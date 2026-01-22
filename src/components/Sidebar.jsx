@@ -16,16 +16,25 @@ const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
 
   const menu = [
-    { name: "Home", path: "/", icon: <FaHome /> },
-    { name: "Purchase Order", path: "/purchase-order", icon: <FaShoppingCart /> },
-    { name: "Sales Order", path: "/sales-order", icon: <FaFileInvoice /> },
-    { name: "Pearls Book", path: "/pearls-book", icon: <FaBook /> },
-    { name: "CRM", path: "/crm", icon: <FaUsers /> },
-    { name: "Loading & Dispatch", path: "/dispatch", icon: <FaTruck /> },
-    { name: "Employees Book", path: "/employees", icon: <FaUserTie /> },
-    { name: "Employee Dashboard", path: "/employeepage", icon: <FaUsers /> },
-    { name: "Payroll & Attendance", path: "/hr-control", icon: <FaMoneyBillWave /> },
+    { name: "Home", path: "/", icon: <FaHome />, roles: ["Manager", "Billing", "Delivery", "Dispatch", "Marketing", "Sales", "HR"] },
+
+    { name: "Purchase Order", path: "/purchase-order", icon: <FaShoppingCart />, roles: ["Manager", "Billing"] },
+
+    { name: "Sales Order", path: "/sales-order", icon: <FaFileInvoice />, roles: ["Manager", "Billing", "Sales"] },
+
+    { name: "Pearls Book", path: "/pearls-book", icon: <FaBook />, roles: ["Manager", "Billing"] },
+
+    { name: "CRM", path: "/crm", icon: <FaUsers />, roles: ["Sales", "Marketing", "Manager"] },
+
+    { name: "Loading & Dispatch", path: "/dispatch", icon: <FaTruck />, roles: ["Dispatch", "Delivery", "Manager"] },
+
+    { name: "Employees Book", path: "/employees", icon: <FaUserTie />, roles: ["HR", "Manager"] },
+
+    { name: "Employee Dashboard", path: "/employeepage", icon: <FaUsers />, roles: ["Manager", "Billing", "Delivery", "Dispatch", "Marketing", "Sales", "HR"] },
+
+    { name: "Payroll & Attendance", path: "/hr-control", icon: <FaMoneyBillWave />, roles: ["Manager", "HR"] },
   ];
+
 
   const handleLogout = () => {
     alert("Logged out successfully");
@@ -49,11 +58,10 @@ const Sidebar = ({ isOpen, onClose }) => {
               <Link
                 key={index}
                 to={item.path}
-                className={`mx-3 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${
-                  active
+                className={`mx-3 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${active
                     ? "bg-white text-primary shadow-md font-semibold"
                     : "hover:bg-white/10 text-white/90"
-                }`}
+                  }`}
               >
                 <span className="text-lg">{item.icon}</span>
                 <span className="text-sm">{item.name}</span>
@@ -74,17 +82,15 @@ const Sidebar = ({ isOpen, onClose }) => {
 
       {/* ================= MOBILE OVERLAY ================= */}
       <div
-        className={`md:hidden fixed inset-0 z-40 bg-black/40 transition-opacity ${
-          isOpen ? "opacity-100 visible" : "opacity-0 invisible"
-        }`}
+        className={`md:hidden fixed inset-0 z-40 bg-black/40 transition-opacity ${isOpen ? "opacity-100 visible" : "opacity-0 invisible"
+          }`}
         onClick={onClose}
       />
 
       {/* ================= MOBILE SIDEBAR ================= */}
       <aside
-        className={`md:hidden fixed top-0 left-0 h-full w-72 bg-gradient-to-b from-primary to-primary/90 text-white shadow-2xl z-50 transform transition-transform duration-300 ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`md:hidden fixed top-0 left-0 h-full w-72 bg-gradient-to-b from-primary to-primary/90 text-white shadow-2xl z-50 transform transition-transform duration-300 ${isOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         {/* CLOSE */}
         <div className="flex justify-end p-4 border-b border-white/20">
@@ -104,11 +110,10 @@ const Sidebar = ({ isOpen, onClose }) => {
               <Link
                 key={index}
                 to={item.path}
-                className={`mx-2 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${
-                  active
+                className={`mx-2 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${active
                     ? "bg-white text-primary shadow-md font-semibold"
                     : "hover:bg-white/10 text-white/90"
-                }`}
+                  }`}
                 onClick={onClose}
               >
                 <span className="text-lg">{item.icon}</span>
@@ -133,3 +138,4 @@ const Sidebar = ({ isOpen, onClose }) => {
 };
 
 export default Sidebar;
+

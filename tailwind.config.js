@@ -7,11 +7,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: "#319bab", 
+        primary: "#319bab",
       },
-       fontFamily: {
-        cursive: ['"Dancing Script"', 'cursive'],
-      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      }
+
     },
   },
   plugins: [],
