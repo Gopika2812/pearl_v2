@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { FaSlidersH, FaTimes } from "react-icons/fa";
 
+// Modals
 import InventoryAddProductGroupModal from "../../components/inventory/InventoryAddProductGroupModal";
 import InventoryAddProductModal from "../../components/inventory/InventoryAddProductModal";
 import InventoryAddVendorModal from "../../components/inventory/InventoryAddVendorModal";
 import InventoryAddVoucherTypeModal from "../../components/inventory/InventoryAddVoucherTypeModal";
 import InventoryAddWarehouseModal from "../../components/inventory/InventoryAddWarehouseModal";
+import InventoryAddAgentModal from "../../components/inventory/InventoryAddAgentModal";
+import InventoryAddBillingPersonModal from "../../components/inventory/InventoryAddBillingPersonModal";
+import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCustomerModal";
 
 import InventoryPurchaseOrderEntry from "../../components/inventory/InventoryPurchaseOrderEntry";
 import InventoryPurchaseOrderHeader from "../../components/inventory/InventoryPurchaseOrderHeader";
@@ -24,12 +28,24 @@ const InventoryPurchaseOrder = () => {
   const [mobileActions, setMobileActions] = useState(false);
 
   const actionBtnClass =
-    "w-full bg-primary text-white py-3 px-4 rounded-xl font-bold text-[13px] uppercase shadow hover:bg-[#248d94] transition";
+    "w-full bg-primary text-white py-3 px-4 rounded-xl font-bold text-[13px] uppercase shadow hover:bg-[#248d94] transition text-left";
+
+  // Sidebar Links Data - இப்போது Vendor சேர்க்கப்பட்டுள்ளது
+  const quickLinks = [
+    { id: "voucher_type", label: "+ Voucher Type" },
+    { id: "vendor", label: "+ Vendor" }, // புதிதாக சேர்க்கப்பட்டது
+    { id: "product_group", label: "+ Product Group" },
+    { id: "product", label: "+ Product Name" },
+    { id: "warehouse", label: "+ Warehouse" },
+    { id: "agent", label: "+ Agent" },
+    { id: "billing_person", label: "+ Billing Person" },
+    { id: "customer", label: "+ Customer Details" },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-16 md:pl-64">
 
-      {/* MOBILE RIGHT TAB */}
+      {/* MOBILE TRIGGER */}
       <div className="lg:hidden fixed top-60 right-0 z-40">
         <button
           onClick={() => setMobileActions(true)}
@@ -40,8 +56,7 @@ const InventoryPurchaseOrder = () => {
       </div>
 
       <div className="relative flex justify-center">
-
-        {/* CENTER */}
+        {/* MAIN FORM AREA */}
         <div className={`w-full max-w-6xl px-3 sm:px-6 py-4 transition-all ${showActions ? "lg:mr-80" : "lg:mr-0"}`}>
           <InventoryPurchaseOrderHeader title="Purchase Order" />
 
@@ -58,7 +73,7 @@ const InventoryPurchaseOrder = () => {
           </div>
         </div>
 
-        {/* QUICK LINKS DESKTOP */}
+        {/* QUICK LINKS SIDEBAR (Desktop) */}
         <aside className={`hidden lg:flex fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-white border-l shadow-xl p-5 flex-col z-40 transition-transform ${showActions ? "translate-x-0" : "translate-x-full"}`}>
           <div className="flex items-center justify-between border-b pb-2">
             <h3 className="text-primary font-bold uppercase text-sm">Quick Links</h3>
@@ -67,19 +82,22 @@ const InventoryPurchaseOrder = () => {
             </button>
           </div>
 
-          <div className="flex flex-col gap-3 mt-4">
-            <button onClick={() => setActiveModal("voucher_type")} className={actionBtnClass}>+ Voucher</button>
-            <button onClick={() => setActiveModal("vendor")} className={actionBtnClass}>+ Vendor</button>
-            <button onClick={() => setActiveModal("product_group")} className={actionBtnClass}>+ Group</button>
-            <button onClick={() => setActiveModal("product")} className={actionBtnClass}>+ Product</button>
-            <button onClick={() => setActiveModal("warehouse")} className={actionBtnClass}>+ Warehouse</button>
+          <div className="flex flex-col gap-3 mt-4 overflow-y-auto custom-scrollbar">
+            {quickLinks.map((link) => (
+              <button 
+                key={link.id}
+                onClick={() => setActiveModal(link.id)} 
+                className={actionBtnClass}
+              >
+                {link.label}
+              </button>
+            ))}
           </div>
         </aside>
 
         {/* MOBILE DRAWER */}
         <div className={`lg:hidden fixed inset-0 z-50 transition ${mobileActions ? "opacity-100 visible" : "opacity-0 invisible"}`}>
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileActions(false)} />
-
           <aside className={`absolute right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-white border-l shadow-xl p-5 flex flex-col z-50 transition-transform ${mobileActions ? "translate-x-0" : "translate-x-full"}`}>
             <div className="flex items-center justify-between border-b pb-2">
               <h3 className="text-primary font-bold uppercase text-sm">Quick Links</h3>
@@ -87,20 +105,25 @@ const InventoryPurchaseOrder = () => {
                 <FaTimes />
               </button>
             </div>
-
-            <div className="flex flex-col gap-3 mt-4">
-              <button onClick={() => setActiveModal("voucher_type")} className={actionBtnClass}>+ Voucher</button>
-              <button onClick={() => setActiveModal("vendor")} className={actionBtnClass}>+ Vendor</button>
-              <button onClick={() => setActiveModal("product_group")} className={actionBtnClass}>+ Group</button>
-              <button onClick={() => setActiveModal("product")} className={actionBtnClass}>+ Product</button>
-              <button onClick={() => setActiveModal("warehouse")} className={actionBtnClass}>+ Warehouse</button>
+            <div className="flex flex-col gap-3 mt-4 overflow-y-auto">
+              {quickLinks.map((link) => (
+                <button 
+                  key={link.id}
+                  onClick={() => {
+                    setActiveModal(link.id);
+                    setMobileActions(false);
+                  }} 
+                  className={actionBtnClass}
+                >
+                  {link.label}
+                </button>
+              ))}
             </div>
           </aside>
         </div>
-
       </div>
 
-      {/* MODALS */}
+      {/* ALL MODALS */}
       <InventoryAddVoucherTypeModal
         isOpen={activeModal === "voucher_type"}
         onClose={() => setActiveModal(null)}
@@ -131,6 +154,24 @@ const InventoryPurchaseOrder = () => {
         isOpen={activeModal === "warehouse"}
         onClose={() => setActiveModal(null)}
         onSave={(data) => { addData("warehouse", data); setActiveModal(null); }}
+      />
+
+      <InventoryAddAgentModal
+        isOpen={activeModal === "agent"}
+        onClose={() => setActiveModal(null)}
+        onSave={(data) => { addData("agent", data); setActiveModal(null); }}
+      />
+
+      <InventoryAddBillingPersonModal
+        isOpen={activeModal === "billing_person"}
+        onClose={() => setActiveModal(null)}
+        onSave={(data) => { addData("billing_person", data); setActiveModal(null); }}
+      />
+
+      <InventoryAddCustomerModal
+        isOpen={activeModal === "customer"}
+        onClose={() => setActiveModal(null)}
+        onSave={(data) => { addData("customer", data); setActiveModal(null); }}
       />
     </div>
   );
