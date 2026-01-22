@@ -3,7 +3,6 @@ import { createContext, useContext, useState } from "react";
 const InventoryContext = createContext();
 
 export const InventoryProvider = ({ children }) => {
-  // Always initialize with [] to prevent ".map() is undefined" errors
   const [voucherTypes, setVoucherTypes] = useState([]);
   const [productGroups, setProductGroups] = useState([]);
   const [products, setProducts] = useState([]);
@@ -14,10 +13,23 @@ export const InventoryProvider = ({ children }) => {
   const [customers, setCustomers] = useState([]);
   const [vendors, setVendors] = useState([]);
 
-  // A single, clean function to handle all Master additions
-  const addData = (type, data) => {
-    const newItem = { ...data, id: Date.now() }; // Add a unique ID
+  // NEW: State for Drafts and Final Orders
+  const [drafts, setDrafts] = useState([]);
+  const [finalOrders, setFinalOrders] = useState([]);
 
+  // Function to save PO as a Draft
+  const saveToDrafts = (orderData) => {
+    setDrafts(prev => [...prev, { ...orderData, status: "Draft", id: Date.now() }]);
+    alert("Purchase Order saved as Draft!");
+  };
+
+  // Function to finalize and place the PO
+  const placeFinalOrder = (orderData) => {
+    setFinalOrders(prev => [...prev, { ...orderData, status: "Placed", id: Date.now() }]);
+  };
+
+  const addData = (type, data) => {
+    const newItem = { ...data, id: Date.now() };
     switch (type) {
       case "voucher": setVoucherTypes(prev => [...prev, newItem]); break;
       case "group": setProductGroups(prev => [...prev, newItem]); break;
@@ -25,20 +37,22 @@ export const InventoryProvider = ({ children }) => {
       case "location": setLocations(prev => [...prev, newItem]); break;
       case "warehouse": setWarehouses(prev => [...prev, newItem]); break;
       case "agent": setAgents(prev => [...prev, newItem]); break;
-      case "billing": setBillingPersons(prev => [...prev, newItem]); break;
+      case "billing_person": setBillingPersons(prev => [...prev, newItem]); break;
       case "customer": setCustomers(prev => [...prev, newItem]); break;
       case "vendor": setVendors(prev => [...prev, newItem]); break;
-
-      default: console.warn(`Unknown data type: ${type}`);
+      default: console.warn("Unknown addData type:", type);
     }
   };
 
   return (
-    <InventoryContext.Provider value={{ 
-      voucherTypes, productGroups, products, 
-      locations, warehouses, agents, billingPersons, customers,vendors,
-      addData 
-    }}>
+    <InventoryContext.Provider
+      value={{
+        voucherTypes, productGroups, products, locations,
+        warehouses, agents, billingPersons, customers, vendors,
+        drafts, finalOrders, // Exported new states
+        addData, saveToDrafts, placeFinalOrder // Exported new functions
+      }}
+    >
       {children}
     </InventoryContext.Provider>
   );
