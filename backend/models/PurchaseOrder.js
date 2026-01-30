@@ -1,0 +1,63 @@
+import mongoose from "mongoose";
+
+const PurchaseItemSchema = new mongoose.Schema({
+  productId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Product",
+    required: true,
+  },
+  name: String,
+  productGroup: String,
+
+  qty: Number,
+  purchasePrice: Number,
+  sellingPrice: Number,
+  rowPrice: Number,
+
+  hsn: String,
+
+  gst: Number,
+  cgst: Number,
+  sgst: Number,
+  igst: Boolean,
+
+  total: Number,
+});
+
+const PurchaseOrderSchema = new mongoose.Schema(
+  {
+    invoiceId: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+
+    voucherType: String,
+
+    vendor: String,
+    warehouse: String,
+
+    items: [PurchaseItemSchema],
+
+    subtotal: Number,
+    totalTax: Number,
+    transportCharge: Number,
+    grandTotal: Number,
+
+    billingPerson: String,
+    agent: String,
+
+    status: {
+      type: String,
+      enum: ["DRAFT", "PLACED"],
+      default: "PLACED",
+    },
+
+    date: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { timestamps: true }
+);
+export default mongoose.model("PurchaseOrder", PurchaseOrderSchema);
