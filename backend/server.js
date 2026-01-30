@@ -22,7 +22,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",
-      "https://pearls-erp-2026.onrender.com",
+      "https://pearlsfrontend.web.app",
     ],
     credentials: true,
   })
