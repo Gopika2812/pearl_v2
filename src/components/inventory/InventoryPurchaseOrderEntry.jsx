@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FaPlus, FaTrash } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { API_BASE } from "../../api";
 import { useInventory } from "../../context/InventoryContext";
 
 const InventoryPurchaseOrderEntry = ({
@@ -148,7 +149,7 @@ const InventoryPurchaseOrderEntry = ({
     const fetchNextInvoice = async () => {
       try {
         const res = await fetch(
-          `http://localhost:5000/api/purchase-orders/next-invoice/${voucherType}`
+          `${API_BASE}/purchase-orders/next-invoice/${voucherType}`
         );
         const data = await res.json();
         if (res.ok) setInvoiceId(data.nextInvoiceId);
@@ -183,7 +184,7 @@ const InventoryPurchaseOrderEntry = ({
     };
 
     try {
-      const res = await fetch("http://localhost:5000/api/purchase-orders", {
+      const res = await fetch(`${API_BASE}/purchase-orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(orderData),

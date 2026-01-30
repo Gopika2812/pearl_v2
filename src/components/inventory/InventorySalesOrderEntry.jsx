@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FaPlus, FaTrash } from "react-icons/fa";
 import { ToastContainer, toast } from "react-toastify";
+import { API_BASE } from "../../api";
 
 const inputClass =
   "w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-1 focus:ring-[#319bab] outline-none text-sm";
@@ -46,7 +47,7 @@ export default function InventorySalesOrderEntry({
   const [transportMode, setTransportMode] = useState("Road");
   const [transporterName, setTransporterName] = useState("");
   const [poItems, setPoItems] = useState([]);
-  const [discountType, setDiscountType] = useState("PERCENT"); // PERCENT | AMOUNT
+  const [discountType, setDiscountType] = useState("PERCENT");
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountAmountInput, setDiscountAmountInput] = useState(0);
   const [customerId, setCustomerId] = useState("");
@@ -62,7 +63,7 @@ export default function InventorySalesOrderEntry({
     const fetchPreview = async () => {
       try {
         const res = await fetch(
-          `http://localhost:5000/api/sales-orders/preview/${voucherType}`
+          `${API_BASE}/sales-orders/preview/${voucherType}`
         );
         const data = await res.json();
 
@@ -79,13 +80,21 @@ export default function InventorySalesOrderEntry({
   }, [voucherType]);
 
 
-
   useEffect(() => {
-    fetch("http://localhost:5000/api/purchase-orders/items")
-      .then(res => res.json())
-      .then(data => setPoItems(data))
-      .catch(() => toast.error("Failed to load purchase data"));
+    const loadPoItems = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/purchase-orders/items`);
+        const data = await res.json();
+        if (!res.ok) throw new Error();
+        setPoItems(data);
+      } catch {
+        toast.error("Failed to load purchase data");
+      }
+    };
+
+    loadPoItems();
   }, []);
+
 
 
   const filteredProducts = useMemo(() => {
@@ -139,81 +148,81 @@ export default function InventorySalesOrderEntry({
 
 
   const addItem = () => {
-  if (!selectedItem) {
-    toast.warning("Select item");
-    return;
-  }
+    if (!selectedItem) {
+      toast.warning("Select item");
+      return;
+    }
 
-  const p = products.find((x) => x._id === selectedItem);
-  if (!p) return;
+    const p = products.find((x) => x._id === selectedItem);
+    if (!p) return;
 
-  // 1️⃣ BASE AMOUNT
-  const baseAmount = Number(sellingPrice) * Number(qty);
+    // 1️⃣ BASE AMOUNT
+    const baseAmount = Number(sellingPrice) * Number(qty);
 
-  // 2️⃣ DISCOUNT (₹ or %)
-  const calculatedDiscount =
-    discountType === "PERCENT"
-      ? (baseAmount * Number(discountPercent)) / 100
-      : Number(discountAmountInput);
+    // 2️⃣ DISCOUNT (₹ or %)
+    const calculatedDiscount =
+      discountType === "PERCENT"
+        ? (baseAmount * Number(discountPercent)) / 100
+        : Number(discountAmountInput);
 
-  const discountAmount = Math.min(calculatedDiscount, baseAmount);
+    const discountAmount = Math.min(calculatedDiscount, baseAmount);
 
-  // 3️⃣ TAXABLE AMOUNT
-  const taxableAmount = baseAmount - discountAmount;
+    // 3️⃣ TAXABLE AMOUNT
+    const taxableAmount = baseAmount - discountAmount;
 
-  // 4️⃣ GST AMOUNT
-  const taxAmount = (taxableAmount * Number(gst)) / 100;
+    // 4️⃣ GST AMOUNT
+    const taxAmount = (taxableAmount * Number(gst)) / 100;
 
-  // 5️⃣ GST BREAKUP
-  const taxBreakup = igst
-    ? {
+    // 5️⃣ GST BREAKUP
+    const taxBreakup = igst
+      ? {
         igst: Number(gst),
         cgst: 0,
         sgst: 0,
       }
-    : {
+      : {
         igst: 0,
         cgst: Number(gst) / 2,
         sgst: Number(gst) / 2,
       };
 
-  // 6️⃣ FINAL TOTAL (ITEM LEVEL)
-  const totalAmount = taxableAmount + taxAmount;
+    // 6️⃣ FINAL TOTAL (ITEM LEVEL)
+    const totalAmount = taxableAmount + taxAmount;
 
-  // 7️⃣ PUSH ITEM (STORE EVERYTHING CLEANLY)
-  setItems((prev) => [
-    ...prev,
-    {
-      productId: p._id,
-      name: p.name,
-      hsn,
-      qty: Number(qty),
-      sellingPrice: Number(sellingPrice),
+    // 7️⃣ PUSH ITEM (STORE EVERYTHING CLEANLY)
+    setItems((prev) => [
+      ...prev,
+      {
+        productId: p._id,
+        name: p.name,
+        hsn,
+        qty: Number(qty),
+        sellingPrice: Number(sellingPrice),
 
-      baseAmount,
-      discountType,
-      discountPercent: Number(discountPercent),
-      discountAmount,
+        baseAmount,
+        discountType,
+        discountPercent: Number(discountPercent),
+        discountAmount,
 
-      taxableAmount,
-      gst: Number(gst),
-      ...taxBreakup,
-      taxAmount,
+        taxableAmount,
+        gst: Number(gst),
+        ...taxBreakup,
+        taxAmount,
 
-      total: totalAmount,
-    },
-  ]);
+        total: totalAmount,
+      },
+    ]);
 
-  // 8️⃣ RESET FORM
-  setSelectedItem("");
-  setSellingPrice(0);
-  setQty(1);
-  setDiscountPercent(0);
-  setDiscountAmountInput(0);
-  setGst(0);
-  setIgst(false);
-  setHsn("");
-};
+    // 8️⃣ RESET FORM
+    setSelectedItem("");
+    setSellingPrice(0);
+    setQty(1);
+    setDiscountPercent(0);
+    setDiscountAmountInput(0);
+    setGst(0);
+    setIgst(false);
+    setHsn("");
+  };
 
   const removeItem = (i) => {
     setItems(items.filter((_, idx) => idx !== i));
@@ -283,7 +292,7 @@ export default function InventorySalesOrderEntry({
     }
 
     try {
-      const res = await fetch("http://localhost:5000/api/sales-orders", {
+      const res = await fetch(`${API_BASE}/sales-orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

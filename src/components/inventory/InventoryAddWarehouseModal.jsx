@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API_BASE } from "../../api";
 
 const InventoryAddWarehouseModal = ({ isOpen, onClose, onSave }) => {
   // Removed locationId from state
@@ -10,7 +11,7 @@ const InventoryAddWarehouseModal = ({ isOpen, onClose, onSave }) => {
   e.preventDefault();
 
   try {
-    const res = await fetch("http://localhost:5000/api/warehouses", {
+    const res = await fetch(`${API_BASE}/warehouse`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: warehouse.name }),

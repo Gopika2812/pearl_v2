@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API_BASE } from "../../api";
 
 const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
   const [product, setProduct] = useState({
@@ -13,7 +14,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
 
   const onSave = async (product) => {
     try {
-      const res = await fetch("http://localhost:5000/api/products", {
+      const res = await fetch(`${API_BASE}/products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(product),
@@ -44,7 +45,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
     };
 
     try {
-      const res = await fetch("http://localhost:5000/api/products", {
+      const res = await fetch(`${API_BASE}/products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

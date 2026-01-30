@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API_BASE } from "../../api";
 
 const InventoryAddBillingPersonModal = ({ isOpen, onClose, refreshList }) => {
   const [person, setPerson] = useState({ name: "", designation: "" });
@@ -11,7 +12,7 @@ const InventoryAddBillingPersonModal = ({ isOpen, onClose, refreshList }) => {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/billing-persons", {
+      const res = await fetch(`${API_BASE}/billing-persons`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(person),

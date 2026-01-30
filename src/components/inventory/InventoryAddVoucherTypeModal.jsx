@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { API_BASE } from "../../api";
 
 const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave }) => {
   const [voucherName, setVoucherName] = useState("");
@@ -38,7 +39,7 @@ const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave }) => {
     try {
       setLoading(true);
 
-      const res = await fetch("http://localhost:5000/api/voucher-types", {
+      const res = await fetch(`${API_BASE}/voucher-types`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

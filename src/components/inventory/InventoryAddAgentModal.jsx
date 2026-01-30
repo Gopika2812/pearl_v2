@@ -10,7 +10,7 @@ const InventoryAddAgentModal = ({ isOpen, onClose }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    await addData("agent", agent);  // ✅ context handles API + state
+    await addData("agent", agent);
 
     setAgent({ name: "", phone: "", email: "" });
     onClose();

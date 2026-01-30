@@ -142,7 +142,7 @@ const InventoryPurchaseOrder = () => {
         isOpen={activeModal === "vendor"}
         onClose={() => setActiveModal(null)}
         onSave={(data) => {
-          addData("vendor", data); // ✅ Context handles POST
+          addData("vendor", data);
           setActiveModal(null);
         }}
       />
