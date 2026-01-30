@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
 import { InventoryProvider } from "./context/InventoryContext";
@@ -23,32 +26,51 @@ function App() {
 
   return (
     <InventoryProvider>
-      <div className="flex">
-        {/* Sidebar - Visible if not on login page */}
-        {!hideLayout && (
-          <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        )}
+      <>
+        {/* 🔥 GLOBAL TOAST CONTAINER */}
+        <ToastContainer />
 
-        {/* Main Content Area */}
-        <div className="flex-1 min-h-screen flex flex-col">
-          {!hideLayout && <Topbar onMenuClick={() => setSidebarOpen(true)} />}
+        <div className="flex">
+          {/* Sidebar - Visible if not on login page */}
+          {!hideLayout && (
+            <Sidebar
+              isOpen={sidebarOpen}
+              onClose={() => setSidebarOpen(false)}
+            />
+          )}
 
-          <div className="flex-1 p-6">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/login" element={<HrLogin />} />
-              <Route path="/purchase-order" element={<InventoryPurchaseOrder />} />
-              <Route path="/sales-order" element={<InventorySalesOrder />} /> 
-              <Route path="/pearls-book" element={<PearlsBookPage />} />
-              <Route path="/crm" element={<CRMPage />} />
-              <Route path="/dispatch" element={<DispatchSheetPage />} />
-              <Route path="/employees" element={<EmployeesBookPage />} />
-              <Route path="/employeepage" element={<EmployeeDashboardPage />} /> 
-              <Route path="/hr-control" element={<HRControlPanel />} /> 
-            </Routes>
+          {/* Main Content Area */}
+          <div className="flex-1 min-h-screen flex flex-col">
+            {!hideLayout && (
+              <Topbar onMenuClick={() => setSidebarOpen(true)} />
+            )}
+
+            <div className="flex-1 p-6">
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/login" element={<HrLogin />} />
+                <Route
+                  path="/purchase-order"
+                  element={<InventoryPurchaseOrder />}
+                />
+                <Route
+                  path="/sales-order"
+                  element={<InventorySalesOrder />}
+                />
+                <Route path="/pearls-book" element={<PearlsBookPage />} />
+                <Route path="/crm" element={<CRMPage />} />
+                <Route path="/dispatch" element={<DispatchSheetPage />} />
+                <Route path="/employees" element={<EmployeesBookPage />} />
+                <Route
+                  path="/employeepage"
+                  element={<EmployeeDashboardPage />}
+                />
+                <Route path="/hr-control" element={<HRControlPanel />} />
+              </Routes>
+            </div>
           </div>
         </div>
-      </div>
+      </>
     </InventoryProvider>
   );
 }

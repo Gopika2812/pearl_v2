@@ -6,14 +6,21 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave }) => {
     phone: "",
     email: "",
     address: "",
-    gst: ""
+    gstin: ""
   });
 
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave({ ...vendor, id: Date.now() });
+
+    // ✅ Just pass data to context, context handles POST
+    onSave(vendor);
+
+    // Reset form
+    setVendor({ name: "", phone: "", email: "", address: "", gstin: "" });
+
+    // Close modal
     onClose();
   };
 
@@ -29,12 +36,14 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave }) => {
             required
             placeholder="Vendor Name *"
             className="w-full p-2 border rounded-lg"
+            value={vendor.name}
             onChange={(e) => setVendor({ ...vendor, name: e.target.value })}
           />
 
           <input
             placeholder="Phone"
             className="w-full p-2 border rounded-lg"
+            value={vendor.phone}
             onChange={(e) => setVendor({ ...vendor, phone: e.target.value })}
           />
 
@@ -42,19 +51,22 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave }) => {
             type="email"
             placeholder="Email"
             className="w-full p-2 border rounded-lg"
+            value={vendor.email}
             onChange={(e) => setVendor({ ...vendor, email: e.target.value })}
           />
 
           <textarea
             placeholder="Address"
             className="w-full p-2 border rounded-lg"
+            value={vendor.address}
             onChange={(e) => setVendor({ ...vendor, address: e.target.value })}
           />
 
           <input
-            placeholder="GST Number"
+            placeholder="GSTIN Number"
             className="w-full p-2 border rounded-lg"
-            onChange={(e) => setVendor({ ...vendor, gst: e.target.value })}
+            value={vendor.gstin}
+            onChange={(e) => setVendor({ ...vendor, gstin: e.target.value })}
           />
 
           <div className="flex gap-3 pt-4">

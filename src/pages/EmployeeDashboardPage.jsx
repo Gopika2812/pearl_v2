@@ -1,10 +1,10 @@
 import { useState } from "react";
 import {
-    FaClock,
-    FaMapMarkerAlt,
-    FaPlay,
-    FaStop,
-    FaUserCircle,
+  FaClock,
+  FaMapMarkerAlt,
+  FaPlay,
+  FaStop,
+  FaUserCircle,
 } from "react-icons/fa";
 
 /* ---------------- SAMPLE EMPLOYEE DATA ---------------- */
@@ -41,9 +41,9 @@ const sampleDeliveryLogs = [
   {
     id: 1,
     startTime: "10:15",
-    startLocation: "Pearls Warehouse, Coimbatore",
+    startLocation: "Pearls Warehouse, Tirunelveli",
     stopTime: "11:05",
-    stopLocation: "Gandhipuram, Coimbatore",
+    stopLocation: "Palayamkottai,Tirunelveli",
   },
 ];
 

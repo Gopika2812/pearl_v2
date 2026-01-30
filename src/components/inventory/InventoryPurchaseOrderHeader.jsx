@@ -10,12 +10,7 @@ const InventoryPurchaseOrderHeader = ({ title }) => {
         </p>
       </div>
       
-      {/* Date display (Optional) */}
-      <div className="mt-2 md:mt-0 px-4 py-1 bg-primary/10 rounded-full border border-primary/20">
-        <span className="text-primary font-semibold text-sm italic">
-          Purchase Module
-        </span>
-      </div>
+      
     </div>
   );
 };

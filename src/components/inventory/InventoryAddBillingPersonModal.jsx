@@ -1,15 +1,38 @@
 import { useState } from "react";
 
-const InventoryAddBillingPersonModal = ({ isOpen, onClose, onSave }) => {
+const InventoryAddBillingPersonModal = ({ isOpen, onClose, refreshList }) => {
   const [person, setPerson] = useState({ name: "", designation: "" });
+  const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave({ ...person, id: Date.now() });
-    setPerson({ name: "", designation: "" }); // Reset form
-    onClose();
+    setLoading(true);
+
+    try {
+      const res = await fetch("http://localhost:5000/api/billing-persons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(person),
+      });
+
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.message || "Save failed");
+
+      alert("Billing person saved successfully!");
+
+      setPerson({ name: "", designation: "" });
+
+      refreshList && refreshList(); // re-fetch list
+      onClose();
+    } catch (err) {
+      alert("Save failed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -18,28 +41,37 @@ const InventoryAddBillingPersonModal = ({ isOpen, onClose, onSave }) => {
         <div className="bg-primary p-4 text-white">
           <h3 className="text-xl font-bold">Add Billing Person</h3>
         </div>
+
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Person Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Person Name</label>
-            <input 
-              type="text" 
-              required 
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Person Name
+            </label>
+            <input
+              type="text"
+              required
               className="w-full px-4 py-2 border rounded-lg outline-primary capitalize"
               placeholder="e.g. Ramesh Kumar"
-              value={person.name} 
-              onChange={(e) => setPerson({...person, name: e.target.value})} 
+              value={person.name}
+              onChange={(e) =>
+                setPerson({ ...person, name: e.target.value })
+              }
             />
           </div>
 
-          {/* Designation Dropdown - இப்போது மாற்றப்பட்டுள்ளது */}
+          {/* Designation */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
-            <select 
-              required 
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Designation
+            </label>
+            <select
+              required
               className="w-full px-4 py-2 border rounded-lg outline-primary bg-white cursor-pointer"
-              value={person.designation} 
-              onChange={(e) => setPerson({...person, designation: e.target.value})}
+              value={person.designation}
+              onChange={(e) =>
+                setPerson({ ...person, designation: e.target.value })
+              }
             >
               <option value="">-- Select Designation --</option>
               <option value="Billing">Billing</option>
@@ -49,18 +81,21 @@ const InventoryAddBillingPersonModal = ({ isOpen, onClose, onSave }) => {
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-2 font-sans">
-            <button 
-              type="button" 
-              onClick={onClose} 
+            <button
+              type="button"
+              onClick={onClose}
               className="flex-1 py-2 border rounded-lg hover:bg-gray-50 transition"
+              disabled={loading}
             >
               Cancel
             </button>
-            <button 
-              type="submit" 
+
+            <button
+              type="submit"
               className="flex-1 py-2 bg-primary text-white rounded-lg shadow-md hover:opacity-90 transition font-bold"
+              disabled={loading}
             >
-              Save Person
+              {loading ? "Saving..." : "Save Person"}
             </button>
           </div>
         </form>

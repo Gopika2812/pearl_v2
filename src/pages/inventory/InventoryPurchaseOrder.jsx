@@ -2,14 +2,14 @@ import { useState } from "react";
 import { FaSlidersH, FaTimes } from "react-icons/fa";
 
 // Modals
+import InventoryAddAgentModal from "../../components/inventory/InventoryAddAgentModal";
+import InventoryAddBillingPersonModal from "../../components/inventory/InventoryAddBillingPersonModal";
+import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCustomerModal";
 import InventoryAddProductGroupModal from "../../components/inventory/InventoryAddProductGroupModal";
 import InventoryAddProductModal from "../../components/inventory/InventoryAddProductModal";
 import InventoryAddVendorModal from "../../components/inventory/InventoryAddVendorModal";
 import InventoryAddVoucherTypeModal from "../../components/inventory/InventoryAddVoucherTypeModal";
 import InventoryAddWarehouseModal from "../../components/inventory/InventoryAddWarehouseModal";
-import InventoryAddAgentModal from "../../components/inventory/InventoryAddAgentModal";
-import InventoryAddBillingPersonModal from "../../components/inventory/InventoryAddBillingPersonModal";
-import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCustomerModal";
 
 import InventoryPurchaseOrderEntry from "../../components/inventory/InventoryPurchaseOrderEntry";
 import InventoryPurchaseOrderHeader from "../../components/inventory/InventoryPurchaseOrderHeader";
@@ -19,7 +19,7 @@ import { useInventory } from "../../context/InventoryContext";
 const InventoryPurchaseOrder = () => {
   const {
     voucherTypes, productGroups, products,
-    warehouses, vendors, addData
+    warehouses, vendors, addData, addLocalVoucher
   } = useInventory();
 
   const [activeModal, setActiveModal] = useState(null);
@@ -30,10 +30,15 @@ const InventoryPurchaseOrder = () => {
   const actionBtnClass =
     "w-full bg-primary text-white py-3 px-4 rounded-xl font-bold text-[13px] uppercase shadow hover:bg-[#248d94] transition text-left";
 
-  // Sidebar Links Data - இப்போது Vendor சேர்க்கப்பட்டுள்ளது
+  const poVoucherTypes = voucherTypes.filter(
+    (v) => v.orderType === "PO"
+  );
+
+
+  // Sidebar Links Data
   const quickLinks = [
     { id: "voucher_type", label: "+ Voucher Type" },
-    { id: "vendor", label: "+ Vendor" }, // புதிதாக சேர்க்கப்பட்டது
+    { id: "vendor", label: "+ Vendor" },
     { id: "product_group", label: "+ Product Group" },
     { id: "product", label: "+ Product Name" },
     { id: "warehouse", label: "+ Warehouse" },
@@ -64,7 +69,7 @@ const InventoryPurchaseOrder = () => {
             <InventoryPurchaseOrderEntry
               items={items}
               setItems={setItems}
-              voucherTypes={voucherTypes}
+              voucherTypes={poVoucherTypes}
               productGroups={productGroups}
               products={products}
               warehouses={warehouses}
@@ -84,9 +89,9 @@ const InventoryPurchaseOrder = () => {
 
           <div className="flex flex-col gap-3 mt-4 overflow-y-auto custom-scrollbar">
             {quickLinks.map((link) => (
-              <button 
+              <button
                 key={link.id}
-                onClick={() => setActiveModal(link.id)} 
+                onClick={() => setActiveModal(link.id)}
                 className={actionBtnClass}
               >
                 {link.label}
@@ -107,12 +112,12 @@ const InventoryPurchaseOrder = () => {
             </div>
             <div className="flex flex-col gap-3 mt-4 overflow-y-auto">
               {quickLinks.map((link) => (
-                <button 
+                <button
                   key={link.id}
                   onClick={() => {
                     setActiveModal(link.id);
                     setMobileActions(false);
-                  }} 
+                  }}
                   className={actionBtnClass}
                 >
                   {link.label}
@@ -127,13 +132,19 @@ const InventoryPurchaseOrder = () => {
       <InventoryAddVoucherTypeModal
         isOpen={activeModal === "voucher_type"}
         onClose={() => setActiveModal(null)}
-        onSave={(data) => { addData("voucher", data); setActiveModal(null); }}
+        onSave={(data) => {
+          addLocalVoucher(data);
+          setActiveModal(null);
+        }}
       />
 
       <InventoryAddVendorModal
         isOpen={activeModal === "vendor"}
         onClose={() => setActiveModal(null)}
-        onSave={(data) => { addData("vendor", data); setActiveModal(null); }}
+        onSave={(data) => {
+          addData("vendor", data); // ✅ Context handles POST
+          setActiveModal(null);
+        }}
       />
 
       <InventoryAddProductGroupModal

@@ -14,9 +14,8 @@ const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave, voucherTypes }
     }
 
     onSave({
-      id: Date.now(),
-      voucherId: selectedVoucherId,
       name: groupName.trim(),
+      voucherId: selectedVoucherId,
     });
 
     // Reset and Close
@@ -46,7 +45,7 @@ const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave, voucherTypes }
             >
               <option value="">-- Choose Voucher --</option>
               {voucherTypes.map((v) => (
-                <option key={v.id} value={v.id}>
+                <option key={v._id} value={v._id}>
                   {v.name} ({v.prefix})
                 </option>
               ))}

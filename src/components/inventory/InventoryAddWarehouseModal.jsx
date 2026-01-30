@@ -6,13 +6,28 @@ const InventoryAddWarehouseModal = ({ isOpen, onClose, onSave }) => {
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Saving only the name and a generated ID
-    onSave({ ...warehouse, id: Date.now() });
-    setWarehouse({ name: "" });
+  const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  try {
+    const res = await fetch("http://localhost:5000/api/warehouses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: warehouse.name }),
+    });
+
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || "Save failed");
+
+    alert("Warehouse saved successfully!");
     onClose();
-  };
+    setWarehouse({ name: "" });
+
+  } catch (err) {
+    alert("Warehouse save failed: " + err.message);
+  }
+};
+
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4 font-cursive">

@@ -13,12 +13,16 @@ import { useInventory } from "../../context/InventoryContext";
 import { FaSlidersH, FaTimes } from "react-icons/fa";
 
 const InventorySalesOrder = () => {
-  const { voucherTypes, productGroups, products, warehouses, agents, addData } = useInventory();
+  const { voucherTypes, productGroups, products, warehouses, agents, billingPersons, addData, customers } = useInventory();
 
   const [activeModal, setActiveModal] = useState(null);
   const [items, setItems] = useState([]);
   const [showActions, setShowActions] = useState(true);
   const [mobileActions, setMobileActions] = useState(false);
+
+  const soVoucherTypes = voucherTypes.filter(
+    (v) => v.orderType === "SO"
+  );
 
   const actionBtnClass =
     "w-full bg-primary text-white py-3 px-4 rounded-xl font-bold text-[13px] uppercase shadow hover:bg-[#248d94] transition";
@@ -27,7 +31,7 @@ const InventorySalesOrder = () => {
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-16 md:pl-64">
 
       {/* ===== MOBILE QUICK ACTION TOP BAR ===== */}
-     
+
       <div className="lg:hidden fixed top-60 right-0 z-40">
         <button
           onClick={() => setMobileActions(true)}
@@ -53,11 +57,13 @@ const InventorySalesOrder = () => {
             <InventorySalesOrderEntry
               items={items}
               setItems={setItems}
-              voucherTypes={voucherTypes}
+              voucherTypes={soVoucherTypes}
               productGroups={productGroups}
               products={products}
               warehouses={warehouses}
               agents={agents}
+              billingPersons={billingPersons}
+              customers ={customers}
             />
           </div>
         </div>
@@ -152,7 +158,7 @@ const InventorySalesOrder = () => {
       <InventoryAddWarehouseModal isOpen={activeModal === "warehouse"} onClose={() => setActiveModal(null)} onSave={(data) => { addData("warehouse", data); setActiveModal(null); }} />
       <InventoryAddAgentModal isOpen={activeModal === "agent"} onClose={() => setActiveModal(null)} onSave={(data) => { addData("agent", data); setActiveModal(null); }} />
       <InventoryAddBillingPersonModal isOpen={activeModal === "billing_person"} onClose={() => setActiveModal(null)} onSave={(data) => { addData("billing", data); setActiveModal(null); }} />
-       <InventoryAddCustomerModal isOpen={activeModal === "customer"} onClose={() => setActiveModal(null)} onSave={(data) => { addData("customer", data); setActiveModal(null); }} />
+      <InventoryAddCustomerModal isOpen={activeModal === "customer"} onClose={() => setActiveModal(null)} onSave={(data) => { addData("customer", data); setActiveModal(null); }} />
     </div>
   );
 };
