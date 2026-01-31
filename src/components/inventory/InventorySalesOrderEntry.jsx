@@ -80,6 +80,8 @@ export default function InventorySalesOrderEntry({
   }, [voucherType]);
 
 
+
+
   useEffect(() => {
     const loadPoItems = async () => {
       try {
@@ -103,23 +105,40 @@ export default function InventorySalesOrderEntry({
       : [];
   }, [products, productGroup]);
 
-  const handleItemSelection = (id) => {
-    const product = products.find(p => p._id === id);
-    const poData = poItems.find(p => p.productId === id);
+  const productsWithStock = useMemo(() => {
+    return filteredProducts.map((p) => {
+      const po = poItems.find(
+        x => x.productId === p._id && x.warehouse === warehouse
+      );
 
-    if (!product || !poData) return;
+      return {
+        ...p,
+        availableQty: po?.qty || 0,
+        poSellingPrice: po?.sellingPrice || 0,
+        poGst: po?.gst || 0,
+        poHsn: po?.hsn || "",
+      };
+    });
+  }, [filteredProducts, poItems, warehouse]);
+
+
+
+
+  const handleItemSelection = (id) => {
+    const product = productsWithStock.find(p => p._id === id);
+    if (!product) return;
 
     setSelectedItem(id);
     setQty(1);
 
-    // 🔥 FROM PURCHASE ORDER
-    setSellingPrice(poData.sellingPrice);
-    setGst(poData.gst);
-    setCgst(poData.gst / 2);
-    setSgst(poData.gst / 2);
+    setSellingPrice(product.poSellingPrice);
+    setGst(product.poGst);
+    setCgst(product.poGst / 2);
+    setSgst(product.poGst / 2);
     setIgst(false);
-    setHsn(poData.hsn);
+    setHsn(product.poHsn);
   };
+
 
 
   const displayPrice = useMemo(() => {
@@ -395,13 +414,31 @@ export default function InventorySalesOrderEntry({
         <div className="grid grid-cols-1 md:grid-cols-8 gap-3">
           <div>
             <label className={labelClass}>Item Name</label>
-            <select className={selectClass} value={selectedItem} onChange={(e) => handleItemSelection(e.target.value)} disabled={!productGroup}>
+            <select
+              className={selectClass}
+              value={selectedItem}
+              onChange={(e) => handleItemSelection(e.target.value)}
+              disabled={!productGroup || !warehouse} // ✅ ADD warehouse
+            >
+
               <option value="">
-                {productGroup ? "Select Product" : "Select Product Group first"}
+                {!warehouse
+                  ? "Select warehouse first"
+                  : productGroup
+                    ? "Select Product"
+                    : "Select Product Group first"}
               </option>
-              {filteredProducts.map((p) => (
-                <option key={p._id} value={p._id}>{p.name}</option>
+
+              {productsWithStock.map((p) => (
+                <option
+                  key={p._id}
+                  value={p._id}
+                  disabled={p.availableQty === 0}
+                >
+                  {p.name} ({p.unit}) — Qty: {p.availableQty}
+                </option>
               ))}
+
             </select>
           </div>
 
@@ -417,7 +454,17 @@ export default function InventorySalesOrderEntry({
 
           <div>
             <label className={labelClass}>Qty</label>
-            <input type="number" className={inputClass} value={qty} onChange={(e) => setQty(+e.target.value)} />
+            <input
+              type="number"
+              className={inputClass}
+              value={qty}
+              min={1}
+              max={
+                productsWithStock.find(p => p._id === selectedItem)?.availableQty || 1
+              }
+              onChange={(e) => setQty(+e.target.value)}
+            />
+
           </div>
 
           <div>

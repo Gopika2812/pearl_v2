@@ -1,233 +1,301 @@
-import { useState } from "react";
-import { FaFilter, FaPlus, FaSearch } from "react-icons/fa";
+import axios from "axios";
+import { Fragment, useEffect, useState } from "react";
+import {
+  FaChevronDown,
+  FaChevronUp,
+  FaFileInvoice,
+} from "react-icons/fa";
+import { API_BASE } from "../api";
 
-/* ---------------- SAMPLE DATA ---------------- */
-const sampleLedger = [
-  { id: 1, type: "sales", ref: "SO-102", date: "2026-01-18", party: "Rahul", warehouse: "Main", qty: 7, amount: 34000, status: "Invoiced" },
-  { id: 2, type: "purchase", ref: "PO-44", date: "2026-01-17", party: "Kannan Traders", warehouse: "Main", qty: 10, amount: 21000, status: "Received" },
-  { id: 3, type: "credit", ref: "TXN-09", date: "2026-01-16", party: "IDFC Bank", warehouse: "-", qty: 0, amount: 18000, status: "Success" },
-  { id: 4, type: "debit", ref: "TXN-10", date: "2026-01-16", party: "IOB Bank", warehouse: "-", qty: 0, amount: 12000, status: "Success" },
-  { id: 5, type: "return", ref: "RET-03", date: "2026-01-15", party: "Rahul", warehouse: "Main", qty: 2, amount: 3200, status: "HR Pending" },
-];
+
+const API = `${API_BASE}/pearls-book`;
 
 export default function PearlsBookPage() {
-  const [records] = useState(sampleLedger);
-  const [filterType, setFilterType] = useState("all");
-  const [search, setSearch] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [rows, setRows] = useState([]);
+  const [expanded, setExpanded] = useState(null);
 
-  /* ---------------- FILTER LOGIC ---------------- */
-  const filtered = records.filter((r) => {
-    const matchType = filterType === "all" || r.type === filterType;
+  useEffect(() => {
+    axios.get(API).then((res) => setRows(res.data));
+  }, []);
 
-    const matchSearch =
-      r.ref.toLowerCase().includes(search.toLowerCase()) ||
-      r.party.toLowerCase().includes(search.toLowerCase());
+  const generateInvoice = async (id) => {
+    try {
+      const res = await axios.post(`${API}/generate-invoice/${id}`);
 
-    const recordDate = new Date(r.date).getTime();
-    const matchFrom = fromDate ? recordDate >= new Date(fromDate).getTime() : true;
-    const matchTo = toDate ? recordDate <= new Date(toDate).getTime() : true;
+      // 🔔 LOW STOCK ALERT
+      if (res.data.lowStockAlerts?.length) {
+        const msg = res.data.lowStockAlerts
+          .map(
+            (a) =>
+              `⚠️ LOW STOCK\n${a.product}\nWarehouse: ${a.warehouse}\nRemaining: ${a.remainingQty}`
+          )
+          .join("\n\n");
 
-    return matchType && matchSearch && matchFrom && matchTo;
-  });
+        alert(msg);
+      }
 
-  /* ---------------- SUMMARY ---------------- */
-  const totalSales = filtered.filter(r => r.type === "sales").reduce((s, r) => s + r.amount, 0);
-  const totalPurchase = filtered.filter(r => r.type === "purchase").reduce((s, r) => s + r.amount, 0);
-  const credits = filtered.filter(r => r.type === "credit").reduce((s, r) => s + r.amount, 0);
-  const debits = filtered.filter(r => r.type === "debit").reduce((s, r) => s + r.amount, 0);
-  const balance = credits - debits;
+      window.open(res.data.waUrl, "_blank");
+    } catch (err) {
+      alert(err.response?.data?.message || "Invoice generation failed");
+    }
+  };
+
+
+
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 md:pl-64 px-4 sm:px-6 space-y-6">
-
+    <div className="min-h-screen bg-gray-100 pt-20 md:pl-64 px-3 sm:px-6">
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-primary">Pearls Book</h1>
-          <p className="text-sm text-gray-500">Unified ledger of all business transactions</p>
-        </div>
-      </div>
-
-      {/* FILTER BAR */}
-      <div className="bg-white p-4 rounded-2xl shadow border">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-          >
-            <option value="all">All</option>
-            <option value="sales">Sales</option>
-            <option value="purchase">Purchase</option>
-            <option value="credit">Credit</option>
-            <option value="debit">Debit</option>
-            <option value="return">Return</option>
-          </select>
-
-          <div className="relative">
-            <FaSearch className="absolute left-3 top-3 text-gray-400 text-sm" />
-            <input
-              type="text"
-              placeholder="Search Ref / Party"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="border rounded-lg pl-9 pr-3 py-2 w-full text-sm focus:ring-2 focus:ring-primary"
-            />
-          </div>
-
-          <input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-          />
-
-          <input
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-          />
-
-          <button className="bg-primary text-white px-4 py-2 rounded-lg text-sm shadow hover:bg-primary/90 transition flex items-center justify-center gap-2">
-            <FaFilter /> Apply
-          </button>
-
-        </div>
-      </div>
-
-      {/* SUMMARY CARDS */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <SummaryCard title="Sales" value={totalSales} />
-        <SummaryCard title="Purchase" value={totalPurchase} />
-        <SummaryCard title="Credits" value={credits} />
-        <SummaryCard title="Debits" value={debits} />
-        <SummaryCard title="Balance" value={balance} highlight />
+      <div className="mb-6 max-w-[1400px] mx-auto">
+        <h1 className="text-2xl font-bold text-primary">
+          Pearls Book
+        </h1>
+        <p className="text-sm text-gray-500">
+          Purchase & Sales Register
+        </p>
       </div>
 
       {/* DESKTOP TABLE */}
-      <div className="hidden md:block bg-white rounded-2xl shadow border overflow-x-auto">
+      <div className="hidden md:block max-w-[1400px] mx-auto bg-white rounded-2xl shadow border overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-primary/10 text-primary">
+          <thead className="bg-primary text-white sticky top-0 z-10">
             <tr>
+              <th className="w-10 px-3 py-3"></th>
               <th className="px-4 py-3 text-left">Date</th>
+              <th className="px-4 py-3 text-left">Invoice</th>
               <th className="px-4 py-3 text-left">Type</th>
-              <th className="px-4 py-3 text-left">Ref No</th>
               <th className="px-4 py-3 text-left">Party</th>
               <th className="px-4 py-3 text-left">Warehouse</th>
-              <th className="px-4 py-3 text-center">Qty</th>
-              <th className="px-4 py-3 text-right">Amount</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-center">Actions</th>
+              <th className="px-4 py-3 text-right">Subtotal</th>
+              <th className="px-4 py-3 text-right">Tax</th>
+              <th className="px-4 py-3 text-right">Transport</th>
+              <th className="px-4 py-3 text-right">Grand Total</th>
+              <th className="px-4 py-3 text-center">Action</th>
             </tr>
           </thead>
+
           <tbody>
-            {filtered.map((r) => (
-              <tr key={r.id} className="border-t hover:bg-gray-50 transition">
-                <td className="px-4 py-3">{r.date}</td>
-                <td className="px-4 py-3 font-semibold text-primary">{r.type.toUpperCase()}</td>
-                <td className="px-4 py-3">{r.ref}</td>
-                <td className="px-4 py-3">{r.party}</td>
-                <td className="px-4 py-3">{r.warehouse}</td>
-                <td className="px-4 py-3 text-center">{r.qty}</td>
-                <td className="px-4 py-3 text-right font-medium">₹{r.amount.toFixed(2)}</td>
-                <td className="px-4 py-3">
-                  <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-semibold">
-                    {r.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <button className="text-primary underline text-sm">View</button>
-                </td>
-              </tr>
+            {rows.map((r) => (
+              <Fragment key={r._id}>
+                <tr className="border-b even:bg-gray-50 hover:bg-primary/5 transition">
+                  <td className="text-center px-3 py-3">
+                    <button
+                      onClick={() =>
+                        setExpanded(expanded === r._id ? null : r._id)
+                      }
+                      className="text-gray-600 hover:text-primary"
+                    >
+                      {expanded === r._id ? (
+                        <FaChevronUp />
+                      ) : (
+                        <FaChevronDown />
+                      )}
+                    </button>
+                  </td>
+
+                  <td className="px-4 py-3">
+                    {new Date(r.date).toLocaleDateString()}
+                  </td>
+
+                  <td className="px-4 py-3 font-semibold text-gray-800">
+                    {r.invoiceId}
+                  </td>
+
+                  <td className="px-4 py-3">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-bold ${r.type === "SALES"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-blue-100 text-blue-700"
+                        }`}
+                    >
+                      {r.type}
+                    </span>
+                  </td>
+
+                  <td className="px-4 py-3">{r.party}</td>
+                  <td className="px-4 py-3">{r.warehouse}</td>
+
+                  <td className="px-4 py-3 text-right">
+                    ₹{r.subtotal}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    ₹{r.totalTax}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    ₹{r.transportCharge}
+                  </td>
+
+                  <td className="px-4 py-3 text-right font-bold text-primary text-base">
+                    ₹{r.grandTotal}
+                  </td>
+
+                  <td className="px-4 py-3 text-center">
+                    {r.type === "SALES" && (
+                      <button
+                        onClick={() => generateInvoice(r._id)}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary font-semibold hover:bg-primary hover:text-white transition text-xs"
+                      >
+                        <FaFileInvoice />
+                        Generate
+                      </button>
+                    )}
+                  </td>
+                </tr>
+
+                {/* EXPANDED ROW */}
+                {expanded === r._id && (
+                  <tr>
+                    <td colSpan="11" className="bg-primary/5 px-6 py-4">
+                      <div className="bg-white rounded-xl shadow-sm border p-4">
+                        <ExpandedItems row={r} />
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* MOBILE CARDS */}
+      {/* MOBILE VIEW (UNCHANGED – ALREADY GOOD) */}
       <div className="md:hidden space-y-3">
-        {filtered.map((r) => (
-          <div key={r.id} className="bg-white rounded-xl shadow border p-4 space-y-2">
+        {rows.map((r) => (
+          <div
+            key={r._id}
+            className="bg-white rounded-xl shadow border p-4"
+          >
             <div className="flex justify-between items-center">
-              <span className="text-xs text-gray-500">{r.date}</span>
-              <span className="text-xs font-bold text-primary">{r.type.toUpperCase()}</span>
+              <span className="text-xs text-gray-500">
+                {new Date(r.date).toLocaleDateString()}
+              </span>
+              <span
+                className={`text-xs font-bold px-2 py-1 rounded-full ${r.type === "SALES"
+                  ? "bg-green-100 text-green-700"
+                  : "bg-blue-100 text-blue-700"
+                  }`}
+              >
+                {r.type}
+              </span>
             </div>
 
-            <div className="font-semibold">{r.ref}</div>
-            <div className="text-sm text-gray-600">{r.party}</div>
-
-            <div className="grid grid-cols-2 text-sm gap-2">
-              <div><span className="text-gray-500">Warehouse:</span> {r.warehouse}</div>
-              <div><span className="text-gray-500">Qty:</span> {r.qty}</div>
-              <div><span className="text-gray-500">Amount:</span> ₹{r.amount.toFixed(2)}</div>
-              <div><span className="text-gray-500">Status:</span> {r.status}</div>
+            <div className="mt-2 font-semibold">
+              {r.invoiceId}
             </div>
 
-            <button className="text-primary underline text-sm">View</button>
+            <div className="text-sm text-gray-600">
+              {r.party}
+            </div>
+
+            <div className="grid grid-cols-2 text-sm gap-2 mt-3">
+              <div>
+                <span className="text-gray-500">Total</span>
+                <div className="font-bold text-primary">
+                  ₹{r.grandTotal}
+                </div>
+              </div>
+              <div>
+                <span className="text-gray-500">Warehouse</span>
+                <div>{r.warehouse}</div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() =>
+                  setExpanded(expanded === r._id ? null : r._id)
+                }
+                className="flex-1 border rounded-lg py-2 text-sm"
+              >
+                {expanded === r._id ? "Hide Items" : "View Items"}
+              </button>
+
+              {r.type === "SALES" && (
+                <button className="flex-1 bg-primary text-white rounded-lg py-2 text-sm">
+                  Invoice
+                </button>
+              )}
+            </div>
+
+            {expanded === r._id && (
+              <div className="mt-3">
+                <ExpandedItems row={r} />
+              </div>
+            )}
           </div>
         ))}
       </div>
+    </div>
 
-      {/* FLOATING RETURN BUTTON */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <button
-          onClick={() => setShowReturnModal(true)}
-          className="bg-primary text-white lg:w-64 h-12 p-5 rounded-xl shadow-xl hover:bg-primary/90 transition flex items-center justify-center"
-        >
-          <FaPlus /> Add Return Products
-        </button>
-      </div>
 
-      {/* RETURN MODAL */}
-      {showReturnModal && <ReturnModal onClose={() => setShowReturnModal(false)} />}
+  );
+}
+
+function ExpandedItems({ row }) {
+  const isSales = row.type === "SALES";
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs border rounded-lg overflow-hidden">
+        <thead className="bg-primary/10 text-primary">
+          <tr>
+            <th className="px-3 py-2 text-left">Item</th>
+            <th className="px-3 py-2">HSN</th>
+            <th className="px-3 py-2 text-right">Price</th>
+            <th className="px-3 py-2 text-right">Qty</th>
+            {isSales && (
+              <th className="px-3 py-2 text-right">Discount</th>
+            )}
+            <th className="px-3 py-2 text-right">GST</th>
+            <th className="px-3 py-2 text-right">Total</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {row.items.map((i, idx) => (
+            <tr key={idx} className="border-t hover:bg-gray-50">
+              <td className="px-3 py-2">
+                <div className="font-semibold">{i.name}</div>
+                <div className="text-[11px] text-gray-500">
+                  {i.productGroup}
+                </div>
+              </td>
+
+              <td className="px-3 py-2">{i.hsn}</td>
+
+              <td className="px-3 py-2 text-right">
+                ₹{isSales ? i.sellingPrice : i.purchasePrice}
+              </td>
+
+              <td className="px-3 py-2 text-right">{i.qty}</td>
+
+              {isSales && (
+                <td className="px-3 py-2 text-right">
+                  {i.discountType === "PERCENT"
+                    ? `${i.discountPercent}%`
+                    : `₹${i.discountAmount}`}
+                </td>
+              )}
+
+              <td className="px-3 py-2 text-right">{i.gst}%</td>
+
+              <td className="px-3 py-2 text-right font-bold text-primary">
+                ₹{i.total}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* E-WAY BILL */}
+      {isSales && row.ewayEnabled && (
+        <div className="mt-4 text-xs bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+          <strong>E-Way Bill:</strong>{" "}
+          {row.ewayDetails?.ewayBillNo} <br />
+          Vehicle No: {row.ewayDetails?.vehicleNo}
+        </div>
+      )}
     </div>
   );
 }
 
-/* ---------------- SUMMARY CARD ---------------- */
-const SummaryCard = ({ title, value, highlight }) => (
-  <div className={`bg-white rounded-2xl shadow border p-5 ${highlight ? "border-primary" : ""}`}>
-    <div className="text-sm text-gray-500">{title}</div>
-    <div className="text-xl font-bold text-primary mt-1">₹{value.toFixed(2)}</div>
-  </div>
-);
-
-/* ---------------- RETURN MODAL ---------------- */
-const ReturnModal = ({ onClose }) => {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
-        <div className="bg-primary p-4 text-white font-bold text-lg">Return Product</div>
-
-        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <input placeholder="Voucher Type" className="border rounded-lg p-2 focus:ring-2 focus:ring-primary" />
-          <input placeholder="Product Group" className="border rounded-lg p-2 focus:ring-2 focus:ring-primary" />
-          <input placeholder="Warehouse" className="border rounded-lg p-2 focus:ring-2 focus:ring-primary" />
-          <input placeholder="Item Name" className="border rounded-lg p-2 focus:ring-2 focus:ring-primary" />
-          <input type="number" placeholder="Qty" className="border rounded-lg p-2 focus:ring-2 focus:ring-primary" />
-          <input type="number" placeholder="Returned Qty" className="border rounded-lg p-2 focus:ring-2 focus:ring-primary" />
-          <input type="number" placeholder="Refundable Amount" className="border rounded-lg p-2 col-span-1 sm:col-span-2 focus:ring-2 focus:ring-primary" />
-
-          <select className="border rounded-lg p-2 col-span-1 sm:col-span-2 focus:ring-2 focus:ring-primary">
-            <option value="no">HR Permission - No</option>
-            <option value="yes">HR Permission - Yes</option>
-          </select>
-        </div>
-
-        <div className="flex gap-3 p-4 border-t">
-          <button onClick={onClose} className="flex-1 border rounded-lg p-2 hover:bg-gray-50">
-            Cancel
-          </button>
-          <button className="flex-1 bg-primary text-white rounded-lg p-2 font-bold hover:bg-primary/90">
-            Save Return
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};

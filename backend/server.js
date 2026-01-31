@@ -1,11 +1,13 @@
+import "./config/env.js";
+
 import cors from "cors";
-import dotenv from "dotenv";
 import express from "express";
 import mongoose from "mongoose";
 
 import agentRoutes from "./routes/agentRoutes.js";
 import billingPersonRoutes from "./routes/billingPersonRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
+import pearlsBookRoutes from "./routes/pearlsBookRoutes.js";
 import productGroupRoutes from "./routes/productGroupRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import purchaseOrderRoutes from "./routes/purchaseOrderRoutes.js";
@@ -14,8 +16,6 @@ import vendorRoutes from "./routes/vendorRoutes.js";
 import voucherTypeRoutes from "./routes/voucherTypeRoutes.js";
 import warehouseRoutes from "./routes/warehouseRoutes.js";
 
-
-dotenv.config();
 
 const app = express();
 app.use(
@@ -41,6 +41,8 @@ app.use("/api/customers", customerRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/voucher-types", voucherTypeRoutes);
 app.use("/api/sales-orders", salesOrderRoutes);
+app.use("/api/pearls-book", pearlsBookRoutes);
+
 
 
 // MongoDB Connect

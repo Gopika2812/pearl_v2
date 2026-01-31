@@ -96,36 +96,34 @@ router.post("/", async (req, res) => {
 
 router.get("/items", async (req, res) => {
   try {
-    const orders = await PurchaseOrder.find(
-      { status: "PLACED" },
-      { items: 1 }
-    ).sort({ createdAt: -1 });
+    const orders = await PurchaseOrder.find({ status: "PLACED" });
 
-    // flatten items
-    const itemMap = new Map();
+    const stockMap = {};
 
-    orders.forEach(order => {
-      order.items.forEach(item => {
-        // keep latest PO item per product
-        if (!itemMap.has(item.productId.toString())) {
-          itemMap.set(item.productId.toString(), {
-            productId: item.productId.toString(),
-            name: item.name,
-            hsn: item.hsn,
-            gst: item.gst,
+    orders.forEach((order) => {
+      order.items.forEach((item) => {
+        const key = `${order.warehouse}_${item.productId}`;
+
+        if (!stockMap[key]) {
+          stockMap[key] = {
+            productId: item.productId,
+            warehouse: order.warehouse,
+            qty: 0,
             sellingPrice: item.sellingPrice,
-          });
+            gst: item.gst,
+            hsn: item.hsn,
+          };
         }
+
+        stockMap[key].qty += item.qty;
       });
     });
 
-    res.json([...itemMap.values()]);
+    res.json(Object.values(stockMap));
   } catch (err) {
-    console.error("PO ITEMS ERROR:", err);
-    res.status(500).json({ message: err.message });
+    console.error(err);
+    res.status(500).json({ message: "Failed to load stock" });
   }
 });
-
-
 
 export default router;
