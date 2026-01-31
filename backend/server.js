@@ -3,6 +3,7 @@ import "./config/env.js";
 import cors from "cors";
 import express from "express";
 import mongoose from "mongoose";
+import dns from "dns";
 
 import agentRoutes from "./routes/agentRoutes.js";
 import billingPersonRoutes from "./routes/billingPersonRoutes.js";
@@ -46,6 +47,7 @@ app.use("/api/pearls-book", pearlsBookRoutes);
 
 
 // MongoDB Connect
+dns.setServers(["8.8.8.8", "1.1.1.1"]);
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected"))

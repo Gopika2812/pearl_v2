@@ -227,7 +227,9 @@ const InventoryPurchaseOrderEntry = ({
       />
 
       {/* HEADER */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100
+                grid grid-cols-1 md:grid-cols-3 gap-4">
+
         <div>
           <label className={labelClass}>Voucher Type</label>
           <select

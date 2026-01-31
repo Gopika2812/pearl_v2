@@ -11,7 +11,7 @@ const InventoryAddWarehouseModal = ({ isOpen, onClose, onSave }) => {
   e.preventDefault();
 
   try {
-    const res = await fetch(`${API_BASE}/warehouse`, {
+    const res = await fetch(`${API_BASE}/warehouses`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: warehouse.name }),

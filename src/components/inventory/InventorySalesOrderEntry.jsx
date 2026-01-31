@@ -106,22 +106,21 @@ export default function InventorySalesOrderEntry({
   }, [products, productGroup]);
 
   const productsWithStock = useMemo(() => {
-  return filteredProducts.map((p) => {
-    const po = poItems.find(
-      x =>
-        String(x.productId) === String(p._id) && // ✅ MATCH BY PRODUCT ID
-        x.warehouse === warehouse
-    );
+    return filteredProducts.map((p) => {
+      const po = poItems.find(
+        x =>
+          String(x.productId) === String(p._id)
+      );
 
-    return {
-      ...p,
-      availableQty: po ? po.qty : 0,
-      poSellingPrice: po?.sellingPrice || 0,
-      poGst: po?.gst || 0,
-      poHsn: po?.hsn || "",
-    };
-  });
-}, [filteredProducts, poItems, warehouse]);
+      return {
+        ...p,
+        availableQty: po ? po.qty : 0,
+        poSellingPrice: po?.sellingPrice || 0,
+        poGst: po?.gst || 0,
+        poHsn: po?.hsn || "",
+      };
+    });
+  }, [filteredProducts, poItems]);
 
 
   const handleItemSelection = (id) => {
@@ -350,7 +349,8 @@ export default function InventorySalesOrderEntry({
       />
 
       {/* HEADER */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100
+                grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label className={labelClass}>Voucher Type</label>
           <select className={selectClass} value={voucherType} onChange={(e) => setVoucherType(e.target.value)}>
@@ -411,7 +411,7 @@ export default function InventorySalesOrderEntry({
       {/* ITEM ENTRY */}
       <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 space-y-4">
 
-        <div className="grid grid-cols-1 md:grid-cols-8 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label className={labelClass}>Item Name</label>
             <select
@@ -422,11 +422,9 @@ export default function InventorySalesOrderEntry({
             >
 
               <option value="">
-                {!warehouse
-                  ? "Select warehouse first"
-                  : productGroup
-                    ? "Select Product"
-                    : "Select Product Group first"}
+                {productGroup
+                  ? "Select Product"
+                  : "Select Product Group first"}
               </option>
 
               {productsWithStock.map((p) => (
