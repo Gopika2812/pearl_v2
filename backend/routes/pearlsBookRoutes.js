@@ -53,46 +53,50 @@ router.get("/", async (req, res) => {
   }
 });
 
-async function checkStockAvailability(saleItems) {
+async function checkStockAvailability(saleItems, warehouse) {
   for (const saleItem of saleItems) {
-    // Find all purchase orders that contain this product name
     const purchaseOrders = await PurchaseOrder.find({
-      status: "PLACED",
-      "items.name": saleItem.name, // compare by name
+      warehouse,
+      "items.productId": saleItem.productId,
     });
 
     const totalAvailable = purchaseOrders.reduce((sum, po) => {
-      const item = po.items.find((i) => i.name === saleItem.name);
+      const item = po.items.find(
+        i => String(i.productId) === String(saleItem.productId)
+      );
       return sum + (item?.qty || 0);
     }, 0);
 
     if (totalAvailable < saleItem.qty) {
       throw new Error(
-        `Insufficient stock for ${saleItem.name}. Available: ${totalAvailable}, Required: ${saleItem.qty}`
+        `Insufficient stock for ${saleItem.name}. Available: ${totalAvailable}`
       );
     }
   }
 }
 
-async function reduceStockFIFO(saleItems) {
+
+async function reduceStockFIFO(saleItems, warehouse) {
   const lowStockAlerts = [];
 
   for (const saleItem of saleItems) {
     let remainingQty = saleItem.qty;
 
-    // Find purchase orders with this product name (FIFO)
     const purchaseOrders = await PurchaseOrder.find({
-      status: "PLACED",
-      "items.name": saleItem.name,
+      warehouse,
+      "items.productId": saleItem.productId,
     }).sort({ createdAt: 1 });
 
     for (const po of purchaseOrders) {
-      const item = po.items.find((i) => i.name === saleItem.name);
+      const item = po.items.find(
+        i => String(i.productId) === String(saleItem.productId)
+      );
+
       if (!item || item.qty <= 0) continue;
 
-      const deductQty = Math.min(item.qty, remainingQty);
-      item.qty -= deductQty;
-      remainingQty -= deductQty;
+      const deduct = Math.min(item.qty, remainingQty);
+      item.qty -= deduct;
+      remainingQty -= deduct;
 
       if (item.qty < 10) {
         lowStockAlerts.push({
@@ -108,13 +112,14 @@ async function reduceStockFIFO(saleItems) {
 
     if (remainingQty > 0) {
       throw new Error(
-        `Insufficient stock for ${saleItem.name}. Short by ${remainingQty}`
+        `Stock mismatch for ${saleItem.name}`
       );
     }
   }
 
   return lowStockAlerts;
 }
+
 
 
 function drawCompanyHeader(ctx, canvasWidth) {
@@ -481,34 +486,31 @@ router.post("/generate-invoice/:id", async (req, res) => {
       .populate("customer")
       .lean();
 
-    if (!sale) return res.status(404).json({ message: "Sale not found" });
-
-    // 1️⃣ Check stock availability by product name
-    try {
-      await checkStockAvailability(sale.items);
-    } catch (err) {
-      return res.status(400).json({ message: err.message });
+    if (!sale) {
+      return res.status(404).json({ message: "Sale not found" });
     }
 
-    // 2️⃣ Generate invoice image
+    // ✅ 1. CHECK STOCK (WAREHOUSE AWARE)
+    await checkStockAvailability(sale.items, sale.warehouse);
+
+    // ✅ 2. GENERATE INVOICE
     const invoiceImage = await generateInvoiceImage(sale);
     let ewayImage = null;
+
     if (sale.ewayEnabled) {
       ewayImage = await generateEwayBillImage(sale);
     }
 
-    // 3️⃣ Reduce stock AFTER invoice generation
-    const lowStockAlerts = await reduceStockFIFO(sale.items);
+    // ✅ 3. REDUCE STOCK (WAREHOUSE + FIFO)
+    const lowStockAlerts = await reduceStockFIFO(
+      sale.items,
+      sale.warehouse
+    );
 
-    // 4️⃣ WhatsApp link
-    const phone = sale.customer?.whatsapp
-      ? `91${sale.customer.whatsapp}`
-      : null;
-
-    if (!phone) return res.status(400).json({ message: "WhatsApp number missing" });
-
+    // ✅ 4. WHATSAPP
+    const phone = `91${sale.customer.whatsapp}`;
     const message = encodeURIComponent(
-      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${sale.grandTotal}\n\n📄 Invoice: ${invoiceImage}\n\n🚚 E-Way Bill: ${ewayImage || "Not applicable"}`
+      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${sale.grandTotal}\n\n📄 Invoice: ${invoiceImage}`
     );
 
     res.json({
@@ -520,9 +522,10 @@ router.post("/generate-invoice/:id", async (req, res) => {
     });
   } catch (err) {
     console.error("INVOICE ERROR:", err);
-    res.status(500).json({ message: "Invoice generation failed" });
+    res.status(500).json({ message: err.message });
   }
 });
+
 
 
 

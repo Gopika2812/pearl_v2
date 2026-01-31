@@ -106,22 +106,22 @@ export default function InventorySalesOrderEntry({
   }, [products, productGroup]);
 
   const productsWithStock = useMemo(() => {
-    return filteredProducts.map((p) => {
-      const po = poItems.find(
-        x => x.productId === p._id && x.warehouse === warehouse
-      );
+  return filteredProducts.map((p) => {
+    const po = poItems.find(
+      x =>
+        String(x.productId) === String(p._id) && // ✅ MATCH BY PRODUCT ID
+        x.warehouse === warehouse
+    );
 
-      return {
-        ...p,
-        availableQty: po?.qty || 0,
-        poSellingPrice: po?.sellingPrice || 0,
-        poGst: po?.gst || 0,
-        poHsn: po?.hsn || "",
-      };
-    });
-  }, [filteredProducts, poItems, warehouse]);
-
-
+    return {
+      ...p,
+      availableQty: po ? po.qty : 0,
+      poSellingPrice: po?.sellingPrice || 0,
+      poGst: po?.gst || 0,
+      poHsn: po?.hsn || "",
+    };
+  });
+}, [filteredProducts, poItems, warehouse]);
 
 
   const handleItemSelection = (id) => {

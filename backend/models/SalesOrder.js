@@ -29,6 +29,11 @@ const salesOrderSchema = new mongoose.Schema(
 
     items: [
       {
+        productId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product",
+          required: true,
+        },
         name: String,
         hsn: String,
         qty: Number,
@@ -49,6 +54,7 @@ const salesOrderSchema = new mongoose.Schema(
         total: Number,
       },
     ],
+
 
     subtotal: Number,
     totalDiscount: Number,
