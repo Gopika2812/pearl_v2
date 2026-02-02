@@ -52,6 +52,8 @@ export default function InventorySalesOrderEntry({
   const [discountAmountInput, setDiscountAmountInput] = useState(0);
   const [customerId, setCustomerId] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [showRecentPanel, setShowRecentPanel] = useState(true);
 
 
   useEffect(() => {
@@ -79,7 +81,29 @@ export default function InventorySalesOrderEntry({
     fetchPreview();
   }, [voucherType]);
 
+  useEffect(() => {
+    if (recentOrders.length > 0) setShowRecentPanel(true);
+  }, [recentOrders]);
 
+  const fetchRecentOrders = async (customerId, productId) => {
+    if (!customerId || !productId) {
+      setRecentOrders([]);
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/sales-orders/recent?customerId=${customerId}&productId=${productId}&limit=5`
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to fetch");
+
+      setRecentOrders(data.data || []);
+    } catch (err) {
+      toast.error(err.message || "Failed to fetch recent orders");
+      setRecentOrders([]);
+    }
+  };
 
 
   useEffect(() => {
@@ -136,8 +160,25 @@ export default function InventorySalesOrderEntry({
     setSgst(product.poGst / 2);
     setIgst(false);
     setHsn(product.poHsn);
+
+    // Fetch recent orders for selected customer + product
+    if (customerId) {
+      fetchRecentOrders(customerId, id);
+    }
   };
 
+  const handleCustomerSelect = (id) => {
+    setCustomerId(id);
+    const customer = customers.find(c => c._id === id);
+    setSelectedCustomer(customer || null);
+
+    setTransportCharge(0);
+
+    // Fetch recent orders for selected customer + selected item
+    if (selectedItem) {
+      fetchRecentOrders(id, selectedItem);
+    }
+  };
 
 
   const displayPrice = useMemo(() => {
@@ -154,15 +195,6 @@ export default function InventorySalesOrderEntry({
 
     return taxable + tax;
   }, [sellingPrice, qty, gst, discountType, discountPercent, discountAmountInput]);
-
-  const handleCustomerSelect = (id) => {
-    setCustomerId(id);
-    const customer = customers.find(c => c._id === id);
-    setSelectedCustomer(customer || null);
-
-    setTransportCharge(0);
-  };
-
 
 
   const addItem = () => {
@@ -408,6 +440,47 @@ export default function InventorySalesOrderEntry({
         </select>
       </div>
 
+      {/* RECENT ORDERS */}
+      {/* {recentOrders.length > 0 && (
+        <div className="bg-white p-4 rounded-2xl border border-gray-200 mt-4">
+          <h4 className="text-[#319bab] font-bold text-sm mb-2">
+            Recent Orders
+          </h4>
+
+          <table className="w-full text-sm">
+            <thead className="text-gray-500 text-[10px] uppercase font-bold">
+              <tr>
+                <th>Invoice</th>
+                <th>Qty</th>
+                <th>Total</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentOrders.map((order) => {
+                const item = order.items.find(
+                  i => String(i.productId) === String(selectedItem)
+                );
+
+                return (
+                  <tr key={order._id} className="border-t">
+                    <td className="py-1">{order.invoiceId}</td>
+                    <td className="text-center">{item?.qty}</td>
+                    <td className="text-right">
+                      ₹{item?.total.toFixed(2)}
+                    </td>
+                    <td className="text-right">
+                      {new Date(order.createdAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )} */}
+
+
       {/* ITEM ENTRY */}
       <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 space-y-4">
 
@@ -532,6 +605,7 @@ export default function InventorySalesOrderEntry({
         </div>
 
       </div>
+
 
       {/* TABLE */}
       {items.length > 0 && (
@@ -780,6 +854,72 @@ export default function InventorySalesOrderEntry({
           </div>
         </div>
       </div>
+      {/* RIGHT SIDE RECENT ORDERS PANEL */}
+      {showRecentPanel && recentOrders.length > 0 && (
+        <div className="
+    fixed top-24 right-4 z-50
+    w-96 max-h-[70vh]
+    bg-white rounded-2xl
+    shadow-2xl border border-gray-200
+    flex flex-col
+  ">
+          {/* HEADER */}
+          <div className="flex items-center justify-between px-4 py-3 border-b">
+            <h4 className="text-[#319bab] font-black text-xs uppercase tracking-widest">
+              Recent Orders
+            </h4>
+            <button
+              onClick={() => setShowRecentPanel(false)}
+              className="text-gray-400 hover:text-red-500 text-lg font-bold"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* SCROLLABLE BODY */}
+          <div className="overflow-y-auto px-4 py-2">
+            <table className="w-full text-sm">
+              <thead className="text-gray-500 text-[10px] uppercase font-bold sticky top-0 bg-white">
+                <tr>
+                  <th className="text-left py-1">Invoice</th>
+                  <th className="text-center">Selling price</th>
+                  <th className="text-center">Qty</th>
+                  <th className="text-right">Total</th>
+                  <th className="text-right">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentOrders.map((order) => {
+                  const item = order.items.find(
+                    i => String(i.productId) === String(selectedItem)
+                  );
+
+                  return (
+                    <tr key={order._id} className="border-t text-xs">
+                      <td className="py-1 font-semibold">
+                        {order.invoiceId}
+                      </td>
+                      <td className="text-center">
+                        {item?.sellingPrice}
+                      </td>
+                      <td className="text-center">
+                        {item?.qty}
+                      </td>
+                      <td className="text-right text-[#319bab] font-bold">
+                        ₹{item?.total.toFixed(2)}
+                      </td>
+                      <td className="text-right text-gray-700">
+                        {new Date(order.createdAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
+
   );
 }

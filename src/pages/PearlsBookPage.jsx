@@ -1,12 +1,18 @@
 import axios from "axios";
 import { Fragment, useEffect, useState } from "react";
 import {
+  FaBoxOpen,
+  FaCalendarAlt,
   FaChevronDown,
   FaChevronUp,
   FaFileInvoice,
+  FaFilter,
+  FaRupeeSign,
+  FaShoppingCart,
+  FaTruckLoading,
+  FaWarehouse,
 } from "react-icons/fa";
 import { API_BASE } from "../api";
-
 
 const API = `${API_BASE}/pearls-book`;
 
@@ -14,9 +20,97 @@ export default function PearlsBookPage() {
   const [rows, setRows] = useState([]);
   const [expanded, setExpanded] = useState(null);
 
+  const [filters, setFilters] = useState({
+    fromDate: "",
+    toDate: "",
+    type: "ALL",
+    warehouse: "ALL",
+    item: "",
+  });
+
+
   useEffect(() => {
     axios.get(API).then((res) => setRows(res.data));
   }, []);
+
+  const filteredRows = rows.filter((r) => {
+    // DATE FILTER
+    const rowDate = new Date(r.date);
+    if (filters.fromDate && rowDate < new Date(filters.fromDate)) return false;
+    if (filters.toDate && rowDate > new Date(filters.toDate)) return false;
+
+    // TYPE
+    if (filters.type !== "ALL" && r.type !== filters.type) return false;
+
+    // WAREHOUSE
+    if (
+      filters.warehouse !== "ALL" &&
+      r.warehouse !== filters.warehouse
+    )
+      return false;
+
+    // ITEM NAME
+    if (
+      filters.item &&
+      !r.items?.some((i) =>
+        i.name.toLowerCase().includes(filters.item.toLowerCase())
+      )
+    )
+      return false;
+
+    return true;
+  });
+
+  const warehouses = [...new Set(filteredRows.map(r => r.warehouse))];
+  const itemNames = [
+    ...new Set(
+      rows.flatMap(r => r.items?.map(i => i.name) || [])
+    ),
+  ];
+
+  // console.log(
+  //   rows.map(r => ({
+  //     invoice: r.invoiceId,
+  //     type: r.type,
+  //     voucherType: r.voucherType,
+  //     items: r.items?.length
+  //   }))
+  // );
+
+  const getOrderType = (r) => {
+    if (r.type) return r.type;
+
+    if (r.invoiceId?.includes("PO")) return "PURCHASE";
+    if (r.invoiceId?.includes("SI") || r.invoiceId?.includes("INV")) return "SALES";
+
+    return "UNKNOWN";
+  };
+
+
+  const LOW_STOCK_LIMIT = 10;
+  const stockMap = {};
+
+  rows.forEach((r) => {
+    const orderType = getOrderType(r);
+
+    r.items?.forEach((i) => {
+      stockMap[i.name] ??= 0;
+
+      if (orderType === "PURCHASE") {
+        stockMap[i.name] += i.qty;
+      }
+
+      if (orderType === "SALES") {
+        stockMap[i.name] -= i.qty;
+      }
+    });
+  });
+
+  const lowStockItems = Object.entries(stockMap)
+    .filter(([_, qty]) => qty < LOW_STOCK_LIMIT)
+    .map(([name, qty]) => ({ name, qty }));
+
+
 
   const generateInvoice = async (id) => {
     try {
@@ -42,7 +136,6 @@ export default function PearlsBookPage() {
 
 
 
-
   return (
     <div className="min-h-screen bg-gray-100 pt-20 md:pl-64 px-3 sm:px-6">
       {/* HEADER */}
@@ -55,8 +148,123 @@ export default function PearlsBookPage() {
         </p>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-[1400px] mx-auto mb-6">
+        <SummaryCard
+          title="Sales Orders"
+          value={filteredRows.filter(r => getOrderType(r)=== "SALES").length}
+          icon={<FaShoppingCart />}
+        />
+
+        <SummaryCard
+          title="Purchase Orders"
+          value={filteredRows.filter(r => getOrderType(r) === "PURCHASE").length}
+          icon={<FaTruckLoading />}
+        />
+
+        <SummaryCard
+          title="Sales Amount"
+          value={`₹${filteredRows
+            .filter(r => r.type === "SALES")
+            .reduce((a, b) => a + b.grandTotal, 0)}`}
+          icon={<FaRupeeSign />}
+        />
+
+        <SummaryCard
+          title="Purchase Amount"
+          value={`₹${filteredRows
+            .filter(r => r.type === "PURCHASE")
+            .reduce((a, b) => a + b.grandTotal, 0)}`}
+          icon={<FaRupeeSign />}
+        />
+
+        {/* <LowStockCard items={lowStockItems} /> */}
+      </div>
+
+
+      <div className="bg-white rounded-2xl shadow border p-5 mb-6 max-w-[1400px] mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-sm">
+
+          {/* FROM DATE */}
+          <div className="relative">
+            <FaCalendarAlt className="absolute left-3 top-3.5 text-gray-400" />
+            <input
+              type="date"
+              value={filters.fromDate}
+              onChange={(e) =>
+                setFilters({ ...filters, fromDate: e.target.value })
+              }
+              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+          {/* TO DATE */}
+          <div className="relative">
+            <FaCalendarAlt className="absolute left-3 top-3.5 text-gray-400" />
+            <input
+              type="date"
+              value={filters.toDate}
+              onChange={(e) =>
+                setFilters({ ...filters, toDate: e.target.value })
+              }
+              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+          {/* TYPE */}
+          <div className="relative">
+            <FaFilter className="absolute left-3 top-3.5 text-gray-400" />
+            <select
+              value={filters.type}
+              onChange={(e) =>
+                setFilters({ ...filters, type: e.target.value })
+              }
+              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:ring-1 focus:ring-primary"
+            >
+              <option value="ALL">All Types</option>
+              <option value="SALES">Sales</option>
+              <option value="PURCHASE">Purchase</option>
+            </select>
+          </div>
+
+          {/* WAREHOUSE */}
+          <div className="relative">
+            <FaWarehouse className="absolute left-3 top-3.5 text-gray-400" />
+            <select
+              value={filters.warehouse}
+              onChange={(e) =>
+                setFilters({ ...filters, warehouse: e.target.value })
+              }
+              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:ring-1 focus:ring-primary"
+            >
+              <option value="ALL">All Warehouses</option>
+              {warehouses.map((w) => (
+                <option key={w} value={w}>
+                  {w}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* ITEM SEARCH */}
+          <div className="relative">
+            <FaBoxOpen className="absolute left-3 top-3.5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search Item"
+              value={filters.item}
+              onChange={(e) =>
+                setFilters({ ...filters, item: e.target.value })
+              }
+              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:ring-1 focus:ring-primary"
+            />
+          </div>
+
+        </div>
+      </div>
+
+
       {/* DESKTOP TABLE */}
-      <div className="hidden md:block max-w-[1400px] mx-auto bg-white rounded-2xl shadow border overflow-hidden">
+      <div className="hidden md:block max-w-[1400px] mx-auto bg-white rounded-2xl shadow border overflow-visible">
         <table className="w-full text-sm">
           <thead className="bg-primary text-white sticky top-0 z-10">
             <tr>
@@ -75,9 +283,10 @@ export default function PearlsBookPage() {
           </thead>
 
           <tbody>
-            {rows.map((r) => (
+            {filteredRows.map((r) => (
               <Fragment key={r._id}>
-                <tr className="border-b even:bg-gray-50 hover:bg-primary/5 transition">
+                <tr className="border-b even:bg-gray-50 hover:bg-primary/5 transition relative">
+
                   <td className="text-center px-3 py-3">
                     <button
                       onClick={() =>
@@ -129,17 +338,27 @@ export default function PearlsBookPage() {
                     ₹{r.grandTotal}
                   </td>
 
-                  <td className="px-4 py-3 text-center">
-                    {r.type === "SALES" && (
-                      <button
-                        onClick={() => generateInvoice(r._id)}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary font-semibold hover:bg-primary hover:text-white transition text-xs"
-                      >
-                        <FaFileInvoice />
-                        Generate
-                      </button>
-                    )}
+                  <td className="px-4 py-3 text-right">
+                    <div className="relative flex items-center justify-end gap-2">
+                      {/* MINI ITEMS ICON (ONLY FOR PURCHASE) */}
+                      {r.type === "PURCHASE" && r.items?.length > 0 && (
+                        <MiniItemsBadge items={r.items} />
+                      )}
+
+                      {r.type === "SALES" && (
+                        <button
+                          onClick={() => generateInvoice(r._id)}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg 
+                 bg-primary/10 text-primary font-semibold 
+                 hover:bg-primary hover:text-white transition text-xs"
+                        >
+                          <FaFileInvoice />
+                          Generate
+                        </button>
+                      )}
+                    </div>
                   </td>
+
                 </tr>
 
                 {/* EXPANDED ROW */}
@@ -160,7 +379,7 @@ export default function PearlsBookPage() {
 
       {/* MOBILE VIEW (UNCHANGED – ALREADY GOOD) */}
       <div className="md:hidden space-y-3">
-        {rows.map((r) => (
+        {filteredRows.map((r) => (
           <div
             key={r._id}
             className="bg-white rounded-xl shadow border p-4"
@@ -231,6 +450,47 @@ export default function PearlsBookPage() {
   );
 }
 
+function MiniItemsBadge({ items }) {
+  return (
+    <div className="relative group">
+      {/* ICON / BADGE */}
+      <div className="cursor-pointer bg-primary/10 text-primary 
+                      px-2 py-1 rounded-lg text-xs font-bold 
+                      flex items-center gap-1">
+        📦 {items.length}
+      </div>
+
+      {/* HOVER POPUP */}
+      <div
+        className="absolute right-0 top-8 z-[9999]
+             opacity-0 scale-95 pointer-events-none
+             group-hover:opacity-100 group-hover:scale-100
+             group-hover:pointer-events-auto
+             transition-all duration-150
+             w-56 max-h-40 overflow-y-auto
+             bg-white border rounded-xl shadow-xl p-3"
+      >
+
+        <h4 className="text-[11px] font-bold text-gray-500 mb-2">
+          Items in Order
+        </h4>
+
+        <ul className="space-y-1 text-xs">
+          {items.map((i, idx) => (
+            <li
+              key={idx}
+              className="flex justify-between bg-gray-50 px-2 py-1 rounded"
+            >
+              <span className="truncate">{i.name}</span>
+              <span className="font-bold">× {i.qty}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function ExpandedItems({ row }) {
   const isSales = row.type === "SALES";
 
@@ -298,4 +558,84 @@ function ExpandedItems({ row }) {
     </div>
   );
 }
+
+function SummaryCard({ title, value, icon }) {
+  return (
+    <div className="rounded-2xl bg-white border shadow-sm p-5 
+                    hover:shadow-md transition">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-xs text-gray-500 uppercase tracking-wide">
+            {title}
+          </div>
+          <div className="text-2xl font-bold text-primary mt-1">
+            {value}
+          </div>
+        </div>
+
+        <div className="w-11 h-11 rounded-xl bg-primary/10 
+                        text-primary flex items-center justify-center text-lg">
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LowStockCard({ items }) {
+  return (
+    <div className="relative group rounded-2xl bg-white border shadow-sm p-5
+                    hover:shadow-md transition cursor-pointer">
+
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-xs text-red-500 uppercase tracking-wide font-semibold">
+            Low Stock Items
+          </div>
+          <div className="text-2xl font-bold text-red-600 mt-1">
+            {items.length}
+          </div>
+        </div>
+
+        <div className="w-11 h-11 rounded-xl bg-red-100 
+                        text-red-600 flex items-center justify-center text-lg">
+          <FaBoxOpen />
+        </div>
+      </div>
+
+      {/* 🔽 Hover Popup */}
+      {items.length > 0 && (
+        <div
+          className="absolute left-0 top-full mt-2 z-[9999]
+                     w-64 max-h-48 overflow-y-auto
+                     bg-white border border-red-200 rounded-xl shadow-xl p-3
+                     opacity-0 scale-95 pointer-events-none
+                     group-hover:opacity-100 group-hover:scale-100
+                     group-hover:pointer-events-auto
+                     transition-all duration-150"
+        >
+          <h4 className="text-xs font-bold text-red-600 mb-2">
+            Items below 10 qty
+          </h4>
+
+          <ul className="space-y-1 text-xs">
+            {items.map((i, idx) => (
+              <li
+                key={idx}
+                className="flex justify-between bg-red-50 px-2 py-1 rounded"
+              >
+                <span className="truncate">{i.name}</span>
+                <span className="font-bold text-red-600">
+                  {i.qty}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 

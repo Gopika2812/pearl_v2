@@ -526,7 +526,4 @@ router.post("/generate-invoice/:id", async (req, res) => {
   }
 });
 
-
-
-
 export default router;

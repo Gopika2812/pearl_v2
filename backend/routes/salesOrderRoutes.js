@@ -1,8 +1,8 @@
 import express from "express";
+import mongoose from "mongoose";
 import SalesOrder from "../models/SalesOrder.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
-
 
 const router = express.Router();
 
@@ -126,5 +126,27 @@ router.post("/", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+
+
+router.get("/recent", async (req, res) => {
+  try {
+    const { customerId, productId, limit = 5 } = req.query;
+
+    const orders = await SalesOrder.find({
+      "customer.customerId": new mongoose.Types.ObjectId(customerId),
+      "items.productId": new mongoose.Types.ObjectId(productId)
+    })
+      .sort({ createdAt: -1 })
+      .limit(Number(limit));
+
+    res.json({ data: orders });
+  } catch (err) {
+    console.error("Recent orders error:", err);
+    res.status(500).json({ message: "Failed to fetch recent orders" });
+  }
+});
+
+
 
 export default router;
