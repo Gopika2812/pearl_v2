@@ -429,6 +429,64 @@ export default function InventorySalesOrderEntry({
         </div>
       </div>
 
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
+        <h3 className="text-[#319bab] font-black uppercase text-xs tracking-widest">
+          Customer Details
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-2">
+            <label className={labelClass}>Customer</label>
+            <select
+              className={selectClass}
+              value={customerId}
+              onChange={(e) => handleCustomerSelect(e.target.value)}
+            >
+              <option value="">-- Select Customer --</option>
+              {customers.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.name} ({c.whatsapp})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={labelClass}>WhatsApp</label>
+            <input className={inputClass} value={selectedCustomer?.whatsapp || ""} readOnly />
+          </div>
+
+          <div>
+            <label className={labelClass}>Email</label>
+            <input className={inputClass} value={selectedCustomer?.email || ""} readOnly />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className={labelClass}>Address</label>
+            <textarea
+              className={`${inputClass} h-16`}
+              value={selectedCustomer?.address || ""}
+              readOnly
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>District</label>
+            <input className={inputClass} value={selectedCustomer?.district || ""} readOnly />
+          </div>
+
+          <div>
+            <label className={labelClass}>State</label>
+            <input className={inputClass} value={selectedCustomer?.state || ""} readOnly />
+          </div>
+
+          <div>
+            <label className={labelClass}>Pincode</label>
+            <input className={inputClass} value={selectedCustomer?.pincode || ""} readOnly />
+          </div>
+        </div>
+      </div>
+
       {/* PRODUCT GROUP */}
       <div>
         <label className={labelClass}>Product Group</label>
@@ -655,63 +713,7 @@ export default function InventorySalesOrderEntry({
       )}
 
       {/* CUSTOMER DETAILS */}
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
-        <h3 className="text-[#319bab] font-black uppercase text-xs tracking-widest">
-          Customer Details
-        </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="md:col-span-2">
-            <label className={labelClass}>Customer</label>
-            <select
-              className={selectClass}
-              value={customerId}
-              onChange={(e) => handleCustomerSelect(e.target.value)}
-            >
-              <option value="">-- Select Customer --</option>
-              {customers.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.name} ({c.whatsapp})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className={labelClass}>WhatsApp</label>
-            <input className={inputClass} value={selectedCustomer?.whatsapp || ""} readOnly />
-          </div>
-
-          <div>
-            <label className={labelClass}>Email</label>
-            <input className={inputClass} value={selectedCustomer?.email || ""} readOnly />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className={labelClass}>Address</label>
-            <textarea
-              className={`${inputClass} h-16`}
-              value={selectedCustomer?.address || ""}
-              readOnly
-            />
-          </div>
-
-          <div>
-            <label className={labelClass}>District</label>
-            <input className={inputClass} value={selectedCustomer?.district || ""} readOnly />
-          </div>
-
-          <div>
-            <label className={labelClass}>State</label>
-            <input className={inputClass} value={selectedCustomer?.state || ""} readOnly />
-          </div>
-
-          <div>
-            <label className={labelClass}>Pincode</label>
-            <input className={inputClass} value={selectedCustomer?.pincode || ""} readOnly />
-          </div>
-        </div>
-      </div>
 
 
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4 mt-6">
