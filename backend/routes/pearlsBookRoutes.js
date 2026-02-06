@@ -33,15 +33,18 @@ router.get("/", async (req, res) => {
       invoiceId: s.invoiceId,
       party: s.customer?.name || "",
       warehouse: s.warehouse,
-      customer: s.customer,
+
+      openingBalance: s.openingBalance,
+      closingBalance: s.closingBalance,
+
       items: s.items,
       subtotal: s.subtotal,
       totalTax: s.totalTax,
       transportCharge: s.transportCharge,
       grandTotal: s.grandTotal,
-      ewayEnabled: s.ewayEnabled,
-      ewayDetails: s.ewayDetails,
     }));
+
+
 
     const merged = [...purchaseMapped, ...salesMapped].sort(
       (a, b) => new Date(b.date) - new Date(a.date)
@@ -311,7 +314,8 @@ async function generateInvoiceImage(sale) {
     `data:image/png;base64,${buffer.toString("base64")}`,
     {
       folder: "pearls-erp/invoices",
-      public_id: `INV_${sale.invoiceId}`,
+      public_id: `INV_${sale.invoiceId}_${Date.now()}`
+
     }
   );
 
@@ -473,7 +477,7 @@ async function generateEwayBillImage(sale) {
     `data:image/png;base64,${buffer.toString("base64")}`,
     {
       folder: "pearls-erp/e-way-bills",
-      public_id: `EWAY_${sale.invoiceId}`,
+      public_id: `EWAY_${sale.invoiceId}_${Date.now()}`,
     }
   );
 
@@ -483,7 +487,6 @@ async function generateEwayBillImage(sale) {
 router.post("/generate-invoice/:id", async (req, res) => {
   try {
     const sale = await SalesOrder.findById(req.params.id)
-      .populate("customer")
       .lean();
 
     if (!sale) {
@@ -506,6 +509,14 @@ router.post("/generate-invoice/:id", async (req, res) => {
       sale.items,
       sale.warehouse
     );
+
+    // ✅ 4. UPDATE CUSTOMER BALANCE
+    const customer = await Customer.findById(sale.customer.customerId);
+
+    if (!customer) {
+      throw new Error("Customer not found");
+    }
+
 
     // ✅ 4. WHATSAPP
     const phone = `91${sale.customer.whatsapp}`;

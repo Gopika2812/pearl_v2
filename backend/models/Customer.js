@@ -4,23 +4,28 @@ const customerSchema = new mongoose.Schema(
   {
     // Basic Details
     name: { type: String, required: true },
-    whatsapp: { type: String, required: true },
+    whatsapp: { type: String, default: "" },
     email: { type: String, default: "" },
     address: { type: String, default: "" },
     district: { type: String, default: "" },
     state: { type: String, default: "" },
     pincode: { type: String, default: "" },
+    country: { type: String, default: "India" },
+    gstin: { type: String, default: "" },
+
+    // 💰 Balance Details (NEW)
+    totalBalance: { type: Number, default: 0 },
+    balanceType: { type: String, enum: ["Dr", "Cr"], default: "Dr" },
 
     // Bank Details
-    accountHolder: { type: String, required: true },
-    accountNumber: { type: String, required: true },   // ✅ ADDED
-    ifsc: { type: String, required: true },
-    branch: { type: String, required: true },
+    accountHolder: { type: String, default: "" },
+    accountNumber: { type: String, default: "" },
+    ifsc: { type: String, default: "" },
+    branch: { type: String, default: "" },
     upi: { type: String, default: "" },
   },
   { timestamps: true }
 );
 
 const Customer = mongoose.model("Customer", customerSchema);
-
 export default Customer;

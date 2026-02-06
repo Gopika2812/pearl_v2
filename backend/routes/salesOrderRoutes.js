@@ -1,8 +1,10 @@
 import express from "express";
 import mongoose from "mongoose";
+import Customer from "../models/Customer.js";
 import SalesOrder from "../models/SalesOrder.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
+
 
 const router = express.Router();
 
@@ -36,7 +38,6 @@ router.get("/preview/:voucherType", async (req, res) => {
   }
 });
 
-
 router.post("/", async (req, res) => {
   try {
     const {
@@ -61,7 +62,7 @@ router.post("/", async (req, res) => {
 
     const financialYear = getFinancialYear();
 
-    // 🔑 Fetch voucher counter for SALES ORDER
+    // 🔑 Fetch voucher
     const voucher = await VoucherType.findOne({
       name: voucherType.toLowerCase(),
       orderType: "SO",
@@ -82,11 +83,23 @@ router.post("/", async (req, res) => {
       "0"
     )}/${financialYear}`;
 
+    // ✅ FETCH CUSTOMER INSIDE ROUTE
+    const dbCustomer = await Customer.findById(customer.id);
+
+    if (!dbCustomer) {
+      return res.status(404).json({ message: "Customer not found" });
+    }
+
+    const openingBalance = dbCustomer.totalBalance || 0;
+    const closingBalance = openingBalance + Number(grandTotal);
+
+
     // 🧾 Save Sales Order
     const salesOrder = new SalesOrder({
       invoiceId,
       voucherType,
       orderType: "SO",
+
       customer: {
         customerId: customer.id,
         name: customer.name,
@@ -96,6 +109,10 @@ router.post("/", async (req, res) => {
         state: customer.state,
         pincode: customer.pincode,
       },
+
+      openingBalance,
+      closingBalance,
+
       warehouse,
       billingPerson,
       agent,
@@ -110,9 +127,15 @@ router.post("/", async (req, res) => {
       financialYear,
     });
 
+
     await salesOrder.save();
 
-    // ✅ Increment counter ONLY after save
+    // ✅ UPDATE CUSTOMER BALANCE (HERE)
+    await Customer.findByIdAndUpdate(customer.id, {
+      totalBalance: closingBalance,
+    });
+
+    // ✅ Increment voucher counter
     voucher.counter += 1;
     await voucher.save();
 
@@ -126,8 +149,6 @@ router.post("/", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
-
 
 router.get("/recent", async (req, res) => {
   try {
@@ -146,7 +167,5 @@ router.get("/recent", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch recent orders" });
   }
 });
-
-
 
 export default router;

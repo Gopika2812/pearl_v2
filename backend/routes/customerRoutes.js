@@ -1,7 +1,100 @@
 import express from "express";
+import multer from "multer";
+import XLSX from "xlsx";
 import Customer from "../models/Customer.js";
 
 const router = express.Router();
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+router.post("/bulk-upload", upload.single("file"), async (req, res) => {
+  console.log("🔥 CUSTOMER BULK UPLOAD HIT");
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Excel file required" });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+
+    console.log("📄 TOTAL ROWS:", rows.length);
+    console.log("📄 FIRST ROW RAW:", rows[0]);
+
+    let inserted = [];
+    let skipped = [];
+
+    for (const row of rows) {
+      // 🔄 normalize headers like product upload
+      const normalized = Object.fromEntries(
+        Object.entries(row).map(([k, v]) => [
+          k.replace(/[\s"\n\r]+/g, "").toLowerCase(),
+          String(v || "").trim(),
+        ])
+      );
+
+      const name = normalized.name;
+      const whatsapp = normalized.whatsapp || "";
+      const address = normalized.address || "";
+      const state = normalized.state || "";
+      const country = normalized.country || "India";
+      const gstin = normalized.gstin || "";
+
+      // 💰 Parse "358062.12 Dr"
+      let totalBalance = 0;
+      let balanceType = "Dr";
+
+      if (normalized.totalbalance) {
+        const parts = normalized.totalbalance.split(" ");
+        totalBalance = parseFloat(parts[0]) || 0;
+        balanceType = parts[1] || "Dr";
+      }
+
+      if (!name) {
+        skipped.push({ row, reason: "Missing customer name" });
+        continue;
+      }
+
+      // 🔁 Duplicate check (WhatsApp OR Name)
+      const exists = await Customer.findOne({
+        name: new RegExp(`^${name}$`, "i"),
+      });
+
+      if (exists) {
+        skipped.push({ row, reason: "Customer already exists" });
+        continue;
+      }
+
+      const customer = await Customer.create({
+        name,
+        whatsapp,
+        address,
+        state,
+        country,
+        gstin,
+        totalBalance,
+        balanceType,
+      });
+
+      inserted.push(customer);
+    }
+
+    return res.json({
+      message: "Bulk customer upload completed",
+      insertedCount: inserted.length,
+      skippedCount: skipped.length,
+      skipped,
+    });
+  } catch (err) {
+    console.error("Customer bulk upload error:", err);
+    return res.status(500).json({
+      message: "Bulk upload failed",
+      error: err.message,
+    });
+  }
+});
+
 
 /**
  * POST: Add New Customer
@@ -93,32 +186,6 @@ router.get("/", async (req, res) => {
   }
 });
 
-/**
- * DELETE: Remove Customer (optional)
- */
-router.delete("/:id", async (req, res) => {
-  try {
-    const deleted = await Customer.findByIdAndDelete(req.params.id);
 
-    if (!deleted) {
-      return res.status(404).json({
-        success: false,
-        message: "Customer not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      message: "Customer deleted successfully",
-    });
-  } catch (error) {
-    console.error("Delete Customer Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to delete customer",
-      error: error.message,
-    });
-  }
-});
 
 export default router;

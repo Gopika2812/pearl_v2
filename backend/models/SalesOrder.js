@@ -66,6 +66,22 @@ const salesOrderSchema = new mongoose.Schema(
     ewayDetails: Object,
 
     financialYear: String,
+    openingBalance: {
+      type: Number,
+      required: true,
+    },
+
+    closingBalance: {
+      type: Number,
+      required: true,
+    },
+
+    balanceType: {
+      type: String,
+      enum: ["Dr", "Cr"],
+      default: "Dr",
+    },
+
   },
   { timestamps: true }
 );

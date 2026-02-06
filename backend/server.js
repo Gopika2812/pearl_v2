@@ -1,9 +1,9 @@
 import "./config/env.js";
 
 import cors from "cors";
+import dns from "dns";
 import express from "express";
 import mongoose from "mongoose";
-import dns from "dns";
 
 import agentRoutes from "./routes/agentRoutes.js";
 import billingPersonRoutes from "./routes/billingPersonRoutes.js";

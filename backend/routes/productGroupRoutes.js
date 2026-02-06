@@ -1,9 +1,81 @@
 import express from "express";
 import mongoose from "mongoose";
+import multer from "multer";
+import XLSX from "xlsx";
 import ProductGroup from "../models/ProductGroup.js";
 import VoucherType from "../models/VoucherType.js";
 
 const router = express.Router();
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+router.post("/bulk-upload", upload.single("file"), async (req, res) => {
+  console.log("FILE RECEIVED:", req.file);
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Excel file required" });
+    }
+
+    // Read Excel
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+
+    let inserted = [];
+    let skipped = [];
+
+    for (const row of rows) {
+      const normalized = Object.fromEntries(
+        Object.entries(row).map(([k, v]) => [
+          k.trim().toLowerCase(),
+          String(v).trim(),
+        ])
+      );
+
+      const name = normalized.name;
+      const voucherPrefix = normalized.vouchertype; // ✅ FIX
+
+      if (!name || !voucherPrefix) {
+        skipped.push({ row, reason: "Missing fields" });
+        continue;
+      }
+
+      const voucher = await VoucherType.findOne({ prefix: voucherPrefix });
+      if (!voucher) {
+        skipped.push({ row, reason: "Invalid voucher type" });
+        continue;
+      }
+
+      const exists = await ProductGroup.findOne({
+        name,
+        voucherType: voucher._id,
+      });
+
+      if (exists) {
+        skipped.push({ row, reason: "Already exists" });
+        continue;
+      }
+
+      const group = await ProductGroup.create({
+        name,
+        voucherType: voucher._id,
+      });
+
+      inserted.push(group);
+    }
+
+
+    return res.json({
+      message: "Bulk upload completed",
+      insertedCount: inserted.length,
+      skippedCount: skipped.length,
+      skipped,
+    });
+  } catch (err) {
+    console.error("Bulk upload error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
 
 // 🔹 CREATE Product Group
 router.post("/", async (req, res) => {
@@ -69,3 +141,6 @@ router.get("/", async (req, res) => {
 });
 
 export default router;
+
+
+
