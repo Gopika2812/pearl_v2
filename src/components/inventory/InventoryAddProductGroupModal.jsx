@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API_BASE } from "../../api";
 
 const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave, voucherTypes }) => {
   const [groupName, setGroupName] = useState("");
@@ -24,6 +25,40 @@ const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave, voucherTypes }
     onClose();
   };
 
+  const handleBulkUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/product-groups/bulk-upload`,
+        {
+          method: "POST",
+          body: formData, // ❗ DO NOT set Content-Type
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Upload failed");
+      }
+
+      alert(
+        `Uploaded: ${data.insertedCount}\nSkipped: ${data.skippedCount}`
+      );
+
+      onClose();
+    } catch (err) {
+      console.error("UPLOAD ERROR:", err);
+      alert(err.message || "Upload failed");
+    }
+  };
+
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
       <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
@@ -31,6 +66,23 @@ const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave, voucherTypes }
         <div className="bg-primary p-4 text-white">
           <h3 className="text-xl font-bold font-cursive">Create Product Group</h3>
         </div>
+
+        <input
+          type="file"
+          accept=".xlsx,.xls"
+          hidden
+          id="bulkUpload"
+          onChange={handleBulkUpload}
+        />
+
+        <button
+          type="button"
+          onClick={() => document.getElementById("bulkUpload").click()}
+          className="w-full bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition"
+        >
+          📤 Bulk Upload (Excel)
+        </button>
+
 
         {/* Form */}
         <form onSubmit={handleSave} className="p-6 space-y-5">

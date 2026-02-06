@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API_BASE } from "../../api";
 
 const InventoryAddCustomerModal = ({ isOpen, onClose, onSave }) => {
   const [customer, setCustomer] = useState({
@@ -17,6 +18,37 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave }) => {
   });
 
   if (!isOpen) return null;
+  const handleBulkUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch(`${API_BASE}/customers/bulk-upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Bulk upload failed");
+      }
+
+      alert(
+        `Uploaded: ${data.insertedCount}\nSkipped: ${data.skippedCount}`
+      );
+
+      console.log("Customer bulk upload:", data);
+      onClose();
+    } catch (err) {
+      console.error("Customer bulk upload error:", err);
+      alert(err.message || "Bulk upload failed");
+    }
+  };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -51,6 +83,26 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave }) => {
         <div className="bg-primary p-4 text-white">
           <h3 className="text-xl font-bold">Register New Customer</h3>
         </div>
+
+        <input
+          type="file"
+          accept=".xlsx,.xls"
+          hidden
+          id="customerBulkUpload"
+          onChange={handleBulkUpload}
+        />
+
+        <button
+          type="button"
+          onClick={() =>
+            document.getElementById("customerBulkUpload").click()
+          }
+          className="w-full bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition"
+        >
+          📤 Bulk Upload Customers (Excel)
+        </button>
+
+
 
         <form
           onSubmit={handleSubmit}

@@ -11,6 +11,7 @@ const InventoryPurchaseOrderEntry = ({
   voucherTypes,
   products,
   vendors,
+  productGroups
 }) => {
   const { billingPersons, warehouses } = useInventory();
 
@@ -306,17 +307,13 @@ const InventoryPurchaseOrderEntry = ({
       </div>
 
       {/* PRODUCT GROUP */}
-      <div>
+       <div>
         <label className={labelClass}>Product Group</label>
-        <select
-          className={selectClass}
-          value={productGroup}
-          onChange={(e) => setProductGroup(e.target.value)}
-        >
+        <select className={selectClass} value={productGroup} onChange={(e) => setProductGroup(e.target.value)}>
           <option value="">Select Product Group</option>
-          {[...new Set(products.map((p) => p.groupId))].map((group) => (
-            <option key={group} value={group}>
-              {group}
+          {productGroups.map((g) => (
+            <option key={g._id} value={g._id}>
+              {g.name}
             </option>
           ))}
         </select>

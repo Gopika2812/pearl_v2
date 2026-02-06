@@ -17,6 +17,7 @@ export default function InventorySalesOrderEntry({
   billingPersons = [],
   agents = [],
   products = [],
+  productGroups = [],
   customers = []
 }) {
   const [voucherType, setVoucherType] = useState("");
@@ -309,8 +310,13 @@ export default function InventorySalesOrderEntry({
         district: selectedCustomer.district,
         state: selectedCustomer.state,
         pincode: selectedCustomer.pincode,
+
+        gstin: selectedCustomer.gstin,
+        openingBalance: selectedCustomer.totalBalance,
+        balanceType: selectedCustomer.balanceType,
       }
       : null,
+
     agent,
     warehouse,
     billingPerson,
@@ -338,7 +344,7 @@ export default function InventorySalesOrderEntry({
     }
 
     if (!customerId) {
-      return toast.error("Please select a customer"); // ✅ ADD
+      return toast.error("Please select a customer");
     }
 
     try {
@@ -353,6 +359,11 @@ export default function InventorySalesOrderEntry({
       if (!res.ok) throw new Error(data.message);
 
       toast.success(`Sales Order Created: ${data.invoiceId}`);
+      setSelectedCustomer(prev => ({
+        ...prev,
+        totalBalance: prev.totalBalance + grandTotal,
+      }));
+
       setInvoiceId(data.invoiceId);
     } catch (err) {
       toast.error(err.message || "Failed to save Sales Order");
@@ -452,6 +463,31 @@ export default function InventorySalesOrderEntry({
           </div>
 
           <div>
+            <label className={labelClass}>GSTIN</label>
+            <input
+              className={inputClass}
+              value={selectedCustomer?.gstin || ""}
+              readOnly
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Opening Balance</label>
+            <input
+              className={`${inputClass} font-bold ${selectedCustomer?.balanceType === "Dr"
+                ? "text-red-600"
+                : "text-green-600"
+                }`}
+              value={
+                selectedCustomer
+                  ? `₹${selectedCustomer.totalBalance?.toFixed(2)} ${selectedCustomer.balanceType}`
+                  : ""
+              }
+              readOnly
+            />
+          </div>
+
+          <div>
             <label className={labelClass}>WhatsApp</label>
             <input className={inputClass} value={selectedCustomer?.whatsapp || ""} readOnly />
           </div>
@@ -492,52 +528,13 @@ export default function InventorySalesOrderEntry({
         <label className={labelClass}>Product Group</label>
         <select className={selectClass} value={productGroup} onChange={(e) => setProductGroup(e.target.value)}>
           <option value="">Select Product Group</option>
-          {[...new Set(products.map((p) => p.groupId))].map((g) => (
-            <option key={g} value={g}>{g}</option>
+          {productGroups.map((g) => (
+            <option key={g._id} value={g._id}>
+              {g.name}
+            </option>
           ))}
         </select>
       </div>
-
-      {/* RECENT ORDERS */}
-      {/* {recentOrders.length > 0 && (
-        <div className="bg-white p-4 rounded-2xl border border-gray-200 mt-4">
-          <h4 className="text-[#319bab] font-bold text-sm mb-2">
-            Recent Orders
-          </h4>
-
-          <table className="w-full text-sm">
-            <thead className="text-gray-500 text-[10px] uppercase font-bold">
-              <tr>
-                <th>Invoice</th>
-                <th>Qty</th>
-                <th>Total</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentOrders.map((order) => {
-                const item = order.items.find(
-                  i => String(i.productId) === String(selectedItem)
-                );
-
-                return (
-                  <tr key={order._id} className="border-t">
-                    <td className="py-1">{order.invoiceId}</td>
-                    <td className="text-center">{item?.qty}</td>
-                    <td className="text-right">
-                      ₹{item?.total.toFixed(2)}
-                    </td>
-                    <td className="text-right">
-                      {new Date(order.createdAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )} */}
-
 
       {/* ITEM ENTRY */}
       <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 space-y-4">
@@ -712,7 +709,7 @@ export default function InventorySalesOrderEntry({
         </div>
       )}
 
-      {/* CUSTOMER DETAILS */}
+
 
 
 

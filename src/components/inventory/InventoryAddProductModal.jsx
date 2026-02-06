@@ -12,6 +12,13 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
 
   if (!isOpen) return null;
 
+  const extractUnit = (name) => {
+    const match = name.match(/(\d+)\s*(ml|gm|kg|ltr|lit|g|pcs)/i);
+    if (!match) return "1 units"; // fallback
+    return `${match[1]} ${match[2]}`;
+  };
+
+
   const onSave = async (product) => {
     try {
       const res = await fetch(`${API_BASE}/products`, {
@@ -34,13 +41,45 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
     }
   };
 
+  const handleBulkUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch(`${API_BASE}/products/bulk-upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Bulk upload failed");
+      }
+
+      alert(
+        `Uploaded: ${data.insertedCount}\nSkipped: ${data.skippedCount}`
+      );
+
+      console.log("Bulk upload response:", data);
+      onClose();
+    } catch (err) {
+      console.error("Bulk upload error:", err);
+      alert(err.message || "Bulk upload failed");
+    }
+  };
+
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     const payload = {
       name: product.name,
       groupId: product.groupId,
-       hsncode: product.hsncode,
+      hsncode: product.hsncode,
       unit: `${product.unitValue} ${product.unitType}`,  // "250 grm"                               // optional if you still want
     };
 
@@ -86,6 +125,23 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
           <h3 className="text-xl font-bold">Add New Product</h3>
         </div>
 
+        <input
+          type="file"
+          accept=".xlsx,.xls"
+          hidden
+          id="productBulkUpload"
+          onChange={handleBulkUpload}
+        />
+
+        <button
+          type="button"
+          onClick={() => document.getElementById("productBulkUpload").click()}
+          className="w-full bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition"
+        >
+          📤 Bulk Upload Products (Excel)
+        </button>
+
+
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-gray-700">
           <div className="grid grid-cols-2 gap-4">
 
@@ -113,7 +169,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
               >
                 <option value="">-- Select --</option>
                 {productGroups.map(g => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
+                  <option key={g._id} value={g._id}>{g.name}</option>
                 ))}
               </select>
             </div>
@@ -141,6 +197,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
                   <option value="ml">ml</option>
                   <option value="grm">grm</option>
                   <option value="kg">kg</option>
+                  <option value="pcs">pieces</option>
                 </select>
               </div>
             </div>

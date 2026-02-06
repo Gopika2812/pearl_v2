@@ -151,7 +151,7 @@ export default function PearlsBookPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-[1400px] mx-auto mb-6">
         <SummaryCard
           title="Sales Orders"
-          value={filteredRows.filter(r => getOrderType(r)=== "SALES").length}
+          value={filteredRows.filter(r => getOrderType(r) === "SALES").length}
           icon={<FaShoppingCart />}
         />
 
@@ -177,7 +177,7 @@ export default function PearlsBookPage() {
           icon={<FaRupeeSign />}
         />
 
-        {/* <LowStockCard items={lowStockItems} /> */}
+
       </div>
 
 
@@ -278,6 +278,8 @@ export default function PearlsBookPage() {
               <th className="px-4 py-3 text-right">Tax</th>
               <th className="px-4 py-3 text-right">Transport</th>
               <th className="px-4 py-3 text-right">Grand Total</th>
+              <th className="px-4 py-3 text-right">Opening Bal</th>
+              <th className="px-4 py-3 text-right">Closing Bal</th>
               <th className="px-4 py-3 text-center">Action</th>
             </tr>
           </thead>
@@ -337,6 +339,15 @@ export default function PearlsBookPage() {
                   <td className="px-4 py-3 text-right font-bold text-primary text-base">
                     ₹{r.grandTotal}
                   </td>
+
+                  <td className="px-4 py-3 text-right text-sm">
+                    {r.type === "SALES" ? `₹${r.openingBalance}` : "—"}
+                  </td>
+
+                  <td className="px-4 py-3 text-right font-bold text-sm">
+                    {r.type === "SALES" ? `₹${r.closingBalance}` : "—"}
+                  </td>
+
 
                   <td className="px-4 py-3 text-right">
                     <div className="relative flex items-center justify-end gap-2">
