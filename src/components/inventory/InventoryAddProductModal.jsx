@@ -7,7 +7,11 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
     groupId: "",
     unitValue: "250",
     unitType: "gm",
-    hsncode: ""
+    hsncode: "",
+    availableQty: "",
+    gst: "",
+    purchasePrice: "",
+    sellingPrice: ""
   });
 
   if (!isOpen) return null;
@@ -80,7 +84,11 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
       name: product.name,
       groupId: product.groupId,
       hsncode: product.hsncode,
-      unit: `${product.unitValue} ${product.unitType}`,  // "250 grm"                               // optional if you still want
+      unit: `${product.unitValue} ${product.unitType}`,
+      availableQty: Number(product.availableQty || 0),
+      gst: Number(product.gst || 0),
+      purchasePrice: Number(product.purchasePrice || 0),
+      sellingPrice: Number(product.sellingPrice || 0)                             // optional if you still want
     };
 
     try {

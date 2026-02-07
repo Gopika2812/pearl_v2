@@ -105,6 +105,13 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const name = normalized.name;
       const groupName = normalized.groupname;
       const hsncode = normalized.hsncode;
+      const availableQty = Number(normalized.availableqty || 0);
+      const gst = Number(normalized.gst || 0);
+
+      const purchasePrice = Number(normalized.purchaseprice || 0);
+      const sellingPrice = Number(normalized.sellingprice || 0);
+
+
 
       if (!name || !groupName || !hsncode) {
         skipped.push({ row, reason: "Missing name / groupName / hsncode" });
@@ -124,6 +131,22 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         name,
         groupId: group._id.toString(),
       });
+      if (gst < 0 || gst > 28) {
+        skipped.push({ row, reason: "Invalid GST value" });
+        continue;
+      }
+
+      if (purchasePrice < 0 || sellingPrice < 0) {
+        skipped.push({ row, reason: "Price cannot be negative" });
+        continue;
+      }
+
+      if (sellingPrice < purchasePrice) {
+        skipped.push({ row, reason: "Selling price less than purchase price" });
+        continue;
+      }
+
+
 
       if (exists) {
         skipped.push({ row, reason: "Product already exists" });
@@ -137,6 +160,10 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         groupId: group._id.toString(),
         unit,
         hsncode,
+        availableQty,
+        gst,
+        purchasePrice,
+        sellingPrice
       });
 
       inserted.push(product);

@@ -132,20 +132,35 @@ export default function InventorySalesOrderEntry({
 
   const productsWithStock = useMemo(() => {
     return filteredProducts.map((p) => {
-      const po = poItems.find(
-        x =>
-          String(x.productId) === String(p._id)
+      // 1️⃣ Opening stock from product master
+      const openingQty = Number(p.availableQty || 0);
+
+      // 2️⃣ Sum of PO stock for this product
+      const poQty = poItems
+        .filter(x => String(x.productId) === String(p._id))
+        .reduce((sum, x) => sum + Number(x.qty || 0), 0);
+
+      // 3️⃣ Final available qty (BOTH MODES)
+      const totalAvailableQty = openingQty + poQty;
+
+      // 4️⃣ Price & GST priority
+      const lastPo = poItems.find(
+        x => String(x.productId) === String(p._id)
       );
 
       return {
         ...p,
-        availableQty: po ? po.qty : 0,
-        poSellingPrice: po?.sellingPrice || 0,
-        poGst: po?.gst || 0,
-        poHsn: po?.hsn || "",
+        openingQty,
+        poQty,
+        availableQty: totalAvailableQty,
+
+        sellingPrice: lastPo?.sellingPrice ?? p.sellingPrice ?? 0,
+        gst: lastPo?.gst ?? p.gst ?? 0,
+        hsn: lastPo?.hsn ?? p.hsncode ?? "",
       };
     });
   }, [filteredProducts, poItems]);
+
 
 
   const handleItemSelection = (id) => {
@@ -155,18 +170,20 @@ export default function InventorySalesOrderEntry({
     setSelectedItem(id);
     setQty(1);
 
-    setSellingPrice(product.poSellingPrice);
-    setGst(product.poGst);
-    setCgst(product.poGst / 2);
-    setSgst(product.poGst / 2);
-    setIgst(false);
-    setHsn(product.poHsn);
+    // ✅ AUTO-FILL (BUT EDITABLE)
+    setSellingPrice(product.sellingPrice);
+    setGst(product.gst);
 
-    // Fetch recent orders for selected customer + product
+    setCgst(product.gst / 2);
+    setSgst(product.gst / 2);
+    setIgst(false);
+    setHsn(product.hsn);
+
     if (customerId) {
       fetchRecentOrders(customerId, id);
     }
   };
+
 
   const handleCustomerSelect = (id) => {
     setCustomerId(id);
@@ -561,8 +578,12 @@ export default function InventorySalesOrderEntry({
                   value={p._id}
                   disabled={p.availableQty === 0}
                 >
-                  {p.name} ({p.unit}) — Qty: {p.availableQty}
+                  {p.name} ({p.unit})
+                  — Qty: {p.availableQty}
+                  {p.openingQty > 0 && ` | Opening: ${p.openingQty}`}
+                  {p.poQty > 0 && ` | PO: ${p.poQty}`}
                 </option>
+
               ))}
 
             </select>
