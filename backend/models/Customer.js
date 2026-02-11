@@ -12,10 +12,10 @@ const customerSchema = new mongoose.Schema(
     pincode: { type: String, default: "" },
     country: { type: String, default: "India" },
     gstin: { type: String, default: "" },
-
-    // 💰 Balance Details (NEW)
-    totalBalance: { type: Number, default: 0 },
-    balanceType: { type: String, enum: ["Dr", "Cr"], default: "Dr" },
+    
+    closingBalance: { type: Number, default: 0 },
+    margin: { type: Number, default: 0 }, // Can be positive or negative
+    salesOwner: { type: String, default: "" },
 
     // Bank Details
     accountHolder: { type: String, default: "" },

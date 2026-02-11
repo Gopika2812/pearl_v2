@@ -2,12 +2,7 @@ import mongoose from "mongoose";
 
 const ProductGroupSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, trim: true },
-    voucherType: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "VoucherType",
-      required: true,
-    },
+    name: { type: String, required: true, trim: true, unique: true },
   },
   { timestamps: true }
 );

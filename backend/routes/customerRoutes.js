@@ -34,14 +34,27 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         ])
       );
 
-      const name = normalized.name;
-      const whatsapp = normalized.whatsapp || "";
+      const name = normalized.customername; 
+      const whatsapp = String(normalized.whatsapp || "").trim(); 
+      const email = normalized.email || "";
       const address = normalized.address || "";
+      const district = normalized.district || "";
       const state = normalized.state || "";
+      const pincode = normalized.pincode || "";
       const country = normalized.country || "India";
       const gstin = normalized.gstin || "";
+      const salesOwner = normalized.salesowner || "";
+      const margin = parseFloat(normalized.margin) || 0;
+      const closingBalance = parseFloat(normalized.closingbalance) || 0;
 
-      // 💰 Parse "358062.12 Dr"
+      // Bank Details
+      const accountHolder = normalized.accountholdername || "";
+      const accountNumber = normalized.accountnumber || "";
+      const ifsc = normalized.ifsc || "";
+      const branch = normalized.branch || "";
+      const upi = normalized.upi || "";
+
+      // 💰 Parse "358062.12 Dr" if totalbalance exists
       let totalBalance = 0;
       let balanceType = "Dr";
 
@@ -69,12 +82,23 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const customer = await Customer.create({
         name,
         whatsapp,
+        email,
         address,
+        district,
         state,
+        pincode,
         country,
         gstin,
         totalBalance,
         balanceType,
+        closingBalance,
+        margin,
+        salesOwner,
+        accountHolder,
+        accountNumber,
+        ifsc,
+        branch,
+        upi,
       });
 
       inserted.push(customer);
@@ -109,8 +133,12 @@ router.post("/", async (req, res) => {
       district,
       state,
       pincode,
+      gstin,
+      closingBalance,
+      margin,
+      salesOwner,
       accountHolder,
-      accountNumber,   // ✅ ADDED
+      accountNumber,
       ifsc,
       branch,
       upi,
@@ -141,8 +169,12 @@ router.post("/", async (req, res) => {
       district,
       state,
       pincode,
+      gstin,
+      closingBalance: parseFloat(closingBalance) || 0,
+      margin: parseFloat(margin) || 0,
+      salesOwner,
       accountHolder,
-      accountNumber,   // ✅ ADDED
+      accountNumber,
       ifsc,
       branch,
       upi,

@@ -5,8 +5,7 @@ import dns from "dns";
 import express from "express";
 import mongoose from "mongoose";
 
-import agentRoutes from "./routes/agentRoutes.js";
-import billingPersonRoutes from "./routes/billingPersonRoutes.js";
+
 import customerRoutes from "./routes/customerRoutes.js";
 import pearlsBookRoutes from "./routes/pearlsBookRoutes.js";
 import productGroupRoutes from "./routes/productGroupRoutes.js";
@@ -36,8 +35,6 @@ app.use("/api/vendors", vendorRoutes);
 app.use("/api/product-groups", productGroupRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/warehouses", warehouseRoutes);
-app.use("/api/agents", agentRoutes);
-app.use("/api/billing-persons", billingPersonRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/voucher-types", voucherTypeRoutes);

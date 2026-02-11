@@ -1,9 +1,7 @@
 import express from "express";
-import mongoose from "mongoose";
 import multer from "multer";
 import XLSX from "xlsx";
 import ProductGroup from "../models/ProductGroup.js";
-import VoucherType from "../models/VoucherType.js";
 
 const router = express.Router();
 
@@ -21,10 +19,16 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet);
 
+    console.log("Raw rows from Excel:", JSON.stringify(rows, null, 2));
+    console.log("Total rows to process:", rows.length);
+
     let inserted = [];
     let skipped = [];
 
+    console.log("PARSED ROWS:", rows);
+
     for (const row of rows) {
+      console.log("Processing row:", row);
       const normalized = Object.fromEntries(
         Object.entries(row).map(([k, v]) => [
           k.trim().toLowerCase(),
@@ -32,38 +36,37 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         ])
       );
 
+      console.log("Normalized row:", normalized);
       const name = normalized.name;
-      const voucherPrefix = normalized.vouchertype; // ✅ FIX
 
-      if (!name || !voucherPrefix) {
-        skipped.push({ row, reason: "Missing fields" });
-        continue;
-      }
-
-      const voucher = await VoucherType.findOne({ prefix: voucherPrefix });
-      if (!voucher) {
-        skipped.push({ row, reason: "Invalid voucher type" });
+      if (!name) {
+        skipped.push({ row, reason: "Missing product group name" });
         continue;
       }
 
       const exists = await ProductGroup.findOne({
-        name,
-        voucherType: voucher._id,
+        name: name,
       });
 
       if (exists) {
+        console.log(`Product "${name}" already exists`);
         skipped.push({ row, reason: "Already exists" });
         continue;
       }
 
-      const group = await ProductGroup.create({
-        name,
-        voucherType: voucher._id,
-      });
-
-      inserted.push(group);
+      try {
+        const group = await ProductGroup.create({
+          name,
+        });
+        console.log("Created product group:", group);
+        inserted.push(group);
+      } catch (createErr) {
+        console.error("Error creating product group:", createErr.message);
+        skipped.push({ row, reason: `Error: ${createErr.message}` });
+      }
     }
 
+    console.log("Upload summary - Inserted:", inserted.length, "Skipped:", skipped.length);
 
     return res.json({
       message: "Bulk upload completed",
@@ -80,25 +83,14 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 // 🔹 CREATE Product Group
 router.post("/", async (req, res) => {
   try {
-    const { name, voucherId } = req.body;
+    const { name } = req.body;
 
-    if (!name || !voucherId) {
-      return res.status(400).json({ message: "Name and Voucher ID required" });
-    }
-
-    // 🔒 Prevent CastError
-    if (!mongoose.Types.ObjectId.isValid(voucherId)) {
-      return res.status(400).json({ message: "Invalid Voucher ID format" });
-    }
-
-    const voucher = await VoucherType.findById(voucherId);
-    if (!voucher) {
-      return res.status(400).json({ message: "Invalid Voucher Type" });
+    if (!name) {
+      return res.status(400).json({ message: "Product group name is required" });
     }
 
     const exists = await ProductGroup.findOne({
       name: name.trim(),
-      voucherType: voucherId,
     });
 
     if (exists) {
@@ -109,28 +101,21 @@ router.post("/", async (req, res) => {
 
     const group = new ProductGroup({
       name: name.trim(),
-      voucherType: voucherId,
     });
 
     await group.save();
 
-    const populated = await ProductGroup.findById(group._id).populate(
-      "voucherType",
-      "name prefix"
-    );
-
-    return res.status(201).json(populated);
+    return res.status(201).json(group);
   } catch (err) {
     console.error("Product Group save error:", err);
     return res.status(500).json({ message: err.message });
   }
 });
 
-// 🔹 GET ALL Product Groups (with Voucher info)
+// 🔹 GET ALL Product Groups
 router.get("/", async (req, res) => {
   try {
     const groups = await ProductGroup.find()
-      .populate("voucherType", "name prefix")
       .sort({ createdAt: -1 });
 
     return res.json(groups);
