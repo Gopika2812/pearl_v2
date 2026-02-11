@@ -10,6 +10,10 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave }) => {
     district: "",
     state: "",
     pincode: "",
+    gstin: "",
+    closingBalance: 0,
+    margin: 0,
+    salesOwner: "",
     accountHolder: "",
     accountNumber: "",
     ifsc: "",
@@ -62,6 +66,10 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave }) => {
       district: "",
       state: "",
       pincode: "",
+      gstin: "",
+      closingBalance: 0,
+      margin: 0,
+      salesOwner: "",
       accountHolder: "",
       accountNumber: "",
       ifsc: "",
@@ -191,6 +199,57 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave }) => {
                 value={customer.pincode}
                 onChange={(e) =>
                   setCustomer({ ...customer, pincode: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="col-span-2">
+              <label className={labelClass}>GSTIN</label>
+              <input
+                type="text"
+                className={inputClass}
+                value={customer.gstin}
+                onChange={(e) =>
+                  setCustomer({ ...customer, gstin: e.target.value.toUpperCase() })
+                }
+                placeholder="E.g., 27AABCD1234H1Z0"
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Sales Owner</label>
+              <input
+                type="text"
+                className={inputClass}
+                value={customer.salesOwner}
+                onChange={(e) =>
+                  setCustomer({ ...customer, salesOwner: e.target.value })
+                }
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Closing Balance</label>
+              <input
+                type="number"
+                step="0.01"
+                className={inputClass}
+                value={customer.closingBalance}
+                onChange={(e) =>
+                  setCustomer({ ...customer, closingBalance: parseFloat(e.target.value) || 0 })
+                }
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Margin (% - Positive or Negative)</label>
+              <input
+                type="number"
+                step="0.01"
+                className={inputClass}
+                value={customer.margin}
+                onChange={(e) =>
+                  setCustomer({ ...customer, margin: parseFloat(e.target.value) || 0 })
                 }
               />
             </div>

@@ -14,8 +14,6 @@ const labelClass =
 export default function InventorySalesOrderEntry({
   voucherTypes = [],
   warehouses = [],
-  billingPersons = [],
-  agents = [],
   products = [],
   productGroups = [],
   customers = []
@@ -23,7 +21,7 @@ export default function InventorySalesOrderEntry({
   const [voucherType, setVoucherType] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [warehouse, setWarehouse] = useState("");
-  const [billingPerson, setBillingPerson] = useState("");
+
 
   const [productGroup, setProductGroup] = useState("");
   const [selectedItem, setSelectedItem] = useState("");
@@ -39,7 +37,7 @@ export default function InventorySalesOrderEntry({
   const [items, setItems] = useState([]);
 
   const [transportCharge, setTransportCharge] = useState(0);
-  const [agent, setAgent] = useState("");
+
   const [enableEway, setEnableEway] = useState(false);
   const [ewayBillNo, setEwayBillNo] = useState("");
 
@@ -334,9 +332,9 @@ export default function InventorySalesOrderEntry({
       }
       : null,
 
-    agent,
+
     warehouse,
-    billingPerson,
+
     items,
     transportCharge,
     subtotal,
@@ -356,7 +354,7 @@ export default function InventorySalesOrderEntry({
   };
 
   const handleFinalAction = async () => {
-    if (!voucherType || !warehouse || !billingPerson || items.length === 0) {
+    if (!voucherType || !warehouse || items.length === 0) {
       return toast.error("Fill all required fields");
     }
 
@@ -432,26 +430,6 @@ export default function InventorySalesOrderEntry({
             <option value="">-- Select --</option>
             {warehouses.map((w) => (
               <option key={w._id} value={w.name}>{w.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className={labelClass}>Billing Person</label>
-          <select className={selectClass} value={billingPerson} onChange={(e) => setBillingPerson(e.target.value)}>
-            <option value="">-- Select --</option>
-            {billingPersons.map((b) => (
-              <option key={b._id} value={b.name}>{b.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className={labelClass}>Agent</label>
-          <select className={selectClass} value={agent} onChange={(e) => setAgent(e.target.value)}>
-            <option value="">-- Select --</option>
-            {agents.map((a) => (
-              <option key={a._id} value={a.name}>{a.name}</option>
             ))}
           </select>
         </div>

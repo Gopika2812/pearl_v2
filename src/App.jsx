@@ -7,6 +7,7 @@ import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
 import { InventoryProvider } from "./context/InventoryContext";
 import CRMPage from "./pages/CRMPage";
+import CustomerSummary from "./pages/CustomerSummary";
 import DispatchSheetPage from "./pages/DispatchSheetPage";
 import EmployeeDashboardPage from "./pages/EmployeeDashboardPage";
 import EmployeesBookPage from "./pages/EmployeesBookPage";
@@ -16,18 +17,19 @@ import HrLogin from "./pages/HrLogin";
 import InventoryPurchaseOrder from "./pages/inventory/InventoryPurchaseOrder";
 import InventorySalesOrder from "./pages/inventory/InventorySalesOrder";
 import PearlsBookPage from "./pages/PearlsBookPage";
+import ProductSummary from "./pages/ProductSummary";
+import VendorSummary from "./pages/VendorSummary";
 
 function App() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // pages where sidebar/topbar should NOT appear
+
   const hideLayout = location.pathname === "/login";
 
   return (
     <InventoryProvider>
       <>
-        {/* 🔥 GLOBAL TOAST CONTAINER */}
         <ToastContainer />
 
         <div className="flex">
@@ -66,6 +68,18 @@ function App() {
                   element={<EmployeeDashboardPage />}
                 />
                 <Route path="/hr-control" element={<HRControlPanel />} />
+                <Route
+                  path="/summary/products"
+                  element={<ProductSummary />}
+                />
+                <Route
+                  path="/summary/customers"
+                  element={<CustomerSummary />}
+                />
+                <Route
+                  path="/summary/vendors"
+                  element={<VendorSummary />}
+                />
               </Routes>
             </div>
           </div>

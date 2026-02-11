@@ -13,7 +13,7 @@ const InventoryPurchaseOrderEntry = ({
   vendors,
   productGroups
 }) => {
-  const { billingPersons, warehouses } = useInventory();
+  const { warehouses } = useInventory();
 
   // Header State
   const [voucherType, setVoucherType] = useState("");
@@ -36,8 +36,7 @@ const InventoryPurchaseOrderEntry = ({
 
   // Footer State
   const [transportCharge, setTransportCharge] = useState(0);
-  const [billingPerson, setBillingPerson] = useState("");
-  const [agent, setAgent] = useState("");
+  
 
   const filteredProducts = productGroup
     ? products.filter((p) => p.groupId === productGroup)
@@ -166,7 +165,7 @@ const InventoryPurchaseOrderEntry = ({
     if (!voucherType) return toast.error("Select Voucher Type!");
     if (!vendor) return toast.error("Select Vendor!");
     if (!warehouse) return toast.error("Select Warehouse!");
-    if (!billingPerson) return toast.error("Select Billing Person!");
+    
     if (items.length === 0) return toast.error("Add at least one product!");
 
     const orderData = {
@@ -178,8 +177,7 @@ const InventoryPurchaseOrderEntry = ({
       totalTax,
       transportCharge,
       grandTotal,
-      billingPerson,
-      agent,
+      
       invoiceId,
       status: "PLACED",
     };
@@ -247,6 +245,16 @@ const InventoryPurchaseOrderEntry = ({
           </select>
         </div>
 
+         <div>
+          <label className={labelClass}>Invoice ID</label>
+          <input
+            type="text"
+            className={`${inputClass} bg-gray-50 font-bold text-[#319bab]`}
+            value={invoiceId}
+            readOnly
+          />
+        </div>
+
         <div>
           <label className={labelClass}>Vendor</label>
           <select
@@ -263,15 +271,7 @@ const InventoryPurchaseOrderEntry = ({
           </select>
         </div>
 
-        <div>
-          <label className={labelClass}>Invoice ID</label>
-          <input
-            type="text"
-            className={`${inputClass} bg-gray-50 font-bold text-[#319bab]`}
-            value={invoiceId}
-            readOnly
-          />
-        </div>
+       
 
         <div>
           <label className={labelClass}>Warehouse</label>
@@ -289,21 +289,6 @@ const InventoryPurchaseOrderEntry = ({
           </select>
         </div>
 
-        <div>
-          <label className={labelClass}>Billing Person</label>
-          <select
-            className={selectClass}
-            value={billingPerson}
-            onChange={(e) => setBillingPerson(e.target.value)}
-          >
-            <option value="">-- Select --</option>
-            {billingPersons.map((b) => (
-              <option key={b._id} value={b.name}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       {/* PRODUCT GROUP */}

@@ -1,5 +1,10 @@
+import { useState } from "react";
 import {
   FaBook,
+  FaBox,
+  FaChartBar,
+  FaChevronDown,
+  FaEllipsisH,
   FaFileInvoice,
   FaHome,
   FaMoneyBillWave,
@@ -7,6 +12,7 @@ import {
   FaSignOutAlt,
   FaTimes,
   FaTruck,
+  FaUserClock,
   FaUsers,
   FaUserTie,
 } from "react-icons/fa";
@@ -14,6 +20,7 @@ import { Link, useLocation } from "react-router-dom";
 
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
   const menu = [
     { name: "Home", path: "/", icon: <FaHome /> },
@@ -25,6 +32,13 @@ const Sidebar = ({ isOpen, onClose }) => {
     { name: "Employees Book", path: "/employees", icon: <FaUserTie /> },
     { name: "Employee Dashboard", path: "/employeepage", icon: <FaUsers /> },
     { name: "Payroll & Attendance", path: "/hr-control", icon: <FaMoneyBillWave /> },
+  ];
+
+  const summaryItems = [
+    { name: "Product Summary", path: "/summary/products", icon: <FaBox /> },
+    { name: "Customer Summary", path: "/summary/customers", icon: <FaUserClock /> },
+    { name: "Vendor Summary", path: "/summary/vendors", icon: <FaTruck /> },
+    { name: "Others", path: "/summary/others", icon: <FaEllipsisH /> },
   ];
 
   const handleLogout = () => {
@@ -60,6 +74,44 @@ const Sidebar = ({ isOpen, onClose }) => {
               </Link>
             );
           })}
+
+          {/* SUMMARY SECTION */}
+          <div className="mx-3 mb-1 mt-4">
+            <button
+              onClick={() => setSummaryOpen(!summaryOpen)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+            >
+              <span className="text-lg"><FaChartBar /></span>
+              <span className="text-sm flex-1 text-left">Summary</span>
+              <FaChevronDown
+                className={`text-xs transition-transform ${
+                  summaryOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {summaryOpen && (
+              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                {summaryItems.map((item, idx) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={idx}
+                      to={item.path}
+                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
+                        active
+                          ? "bg-white/20 text-white font-semibold"
+                          : "hover:bg-white/10 text-white/80"
+                      }`}
+                    >
+                      <span className="text-sm">{item.icon}</span>
+                      <span>{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </nav>
 
         <div className="p-4 border-t border-white/20">
@@ -116,6 +168,45 @@ const Sidebar = ({ isOpen, onClose }) => {
               </Link>
             );
           })}
+
+          {/* SUMMARY SECTION MOBILE */}
+          <div className="mx-2 mb-1 mt-4">
+            <button
+              onClick={() => setSummaryOpen(!summaryOpen)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+            >
+              <span className="text-lg"><FaChartBar /></span>
+              <span className="text-sm flex-1 text-left">Summary</span>
+              <FaChevronDown
+                className={`text-xs transition-transform ${
+                  summaryOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {summaryOpen && (
+              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                {summaryItems.map((item, idx) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={idx}
+                      to={item.path}
+                      onClick={onClose}
+                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
+                        active
+                          ? "bg-white/20 text-white font-semibold"
+                          : "hover:bg-white/10 text-white/80"
+                      }`}
+                    >
+                      <span className="text-sm">{item.icon}</span>
+                      <span>{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* LOGOUT */}

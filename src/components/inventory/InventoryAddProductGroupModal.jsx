@@ -1,27 +1,24 @@
 import { useState } from "react";
 import { API_BASE } from "../../api";
 
-const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave, voucherTypes }) => {
+const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave }) => {
   const [groupName, setGroupName] = useState("");
-  const [selectedVoucherId, setSelectedVoucherId] = useState("");
 
   if (!isOpen) return null;
 
   const handleSave = (e) => {
     e.preventDefault();
-    if (!groupName || !selectedVoucherId) {
-      alert("Please fill all fields");
+    if (!groupName) {
+      alert("Please fill in the product group name");
       return;
     }
 
     onSave({
       name: groupName.trim(),
-      voucherId: selectedVoucherId,
     });
 
     // Reset and Close
     setGroupName("");
-    setSelectedVoucherId("");
     onClose();
   };
 
@@ -86,24 +83,6 @@ const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave, voucherTypes }
 
         {/* Form */}
         <form onSubmit={handleSave} className="p-6 space-y-5">
-          {/* Voucher Selection Dropdown */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Select Voucher Type</label>
-            <select
-              required
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white"
-              value={selectedVoucherId}
-              onChange={(e) => setSelectedVoucherId(e.target.value)}
-            >
-              <option value="">-- Choose Voucher --</option>
-              {voucherTypes.map((v) => (
-                <option key={v._id} value={v._id}>
-                  {v.name} ({v.prefix})
-                </option>
-              ))}
-            </select>
-          </div>
-
           {/* Group Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Product Group Name</label>

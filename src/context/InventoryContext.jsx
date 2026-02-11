@@ -11,8 +11,6 @@ export const InventoryProvider = ({ children }) => {
   const [products, setProducts] = useState([]);
   const [locations, setLocations] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
-  const [agents, setAgents] = useState([]);
-  const [billingPersons, setBillingPersons] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [vendors, setVendors] = useState([]);
 
@@ -26,8 +24,6 @@ export const InventoryProvider = ({ children }) => {
     fetchProductGroups();
     fetchProducts();
     fetchWarehouses();
-    fetchAgents();
-    fetchBillingPersons();
     fetchCustomers();
   }, []);
 
@@ -40,7 +36,7 @@ export const InventoryProvider = ({ children }) => {
     try {
       const res = await fetch(`${API_BASE}/voucher-types`);
       const data = await res.json();
-      setVoucherTypes(data);
+      setVoucherTypes(data.data || data);
     } catch (err) {
       console.error("Voucher fetch failed", err);
     }
@@ -50,7 +46,7 @@ export const InventoryProvider = ({ children }) => {
     try {
       const res = await fetch(`${API_BASE}/vendors`);
       const data = await res.json();
-      setVendors(data);
+      setVendors(data.data || data);
     } catch (err) {
       console.error("Vendor fetch failed", err);
     }
@@ -60,7 +56,7 @@ export const InventoryProvider = ({ children }) => {
     try {
       const res = await fetch(`${API_BASE}/product-groups`);
       const data = await res.json();
-      setProductGroups(data);
+      setProductGroups(data.data || data);
     } catch (err) {
       console.error("ProductGroup fetch failed", err);
     }
@@ -83,26 +79,6 @@ export const InventoryProvider = ({ children }) => {
       setWarehouses(json.data || []);
     } catch (err) {
       console.error("Warehouse fetch failed", err);
-    }
-  };
-
-  const fetchAgents = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/agents`);
-      const data = await res.json();
-      setAgents(data);
-    } catch (err) {
-      console.error("Agent fetch failed", err);
-    }
-  };
-
-  const fetchBillingPersons = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/billing-persons`);
-      const json = await res.json();
-      setBillingPersons(json.data || []);
-    } catch (err) {
-      console.error("Billing person fetch failed", err);
     }
   };
 
@@ -141,9 +117,7 @@ export const InventoryProvider = ({ children }) => {
       if (type === "group") url = `${API_BASE}/product-groups`;
       if (type === "product") url = `${API_BASE}/products`;
       if (type === "warehouse") url = `${API_BASE}/warehouses`;
-      if (type === "agent") url = `${API_BASE}/agents`;
-      if (type === "billing") url = `${API_BASE}/billing-persons`;
-      if (type === "customer") url = `${API_BASE}/customers`; // ✅ ADD THIS
+      if (type === "customer") url = `${API_BASE}/customers`;
 
 
 
@@ -158,18 +132,16 @@ export const InventoryProvider = ({ children }) => {
         body: JSON.stringify(data),
       });
 
-      const text = await res.text(); // ← safer parse
+      const text = await res.text(); 
       const saved = text ? JSON.parse(text) : {};
 
       if (!res.ok) throw new Error(saved.message || "Save failed");
 
 
-      if (type === "vendor") setVendors(prev => [...prev, saved]);
-      if (type === "group") setProductGroups(prev => [...prev, saved]);
-      if (type === "product") setProducts(prev => [...prev, saved]);
-      if (type === "warehouse") setWarehouses(prev => [...prev, saved]);
-      if (type === "agent") setAgents(prev => [...prev, saved]);
-      if (type === "billing") setBillingPersons(prev => [...prev, saved]);
+      if (type === "vendor") setVendors(prev => [...prev, saved.data || saved]);
+      if (type === "group") setProductGroups(prev => [...prev, saved.data || saved]);
+      if (type === "product") setProducts(prev => [...prev, saved.data || saved]);
+      if (type === "warehouse") setWarehouses(prev => [...prev, saved.data || saved]);
       if (type === "customer") setCustomers(prev => [...prev, saved.data || saved]);
 
     } catch (err) {
@@ -182,8 +154,8 @@ export const InventoryProvider = ({ children }) => {
     <InventoryContext.Provider
       value={{
         voucherTypes, productGroups, products, locations,
-        warehouses, agents, billingPersons, customers, vendors,
-        drafts, finalOrders, fetchWarehouses, fetchAgents, fetchBillingPersons, fetchCustomers,
+        warehouses, customers, vendors,
+        drafts, finalOrders, fetchWarehouses,  fetchCustomers,
         addData, addLocalVoucher, saveToDrafts, placeFinalOrder
       }}
     >

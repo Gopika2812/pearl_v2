@@ -2,8 +2,6 @@ import { useState } from "react";
 import { FaSlidersH, FaTimes } from "react-icons/fa";
 
 // Modals
-import InventoryAddAgentModal from "../../components/inventory/InventoryAddAgentModal";
-import InventoryAddBillingPersonModal from "../../components/inventory/InventoryAddBillingPersonModal";
 import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCustomerModal";
 import InventoryAddProductGroupModal from "../../components/inventory/InventoryAddProductGroupModal";
 import InventoryAddProductModal from "../../components/inventory/InventoryAddProductModal";
@@ -42,8 +40,6 @@ const InventoryPurchaseOrder = () => {
     { id: "product_group", label: "+ Product Group" },
     { id: "product", label: "+ Product Name" },
     { id: "warehouse", label: "+ Warehouse" },
-    { id: "agent", label: "+ Agent" },
-    { id: "billing_person", label: "+ Billing Person" },
     { id: "customer", label: "+ Customer Details" },
   ];
 
@@ -151,7 +147,6 @@ const InventoryPurchaseOrder = () => {
         isOpen={activeModal === "product_group"}
         onClose={() => setActiveModal(null)}
         onSave={(data) => { addData("group", data); setActiveModal(null); }}
-        voucherTypes={voucherTypes}
       />
 
       <InventoryAddProductModal
@@ -165,18 +160,6 @@ const InventoryPurchaseOrder = () => {
         isOpen={activeModal === "warehouse"}
         onClose={() => setActiveModal(null)}
         onSave={(data) => { addData("warehouse", data); setActiveModal(null); }}
-      />
-
-      <InventoryAddAgentModal
-        isOpen={activeModal === "agent"}
-        onClose={() => setActiveModal(null)}
-        onSave={(data) => { addData("agent", data); setActiveModal(null); }}
-      />
-
-      <InventoryAddBillingPersonModal
-        isOpen={activeModal === "billing_person"}
-        onClose={() => setActiveModal(null)}
-        onSave={(data) => { addData("billing_person", data); setActiveModal(null); }}
       />
 
       <InventoryAddCustomerModal
