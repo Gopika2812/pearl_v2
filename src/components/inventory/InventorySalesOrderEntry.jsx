@@ -16,7 +16,9 @@ export default function InventorySalesOrderEntry({
   warehouses = [],
   products = [],
   productGroups = [],
-  customers = []
+  customers = [],
+  salesMen = [],
+  deliveryMen = []
 }) {
   const [voucherType, setVoucherType] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
@@ -53,6 +55,9 @@ export default function InventorySalesOrderEntry({
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
   const [showRecentPanel, setShowRecentPanel] = useState(true);
+  const [salesOwner, setSalesOwner] = useState("");
+  const [salesMan, setSalesMan] = useState("");
+  const [deliveryMan, setDeliveryMan] = useState("");
 
 
   useEffect(() => {
@@ -80,6 +85,22 @@ export default function InventorySalesOrderEntry({
     fetchPreview();
   }, [voucherType]);
 
+  // Load purchase order items for HSN fallback
+  useEffect(() => {
+    const loadPoItems = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/purchase-orders/items`);
+        const data = await res.json();
+        if (!res.ok) throw new Error();
+        setPoItems(data || []);
+      } catch {
+        console.warn("Failed to load purchase order data for HSN");
+      }
+    };
+
+    loadPoItems();
+  }, []);
+
   useEffect(() => {
     if (recentOrders.length > 0) setShowRecentPanel(true);
   }, [recentOrders]);
@@ -105,56 +126,47 @@ export default function InventorySalesOrderEntry({
   };
 
 
-  useEffect(() => {
-    const loadPoItems = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/purchase-orders/items`);
-        const data = await res.json();
-        if (!res.ok) throw new Error();
-        setPoItems(data);
-      } catch {
-        toast.error("Failed to load purchase data");
-      }
-    };
-
-    loadPoItems();
-  }, []);
-
 
 
   const filteredProducts = useMemo(() => {
     return productGroup
-      ? products.filter((p) => p.groupId === productGroup)
+      ? products.filter((p) => {
+          const pGroupId = p.productGroup?._id || p.productGroup || p.groupId?._id || p.groupId;
+          return String(pGroupId) === String(productGroup);
+        })
       : [];
   }, [products, productGroup]);
 
+  // Debug: Log filtered products when group changes
+  useEffect(() => {
+    if (productGroup && filteredProducts.length > 0) {
+      console.log(`✅ Found ${filteredProducts.length} products for SO group:`, productGroup);
+    } else if (productGroup) {
+      console.warn(`⚠️ No products found for SO group: ${productGroup}`);
+      console.log("Available products:", products.map(p => ({ id: p._id, name: p.name, group: p.productGroup || p.groupId })));
+    }
+  }, [filteredProducts, productGroup]);
+
   const productsWithStock = useMemo(() => {
     return filteredProducts.map((p) => {
-      // 1️⃣ Opening stock from product master
-      const openingQty = Number(p.availableQty || 0);
+      // 1️⃣ Get HSN from product database first
+      let hsn = p.hsnCode || "";
 
-      // 2️⃣ Sum of PO stock for this product
-      const poQty = poItems
-        .filter(x => String(x.productId) === String(p._id))
-        .reduce((sum, x) => sum + Number(x.qty || 0), 0);
-
-      // 3️⃣ Final available qty (BOTH MODES)
-      const totalAvailableQty = openingQty + poQty;
-
-      // 4️⃣ Price & GST priority
-      const lastPo = poItems.find(
-        x => String(x.productId) === String(p._id)
-      );
+      // 2️⃣ Fallback to purchase order HSN if product doesn't have it
+      if (!hsn) {
+        const poItem = poItems.find(
+          (item) => String(item.productId || item.productId?._id) === String(p._id)
+        );
+        hsn = poItem?.hsn || "";
+      }
 
       return {
         ...p,
-        openingQty,
-        poQty,
-        availableQty: totalAvailableQty,
-
-        sellingPrice: lastPo?.sellingPrice ?? p.sellingPrice ?? 0,
-        gst: lastPo?.gst ?? p.gst ?? 0,
-        hsn: lastPo?.hsn ?? p.hsncode ?? "",
+        // Use product database fields directly
+        availableQty: p.totalQty || 0,
+        sellingPrice: p.sellingPrice || 0,
+        gst: p.gst || 0,
+        hsn,
       };
     });
   }, [filteredProducts, poItems]);
@@ -187,6 +199,7 @@ export default function InventorySalesOrderEntry({
     setCustomerId(id);
     const customer = customers.find(c => c._id === id);
     setSelectedCustomer(customer || null);
+    setSalesOwner(customer?.salesOwner || "");
 
     setTransportCharge(0);
 
@@ -351,6 +364,9 @@ export default function InventorySalesOrderEntry({
         transporterName,
       }
       : null,
+    salesOwner,
+    salesMan,
+    deliveryMan,
   };
 
   const handleFinalAction = async () => {
@@ -467,15 +483,15 @@ export default function InventorySalesOrderEntry({
           </div>
 
           <div>
-            <label className={labelClass}>Opening Balance</label>
+            <label className={labelClass}>Closing Balance</label>
             <input
-              className={`${inputClass} font-bold ${selectedCustomer?.balanceType === "Dr"
-                ? "text-red-600"
-                : "text-green-600"
+              className={`${inputClass} font-bold ${selectedCustomer?.closingBalance && selectedCustomer.closingBalance > 0
+                ? "text-blue-600"
+                : "text-gray-600"
                 }`}
               value={
                 selectedCustomer
-                  ? `₹${selectedCustomer.totalBalance?.toFixed(2)} ${selectedCustomer.balanceType}`
+                  ? `₹${selectedCustomer.closingBalance?.toFixed(2)}`
                   : ""
               }
               readOnly
@@ -485,6 +501,15 @@ export default function InventorySalesOrderEntry({
           <div>
             <label className={labelClass}>WhatsApp</label>
             <input className={inputClass} value={selectedCustomer?.whatsapp || ""} readOnly />
+          </div>
+
+          <div>
+            <label className={labelClass}>Sales Owner</label>
+            <input 
+              className={`${inputClass} bg-gray-100`} 
+              value={salesOwner || ""} 
+              readOnly 
+            />
           </div>
 
           <div>
@@ -556,12 +581,8 @@ export default function InventorySalesOrderEntry({
                   value={p._id}
                   disabled={p.availableQty === 0}
                 >
-                  {p.name} ({p.unit})
-                  — Qty: {p.availableQty}
-                  {p.openingQty > 0 && ` | Opening: ${p.openingQty}`}
-                  {p.poQty > 0 && ` | PO: ${p.poQty}`}
+                  {p.name} ({p.perQty || 1}:{p.units || ""})  - Qty: {p.totalQty || 0}
                 </option>
-
               ))}
 
             </select>
@@ -801,6 +822,41 @@ export default function InventorySalesOrderEntry({
           value={transportCharge}
           onChange={(e) => setTransportCharge(+e.target.value || 0)}
         />
+      </div>
+
+      {/* Sales Man and Delivery Man */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className={labelClass}>Sales Man</label>
+          <select
+            className={selectClass}
+            value={salesMan}
+            onChange={(e) => setSalesMan(e.target.value)}
+          >
+            <option value="">-- Select Sales Man --</option>
+            {salesMen.map((sm) => (
+              <option key={sm._id} value={sm._id}>
+                {sm.name} ({sm.phone})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className={labelClass}>Delivery Man</label>
+          <select
+            className={selectClass}
+            value={deliveryMan}
+            onChange={(e) => setDeliveryMan(e.target.value)}
+          >
+            <option value="">-- Select Delivery Man --</option>
+            {deliveryMen.map((dm) => (
+              <option key={dm._id} value={dm._id}>
+                {dm.name} ({dm.phone})
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
 

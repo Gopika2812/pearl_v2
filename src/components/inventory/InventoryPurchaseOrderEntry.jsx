@@ -33,14 +33,29 @@ const InventoryPurchaseOrderEntry = ({
   const [cgst, setCgst] = useState(0);
   const [sgst, setSgst] = useState(0);
   const [igst, setIgst] = useState(false);
+  const [selectedProductData, setSelectedProductData] = useState(null);
 
   // Footer State
   const [transportCharge, setTransportCharge] = useState(0);
   
 
+  // Filter products by selected product group
   const filteredProducts = productGroup
-    ? products.filter((p) => p.groupId === productGroup)
+    ? products.filter((p) => {
+        const pGroupId = p.productGroup?._id || p.productGroup || p.groupId?._id || p.groupId;
+        return String(pGroupId) === String(productGroup);
+      })
     : [];
+
+  // Debug: Log filtered products when group changes
+  useEffect(() => {
+    if (productGroup && filteredProducts.length > 0) {
+      console.log(`✅ Found ${filteredProducts.length} products for group:`, productGroup);
+    } else if (productGroup) {
+      console.warn(`⚠️ No products found for group: ${productGroup}`);
+      console.log("Available products:", products.map(p => ({ id: p._id, name: p.name, group: p.productGroup || p.groupId })));
+    }
+  }, [filteredProducts, productGroup]);
 
   // Dynamic Row Price
   useEffect(() => setDisplayPrice(purchasePrice * qty), [qty, purchasePrice]);
@@ -75,13 +90,15 @@ const InventoryPurchaseOrderEntry = ({
     setSelectedItem(productId);
     const product = products.find((p) => p._id === productId);
     if (!product) return;
-    setPurchasePrice(product.rate || 0);
-    setSellingPrice(product.rate || 0);
-    setHsn(product.hsncode || "");
-    setGst(product.tax || 0);
+    
+    setSelectedProductData(product);
+    setPurchasePrice(product.purchasingPrice || product.rate || 0);
+    setSellingPrice(product.sellingPrice || product.rate || 0);
+    setHsn(product.hsnCode || product.hsncode || "");
+    setGst(product.gst || product.tax || 0);
     if (!igst) {
-      setCgst((product.tax || 0) / 2);
-      setSgst((product.tax || 0) / 2);
+      setCgst((product.gst || product.tax || 0) / 2);
+      setSgst((product.gst || product.tax || 0) / 2);
     }
   };
 
@@ -102,8 +119,11 @@ const InventoryPurchaseOrderEntry = ({
       {
         productId: product._id,
         name: product.name,
-        productGroup: product.groupId,
+        productGroup: product.productGroup || product.groupId,
         qty,
+        perQty: product.perQty || 1,
+        units: product.units || "",
+        totalQty: product.totalQty || 0,
         purchasePrice,
         sellingPrice,
         rowPrice: displayPrice,
@@ -119,6 +139,7 @@ const InventoryPurchaseOrderEntry = ({
     toast.success(`${product.name} added!`);
 
     setSelectedItem("");
+    setSelectedProductData(null);
     setQty(1);
     setPurchasePrice(0);
     setSellingPrice(0);
@@ -317,16 +338,23 @@ const InventoryPurchaseOrderEntry = ({
               disabled={!productGroup}
             >
               <option value="">
-                {productGroup
+                {!productGroup
+                  ? "Select Product Group first"
+                  : filteredProducts.length > 0
                   ? "Select Product"
-                  : "Select Product Group first"}
+                  : "No products in this group"}
               </option>
-              {filteredProducts.map((p) => (
+              {filteredProducts.length > 0 && filteredProducts.map((p) => (
                 <option key={p._id} value={p._id}>
-                  {p.name}({p.unit})
+                  {p.name} ({p.perQty || 1}:{p.units || ""}) - Qty: {p.totalQty || 0}
                 </option>
               ))}
             </select>
+            {selectedProductData && (
+              <div className="text-[10px] text-gray-500 mt-1">
+                Available: {selectedProductData.totalQty || 0} {selectedProductData.units || ""}
+              </div>
+            )}
           </div>
 
           <div>
@@ -361,7 +389,13 @@ const InventoryPurchaseOrderEntry = ({
 
           <div>
             <label className={labelClass}>HSN</label>
-            <input type="text" className={inputClass} value={hsn} readOnly />
+            <input 
+              type="text" 
+              className={inputClass} 
+              value={hsn} 
+              onChange={(e) => setHsn(e.target.value)}
+              placeholder="Enter HSN Code"
+            />
           </div>
 
           <div>
@@ -434,7 +468,8 @@ const InventoryPurchaseOrderEntry = ({
             <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold">
               <tr>
                 <th className="px-4 py-3 text-left">Item</th>
-                <th className="px-4 py-3 text-center">Qty</th>
+                <th className="px-4 py-3 text-center">Package</th>
+                <th className="px-4 py-3 text-center">Qty Ordered</th>
                 <th className="px-4 py-3 text-right">Rate</th>
                 <th className="px-4 py-3 text-right">Tax</th>
                 <th className="px-4 py-3 text-right">Total</th>
@@ -449,6 +484,9 @@ const InventoryPurchaseOrderEntry = ({
                     <div className="text-[10px] text-gray-400">
                       HSN: {item.hsn}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-center text-sm">
+                    {item.perQty} {item.units}
                   </td>
                   <td className="px-4 py-3 text-center">{item.qty}</td>
                   <td className="px-4 py-3 text-right">₹{item.purchasePrice}</td>

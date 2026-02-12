@@ -163,17 +163,21 @@ export default function PearlsBookPage() {
 
         <SummaryCard
           title="Sales Amount"
-          value={`₹${filteredRows
-            .filter(r => r.type === "SALES")
-            .reduce((a, b) => a + b.grandTotal, 0)}`}
+          value={`₹${Math.round(
+            filteredRows
+              .filter(r => r.type === "SALES")
+              .reduce((a, b) => a + b.grandTotal, 0) * 100
+          ) / 100}`}
           icon={<FaRupeeSign />}
         />
 
         <SummaryCard
           title="Purchase Amount"
-          value={`₹${filteredRows
-            .filter(r => r.type === "PURCHASE")
-            .reduce((a, b) => a + b.grandTotal, 0)}`}
+          value={`₹${Math.round(
+            filteredRows
+              .filter(r => r.type === "PURCHASE")
+              .reduce((a, b) => a + b.grandTotal, 0) * 100
+          ) / 100}`}
           icon={<FaRupeeSign />}
         />
 
@@ -327,17 +331,17 @@ export default function PearlsBookPage() {
                   <td className="px-4 py-3">{r.warehouse}</td>
 
                   <td className="px-4 py-3 text-right">
-                    ₹{r.subtotal}
+                    ₹{(Math.round(r.subtotal * 100) / 100).toFixed(2)}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    ₹{r.totalTax}
+                    ₹{(Math.round(r.totalTax * 100) / 100).toFixed(2)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     ₹{r.transportCharge}
                   </td>
 
                   <td className="px-4 py-3 text-right font-bold text-primary text-base">
-                    ₹{r.grandTotal}
+                    ₹{(Math.round(r.grandTotal * 100) / 100).toFixed(2)}
                   </td>
 
                   <td className="px-4 py-3 text-right text-sm">
@@ -345,7 +349,7 @@ export default function PearlsBookPage() {
                   </td>
 
                   <td className="px-4 py-3 text-right font-bold text-sm">
-                    {r.type === "SALES" ? `₹${r.closingBalance}` : "—"}
+                    {r.type === "SALES" ? `₹${(Math.round(r.closingBalance * 100) / 100).toFixed(2)}` : "—"}
                   </td>
 
 
@@ -421,7 +425,7 @@ export default function PearlsBookPage() {
               <div>
                 <span className="text-gray-500">Total</span>
                 <div className="font-bold text-primary">
-                  ₹{r.grandTotal}
+                  ₹{(Math.round(r.grandTotal * 100) / 100).toFixed(2)}
                 </div>
               </div>
               <div>

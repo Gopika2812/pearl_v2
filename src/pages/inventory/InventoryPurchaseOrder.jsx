@@ -3,8 +3,11 @@ import { FaSlidersH, FaTimes } from "react-icons/fa";
 
 // Modals
 import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCustomerModal";
+import InventoryAddDeliveryManModal from "../../components/inventory/InventoryAddDeliveryManModal";
 import InventoryAddProductGroupModal from "../../components/inventory/InventoryAddProductGroupModal";
 import InventoryAddProductModal from "../../components/inventory/InventoryAddProductModal";
+import InventoryAddSalesManModal from "../../components/inventory/InventoryAddSalesManModal";
+import InventoryAddSalesOwnerModal from "../../components/inventory/InventoryAddSalesOwnerModal";
 import InventoryAddVendorModal from "../../components/inventory/InventoryAddVendorModal";
 import InventoryAddVoucherTypeModal from "../../components/inventory/InventoryAddVoucherTypeModal";
 import InventoryAddWarehouseModal from "../../components/inventory/InventoryAddWarehouseModal";
@@ -17,7 +20,7 @@ import { useInventory } from "../../context/InventoryContext";
 const InventoryPurchaseOrder = () => {
   const {
     voucherTypes, productGroups, products,
-    warehouses, vendors, addData, addLocalVoucher
+    warehouses, vendors, salesOwners, salesMen, deliveryMen, addData, addLocalVoucher
   } = useInventory();
 
   const [activeModal, setActiveModal] = useState(null);
@@ -41,6 +44,9 @@ const InventoryPurchaseOrder = () => {
     { id: "product", label: "+ Product Name" },
     { id: "warehouse", label: "+ Warehouse" },
     { id: "customer", label: "+ Customer Details" },
+    { id: "sales_owner", label: "+ Sales Owner" },
+    { id: "sales_man", label: "+ Sales Man" },
+    { id: "delivery_man", label: "+ Delivery Man" },
   ];
 
   return (
@@ -166,6 +172,25 @@ const InventoryPurchaseOrder = () => {
         isOpen={activeModal === "customer"}
         onClose={() => setActiveModal(null)}
         onSave={(data) => { addData("customer", data); setActiveModal(null); }}
+        salesOwners={salesOwners}
+      />
+
+      <InventoryAddSalesOwnerModal
+        isOpen={activeModal === "sales_owner"}
+        onClose={() => setActiveModal(null)}
+        onSave={(data) => { addData("sales_owner", data); setActiveModal(null); }}
+      />
+
+      <InventoryAddSalesManModal
+        isOpen={activeModal === "sales_man"}
+        onClose={() => setActiveModal(null)}
+        onSave={(data) => { addData("sales_man", data); setActiveModal(null); }}
+      />
+
+      <InventoryAddDeliveryManModal
+        isOpen={activeModal === "delivery_man"}
+        onClose={() => setActiveModal(null)}
+        onSave={(data) => { addData("delivery_man", data); setActiveModal(null); }}
       />
     </div>
   );

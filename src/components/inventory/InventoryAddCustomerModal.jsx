@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { API_BASE } from "../../api";
 
-const InventoryAddCustomerModal = ({ isOpen, onClose, onSave }) => {
+const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [] }) => {
   const [customer, setCustomer] = useState({
     name: "",
     whatsapp: "",
@@ -218,14 +218,20 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave }) => {
 
             <div>
               <label className={labelClass}>Sales Owner</label>
-              <input
-                type="text"
+              <select
                 className={inputClass}
                 value={customer.salesOwner}
                 onChange={(e) =>
                   setCustomer({ ...customer, salesOwner: e.target.value })
                 }
-              />
+              >
+                <option value="">Select Sales Owner</option>
+                {salesOwners.map((owner) => (
+                  <option key={owner._id} value={owner._id}>
+                    {owner.name} ({owner.phone})
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>

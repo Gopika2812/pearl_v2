@@ -86,6 +86,14 @@ const CustomerSummary = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editFormData),
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("PUT Error:", response.status, errorText);
+        alert(`Failed to update customer: ${response.status} ${response.statusText}`);
+        return;
+      }
+
       const data = await response.json();
 
       if (data.success) {
@@ -100,6 +108,7 @@ const CustomerSummary = () => {
       }
     } catch (err) {
       alert("Error updating customer: " + err.message);
+      console.error("Edit error:", err);
     }
   };
 
@@ -120,6 +129,14 @@ const CustomerSummary = () => {
       const response = await fetch(`${API_BASE}/customers/${customerId}`, {
         method: "DELETE",
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("DELETE Error:", response.status, errorText);
+        alert(`Failed to delete customer: ${response.status} ${response.statusText}`);
+        return;
+      }
+
       const data = await response.json();
 
       if (data.success) {
@@ -131,6 +148,7 @@ const CustomerSummary = () => {
       }
     } catch (err) {
       alert("Error deleting customer: " + err.message);
+      console.error("Delete error:", err);
     }
   };
 

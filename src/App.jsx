@@ -16,6 +16,7 @@ import HRControlPanel from "./pages/HrcontrolPanel";
 import HrLogin from "./pages/HrLogin";
 import InventoryPurchaseOrder from "./pages/inventory/InventoryPurchaseOrder";
 import InventorySalesOrder from "./pages/inventory/InventorySalesOrder";
+import OthersSummary from "./pages/OthersSummary";
 import PearlsBookPage from "./pages/PearlsBookPage";
 import ProductSummary from "./pages/ProductSummary";
 import VendorSummary from "./pages/VendorSummary";
@@ -79,6 +80,10 @@ function App() {
                 <Route
                   path="/summary/vendors"
                   element={<VendorSummary />}
+                />
+                <Route
+                  path="/summary/others"
+                  element={<OthersSummary />}
                 />
               </Routes>
             </div>

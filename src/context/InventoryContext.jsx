@@ -13,6 +13,9 @@ export const InventoryProvider = ({ children }) => {
   const [warehouses, setWarehouses] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [salesOwners, setSalesOwners] = useState([]);
+  const [salesMen, setSalesMen] = useState([]);
+  const [deliveryMen, setDeliveryMen] = useState([]);
 
   const [drafts, setDrafts] = useState([]);
   const [finalOrders, setFinalOrders] = useState([]);
@@ -25,6 +28,9 @@ export const InventoryProvider = ({ children }) => {
     fetchProducts();
     fetchWarehouses();
     fetchCustomers();
+    fetchSalesOwners();
+    fetchSalesMen();
+    fetchDeliveryMen();
   }, []);
 
   const addLocalVoucher = (saved) => {
@@ -92,6 +98,36 @@ export const InventoryProvider = ({ children }) => {
     }
   };
 
+  const fetchSalesOwners = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/sales-owners`);
+      const json = await res.json();
+      setSalesOwners(json.data || []);
+    } catch (err) {
+      console.error("Sales Owner fetch failed", err);
+    }
+  };
+
+  const fetchSalesMen = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/sales-men`);
+      const json = await res.json();
+      setSalesMen(json.data || []);
+    } catch (err) {
+      console.error("Sales Man fetch failed", err);
+    }
+  };
+
+  const fetchDeliveryMen = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/delivery-men`);
+      const json = await res.json();
+      setDeliveryMen(json.data || []);
+    } catch (err) {
+      console.error("Delivery Man fetch failed", err);
+    }
+  };
+
 
 
   // 🔹 SAVE PO AS DRAFT (still frontend for now)
@@ -118,8 +154,9 @@ export const InventoryProvider = ({ children }) => {
       if (type === "product") url = `${API_BASE}/products`;
       if (type === "warehouse") url = `${API_BASE}/warehouses`;
       if (type === "customer") url = `${API_BASE}/customers`;
-
-
+      if (type === "sales_owner") url = `${API_BASE}/sales-owners`;
+      if (type === "sales_man") url = `${API_BASE}/sales-men`;
+      if (type === "delivery_man") url = `${API_BASE}/delivery-men`;
 
       if (!url) {
         console.warn("No API for type:", type);
@@ -137,12 +174,14 @@ export const InventoryProvider = ({ children }) => {
 
       if (!res.ok) throw new Error(saved.message || "Save failed");
 
-
       if (type === "vendor") setVendors(prev => [...prev, saved.data || saved]);
       if (type === "group") setProductGroups(prev => [...prev, saved.data || saved]);
       if (type === "product") setProducts(prev => [...prev, saved.data || saved]);
       if (type === "warehouse") setWarehouses(prev => [...prev, saved.data || saved]);
       if (type === "customer") setCustomers(prev => [...prev, saved.data || saved]);
+      if (type === "sales_owner") setSalesOwners(prev => [...prev, saved.data || saved]);
+      if (type === "sales_man") setSalesMen(prev => [...prev, saved.data || saved]);
+      if (type === "delivery_man") setDeliveryMen(prev => [...prev, saved.data || saved]);
 
     } catch (err) {
       alert("Save failed: " + err.message);
@@ -154,8 +193,8 @@ export const InventoryProvider = ({ children }) => {
     <InventoryContext.Provider
       value={{
         voucherTypes, productGroups, products, locations,
-        warehouses, customers, vendors,
-        drafts, finalOrders, fetchWarehouses,  fetchCustomers,
+        warehouses, customers, vendors, salesOwners, salesMen, deliveryMen,
+        drafts, finalOrders, fetchWarehouses, fetchCustomers,
         addData, addLocalVoucher, saveToDrafts, placeFinalOrder
       }}
     >
