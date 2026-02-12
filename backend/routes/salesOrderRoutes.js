@@ -54,6 +54,9 @@ router.post("/", async (req, res) => {
       grandTotal,
       ewayEnabled,
       ewayDetails,
+      salesOwner,
+      salesMan,
+      deliveryMan,
     } = req.body;
 
     if (!voucherType || !items?.length) {
@@ -124,6 +127,9 @@ router.post("/", async (req, res) => {
       grandTotal,
       ewayEnabled,
       ewayDetails,
+      salesOwner,
+      salesMan,
+      deliveryMan,
       financialYear,
     });
 

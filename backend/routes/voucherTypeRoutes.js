@@ -96,4 +96,46 @@ router.post("/generate", async (req, res) => {
   }
 });
 
+/**
+ * UPDATE voucher type
+ */
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const voucher = await VoucherType.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!voucher) {
+      return res.status(404).json({ message: "Voucher type not found" });
+    }
+
+    res.json(voucher);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/**
+ * DELETE voucher type
+ */
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const voucher = await VoucherType.findByIdAndDelete(id);
+
+    if (!voucher) {
+      return res.status(404).json({ message: "Voucher type not found" });
+    }
+
+    res.json({ message: "Voucher type deleted successfully", data: voucher });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 export default router;

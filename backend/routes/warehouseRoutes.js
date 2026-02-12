@@ -67,4 +67,70 @@ router.get("/", async (req, res) => {
   }
 });
 
+/**
+ * PUT: Update Warehouse
+ */
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const warehouse = await Warehouse.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!warehouse) {
+      return res.status(404).json({
+        success: false,
+        message: "Warehouse not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Warehouse updated successfully",
+      data: warehouse,
+    });
+  } catch (error) {
+    console.error("Warehouse update error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update warehouse",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE: Delete Warehouse
+ */
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const warehouse = await Warehouse.findByIdAndDelete(id);
+
+    if (!warehouse) {
+      return res.status(404).json({
+        success: false,
+        message: "Warehouse not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Warehouse deleted successfully",
+      data: warehouse,
+    });
+  } catch (error) {
+    console.error("Warehouse delete error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete warehouse",
+      error: error.message,
+    });
+  }
+});
+
 export default router;

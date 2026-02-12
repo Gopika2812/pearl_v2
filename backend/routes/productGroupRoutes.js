@@ -125,6 +125,46 @@ router.get("/", async (req, res) => {
   }
 });
 
+// 🔹 UPDATE Product Group
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const group = await ProductGroup.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!group) {
+      return res.status(404).json({ message: "Product Group not found" });
+    }
+
+    return res.json(group);
+  } catch (err) {
+    console.error("Product Group update error:", err);
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// 🔹 DELETE Product Group
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const group = await ProductGroup.findByIdAndDelete(id);
+
+    if (!group) {
+      return res.status(404).json({ message: "Product Group not found" });
+    }
+
+    return res.json({ message: "Product Group deleted successfully", data: group });
+  } catch (err) {
+    console.error("Product Group delete error:", err);
+    return res.status(500).json({ message: err.message });
+  }
+});
+
 export default router;
 
 

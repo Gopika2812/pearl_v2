@@ -15,6 +15,9 @@ import salesOrderRoutes from "./routes/salesOrderRoutes.js";
 import vendorRoutes from "./routes/vendorRoutes.js";
 import voucherTypeRoutes from "./routes/voucherTypeRoutes.js";
 import warehouseRoutes from "./routes/warehouseRoutes.js";
+import salesOwnerRoutes from "./routes/salesOwnerRoutes.js";
+import salesManRoutes from "./routes/salesManRoutes.js";
+import deliveryManRoutes from "./routes/deliveryManRoutes.js";
 
 
 const app = express();
@@ -40,6 +43,9 @@ app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/voucher-types", voucherTypeRoutes);
 app.use("/api/sales-orders", salesOrderRoutes);
 app.use("/api/pearls-book", pearlsBookRoutes);
+app.use("/api/sales-owners", salesOwnerRoutes);
+app.use("/api/sales-men", salesManRoutes);
+app.use("/api/delivery-men", deliveryManRoutes);
 
 
 

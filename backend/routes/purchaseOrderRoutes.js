@@ -1,4 +1,5 @@
 import express from "express";
+import Product from "../models/Product.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import VoucherType from "../models/VoucherType.js";
 
@@ -79,7 +80,25 @@ router.post("/", async (req, res) => {
 
     await order.save();
 
+    // ✅ UPDATE PRODUCT INVENTORY
     if (status !== "DRAFT") {
+      for (const item of rest.items) {
+        try {
+          const product = await Product.findByIdAndUpdate(
+            item.productId,
+            { $inc: { totalQty: item.qty } },
+            { new: true }
+          );
+          if (product) {
+            console.log(
+              `✅ Product "${product.name}" inventory updated: +${item.qty} units (New total: ${product.totalQty})`
+            );
+          }
+        } catch (err) {
+          console.error(`⚠️ Failed to update product ${item.productId}:`, err.message);
+        }
+      }
+
       voucher.counter += 1;
       await voucher.save();
     }

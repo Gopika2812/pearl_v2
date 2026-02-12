@@ -7,6 +7,9 @@ const router = express.Router();
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+/**
+ * POST: Bulk Upload Customers
+ */
 router.post("/bulk-upload", upload.single("file"), async (req, res) => {
   console.log("🔥 CUSTOMER BULK UPLOAD HIT");
 
@@ -119,6 +122,26 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
   }
 });
 
+/**
+ * GET: Fetch All Customers
+ */
+router.get("/", async (req, res) => {
+  try {
+    const customers = await Customer.find().sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: customers,
+    });
+  } catch (error) {
+    console.error("Fetch Customer Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch customers",
+      error: error.message,
+    });
+  }
+});
 
 /**
  * POST: Add New Customer
@@ -198,26 +221,69 @@ router.post("/", async (req, res) => {
 });
 
 /**
- * GET: Fetch All Customers
+ * PUT: Update Customer
  */
-router.get("/", async (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
-    const customers = await Customer.find().sort({ createdAt: -1 });
+    const { id } = req.params;
+    const updates = req.body;
+
+    const customer = await Customer.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
 
     res.json({
       success: true,
-      data: customers,
+      message: "Customer updated successfully",
+      data: customer,
     });
   } catch (error) {
-    console.error("Fetch Customer Error:", error);
+    console.error("Update Customer Error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to fetch customers",
+      message: "Failed to update customer",
       error: error.message,
     });
   }
 });
 
+/**
+ * DELETE: Delete Customer
+ */
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    const customer = await Customer.findByIdAndDelete(id);
+
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Customer deleted successfully",
+      data: customer,
+    });
+  } catch (error) {
+    console.error("Delete Customer Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete customer",
+      error: error.message,
+    });
+  }
+});
 
 export default router;

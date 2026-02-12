@@ -65,6 +65,16 @@ const salesOrderSchema = new mongoose.Schema(
     ewayEnabled: Boolean,
     ewayDetails: Object,
 
+    salesOwner: String,
+    salesMan: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SalesMan",
+    },
+    deliveryMan: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DeliveryMan",
+    },
+
     financialYear: String,
     openingBalance: {
       type: Number,
