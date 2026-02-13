@@ -16,6 +16,7 @@ export const InventoryProvider = ({ children }) => {
   const [salesOwners, setSalesOwners] = useState([]);
   const [salesMen, setSalesMen] = useState([]);
   const [deliveryMen, setDeliveryMen] = useState([]);
+  const [commissions, setCommissions] = useState([]);
 
   const [drafts, setDrafts] = useState([]);
   const [finalOrders, setFinalOrders] = useState([]);
@@ -31,6 +32,7 @@ export const InventoryProvider = ({ children }) => {
     fetchSalesOwners();
     fetchSalesMen();
     fetchDeliveryMen();
+    fetchCommissions();
   }, []);
 
   const addLocalVoucher = (saved) => {
@@ -128,6 +130,15 @@ export const InventoryProvider = ({ children }) => {
     }
   };
 
+  const fetchCommissions = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/sales-orders/commissions`);
+      const json = await res.json();
+      setCommissions(json.data || []);
+    } catch (err) {
+      console.error("Commission fetch failed", err);
+    }
+  };
 
 
   // 🔹 SAVE PO AS DRAFT (still frontend for now)
@@ -193,8 +204,8 @@ export const InventoryProvider = ({ children }) => {
     <InventoryContext.Provider
       value={{
         voucherTypes, productGroups, products, locations,
-        warehouses, customers, vendors, salesOwners, salesMen, deliveryMen,
-        drafts, finalOrders, fetchWarehouses, fetchCustomers,
+        warehouses, customers, vendors, salesOwners, salesMen, deliveryMen, commissions,
+        drafts, finalOrders, fetchWarehouses, fetchCustomers, fetchCommissions,
         addData, addLocalVoucher, saveToDrafts, placeFinalOrder
       }}
     >

@@ -4,6 +4,7 @@ import { API_BASE } from "../api";
 
 const CustomerSummary = () => {
   const [customers, setCustomers] = useState([]);
+  const [salesOwners, setSalesOwners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editingCustomer, setEditingCustomer] = useState(null);
@@ -49,13 +50,37 @@ const CustomerSummary = () => {
     }
   };
 
+  // Fetch sales owners
+  const fetchSalesOwners = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/sales-owners`);
+      const data = await response.json();
+
+      if (data.success) {
+        setSalesOwners(data.data);
+      }
+    } catch (err) {
+      console.error("Fetch sales owners error:", err);
+    }
+  };
+
   useEffect(() => {
     fetchCustomers();
+    fetchSalesOwners();
+  }, []);
+
+  // Force refresh after a short delay to ensure data is fresh
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchCustomers();
+    }, 1000);
+    return () => clearTimeout(timer);
   }, []);
 
   // Handle Edit Customer
   const handleEdit = (customer) => {
     setEditingCustomer(customer);
+    const salesOwnerId = typeof customer.salesOwner === 'object' ? customer.salesOwner?._id : customer.salesOwner;
     setEditFormData({
       name: customer.name,
       whatsapp: customer.whatsapp,
@@ -68,7 +93,7 @@ const CustomerSummary = () => {
       gstin: customer.gstin,
       closingBalance: customer.closingBalance,
       margin: customer.margin,
-      salesOwner: customer.salesOwner,
+      salesOwner: salesOwnerId || "",
       accountHolder: customer.accountHolder,
       accountNumber: customer.accountNumber,
       ifsc: customer.ifsc,
@@ -156,7 +181,13 @@ const CustomerSummary = () => {
   const filteredCustomers = searchValue.trim() === ""
     ? customers
     : customers.filter((customer) => {
-        const fieldValue = customer[searchField];
+        let fieldValue = customer[searchField];
+        
+        // Handle salesOwner object - extract name
+        if (searchField === "salesOwner" && typeof fieldValue === "object") {
+          fieldValue = fieldValue?.name || "";
+        }
+        
         const currentField = filterFields.find((f) => f.value === searchField);
         const isNumericField = currentField?.type === "number";
 
@@ -427,7 +458,20 @@ const CustomerSummary = () => {
                         {customer.margin?.toFixed(2) || "0.00"}%
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-700">
-                        {customer.salesOwner || "-"}
+                        {(() => {
+                          // Handle different salesOwner formats
+                          if (!customer.salesOwner) return "-";
+                          if (typeof customer.salesOwner === "string") return customer.salesOwner;
+                          if (typeof customer.salesOwner === "object" && customer.salesOwner.name) {
+                            return customer.salesOwner.name;
+                          }
+                          if (typeof customer.salesOwner === "object" && customer.salesOwner._id) {
+                            // If it's an object but no name, try to find from salesOwners list
+                            const owner = salesOwners.find(so => so._id === customer.salesOwner._id);
+                            return owner?.name || customer.salesOwner._id;
+                          }
+                          return customer.salesOwner || "-";
+                        })()}
                       </td>
                       <td className="px-6 py-4 text-sm text-center flex items-center justify-center gap-2">
                         <button
@@ -691,14 +735,20 @@ const CustomerSummary = () => {
                   <label className="text-sm font-bold text-gray-600 mb-1 block">
                     Sales Owner
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={editFormData.salesOwner || ""}
                     onChange={(e) =>
                       setEditFormData({ ...editFormData, salesOwner: e.target.value })
                     }
                     className="w-full p-2 border rounded-lg outline-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
+                  >
+                    <option value="">-- Select Sales Owner --</option>
+                    {salesOwners.map((owner) => (
+                      <option key={owner._id} value={owner._id}>
+                        {owner.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

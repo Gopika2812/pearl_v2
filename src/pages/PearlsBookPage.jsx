@@ -137,9 +137,9 @@ export default function PearlsBookPage() {
 
 
   return (
-    <div className="min-h-screen bg-gray-100 pt-20 md:pl-64 px-3 sm:px-6">
+    <div className="min-h-screen bg-gray-100 pt-20 md:pl-64 px-3 sm:px-6 pb-10">
       {/* HEADER */}
-      <div className="mb-6 max-w-[1400px] mx-auto">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-primary">
           Pearls Book
         </h1>
@@ -148,7 +148,7 @@ export default function PearlsBookPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-[1400px] mx-auto mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <SummaryCard
           title="Sales Orders"
           value={filteredRows.filter(r => getOrderType(r) === "SALES").length}
@@ -180,12 +180,10 @@ export default function PearlsBookPage() {
           ) / 100}`}
           icon={<FaRupeeSign />}
         />
-
-
       </div>
 
 
-      <div className="bg-white rounded-2xl shadow border p-5 mb-6 max-w-[1400px] mx-auto">
+      <div className="bg-white rounded-2xl shadow border p-5 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-sm">
 
           {/* FROM DATE */}
@@ -268,23 +266,23 @@ export default function PearlsBookPage() {
 
 
       {/* DESKTOP TABLE */}
-      <div className="hidden md:block max-w-[1400px] mx-auto bg-white rounded-2xl shadow border overflow-visible">
-        <table className="w-full text-sm">
+      <div className="hidden md:block bg-white rounded-2xl shadow border overflow-hidden">
+        <table className="w-full text-xs">
           <thead className="bg-primary text-white sticky top-0 z-10">
             <tr>
-              <th className="w-10 px-3 py-3"></th>
-              <th className="px-4 py-3 text-left">Date</th>
-              <th className="px-4 py-3 text-left">Invoice</th>
-              <th className="px-4 py-3 text-left">Type</th>
-              <th className="px-4 py-3 text-left">Party</th>
-              <th className="px-4 py-3 text-left">Warehouse</th>
-              <th className="px-4 py-3 text-right">Subtotal</th>
-              <th className="px-4 py-3 text-right">Tax</th>
-              <th className="px-4 py-3 text-right">Transport</th>
-              <th className="px-4 py-3 text-right">Grand Total</th>
-              <th className="px-4 py-3 text-right">Opening Bal</th>
-              <th className="px-4 py-3 text-right">Closing Bal</th>
-              <th className="px-4 py-3 text-center">Action</th>
+              <th className="w-8 px-2 py-2 sticky left-0 bg-primary z-20"></th>
+              <th className="px-2 py-2 text-left whitespace-nowrap sticky left-8 bg-primary z-20 border-r">Date</th>
+              <th className="px-2 py-2 text-left whitespace-nowrap min-w-[115px]">Invoice</th>
+              <th className="px-2 py-2 text-left whitespace-nowrap">Type</th>
+              <th className="px-2 py-2 text-left whitespace-nowrap min-w-[130px]">Party</th>
+              <th className="px-2 py-2 text-left whitespace-nowrap">Warehouse</th>
+              <th className="px-2 py-2 text-right whitespace-nowrap">Subtotal</th>
+              <th className="px-2 py-2 text-right whitespace-nowrap">Tax</th>
+              <th className="px-2 py-2 text-right whitespace-nowrap">Transport</th>
+              <th className="px-2 py-2 text-right whitespace-nowrap font-bold">Total</th>
+              <th className="px-2 py-2 text-right whitespace-nowrap text-xs">Open Bal</th>
+              <th className="px-2 py-2 text-right whitespace-nowrap font-bold">Close Bal</th>
+              <th className="px-2 py-2 text-center whitespace-nowrap">Action</th>
             </tr>
           </thead>
 
@@ -293,12 +291,12 @@ export default function PearlsBookPage() {
               <Fragment key={r._id}>
                 <tr className="border-b even:bg-gray-50 hover:bg-primary/5 transition relative">
 
-                  <td className="text-center px-3 py-3">
+                  <td className="text-center px-2 py-2 sticky left-0 bg-white z-10 border-r">
                     <button
                       onClick={() =>
                         setExpanded(expanded === r._id ? null : r._id)
                       }
-                      className="text-gray-600 hover:text-primary"
+                      className="text-gray-600 hover:text-primary text-sm"
                     >
                       {expanded === r._id ? (
                         <FaChevronUp />
@@ -308,17 +306,17 @@ export default function PearlsBookPage() {
                     </button>
                   </td>
 
-                  <td className="px-4 py-3">
-                    {new Date(r.date).toLocaleDateString()}
+                  <td className="px-2 py-2 sticky left-8 bg-white z-10 border-r whitespace-nowrap text-xs">
+                    {new Date(r.date).toLocaleDateString('en-GB')}
                   </td>
 
-                  <td className="px-4 py-3 font-semibold text-gray-800">
+                  <td className="px-2 py-2 font-semibold text-gray-800 whitespace-nowrap text-xs">
                     {r.invoiceId}
                   </td>
 
-                  <td className="px-4 py-3">
+                  <td className="px-2 py-2 whitespace-nowrap">
                     <span
-                      className={`px-2 py-1 rounded-full text-xs font-bold ${r.type === "SALES"
+                      className={`px-1.5 py-0.5 rounded text-xs font-bold ${r.type === "SALES"
                         ? "bg-green-100 text-green-700"
                         : "bg-blue-100 text-blue-700"
                         }`}
@@ -327,34 +325,34 @@ export default function PearlsBookPage() {
                     </span>
                   </td>
 
-                  <td className="px-4 py-3">{r.party}</td>
-                  <td className="px-4 py-3">{r.warehouse}</td>
+                  <td className="px-2 py-2 whitespace-nowrap text-xs">{r.party}</td>
+                  <td className="px-2 py-2 whitespace-nowrap text-xs">{r.warehouse}</td>
 
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-2 py-2 text-right whitespace-nowrap text-xs">
                     ₹{(Math.round(r.subtotal * 100) / 100).toFixed(2)}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-2 py-2 text-right whitespace-nowrap text-xs">
                     ₹{(Math.round(r.totalTax * 100) / 100).toFixed(2)}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-2 py-2 text-right whitespace-nowrap text-xs">
                     ₹{r.transportCharge}
                   </td>
 
-                  <td className="px-4 py-3 text-right font-bold text-primary text-base">
+                  <td className="px-2 py-2 text-right font-bold text-primary text-xs whitespace-nowrap">
                     ₹{(Math.round(r.grandTotal * 100) / 100).toFixed(2)}
                   </td>
 
-                  <td className="px-4 py-3 text-right text-sm">
+                  <td className="px-2 py-2 text-right text-xs whitespace-nowrap">
                     {r.type === "SALES" ? `₹${r.openingBalance}` : "—"}
                   </td>
 
-                  <td className="px-4 py-3 text-right font-bold text-sm">
+                  <td className="px-2 py-2 text-right font-bold text-xs whitespace-nowrap">
                     {r.type === "SALES" ? `₹${(Math.round(r.closingBalance * 100) / 100).toFixed(2)}` : "—"}
                   </td>
 
 
-                  <td className="px-4 py-3 text-right">
-                    <div className="relative flex items-center justify-end gap-2">
+                  <td className="px-2 py-2 text-right whitespace-nowrap">
+                    <div className="relative flex items-center justify-center gap-1">
                       {/* MINI ITEMS ICON (ONLY FOR PURCHASE) */}
                       {r.type === "PURCHASE" && r.items?.length > 0 && (
                         <MiniItemsBadge items={r.items} />
@@ -363,12 +361,11 @@ export default function PearlsBookPage() {
                       {r.type === "SALES" && (
                         <button
                           onClick={() => generateInvoice(r._id)}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg 
-                 bg-primary/10 text-primary font-semibold 
-                 hover:bg-primary hover:text-white transition text-xs"
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs
+                          bg-blue-100 text-blue-600 hover:bg-blue-200 transition"
+                          title="Generate Invoice"
                         >
-                          <FaFileInvoice />
-                          Generate
+                          <FaFileInvoice size={12} />
                         </button>
                       )}
                     </div>
@@ -379,8 +376,8 @@ export default function PearlsBookPage() {
                 {/* EXPANDED ROW */}
                 {expanded === r._id && (
                   <tr>
-                    <td colSpan="11" className="bg-primary/5 px-6 py-4">
-                      <div className="bg-white rounded-xl shadow-sm border p-4">
+                    <td colSpan="13" className="bg-primary/5 px-0 py-3 sticky left-0">
+                      <div className="bg-white rounded-lg shadow-sm border mx-2">
                         <ExpandedItems row={r} />
                       </div>
                     </td>
@@ -389,7 +386,7 @@ export default function PearlsBookPage() {
               </Fragment>
             ))}
           </tbody>
-        </table>
+          </table>
       </div>
 
       {/* MOBILE VIEW (UNCHANGED – ALREADY GOOD) */}

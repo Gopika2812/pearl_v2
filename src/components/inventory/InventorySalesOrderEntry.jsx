@@ -56,8 +56,10 @@ export default function InventorySalesOrderEntry({
   const [recentOrders, setRecentOrders] = useState([]);
   const [showRecentPanel, setShowRecentPanel] = useState(true);
   const [salesOwner, setSalesOwner] = useState("");
+  const [salesOwnerId, setSalesOwnerId] = useState("");
   const [salesMan, setSalesMan] = useState("");
   const [deliveryMan, setDeliveryMan] = useState("");
+  const [customerMargin, setCustomerMargin] = useState(0);
 
 
   useEffect(() => {
@@ -199,7 +201,23 @@ export default function InventorySalesOrderEntry({
     setCustomerId(id);
     const customer = customers.find(c => c._id === id);
     setSelectedCustomer(customer || null);
-    setSalesOwner(customer?.salesOwner || "");
+    
+    // Extract sales owner name from object or use string, and store ID
+    const ownerData = customer?.salesOwner;
+    let ownerName = "";
+    let ownerId = "";
+    
+    if (typeof ownerData === "object" && ownerData?._id) {
+      ownerName = ownerData.name || "";
+      ownerId = ownerData._id;
+    } else if (typeof ownerData === "string") {
+      ownerName = ownerData;
+      ownerId = ownerData;
+    }
+    
+    setSalesOwner(ownerName);
+    setSalesOwnerId(ownerId);
+    setCustomerMargin(customer?.margin || 0);
 
     setTransportCharge(0);
 
@@ -326,6 +344,10 @@ export default function InventorySalesOrderEntry({
   const grandTotal =
     subtotal - totalDiscount + totalTax + Number(transportCharge || 0);
 
+  // Calculate margin amount
+  const marginAmount = (grandTotal * customerMargin) / 100;
+  const grandTotalWithMargin = grandTotal + marginAmount;
+
 
   const payload = {
     voucherType,
@@ -354,6 +376,9 @@ export default function InventorySalesOrderEntry({
     totalDiscount,
     totalTax,
     grandTotal,
+    customerMargin,
+    marginAmount,
+    grandTotalWithMargin,
     ewayEnabled: enableEway,
     ewayDetails: enableEway
       ? {
@@ -364,7 +389,7 @@ export default function InventorySalesOrderEntry({
         transporterName,
       }
       : null,
-    salesOwner,
+    salesOwner: salesOwnerId,
     salesMan,
     deliveryMan,
   };
@@ -890,13 +915,15 @@ export default function InventorySalesOrderEntry({
             <span className="font-bold">₹{Number(transportCharge || 0).toFixed(2)}</span>
           </div>
 
+          
+
           <div className="pt-2">
             <div className="flex justify-between items-center">
               <span className="text-gray-800 font-black text-xs uppercase">
                 Grand Total
               </span>
               <span className="text-3xl font-black text-[#319bab] italic">
-                ₹{grandTotal.toFixed(2)}
+                ₹{grandTotalWithMargin.toFixed(2)}
               </span>
             </div>
           </div>
