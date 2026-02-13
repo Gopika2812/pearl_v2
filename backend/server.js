@@ -6,18 +6,19 @@ import express from "express";
 import mongoose from "mongoose";
 
 
+import commissionRuleRoutes from "./routes/commissionRuleRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
+import deliveryManRoutes from "./routes/deliveryManRoutes.js";
 import pearlsBookRoutes from "./routes/pearlsBookRoutes.js";
 import productGroupRoutes from "./routes/productGroupRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import purchaseOrderRoutes from "./routes/purchaseOrderRoutes.js";
+import salesManRoutes from "./routes/salesManRoutes.js";
 import salesOrderRoutes from "./routes/salesOrderRoutes.js";
+import salesOwnerRoutes from "./routes/salesOwnerRoutes.js";
 import vendorRoutes from "./routes/vendorRoutes.js";
 import voucherTypeRoutes from "./routes/voucherTypeRoutes.js";
 import warehouseRoutes from "./routes/warehouseRoutes.js";
-import salesOwnerRoutes from "./routes/salesOwnerRoutes.js";
-import salesManRoutes from "./routes/salesManRoutes.js";
-import deliveryManRoutes from "./routes/deliveryManRoutes.js";
 
 
 const app = express();
@@ -46,6 +47,7 @@ app.use("/api/pearls-book", pearlsBookRoutes);
 app.use("/api/sales-owners", salesOwnerRoutes);
 app.use("/api/sales-men", salesManRoutes);
 app.use("/api/delivery-men", deliveryManRoutes);
+app.use("/api/commission-rules", commissionRuleRoutes);
 
 
 

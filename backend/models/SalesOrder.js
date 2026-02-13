@@ -61,6 +61,9 @@ const salesOrderSchema = new mongoose.Schema(
     totalTax: Number,
     transportCharge: Number,
     grandTotal: Number,
+    customerMargin: Number,
+    marginAmount: Number,
+    grandTotalWithMargin: Number,
 
     ewayEnabled: Boolean,
     ewayDetails: Object,

@@ -15,7 +15,7 @@ const customerSchema = new mongoose.Schema(
     
     closingBalance: { type: Number, default: 0 },
     margin: { type: Number, default: 0 }, // Can be positive or negative
-    salesOwner: { type: String, default: "" },
+    salesOwner: { type: mongoose.Schema.Types.ObjectId, ref: "SalesOwner", default: null },
 
     // Bank Details
     accountHolder: { type: String, default: "" },

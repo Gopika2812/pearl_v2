@@ -1,13 +1,34 @@
 import express from "express";
 import mongoose from "mongoose";
+import Commission from "../models/Commission.js";
+import CommissionRule from "../models/CommissionRule.js";
 import Customer from "../models/Customer.js";
+import DeliveryMan from "../models/DeliveryMan.js";
+import SalesMan from "../models/SalesMan.js";
 import SalesOrder from "../models/SalesOrder.js";
+import SalesOwner from "../models/SalesOwner.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 
 
 const router = express.Router();
 
+// GET all sales orders (for OthersSummary)
+router.get("/", async (req, res) => {
+  try {
+    const salesOrders = await SalesOrder.find()
+      .select("invoiceId customer grandTotalWithMargin grandTotal closingBalance salesOwner createdAt")
+      .populate('salesOwner', 'name')
+      .sort({ createdAt: -1 });
+    
+    res.json({ success: true, data: salesOrders });
+  } catch (error) {
+    console.error("Fetch error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch sales orders" });
+  }
+});
+
+// GET sales order preview (for new orders)
 router.get("/preview/:voucherType", async (req, res) => {
   try {
     const { voucherType } = req.params;
@@ -52,6 +73,9 @@ router.post("/", async (req, res) => {
       totalDiscount,
       totalTax,
       grandTotal,
+      customerMargin,
+      marginAmount,
+      grandTotalWithMargin,
       ewayEnabled,
       ewayDetails,
       salesOwner,
@@ -93,8 +117,8 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ message: "Customer not found" });
     }
 
-    const openingBalance = dbCustomer.totalBalance || 0;
-    const closingBalance = openingBalance + Number(grandTotal);
+    const openingBalance = dbCustomer.closingBalance || dbCustomer.totalBalance || 0;
+    const closingBalance = openingBalance + Number(grandTotalWithMargin || grandTotal);
 
 
     // 🧾 Save Sales Order
@@ -125,6 +149,9 @@ router.post("/", async (req, res) => {
       totalDiscount,
       totalTax,
       grandTotal,
+      customerMargin,
+      marginAmount,
+      grandTotalWithMargin,
       ewayEnabled,
       ewayDetails,
       salesOwner,
@@ -136,9 +163,79 @@ router.post("/", async (req, res) => {
 
     await salesOrder.save();
 
+    // 💰 CREATE COMMISSION RECORDS (Using Commission Rules)
+    try {
+      const orderValue = grandTotalWithMargin || grandTotal;
+      
+      // Get sales personnel data
+      const salesOwnerDoc = salesOwner ? await SalesOwner.findById(salesOwner) : null;
+      const salesManDoc = salesMan ? await SalesMan.findById(salesMan) : null;
+      const deliveryManDoc = deliveryMan ? await DeliveryMan.findById(deliveryMan) : null;
+
+      // Function to get applicable commission for a person based on role type
+      const getCommission = async (personId, roleType) => {
+        if (!personId) return { percentage: 0, amount: 0 };
+        
+        // Find applicable commission rule (highest minimum order value that doesn't exceed order value)
+        const rule = await CommissionRule.findOne({
+          personId: personId,
+          roleType: roleType,
+          minimumOrderValue: { $lte: orderValue },
+          isActive: true,
+        }).sort({ minimumOrderValue: -1 });
+        
+        if (!rule) return { percentage: 0, amount: 0 };
+        
+        const commissionAmount = (orderValue * rule.commissionPercentage) / 100;
+        return { percentage: rule.commissionPercentage, amount: commissionAmount };
+      };
+
+      // Get applicable commissions for all three roles
+      const soCommission = await getCommission(salesOwner, "SalesOwner");
+      const smCommission = await getCommission(salesMan, "SalesMan");
+      const dmCommission = await getCommission(deliveryMan, "DeliveryMan");
+
+      const commissionData = {
+        salesOrderId: salesOrder._id,
+        orderValue: orderValue,
+        invoiceId: invoiceId,
+
+        // Sales Owner
+        salesOwnerId: salesOwnerDoc?._id,
+        salesOwnerName: salesOwnerDoc?.name,
+        salesOwnerCommissionPercentage: soCommission.percentage,
+        salesOwnerCommissionAmount: soCommission.amount,
+
+        // Sales Man
+        salesManId: salesManDoc?._id,
+        salesManName: salesManDoc?.name,
+        salesManCommissionPercentage: smCommission.percentage,
+        salesManCommissionAmount: smCommission.amount,
+
+        // Delivery Man
+        deliveryManId: deliveryManDoc?._id,
+        deliveryManName: deliveryManDoc?.name,
+        deliveryManCommissionPercentage: dmCommission.percentage,
+        deliveryManCommissionAmount: dmCommission.amount,
+      };
+
+      commissionData.totalCommission =
+        commissionData.salesOwnerCommissionAmount +
+        commissionData.salesManCommissionAmount +
+        commissionData.deliveryManCommissionAmount;
+
+      const commission = new Commission(commissionData);
+      await commission.save();
+
+      console.log("✅ Commission record created:", commission._id);
+    } catch (commissionError) {
+      console.error("⚠️ Commission creation failed:", commissionError.message);
+    }
+
     // ✅ UPDATE CUSTOMER BALANCE (HERE)
     await Customer.findByIdAndUpdate(customer.id, {
       totalBalance: closingBalance,
+      closingBalance: closingBalance,
     });
 
     // ✅ Increment voucher counter
@@ -171,6 +268,82 @@ router.get("/recent", async (req, res) => {
   } catch (err) {
     console.error("Recent orders error:", err);
     res.status(500).json({ message: "Failed to fetch recent orders" });
+  }
+});
+
+// GET all commissions
+router.get("/commissions", async (req, res) => {
+  try {
+    const commissions = await Commission.find().sort({ createdAt: -1 });
+    res.json({ success: true, data: commissions });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch commissions" });
+  }
+});
+
+// GET commission by sales order ID
+router.get("/commissions/order/:salesOrderId", async (req, res) => {
+  try {
+    const commission = await Commission.findOne({
+      salesOrderId: req.params.salesOrderId,
+    });
+    if (!commission) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Commission not found" });
+    }
+    res.json({ success: true, data: commission });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch commission" });
+  }
+});
+
+// DELETE sales order and revert customer balance
+router.delete("/:id", async (req, res) => {
+  try {
+    const salesOrder = await SalesOrder.findById(req.params.id);
+    
+    if (!salesOrder) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Sales order not found" });
+    }
+
+    const orderValue = salesOrder.grandTotalWithMargin || salesOrder.grandTotal || 0;
+
+    // 🔄 REVERT CUSTOMER CLOSING BALANCE
+    if (salesOrder.customer && mongoose.Types.ObjectId.isValid(salesOrder.customer)) {
+      const customer = await Customer.findById(salesOrder.customer);
+      if (customer) {
+        const revertedBalance = customer.closingBalance - orderValue;
+        await Customer.findByIdAndUpdate(salesOrder.customer, {
+          closingBalance: revertedBalance,
+          totalBalance: revertedBalance,
+        });
+        console.log(`✅ Customer balance reverted: ${revertedBalance}`);
+      }
+    }
+
+    // 🗑️ DELETE ASSOCIATED COMMISSION RECORD
+    await Commission.deleteOne({ salesOrderId: req.params.id });
+    console.log("✅ Commission record deleted");
+
+    // 🗑️ DELETE SALES ORDER
+    await SalesOrder.findByIdAndDelete(req.params.id);
+
+    res.json({
+      success: true,
+      message: "Sales order deleted and customer balance reverted",
+    });
+  } catch (error) {
+    console.error("Delete error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to delete sales order" });
   }
 });
 

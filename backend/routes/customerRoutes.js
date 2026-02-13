@@ -127,7 +127,9 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
  */
 router.get("/", async (req, res) => {
   try {
-    const customers = await Customer.find().sort({ createdAt: -1 });
+    const customers = await Customer.find()
+      .populate('salesOwner', 'name phone role')
+      .sort({ createdAt: -1 });
 
     res.json({
       success: true,
