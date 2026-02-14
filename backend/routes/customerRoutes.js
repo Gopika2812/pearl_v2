@@ -2,6 +2,7 @@ import express from "express";
 import multer from "multer";
 import XLSX from "xlsx";
 import Customer from "../models/Customer.js";
+import SalesOwner from "../models/SalesOwner.js";
 
 const router = express.Router();
 
@@ -46,7 +47,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const pincode = normalized.pincode || "";
       const country = normalized.country || "India";
       const gstin = normalized.gstin || "";
-      const salesOwner = normalized.salesowner || "";
+      const salesOwnerName = normalized.salesowner || "";
       const margin = parseFloat(normalized.margin) || 0;
       const closingBalance = parseFloat(normalized.closingbalance) || 0;
 
@@ -82,6 +83,20 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         continue;
       }
 
+      // 👤 Lookup SalesOwner by name
+      let salesOwnerId = null;
+      if (salesOwnerName) {
+        const owner = await SalesOwner.findOne({
+          name: new RegExp(`^${salesOwnerName}$`, "i"),
+        });
+        if (owner) {
+          salesOwnerId = owner._id;
+        } else {
+          skipped.push({ row, reason: `Sales Owner "${salesOwnerName}" not found` });
+          continue;
+        }
+      }
+
       const customer = await Customer.create({
         name,
         whatsapp,
@@ -96,7 +111,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         balanceType,
         closingBalance,
         margin,
-        salesOwner,
+        salesOwner: salesOwnerId,
         accountHolder,
         accountNumber,
         ifsc,
