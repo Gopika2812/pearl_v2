@@ -6,8 +6,13 @@ import SalesOwner from "../models/SalesOwner.js";
 
 const router = express.Router();
 
-const upload = multer({ storage: multer.memoryStorage() });
-
+// Configure multer with 50MB limit for bulk uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, 
+});
+// Escape special regex characters
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /**
  * POST: Bulk Upload Customers
  */
@@ -26,11 +31,21 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     console.log("📄 TOTAL ROWS:", rows.length);
     console.log("📄 FIRST ROW RAW:", rows[0]);
 
-    let inserted = [];
+    const allSalesOwners = await SalesOwner.find({});
+    const salesOwnerMap = new Map(
+      allSalesOwners.map(owner => [owner.name.toLowerCase(), owner._id])
+    );
+
+    const existingCustomers = await Customer.find({}, { name: 1 });
+    const existingNames = new Set(
+      existingCustomers.map(c => c.name.toLowerCase())
+    );
+
+    let customersToBulkInsert = [];
     let skipped = [];
 
+    // 🔄 First pass: Validate and collect all valid records
     for (const row of rows) {
-      // 🔄 normalize headers like product upload
       const normalized = Object.fromEntries(
         Object.entries(row).map(([k, v]) => [
           k.replace(/[\s"\n\r]+/g, "").toLowerCase(),
@@ -38,8 +53,8 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         ])
       );
 
-      const name = normalized.customername; 
-      const whatsapp = String(normalized.whatsapp || "").trim(); 
+      const name = normalized.customername;
+      const whatsapp = String(normalized.whatsapp || "").trim();
       const email = normalized.email || "";
       const address = normalized.address || "";
       const district = normalized.district || "";
@@ -68,36 +83,30 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         balanceType = parts[1] || "Dr";
       }
 
+      // ❌ Validation checks
       if (!name) {
         skipped.push({ row, reason: "Missing customer name" });
         continue;
       }
 
-      // 🔁 Duplicate check (WhatsApp OR Name)
-      const exists = await Customer.findOne({
-        name: new RegExp(`^${name}$`, "i"),
-      });
-
-      if (exists) {
+      // Check if customer already exists (case-insensitive)
+      if (existingNames.has(name.toLowerCase())) {
         skipped.push({ row, reason: "Customer already exists" });
         continue;
       }
 
-      // 👤 Lookup SalesOwner by name
+      // Lookup SalesOwner ID from map
       let salesOwnerId = null;
       if (salesOwnerName) {
-        const owner = await SalesOwner.findOne({
-          name: new RegExp(`^${salesOwnerName}$`, "i"),
-        });
-        if (owner) {
-          salesOwnerId = owner._id;
-        } else {
+        salesOwnerId = salesOwnerMap.get(salesOwnerName.toLowerCase());
+        if (!salesOwnerId) {
           skipped.push({ row, reason: `Sales Owner "${salesOwnerName}" not found` });
           continue;
         }
       }
 
-      const customer = await Customer.create({
+      // ✅ Valid record - add to bulk insert list
+      customersToBulkInsert.push({
         name,
         whatsapp,
         email,
@@ -118,8 +127,12 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         branch,
         upi,
       });
+    }
 
-      inserted.push(customer);
+    // ⚡ OPTIMIZATION: Bulk insert all at once instead of one-by-one
+    let inserted = [];
+    if (customersToBulkInsert.length > 0) {
+      inserted = await Customer.insertMany(customersToBulkInsert);
     }
 
     return res.json({

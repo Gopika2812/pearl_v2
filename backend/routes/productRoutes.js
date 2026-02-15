@@ -6,7 +6,12 @@ import Product from "../models/Product.js";
 import ProductGroup from "../models/ProductGroup.js";
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
+
+// Configure multer with 50MB limit for bulk uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+});
 
 // POST: Add New Product
 router.post("/", async (req, res) => {
@@ -90,12 +95,6 @@ router.get("/", async (req, res) => {
 
 router.post("/bulk-upload", upload.single("file"), async (req, res) => {
   console.log("🔥 BULK UPLOAD HIT");
-  console.log(
-    "📦 FILE:",
-    req.file?.originalname,
-    req.file?.size,
-    req.file?.mimetype
-  );
 
   try {
     if (!req.file) {
@@ -109,9 +108,22 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     console.log("📄 TOTAL ROWS:", rows.length);
     console.log("📄 FIRST ROW RAW:", rows[0]);
 
-    let inserted = [];
+    // ⚡ OPTIMIZATION: Batch load all product groups ONCE
+    const allProductGroups = await ProductGroup.find({});
+    const productGroupMap = new Map(
+      allProductGroups.map(group => [group.name.toLowerCase(), group._id])
+    );
+
+    // ⚡ OPTIMIZATION: Batch load all existing products
+    const existingProducts = await Product.find({});
+    const existingProductSet = new Set(
+      existingProducts.map(p => `${p.name}|${p.productGroup}`)
+    );
+
+    let productsToBulkInsert = [];
     let skipped = [];
 
+    // 🔄 First pass: Validate and collect all valid records
     for (const row of rows) {
       const normalized = Object.fromEntries(
         Object.entries(row).map(([k, v]) => [
@@ -120,24 +132,23 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         ])
       );
 
-      console.log("Processing row:", normalized);
-
-      const name = normalized.name;
-      const groupName = normalized.productgroup;
-      const perQty = Number(normalized.perqty || 0);
-      const units = normalized.units;
+      const name = normalized.name || "";
+      const groupName = normalized.productgroup || "";
+      const perQty = Number(normalized.perqty || 1); // Default to 1
+      const units = normalized.units || "kg"; // Default to kg
       const totalQty = Number(normalized.totalqty || 0);
       const purchasingPrice = Number(normalized.purchasingprice || 0);
       const sellingPrice = Number(normalized.sellingprice || 0);
-      const hsnCode = normalized.hsncode;
+      const hsnCode = normalized.hsncode || "N/A"; // Default to N/A
       const gst = Number(normalized.gst || 0);
 
-      if (!name || !groupName || !perQty || !units || !hsnCode) {
-        skipped.push({ row, reason: "Missing name / product group / perQty / units / HSN code" });
+      // Only name and product group are mandatory
+      if (!name || !groupName) {
+        skipped.push({ row, reason: "Missing name or product group" });
         continue;
       }
 
-      // Validate prices
+      // Validate prices (skip if invalid)
       if (gst < 0 || gst > 28) {
         skipped.push({ row, reason: "Invalid GST value (0-28)" });
         continue;
@@ -153,46 +164,38 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         continue;
       }
 
-      // Find product group
-      const group = await ProductGroup.findOne({
-        name: new RegExp(`^${groupName}$`, "i"),
-      });
-
-      if (!group) {
+      // Lookup Product Group ID from map
+      const groupId = productGroupMap.get(groupName.toLowerCase());
+      if (!groupId) {
         skipped.push({ row, reason: `Product group "${groupName}" not found` });
         continue;
       }
 
-      // Check if product exists
-      const exists = await Product.findOne({
-        name,
-        productGroup: group._id,
-      });
-
-      if (exists) {
+      // Check if product already exists
+      const productKey = `${name}|${groupId}`;
+      if (existingProductSet.has(productKey)) {
         skipped.push({ row, reason: "Product already exists" });
         continue;
       }
 
-      try {
-        const product = await Product.create({
-          productGroup: group._id,
-          name,
-          perQty,
-          units,
-          totalQty,
-          purchasingPrice,
-          sellingPrice,
-          hsnCode,
-          gst,
-        });
+      // ✅ Valid record - add to bulk insert list
+      productsToBulkInsert.push({
+        productGroup: groupId,
+        name,
+        perQty,
+        units,
+        totalQty,
+        purchasingPrice,
+        sellingPrice,
+        hsnCode,
+        gst,
+      });
+    }
 
-        console.log("✅ Created product:", product._id);
-        inserted.push(product);
-      } catch (createErr) {
-        console.error("Error creating product:", createErr.message);
-        skipped.push({ row, reason: `Error: ${createErr.message}` });
-      }
+    // ⚡ OPTIMIZATION: Bulk insert all at once
+    let inserted = [];
+    if (productsToBulkInsert.length > 0) {
+      inserted = await Product.insertMany(productsToBulkInsert);
     }
 
     console.log(`✅ Uploaded: ${inserted.length}, ⚠️ Skipped: ${skipped.length}`);
