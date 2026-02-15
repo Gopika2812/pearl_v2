@@ -3,9 +3,9 @@ import mongoose from "mongoose";
 const customerSchema = new mongoose.Schema(
   {
     // Basic Details
-    name: { type: String, required: true },
-    whatsapp: { type: String, default: "" },
-    email: { type: String, default: "" },
+    name: { type: String, required: true, index: true },
+    whatsapp: { type: String, default: "", index: true },
+    email: { type: String, default: "", index: true },
     address: { type: String, default: "" },
     district: { type: String, default: "" },
     state: { type: String, default: "" },
@@ -15,7 +15,7 @@ const customerSchema = new mongoose.Schema(
     
     closingBalance: { type: Number, default: 0 },
     margin: { type: Number, default: 0 }, // Can be positive or negative
-    salesOwner: { type: mongoose.Schema.Types.ObjectId, ref: "SalesOwner", default: null },
+    salesOwner: { type: mongoose.Schema.Types.ObjectId, ref: "SalesOwner", default: null, index: true },
 
     // Bank Details
     accountHolder: { type: String, default: "" },

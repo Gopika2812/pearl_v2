@@ -72,16 +72,39 @@ router.post("/", async (req, res) => {
   }
 });
 
-// GET: Fetch All Products
+// GET: Fetch All Products with Pagination
 router.get("/", async (req, res) => {
   try {
-    const products = await Product.find()
+    const { page = 1, limit = 50, search = "" } = req.query;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(limit) || 50)); // Max 100 per page
+    const skip = (pageNum - 1) * pageSize;
+
+    // Build search filter
+    const filter = search
+      ? { name: { $regex: search, $options: "i" } }
+      : {};
+
+    // ⚡ Get total count
+    const total = await Product.countDocuments(filter);
+
+    // ⚡ Fetch paginated results with lean() for faster performance
+    const products = await Product.find(filter)
       .populate("productGroup", "name")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(pageSize)
+      .lean();
 
     res.json({
       success: true,
       data: products,
+      pagination: {
+        page: pageNum,
+        limit: pageSize,
+        total,
+        pages: Math.ceil(total / pageSize),
+      },
     });
   } catch (error) {
     console.error("Fetch Product Error:", error);
