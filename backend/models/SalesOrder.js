@@ -99,4 +99,136 @@ const salesOrderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+salesOrderSchema.post("deleteOne", { document: true }, async function(doc) {
+  try {
+    if (!doc) return;
+    
+    // Lazy load models to avoid circular dependencies
+    const Commission = mongoose.model("Commission");
+    const Customer = mongoose.model("Customer");
+    const SalesOwner = mongoose.model("SalesOwner");
+    const SalesMan = mongoose.model("SalesMan");
+    const DeliveryMan = mongoose.model("DeliveryMan");
+    
+    const orderValue = doc.grandTotalWithMargin || doc.grandTotal || 0;
+    const customerId = doc.customer?.customerId;
+    
+    console.log(`🗑️ Reverting sales order deletion: Invoice ${doc.invoiceId}`);
+    
+    // 1️⃣ REVERT CUSTOMER CLOSING BALANCE
+    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+      const customer = await Customer.findById(customerId);
+      if (customer) {
+        const revertedBalance = customer.closingBalance - orderValue;
+        await Customer.findByIdAndUpdate(customerId, {
+          closingBalance: revertedBalance,
+          totalBalance: revertedBalance,
+        });
+        console.log(`✅ Customer balance reverted: ₹${revertedBalance}`);
+      }
+    }
+    
+    // 2️⃣ REVERT COMMISSIONS FROM SALES PERSONNEL
+    const commission = await Commission.findOne({ salesOrderId: doc._id });
+    if (commission) {
+      // Revert Sales Owner Commission
+      if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
+        await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
+          $inc: { commissionAmount: -commission.salesOwnerCommissionAmount }
+        });
+        console.log(`✅ Sales Owner commission reverted: -₹${commission.salesOwnerCommissionAmount}`);
+      }
+      
+      // Revert Sales Man Commission
+      if (commission.salesManId && commission.salesManCommissionAmount > 0) {
+        await SalesMan.findByIdAndUpdate(commission.salesManId, {
+          $inc: { commissionAmount: -commission.salesManCommissionAmount }
+        });
+        console.log(`✅ Sales Man commission reverted: -₹${commission.salesManCommissionAmount}`);
+      }
+      
+      // Revert Delivery Man Commission
+      if (commission.deliveryManId && commission.deliveryManCommissionAmount > 0) {
+        await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, {
+          $inc: { commissionAmount: -commission.deliveryManCommissionAmount }
+        });
+        console.log(`✅ Delivery Man commission reverted: -₹${commission.deliveryManCommissionAmount}`);
+      }
+      
+      // Delete Commission Record
+      await Commission.deleteOne({ salesOrderId: doc._id });
+      console.log(`✅ Commission record deleted`);
+    }
+    
+  } catch (error) {
+    console.error("❌ Error in post-delete hook:", error.message);
+  }
+});
+
+salesOrderSchema.post("findByIdAndDelete", async function(doc) {
+  try {
+    if (!doc) return;
+    
+    // Lazy load models
+    const Commission = mongoose.model("Commission");
+    const Customer = mongoose.model("Customer");
+    const SalesOwner = mongoose.model("SalesOwner");
+    const SalesMan = mongoose.model("SalesMan");
+    const DeliveryMan = mongoose.model("DeliveryMan");
+    
+    const orderValue = doc.grandTotalWithMargin || doc.grandTotal || 0;
+    const customerId = doc.customer?.customerId;
+    
+    console.log(`🗑️ Reverting sales order deletion: Invoice ${doc.invoiceId}`);
+    
+    // 1️⃣ REVERT CUSTOMER CLOSING BALANCE
+    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+      const customer = await Customer.findById(customerId);
+      if (customer) {
+        const revertedBalance = customer.closingBalance - orderValue;
+        await Customer.findByIdAndUpdate(customerId, {
+          closingBalance: revertedBalance,
+          totalBalance: revertedBalance,
+        });
+        console.log(`✅ Customer balance reverted: ₹${revertedBalance}`);
+      }
+    }
+    
+    // 2️⃣ REVERT COMMISSIONS FROM SALES PERSONNEL
+    const commission = await Commission.findOne({ salesOrderId: doc._id });
+    if (commission) {
+      // Revert Sales Owner Commission
+      if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
+        await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
+          $inc: { commissionAmount: -commission.salesOwnerCommissionAmount }
+        });
+        console.log(`✅ Sales Owner commission reverted: -₹${commission.salesOwnerCommissionAmount}`);
+      }
+      
+      // Revert Sales Man Commission
+      if (commission.salesManId && commission.salesManCommissionAmount > 0) {
+        await SalesMan.findByIdAndUpdate(commission.salesManId, {
+          $inc: { commissionAmount: -commission.salesManCommissionAmount }
+        });
+        console.log(`✅ Sales Man commission reverted: -₹${commission.salesManCommissionAmount}`);
+      }
+      
+      // Revert Delivery Man Commission
+      if (commission.deliveryManId && commission.deliveryManCommissionAmount > 0) {
+        await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, {
+          $inc: { commissionAmount: -commission.deliveryManCommissionAmount }
+        });
+        console.log(`✅ Delivery Man commission reverted: -₹${commission.deliveryManCommissionAmount}`);
+      }
+      
+      // Delete Commission Record
+      await Commission.deleteOne({ salesOrderId: doc._id });
+      console.log(`✅ Commission record deleted`);
+    }
+    
+  } catch (error) {
+    console.error("❌ Error in findByIdAndDelete post-hook:", error.message);
+  }
+});
+
 export default mongoose.model("SalesOrder", salesOrderSchema);

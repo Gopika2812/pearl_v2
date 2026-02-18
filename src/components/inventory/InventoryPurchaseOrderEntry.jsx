@@ -38,24 +38,49 @@ const InventoryPurchaseOrderEntry = ({
   // Footer State
   const [transportCharge, setTransportCharge] = useState(0);
   
+  // Filter products by fetching from API when group changes
+  const [filteredProducts, setFilteredProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
-  // Filter products by selected product group
-  const filteredProducts = productGroup
-    ? products.filter((p) => {
-        const pGroupId = p.productGroup?._id || p.productGroup || p.groupId?._id || p.groupId;
-        return String(pGroupId) === String(productGroup);
-      })
-    : [];
-
-  // Debug: Log filtered products when group changes
+  // Fetch products by product group from API
   useEffect(() => {
-    if (productGroup && filteredProducts.length > 0) {
-      console.log(`✅ Found ${filteredProducts.length} products for group:`, productGroup);
-    } else if (productGroup) {
-      console.warn(`⚠️ No products found for group: ${productGroup}`);
-      console.log("Available products:", products.map(p => ({ id: p._id, name: p.name, group: p.productGroup || p.groupId })));
+    console.log("🔄 Product Group changed to:", productGroup);
+    
+    if (!productGroup) {
+      console.log("⚠️ No product group selected");
+      setFilteredProducts([]);
+      return;
     }
-  }, [filteredProducts, productGroup]);
+
+    const fetchProductsByGroup = async () => {
+      setLoadingProducts(true);
+      const url = `${API_BASE}/products/group/${productGroup}`;
+      console.log(`📡 Fetching from: ${url}`);
+      
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+
+        console.log(`📊 API Response:`, data);
+
+        if (data.success) {
+          console.log(`✅ Fetched ${data.data.length} products for group:`, productGroup);
+          setFilteredProducts(data.data);
+        } else {
+          console.warn("⚠️ Failed to fetch products:", data.message);
+          setFilteredProducts([]);
+        }
+      } catch (error) {
+        console.error("❌ Error fetching products by group:", error);
+        setFilteredProducts([]);
+        toast.error("Failed to load products");
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    fetchProductsByGroup();
+  }, [productGroup]);
 
   // Dynamic Row Price
   useEffect(() => setDisplayPrice(purchasePrice * qty), [qty, purchasePrice]);
@@ -88,8 +113,12 @@ const InventoryPurchaseOrderEntry = ({
   // Auto-fetch Product Price / Tax / HSN
   const handleItemSelection = (productId) => {
     setSelectedItem(productId);
-    const product = products.find((p) => p._id === productId);
-    if (!product) return;
+    // Search in filteredProducts (from API), not the products prop
+    const product = filteredProducts.find((p) => p._id === productId);
+    if (!product) {
+      console.warn("⚠️ Product not found in filtered products:", productId);
+      return;
+    }
     
     setSelectedProductData(product);
     setPurchasePrice(product.purchasingPrice || product.rate || 0);
@@ -112,7 +141,12 @@ const InventoryPurchaseOrderEntry = ({
     const taxRate = igst ? gst : cgst + sgst;
     const rowTax = (displayPrice * taxRate) / 100;
     const total = displayPrice + rowTax;
-    const product = products.find((p) => p._id === selectedItem);
+    // Search in filteredProducts (from API), not the products prop
+    const product = filteredProducts.find((p) => p._id === selectedItem);
+    if (!product) {
+      toast.error("Product not found!");
+      return;
+    }
 
     setItems((prev) => [
       ...prev,

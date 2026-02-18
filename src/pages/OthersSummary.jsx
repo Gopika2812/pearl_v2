@@ -1,19 +1,20 @@
 import { useEffect, useState } from "react";
 import {
-    FaCog,
-    FaEdit,
-    FaFileInvoice,
-    FaFilter,
-    FaLayerGroup,
-    FaPlus,
-    FaShoppingCart,
-    FaSync,
-    FaTrash,
-    FaTruck,
-    FaUser,
-    FaWarehouse
+  FaCog,
+  FaEdit,
+  FaFileInvoice,
+  FaFilter,
+  FaLayerGroup,
+  FaPlus,
+  FaShoppingCart,
+  FaSync,
+  FaTrash,
+  FaTruck,
+  FaUser,
+  FaWarehouse
 } from "react-icons/fa";
 import { API_BASE } from "../api";
+import CreditNoteModal from "../components/inventory/CreditNoteModal";
 
 const OthersSummary = () => {
   const [tableType, setTableType] = useState("voucher-types");
@@ -30,6 +31,8 @@ const OthersSummary = () => {
   const [salesMen, setSalesMen] = useState([]);
   const [deliveryMen, setDeliveryMen] = useState([]);
   const [showCommissionRuleModal, setShowCommissionRuleModal] = useState(false);
+  const [selectedSalesOrderForCredit, setSelectedSalesOrderForCredit] = useState(null);
+  const [showCreditNoteModal, setShowCreditNoteModal] = useState(false);
   const [commissionRuleForm, setCommissionRuleForm] = useState({
     roleType: "SalesOwner",
     personId: "",
@@ -91,6 +94,13 @@ const OthersSummary = () => {
       displayFields: ["Invoice ID", "Customer", "Sales Owner", "Order Value", "Closing Balance", "Date"],
       isReadOnly: true,
     },
+    "commissions": {
+      label: "Commission Tracking",
+      icon: <FaCog />,
+      fields: ["invoiceId", "orderValue", "salesOwnerName", "salesOwnerCommissionAmount", "salesManName", "salesManCommissionAmount", "deliveryManName", "deliveryManCommissionAmount", "totalCommission"],
+      displayFields: ["Invoice ID", "Order Value (₹)", "Sales Owner", "SO Commission (₹)", "Sales Man", "SM Commission (₹)", "Delivery Man", "DM Commission (₹)", "Total Commission (₹)"],
+      isReadOnly: true,
+    },
   };
 
   // Fetch data based on table type
@@ -108,6 +118,7 @@ const OthersSummary = () => {
       else if (tableType === "delivery-men") endpoint = `${API_BASE}/delivery-men`;
       else if (tableType === "commission-rules") endpoint = `${API_BASE}/commission-rules`;
       else if (tableType === "sales-orders") endpoint = `${API_BASE}/sales-orders`;
+      else if (tableType === "commissions") endpoint = `${API_BASE}/sales-orders/commissions`;
 
       const response = await fetch(endpoint);
       const result = await response.json();
@@ -131,6 +142,39 @@ const OthersSummary = () => {
         setError(result.message || result.error || `Failed to fetch ${tableConfigs[tableType].label}`);
         setLoading(false);
         return;
+      }
+
+      // 💰 For sales personnel, enhance with actual earned commissions
+      if (["sales-owners", "sales-men", "delivery-men"].includes(tableType)) {
+        try {
+          const commissionsRes = await fetch(`${API_BASE}/sales-orders/commissions`);
+          const commissionsData = await commissionsRes.json();
+          const commissions = commissionsData.success ? commissionsData.data : commissionsData;
+          
+          // Calculate earned commissions per person
+          const commissionMap = {};
+          
+          commissions.forEach(comm => {
+            if (tableType === "sales-owners" && comm.salesOwnerId) {
+              const id = comm.salesOwnerId;
+              commissionMap[id] = (commissionMap[id] || 0) + (comm.salesOwnerCommissionAmount || 0);
+            } else if (tableType === "sales-men" && comm.salesManId) {
+              const id = comm.salesManId;
+              commissionMap[id] = (commissionMap[id] || 0) + (comm.salesManCommissionAmount || 0);
+            } else if (tableType === "delivery-men" && comm.deliveryManId) {
+              const id = comm.deliveryManId;
+              commissionMap[id] = (commissionMap[id] || 0) + (comm.deliveryManCommissionAmount || 0);
+            }
+          });
+          
+          // Enhance data with earned commissions
+          dataArray = dataArray.map(person => ({
+            ...person,
+            commissionAmount: commissionMap[person._id] || 0
+          }));
+        } catch (commErr) {
+          console.warn("Could not fetch commission data:", commErr);
+        }
       }
 
       setData(dataArray || []);
@@ -500,6 +544,62 @@ const OthersSummary = () => {
                 </div>
               </>
             )}
+            {tableType === "commissions" && (
+              <>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                  <p className="text-gray-600 text-xs font-semibold uppercase">
+                    Total Commission
+                  </p>
+                  <p className="text-2xl md:text-3xl font-bold text-green-600 mt-2">
+                    ₹{data.reduce((sum, d) => sum + (d.totalCommission || 0), 0).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
+                  <p className="text-gray-600 text-xs font-semibold uppercase">
+                    Sales Owner Commission
+                  </p>
+                  <p className="text-2xl md:text-3xl font-bold text-blue-600 mt-2">
+                    ₹{data.reduce((sum, d) => sum + (d.salesOwnerCommissionAmount || 0), 0).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
+                  <p className="text-gray-600 text-xs font-semibold uppercase">
+                    Sales Man Commission
+                  </p>
+                  <p className="text-2xl md:text-3xl font-bold text-purple-600 mt-2">
+                    ₹{data.reduce((sum, d) => sum + (d.salesManCommissionAmount || 0), 0).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg border border-orange-200">
+                  <p className="text-gray-600 text-xs font-semibold uppercase">
+                    Delivery Man Commission
+                  </p>
+                  <p className="text-2xl md:text-3xl font-bold text-orange-600 mt-2">
+                    ₹{data.reduce((sum, d) => sum + (d.deliveryManCommissionAmount || 0), 0).toFixed(2)}
+                  </p>
+                </div>
+              </>
+            )}
+            {["sales-owners", "sales-men", "delivery-men"].includes(tableType) && (
+              <>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                  <p className="text-gray-600 text-xs font-semibold uppercase">
+                    Total {tableType === "sales-owners" ? "Sales Owners" : tableType === "sales-men" ? "Sales Men" : "Delivery Men"}
+                  </p>
+                  <p className="text-2xl md:text-3xl font-bold text-green-600 mt-2">
+                    {data.length}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
+                  <p className="text-gray-600 text-xs font-semibold uppercase">
+                    Total Earned Commissions
+                  </p>
+                  <p className="text-2xl md:text-3xl font-bold text-blue-600 mt-2">
+                    ₹{data.reduce((sum, d) => sum + (d.commissionAmount || 0), 0).toFixed(2)}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -612,12 +712,24 @@ const OthersSummary = () => {
                             </button>
                           </>
                         ) : tableType === "sales-orders" ? (
-                          <button
-                            onClick={() => setDeleteConfirm(item._id)}
-                            className="bg-red-500 text-white px-2 md:px-3 py-1 md:py-2 rounded-lg hover:bg-red-600 transition inline-flex items-center gap-1 text-xs md:text-sm font-semibold"
-                          >
-                            <FaTrash /> Delete
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedSalesOrderForCredit(item);
+                                setShowCreditNoteModal(true);
+                              }}
+                              className="bg-blue-500 text-white px-2 md:px-3 py-1 md:py-2 rounded-lg hover:bg-blue-600 transition inline-flex items-center gap-1 text-xs md:text-sm font-semibold"
+                              title="Add credit note (return) for this sales order"
+                            >
+                              📝 Credit Note
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirm(item._id)}
+                              className="bg-red-500 text-white px-2 md:px-3 py-1 md:py-2 rounded-lg hover:bg-red-600 transition inline-flex items-center gap-1 text-xs md:text-sm font-semibold"
+                            >
+                              <FaTrash /> Delete
+                            </button>
+                          </div>
                         ) : (
                           <span className="text-gray-500 text-xs">Read-only</span>
                         )}
@@ -919,6 +1031,18 @@ const OthersSummary = () => {
           </div>
         </div>
       )}
+
+      {/* Credit Note Modal */}
+      <CreditNoteModal
+        isOpen={showCreditNoteModal}
+        onClose={() => {
+          setShowCreditNoteModal(false);
+          setSelectedSalesOrderForCredit(null);
+          // Refresh data after creating credit note
+          fetchData();
+        }}
+        salesOrder={selectedSalesOrderForCredit}
+      />
     </div>
   );
 };

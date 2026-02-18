@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 
 
 import commissionRuleRoutes from "./routes/commissionRuleRoutes.js";
+import creditNoteRoutes from "./routes/creditNoteRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import deliveryManRoutes from "./routes/deliveryManRoutes.js";
 import pearlsBookRoutes from "./routes/pearlsBookRoutes.js";
@@ -45,6 +46,7 @@ app.use("/api/customers", customerRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/voucher-types", voucherTypeRoutes);
 app.use("/api/sales-orders", salesOrderRoutes);
+app.use("/api/credit-notes", creditNoteRoutes);
 app.use("/api/pearls-book", pearlsBookRoutes);
 app.use("/api/sales-owners", salesOwnerRoutes);
 app.use("/api/sales-men", salesManRoutes);

@@ -116,6 +116,53 @@ router.get("/", async (req, res) => {
   }
 });
 
+// GET: Fetch Products by Product Group
+router.get("/group/:productGroupId", async (req, res) => {
+  try {
+    const { productGroupId } = req.params;
+    const { search = "" } = req.query;
+
+    console.log(`🔍 Fetching products for group: ${productGroupId}`);
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(productGroupId)) {
+      console.log(`❌ Invalid ObjectId: ${productGroupId}`);
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Product Group ID",
+      });
+    }
+
+    // Build filter
+    const filter = { productGroup: productGroupId };
+    if (search) {
+      filter.name = { $regex: search, $options: "i" };
+    }
+
+    console.log(`📋 Search filter:`, filter);
+
+    // ⚡ Fetch products with lean() for faster performance
+    const products = await Product.find(filter)
+      .populate("productGroup", "name")
+      .sort({ name: 1 })
+      .lean();
+
+    console.log(`✅ Found ${products.length} products for group ${productGroupId}`);
+
+    res.json({
+      success: true,
+      data: products,
+    });
+  } catch (error) {
+    console.error("Fetch Product by Group Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch products",
+      error: error.message,
+    });
+  }
+});
+
 router.post("/bulk-upload", upload.single("file"), async (req, res) => {
   console.log("🔥 BULK UPLOAD HIT");
 

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { FaBox, FaChevronDown, FaEdit, FaFilter, FaSync, FaTrash } from "react-icons/fa";
+import { FaBox, FaChevronDown, FaChevronLeft, FaChevronRight, FaEdit, FaFilter, FaSync, FaTrash } from "react-icons/fa";
 import { API_BASE } from "../api";
 
 const CustomerSummary = () => {
@@ -15,8 +15,9 @@ const CustomerSummary = () => {
   const [searchValue, setSearchValue] = useState("");
   const [searchField, setSearchField] = useState("name");
   const [expandedRows, setExpandedRows] = useState(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
-  // Available search fields
   const filterFields = [
     { label: "Customer Name", value: "name", type: "text" },
     { label: "WhatsApp", value: "whatsapp", type: "text" },
@@ -29,19 +30,42 @@ const CustomerSummary = () => {
     { label: "Margin", value: "margin", type: "number" },
   ];
 
-  // Fetch customers data
+  // Fetch customers data - fetch all pages
   const fetchCustomers = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${API_BASE}/customers`);
-      const data = await response.json();
+      
+      // First fetch to get total pages
+      const firstResponse = await fetch(`${API_BASE}/customers?page=1&limit=100`);
+      const firstData = await firstResponse.json();
 
-      if (data.success) {
-        setCustomers(data.data);
-      } else {
+      if (!firstData.success) {
         setError("Failed to fetch customers");
+        return;
       }
+
+      let allCustomers = [...firstData.data];
+      const totalPages = firstData.pagination?.pages || 1;
+
+      // Fetch remaining pages
+      if (totalPages > 1) {
+        const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+        
+        const pageRequests = remainingPages.map(page =>
+          fetch(`${API_BASE}/customers?page=${page}&limit=100`).then(res => res.json())
+        );
+
+        const results = await Promise.all(pageRequests);
+        
+        results.forEach(result => {
+          if (result.success && result.data) {
+            allCustomers = [...allCustomers, ...result.data];
+          }
+        });
+      }
+
+      setCustomers(allCustomers);
     } catch (err) {
       setError(err.message || "Error fetching customers");
       console.error("Fetch customers error:", err);
@@ -198,83 +222,122 @@ const CustomerSummary = () => {
           // For text fields, do contains search
           return String(fieldValue || "")
             .toLowerCase()
-            .includes(searchValue.toLowerCase());
+            .trim()
+            .includes(searchValue.toLowerCase().trim());
         }
+      }).sort((a, b) => {
+        // Sort results: exact matches first, then starts with, then other matches
+        let fieldA = a[searchField];
+        let fieldB = b[searchField];
+        
+        // Handle salesOwner object
+        if (searchField === "salesOwner") {
+          fieldA = typeof fieldA === "object" ? fieldA?.name || "" : fieldA;
+          fieldB = typeof fieldB === "object" ? fieldB?.name || "" : fieldB;
+        }
+        
+        fieldA = String(fieldA || "").toLowerCase().trim();
+        fieldB = String(fieldB || "").toLowerCase().trim();
+        const searchLower = searchValue.toLowerCase().trim();
+
+        // Priority: exact match first
+        const aIsExact = fieldA === searchLower ? 1 : 0;
+        const bIsExact = fieldB === searchLower ? 1 : 0;
+        if (aIsExact !== bIsExact) return bIsExact - aIsExact;
+
+        // Priority: starts with search term
+        const aStartsWith = fieldA.startsWith(searchLower) ? 1 : 0;
+        const bStartsWith = fieldB.startsWith(searchLower) ? 1 : 0;
+        if (aStartsWith !== bStartsWith) return bStartsWith - aStartsWith;
+
+        // Default: keep original order
+        return 0;
       });
 
+  // Reset to page 1 when search value changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchValue, searchField]);
+
+  // Calculate paginated customers
+  const totalPages = Math.ceil(filteredCustomers.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedCustomers = filteredCustomers.slice(startIndex, endIndex);
+
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 md:pt-16 md:pl-64">
+    <div className="min-h-screen bg-gray-50 pt-20 md:pt-16 md:pl-64 pb-8">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
+      <div className="bg-white shadow-sm border-b sticky top-16 md:top-12 z-40">
+        <div className="max-w-full mx-auto px-4 md:px-6 py-4 md:py-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-3">
               <FaBox className="text-primary text-2xl" />
               <div>
-                <h1 className="text-3xl font-bold text-gray-800">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
                   Customer Summary
                 </h1>
-                <p className="text-gray-600 text-sm mt-1">
+                <p className="text-gray-600 text-xs md:text-sm mt-1">
                   {filteredCustomers.length} customers {searchValue.trim() !== "" ? `(searched in ${filterFields.find((f) => f.value === searchField)?.label})` : "in database"}
                 </p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button
                 onClick={fetchCustomers}
                 disabled={loading}
-                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition flex items-center gap-2 disabled:opacity-50"
+                className="bg-primary text-white px-3 md:px-4 py-2 rounded-lg hover:bg-primary/90 transition flex items-center gap-2 disabled:opacity-50 text-sm md:text-base"
               >
                 <FaSync className={loading ? "animate-spin" : ""} />
-                Refresh
+                <span className="hidden sm:inline">Refresh</span>
               </button>
               <button
                 onClick={() => setShowSearchBox(!showSearchBox)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 font-semibold"
+                className="bg-blue-600 text-white px-3 md:px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 font-semibold text-sm md:text-base"
               >
                 <FaFilter size={16} />
-                Add Filter
+                <span className="hidden sm:inline">Add Filter</span>
               </button>
             </div>
           </div>
 
           {/* Summary Statistics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-            <div className="bg-white p-4 rounded-lg border">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mt-4 md:mt-6">
+            <div className="bg-gray-50 p-3 md:p-4 rounded-lg border">
               <p className="text-gray-600 text-xs font-semibold uppercase">
-                Total Customers
+                Total
               </p>
-              <p className="text-2xl font-bold text-primary mt-1">
+              <p className="text-lg md:text-2xl font-bold text-primary mt-1">
                 {customers.length}
               </p>
             </div>
-            <div className="bg-white p-4 rounded-lg border">
+            <div className="bg-gray-50 p-3 md:p-4 rounded-lg border">
               <p className="text-gray-600 text-xs font-semibold uppercase">
-                Total Closing Balance
+                Balance
               </p>
-              <p className="text-2xl font-bold text-blue-600 mt-1">
-                ₹ {customers.reduce((sum, c) => sum + (c.closingBalance || 0), 0).toFixed(2)}
+              <p className="text-lg md:text-2xl font-bold text-blue-600 mt-1">
+                ₹ {(customers.reduce((sum, c) => sum + (c.closingBalance || 0), 0) / 1000).toFixed(0)}K
               </p>
             </div>
-            <div className="bg-white p-4 rounded-lg border">
+            <div className="bg-gray-50 p-3 md:p-4 rounded-lg border">
               <p className="text-gray-600 text-xs font-semibold uppercase">
                 Avg Margin
               </p>
-              <p className="text-2xl font-bold text-purple-600 mt-1">
+              <p className="text-lg md:text-2xl font-bold text-purple-600 mt-1">
                 {customers.length > 0
                   ? (
                       customers.reduce((sum, c) => sum + (c.margin || 0), 0) /
                       customers.length
-                    ).toFixed(2)
-                  : "0.00"}
+                    ).toFixed(1)
+                  : "0.0"}
                 %
               </p>
             </div>
-            <div className="bg-white p-4 rounded-lg border">
+            <div className="bg-gray-50 p-3 md:p-4 rounded-lg border">
               <p className="text-gray-600 text-xs font-semibold uppercase">
-                States Covered
+                States
               </p>
-              <p className="text-2xl font-bold text-orange-600 mt-1">
+              <p className="text-lg md:text-2xl font-bold text-orange-600 mt-1">
                 {new Set(customers.map((c) => c.state).filter(Boolean)).size}
               </p>
             </div>
@@ -284,10 +347,10 @@ const CustomerSummary = () => {
 
       {/* Search Box - Appears when Add Filter is clicked */}
       {showSearchBox && (
-        <div className="max-w-full mx-auto px-6 py-4">
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
-            <div className="flex items-end gap-4">
-              <div className="flex-1">
+        <div className="max-w-full mx-auto px-4 md:px-6 py-4">
+          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4 md:p-6">
+            <div className="flex flex-col gap-4">
+              <div className="w-full">
                 <label className="text-sm font-bold text-gray-600 block mb-2">
                   Select Field to Search
                 </label>
@@ -295,9 +358,9 @@ const CustomerSummary = () => {
                   value={searchField}
                   onChange={(e) => {
                     setSearchField(e.target.value);
-                    setSearchValue(""); // Reset search when field changes
+                    setSearchValue("");
                   }}
-                  className="w-full p-3 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2 md:p-3 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500 text-sm"
                 >
                   {filterFields.map((field) => (
                     <option key={field.value} value={field.value}>
@@ -307,7 +370,7 @@ const CustomerSummary = () => {
                 </select>
               </div>
 
-              <div className="flex-1">
+              <div className="w-full">
                 <label className="text-sm font-bold text-gray-600 block mb-2">
                   Enter Search Value
                 </label>
@@ -320,7 +383,7 @@ const CustomerSummary = () => {
                       ? "Enter numeric value..."
                       : "Enter text to search..."
                   }
-                  className="w-full p-3 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2 md:p-3 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500 text-sm"
                   autoFocus
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -330,21 +393,21 @@ const CustomerSummary = () => {
                 </p>
               </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <button
                   onClick={() => {
                     setShowSearchBox(false);
                     setSearchValue("");
                     setSearchField("name");
                   }}
-                  className="px-4 py-3 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition font-semibold whitespace-nowrap"
+                  className="flex-1 px-3 md:px-4 py-2 md:py-3 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition font-semibold text-sm"
                 >
                   Close
                 </button>
                 {searchValue && (
                   <button
                     onClick={() => setSearchValue("")}
-                    className="px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold whitespace-nowrap"
+                    className="flex-1 px-3 md:px-4 py-2 md:py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold text-sm"
                   >
                     Clear
                   </button>
@@ -356,9 +419,9 @@ const CustomerSummary = () => {
       )}
 
       {/* Main Content */}
-      <div className="max-w-full mx-auto px-6 py-8">
+      <div className="max-w-full mx-auto px-4 md:px-6 py-6 md:py-8">
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm md:text-base">
             {error}
           </div>
         )}
@@ -370,53 +433,55 @@ const CustomerSummary = () => {
         ) : filteredCustomers.length === 0 ? (
           <div className="bg-gray-100 rounded-lg p-8 text-center">
             <FaBox className="text-4xl text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-600">
+            <p className="text-gray-600 text-sm md:text-base">
               {searchValue.trim() !== "" ? "No customers match your search" : "No customers found"}
             </p>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-100 border-b">
-                    <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">
-                      Customer Name
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">
-                      WhatsApp
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">
-                      Email
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">
-                      State
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">
-                      District
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">
-                      GSTIN
-                    </th>
-                    <th className="px-6 py-4 text-right text-sm font-bold text-gray-700">
-                      Closing Balance
-                    </th>
-                    <th className="px-6 py-4 text-right text-sm font-bold text-gray-700">
-                      Margin
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-bold text-gray-700">
-                      Sales Owner
-                    </th>
-                    <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">
-                      Details
-                    </th>
-                    <th className="px-6 py-4 text-center text-sm font-bold text-gray-700">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-100 border-b">
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-700">
+                        Customer Name
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-700">
+                        WhatsApp
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-700">
+                        Email
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-700">
+                        State
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-700">
+                        District
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-700">
+                        GSTIN
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-700">
+                        Balance
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-700">
+                        Margin
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-700">
+                        Sales Owner
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-bold text-gray-700">
+                        Details
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-bold text-gray-700">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
                 <tbody>
-                  {filteredCustomers.map((customer, idx) => (
+                  {paginatedCustomers.map((customer, idx) => (
                     <Fragment key={customer._id}>
                     <tr
                       className={`border-b hover:bg-gray-50 transition ${
@@ -563,49 +628,145 @@ const CustomerSummary = () => {
                 </tbody>
               </table>
             </div>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
+              {paginatedCustomers.map((customer) => (
+                <div key={customer._id} className="bg-white border rounded-lg p-4 shadow-sm">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h3 className="font-bold text-gray-900 text-sm">{customer.name}</h3>
+                      <p className="text-xs text-gray-500 mt-1">{customer.district || "N/A"}, {customer.state || "N/A"}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEdit(customer)}
+                        className="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded transition"
+                        title="Edit"
+                      >
+                        <FaEdit size={12} />
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(customer)}
+                        className="bg-red-500 hover:bg-red-600 text-white p-2 rounded transition"
+                        title="Delete"
+                      >
+                        <FaTrash size={12} />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                    <div>
+                      <p className="text-gray-500">WhatsApp</p>
+                      <p className="text-gray-900 font-semibold">{customer.whatsapp || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Email</p>
+                      <p className="text-gray-900 font-semibold truncate">{customer.email || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">GSTIN</p>
+                      <p className="text-gray-900 font-semibold">{customer.gstin || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Margin</p>
+                      <p className={`font-semibold ${customer.margin > 0 ? "text-green-600" : customer.margin < 0 ? "text-red-600" : "text-gray-700"}`}>
+                        {customer.margin?.toFixed(1) || "0.0"}%
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="border-t pt-3">
+                    <p className="text-gray-500 text-xs">Balance</p>
+                    <p className={`text-sm font-bold ${customer.closingBalance > 0 ? "text-green-600" : customer.closingBalance < 0 ? "text-red-600" : "text-gray-700"}`}>
+                      ₹ {customer.closingBalance?.toFixed(2) || "0.00"}
+                    </p>
+                  </div>
+                  
+                  <div className="border-t mt-3 pt-3">
+                    <p className="text-gray-500 text-xs">Sales Owner</p>
+                    <p className="text-gray-900 font-semibold text-xs">
+                      {typeof customer.salesOwner === "object" ? customer.salesOwner?.name : customer.salesOwner || "-"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="bg-gray-50 border-t px-4 md:px-6 py-3 md:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 md:gap-4">
+              <div className="text-xs md:text-sm text-gray-600">
+                Showing {filteredCustomers.length === 0 ? 0 : startIndex + 1} to{" "}
+                {Math.min(endIndex, filteredCustomers.length)} of{" "}
+                {filteredCustomers.length} customers
+              </div>
+              <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-end">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 md:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 md:gap-2 text-xs md:text-sm"
+                >
+                  <FaChevronLeft size={14} />
+                  <span className="hidden sm:inline">Prev</span>
+                </button>
+                <div className="px-3 md:px-4 py-2 bg-white border rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap">
+                  Page {currentPage} of {totalPages || 1}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="px-3 md:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 md:gap-2 text-xs md:text-sm"
+                >
+                  <span className="hidden sm:inline">Next</span>
+                  <FaChevronRight size={14} />
+                </button>
+              </div>
+            </div>
 
             {/* Summary Stats */}
-            <div className="bg-gray-50 border-t px-6 py-4 grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white p-4 rounded-lg border">
+            <div className="bg-gray-50 border-t px-4 md:px-6 py-3 md:py-4 grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+              <div className="bg-white p-3 md:p-4 rounded-lg border">
                 <p className="text-gray-600 text-xs font-semibold uppercase">
-                  Displayed
+                  Page Items
                 </p>
-                <p className="text-2xl font-bold text-primary mt-1">
-                  {filteredCustomers.length}
+                <p className="text-lg md:text-2xl font-bold text-primary mt-1">
+                  {paginatedCustomers.length}
                 </p>
               </div>
-              <div className="bg-white p-4 rounded-lg border">
+              <div className="bg-white p-3 md:p-4 rounded-lg border">
                 <p className="text-gray-600 text-xs font-semibold uppercase">
-                  Total Balance
+                  Balance
                 </p>
-                <p className="text-2xl font-bold text-blue-600 mt-1">
-                  ₹ {filteredCustomers.reduce((sum, c) => sum + (c.closingBalance || 0), 0).toFixed(2)}
+                <p className="text-lg md:text-2xl font-bold text-blue-600 mt-1">
+                  ₹ {(paginatedCustomers.reduce((sum, c) => sum + (c.closingBalance || 0), 0) / 1000).toFixed(1)}K
                 </p>
               </div>
-              <div className="bg-white p-4 rounded-lg border">
+              <div className="bg-white p-3 md:p-4 rounded-lg border">
                 <p className="text-gray-600 text-xs font-semibold uppercase">
                   Avg Margin
                 </p>
-                <p className="text-2xl font-bold text-green-600 mt-1">
-                  {filteredCustomers.length > 0
+                <p className="text-lg md:text-2xl font-bold text-green-600 mt-1">
+                  {paginatedCustomers.length > 0
                     ? (
-                        filteredCustomers.reduce((sum, c) => sum + (c.margin || 0), 0) /
-                        filteredCustomers.length
-                      ).toFixed(2)
-                    : "0.00"}
+                        paginatedCustomers.reduce((sum, c) => sum + (c.margin || 0), 0) /
+                        paginatedCustomers.length
+                      ).toFixed(1)
+                    : "0.0"}
                   %
                 </p>
               </div>
-              <div className="bg-white p-4 rounded-lg border">
+              <div className="bg-white p-3 md:p-4 rounded-lg border">
                 <p className="text-gray-600 text-xs font-semibold uppercase">
                   States
                 </p>
-                <p className="text-2xl font-bold text-orange-600 mt-1">
-                  {new Set(filteredCustomers.map((c) => c.state).filter(Boolean)).size}
+                <p className="text-lg md:text-2xl font-bold text-orange-600 mt-1">
+                  {new Set(paginatedCustomers.map((c) => c.state).filter(Boolean)).size}
                 </p>
               </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 

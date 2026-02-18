@@ -314,17 +314,48 @@ router.delete("/:id", async (req, res) => {
     }
 
     const orderValue = salesOrder.grandTotalWithMargin || salesOrder.grandTotal || 0;
+    const customerId = salesOrder.customer?.customerId; // ✅ GET CUSTOMER ID CORRECTLY
 
     // 🔄 REVERT CUSTOMER CLOSING BALANCE
-    if (salesOrder.customer && mongoose.Types.ObjectId.isValid(salesOrder.customer)) {
-      const customer = await Customer.findById(salesOrder.customer);
+    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+      const customer = await Customer.findById(customerId);
       if (customer) {
         const revertedBalance = customer.closingBalance - orderValue;
-        await Customer.findByIdAndUpdate(salesOrder.customer, {
+        await Customer.findByIdAndUpdate(customerId, {
           closingBalance: revertedBalance,
           totalBalance: revertedBalance,
         });
-        console.log(`✅ Customer balance reverted: ${revertedBalance}`);
+        console.log(`✅ Customer balance reverted from ₹${customer.closingBalance} to ₹${revertedBalance}`);
+      }
+    } else {
+      console.warn("⚠️ No valid customer ID found in sales order");
+    }
+
+    // � REVERT COMMISSION AMOUNTS FROM SALES PERSONNEL
+    const commission = await Commission.findOne({ salesOrderId: req.params.id });
+    if (commission) {
+      // Revert Sales Owner Commission
+      if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
+        await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
+          $inc: { commissionAmount: -commission.salesOwnerCommissionAmount }
+        });
+        console.log(`✅ Sales Owner commission reverted: -₹${commission.salesOwnerCommissionAmount}`);
+      }
+
+      // Revert Sales Man Commission
+      if (commission.salesManId && commission.salesManCommissionAmount > 0) {
+        await SalesMan.findByIdAndUpdate(commission.salesManId, {
+          $inc: { commissionAmount: -commission.salesManCommissionAmount }
+        });
+        console.log(`✅ Sales Man commission reverted: -₹${commission.salesManCommissionAmount}`);
+      }
+
+      // Revert Delivery Man Commission
+      if (commission.deliveryManId && commission.deliveryManCommissionAmount > 0) {
+        await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, {
+          $inc: { commissionAmount: -commission.deliveryManCommissionAmount }
+        });
+        console.log(`✅ Delivery Man commission reverted: -₹${commission.deliveryManCommissionAmount}`);
       }
     }
 
@@ -337,7 +368,7 @@ router.delete("/:id", async (req, res) => {
 
     res.json({
       success: true,
-      message: "Sales order deleted and customer balance reverted",
+      message: "Sales order deleted. Customer balance and all commissions reverted.",
     });
   } catch (error) {
     console.error("Delete error:", error);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaBox, FaEdit, FaFilter, FaSync, FaTrash } from "react-icons/fa";
+import { FaBox, FaChevronLeft, FaChevronRight, FaEdit, FaFilter, FaSync, FaTrash } from "react-icons/fa";
 import { API_BASE } from "../api";
 
 const ProductSummary = () => {
@@ -13,6 +13,8 @@ const ProductSummary = () => {
   const [showSearchBox, setShowSearchBox] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [searchField, setSearchField] = useState("name");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   // Available filter fields
   const filterFields = [
@@ -26,19 +28,42 @@ const ProductSummary = () => {
     { label: "GST %", value: "gst", type: "number" },
   ];
 
-  // Fetch products data
+  // Fetch products data - fetch all pages
   const fetchProducts = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${API_BASE}/products`);
-      const data = await response.json();
+      
+      // First fetch to get total pages
+      const firstResponse = await fetch(`${API_BASE}/products?page=1&limit=50`);
+      const firstData = await firstResponse.json();
 
-      if (data.success) {
-        setProducts(data.data);
-      } else {
+      if (!firstData.success) {
         setError("Failed to fetch products");
+        return;
       }
+
+      let allProducts = [...firstData.data];
+      const totalPages = firstData.pagination?.pages || 1;
+
+      // Fetch remaining pages
+      if (totalPages > 1) {
+        const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+        
+        const pageRequests = remainingPages.map(page =>
+          fetch(`${API_BASE}/products?page=${page}&limit=100`).then(res => res.json())
+        );
+
+        const results = await Promise.all(pageRequests);
+        
+        results.forEach(result => {
+          if (result.success && result.data) {
+            allProducts = [...allProducts, ...result.data];
+          }
+        });
+      }
+
+      setProducts(allProducts);
     } catch (err) {
       setError(err.message || "Error fetching products");
       console.error("Fetch products error:", err);
@@ -127,89 +152,119 @@ const ProductSummary = () => {
           // For text fields, do contains search
           return String(fieldValue || "")
             .toLowerCase()
-            .includes(searchValue.toLowerCase());
+            .trim()
+            .includes(searchValue.toLowerCase().trim());
         }
+      }).sort((a, b) => {
+        // Sort results: exact matches first, then starts with, then other matches
+        const fieldA = String(a[searchField] || "").toLowerCase().trim();
+        const fieldB = String(b[searchField] || "").toLowerCase().trim();
+        const searchLower = searchValue.toLowerCase().trim();
+
+        // Priority: exact match first
+        const aIsExact = fieldA === searchLower ? 1 : 0;
+        const bIsExact = fieldB === searchLower ? 1 : 0;
+        if (aIsExact !== bIsExact) return bIsExact - aIsExact;
+
+        // Priority: starts with search term
+        const aStartsWith = fieldA.startsWith(searchLower) ? 1 : 0;
+        const bStartsWith = fieldB.startsWith(searchLower) ? 1 : 0;
+        if (aStartsWith !== bStartsWith) return bStartsWith - aStartsWith;
+
+        // Default: keep original order
+        return 0;
       });
 
+  // Reset to page 1 when search value changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchValue, searchField]);
+
+  // Calculate paginated products
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
+
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 md:pt-16 md:pl-64">
+    <div className="min-h-screen bg-gray-50 pt-20 md:pt-16 md:pl-64 pb-8">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
+      <div className="bg-white shadow-sm border-b sticky top-16 md:top-12 z-40">
+        <div className="max-w-full mx-auto px-4 md:px-6 py-4 md:py-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-3">
               <FaBox className="text-primary text-2xl" />
               <div>
-                <h1 className="text-3xl font-bold text-gray-800">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
                   Product Summary
                 </h1>
-                <p className="text-gray-600 text-sm mt-1">
+                <p className="text-gray-600 text-xs md:text-sm mt-1">
                   {filteredProducts.length} products {searchValue.trim() !== "" ? `(searched in ${filterFields.find((f) => f.value === searchField)?.label})` : "in inventory"}
                 </p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button
                 onClick={fetchProducts}
                 disabled={loading}
-                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition flex items-center gap-2 disabled:opacity-50"
+                className="bg-primary text-white px-3 md:px-4 py-2 rounded-lg hover:bg-primary/90 transition flex items-center gap-2 disabled:opacity-50 text-sm md:text-base"
               >
                 <FaSync className={loading ? "animate-spin" : ""} />
-                Refresh
+                <span className="hidden sm:inline">Refresh</span>
               </button>
               <button
                 onClick={() => setShowSearchBox(!showSearchBox)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 font-semibold"
+                className="bg-blue-600 text-white px-3 md:px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 font-semibold text-sm md:text-base"
               >
                 <FaFilter size={16} />
-                Add Filter
+                <span className="hidden sm:inline">Add Filter</span>
               </button>
             </div>
           </div>
 
           {/* Summary Statistics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-            <div className="bg-white p-4 rounded-lg border">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mt-4 md:mt-6">
+            <div className="bg-gray-50 p-3 md:p-4 rounded-lg border">
               <p className="text-gray-600 text-xs font-semibold uppercase">
-                Total Products
+                Total
               </p>
-              <p className="text-2xl font-bold text-primary mt-1">
+              <p className="text-lg md:text-2xl font-bold text-primary mt-1">
                 {products.length}
               </p>
             </div>
-            <div className="bg-white p-4 rounded-lg border">
+            <div className="bg-gray-50 p-3 md:p-4 rounded-lg border">
               <p className="text-gray-600 text-xs font-semibold uppercase">
-                Total Qty In Stock
+                Qty Stock
               </p>
-              <p className="text-2xl font-bold text-blue-600 mt-1">
-                {products.reduce((sum, p) => sum + (p.totalQty || 0), 0)}
+              <p className="text-lg md:text-2xl font-bold text-blue-600 mt-1">
+                {(products.reduce((sum, p) => sum + (p.totalQty || 0), 0) / 1000).toFixed(1)}K
               </p>
             </div>
-            <div className="bg-white p-4 rounded-lg border">
+            <div className="bg-gray-50 p-3 md:p-4 rounded-lg border">
               <p className="text-gray-600 text-xs font-semibold uppercase">
                 Avg Margin
               </p>
-              <p className="text-2xl font-bold text-purple-600 mt-1">
+              <p className="text-lg md:text-2xl font-bold text-purple-600 mt-1">
                 {products.length > 0
                   ? (
                       products.reduce((sum, p) => sum + (p.margin || 0), 0) /
                       products.length
-                    ).toFixed(2)
-                  : "0.00"}
+                    ).toFixed(1)
+                  : "0.0"}
                 %
               </p>
             </div>
-            <div className="bg-white p-4 rounded-lg border">
+            <div className="bg-gray-50 p-3 md:p-4 rounded-lg border">
               <p className="text-gray-600 text-xs font-semibold uppercase">
                 Avg GST
               </p>
-              <p className="text-2xl font-bold text-orange-600 mt-1">
+              <p className="text-lg md:text-2xl font-bold text-orange-600 mt-1">
                 {products.length > 0
                   ? (
                       products.reduce((sum, p) => sum + (p.gst || 0), 0) /
                       products.length
-                    ).toFixed(2)
-                  : "0.00"}
+                    ).toFixed(1)
+                  : "0.0"}
                 %
               </p>
             </div>
@@ -219,10 +274,10 @@ const ProductSummary = () => {
 
       {/* Search Box - Appears when Add Filter is clicked */}
       {showSearchBox && (
-        <div className="max-w-full mx-auto px-6 py-4">
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
-            <div className="flex items-end gap-4">
-              <div className="flex-1">
+        <div className="max-w-full mx-auto px-4 md:px-6 py-4">
+          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4 md:p-6">
+            <div className="flex flex-col gap-4">
+              <div className="w-full">
                 <label className="text-sm font-bold text-gray-600 block mb-2">
                   Select Field to Search
                 </label>
@@ -230,9 +285,9 @@ const ProductSummary = () => {
                   value={searchField}
                   onChange={(e) => {
                     setSearchField(e.target.value);
-                    setSearchValue(""); // Reset search when field changes
+                    setSearchValue("");
                   }}
-                  className="w-full p-3 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2 md:p-3 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500 text-sm"
                 >
                   {filterFields.map((field) => (
                     <option key={field.value} value={field.value}>
@@ -242,7 +297,7 @@ const ProductSummary = () => {
                 </select>
               </div>
 
-              <div className="flex-1">
+              <div className="w-full">
                 <label className="text-sm font-bold text-gray-600 block mb-2">
                   Enter Search Value
                 </label>
@@ -255,7 +310,7 @@ const ProductSummary = () => {
                       ? "Enter numeric value..."
                       : "Enter text to search..."
                   }
-                  className="w-full p-3 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2 md:p-3 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500 text-sm"
                   autoFocus
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -265,21 +320,21 @@ const ProductSummary = () => {
                 </p>
               </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <button
                   onClick={() => {
                     setShowSearchBox(false);
                     setSearchValue("");
                     setSearchField("name");
                   }}
-                  className="px-4 py-3 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition font-semibold whitespace-nowrap"
+                  className="flex-1 px-3 md:px-4 py-2 md:py-3 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition font-semibold text-sm"
                 >
                   Close
                 </button>
                 {searchValue && (
                   <button
                     onClick={() => setSearchValue("")}
-                    className="px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold whitespace-nowrap"
+                    className="flex-1 px-3 md:px-4 py-2 md:py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold text-sm"
                   >
                     Clear
                   </button>
@@ -291,30 +346,29 @@ const ProductSummary = () => {
       )}
 
       {/* Main Content */}
-      <div className="max-w-full mx-auto px-6 py-8">
-        <div className="flex gap-6">
-          {/* Main Content Area */}
-          <div className="flex-1 w-full">
-            {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6">
-                {error}
-              </div>
-            )}
+      <div className="max-w-full mx-auto px-4 md:px-6 py-6 md:py-8">
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm md:text-base">
+            {error}
+          </div>
+        )}
 
-            {loading ? (
-              <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-              </div>
-            ) : filteredProducts.length === 0 ? (
-              <div className="bg-gray-100 rounded-lg p-8 text-center">
-                <FaBox className="text-4xl text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-600">
-                  {filters.length > 0 ? "No products match your filters" : "No products found"}
-                </p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                <div className="overflow-x-auto">
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          </div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="bg-gray-100 rounded-lg p-8 text-center">
+            <FaBox className="text-4xl text-gray-400 mx-auto mb-3" />
+            <p className="text-gray-600 text-sm md:text-base">
+              {searchValue.trim().length > 0 ? "No products match your filters" : "No products found"}
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="bg-gray-100 border-b">
@@ -354,7 +408,7 @@ const ProductSummary = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredProducts.map((product, idx) => (
+                      {paginatedProducts.map((product, idx) => (
                         <tr
                           key={product._id}
                           className={`border-b hover:bg-gray-50 transition ${
@@ -422,58 +476,162 @@ const ProductSummary = () => {
                     </tbody>
                   </table>
                 </div>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
+              {paginatedProducts.map((product) => (
+                <div key={product._id} className="bg-white border rounded-lg p-4 shadow-sm">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h3 className="font-bold text-gray-900 text-sm">{product.name}</h3>
+                      <p className="text-xs text-gray-500 mt-1">{product.productGroup?.name || "N/A"}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEdit(product)}
+                        className="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded transition"
+                        title="Edit"
+                      >
+                        <FaEdit size={12} />
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(product)}
+                        className="bg-red-500 hover:bg-red-600 text-white p-2 rounded transition"
+                        title="Delete"
+                      >
+                        <FaTrash size={12} />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                    <div>
+                      <p className="text-gray-500">Per Qty</p>
+                      <p className="text-gray-900 font-semibold">{product.perQty}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Units</p>
+                      <p className="text-gray-900 font-semibold">{product.units}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Stock Qty</p>
+                      <p className="text-gray-900 font-semibold">{product.totalQty}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Margin</p>
+                      <p className={`font-semibold ${product.margin > 0 ? "text-green-600" : product.margin < 0 ? "text-red-600" : "text-gray-700"}`}>
+                        {product.margin?.toFixed(1) || "0.0"}%
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-xs border-t pt-3 mb-3">
+                    <div>
+                      <p className="text-gray-500">Price</p>
+                      <p className="text-gray-900 font-semibold">₹ {product.purchasingPrice?.toFixed(2) || "0.00"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Sell Price</p>
+                      <p className="text-gray-900 font-semibold">₹ {product.sellingPrice?.toFixed(2) || "0.00"}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="border-t pt-3">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <p className="text-gray-500">HSN Code</p>
+                        <p className="text-gray-900 font-semibold">{product.hsnCode}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500">GST %</p>
+                        <p className="text-gray-900 font-semibold">{product.gst}%</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+                {/* Pagination Controls */}
+                <div className="bg-gray-50 border-t px-4 md:px-6 py-3 md:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 md:gap-4">
+                  <div className="text-xs md:text-sm text-gray-600">
+                    Showing {filteredProducts.length === 0 ? 0 : startIndex + 1} to{" "}
+                    {Math.min(endIndex, filteredProducts.length)} of{" "}
+                    {filteredProducts.length} products
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-end">
+                    <button
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 md:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 md:gap-2 text-xs md:text-sm"
+                    >
+                      <FaChevronLeft size={14} />
+                      <span className="hidden sm:inline">Prev</span>
+                    </button>
+                    <div className="px-3 md:px-4 py-2 bg-white border rounded-lg text-xs md:text-sm font-semibold whitespace-nowrap">
+                      Page {currentPage} of {totalPages || 1}
+                    </div>
+                    <button
+                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages || totalPages === 0}
+                      className="px-3 md:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 md:gap-2 text-xs md:text-sm"
+                    >
+                      <span className="hidden sm:inline">Next</span>
+                      <FaChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
 
                 {/* Summary Stats */}
-                <div className="bg-gray-50 border-t px-6 py-4 grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="bg-white p-4 rounded-lg border">
+                <div className="bg-gray-50 border-t px-4 md:px-6 py-3 md:py-4 grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+                  <div className="bg-white p-3 md:p-4 rounded-lg border">
                     <p className="text-gray-600 text-xs font-semibold uppercase">
-                      Products Displayed
+                      Page Items
                     </p>
-                    <p className="text-2xl font-bold text-primary mt-1">
-                      {filteredProducts.length}
+                    <p className="text-lg md:text-2xl font-bold text-primary mt-1">
+                      {paginatedProducts.length}
                     </p>
                   </div>
-                  <div className="bg-white p-4 rounded-lg border">
+                  <div className="bg-white p-3 md:p-4 rounded-lg border">
                     <p className="text-gray-600 text-xs font-semibold uppercase">
-                      Total Qty In Stock
+                      Stock
                     </p>
-                    <p className="text-2xl font-bold text-blue-600 mt-1">
-                      {filteredProducts.reduce((sum, p) => sum + (p.totalQty || 0), 0)}
+                    <p className="text-lg md:text-2xl font-bold text-blue-600 mt-1">
+                      {(paginatedProducts.reduce((sum, p) => sum + (p.totalQty || 0), 0) / 1000).toFixed(1)}K
                     </p>
                   </div>
-                  <div className="bg-white p-4 rounded-lg border">
+                  <div className="bg-white p-3 md:p-4 rounded-lg border">
                     <p className="text-gray-600 text-xs font-semibold uppercase">
                       Avg Margin
                     </p>
-                    <p className="text-2xl font-bold text-green-600 mt-1">
-                      {filteredProducts.length > 0
+                    <p className="text-lg md:text-2xl font-bold text-green-600 mt-1">
+                      {paginatedProducts.length > 0
                         ? (
-                            filteredProducts.reduce((sum, p) => sum + (p.margin || 0), 0) /
-                            filteredProducts.length
-                          ).toFixed(2)
-                        : "0.00"}
+                            paginatedProducts.reduce((sum, p) => sum + (p.margin || 0), 0) /
+                            paginatedProducts.length
+                          ).toFixed(1)
+                        : "0.0"}
                       %
                     </p>
                   </div>
-                  <div className="bg-white p-4 rounded-lg border">
+                  <div className="bg-white p-3 md:p-4 rounded-lg border">
                     <p className="text-gray-600 text-xs font-semibold uppercase">
                       Avg GST
                     </p>
-                    <p className="text-2xl font-bold text-orange-600 mt-1">
-                      {filteredProducts.length > 0
+                    <p className="text-lg md:text-2xl font-bold text-orange-600 mt-1">
+                      {paginatedProducts.length > 0
                         ? (
-                            filteredProducts.reduce((sum, p) => sum + (p.gst || 0), 0) /
-                            filteredProducts.length
-                          ).toFixed(2)
-                        : "0.00"}
+                            paginatedProducts.reduce((sum, p) => sum + (p.gst || 0), 0) /
+                            paginatedProducts.length
+                          ).toFixed(1)
+                        : "0.0"}
                       %
                     </p>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
+            </>
+        )}
       </div>
 
       {/* EDIT MODAL */}

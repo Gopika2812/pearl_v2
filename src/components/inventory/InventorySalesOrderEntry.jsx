@@ -27,6 +27,8 @@ export default function InventorySalesOrderEntry({
 
   const [productGroup, setProductGroup] = useState("");
   const [selectedItem, setSelectedItem] = useState("");
+  const [filteredProducts, setFilteredProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   const [sellingPrice, setSellingPrice] = useState(0);
   const [qty, setQty] = useState(1);
@@ -65,6 +67,11 @@ export default function InventorySalesOrderEntry({
   useEffect(() => {
     if (!voucherType) {
       setInvoiceId("");
+      // Reset product selection when voucher type changes
+      setProductGroup("");
+      setSelectedItem("");
+      setFilteredProducts([]);
+      setItems([]);
       return;
     }
 
@@ -84,6 +91,12 @@ export default function InventorySalesOrderEntry({
       }
     };
 
+    // Reset product selection when voucher type changes
+    setProductGroup("");
+    setSelectedItem("");
+    setFilteredProducts([]);
+    setItems([]);
+
     fetchPreview();
   }, [voucherType]);
 
@@ -102,6 +115,12 @@ export default function InventorySalesOrderEntry({
 
     loadPoItems();
   }, []);
+
+  // Reset filtered products and items when warehouse changes
+  useEffect(() => {
+    setFilteredProducts([]);
+    setSelectedItem("");
+  }, [warehouse]);
 
   useEffect(() => {
     if (recentOrders.length > 0) setShowRecentPanel(true);
@@ -128,9 +147,43 @@ export default function InventorySalesOrderEntry({
   };
 
 
+  // Fetch products by product group from API
+  useEffect(() => {
+    if (!productGroup) {
+      setFilteredProducts([]);
+      return;
+    }
 
+    const fetchProductsByGroup = async () => {
+      setLoadingProducts(true);
+      try {
+        const res = await fetch(`${API_BASE}/products/group/${productGroup}`);
+        const data = await res.json();
 
-  const filteredProducts = useMemo(() => {
+        if (data.success) {
+          console.log(`✅ Fetched ${data.data.length} products for SO group:`, productGroup);
+          setFilteredProducts(data.data);
+        } else if (Array.isArray(data)) {
+          // Handle if API returns array directly
+          console.log(`✅ Fetched ${data.length} products for SO group:`, productGroup);
+          setFilteredProducts(data);
+        } else {
+          console.warn("⚠️ Failed to fetch products:", data.message);
+          setFilteredProducts([]);
+        }
+      } catch (error) {
+        console.error("❌ Error fetching products by group:", error);
+        setFilteredProducts([]);
+        toast.error("Failed to load products");
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    fetchProductsByGroup();
+  }, [productGroup]);
+
+  const filteredProducts_unused = useMemo(() => {
     return productGroup
       ? products.filter((p) => {
           const pGroupId = p.productGroup?._id || p.productGroup || p.groupId?._id || p.groupId;
@@ -145,7 +198,7 @@ export default function InventorySalesOrderEntry({
       console.log(`✅ Found ${filteredProducts.length} products for SO group:`, productGroup);
     } else if (productGroup) {
       console.warn(`⚠️ No products found for SO group: ${productGroup}`);
-      console.log("Available products:", products.map(p => ({ id: p._id, name: p.name, group: p.productGroup || p.groupId })));
+      console.log("Available products (from API):", filteredProducts);
     }
   }, [filteredProducts, productGroup]);
 
@@ -250,8 +303,11 @@ export default function InventorySalesOrderEntry({
       return;
     }
 
-    const p = products.find((x) => x._id === selectedItem);
-    if (!p) return;
+    const p = productsWithStock.find((x) => x._id === selectedItem);
+    if (!p) {
+      toast.error("Product not found. Please select again.");
+      return;
+    }
 
     // 1️⃣ BASE AMOUNT
     const baseAmount = Number(sellingPrice) * Number(qty);
@@ -685,9 +741,9 @@ export default function InventorySalesOrderEntry({
             <input className={`${inputClass} font-bold text-[#319bab]`} value={displayPrice.toFixed(2)} readOnly />
           </div>
 
-          <div className="flex items-end">
-            <button onClick={addItem} className="w-full bg-[#319bab] text-white h-[42px] rounded-xl font-bold flex items-center justify-center hover:bg-[#257f87] transition shadow-lg">
-              <FaPlus className="mr-2" /> ADD
+          <div className="md:col-span-4 flex items-end pt-2">
+            <button onClick={addItem} className="w-full bg-[#319bab] text-white h-[42px] rounded-xl font-bold flex items-center justify-center hover:bg-[#257f87] transition shadow-lg cursor-pointer active:scale-95">
+              <FaPlus className="mr-2" /> ADD ITEM
             </button>
           </div>
         </div>
@@ -938,11 +994,12 @@ export default function InventorySalesOrderEntry({
       {/* RIGHT SIDE RECENT ORDERS PANEL */}
       {showRecentPanel && recentOrders.length > 0 && (
         <div className="
-    fixed top-24 right-4 z-50
+    hidden lg:flex
+    fixed top-24 right-4 z-40
     w-96 max-h-[70vh]
     bg-white rounded-2xl
     shadow-2xl border border-gray-200
-    flex flex-col
+    flex-col
   ">
           {/* HEADER */}
           <div className="flex items-center justify-between px-4 py-3 border-b">
