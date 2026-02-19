@@ -62,6 +62,16 @@ export default function InventorySalesOrderEntry({
   const [salesMan, setSalesMan] = useState("");
   const [deliveryMan, setDeliveryMan] = useState("");
   const [customerMargin, setCustomerMargin] = useState(0);
+  
+  // SEARCH STATES FOR TYPING
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [productGroupSearch, setProductGroupSearch] = useState("");
+  const [itemSearch, setItemSearch] = useState("");
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [showProductGroupDropdown, setShowProductGroupDropdown] = useState(false);
+  const [showItemDropdown, setShowItemDropdown] = useState(false);
+  const [fetchedCustomers, setFetchedCustomers] = useState([]);
+  const [searchingCustomers, setSearchingCustomers] = useState(false);
 
 
   useEffect(() => {
@@ -69,7 +79,9 @@ export default function InventorySalesOrderEntry({
       setInvoiceId("");
       // Reset product selection when voucher type changes
       setProductGroup("");
+      setProductGroupSearch("");
       setSelectedItem("");
+      setItemSearch("");
       setFilteredProducts([]);
       setItems([]);
       return;
@@ -93,7 +105,9 @@ export default function InventorySalesOrderEntry({
 
     // Reset product selection when voucher type changes
     setProductGroup("");
+    setProductGroupSearch("");
     setSelectedItem("");
+    setItemSearch("");
     setFilteredProducts([]);
     setItems([]);
 
@@ -116,10 +130,46 @@ export default function InventorySalesOrderEntry({
     loadPoItems();
   }, []);
 
+  // Fetch customers from backend when searching
+  useEffect(() => {
+    if (!customerSearch.trim()) {
+      // If search is empty, use all provided customers
+      setFetchedCustomers(customers);
+      return;
+    }
+
+    // Fetch from backend if search has content
+    const fetchCustomersFromBackend = async () => {
+      setSearchingCustomers(true);
+      try {
+        const res = await fetch(
+          `${API_BASE}/customers?search=${encodeURIComponent(customerSearch)}&limit=100`
+        );
+        const data = await res.json();
+        setFetchedCustomers(data.data || data || []);
+      } catch (err) {
+        console.error("Failed to search customers:", err);
+        setFetchedCustomers([]);
+      } finally {
+        setSearchingCustomers(false);
+      }
+    };
+
+    const timer = setTimeout(fetchCustomersFromBackend, 300); // Debounce 300ms
+    return () => clearTimeout(timer);
+  }, [customerSearch]);
+  
+  // Initialize with provided customers on mount
+  useEffect(() => {
+    setFetchedCustomers(customers);
+  }, []);
+
+
   // Reset filtered products and items when warehouse changes
   useEffect(() => {
     setFilteredProducts([]);
     setSelectedItem("");
+    setItemSearch("");
   }, [warehouse]);
 
   useEffect(() => {
@@ -233,6 +283,8 @@ export default function InventorySalesOrderEntry({
     if (!product) return;
 
     setSelectedItem(id);
+    setItemSearch(product.name);
+    setShowItemDropdown(false);
     setQty(1);
 
     // ✅ AUTO-FILL (BUT EDITABLE)
@@ -252,8 +304,12 @@ export default function InventorySalesOrderEntry({
 
   const handleCustomerSelect = (id) => {
     setCustomerId(id);
-    const customer = customers.find(c => c._id === id);
+    const customer = fetchedCustomers.find(c => c._id === id) || customers.find(c => c._id === id);
     setSelectedCustomer(customer || null);
+    
+    // Set search to customer name and hide dropdown
+    setCustomerSearch(customer?.name || "");
+    setShowCustomerDropdown(false);
     
     // Extract sales owner name from object or use string, and store ID
     const ownerData = customer?.salesOwner;
@@ -538,21 +594,46 @@ export default function InventorySalesOrderEntry({
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="md:col-span-2">
-            <label className={labelClass}>Customer</label>
-            <select
-              className={selectClass}
-              value={customerId}
-              onChange={(e) => handleCustomerSelect(e.target.value)}
-            >
-              <option value="">-- Select Customer --</option>
-              {customers.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.name} ({c.whatsapp})
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="md:col-span-2 relative">
+          <label className={labelClass}>Customer</label>
+          <input
+            type="text"
+            placeholder="Type to search or click to see all customers..."
+            value={customerSearch}
+            onChange={(e) => {
+              setCustomerSearch(e.target.value);
+              setShowCustomerDropdown(true);
+            }}
+            onFocus={() => setShowCustomerDropdown(true)}
+            className={inputClass}
+          />
+          
+          {/* CUSTOMER DROPDOWN */}
+          {showCustomerDropdown && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+              {searchingCustomers && (
+                <div className="px-3 py-2 text-gray-500 text-sm text-center">🔍 Searching...</div>
+              )}
+              {!searchingCustomers && fetchedCustomers
+                .map((c) => (
+                  <div
+                    key={c._id}
+                    onClick={() => handleCustomerSelect(c._id)}
+                    className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
+                  >
+                    <div className="font-semibold">{c.name}</div>
+                    <div className="text-gray-500 text-xs">{c.whatsapp}</div>
+                  </div>
+                ))}
+              {!searchingCustomers && fetchedCustomers.length === 0 && customerSearch && (
+                <div className="px-3 py-2 text-gray-500 text-sm">No customers found for "{customerSearch}"</div>
+              )}
+              {!searchingCustomers && fetchedCustomers.length === 0 && !customerSearch && (
+                <div className="px-3 py-2 text-gray-500 text-sm">Loading customers...</div>
+              )}
+            </div>
+          )}
+        </div>
 
           <div>
             <label className={labelClass}>GSTIN</label>
@@ -625,48 +706,98 @@ export default function InventorySalesOrderEntry({
       </div>
 
       {/* PRODUCT GROUP */}
-      <div>
+      <div className="relative">
         <label className={labelClass}>Product Group</label>
-        <select className={selectClass} value={productGroup} onChange={(e) => setProductGroup(e.target.value)}>
-          <option value="">Select Product Group</option>
-          {productGroups.map((g) => (
-            <option key={g._id} value={g._id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
+        <input
+          type="text"
+          placeholder="Type product group name..."
+          value={productGroupSearch}
+          onChange={(e) => {
+            setProductGroupSearch(e.target.value);
+            setShowProductGroupDropdown(true);
+          }}
+          onFocus={() => setShowProductGroupDropdown(true)}
+          className={inputClass}
+        />
+        
+        {/* PRODUCT GROUP DROPDOWN */}
+        {showProductGroupDropdown && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+            {productGroups
+              .filter(g => 
+                g.name.toLowerCase().includes(productGroupSearch.toLowerCase())
+              )
+              .map((g) => (
+                <div
+                  key={g._id}
+                  onClick={() => {
+                    setProductGroup(g._id);
+                    setProductGroupSearch(g.name);
+                    setShowProductGroupDropdown(false);
+                    setSelectedItem("");
+                    setItemSearch("");
+                  }}
+                  className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm font-semibold"
+                >
+                  {g.name}
+                </div>
+              ))}
+            {productGroups.filter(g => 
+              g.name.toLowerCase().includes(productGroupSearch.toLowerCase())
+            ).length === 0 && (
+              <div className="px-3 py-2 text-gray-500 text-sm">No product groups found</div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ITEM ENTRY */}
       <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 space-y-4">
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div>
+          <div className="relative">
             <label className={labelClass}>Item Name</label>
-            <select
-              className={selectClass}
-              value={selectedItem}
-              onChange={(e) => handleItemSelection(e.target.value)}
-              disabled={!productGroup || !warehouse} // ✅ ADD warehouse
-            >
-
-              <option value="">
-                {productGroup
-                  ? "Select Product"
-                  : "Select Product Group first"}
-              </option>
-
-              {productsWithStock.map((p) => (
-                <option
-                  key={p._id}
-                  value={p._id}
-                  disabled={p.availableQty === 0}
-                >
-                  {p.name} ({p.perQty || 1}:{p.units || ""})  - Qty: {p.totalQty || 0}
-                </option>
-              ))}
-
-            </select>
+            <input
+              type="text"
+              placeholder="Type item name..."
+              value={itemSearch}
+              onChange={(e) => {
+                setItemSearch(e.target.value);
+                setShowItemDropdown(true);
+              }}
+              onFocus={() => setShowItemDropdown(true)}
+              disabled={!productGroup || !warehouse}
+              className={`${inputClass} ${(!productGroup || !warehouse) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+            />
+            
+            {/* ITEM DROPDOWN */}
+            {showItemDropdown && productGroup && warehouse && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                {productsWithStock
+                  .filter(p => 
+                    p.name.toLowerCase().includes(itemSearch.toLowerCase()) &&
+                    p.availableQty > 0
+                  )
+                  .map((p) => (
+                    <div
+                      key={p._id}
+                      onClick={() => handleItemSelection(p._id)}
+                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
+                    >
+                      <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
+                      <div className="text-gray-500 text-xs">Available: {p.totalQty || 0}</div>
+                    </div>
+                  ))}
+                {productsWithStock.filter(p => 
+                  p.name.toLowerCase().includes(itemSearch.toLowerCase()) &&
+                  p.availableQty > 0
+                ).length === 0 && (
+                  <div className="px-3 py-2 text-gray-500 text-sm">
+                    {productsWithStock.length === 0 ? "Select Product Group first" : "No items found"}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div>

@@ -714,9 +714,23 @@ const OthersSummary = () => {
                         ) : tableType === "sales-orders" ? (
                           <div className="flex gap-2">
                             <button
-                              onClick={() => {
-                                setSelectedSalesOrderForCredit(item);
-                                setShowCreditNoteModal(true);
+                              onClick={async () => {
+                                try {
+                                  // Fetch full sales order with items
+                                  const response = await fetch(`${API_BASE}/sales-orders/${item._id}`);
+                                  const result = await response.json();
+                                  if (result.success) {
+                                    setSelectedSalesOrderForCredit(result.data);
+                                    setShowCreditNoteModal(true);
+                                  } else if (result.data) {
+                                    // If API returns data directly without success flag
+                                    setSelectedSalesOrderForCredit(result.data);
+                                    setShowCreditNoteModal(true);
+                                  }
+                                } catch (error) {
+                                  console.error("Failed to fetch sales order:", error);
+                                  alert("Failed to load sales order details");
+                                }
                               }}
                               className="bg-blue-500 text-white px-2 md:px-3 py-1 md:py-2 rounded-lg hover:bg-blue-600 transition inline-flex items-center gap-1 text-xs md:text-sm font-semibold"
                               title="Add credit note (return) for this sales order"

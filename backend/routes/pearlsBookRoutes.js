@@ -1,6 +1,8 @@
 import { createCanvas } from "canvas";
 import express from "express";
 import cloudinary from "../config/cloudinary.js";
+import Customer from "../models/Customer.js";
+import Product from "../models/Product.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SalesOrder from "../models/SalesOrder.js";
 
@@ -58,17 +60,18 @@ router.get("/", async (req, res) => {
 
 async function checkStockAvailability(saleItems, warehouse) {
   for (const saleItem of saleItems) {
-    const purchaseOrders = await PurchaseOrder.find({
-      warehouse,
-      "items.productId": saleItem.productId,
-    });
+    console.log(`\n📦 Checking stock for: ${saleItem.name} (ProductId: ${saleItem.productId})`);
+    
+    // Check Product model's totalQty (source of truth)
+    const product = await Product.findById(saleItem.productId);
 
-    const totalAvailable = purchaseOrders.reduce((sum, po) => {
-      const item = po.items.find(
-        i => String(i.productId) === String(saleItem.productId)
-      );
-      return sum + (item?.qty || 0);
-    }, 0);
+    if (!product) {
+      throw new Error(`Product not found: ${saleItem.name}`);
+    }
+
+    const totalAvailable = product.totalQty || 0;
+    console.log(`  📍 Warehouse: ${warehouse}`);
+    console.log(`  Product totalQty: ${totalAvailable}, Required: ${saleItem.qty}`);
 
     if (totalAvailable < saleItem.qty) {
       throw new Error(
@@ -83,40 +86,28 @@ async function reduceStockFIFO(saleItems, warehouse) {
   const lowStockAlerts = [];
 
   for (const saleItem of saleItems) {
-    let remainingQty = saleItem.qty;
+    // Reduce from Product totalQty
+    const product = await Product.findById(saleItem.productId);
 
-    const purchaseOrders = await PurchaseOrder.find({
-      warehouse,
-      "items.productId": saleItem.productId,
-    }).sort({ createdAt: 1 });
-
-    for (const po of purchaseOrders) {
-      const item = po.items.find(
-        i => String(i.productId) === String(saleItem.productId)
-      );
-
-      if (!item || item.qty <= 0) continue;
-
-      const deduct = Math.min(item.qty, remainingQty);
-      item.qty -= deduct;
-      remainingQty -= deduct;
-
-      if (item.qty < 10) {
-        lowStockAlerts.push({
-          product: item.name,
-          warehouse: po.warehouse,
-          remainingQty: item.qty,
-        });
-      }
-
-      await po.save();
-      if (remainingQty === 0) break;
+    if (!product) {
+      throw new Error(`Product not found: ${saleItem.name}`);
     }
 
-    if (remainingQty > 0) {
-      throw new Error(
-        `Stock mismatch for ${saleItem.name}`
-      );
+    // Reduce totalQty
+    const newTotalQty = product.totalQty - saleItem.qty;
+    await Product.findByIdAndUpdate(saleItem.productId, {
+      totalQty: newTotalQty
+    });
+
+    console.log(`✅ Stock reduced for ${saleItem.name}: ${product.totalQty} → ${newTotalQty}`);
+
+    // Check for low stock alert
+    if (newTotalQty < 10) {
+      lowStockAlerts.push({
+        product: saleItem.name,
+        warehouse: warehouse,
+        remainingQty: newTotalQty,
+      });
     }
   }
 

@@ -2,15 +2,12 @@ import axios from "axios";
 import { Fragment, useEffect, useState } from "react";
 import {
   FaBoxOpen,
-  FaCalendarAlt,
   FaChevronDown,
   FaChevronUp,
   FaFileInvoice,
-  FaFilter,
   FaRupeeSign,
   FaShoppingCart,
-  FaTruckLoading,
-  FaWarehouse,
+  FaTruckLoading
 } from "react-icons/fa";
 import { API_BASE } from "../api";
 
@@ -20,13 +17,9 @@ export default function PearlsBookPage() {
   const [rows, setRows] = useState([]);
   const [expanded, setExpanded] = useState(null);
 
-  const [filters, setFilters] = useState({
-    fromDate: "",
-    toDate: "",
-    type: "ALL",
-    warehouse: "ALL",
-    item: "",
-  });
+  const [searchField, setSearchField] = useState("type"); // Current field to search by
+  const [searchValue, setSearchValue] = useState("ALL"); // Value for the selected field
+  const [activeFilters, setActiveFilters] = useState([]); // Array of applied filters
 
 
   useEffect(() => {
@@ -34,34 +27,30 @@ export default function PearlsBookPage() {
   }, []);
 
   const filteredRows = rows.filter((r) => {
-    // DATE FILTER
-    const rowDate = new Date(r.date);
-    if (filters.fromDate && rowDate < new Date(filters.fromDate)) return false;
-    if (filters.toDate && rowDate > new Date(filters.toDate)) return false;
-
-    // TYPE
-    if (filters.type !== "ALL" && r.type !== filters.type) return false;
-
-    // WAREHOUSE
-    if (
-      filters.warehouse !== "ALL" &&
-      r.warehouse !== filters.warehouse
-    )
-      return false;
-
-    // ITEM NAME
-    if (
-      filters.item &&
-      !r.items?.some((i) =>
-        i.name.toLowerCase().includes(filters.item.toLowerCase())
-      )
-    )
-      return false;
-
+    // Apply current search field filter
+    if (searchField === "type" && searchValue !== "ALL") {
+      return r.type === searchValue;
+    }
+    if (searchField === "warehouse" && searchValue !== "ALL") {
+      return r.warehouse === searchValue;
+    }
+    if (searchField === "party" && searchValue) {
+      return r.party.toLowerCase().includes(searchValue.toLowerCase());
+    }
+    if (searchField === "invoiceId" && searchValue) {
+      return r.invoiceId.toLowerCase().includes(searchValue.toLowerCase());
+    }
+    if (searchField === "item" && searchValue) {
+      return r.items?.some((i) =>
+        i.name.toLowerCase().includes(searchValue.toLowerCase())
+      );
+    }
+    // If no filter or searchValue is empty, show all rows
     return true;
   });
 
   const warehouses = [...new Set(filteredRows.map(r => r.warehouse))];
+  const parties = [...new Set(rows.map(r => r.party))];
   const itemNames = [
     ...new Set(
       rows.flatMap(r => r.items?.map(i => i.name) || [])
@@ -184,83 +173,115 @@ export default function PearlsBookPage() {
 
 
       <div className="bg-white rounded-2xl shadow border p-5 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-sm">
+        <div className="space-y-4">
+          {/* SEPARATE SEARCH FIELDS FOR ALL FIELDS */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* INVOICE ID */}
+            <div>
+              <label className="text-xs font-bold text-gray-600 block mb-2">Invoice ID</label>
+              <input
+                type="text"
+                placeholder="Enter invoice ID..."
+                value={searchField === "invoiceId" ? searchValue : ""}
+                onChange={(e) => {
+                  setSearchField("invoiceId");
+                  setSearchValue(e.target.value);
+                }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-1 focus:ring-primary text-sm"
+              />
+            </div>
 
-          {/* FROM DATE */}
-          <div className="relative">
-            <FaCalendarAlt className="absolute left-3 top-3.5 text-gray-400" />
-            <input
-              type="date"
-              value={filters.fromDate}
-              onChange={(e) =>
-                setFilters({ ...filters, fromDate: e.target.value })
-              }
-              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:ring-1 focus:ring-primary"
-            />
+            {/* ORDER TYPE */}
+            <div>
+              <label className="text-xs font-bold text-gray-600 block mb-2">Order Type</label>
+              <select
+                value={searchField === "type" ? searchValue : "ALL"}
+                onChange={(e) => {
+                  setSearchField("type");
+                  setSearchValue(e.target.value);
+                }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-1 focus:ring-primary text-sm"
+              >
+                <option value="ALL">All Types</option>
+                <option value="SALES">Sales</option>
+                <option value="PURCHASE">Purchase</option>
+              </select>
+            </div>
+
+            {/* PARTY */}
+            <div>
+              <label className="text-xs font-bold text-gray-600 block mb-2">Party</label>
+              <input
+                type="text"
+                placeholder="Enter party name..."
+                value={searchField === "party" ? searchValue : ""}
+                onChange={(e) => {
+                  setSearchField("party");
+                  setSearchValue(e.target.value);
+                }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-1 focus:ring-primary text-sm"
+              />
+            </div>
+
+            {/* WAREHOUSE */}
+            <div>
+              <label className="text-xs font-bold text-gray-600 block mb-2">Warehouse</label>
+              <select
+                value={searchField === "warehouse" ? searchValue : "ALL"}
+                onChange={(e) => {
+                  setSearchField("warehouse");
+                  setSearchValue(e.target.value);
+                }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-1 focus:ring-primary text-sm"
+              >
+                <option value="ALL">All Warehouses</option>
+                {warehouses.map((w) => (
+                  <option key={w} value={w}>{w}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* ITEM NAME */}
+            <div>
+              <label className="text-xs font-bold text-gray-600 block mb-2">Item Name</label>
+              <input
+                type="text"
+                placeholder="Enter item name..."
+                value={searchField === "item" ? searchValue : ""}
+                onChange={(e) => {
+                  setSearchField("item");
+                  setSearchValue(e.target.value);
+                }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-1 focus:ring-primary text-sm"
+              />
+            </div>
+
+            {/* CLEAR ALL BUTTON */}
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setSearchField("type");
+                  setSearchValue("ALL");
+                  setActiveFilters([]);
+                }}
+                className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-lg transition text-sm"
+              >
+                Reset All Filters
+              </button>
+            </div>
           </div>
 
-          {/* TO DATE */}
-          <div className="relative">
-            <FaCalendarAlt className="absolute left-3 top-3.5 text-gray-400" />
-            <input
-              type="date"
-              value={filters.toDate}
-              onChange={(e) =>
-                setFilters({ ...filters, toDate: e.target.value })
-              }
-              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:ring-1 focus:ring-primary"
-            />
+          {/* RESULTS SUMMARY */}
+          <div className="bg-gradient-to-r from-primary/10 to-blue-100 p-3 rounded-lg flex justify-between items-center text-sm">
+            <span className="font-semibold text-gray-700">
+              📊 Showing <span className="text-primary font-bold">{filteredRows.length}</span> of <span className="text-primary font-bold">{rows.length}</span> records
+            </span>
+            {filteredRows.length > 0 && (
+              <span className="text-gray-600">
+                💰 Total: <span className="font-bold text-primary">₹{(Math.round(filteredRows.reduce((a, b) => a + b.grandTotal, 0) * 100) / 100).toFixed(2)}</span>
+              </span>
+            )}
           </div>
-
-          {/* TYPE */}
-          <div className="relative">
-            <FaFilter className="absolute left-3 top-3.5 text-gray-400" />
-            <select
-              value={filters.type}
-              onChange={(e) =>
-                setFilters({ ...filters, type: e.target.value })
-              }
-              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:ring-1 focus:ring-primary"
-            >
-              <option value="ALL">All Types</option>
-              <option value="SALES">Sales</option>
-              <option value="PURCHASE">Purchase</option>
-            </select>
-          </div>
-
-          {/* WAREHOUSE */}
-          <div className="relative">
-            <FaWarehouse className="absolute left-3 top-3.5 text-gray-400" />
-            <select
-              value={filters.warehouse}
-              onChange={(e) =>
-                setFilters({ ...filters, warehouse: e.target.value })
-              }
-              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:ring-1 focus:ring-primary"
-            >
-              <option value="ALL">All Warehouses</option>
-              {warehouses.map((w) => (
-                <option key={w} value={w}>
-                  {w}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* ITEM SEARCH */}
-          <div className="relative">
-            <FaBoxOpen className="absolute left-3 top-3.5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search Item"
-              value={filters.item}
-              onChange={(e) =>
-                setFilters({ ...filters, item: e.target.value })
-              }
-              className="w-full border rounded-lg pl-9 pr-3 py-2 focus:ring-1 focus:ring-primary"
-            />
-          </div>
-
         </div>
       </div>
 

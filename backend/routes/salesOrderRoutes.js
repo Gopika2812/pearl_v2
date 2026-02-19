@@ -378,4 +378,26 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+// GET single sales order by ID (for credit note modal) - MUST BE LAST ROUTE
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: "Invalid sales order ID" });
+    }
+
+    const salesOrder = await SalesOrder.findById(id);
+    
+    if (!salesOrder) {
+      return res.status(404).json({ success: false, message: "Sales order not found" });
+    }
+    
+    res.json({ success: true, data: salesOrder });
+  } catch (error) {
+    console.error("Fetch error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch sales order" });
+  }
+});
+
 export default router;

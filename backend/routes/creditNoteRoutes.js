@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import Commission from "../models/Commission.js";
 import CreditNote from "../models/CreditNote.js";
 import Customer from "../models/Customer.js";
@@ -149,42 +150,98 @@ router.post("/", async (req, res) => {
     }
 
     // 3️⃣ REDUCE COMMISSIONS (proportional to returned amount)
-    const commission = await Commission.findOne({ salesOrderId: originalSalesOrderId });
+    console.log(`🔍 Looking for commission for sales order: ${originalSalesOrderId}`);
+    
+    // Convert to ObjectId for proper matching
+    const salesOrderObjectId = new mongoose.Types.ObjectId(originalSalesOrderId);
+    let commission = await Commission.findOne({ salesOrderId: salesOrderObjectId });
+    console.log(`📋 Commission found:`, commission ? "YES" : "NO");
+    
+    // Fallback: try to find commission by invoice ID
+    if (!commission && originalOrder.invoiceId) {
+      console.log(`🔄 Fallback search by invoiceId: ${originalOrder.invoiceId}`);
+      commission = await Commission.findOne({ invoiceId: originalOrder.invoiceId });
+      console.log(`📋 Commission found (fallback):`, commission ? "YES" : "NO");
+    }
+    
     if (commission) {
+      console.log(`💾 Commission details:`, {
+        salesOwnerId: commission.salesOwnerId,
+        salesOwnerAmount: commission.salesOwnerCommissionAmount,
+        salesManId: commission.salesManId,
+        salesManAmount: commission.salesManCommissionAmount,
+        deliveryManId: commission.deliveryManId,
+        deliveryManAmount: commission.deliveryManCommissionAmount,
+      });
+      
       const proportionReturned = grandTotal / (originalOrder.grandTotalWithMargin || originalOrder.grandTotal);
+      console.log(`📊 Proportion returned: ${proportionReturned.toFixed(2)} (${grandTotal} / ${originalOrder.grandTotalWithMargin})`);
       
       // Sales Owner Commission
       if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
         const commissionReduction = commission.salesOwnerCommissionAmount * proportionReturned;
-        await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
+        console.log(`🔄 Reducing Sales Owner [${commission.salesOwnerId}] by ₹${commissionReduction.toFixed(2)}`);
+        const updateResult = await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
           $inc: { commissionAmount: -commissionReduction }
         });
-        console.log(`✅ Sales Owner commission reduced: -₹${commissionReduction.toFixed(2)}`);
+        if (updateResult) {
+          console.log(`✅ Sales Owner commission reduced: -₹${commissionReduction.toFixed(2)}`);
+        } else {
+          console.warn(`⚠️ Sales Owner not found with ID: ${commission.salesOwnerId}`);
+        }
+      } else {
+        console.warn(`⚠️ Sales Owner ID or commission amount missing`, {
+          salesOwnerId: commission.salesOwnerId,
+          amount: commission.salesOwnerCommissionAmount
+        });
       }
 
       // Sales Man Commission
       if (commission.salesManId && commission.salesManCommissionAmount > 0) {
         const commissionReduction = commission.salesManCommissionAmount * proportionReturned;
-        await SalesMan.findByIdAndUpdate(commission.salesManId, {
+        console.log(`🔄 Reducing Sales Man [${commission.salesManId}] by ₹${commissionReduction.toFixed(2)}`);
+        const updateResult = await SalesMan.findByIdAndUpdate(commission.salesManId, {
           $inc: { commissionAmount: -commissionReduction }
         });
-        console.log(`✅ Sales Man commission reduced: -₹${commissionReduction.toFixed(2)}`);
+        if (updateResult) {
+          console.log(`✅ Sales Man commission reduced: -₹${commissionReduction.toFixed(2)}`);
+        } else {
+          console.warn(`⚠️ Sales Man not found with ID: ${commission.salesManId}`);
+        }
+      } else {
+        console.warn(`⚠️ Sales Man ID or commission amount missing`, {
+          salesManId: commission.salesManId,
+          amount: commission.salesManCommissionAmount
+        });
       }
 
       // Delivery Man Commission
       if (commission.deliveryManId && commission.deliveryManCommissionAmount > 0) {
         const commissionReduction = commission.deliveryManCommissionAmount * proportionReturned;
-        await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, {
+        console.log(`🔄 Reducing Delivery Man [${commission.deliveryManId}] by ₹${commissionReduction.toFixed(2)}`);
+        const updateResult = await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, {
           $inc: { commissionAmount: -commissionReduction }
         });
-        console.log(`✅ Delivery Man commission reduced: -₹${commissionReduction.toFixed(2)}`);
+        if (updateResult) {
+          console.log(`✅ Delivery Man commission reduced: -₹${commissionReduction.toFixed(2)}`);
+        } else {
+          console.warn(`⚠️ Delivery Man not found with ID: ${commission.deliveryManId}`);
+        }
+      } else {
+        console.warn(`⚠️ Delivery Man ID or commission amount missing`, {
+          deliveryManId: commission.deliveryManId,
+          amount: commission.deliveryManCommissionAmount
+        });
       }
+    } else {
+      console.warn(`⚠️ No commission record found for sales order: ${originalSalesOrderId}. Invoice: ${originalOrder.invoiceId}`);
     }
 
     res.status(201).json({
       success: true,
       message: "Credit note created successfully",
       creditNoteId,
+      commissionUpdated: !!commission,
       data: creditNote,
     });
   } catch (error) {
