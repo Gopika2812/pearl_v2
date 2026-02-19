@@ -174,9 +174,9 @@ export default function PearlsBookPage() {
 
       <div className="bg-white rounded-2xl shadow border p-5 mb-6">
         <div className="space-y-4">
-          {/* SEPARATE SEARCH FIELDS FOR ALL FIELDS */}
+        
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* INVOICE ID */}
+    
             <div>
               <label className="text-xs font-bold text-gray-600 block mb-2">Invoice ID</label>
               <input
