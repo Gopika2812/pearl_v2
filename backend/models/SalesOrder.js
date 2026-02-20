@@ -95,6 +95,11 @@ const salesOrderSchema = new mongoose.Schema(
       default: "Dr",
     },
 
+    invoiceGenerated: {
+      type: Boolean,
+      default: false,
+    },
+
   },
   { timestamps: true }
 );

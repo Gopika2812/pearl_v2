@@ -28,42 +28,54 @@ const ProductSummary = () => {
     { label: "GST %", value: "gst", type: "number" },
   ];
 
-  // Fetch products data - fetch all pages
+  // Fetch products data - fetch all pages from database
   const fetchProducts = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // First fetch to get total pages
-      const firstResponse = await fetch(`${API_BASE}/products?page=1&limit=50`);
-      const firstData = await firstResponse.json();
+      const allProducts = [];
+      let page = 1;
+      let hasMore = true;
+      
+      // Keep fetching until no more pages
+      while (hasMore) {
+        const response = await fetch(`${API_BASE}/products?page=${page}&limit=100`);
+        const data = await response.json();
 
-      if (!firstData.success) {
-        setError("Failed to fetch products");
-        return;
-      }
+        if (!data.success || !data.data) {
+          setError("Failed to fetch products");
+          return;
+        }
 
-      let allProducts = [...firstData.data];
-      const totalPages = firstData.pagination?.pages || 1;
-
-      // Fetch remaining pages
-      if (totalPages > 1) {
-        const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+        allProducts.push(...data.data);
         
-        const pageRequests = remainingPages.map(page =>
-          fetch(`${API_BASE}/products?page=${page}&limit=100`).then(res => res.json())
-        );
-
-        const results = await Promise.all(pageRequests);
+        // Check if there are more pages
+        const totalPages = data.pagination?.pages || 1;
+        console.log(`✅ Fetched page ${page} of ${totalPages} (${data.data.length} products on this page, ${allProducts.length} total so far)`);
         
-        results.forEach(result => {
-          if (result.success && result.data) {
-            allProducts = [...allProducts, ...result.data];
-          }
-        });
+        hasMore = page < totalPages;
+        page++;
       }
 
       setProducts(allProducts);
+      
+      console.log(`✅ ✅ FINAL: Loaded ${allProducts.length} TOTAL products from database`);
+      console.log("Sample product:", allProducts[0]);
+      
+      // Log your specific product if it exists
+      const vChickProduct = allProducts.find(p => p.name && p.name.toLowerCase().includes("v chick cheese nuggets"));
+      if (vChickProduct) {
+        console.log("🎯 Found your product:", vChickProduct.name);
+      } else {
+        console.warn("⚠️ 'V Chick Cheese Nuggets' product not found in loaded products");
+      }
+      
+      // Validate first product has expected fields
+      if (allProducts.length > 0) {
+        const firstProduct = allProducts[0];
+        console.log("Product fields available:", Object.keys(firstProduct));
+      }
     } catch (err) {
       setError(err.message || "Error fetching products");
       console.error("Fetch products error:", err);
@@ -149,11 +161,18 @@ const ProductSummary = () => {
           // For numeric fields, do numeric comparison
           return Number(fieldValue || 0) === Number(searchValue);
         } else {
-          // For text fields, do contains search
-          return String(fieldValue || "")
-            .toLowerCase()
-            .trim()
-            .includes(searchValue.toLowerCase().trim());
+          // For text fields, do contains search (case-insensitive)
+          const productValue = String(fieldValue || "").toLowerCase().trim();
+          const searchLower = searchValue.toLowerCase().trim();
+          const matches = productValue.includes(searchLower);
+          
+          // Log for debugging - show search info
+          if (products.indexOf(product) === 0) {
+            console.log(`🔍 Searching for: "${searchLower}" in field: "${searchField}"`);
+            console.log(`📊 Total products to search: ${products.length}`);
+          }
+          
+          return matches;
         }
       }).sort((a, b) => {
         // Sort results: exact matches first, then starts with, then other matches
@@ -178,7 +197,10 @@ const ProductSummary = () => {
   // Reset to page 1 when search value changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchValue, searchField]);
+    if (searchValue.trim() !== "") {
+      console.log(`✅ Search results: ${filteredProducts.length} products found`);
+    }
+  }, [searchValue, searchField, filteredProducts.length]);
 
   // Calculate paginated products
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
@@ -212,6 +234,17 @@ const ProductSummary = () => {
                 <FaSync className={loading ? "animate-spin" : ""} />
                 <span className="hidden sm:inline">Refresh</span>
               </button>
+              {searchValue.trim() !== "" && (
+                <button
+                  onClick={() => {
+                    setSearchValue("");
+                    setCurrentPage(1);
+                  }}
+                  className="bg-red-600 text-white px-3 md:px-4 py-2 rounded-lg hover:bg-red-700 transition flex items-center gap-2 text-sm md:text-base"
+                >
+                  Clear Search
+                </button>
+              )}
               <button
                 onClick={() => setShowSearchBox(!showSearchBox)}
                 className="bg-blue-600 text-white px-3 md:px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 font-semibold text-sm md:text-base"

@@ -44,6 +44,27 @@ router.get("/next-invoice/:voucherType", async (req, res) => {
   }
 });
 
+// GET ALL PURCHASE ORDERS
+router.get("/", async (req, res) => {
+  try {
+    console.log("🔍 GET /api/purchase-orders - Fetching all POs...");
+    const orders = await PurchaseOrder.find().sort({ createdAt: -1 });
+    console.log(`✅ Found ${orders.length} purchase orders`);
+    console.log("📦 POs:", orders);
+    
+    res.json({
+      success: true,
+      data: orders,
+    });
+  } catch (err) {
+    console.error("❌ Get POs error:", err);
+    res.status(500).json({ 
+      success: false,
+      message: err.message 
+    });
+  }
+});
+
 router.post("/", async (req, res) => {
   try {
     const { voucherType, status, ...rest } = req.body;

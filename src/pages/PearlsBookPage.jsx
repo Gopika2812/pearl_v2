@@ -364,7 +364,7 @@ export default function PearlsBookPage() {
                   </td>
 
                   <td className="px-2 py-2 text-right text-xs whitespace-nowrap">
-                    {r.type === "SALES" ? `₹${r.openingBalance}` : "—"}
+                   {r.type === "SALES" ? `₹${Number(r.openingBalance).toFixed(2)}` : "—"}
                   </td>
 
                   <td className="px-2 py-2 text-right font-bold text-xs whitespace-nowrap">
@@ -557,7 +557,7 @@ function ExpandedItems({ row }) {
               <td className="px-3 py-2">{i.hsn}</td>
 
               <td className="px-3 py-2 text-right">
-                ₹{isSales ? i.sellingPrice : i.purchasePrice}
+                ₹{(isSales ? i.sellingPrice : i.purchasePrice).toFixed(2)}
               </td>
 
               <td className="px-3 py-2 text-right">{i.qty}</td>
@@ -566,14 +566,14 @@ function ExpandedItems({ row }) {
                 <td className="px-3 py-2 text-right">
                   {i.discountType === "PERCENT"
                     ? `${i.discountPercent}%`
-                    : `₹${i.discountAmount}`}
+                    : `₹${(i.discountAmount).toFixed(2)}`}
                 </td>
               )}
 
               <td className="px-3 py-2 text-right">{i.gst}%</td>
 
               <td className="px-3 py-2 text-right font-bold text-primary">
-                ₹{i.total}
+                ₹{(i.total).toFixed(2)}
               </td>
             </tr>
           ))}

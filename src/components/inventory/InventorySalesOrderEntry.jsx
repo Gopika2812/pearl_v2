@@ -461,6 +461,20 @@ export default function InventorySalesOrderEntry({
   const grandTotalWithMargin = grandTotal + marginAmount;
 
 
+  // Round up all item totals and financial values
+  const roundedItems = items.map((item) => ({
+    ...item,
+    total: Math.ceil(item.total * 100) / 100,
+  }));
+
+  const roundedSubtotal = Math.ceil(subtotal * 100) / 100;
+  const roundedTotalDiscount = Math.ceil(totalDiscount * 100) / 100;
+  const roundedTotalTax = Math.ceil(totalTax * 100) / 100;
+  const roundedTransportCharge = Math.ceil(Number(transportCharge || 0) * 100) / 100;
+  const roundedGrandTotal = Math.ceil(grandTotal * 100) / 100;
+  const roundedMarginAmount = Math.ceil(marginAmount * 100) / 100;
+  const roundedGrandTotalWithMargin = Math.ceil(grandTotalWithMargin * 100) / 100;
+
   const payload = {
     voucherType,
     customer: selectedCustomer
@@ -482,15 +496,15 @@ export default function InventorySalesOrderEntry({
 
     warehouse,
 
-    items,
-    transportCharge,
-    subtotal,
-    totalDiscount,
-    totalTax,
-    grandTotal,
+    items: roundedItems,
+    transportCharge: roundedTransportCharge,
+    subtotal: roundedSubtotal,
+    totalDiscount: roundedTotalDiscount,
+    totalTax: roundedTotalTax,
+    grandTotal: roundedGrandTotal,
     customerMargin,
-    marginAmount,
-    grandTotalWithMargin,
+    marginAmount: roundedMarginAmount,
+    grandTotalWithMargin: roundedGrandTotalWithMargin,
     ewayEnabled: enableEway,
     ewayDetails: enableEway
       ? {
@@ -527,10 +541,7 @@ export default function InventorySalesOrderEntry({
       if (!res.ok) throw new Error(data.message);
 
       toast.success(`Sales Order Created: ${data.invoiceId}`);
-      setSelectedCustomer(prev => ({
-        ...prev,
-        totalBalance: prev.totalBalance + grandTotal,
-      }));
+      // NOTE: Customer balance will be updated after invoice generation, not here
 
       setInvoiceId(data.invoiceId);
     } catch (err) {

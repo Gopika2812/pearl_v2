@@ -1,10 +1,15 @@
 import { createCanvas } from "canvas";
 import express from "express";
 import cloudinary from "../config/cloudinary.js";
+import Commission from "../models/Commission.js";
+import CommissionRule from "../models/CommissionRule.js";
 import Customer from "../models/Customer.js";
+import DeliveryMan from "../models/DeliveryMan.js";
 import Product from "../models/Product.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
+import SalesMan from "../models/SalesMan.js";
 import SalesOrder from "../models/SalesOrder.js";
+import SalesOwner from "../models/SalesOwner.js";
 
 const router = express.Router();
 
@@ -199,7 +204,8 @@ async function generateInvoiceImage(sale) {
   drawText(ctx, `Billing Person : ${sale.billingPerson || "-"}`, 360, y);
 
   y += 20;
-  drawText(ctx, `Agent : ${sale.agent || "-"}`, 30, y);
+  drawText(ctx, `Sales Man : ${sale.salesManName || "-"}`, 30, y);
+  drawText(ctx, `Delivery Man : ${sale.deliveryManName || "-"}`, 360, y);
 
   // ===== SUPPLIER & BUYER =====
   y += 25;
@@ -258,15 +264,16 @@ async function generateInvoiceImage(sale) {
   sale.items.forEach((item) => {
     const taxAmount =
       ((item.sellingPrice * item.qty - item.discountAmount) * item.gst) / 100;
+    const roundedTotal = Math.ceil(item.total * 100) / 100;
 
     ctx.fillText(item.name, 30, y);
     ctx.fillText(item.hsn, 180, y);
     ctx.fillText(item.qty.toString(), 230, y);
-    ctx.fillText(`₹${item.sellingPrice}`, 270, y);
-    ctx.fillText(`₹${item.discountAmount}`, 320, y);
+    ctx.fillText(`₹${(item.sellingPrice).toFixed(2)}`, 270, y);
+    ctx.fillText(`₹${(item.discountAmount).toFixed(2)}`, 320, y);
     ctx.fillText(`${item.gst}%`, 370, y);
-    ctx.fillText(`₹${taxAmount.toFixed(2)}`, 420, y);
-    ctx.fillText(`₹${item.total}`, 480, y);
+    ctx.fillText(`₹${(Math.ceil(taxAmount * 100) / 100).toFixed(2)}`, 420, y);
+    ctx.fillText(`₹${roundedTotal.toFixed(2)}`, 480, y);
 
     y += 20;
   });
@@ -277,21 +284,27 @@ async function generateInvoiceImage(sale) {
   y += 25;
   ctx.font = "bold 13px Arial";
 
-  drawText(ctx, `Sub Total : ₹${sale.subtotal}`, 360, y);
+  const roundedSubtotal = Math.ceil(sale.subtotal * 100) / 100;
+  const roundedDiscount = Math.ceil(sale.totalDiscount * 100) / 100;
+  const roundedTax = Math.ceil(sale.totalTax * 100) / 100;
+  const roundedTransport = Math.ceil(sale.transportCharge * 100) / 100;
+  const roundedGrandTotal = Math.ceil(sale.grandTotal * 100) / 100;
+
+  drawText(ctx, `Sub Total : ₹${roundedSubtotal.toFixed(2)}`, 360, y);
   y += 18;
 
-  drawText(ctx, `Total Discount : ₹${sale.totalDiscount}`, 360, y);
+  drawText(ctx, `Total Discount : ₹${roundedDiscount.toFixed(2)}`, 360, y);
   y += 18;
 
-  drawText(ctx, `GST : ₹${sale.totalTax}`, 360, y);
+  drawText(ctx, `GST : ₹${roundedTax.toFixed(2)}`, 360, y);
   y += 18;
 
-  drawText(ctx, `Transport Charges : ₹${sale.transportCharge}`, 360, y);
+  drawText(ctx, `Transport Charges : ₹${roundedTransport.toFixed(2)}`, 360, y);
   y += 20;
 
   ctx.font = "bold 15px Arial";
   ctx.fillStyle = "#c53030";
-  drawText(ctx, `GRAND TOTAL : ₹${sale.grandTotal}`, 360, y);
+  drawText(ctx, `GRAND TOTAL : ₹${roundedGrandTotal.toFixed(2)}`, 360, y);
 
   // ===== FOOTER =====
   ctx.fillStyle = "#555";
@@ -478,11 +491,17 @@ async function generateEwayBillImage(sale) {
 router.post("/generate-invoice/:id", async (req, res) => {
   try {
     const sale = await SalesOrder.findById(req.params.id)
+      .populate('salesMan', 'name')
+      .populate('deliveryMan', 'name')
       .lean();
 
     if (!sale) {
       return res.status(404).json({ message: "Sale not found" });
     }
+
+    // Extract names from populated fields
+    sale.salesManName = sale.salesMan?.name || "-";
+    sale.deliveryManName = sale.deliveryMan?.name || "-";
 
     // ✅ 1. CHECK STOCK (WAREHOUSE AWARE)
     await checkStockAvailability(sale.items, sale.warehouse);
@@ -501,15 +520,118 @@ router.post("/generate-invoice/:id", async (req, res) => {
       sale.warehouse
     );
 
-    // ✅ 4. UPDATE CUSTOMER BALANCE
+    // ✅ 4. UPDATE CUSTOMER BALANCE (AFTER INVOICE GENERATION)
+    const orderValue = sale.grandTotalWithMargin || sale.grandTotal;
     const customer = await Customer.findById(sale.customer.customerId);
 
     if (!customer) {
       throw new Error("Customer not found");
     }
 
+    // Add sales order amount to customer closing balance
+    const updatedClosingBalance = customer.closingBalance + orderValue;
+    await Customer.findByIdAndUpdate(sale.customer.customerId, {
+      closingBalance: updatedClosingBalance,
+      totalBalance: updatedClosingBalance,
+    });
 
-    // ✅ 4. WHATSAPP
+    // ✅ Mark invoice as generated and update closing balance in SalesOrder
+    await SalesOrder.findByIdAndUpdate(req.params.id, {
+      invoiceGenerated: true,
+      closingBalance: updatedClosingBalance,
+    });
+
+    console.log(`✅ Customer balance updated: ₹${customer.closingBalance} → ₹${updatedClosingBalance}`);
+
+    // ✅ 5. CREATE COMMISSIONS (AFTER INVOICE GENERATION)
+    try {
+      const salesOwnerDoc = sale.salesOwner ? await SalesOwner.findById(sale.salesOwner) : null;
+      const salesManDoc = sale.salesMan ? await SalesMan.findById(sale.salesMan) : null;
+      const deliveryManDoc = sale.deliveryMan ? await DeliveryMan.findById(sale.deliveryMan) : null;
+
+      // Function to get applicable commission for a person based on role type
+      const getCommission = async (personId, roleType) => {
+        if (!personId) return { percentage: 0, amount: 0 };
+        
+        // Find applicable commission rule (highest minimum order value that doesn't exceed order value)
+        const rule = await CommissionRule.findOne({
+          personId: personId,
+          roleType: roleType,
+          minimumOrderValue: { $lte: orderValue },
+          isActive: true,
+        }).sort({ minimumOrderValue: -1 });
+        
+        if (!rule) return { percentage: 0, amount: 0 };
+        
+        const commissionAmount = (orderValue * rule.commissionPercentage) / 100;
+        return { percentage: rule.commissionPercentage, amount: commissionAmount };
+      };
+
+      // Get applicable commissions for all three roles
+      const soCommission = await getCommission(sale.salesOwner, "SalesOwner");
+      const smCommission = await getCommission(sale.salesMan, "SalesMan");
+      const dmCommission = await getCommission(sale.deliveryMan, "DeliveryMan");
+
+      const commissionData = {
+        salesOrderId: sale._id,
+        orderValue: orderValue,
+        invoiceId: sale.invoiceId,
+
+        // Sales Owner
+        salesOwnerId: salesOwnerDoc?._id,
+        salesOwnerName: salesOwnerDoc?.name,
+        salesOwnerCommissionPercentage: soCommission.percentage,
+        salesOwnerCommissionAmount: soCommission.amount,
+
+        // Sales Man
+        salesManId: salesManDoc?._id,
+        salesManName: salesManDoc?.name,
+        salesManCommissionPercentage: smCommission.percentage,
+        salesManCommissionAmount: smCommission.amount,
+
+        // Delivery Man
+        deliveryManId: deliveryManDoc?._id,
+        deliveryManName: deliveryManDoc?.name,
+        deliveryManCommissionPercentage: dmCommission.percentage,
+        deliveryManCommissionAmount: dmCommission.amount,
+      };
+
+      commissionData.totalCommission =
+        commissionData.salesOwnerCommissionAmount +
+        commissionData.salesManCommissionAmount +
+        commissionData.deliveryManCommissionAmount;
+
+      const commission = new Commission(commissionData);
+      await commission.save();
+
+      // Update commission amounts for sales personnel
+      if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
+        await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
+          $inc: { commissionAmount: commission.salesOwnerCommissionAmount }
+        });
+        console.log(`✅ Sales Owner commission added: ₹${commission.salesOwnerCommissionAmount}`);
+      }
+
+      if (commission.salesManId && commission.salesManCommissionAmount > 0) {
+        await SalesMan.findByIdAndUpdate(commission.salesManId, {
+          $inc: { commissionAmount: commission.salesManCommissionAmount }
+        });
+        console.log(`✅ Sales Man commission added: ₹${commission.salesManCommissionAmount}`);
+      }
+
+      if (commission.deliveryManId && commission.deliveryManCommissionAmount > 0) {
+        await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, {
+          $inc: { commissionAmount: commission.deliveryManCommissionAmount }
+        });
+        console.log(`✅ Delivery Man commission added: ₹${commission.deliveryManCommissionAmount}`);
+      }
+
+      console.log("✅ Commission record created:", commission._id);
+    } catch (commissionError) {
+      console.error("⚠️ Commission creation failed:", commissionError.message);
+    }
+
+    // ✅ 6. WHATSAPP
     const phone = `91${sale.customer.whatsapp}`;
     const message = encodeURIComponent(
       `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${sale.grandTotal}\n\n📄 Invoice: ${invoiceImage}`

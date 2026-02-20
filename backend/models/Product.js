@@ -5,7 +5,8 @@ const productSchema = new mongoose.Schema(
     productGroup: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ProductGroup",
-      required: true,
+      required: false,
+      default: null,
     },
     name: { type: String, required: true },
     perQty: { type: Number, required: true },

@@ -18,32 +18,34 @@ router.post("/", async (req, res) => {
   try {
     const { productGroup, name, perQty, units, totalQty, purchasingPrice, sellingPrice, hsnCode, gst } = req.body;
 
-    if (!productGroup || !name || !perQty || !units || hsnCode === undefined) {
+    if (!name || !perQty || !units || hsnCode === undefined) {
       return res.status(400).json({
         success: false,
-        message: "Product Group, Name, Per Qty, Units, and HSN Code are required",
+        message: "Name, Per Qty, Units, and HSN Code are required",
       });
     }
 
-    // Validate productGroup is a valid ObjectId
-    if (!mongoose.Types.ObjectId.isValid(productGroup)) {
+    // Validate productGroup is a valid ObjectId if provided
+    if (productGroup && !mongoose.Types.ObjectId.isValid(productGroup)) {
       return res.status(400).json({
         success: false,
         message: "Invalid Product Group ID",
       });
     }
 
-    // Verify product group exists
-    const groupExists = await ProductGroup.findById(productGroup);
-    if (!groupExists) {
-      return res.status(400).json({
-        success: false,
-        message: "Product Group not found",
-      });
+    // Verify product group exists if provided
+    if (productGroup) {
+      const groupExists = await ProductGroup.findById(productGroup);
+      if (!groupExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Product Group not found",
+        });
+      }
     }
 
     const product = new Product({
-      productGroup,
+      productGroup: productGroup || null,
       name,
       perQty,
       units,
@@ -75,7 +77,7 @@ router.post("/", async (req, res) => {
 // GET: Fetch All Products with Pagination
 router.get("/", async (req, res) => {
   try {
-    const { page = 1, limit = 50, search = "" } = req.query;
+    const { page = 1, limit = 50, search = "", diag = "" } = req.query;
     const pageNum = Math.max(1, parseInt(page) || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(limit) || 50)); // Max 100 per page
     const skip = (pageNum - 1) * pageSize;
@@ -96,6 +98,24 @@ router.get("/", async (req, res) => {
       .limit(pageSize)
       .lean();
 
+    // DIAGNOSTIC MODE - if ?diag=1 is passed
+    let diagnosticData = {};
+    if (diag === "1") {
+      const allProducts = await Product.countDocuments({});
+      const withGroup = await Product.countDocuments({ productGroup: { $exists: true, $ne: null } });
+      const withoutGroup = await Product.countDocuments({ $or: [{ productGroup: null }, { productGroup: { $exists: false } }] });
+      const chicProduct = await Product.findOne({ name: { $regex: "Chick Cheese", $options: "i" } }).lean();
+      
+      diagnosticData = {
+        totalInDB: allProducts,
+        withProductGroup: withGroup,
+        withoutProductGroup: withoutGroup,
+        chickenProductFound: !!chicProduct,
+        chickenProductName: chicProduct?.name || "Not found",
+        chickenProductId: chicProduct?._id || "N/A",
+      };
+    }
+
     res.json({
       success: true,
       data: products,
@@ -105,6 +125,7 @@ router.get("/", async (req, res) => {
         total,
         pages: Math.ceil(total / pageSize),
       },
+      ...(diag === "1" && { diagnostic: diagnosticData }),
     });
   } catch (error) {
     console.error("Fetch Product Error:", error);

@@ -15,6 +15,8 @@ import {
 } from "react-icons/fa";
 import { API_BASE } from "../api";
 import CreditNoteModal from "../components/inventory/CreditNoteModal";
+import DebitNoteModal from "../components/inventory/DebitNoteModal";
+import PaymentModal from "../components/inventory/PaymentModal";
 
 const OthersSummary = () => {
   const [tableType, setTableType] = useState("voucher-types");
@@ -30,7 +32,11 @@ const OthersSummary = () => {
   const [salesOwners, setSalesOwners] = useState([]);
   const [salesMen, setSalesMen] = useState([]);
   const [deliveryMen, setDeliveryMen] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [showCommissionRuleModal, setShowCommissionRuleModal] = useState(false);
+  const [showDebitNoteModal, setShowDebitNoteModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedSalesOrderForCredit, setSelectedSalesOrderForCredit] = useState(null);
   const [showCreditNoteModal, setShowCreditNoteModal] = useState(false);
   const [commissionRuleForm, setCommissionRuleForm] = useState({
@@ -101,6 +107,20 @@ const OthersSummary = () => {
       displayFields: ["Invoice ID", "Order Value (₹)", "Sales Owner", "SO Commission (₹)", "Sales Man", "SM Commission (₹)", "Delivery Man", "DM Commission (₹)", "Total Commission (₹)"],
       isReadOnly: true,
     },
+    "debit-notes": {
+      label: "Debit Note",
+      icon: <FaFileInvoice />,
+      fields: ["debitNoteId", "originalInvoiceId", "vendor.name", "grandTotal", "status", "createdAt"],
+      displayFields: ["Debit Note ID", "Original PO", "Vendor", "Amount (₹)", "Status", "Date"],
+      isReadOnly: true,
+    },
+    "payments": {
+      label: "Payment",
+      icon: <FaShoppingCart />,
+      fields: ["paymentId", "paymentType", "amount", "paymentMethod", "paymentDate", "description", "status"],
+      displayFields: ["Payment ID", "Type", "Amount (₹)", "Method", "Date", "Description", "Status"],
+      isReadOnly: true,
+    },
   };
 
   // Fetch data based on table type
@@ -119,6 +139,8 @@ const OthersSummary = () => {
       else if (tableType === "commission-rules") endpoint = `${API_BASE}/commission-rules`;
       else if (tableType === "sales-orders") endpoint = `${API_BASE}/sales-orders`;
       else if (tableType === "commissions") endpoint = `${API_BASE}/sales-orders/commissions`;
+      else if (tableType === "debit-notes") endpoint = `${API_BASE}/debit-notes`;
+      else if (tableType === "payments") endpoint = `${API_BASE}/payments`;
 
       const response = await fetch(endpoint);
       const result = await response.json();
@@ -190,25 +212,37 @@ const OthersSummary = () => {
     fetchData();
   }, [tableType]);
 
-  // Fetch sales owners, sales men, and delivery men for dropdowns
+  // Fetch sales owners, sales men, delivery men, vendors, and purchase orders
   useEffect(() => {
     const fetchPersons = async () => {
       try {
-        const [ownersRes, menRes, deliveryRes] = await Promise.all([
+        const [ownersRes, menRes, deliveryRes, vendorsRes, poRes] = await Promise.all([
           fetch(`${API_BASE}/sales-owners`),
           fetch(`${API_BASE}/sales-men`),
           fetch(`${API_BASE}/delivery-men`),
+          fetch(`${API_BASE}/vendors`),
+          fetch(`${API_BASE}/purchase-orders`),
         ]);
 
         const ownersData = await ownersRes.json();
         const menData = await menRes.json();
         const deliveryData = await deliveryRes.json();
+        const vendorsData = await vendorsRes.json();
+        const poData = await poRes.json();
+
+        console.log("📦 PO Data received:", poData);
+        console.log("📦 PO Array:", poData.data || poData);
 
         setSalesOwners(ownersData.data || ownersData || []);
         setSalesMen(menData.data || menData || []);
         setDeliveryMen(deliveryData.data || deliveryData || []);
+        setVendors(vendorsData.data || vendorsData || []);
+        
+        const posArray = poData.data || poData || [];
+        console.log("📦 Setting POs to state:", posArray);
+        setPurchaseOrders(posArray);
       } catch (err) {
-        console.error("Failed to fetch persons:", err);
+        console.error("❌ Failed to fetch data:", err);
       }
     };
     fetchPersons();
@@ -422,8 +456,22 @@ const OthersSummary = () => {
     }
     
     // Format currency for amount fields
-    if (field === "totalCommission" || field === "grandTotalWithMargin" || field === "closingBalance" || field === "orderValue" || field === "commissionAmount") {
+    if (field === "totalCommission" || field === "grandTotalWithMargin" || field === "closingBalance" || field === "orderValue" || field === "commissionAmount" || field === "grandTotal" || field === "amount") {
       return `₹${parseFloat(value).toFixed(2)}`;
+    }
+    
+    // Format payment type
+    if (field === "paymentType") {
+      if (value === "vendor_payment") return "Vendor Payment";
+      if (value === "expense") return "Expense";
+      if (value === "loan_payment") return "Loan Payment";
+      return value;
+    }
+    
+    // Format payment method
+    if (field === "paymentMethod") {
+      if (value === "bank_transfer") return "Bank Transfer";
+      return value.charAt(0).toUpperCase() + value.slice(1);
     }
     
     // Format percentages
@@ -437,7 +485,7 @@ const OthersSummary = () => {
     }
     
     // Format dates
-    if (field === "createdAt" || field === "effectiveFrom") {
+    if (field === "createdAt" || field === "effectiveFrom" || field === "paymentDate") {
       try {
         return new Date(value).toLocaleDateString();
       } catch {
@@ -491,6 +539,26 @@ const OthersSummary = () => {
                   <FaPlus size={16} />
                   <span className="hidden sm:inline">Add Commission Rule</span>
                   <span className="sm:hidden">Add</span>
+                </button>
+              )}
+              {tableType === "debit-notes" && (
+                <button
+                  onClick={() => setShowDebitNoteModal(true)}
+                  className="bg-blue-600 text-white px-3 md:px-4 py-2 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 font-semibold text-sm md:text-base"
+                >
+                  <FaPlus size={16} />
+                  <span className="hidden sm:inline">Create Debit Note</span>
+                  <span className="sm:hidden">New</span>
+                </button>
+              )}
+              {tableType === "payments" && (
+                <button
+                  onClick={() => setShowPaymentModal(true)}
+                  className="bg-green-600 text-white px-3 md:px-4 py-2 rounded-lg hover:bg-green-700 transition flex items-center gap-2 font-semibold text-sm md:text-base"
+                >
+                  <FaPlus size={16} />
+                  <span className="hidden sm:inline">Record Payment</span>
+                  <span className="sm:hidden">New</span>
                 </button>
               )}
             </div>
@@ -600,6 +668,62 @@ const OthersSummary = () => {
                 </div>
               </>
             )}
+            {tableType === "debit-notes" && (
+              <>
+                <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-lg border border-red-200">
+                  <p className="text-gray-600 text-xs font-semibold uppercase">
+                    Total Debit Notes
+                  </p>
+                  <p className="text-2xl md:text-3xl font-bold text-red-600 mt-2">
+                    {data.length}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-pink-50 to-pink-100 p-4 rounded-lg border border-pink-200">
+                  <p className="text-gray-600 text-xs font-semibold uppercase">
+                    Total Return Amount
+                  </p>
+                  <p className="text-2xl md:text-3xl font-bold text-pink-600 mt-2">
+                    ₹{data.reduce((sum, d) => sum + (d.grandTotal || 0), 0).toFixed(2)}
+                  </p>
+                </div>
+              </>
+            )}
+            {tableType === "payments" && (
+              <>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                  <p className="text-gray-600 text-xs font-semibold uppercase">
+                    Total Payments
+                  </p>
+                  <p className="text-2xl md:text-3xl font-bold text-green-600 mt-2">
+                    {data.length}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
+                  <p className="text-gray-600 text-xs font-semibold uppercase">
+                    Total Payment Amount
+                  </p>
+                  <p className="text-2xl md:text-3xl font-bold text-blue-600 mt-2">
+                    ₹{data.reduce((sum, d) => sum + (d.amount || 0), 0).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
+                  <p className="text-gray-600 text-xs font-semibold uppercase">
+                    Vendor Payments
+                  </p>
+                  <p className="text-2xl md:text-3xl font-bold text-purple-600 mt-2">
+                    ₹{data.filter(d => d.paymentType === "vendor_payment").reduce((sum, d) => sum + (d.amount || 0), 0).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg border border-orange-200">
+                  <p className="text-gray-600 text-xs font-semibold uppercase">
+                    Expenses
+                  </p>
+                  <p className="text-2xl md:text-3xl font-bold text-orange-600 mt-2">
+                    ₹{data.filter(d => d.paymentType === "expense").reduce((sum, d) => sum + (d.amount || 0), 0).toFixed(2)}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -681,7 +805,19 @@ const OthersSummary = () => {
                         idx % 2 === 0 ? "bg-white" : "bg-gray-50"
                       }`}
                     >
-                    {config.fields.map((field, fieldIdx) => (
+                      {config.fields.map((field, fieldIdx) => {
+                        let cellValue = item[field];
+                        
+                        // Handle nested fields like "vendor.name"
+                        if (field.includes(".")) {
+                          const parts = field.split(".");
+                          cellValue = item;
+                          for (const part of parts) {
+                            cellValue = cellValue?.[part];
+                          }
+                        }
+                        
+                        return (
                         <td
                           key={fieldIdx}
                           className="px-4 md:px-6 py-4 text-sm text-gray-900 font-medium"
@@ -692,9 +828,10 @@ const OthersSummary = () => {
                             ? typeof item.salesOwner === "object" ? item.salesOwner?.name : item.salesOwner
                             : tableType === "sales-orders" && field === "orderValue"
                             ? formatFieldValue(item.grandTotalWithMargin || item.grandTotal, "grandTotalWithMargin")
-                            : formatFieldValue(item[field], field)}
+                            : formatFieldValue(cellValue, field)}
                         </td>
-                      ))}
+                        );
+                      })}
                       <td className="px-4 md:px-6 py-4 text-center space-x-1 md:space-x-2">
                         {tableType !== "commissions" && tableType !== "sales-orders" ? (
                           <>
@@ -1056,6 +1193,37 @@ const OthersSummary = () => {
           fetchData();
         }}
         salesOrder={selectedSalesOrderForCredit}
+      />
+
+      {/* Debit Note Modal */}
+      <DebitNoteModal
+        isOpen={showDebitNoteModal}
+        onClose={() => {
+          setShowDebitNoteModal(false);
+          // Refresh data after creating debit note
+          fetchData();
+        }}
+        onSave={(data) => {
+          // Optionally update local data
+          setData([data, ...data]);
+        }}
+        purchaseOrders={purchaseOrders}
+      />
+
+      {/* Payment Modal */}
+      <PaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => {
+          setShowPaymentModal(false);
+          // Refresh data after recording payment
+          fetchData();
+        }}
+        onSave={(data) => {
+          // Optionally update local data
+          setData([data, ...data]);
+        }}
+        vendors={vendors}
+        purchaseOrders={purchaseOrders}
       />
     </div>
   );
