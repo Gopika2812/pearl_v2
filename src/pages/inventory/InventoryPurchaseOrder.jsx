@@ -76,6 +76,9 @@ const InventoryPurchaseOrder = () => {
               products={products}
               warehouses={warehouses}
               vendors={vendors}
+              salesOwners={salesOwners}
+              salesMen={salesMen}
+              deliveryMen={deliveryMen}
             />
           </div>
         </div>

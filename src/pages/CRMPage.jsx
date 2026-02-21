@@ -1,47 +1,83 @@
-import { useState } from "react";
-import { FaFileInvoice, FaPlus, FaSearch, FaUser, FaWhatsapp } from "react-icons/fa";
-
-/* ---------------- SAMPLE CLIENT DATA ---------------- */
-const sampleClients = [
-  { id: 1, name: "Rahul Kumar", phone: "+91 9876543210", email: "rahul@gmail.com", balance: 12400 },
-  { id: 2, name: "Kannan Traders", phone: "+91 9887766554", email: "kannan@gmail.com", balance: 0 },
-];
-
-const sampleLedger = [
-  { id: 1, clientId: 1, date: "2026-01-18", ref: "SO-102", type: "Sales", debit: 34000, credit: 0, balance: 12400 },
-  { id: 2, clientId: 1, date: "2026-01-16", ref: "TXN-09", type: "Payment", debit: 0, credit: 18000, balance: -5600 },
-  { id: 3, clientId: 2, date: "2026-01-17", ref: "SO-88", type: "Sales", debit: 21000, credit: 0, balance: 0 },
-];
-
-const sampleOrders = [
-  { id: 1, clientId: 1, orderNo: "SO-102", date: "2026-01-18", qty: 7, amount: 34000, status: "Invoiced" },
-  { id: 2, clientId: 2, orderNo: "SO-88", date: "2026-01-17", qty: 5, amount: 21000, status: "Paid" },
-];
+import { useEffect, useState } from "react";
+import { FaCopy, FaSearch, FaUser, FaWhatsapp } from "react-icons/fa";
+import { API_BASE } from "../api";
 
 export default function CRMPage() {
-  const [clients] = useState(sampleClients);
-  const [selectedClient, setSelectedClient] = useState(sampleClients[0]);
-  const [activeTab, setActiveTab] = useState("ledger");
+  const [customers, setCustomers] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [activeTab, setActiveTab] = useState("orders");
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [copiedLink, setCopiedLink] = useState(null);
 
-  const filteredClients = clients.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase())
+  // Fetch customers and sales orders
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  const fetchCustomers = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE}/customers`);
+      const data = await response.json();
+
+      if (Array.isArray(data)) {
+        setCustomers(data);
+        if (data.length > 0 && !selectedCustomer) {
+          setSelectedCustomer(data[0]);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch customers:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredCustomers = customers.filter((c) =>
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    c.whatsapp?.includes(search.replace(/\D/g, ""))
   );
 
-  const clientLedger = sampleLedger.filter((l) => l.clientId === selectedClient.id);
-  const clientOrders = sampleOrders.filter((o) => o.clientId === selectedClient.id);
+  // Get first sale order for selected customer
+  const firstSaleOrder = selectedCustomer?.sales?.[0] || null;
+
+  // Generate invoice link
+  const generateInvoiceLink = (invoiceId) => {
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/invoice/${invoiceId}`;
+  };
+
+  // Generate CRM link
+  const generateCRMLink = () => {
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/customer-login`;
+  };
+
+  const copyToClipboard = (text, type) => {
+    navigator.clipboard.writeText(text);
+    setCopiedLink(type);
+    setTimeout(() => setCopiedLink(null), 2000);
+  };
+
+  const sendWhatsappMessage = (phone, invoiceLink, crmLink) => {
+    const message = `Hello ${selectedCustomer.name},\n\nHere are your links:\n\n📄 Invoice: ${invoiceLink}\n🛒 Pearls Shopping: ${crmLink}`;
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/91${phone.replace(/\D/g, "")}?text=${encodedMessage}`;
+    window.open(whatsappUrl, "_blank");
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pl-64 px-4 sm:px-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
 
-        {/* CLIENT LIST */}
+        {/* CUSTOMER LIST */}
         <div className="bg-white rounded-2xl shadow border p-4 md:col-span-1">
           <div className="relative mb-3">
             <FaSearch className="absolute left-3 top-3 text-gray-400 text-sm" />
             <input
               type="text"
-              placeholder="Search Client"
+              placeholder="Search Customer"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="border rounded-lg pl-9 pr-3 py-2 w-full text-sm focus:ring-2 focus:ring-primary"
@@ -49,152 +85,232 @@ export default function CRMPage() {
           </div>
 
           <div className="space-y-2 max-h-[70vh] overflow-y-auto">
-            {filteredClients.map((c) => (
+            {filteredCustomers.map((c) => (
               <div
-                key={c.id}
-                onClick={() => setSelectedClient(c)}
+                key={c._id}
+                onClick={() => setSelectedCustomer(c)}
                 className={`p-3 rounded-xl border cursor-pointer transition ${
-                  selectedClient.id === c.id
+                  selectedCustomer?._id === c._id
                     ? "border-primary bg-primary/5"
                     : "hover:bg-gray-50"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="font-semibold text-primary">{c.name}</div>
+                  <div className="font-semibold text-primary text-sm">{c.name}</div>
                   <div
                     className={`text-xs px-2 py-1 rounded-full ${
-                      c.balance > 0
+                      c.closingBalance > 0
                         ? "bg-yellow-100 text-yellow-700"
                         : "bg-green-100 text-green-700"
                     }`}
                   >
-                    {c.balance > 0 ? "Due" : "Paid"}
+                    {c.closingBalance > 0 ? "Due" : "Paid"}
                   </div>
                 </div>
-                <div className="text-sm text-gray-500 mt-1">Balance: ₹{c.balance}</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {c.whatsapp && `📱 ${c.whatsapp}`}
+                </div>
+                <div className="text-xs text-gray-600 mt-1">Balance: ₹{c.closingBalance || 0}</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* CLIENT PROFILE + TABS */}
+        {/* CUSTOMER PROFILE + TABS */}
         <div className="bg-white rounded-2xl shadow border p-5 md:col-span-3">
-          {/* HEADER */}
-          <div className="flex flex-col sm:flex-row justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-bold text-primary flex items-center gap-2">
-                <FaUser /> {selectedClient.name}
-              </h2>
-              <div className="text-sm text-gray-500 mt-1">
-                {selectedClient.phone} | {selectedClient.email}
+          {selectedCustomer ? (
+            <>
+              {/* HEADER */}
+              <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-primary flex items-center gap-2">
+                    <FaUser /> {selectedCustomer.name}
+                  </h2>
+                  <div className="text-sm text-gray-500 mt-1">
+                    {selectedCustomer.whatsapp && `📱 ${selectedCustomer.whatsapp}`}
+                    {selectedCustomer.email && ` | ${selectedCustomer.email}`}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      const phone = selectedCustomer.whatsapp || "";
+                      const invoiceLink = firstSaleOrder ? generateInvoiceLink(firstSaleOrder.invoiceId) : "#";
+                      const crmLink = generateCRMLink();
+                      sendWhatsappMessage(phone, invoiceLink, crmLink);
+                    }}
+                    className="bg-green-500 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 shadow hover:bg-green-600"
+                  >
+                    <FaWhatsapp /> Send Links
+                  </button>
+                </div>
               </div>
+
+              {/* FIRST SALE ORDER INFO */}
+              {firstSaleOrder && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+                  <h3 className="font-bold text-blue-900 mb-3">📦 First Sale Order</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                    <div>
+                      <p className="text-gray-600">Order No</p>
+                      <p className="font-bold text-blue-900">{firstSaleOrder.invoiceId}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Date</p>
+                      <p className="font-bold text-blue-900">
+                        {new Date(firstSaleOrder.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Amount</p>
+                      <p className="font-bold text-blue-900">₹{firstSaleOrder.grandTotal}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Status</p>
+                      <p className={`font-bold ${firstSaleOrder.invoiceGenerated ? "text-green-600" : "text-yellow-600"}`}>
+                        {firstSaleOrder.invoiceGenerated ? "Invoiced" : "Pending"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* INVOICE AND CRM LINKS */}
+                  <div className="mt-4 space-y-2 border-t pt-4">
+                    {/* INVOICE LINK */}
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block mb-1">Invoice Link</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={generateInvoiceLink(firstSaleOrder.invoiceId)}
+                          readOnly
+                          className="flex-1 px-3 py-2 border rounded-lg text-sm bg-gray-50"
+                        />
+                        <button
+                          onClick={() => copyToClipboard(generateInvoiceLink(firstSaleOrder.invoiceId), "invoice")}
+                          className="bg-primary text-white px-3 py-2 rounded-lg hover:bg-primary/90 flex items-center gap-2"
+                        >
+                          <FaCopy size={14} />
+                          {copiedLink === "invoice" ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* CRM LINK */}
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block mb-1">Pearls Shopping Link</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={generateCRMLink()}
+                          readOnly
+                          className="flex-1 px-3 py-2 border rounded-lg text-sm bg-gray-50"
+                        />
+                        <button
+                          onClick={() => copyToClipboard(generateCRMLink(), "crm")}
+                          className="bg-primary text-white px-3 py-2 rounded-lg hover:bg-primary/90 flex items-center gap-2"
+                        >
+                          <FaCopy size={14} />
+                          {copiedLink === "crm" ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TABS */}
+              <div className="flex gap-4 border-b mb-4">
+                {[
+                  { key: "orders", label: "Orders" },
+                  { key: "details", label: "Details" },
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`pb-2 px-2 font-semibold text-sm transition ${
+                      activeTab === tab.key
+                        ? "border-b-2 border-primary text-primary"
+                        : "text-gray-500 hover:text-primary"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* TAB CONTENT */}
+              <div className="mt-4">
+                {activeTab === "orders" && (
+                  <div className="overflow-x-auto">
+                    {selectedCustomer.sales && selectedCustomer.sales.length > 0 ? (
+                      <table className="w-full text-sm">
+                        <thead className="bg-primary/10 text-primary">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Order No</th>
+                            <th className="px-3 py-2 text-left">Date</th>
+                            <th className="px-3 py-2 text-right">Amount</th>
+                            <th className="px-3 py-2 text-left">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedCustomer.sales.map((order) => (
+                            <tr key={order._id} className="border-t hover:bg-gray-50">
+                              <td className="px-3 py-2 font-semibold">{order.invoiceId}</td>
+                              <td className="px-3 py-2">{new Date(order.createdAt).toLocaleDateString()}</td>
+                              <td className="px-3 py-2 text-right">₹{order.grandTotal}</td>
+                              <td className="px-3 py-2">
+                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${order.invoiceGenerated ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                  {order.invoiceGenerated ? "Invoiced" : "Pending"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <p className="text-gray-500 text-sm">No orders found</p>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === "details" && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-700">Customer Name</p>
+                        <p className="text-sm text-gray-900">{selectedCustomer.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-700">WhatsApp Number</p>
+                        <p className="text-sm text-gray-900">{selectedCustomer.whatsapp}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-700">Email</p>
+                        <p className="text-sm text-gray-900">{selectedCustomer.email || "-"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-700">Current Balance</p>
+                        <p className="text-sm text-gray-900 font-bold">₹{selectedCustomer.closingBalance || 0}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-700">Address</p>
+                        <p className="text-sm text-gray-900">{selectedCustomer.address || "-"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-700">GSTIN</p>
+                        <p className="text-sm text-gray-900">{selectedCustomer.gstin || "-"}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              {loading ? "Loading customers..." : "Select a customer to view details"}
             </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button className="bg-primary text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 shadow">
-                <FaWhatsapp /> WhatsApp
-              </button>
-              <button className="border px-4 py-2 rounded-lg text-sm flex items-center gap-2">
-                <FaFileInvoice /> Invoice
-              </button>
-              <button className="bg-primary/10 text-primary px-4 py-2 rounded-lg text-sm flex items-center gap-2">
-                <FaPlus /> Order
-              </button>
-            </div>
-          </div>
-
-          {/* TABS */}
-          <div className="flex gap-4 mt-6 border-b">
-            {[
-              { key: "ledger", label: "Ledger" },
-              { key: "orders", label: "Orders" },
-              { key: "invoices", label: "Invoices" },
-              { key: "messages", label: "Messages" },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`pb-2 px-2 font-semibold text-sm transition ${
-                  activeTab === tab.key
-                    ? "border-b-2 border-primary text-primary"
-                    : "text-gray-500 hover:text-primary"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* TAB CONTENT */}
-          <div className="mt-4">
-            {activeTab === "ledger" && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-primary/10 text-primary">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Date</th>
-                      <th className="px-3 py-2 text-left">Ref</th>
-                      <th className="px-3 py-2 text-left">Type</th>
-                      <th className="px-3 py-2 text-right">Debit</th>
-                      <th className="px-3 py-2 text-right">Credit</th>
-                      <th className="px-3 py-2 text-right">Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clientLedger.map((l) => (
-                      <tr key={l.id} className="border-t hover:bg-gray-50">
-                        <td className="px-3 py-2">{l.date}</td>
-                        <td className="px-3 py-2">{l.ref}</td>
-                        <td className="px-3 py-2">{l.type}</td>
-                        <td className="px-3 py-2 text-right">₹{l.debit}</td>
-                        <td className="px-3 py-2 text-right">₹{l.credit}</td>
-                        <td className="px-3 py-2 text-right font-semibold">₹{l.balance}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {activeTab === "orders" && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-primary/10 text-primary">
-                    <tr>
-                      <th className="px-3 py-2">Order No</th>
-                      <th className="px-3 py-2">Date</th>
-                      <th className="px-3 py-2">Qty</th>
-                      <th className="px-3 py-2">Amount</th>
-                      <th className="px-3 py-2">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clientOrders.map((o) => (
-                      <tr key={o.id} className="border-t hover:bg-gray-50">
-                        <td className="px-3 py-2">{o.orderNo}</td>
-                        <td className="px-3 py-2">{o.date}</td>
-                        <td className="px-3 py-2 text-center">{o.qty}</td>
-                        <td className="px-3 py-2 text-right">₹{o.amount}</td>
-                        <td className="px-3 py-2">
-                          <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-semibold">
-                            {o.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {activeTab === "invoices" && (
-              <div className="text-sm text-gray-500 p-4">No invoices yet.</div>
-            )}
-
-            {activeTab === "messages" && (
-              <div className="text-sm text-gray-500 p-4">WhatsApp logs will appear here.</div>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </div>

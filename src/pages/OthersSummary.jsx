@@ -17,6 +17,7 @@ import { API_BASE } from "../api";
 import CreditNoteModal from "../components/inventory/CreditNoteModal";
 import DebitNoteModal from "../components/inventory/DebitNoteModal";
 import PaymentModal from "../components/inventory/PaymentModal";
+import SalesReceiptModal from "../components/inventory/SalesReceiptModal";
 
 const OthersSummary = () => {
   const [tableType, setTableType] = useState("voucher-types");
@@ -39,6 +40,8 @@ const OthersSummary = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedSalesOrderForCredit, setSelectedSalesOrderForCredit] = useState(null);
   const [showCreditNoteModal, setShowCreditNoteModal] = useState(false);
+  const [selectedSalesOrderForReceipt, setSelectedSalesOrderForReceipt] = useState(null);
+  const [showSalesReceiptModal, setShowSalesReceiptModal] = useState(false);
   const [commissionRuleForm, setCommissionRuleForm] = useState({
     roleType: "SalesOwner",
     personId: "",
@@ -849,7 +852,7 @@ const OthersSummary = () => {
                             </button>
                           </>
                         ) : tableType === "sales-orders" ? (
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
                             <button
                               onClick={async () => {
                                 try {
@@ -873,6 +876,29 @@ const OthersSummary = () => {
                               title="Add credit note (return) for this sales order"
                             >
                               📝 Credit Note
+                            </button>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  // Fetch full sales order details
+                                  const response = await fetch(`${API_BASE}/sales-orders/${item._id}`);
+                                  const result = await response.json();
+                                  if (result.success) {
+                                    setSelectedSalesOrderForReceipt(result.data);
+                                    setShowSalesReceiptModal(true);
+                                  } else if (result.data) {
+                                    setSelectedSalesOrderForReceipt(result.data);
+                                    setShowSalesReceiptModal(true);
+                                  }
+                                } catch (error) {
+                                  console.error("Failed to fetch sales order:", error);
+                                  alert("Failed to load sales order details");
+                                }
+                              }}
+                              className="bg-green-500 text-white px-2 md:px-3 py-1 md:py-2 rounded-lg hover:bg-green-600 transition inline-flex items-center gap-1 text-xs md:text-sm font-semibold"
+                              title="Record payment received from customer"
+                            >
+                              💰 Receipt
                             </button>
                             <button
                               onClick={() => setDeleteConfirm(item._id)}
@@ -1203,9 +1229,8 @@ const OthersSummary = () => {
           // Refresh data after creating debit note
           fetchData();
         }}
-        onSave={(data) => {
-          // Optionally update local data
-          setData([data, ...data]);
+        onSave={() => {
+          // Data will be refreshed via fetchData()
         }}
         purchaseOrders={purchaseOrders}
       />
@@ -1218,12 +1243,28 @@ const OthersSummary = () => {
           // Refresh data after recording payment
           fetchData();
         }}
-        onSave={(data) => {
-          // Optionally update local data
-          setData([data, ...data]);
+        onSave={() => {
+         
         }}
         vendors={vendors}
         purchaseOrders={purchaseOrders}
+        salesOwners={salesOwners}
+        salesMen={salesMen}
+      />
+
+      {/* Sales Receipt Modal */}
+      <SalesReceiptModal
+        isOpen={showSalesReceiptModal}
+        onClose={() => {
+          setShowSalesReceiptModal(false);
+          setSelectedSalesOrderForReceipt(null);
+          // Refresh data after recording payment
+          fetchData();
+        }}
+        onSave={() => {
+          // Data will be refreshed via fetchData()
+        }}
+        salesOrder={selectedSalesOrderForReceipt}
       />
     </div>
   );

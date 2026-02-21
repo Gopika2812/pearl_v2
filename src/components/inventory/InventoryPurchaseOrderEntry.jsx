@@ -11,7 +11,10 @@ const InventoryPurchaseOrderEntry = ({
   voucherTypes,
   products,
   vendors,
-  productGroups
+  productGroups,
+  salesOwners = [],
+  salesMen = [],
+  deliveryMen = []
 }) => {
   const { warehouses } = useInventory();
 
@@ -21,6 +24,7 @@ const InventoryPurchaseOrderEntry = ({
   const [warehouse, setWarehouse] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [productGroup, setProductGroup] = useState("");
+  const [billingPerson, setBillingPerson] = useState("");
 
   // Item Entry State
   const [selectedItem, setSelectedItem] = useState("");
@@ -232,7 +236,7 @@ const InventoryPurchaseOrderEntry = ({
       totalTax,
       transportCharge,
       grandTotal,
-      
+      billingPerson,
       invoiceId,
       status: "PLACED",
     };
@@ -346,17 +350,59 @@ const InventoryPurchaseOrderEntry = ({
 
       </div>
 
-      {/* PRODUCT GROUP */}
-       <div>
-        <label className={labelClass}>Product Group</label>
-        <select className={selectClass} value={productGroup} onChange={(e) => setProductGroup(e.target.value)}>
-          <option value="">Select Product Group</option>
-          {productGroups.map((g) => (
-            <option key={g._id} value={g._id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
+      {/* PRODUCT GROUP & BILLING PERSON */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className={labelClass}>Product Group</label>
+          <select className={selectClass} value={productGroup} onChange={(e) => setProductGroup(e.target.value)}>
+            <option value="">Select Product Group</option>
+            {productGroups.map((g) => (
+              <option key={g._id} value={g._id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className={labelClass}>Billing Person</label>
+          <select className={selectClass} value={billingPerson} onChange={(e) => setBillingPerson(e.target.value)}>
+            <option value="">-- Select --</option>
+            {/* Sales Owners */}
+            {salesOwners.length > 0 && (
+              <>
+                <option disabled>--- Sales Owners ---</option>
+                {salesOwners.map((so) => (
+                  <option key={`so-${so._id}`} value={so._id}>
+                    {so.name} (Owner)
+                  </option>
+                ))}
+              </>
+            )}
+            {/* Sales Men */}
+            {salesMen.length > 0 && (
+              <>
+                <option disabled>--- Sales Men ---</option>
+                {salesMen.map((sm) => (
+                  <option key={`sm-${sm._id}`} value={sm._id}>
+                    {sm.name} (Sales Man)
+                  </option>
+                ))}
+              </>
+            )}
+            {/* Delivery Men */}
+            {deliveryMen.length > 0 && (
+              <>
+                <option disabled>--- Delivery Men ---</option>
+                {deliveryMen.map((dm) => (
+                  <option key={`dm-${dm._id}`} value={dm._id}>
+                    {dm.name} (Delivery Man)
+                  </option>
+                ))}
+              </>
+            )}
+          </select>
+        </div>
       </div>
 
       {/* ITEM ENTRY */}

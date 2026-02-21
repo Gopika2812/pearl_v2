@@ -11,7 +11,7 @@ import { useInventory } from "../../context/InventoryContext";
 import { FaSlidersH, FaTimes } from "react-icons/fa";
 
 const InventorySalesOrder = () => {
-  const { voucherTypes, productGroups, products, warehouses, addData, customers, salesMen, deliveryMen } = useInventory();
+  const { voucherTypes, productGroups, products, warehouses, addData, customers, salesMen, deliveryMen, salesOwners } = useInventory();
 
   const [activeModal, setActiveModal] = useState(null);
   const [items, setItems] = useState([]);
@@ -62,6 +62,7 @@ const InventorySalesOrder = () => {
               customers={customers}
               salesMen={salesMen}
               deliveryMen={deliveryMen}
+              salesOwners={salesOwners}
             />
           </div>
         </div>

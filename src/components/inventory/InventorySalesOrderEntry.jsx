@@ -18,7 +18,8 @@ export default function InventorySalesOrderEntry({
   productGroups = [],
   customers = [],
   salesMen = [],
-  deliveryMen = []
+  deliveryMen = [],
+  salesOwners = []
 }) {
   const [voucherType, setVoucherType] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
@@ -39,6 +40,16 @@ export default function InventorySalesOrderEntry({
   const [hsn, setHsn] = useState("");
 
   const [items, setItems] = useState([]);
+  const [sampleItems, setSampleItems] = useState([]);
+
+  const [sampleProductGroup, setSampleProductGroup] = useState("");
+  const [sampleSelectedItem, setSampleSelectedItem] = useState("");
+  const [sampleQty, setSampleQty] = useState(1);
+  const [sampleSellingPrice, setSampleSellingPrice] = useState(0);
+  const [sampleItemSearch, setSampleItemSearch] = useState("");
+  const [showSampleItemDropdown, setShowSampleItemDropdown] = useState(false);
+  const [filteredSampleProducts, setFilteredSampleProducts] = useState([]);
+  const [loadingSampleProducts, setLoadingSampleProducts] = useState(false);
 
   const [transportCharge, setTransportCharge] = useState(0);
 
@@ -61,6 +72,7 @@ export default function InventorySalesOrderEntry({
   const [salesOwnerId, setSalesOwnerId] = useState("");
   const [salesMan, setSalesMan] = useState("");
   const [deliveryMan, setDeliveryMan] = useState("");
+  const [billingPerson, setBillingPerson] = useState("");
   const [customerMargin, setCustomerMargin] = useState(0);
   
   // SEARCH STATES FOR TYPING
@@ -232,6 +244,41 @@ export default function InventorySalesOrderEntry({
 
     fetchProductsByGroup();
   }, [productGroup]);
+
+  // Fetch products for SAMPLE PRODUCTS section when sampleProductGroup changes
+  useEffect(() => {
+    if (!sampleProductGroup) {
+      setFilteredSampleProducts([]);
+      return;
+    }
+
+    const fetchSampleProductsByGroup = async () => {
+      setLoadingSampleProducts(true);
+      try {
+        const res = await fetch(`${API_BASE}/products/group/${sampleProductGroup}`);
+        const data = await res.json();
+
+        if (data.success) {
+          console.log(`✅ Fetched ${data.data.length} products for sample group:`, sampleProductGroup);
+          setFilteredSampleProducts(data.data);
+        } else if (Array.isArray(data)) {
+          console.log(`✅ Fetched ${data.length} products for sample group:`, sampleProductGroup);
+          setFilteredSampleProducts(data);
+        } else {
+          console.warn("⚠️ Failed to fetch sample products:", data.message);
+          setFilteredSampleProducts([]);
+        }
+      } catch (error) {
+        console.error("❌ Error fetching sample products by group:", error);
+        setFilteredSampleProducts([]);
+        toast.error("Failed to load sample products");
+      } finally {
+        setLoadingSampleProducts(false);
+      }
+    };
+
+    fetchSampleProductsByGroup();
+  }, [sampleProductGroup]);
 
   const filteredProducts_unused = useMemo(() => {
     return productGroup
@@ -437,6 +484,54 @@ export default function InventorySalesOrderEntry({
     setItems(items.filter((_, idx) => idx !== i));
   };
 
+  // SAMPLE PRODUCTS - Add item
+  const handleSampleItemSelection = (id) => {
+    const product = filteredSampleProducts.find(p => p._id === id);
+    if (!product) return;
+
+    setSampleSelectedItem(id);
+    setSampleItemSearch(product.name);
+    setShowSampleItemDropdown(false);
+    setSampleQty(1);
+    setSampleSellingPrice(product.sellingPrice);
+  };
+
+  const addSampleItem = () => {
+    if (!sampleSelectedItem) {
+      toast.warning("Select sample item");
+      return;
+    }
+
+    const p = filteredSampleProducts.find((x) => x._id === sampleSelectedItem);
+    if (!p) {
+      toast.error("Product not found. Please select again.");
+      return;
+    }
+
+    setSampleItems((prev) => [
+      ...prev,
+      {
+        productId: p._id,
+        name: p.name,
+        hsn: p.hsnCode || "",
+        qty: Number(sampleQty),
+        sellingPrice: Number(sampleSellingPrice),
+        isSample: true,
+      },
+    ]);
+
+    toast.success(`${p.name} added as sample!`);
+
+    setSampleSelectedItem("");
+    setSampleItemSearch("");
+    setSampleQty(1);
+    setSampleSellingPrice(0);
+  };
+
+  const removeSampleItem = (i) => {
+    setSampleItems(sampleItems.filter((_, idx) => idx !== i));
+  };
+
   const subtotal = items.reduce(
     (s, i) => s + i.qty * i.sellingPrice,
     0
@@ -497,6 +592,7 @@ export default function InventorySalesOrderEntry({
     warehouse,
 
     items: roundedItems,
+    sampleItems: sampleItems,
     transportCharge: roundedTransportCharge,
     subtotal: roundedSubtotal,
     totalDiscount: roundedTotalDiscount,
@@ -518,6 +614,7 @@ export default function InventorySalesOrderEntry({
     salesOwner: salesOwnerId,
     salesMan,
     deliveryMan,
+    billingPerson,
   };
 
   const handleFinalAction = async () => {
@@ -905,6 +1002,126 @@ export default function InventorySalesOrderEntry({
       </div>
 
 
+      {/* SAMPLE PRODUCTS SECTION */}
+      <div className="bg-yellow-50 border-2 border-yellow-200 p-6 rounded-2xl space-y-4">
+        <h3 className="text-yellow-700 font-black uppercase text-sm tracking-widest">
+          🎁 Sample Products (Not Billed)
+        </h3>
+        <p className="text-xs text-yellow-600">Sample products are tracked but do not affect the bill total</p>
+
+        {/* SAMPLE ITEM ENTRY */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+          <div>
+            <label className={labelClass}>Product Group</label>
+            <select className={selectClass} value={sampleProductGroup} onChange={(e) => setSampleProductGroup(e.target.value)}>
+              <option value="">Select Group</option>
+              {productGroups.map((g) => (
+                <option key={g._id} value={g._id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="relative">
+            <label className={labelClass}>Item</label>
+            <input
+              type="text"
+              placeholder="Type item name..."
+              value={sampleItemSearch}
+              onChange={(e) => {
+                setSampleItemSearch(e.target.value);
+                setShowSampleItemDropdown(true);
+              }}
+              onFocus={() => setShowSampleItemDropdown(true)}
+              disabled={!sampleProductGroup}
+              className={`${inputClass} ${!sampleProductGroup ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+            />
+            {showSampleItemDropdown && sampleProductGroup && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto">
+                {loadingSampleProducts && (
+                  <div className="px-3 py-2 text-gray-500 text-sm text-center">🔍 Loading products...</div>
+                )}
+                {!loadingSampleProducts && filteredSampleProducts
+                  .filter(p => p.name.toLowerCase().includes(sampleItemSearch.toLowerCase()) && p.totalQty > 0)
+                  .map((p) => (
+                    <div
+                      key={p._id}
+                      onClick={() => handleSampleItemSelection(p._id)}
+                      className="px-3 py-2 hover:bg-yellow-50 cursor-pointer border-b text-sm"
+                    >
+                      <div className="font-semibold">{p.name}</div>
+                      <div className="text-gray-500 text-xs">Available: {p.totalQty || 0}</div>
+                    </div>
+                  ))}
+                {!loadingSampleProducts && filteredSampleProducts.filter(p => p.name.toLowerCase().includes(sampleItemSearch.toLowerCase()) && p.totalQty > 0).length === 0 && (
+                  <div className="px-3 py-2 text-gray-500 text-sm">No products available</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className={labelClass}>Qty</label>
+            <input
+              type="number"
+              className={inputClass}
+              value={sampleQty}
+              onChange={(e) => setSampleQty(+e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Price ₹</label>
+            <input
+              type="number"
+              className={inputClass}
+              value={sampleSellingPrice}
+              onChange={(e) => setSampleSellingPrice(+e.target.value)}
+            />
+          </div>
+
+          <button onClick={addSampleItem} className="bg-yellow-500 text-white h-[42px] rounded-xl font-bold flex items-center justify-center hover:bg-yellow-600 transition shadow-lg active:scale-95">
+            <FaPlus className="mr-2" /> ADD SAMPLE
+          </button>
+        </div>
+      </div>
+
+      {/* SAMPLE ITEMS TABLE */}
+      {sampleItems.length > 0 && (
+        <div className="bg-yellow-50 rounded-2xl shadow-sm border-2 border-yellow-200 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-yellow-100 text-yellow-700 uppercase text-[11px] font-bold">
+              <tr>
+                <th className="px-4 py-3 text-left">Sample Item</th>
+                <th className="px-4 py-3 text-center">Qty</th>
+                <th className="px-4 py-3 text-right">Unit Price</th>
+                <th className="px-4 py-3 text-right">Total (Qty × Price)</th>
+                <th className="px-4 py-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {sampleItems.map((item, index) => (
+                <tr key={index} className="bg-yellow-50 hover:bg-yellow-100">
+                  <td className="px-4 py-3 font-semibold text-yellow-900">
+                    {item.name}
+                    <div className="text-[10px] text-yellow-700">HSN: {item.hsn}</div>
+                  </td>
+                  <td className="px-4 py-3 text-center font-bold">{item.qty}</td>
+                  <td className="px-4 py-3 text-right text-yellow-600">₹{item.sellingPrice.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right text-yellow-700 font-bold">₹{(item.qty * item.sellingPrice).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-center">
+                    <button onClick={() => removeSampleItem(index)} className="text-red-500 hover:text-red-700">
+                      <FaTrash />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* TABLE */}
       {items.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -1047,8 +1264,8 @@ export default function InventorySalesOrderEntry({
         />
       </div>
 
-      {/* Sales Man and Delivery Man */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Sales Man, Delivery Man, and Billing Person */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label className={labelClass}>Sales Man</label>
           <select
@@ -1078,6 +1295,50 @@ export default function InventorySalesOrderEntry({
                 {dm.name} ({dm.phone})
               </option>
             ))}
+          </select>
+        </div>
+
+        <div>
+          <label className={labelClass}>Billing Person</label>
+          <select
+            className={selectClass}
+            value={billingPerson}
+            onChange={(e) => setBillingPerson(e.target.value)}
+          >
+            <option value="">-- Select --</option>
+            {/* Sales Owners */}
+            {salesOwners.length > 0 && (
+              <>
+                <option disabled>--- Sales Owners ---</option>
+                {salesOwners.map((so) => (
+                  <option key={`so-${so._id}`} value={so._id}>
+                    {so.name} (Owner)
+                  </option>
+                ))}
+              </>
+            )}
+            {/* Sales Men */}
+            {salesMen.length > 0 && (
+              <>
+                <option disabled>--- Sales Men ---</option>
+                {salesMen.map((sm) => (
+                  <option key={`sm-${sm._id}`} value={sm._id}>
+                    {sm.name} (Sales Man)
+                  </option>
+                ))}
+              </>
+            )}
+            {/* Delivery Men */}
+            {deliveryMen.length > 0 && (
+              <>
+                <option disabled>--- Delivery Men ---</option>
+                {deliveryMen.map((dm) => (
+                  <option key={`dm-${dm._id}`} value={dm._id}>
+                    {dm.name} (Delivery Man)
+                  </option>
+                ))}
+              </>
+            )}
           </select>
         </div>
       </div>
@@ -1113,7 +1374,13 @@ export default function InventorySalesOrderEntry({
             <span className="font-bold">₹{Number(transportCharge || 0).toFixed(2)}</span>
           </div>
 
-          
+          {sampleItems.length > 0 && (
+            <div className="pt-2 border-t border-yellow-200 mt-2">
+              <div className="flex justify-between text-xs text-yellow-700 font-semibold">
+                <span>📦 Sample Items: {sampleItems.reduce((s, i) => s + i.qty, 0)} units (Not in total)</span>
+              </div>
+            </div>
+          )}
 
           <div className="pt-2">
             <div className="flex justify-between items-center">

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { API_BASE } from "../../api";
 
-const PaymentModal = ({ isOpen, onClose, onSave, vendors = [], purchaseOrders = [] }) => {
+const PaymentModal = ({ isOpen, onClose, onSave, vendors = [], purchaseOrders = [], salesOwners = [], salesMen = [] }) => {
   const [formData, setFormData] = useState({
     paymentType: "vendor_payment",
     amount: 0,
@@ -341,15 +341,25 @@ const PaymentModal = ({ isOpen, onClose, onSave, vendors = [], purchaseOrders = 
               <label className="text-sm font-bold text-gray-600 block mb-1">
                 Billing Person
               </label>
-              <input
-                type="text"
+              <select
                 value={formData.billingPerson}
                 onChange={(e) =>
                   setFormData({ ...formData, billingPerson: e.target.value })
                 }
-                placeholder="Person who processed this payment"
                 className="w-full p-2 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500"
-              />
+              >
+                <option value="">-- Select Person --</option>
+                {salesOwners.map((owner) => (
+                  <option key={owner._id} value={owner.name}>
+                    {owner.name} (Sales Owner)
+                  </option>
+                ))}
+                {salesMen.map((man) => (
+                  <option key={man._id} value={man.name}>
+                    {man.name} (Sales Man)
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </form>

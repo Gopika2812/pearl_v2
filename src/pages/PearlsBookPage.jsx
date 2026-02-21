@@ -2,6 +2,7 @@ import axios from "axios";
 import { Fragment, useEffect, useState } from "react";
 import {
   FaBoxOpen,
+  FaCheckCircle,
   FaChevronDown,
   FaChevronUp,
   FaFileInvoice,
@@ -126,7 +127,7 @@ export default function PearlsBookPage() {
 
 
   return (
-    <div className="min-h-screen bg-gray-100 pt-20 md:pl-64 px-3 sm:px-6 pb-10">
+    <div className="min-h-screen bg-gray-100 pt-20 md:pt-16 md:pl-64 px-3 sm:px-6 pb-10">
       {/* HEADER */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-primary">
@@ -287,7 +288,7 @@ export default function PearlsBookPage() {
 
 
       {/* DESKTOP TABLE */}
-      <div className="hidden md:block bg-white rounded-2xl shadow border overflow-hidden">
+      <div className="hidden md:block bg-white rounded-2xl shadow border overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="bg-primary text-white sticky top-0 z-10">
             <tr>
@@ -372,22 +373,33 @@ export default function PearlsBookPage() {
                   </td>
 
 
-                  <td className="px-2 py-2 text-right whitespace-nowrap">
-                    <div className="relative flex items-center justify-center gap-1">
+                  <td className="px-2 py-2 text-center whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-1">
                       {/* MINI ITEMS ICON (ONLY FOR PURCHASE) */}
                       {r.type === "PURCHASE" && r.items?.length > 0 && (
                         <MiniItemsBadge items={r.items} />
                       )}
 
                       {r.type === "SALES" && (
-                        <button
-                          onClick={() => generateInvoice(r._id)}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs
-                          bg-blue-100 text-blue-600 hover:bg-blue-200 transition"
-                          title="Generate Invoice"
-                        >
-                          <FaFileInvoice size={12} />
-                        </button>
+                        <>
+                          {r.invoiceGenerated ? (
+                            <button
+                              disabled
+                              className="p-1.5 rounded bg-green-100 text-green-600 cursor-not-allowed hover:bg-green-200"
+                              title="Invoice Generated"
+                            >
+                              <FaCheckCircle size={14} />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => generateInvoice(r._id)}
+                              className="p-1.5 rounded bg-blue-100 text-blue-600 hover:bg-blue-200 transition"
+                              title="Generate Invoice"
+                            >
+                              <FaFileInvoice size={14} />
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
@@ -463,9 +475,25 @@ export default function PearlsBookPage() {
               </button>
 
               {r.type === "SALES" && (
-                <button className="flex-1 bg-primary text-white rounded-lg py-2 text-sm">
-                  Invoice
-                </button>
+                <>
+                  {r.invoiceGenerated ? (
+                    <button
+                      disabled
+                      className="flex-1 bg-green-600 text-white rounded-lg py-2 text-sm cursor-not-allowed opacity-75"
+                      title="Invoice Generated"
+                    >
+                      ✓ Generated
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => generateInvoice(r._id)}
+                      className="flex-1 bg-primary text-white rounded-lg py-2 text-sm hover:bg-blue-700 transition"
+                      title="Generate Invoice"
+                    >
+                      Generate Invoice
+                    </button>
+                  )}
+                </>
               )}
             </div>
 
@@ -528,61 +556,106 @@ function ExpandedItems({ row }) {
   const isSales = row.type === "SALES";
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs border rounded-lg overflow-hidden">
-        <thead className="bg-primary/10 text-primary">
-          <tr>
-            <th className="px-3 py-2 text-left">Item</th>
-            <th className="px-3 py-2">HSN</th>
-            <th className="px-3 py-2 text-right">Price</th>
-            <th className="px-3 py-2 text-right">Qty</th>
-            {isSales && (
-              <th className="px-3 py-2 text-right">Discount</th>
-            )}
-            <th className="px-3 py-2 text-right">GST</th>
-            <th className="px-3 py-2 text-right">Total</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {row.items.map((i, idx) => (
-            <tr key={idx} className="border-t hover:bg-gray-50">
-              <td className="px-3 py-2">
-                <div className="font-semibold">{i.name}</div>
-                <div className="text-[11px] text-gray-500">
-                  {i.productGroup}
-                </div>
-              </td>
-
-              <td className="px-3 py-2">{i.hsn}</td>
-
-              <td className="px-3 py-2 text-right">
-                ₹{(isSales ? i.sellingPrice : i.purchasePrice).toFixed(2)}
-              </td>
-
-              <td className="px-3 py-2 text-right">{i.qty}</td>
-
+    <div className="space-y-4">
+      {/* MAIN ITEMS TABLE */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border rounded-lg overflow-hidden">
+          <thead className="bg-primary/10 text-primary">
+            <tr>
+              <th className="px-3 py-2 text-left">Item</th>
+              <th className="px-3 py-2">HSN</th>
+              <th className="px-3 py-2 text-right">Price</th>
+              <th className="px-3 py-2 text-right">Qty</th>
               {isSales && (
-                <td className="px-3 py-2 text-right">
-                  {i.discountType === "PERCENT"
-                    ? `${i.discountPercent}%`
-                    : `₹${(i.discountAmount).toFixed(2)}`}
-                </td>
+                <th className="px-3 py-2 text-right">Discount</th>
               )}
-
-              <td className="px-3 py-2 text-right">{i.gst}%</td>
-
-              <td className="px-3 py-2 text-right font-bold text-primary">
-                ₹{(i.total).toFixed(2)}
-              </td>
+              <th className="px-3 py-2 text-right">GST</th>
+              <th className="px-3 py-2 text-right">Total</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {row.items.map((i, idx) => (
+              <tr key={idx} className="border-t hover:bg-gray-50">
+                <td className="px-3 py-2">
+                  <div className="font-semibold">{i.name}</div>
+                  <div className="text-[11px] text-gray-500">
+                    {i.productGroup}
+                  </div>
+                </td>
+
+                <td className="px-3 py-2">{i.hsn}</td>
+
+                <td className="px-3 py-2 text-right">
+                  ₹{(isSales ? i.sellingPrice : i.purchasePrice).toFixed(2)}
+                </td>
+
+                <td className="px-3 py-2 text-right">{i.qty}</td>
+
+                {isSales && (
+                  <td className="px-3 py-2 text-right">
+                    {i.discountType === "PERCENT"
+                      ? `${i.discountPercent}%`
+                      : `₹${(i.discountAmount).toFixed(2)}`}
+                  </td>
+                )}
+
+                <td className="px-3 py-2 text-right">{i.gst}%</td>
+
+                <td className="px-3 py-2 text-right font-bold text-primary">
+                  ₹{(i.total).toFixed(2)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* SAMPLE ITEMS TABLE */}
+      {isSales && row.sampleItems && row.sampleItems.length > 0 && (
+        <div className="overflow-x-auto bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+          <div className="text-xs font-bold text-yellow-700 mb-3">
+            🎁 Sample Items (Not Billed)
+          </div>
+          <table className="w-full text-xs border-collapse">
+            <thead className="bg-yellow-100 text-yellow-700">
+              <tr>
+                <th className="px-3 py-2 text-left border border-yellow-300">Item</th>
+                <th className="px-3 py-2 border border-yellow-300">HSN</th>
+                <th className="px-3 py-2 text-right border border-yellow-300">Price</th>
+                <th className="px-3 py-2 text-right border border-yellow-300">Qty</th>
+                <th className="px-3 py-2 text-right border border-yellow-300">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {row.sampleItems.map((item, idx) => (
+                <tr key={idx} className="border-t border-yellow-200 hover:bg-yellow-100">
+                  <td className="px-3 py-2 border border-yellow-200">
+                    <div className="font-semibold">{item.name}</div>
+                    <div className="text-[11px] text-yellow-700">
+                      HSN: {item.hsn}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-center border border-yellow-200">{item.hsn}</td>
+                  <td className="px-3 py-2 text-right border border-yellow-200">
+                    ₹{Number(item.sellingPrice).toFixed(2)}
+                  </td>
+                  <td className="px-3 py-2 text-right border border-yellow-200">
+                    {item.qty}
+                  </td>
+                  <td className="px-3 py-2 text-right font-bold text-yellow-700 border border-yellow-200">
+                    ₹{(item.qty * item.sellingPrice).toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* E-WAY BILL */}
       {isSales && row.ewayEnabled && (
-        <div className="mt-4 text-xs bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+        <div className="text-xs bg-yellow-50 border border-yellow-200 rounded-lg p-3">
           <strong>E-Way Bill:</strong>{" "}
           {row.ewayDetails?.ewayBillNo} <br />
           Vehicle No: {row.ewayDetails?.vehicleNo}
