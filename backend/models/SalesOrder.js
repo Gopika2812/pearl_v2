@@ -55,6 +55,23 @@ const salesOrderSchema = new mongoose.Schema(
       },
     ],
 
+    sampleItems: [
+      {
+        productId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product",
+          required: true,
+        },
+        name: String,
+        hsn: String,
+        qty: Number,
+        sellingPrice: Number,
+        isSample: {
+          type: Boolean,
+          default: true,
+        },
+      },
+    ],
 
     subtotal: Number,
     totalDiscount: Number,

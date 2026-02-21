@@ -17,23 +17,34 @@ const getFinancialYear = () => {
 // GET NEXT DEBIT NOTE ID
 router.get("/next-id", async (req, res) => {
   try {
-    const voucher = await VoucherType.findOne({
+    const currentFY = getFinancialYear();
+    
+    let voucher = await VoucherType.findOne({
       name: "debit_note",
       orderType: "DN",
     });
 
     if (!voucher) {
-      return res.status(404).json({ message: "Debit Note voucher type not found" });
+      // Create if doesn't exist
+      voucher = await VoucherType.create({
+        name: "debit_note",
+        orderType: "DN",
+        prefix: "DN",
+        counter: 0,
+        financialYear: currentFY,
+      });
     }
 
-    const currentFY = getFinancialYear();
-    let counter = voucher.counter || 1;
-
+    // Check if year changed
     if (voucher.financialYear !== currentFY) {
-      counter = 1;
+      voucher = await VoucherType.findByIdAndUpdate(
+        voucher._id,
+        { counter: 0, financialYear: currentFY },
+        { new: true }
+      );
     }
 
-    const nextId = `${voucher.prefix}/${String(counter).padStart(3, "0")}/${currentFY}`;
+    const nextId = `DN/${String(voucher.counter + 1).padStart(3, "0")}/${currentFY}`;
     res.json({ nextId });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -90,19 +101,43 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ message: "Purchase Order not found" });
     }
 
-    // Get voucher for debit note ID
-    const voucher = await VoucherType.findOne({
+    // Get voucher for debit note ID (atomic counter increment)
+    const currentFY = getFinancialYear();
+    
+    let voucher = await VoucherType.findOne({
       name: "debit_note",
       orderType: "DN",
     });
 
-    const currentFY = getFinancialYear();
-    let counter = voucher?.counter || 1;
-
-    if (voucher?.financialYear !== currentFY) {
-      counter = 1;
+    // Create voucher if it doesn't exist
+    if (!voucher) {
+      voucher = await VoucherType.create({
+        name: "debit_note",
+        orderType: "DN",
+        prefix: "DN",
+        counter: 1,
+        financialYear: currentFY,
+      });
     }
 
+    // Reset counter if financial year changed
+    if (voucher.financialYear !== currentFY) {
+      voucher = await VoucherType.findByIdAndUpdate(
+        voucher._id,
+        { counter: 1, financialYear: currentFY },
+        { new: true }
+      );
+    }
+
+    // Atomically increment counter and get the new value
+    voucher = await VoucherType.findByIdAndUpdate(
+      voucher._id,
+      { $inc: { counter: 1 } },
+      { new: true }
+    );
+
+    // Use the incremented counter - 1 (since we just incremented)
+    const counter = voucher.counter;
     const debitNoteId = `DN/${String(counter).padStart(3, "0")}/${currentFY}`;
 
     // Calculate totals
@@ -154,17 +189,31 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // ✅ UPDATE ORIGINAL PO STATUS IF FULLY RETURNED
+    // ✅ UPDATE ORIGINAL PO ITEMS QTY AND STATUS
     let poStatus = originalPO.status;
     let totalOriginalQty = 0;
     let totalReturnedQty = 0;
 
-    for (const poItem of originalPO.items) {
-      totalOriginalQty += poItem.qty;
+    // Ensure items array exists and is iterable
+    const poItems = Array.isArray(originalPO.items) ? originalPO.items : [];
+
+    for (const poItem of poItems) {
+      totalOriginalQty += poItem.qty || 0;
     }
 
-    for (const item of items) {
-      totalReturnedQty += item.returnedQty;
+    // Update each PO item with returned qty
+    for (const returnedItem of items) {
+      totalReturnedQty += returnedItem.returnedQty;
+      
+      // Find matching item in PO and reduce its quantity
+      const poItemIndex = poItems.findIndex(pi => 
+        pi.productId?.toString() === returnedItem.productId?.toString()
+      );
+      
+      if (poItemIndex !== -1) {
+        poItems[poItemIndex].qty = Math.max(0, (poItems[poItemIndex].qty || 0) - returnedItem.returnedQty);
+        console.log(`📦 PO Item "${returnedItem.name}" quantity updated: -${returnedItem.returnedQty} (New qty: ${poItems[poItemIndex].qty})`);
+      }
     }
 
     if (totalReturnedQty >= totalOriginalQty) {
@@ -173,18 +222,16 @@ router.post("/", async (req, res) => {
       poStatus = "PARTIALLY_RETURNED";
     }
 
+    // Update PO with new items and status
     await PurchaseOrder.findByIdAndUpdate(
       originalPurchaseOrderId,
-      { status: poStatus }
+      { 
+        items: poItems,
+        status: poStatus 
+      }
     );
-
-    // Update voucher counter
-    if (voucher) {
-      await VoucherType.findByIdAndUpdate(voucher._id, {
-        counter: counter + 1,
-        financialYear: currentFY,
-      });
-    }
+    
+    console.log(`✅ PO status updated to: ${poStatus}`);
 
     res.status(201).json({
       success: true,

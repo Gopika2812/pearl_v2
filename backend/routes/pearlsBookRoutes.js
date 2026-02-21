@@ -1,5 +1,7 @@
-import { createCanvas } from "canvas";
+import { createCanvas, loadImage } from "canvas";
 import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
 import cloudinary from "../config/cloudinary.js";
 import Commission from "../models/Commission.js";
 import CommissionRule from "../models/CommissionRule.js";
@@ -10,6 +12,9 @@ import PurchaseOrder from "../models/PurchaseOrder.js";
 import SalesMan from "../models/SalesMan.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
@@ -26,7 +31,7 @@ router.get("/", async (req, res) => {
       invoiceId: p.invoiceId,
       party: p.vendor,
       warehouse: p.warehouse,
-      items: p.items,
+      items: Array.isArray(p.items) ? p.items : [],
       subtotal: p.subtotal,
       totalTax: p.totalTax,
       transportCharge: p.transportCharge || 0,
@@ -44,11 +49,13 @@ router.get("/", async (req, res) => {
       openingBalance: s.openingBalance,
       closingBalance: s.closingBalance,
 
-      items: s.items,
+      items: Array.isArray(s.items) ? s.items : [],
+      sampleItems: Array.isArray(s.sampleItems) ? s.sampleItems : [],
       subtotal: s.subtotal,
       totalTax: s.totalTax,
       transportCharge: s.transportCharge,
       grandTotal: s.grandTotal,
+      invoiceGenerated: s.invoiceGenerated || false,
     }));
 
 
@@ -175,141 +182,344 @@ function getFormattedDateTime() {
 
 // ---------------- GENERATE INVOICE IMAGE ----------------
 async function generateInvoiceImage(sale) {
-  const canvas = createCanvas(595, 842); // A4
+  // Calculate HSN-wise tax summary
+  const hsnSummary = {};
+  if (Array.isArray(sale.items)) {
+    sale.items.forEach((item) => {
+      if (!hsnSummary[item.hsn]) {
+        hsnSummary[item.hsn] = {
+          hsn: item.hsn,
+          taxableValue: 0,
+          cgstRate: item.cgst || 0,
+          sgstRate: item.sgst || 0,
+          igstRate: item.igst || 0,
+          cgstAmount: 0,
+          sgstAmount: 0,
+          igstAmount: 0,
+          totalTax: 0,
+          total: 0,
+        };
+      }
+
+      const baseAmount = item.sellingPrice * item.qty;
+      const taxableValue = baseAmount - (item.discountAmount || 0);
+      const cgstAmount = (taxableValue * item.cgst) / 100;
+      const sgstAmount = (taxableValue * item.sgst) / 100;
+      const igstAmount = (taxableValue * item.igst) / 100;
+
+      hsnSummary[item.hsn].taxableValue += taxableValue;
+      hsnSummary[item.hsn].cgstAmount += cgstAmount;
+      hsnSummary[item.hsn].sgstAmount += sgstAmount;
+      hsnSummary[item.hsn].igstAmount += igstAmount;
+      hsnSummary[item.hsn].totalTax += cgstAmount + sgstAmount + igstAmount;
+      hsnSummary[item.hsn].total += cgstAmount + sgstAmount + igstAmount + taxableValue;
+    });
+  }
+
+  const hsnArray = Object.values(hsnSummary);
+  const totalHsnItems = hsnArray.length;
+  const estimatedHeight = 250 + (sale.items?.length || 0) * 18 + totalHsnItems * 20 + 400;
+
+  const canvas = createCanvas(595, Math.max(1200, estimatedHeight));
   const ctx = canvas.getContext("2d");
 
   // ===== BACKGROUND =====
   ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, 595, 842);
+  ctx.fillRect(0, 0, 595, canvas.height);
 
-  drawBorder(ctx, 595, 842);
-  drawCompanyHeader(ctx, 595);
+  drawBorder(ctx, 595, canvas.height);
 
-  // ===== TITLE =====
+  // ===== LOAD AND DRAW LOGO =====
+  let y = 15;
+  try {
+    const logoPath = path.join(__dirname, "../../public/logo.jpeg");
+    const logo = await loadImage(logoPath);
+    const logoWidth = 100;
+    const logoHeight = 75;
+    const logoCenterX = 297 - logoWidth / 2;
+    ctx.drawImage(logo, logoCenterX, y, logoWidth, logoHeight);
+    y += 90;
+  } catch (err) {
+    console.warn("Logo not found, skipping logo display:", err.message);
+    y += 15;
+  }
+
+  // ===== COMPANY HEADER (CENTERED) =====
+  y += 15;
   ctx.textAlign = "center";
-  ctx.fillStyle = "#2f855a";
-  ctx.font = "bold 20px Arial";
-  ctx.fillText("BILL INVOICE", 297, 245);
+  ctx.font = "12px Arial";
+  ctx.fillStyle = "#000";
+  ctx.fillText("12/13, South By-Pass Road, Vanarpettai,", 297, y);
+  y += 15;
+  ctx.fillText("Tirunelveli - 627003, Tamil Nadu", 297, y);
+  y += 15;
+  ctx.fillText("Mobile: 9429692970 | GSTIN: 33DULPS2600Q1Z6", 297, y);
+  y += 13;
+  ctx.fillText("GPAY No: 8825847884 | State: Tamil Nadu (Code: 33)", 297, y);
+
+  // ===== HEADER - ACKNOWLEDGEMENT NO & DATE =====
+  y += 18;
+  ctx.font = "bold 13px Arial";
+  ctx.fillText(`Acknowledgement No: ${sale.invoiceId}`, 297, y);
+  y += 18;
+  ctx.font = "12px Arial";
+  ctx.fillText(`Acknowledgement Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}`, 297, y);
+
   ctx.textAlign = "left";
 
-  // ===== INVOICE META =====
-  let y = 270;
-  ctx.font = "13px Arial";
-
-  drawText(ctx, `Invoice No : ${sale.invoiceId}`, 30, y);
-  drawText(ctx, `Date : ${new Date(sale.createdAt).toLocaleDateString("en-IN")}`, 360, y);
-
-  y += 20;
-  drawText(ctx, `Warehouse : ${sale.warehouse}`, 30, y);
-  drawText(ctx, `Billing Person : ${sale.billingPerson || "-"}`, 360, y);
-
-  y += 20;
-  drawText(ctx, `Sales Man : ${sale.salesManName || "-"}`, 30, y);
-  drawText(ctx, `Delivery Man : ${sale.deliveryManName || "-"}`, 360, y);
-
-  // ===== SUPPLIER & BUYER =====
-  y += 25;
-  drawLine(ctx, 20, y, 575, y);
-  y += 20;
-
-  // SUPPLIER
-  drawText(ctx, "Supplier (From)", 30, y, 13, true);
-  drawText(ctx, "Buyer (Bill To)", 310, y, 13, true);
-
+  // ===== DIVIDER =====
   y += 18;
-
-  drawText(ctx, "PEARL AGENCY", 30, y, 12, true);
-  drawText(ctx, sale.customer.name, 310, y, 12, true);
-
-  y += 16;
-  drawText(ctx, "12/13, South By-Pass Road,", 30, y);
-  drawText(ctx, sale.customer.address, 310, y);
-
-  y += 16;
-  drawText(ctx, "Vanarpettai, Tirunelveli - 627003", 30, y);
-  drawText(
-    ctx,
-    `${sale.customer.district}, ${sale.customer.state} - ${sale.customer.pincode}`,
-    310,
-    y
-  );
-
-  y += 16;
-  drawText(ctx, "GSTIN : 33DULPS2600Q1Z6", 30, y);
-  drawText(ctx, `Mobile : ${sale.customer.whatsapp}`, 310, y);
-
-  y += 16;
-  drawText(ctx, "State : Tamil Nadu (33)", 30, y);
-
-  // ===== ITEMS TABLE =====
-  y += 30;
   drawLine(ctx, 20, y, 575, y);
-  y += 25;
 
-  ctx.font = "bold 12px Arial";
-  ctx.fillText("Item", 30, y);
-  ctx.fillText("HSN", 180, y);
-  ctx.fillText("Qty", 230, y);
-  ctx.fillText("Rate", 270, y);
-  ctx.fillText("Disc", 320, y);
-  ctx.fillText("GST%", 370, y);
-  ctx.fillText("Tax", 420, y);
-  ctx.fillText("Total", 480, y);
+  // ===== SENDER & BUYER DATA =====
+  y += 15;
 
-  drawLine(ctx, 20, y + 5, 575, y + 5);
-  y += 22;
+  // Sender
+  ctx.font = "bold 11px Arial";
+  ctx.fillText("SENDER (FROM)", 30, y);
 
-  ctx.font = "12px Arial";
+  // Buyer
+  ctx.fillText("BUYER (BILL TO)", 310, y);
 
-  sale.items.forEach((item) => {
-    const taxAmount =
-      ((item.sellingPrice * item.qty - item.discountAmount) * item.gst) / 100;
-    const roundedTotal = Math.ceil(item.total * 100) / 100;
+  y += 15;
+  ctx.font = "11px Arial";
 
-    ctx.fillText(item.name, 30, y);
-    ctx.fillText(item.hsn, 180, y);
-    ctx.fillText(item.qty.toString(), 230, y);
-    ctx.fillText(`₹${(item.sellingPrice).toFixed(2)}`, 270, y);
-    ctx.fillText(`₹${(item.discountAmount).toFixed(2)}`, 320, y);
-    ctx.fillText(`${item.gst}%`, 370, y);
-    ctx.fillText(`₹${(Math.ceil(taxAmount * 100) / 100).toFixed(2)}`, 420, y);
-    ctx.fillText(`₹${roundedTotal.toFixed(2)}`, 480, y);
+  // Sender details
+  drawText(ctx, "PEARL AGENCY", 30, y, 11, true);
+  drawText(ctx, sale.customer.name, 310, y, 11, true);
 
-    y += 20;
-  });
+  y += 14;
+  drawText(ctx, "12/13, South By-Pass Road,", 30, y);
+  // Split buyer address into 2 lines
+  const addressLine1 = sale.customer.address || "";
+  drawText(ctx, addressLine1, 310, y);
 
-  drawLine(ctx, 20, y + 5, 575, y + 5);
+  y += 13;
+  drawText(ctx, "Vanarpettai, Tirunelveli - 627003", 30, y);
+  const addressLine2 = `${sale.customer.district}, ${sale.customer.state} - ${sale.customer.pincode}`;
+  drawText(ctx, addressLine2, 310, y);
 
-  // ===== TOTAL SUMMARY =====
-  y += 25;
-  ctx.font = "bold 13px Arial";
+  y += 13;
+  drawText(ctx, "GSTIN: 33DULPS2600Q1Z6", 30, y);
+  drawText(ctx, `GSTIN: ${sale.customer.gstin || "-"}`, 310, y);
 
+  y += 13;
+  drawText(ctx, "Mobile: 9429692970", 30, y);
+  drawText(ctx, `Mobile: ${sale.customer.whatsapp}`, 310, y);
+
+  // ===== ORDER DETAILS =====
+  y += 18;
+  drawLine(ctx, 20, y, 575, y);
+  y += 12;
+
+  ctx.font = "11px Arial";
+  drawText(ctx, `Invoice No: ${sale.invoiceId}`, 30, y);
+  // Get billing person name
+  const billingPersonName = sale.billingPersonName || "-";
+  drawText(ctx, `Billing Person: ${billingPersonName}`, 310, y);
+
+  y += 14;
+  drawText(ctx, `Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}`, 30, y);
+  drawText(ctx, `Delivery Man: ${sale.deliveryManName || "-"}`, 310, y);
+
+  // ===== ITEMS TABLE HEADER =====
+  y += 20;
+  drawLine(ctx, 20, y, 575, y);
+  y += 13;
+
+  ctx.font = "bold 10px Arial";
+  ctx.fillStyle = "#1a365d";
+
+  // Adjusted column positions for wider description and GST
+  drawText(ctx, "Description of Goods", 25, y);
+  drawText(ctx, "HSN", 200, y);
+  drawText(ctx, "GST %", 260, y);
+  drawText(ctx, "Qty", 305, y);
+  drawText(ctx, "Rate", 345, y);
+  drawText(ctx, "Unit", 430, y);
+  drawText(ctx, "Total", 500, y);
+
+  // ===== ITEMS TABLE BODY =====
+  y += 12;
+  drawLine(ctx, 20, y, 575, y);
+  y += 12;
+
+  ctx.font = "10px Arial";
+  ctx.fillStyle = "#000";
+
+  if (Array.isArray(sale.items)) {
+    sale.items.forEach((item) => {
+      const taxAmount = ((item.sellingPrice * item.qty - item.discountAmount) * item.gst) / 100;
+      const roundedTotal = Math.ceil(item.total * 100) / 100;
+
+      drawText(ctx, item.name.substring(0, 30), 25, y);
+      drawText(ctx, item.hsn, 200, y);
+      drawText(ctx, `${item.gst}%`, 260, y);
+      drawText(ctx, item.qty.toString(), 305, y);
+      drawText(ctx, `₹${item.sellingPrice.toFixed(2)}`, 345, y);
+      drawText(ctx, "Kg", 430, y);
+      drawText(ctx, `₹${roundedTotal.toFixed(2)}`, 500, y);
+
+      y += 16;
+    });
+  }
+
+  // ===== ITEMS TABLE FOOTER =====
+  drawLine(ctx, 20, y, 575, y);
+  y += 15;
+
+  ctx.font = "11px Arial";
+
+  // Summary on right side
+  const summaryX = 350;
   const roundedSubtotal = Math.ceil(sale.subtotal * 100) / 100;
-  const roundedDiscount = Math.ceil(sale.totalDiscount * 100) / 100;
-  const roundedTax = Math.ceil(sale.totalTax * 100) / 100;
+  const roundedTotalTax = Math.ceil(sale.totalTax * 100) / 100;
   const roundedTransport = Math.ceil(sale.transportCharge * 100) / 100;
   const roundedGrandTotal = Math.ceil(sale.grandTotal * 100) / 100;
 
-  drawText(ctx, `Sub Total : ₹${roundedSubtotal.toFixed(2)}`, 360, y);
-  y += 18;
+  drawText(ctx, `Total Amount: ₹${roundedSubtotal.toFixed(2)}`, summaryX, y);
+  y += 14;
 
-  drawText(ctx, `Total Discount : ₹${roundedDiscount.toFixed(2)}`, 360, y);
-  y += 18;
+  // Calculate CGST and SGST by aggregating from items
+  let totalCGST = 0,
+    totalSGST = 0,
+    totalIGST = 0;
+  if (Array.isArray(sale.items)) {
+    sale.items.forEach((item) => {
+      const taxable = item.sellingPrice * item.qty - (item.discountAmount || 0);
+      totalCGST += (taxable * item.cgst) / 100;
+      totalSGST += (taxable * item.sgst) / 100;
+      totalIGST += (taxable * item.igst) / 100;
+    });
+  }
 
-  drawText(ctx, `GST : ₹${roundedTax.toFixed(2)}`, 360, y);
-  y += 18;
+  drawText(ctx, `CGST: ₹${Math.ceil(totalCGST * 100) / 100}`, summaryX, y);
+  y += 14;
 
-  drawText(ctx, `Transport Charges : ₹${roundedTransport.toFixed(2)}`, 360, y);
+  drawText(ctx, `SGST: ₹${Math.ceil(totalSGST * 100) / 100}`, summaryX, y);
+  y += 14;
+
+  if (totalIGST > 0) {
+    drawText(ctx, `IGST: ₹${Math.ceil(totalIGST * 100) / 100}`, summaryX, y);
+    y += 14;
+  }
+
+  drawText(ctx, `Transport: ₹${roundedTransport.toFixed(2)}`, summaryX, y);
+  y += 16;
+
+  ctx.font = "bold 12px Arial";
+  drawText(ctx, `Grand Total: ₹${roundedGrandTotal.toFixed(2)}`, summaryX, y);
+
+  // ===== BALANCE SECTION =====
   y += 20;
+  drawLine(ctx, 20, y, 575, y);
+  y += 12;
 
-  ctx.font = "bold 15px Arial";
-  ctx.fillStyle = "#c53030";
-  drawText(ctx, `GRAND TOTAL : ₹${roundedGrandTotal.toFixed(2)}`, 360, y);
+  ctx.font = "11px Arial";
+  ctx.fillStyle = "#000";
 
-  // ===== FOOTER =====
-  ctx.fillStyle = "#555";
-  ctx.font = "italic 11px Arial";
+  drawText(ctx, "PREVIOUS BALANCE (Opening Balance):", 30, y);
+  drawText(ctx, `₹${Number(sale.openingBalance || 0).toFixed(2)}`, 480, y);
 
+  y += 14;
+  drawText(ctx, "CURRENT BALANCE (Closing Balance):", 30, y);
+  drawText(ctx, `₹${Number(sale.closingBalance || 0).toFixed(2)}`, 480, y);
+
+  // ===== SAMPLE PRODUCTS TABLE =====
+  if (sale.sampleItems && Array.isArray(sale.sampleItems) && sale.sampleItems.length > 0) {
+    y += 25;
+    drawLine(ctx, 20, y, 575, y);
+    y += 12;
+
+    ctx.font = "bold 11px Arial";
+    ctx.fillStyle = "#1a365d";
+    ctx.fillText("SAMPLE PRODUCTS (NOT BILLED)", 30, y);
+
+    y += 14;
+    drawLine(ctx, 20, y, 575, y);
+    y += 13;
+
+    ctx.font = "bold 10px Arial";
+    ctx.fillStyle = "#1a365d";
+
+    // Sample Products Table Header
+    drawText(ctx, "Description of Goods", 25, y);
+    drawText(ctx, "HSN", 200, y);
+    drawText(ctx, "Qty", 305, y);
+    drawText(ctx, "Rate", 345, y);
+    drawText(ctx, "Total", 500, y);
+
+    // Sample Products Table Body
+    y += 12;
+    drawLine(ctx, 20, y, 575, y);
+    y += 12;
+
+    ctx.font = "10px Arial";
+    ctx.fillStyle = "#000";
+
+    sale.sampleItems.forEach((item) => {
+      const sampleTotal = item.qty * item.sellingPrice;
+      drawText(ctx, item.name.substring(0, 30), 25, y);
+      drawText(ctx, item.hsn, 200, y);
+      drawText(ctx, item.qty.toString(), 305, y);
+      drawText(ctx, `₹${item.sellingPrice.toFixed(2)}`, 345, y);
+      drawText(ctx, `₹${sampleTotal.toFixed(2)}`, 500, y);
+
+      y += 16;
+    });
+
+    // Sample Products Table Footer
+    drawLine(ctx, 20, y, 575, y);
+    y += 12;
+  }
+
+  // ===== TAX INVOICE SECTION =====
+  y += 13;
+  drawLine(ctx, 20, y, 575, y);
+  y += 12;
+
+  ctx.font = "bold 12px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("TAX INVOICE", 297, y);
+  ctx.textAlign = "left";
+
+  y += 15;
+  drawLine(ctx, 20, y, 575, y);
+  y += 12;
+
+  // HSN Table Header
+  ctx.font = "bold 10px Arial";
+  ctx.fillStyle = "#1a365d";
+
+  drawText(ctx, "HSN Code", 30, y);
+  drawText(ctx, "Taxable Value", 120, y);
+  drawText(ctx, "CGST (Rate | Amt)", 220, y);
+  drawText(ctx, "SGST (Rate | Amt)", 380, y);
+  drawText(ctx, "Total", 500, y);
+
+  y += 12;
+  drawLine(ctx, 20, y, 575, y);
+  y += 11;
+
+  // HSN Table Body
+  ctx.font = "10px Arial";
+  ctx.fillStyle = "#000";
+
+  hsnArray.forEach((hsnData) => {
+    const cgstDisplay = hsnData.cgstRate > 0 ? `${hsnData.cgstRate}% | ₹${hsnData.cgstAmount.toFixed(2)}` : "-";
+    const sgstDisplay = hsnData.sgstRate > 0 ? `${hsnData.sgstRate}% | ₹${hsnData.sgstAmount.toFixed(2)}` : "-";
+
+    drawText(ctx, hsnData.hsn, 30, y);
+    drawText(ctx, `₹${hsnData.taxableValue.toFixed(2)}`, 120, y);
+    drawText(ctx, cgstDisplay, 220, y);
+    drawText(ctx, sgstDisplay, 380, y);
+    drawText(ctx, `₹${hsnData.total.toFixed(2)}`, 500, y);
+
+    y += 14;
+  });
+
+  // HSN Table Footer
+  drawLine(ctx, 20, y + 2, 575, y + 2);
 
   // ===== UPLOAD =====
   const buffer = canvas.toBuffer("image/png");
@@ -318,13 +528,13 @@ async function generateInvoiceImage(sale) {
     `data:image/png;base64,${buffer.toString("base64")}`,
     {
       folder: "pearls-erp/invoices",
-      public_id: `INV_${sale.invoiceId}_${Date.now()}`
-
+      public_id: `INV_${sale.invoiceId}_${Date.now()}`,
     }
   );
 
   return upload.secure_url;
 }
+
 
 
 function drawLine(ctx, x1, y1, x2, y2) {
@@ -449,16 +659,18 @@ async function generateEwayBillImage(sale) {
   ctx.font = "12px Arial";
   y += 25;
 
-  sale.items.forEach((item) => {
-    ctx.fillText(item.name, 30, y);
-    ctx.fillText(item.qty.toString(), 210, y);
-    ctx.fillText(`₹${item.sellingPrice}`, 250, y);
-    ctx.fillText(`${item.gst}%`, 310, y);
-    ctx.fillText(`₹${item.cgst}`, 360, y);
-    ctx.fillText(`₹${item.sgst}`, 420, y);
-    ctx.fillText(`₹${item.total}`, 480, y);
-    y += 22;
-  });
+  if (Array.isArray(sale.items)) {
+    sale.items.forEach((item) => {
+      ctx.fillText(item.name, 30, y);
+      ctx.fillText(item.qty.toString(), 210, y);
+      ctx.fillText(`₹${item.sellingPrice}`, 250, y);
+      ctx.fillText(`${item.gst}%`, 310, y);
+      ctx.fillText(`₹${item.cgst}`, 360, y);
+      ctx.fillText(`₹${item.sgst}`, 420, y);
+      ctx.fillText(`₹${item.total}`, 480, y);
+      y += 22;
+    });
+  }
 
   drawLine(ctx, 20, y + 5, 575, y + 5);
 
@@ -503,6 +715,29 @@ router.post("/generate-invoice/:id", async (req, res) => {
     sale.salesManName = sale.salesMan?.name || "-";
     sale.deliveryManName = sale.deliveryMan?.name || "-";
 
+    // Fetch customer details including GSTIN
+    const customerDoc = await Customer.findById(sale.customer.customerId).select('gstin name').lean();
+    if (customerDoc) {
+      sale.customer.gstin = customerDoc.gstin || "-";
+    }
+
+    // Fetch billing person name (can be SalesOwner, SalesMan, or DeliveryMan)
+    let billingPersonName = "-";
+    if (sale.billingPerson) {
+      // Try to find in SalesOwner first
+      let billingPerson = await SalesOwner.findById(sale.billingPerson).select('name').lean();
+      if (!billingPerson) {
+        // Try SalesMan
+        billingPerson = await SalesMan.findById(sale.billingPerson).select('name').lean();
+      }
+      if (!billingPerson) {
+        // Try DeliveryMan
+        billingPerson = await DeliveryMan.findById(sale.billingPerson).select('name').lean();
+      }
+      billingPersonName = billingPerson?.name || "-";
+    }
+    sale.billingPersonName = billingPersonName;
+
     // ✅ 1. CHECK STOCK (WAREHOUSE AWARE)
     await checkStockAvailability(sale.items, sale.warehouse);
 
@@ -519,6 +754,15 @@ router.post("/generate-invoice/:id", async (req, res) => {
       sale.items,
       sale.warehouse
     );
+
+    // ✅ 3B. REDUCE STOCK FOR SAMPLE ITEMS
+    if (sale.sampleItems && Array.isArray(sale.sampleItems) && sale.sampleItems.length > 0) {
+      console.log(`\n📦 Processing ${sale.sampleItems.length} sample items for stock reduction...`);
+      await reduceStockFIFO(
+        sale.sampleItems,
+        sale.warehouse
+      );
+    }
 
     // ✅ 4. UPDATE CUSTOMER BALANCE (AFTER INVOICE GENERATION)
     const orderValue = sale.grandTotalWithMargin || sale.grandTotal;

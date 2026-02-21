@@ -346,4 +346,46 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+/* ========== CUSTOMER LOGIN ========== */
+router.post("/login", async (req, res) => {
+  try {
+    const { whatsappNumber, password } = req.body;
+
+    if (!whatsappNumber || !password) {
+      return res.status(400).json({ message: "WhatsApp number and password are required" });
+    }
+
+    // Find customer by whatsapp number
+    const customer = await Customer.findOne({
+      whatsapp: whatsappNumber,
+    });
+
+    if (!customer) {
+      return res.status(404).json({ message: "Customer not found" });
+    }
+
+    // Accept password (default: password123)
+    // TODO: Implement proper password hashing with bcrypt
+    if (password !== "password123") {
+      return res.status(401).json({ message: "Invalid password" });
+    }
+
+    res.json({
+      success: true,
+      token: `customer_${customer._id}`,
+      customer: {
+        _id: customer._id,
+        name: customer.name,
+        whatsapp: customer.whatsapp,
+        email: customer.email,
+        address: customer.address,
+        gstin: customer.gstin,
+      },
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Login failed" });
+  }
+});
+
 export default router;

@@ -15,23 +15,34 @@ const getFinancialYear = () => {
 // GET NEXT PAYMENT ID
 router.get("/next-id", async (req, res) => {
   try {
-    const voucher = await VoucherType.findOne({
+    const currentFY = getFinancialYear();
+    
+    let voucher = await VoucherType.findOne({
       name: "payment",
-      orderType: "PAY",
+      orderType: "PM",
     });
 
     if (!voucher) {
-      return res.status(404).json({ message: "Payment voucher type not found" });
+      // Create if doesn't exist
+      voucher = await VoucherType.create({
+        name: "payment",
+        orderType: "PM",
+        prefix: "PAY",
+        counter: 0,
+        financialYear: currentFY,
+      });
     }
 
-    const currentFY = getFinancialYear();
-    let counter = voucher.counter || 1;
-
+    // Check if year changed
     if (voucher.financialYear !== currentFY) {
-      counter = 1;
+      voucher = await VoucherType.findByIdAndUpdate(
+        voucher._id,
+        { counter: 0, financialYear: currentFY },
+        { new: true }
+      );
     }
 
-    const nextId = `PAY/${String(counter).padStart(3, "0")}/${currentFY}`;
+    const nextId = `PAY/${String(voucher.counter + 1).padStart(3, "0")}/${currentFY}`;
     res.json({ nextId });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -95,19 +106,43 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // Get voucher for payment ID
-    const voucher = await VoucherType.findOne({
+    // Get voucher for payment ID (atomic counter increment)
+    const currentFY = getFinancialYear();
+    
+    let voucher = await VoucherType.findOne({
       name: "payment",
-      orderType: "PAY",
+      orderType: "PM",
     });
 
-    const currentFY = getFinancialYear();
-    let counter = voucher?.counter || 1;
-
-    if (voucher?.financialYear !== currentFY) {
-      counter = 1;
+    // Create voucher if it doesn't exist
+    if (!voucher) {
+      voucher = await VoucherType.create({
+        name: "payment",
+        orderType: "PM",
+        prefix: "PAY",
+        counter: 1,
+        financialYear: currentFY,
+      });
     }
 
+    // Reset counter if financial year changed
+    if (voucher.financialYear !== currentFY) {
+      voucher = await VoucherType.findByIdAndUpdate(
+        voucher._id,
+        { counter: 1, financialYear: currentFY },
+        { new: true }
+      );
+    }
+
+    // Atomically increment counter and get the new value
+    voucher = await VoucherType.findByIdAndUpdate(
+      voucher._id,
+      { $inc: { counter: 1 } },
+      { new: true }
+    );
+
+    // Use the incremented counter
+    const counter = voucher.counter;
     const paymentId = `PAY/${String(counter).padStart(3, "0")}/${currentFY}`;
 
     // Build description based on payment type
@@ -137,14 +172,6 @@ router.post("/", async (req, res) => {
     });
 
     await payment.save();
-
-    // Update voucher counter
-    if (voucher) {
-      await VoucherType.findByIdAndUpdate(voucher._id, {
-        counter: counter + 1,
-        financialYear: currentFY,
-      });
-    }
 
     res.status(201).json({
       success: true,
