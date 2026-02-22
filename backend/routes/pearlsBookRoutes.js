@@ -877,8 +877,9 @@ router.post("/generate-invoice/:id", async (req, res) => {
 
     // ✅ 6. WHATSAPP
     const phone = `91${sale.customer.whatsapp}`;
+    const customerLoginLink = "https://pearlsfrontend.web.app/customer-login";
     const message = encodeURIComponent(
-      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${sale.grandTotal}\n\n📄 Invoice: ${invoiceImage}`
+      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${sale.grandTotal}\n\n📄 Invoice: ${invoiceImage}\n\n🛒 Pearls Shopping: ${customerLoginLink}`
     );
 
     res.json({
