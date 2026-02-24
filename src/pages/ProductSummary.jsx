@@ -15,10 +15,20 @@ const ProductSummary = () => {
   const [searchField, setSearchField] = useState("name");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
+  
+  // Group margin management states
+  const [productGroups, setProductGroups] = useState([]);
+  const [selectedGroupId, setSelectedGroupId] = useState("");
+  const [marginValue, setMarginValue] = useState("");
+  const [showMarginPanel, setShowMarginPanel] = useState(false);
+  const [applyingMargin, setApplyingMargin] = useState(false);
+  const [lastAppliedGroupId, setLastAppliedGroupId] = useState("");
+  const [lastAppliedMargin, setLastAppliedMargin] = useState(null);
 
   // Available filter fields
   const filterFields = [
     { label: "Product Name", value: "name", type: "text" },
+    { label: "Product Group", value: "productGroup", type: "text", nested: "name" },
     { label: "Units", value: "units", type: "text" },
     { label: "HSN Code", value: "hsnCode", type: "text" },
     { label: "Total Qty", value: "totalQty", type: "number" },
@@ -86,7 +96,106 @@ const ProductSummary = () => {
 
   useEffect(() => {
     fetchProducts();
+    fetchProductGroups();
   }, []);
+
+  // Fetch product groups
+  const fetchProductGroups = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/product-groups`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      
+      // API returns array directly
+      if (Array.isArray(data)) {
+        setProductGroups(data);
+        console.log(`✅ Fetched ${data.length} product groups`);
+      } else if (data.data && Array.isArray(data.data)) {
+        // Handle wrapped response if structure changes
+        setProductGroups(data.data);
+        console.log(`✅ Fetched ${data.data.length} product groups`);
+      } else {
+        console.error("Unexpected response structure:", data);
+      }
+    } catch (err) {
+      console.error("❌ Error fetching product groups:", err);
+      setError("Failed to load product groups");
+    }
+  };
+
+  // Apply margin to all products in selected group
+  const applyMarginToGroup = async () => {
+    if (!selectedGroupId || marginValue === "") {
+      alert("Please select a product group and enter a margin value");
+      return;
+    }
+
+    setApplyingMargin(true);
+    try {
+      const groupProducts = products.filter(
+        (p) => p.productGroup?._id === selectedGroupId
+      );
+
+      if (groupProducts.length === 0) {
+        alert("No products found in this group");
+        setApplyingMargin(false);
+        return;
+      }
+
+      const margin = parseFloat(marginValue);
+      let successCount = 0;
+
+      // Update each product with new selling price
+      for (const product of groupProducts) {
+        const newSellingPrice = product.purchasingPrice + margin;
+        
+        try {
+          const response = await fetch(`${API_BASE}/products/${product._id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sellingPrice: newSellingPrice,
+              // Don't send margin - let backend calculate it automatically
+              // margin = sellingPrice - purchasingPrice
+            }),
+          });
+          const result = await response.json();
+          if (result.success) {
+            successCount++;
+          }
+        } catch (err) {
+          console.error(`Error updating product ${product._id}:`, err);
+        }
+      }
+
+      // Refresh products list
+      await fetchProducts();
+      
+      // Store the recently applied margin for display
+      setLastAppliedGroupId(selectedGroupId);
+      setLastAppliedMargin(margin);
+      
+      setShowMarginPanel(false);
+      setSelectedGroupId("");
+      setMarginValue("");
+      
+      alert(
+        `✅ Margin ₹${margin.toFixed(2)} applied to ${successCount} out of ${groupProducts.length} products in this group`
+      );
+      
+      // Clear the highlight after 5 seconds
+      setTimeout(() => {
+        setLastAppliedGroupId("");
+        setLastAppliedMargin(null);
+      }, 5000);
+    } catch (err) {
+      alert("Error applying margin: " + err.message);
+    } finally {
+      setApplyingMargin(false);
+    }
+  };
 
   // Handle Edit Product
   const handleEdit = (product) => {
@@ -149,58 +258,93 @@ const ProductSummary = () => {
     }
   };
 
-  // Filter products by search value and selected field
-  const filteredProducts = searchValue.trim() === ""
-    ? products
-    : products.filter((product) => {
-        const fieldValue = product[searchField];
-        const currentField = filterFields.find((f) => f.value === searchField);
-        const isNumericField = currentField?.type === "number";
+  // Filter products by search value and selected field, and by selected group in margin panel
+  const filteredProducts = products
+    // First filter by selected product group if in margin panel
+    .filter((product) => {
+      if (showMarginPanel && selectedGroupId) {
+        return product.productGroup?._id === selectedGroupId;
+      }
+      return true;
+    })
+    // Then apply search filter
+    .filter((product) => {
+      if (searchValue.trim() === "") {
+        return true;
+      }
+      
+      const currentField = filterFields.find((f) => f.value === searchField);
+      let fieldValue;
+      
+      // Handle nested fields (e.g., productGroup.name)
+      if (currentField?.nested) {
+        fieldValue = product[searchField]?.[currentField.nested];
+      } else {
+        fieldValue = product[searchField];
+      }
+      
+      const isNumericField = currentField?.type === "number";
 
-        if (isNumericField) {
-          // For numeric fields, do numeric comparison
-          return Number(fieldValue || 0) === Number(searchValue);
-        } else {
-          // For text fields, do contains search (case-insensitive)
-          const productValue = String(fieldValue || "").toLowerCase().trim();
-          const searchLower = searchValue.toLowerCase().trim();
-          const matches = productValue.includes(searchLower);
-          
-          // Log for debugging - show search info
-          if (products.indexOf(product) === 0) {
-            console.log(`🔍 Searching for: "${searchLower}" in field: "${searchField}"`);
-            console.log(`📊 Total products to search: ${products.length}`);
-          }
-          
-          return matches;
-        }
-      }).sort((a, b) => {
-        // Sort results: exact matches first, then starts with, then other matches
-        const fieldA = String(a[searchField] || "").toLowerCase().trim();
-        const fieldB = String(b[searchField] || "").toLowerCase().trim();
+      if (isNumericField) {
+        // For numeric fields, do numeric comparison
+        return Number(fieldValue || 0) === Number(searchValue);
+      } else {
+        // For text fields, do contains search (case-insensitive)
+        const productValue = String(fieldValue || "").toLowerCase().trim();
         const searchLower = searchValue.toLowerCase().trim();
+        const matches = productValue.includes(searchLower);
+        
+        // Log for debugging - show search info
+        if (products.indexOf(product) === 0) {
+          console.log(`🔍 Searching for: "${searchLower}" in field: "${searchField}"`);
+          console.log(`📊 Total products to search: ${products.length}`);
+        }
+        
+        return matches;
+      }
+    }).sort((a, b) => {
+      // Sort results: exact matches first, then starts with, then other matches
+      const currentField = filterFields.find((f) => f.value === searchField);
+      let valueA, valueB;
+      
+      // Handle nested fields for sorting
+      if (currentField?.nested) {
+        valueA = a[searchField]?.[currentField.nested];
+        valueB = b[searchField]?.[currentField.nested];
+      } else {
+        valueA = a[searchField];
+        valueB = b[searchField];
+      }
+      
+      const fieldA = String(valueA || "").toLowerCase().trim();
+      const fieldB = String(valueB || "").toLowerCase().trim();
+      const searchLower = searchValue.toLowerCase().trim();
 
-        // Priority: exact match first
-        const aIsExact = fieldA === searchLower ? 1 : 0;
-        const bIsExact = fieldB === searchLower ? 1 : 0;
-        if (aIsExact !== bIsExact) return bIsExact - aIsExact;
+      // Priority: exact match first
+      const aIsExact = fieldA === searchLower ? 1 : 0;
+      const bIsExact = fieldB === searchLower ? 1 : 0;
+      if (aIsExact !== bIsExact) return bIsExact - aIsExact;
 
-        // Priority: starts with search term
-        const aStartsWith = fieldA.startsWith(searchLower) ? 1 : 0;
-        const bStartsWith = fieldB.startsWith(searchLower) ? 1 : 0;
-        if (aStartsWith !== bStartsWith) return bStartsWith - aStartsWith;
+      // Priority: starts with search term
+      const aStartsWith = fieldA.startsWith(searchLower) ? 1 : 0;
+      const bStartsWith = fieldB.startsWith(searchLower) ? 1 : 0;
+      if (aStartsWith !== bStartsWith) return bStartsWith - aStartsWith;
 
-        // Default: keep original order
-        return 0;
-      });
+      // Default: keep original order
+      return 0;
+    });
 
-  // Reset to page 1 when search value changes
+  // Reset to page 1 when search value changes or margin panel selection changes
   useEffect(() => {
     setCurrentPage(1);
+    if (showMarginPanel && selectedGroupId) {
+      const groupProductCount = products.filter((p) => p.productGroup?._id === selectedGroupId).length;
+      console.log(`📊 Filtered to group: showing ${groupProductCount} products`);
+    }
     if (searchValue.trim() !== "") {
       console.log(`✅ Search results: ${filteredProducts.length} products found`);
     }
-  }, [searchValue, searchField, filteredProducts.length]);
+  }, [searchValue, searchField, selectedGroupId, showMarginPanel, filteredProducts.length]);
 
   // Calculate paginated products
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
@@ -251,6 +395,14 @@ const ProductSummary = () => {
               >
                 <FaFilter size={16} />
                 <span className="hidden sm:inline">Add Filter</span>
+              </button>
+              <button
+                onClick={() => setShowMarginPanel(!showMarginPanel)}
+                className="bg-purple-600 text-white px-3 md:px-4 py-2 rounded-lg hover:bg-purple-700 transition flex items-center gap-2 font-semibold text-sm md:text-base"
+              >
+                <span className="hidden sm:inline">💰</span>
+                <span className="hidden sm:inline">Group Margin</span>
+                <span className="sm:hidden">Margin</span>
               </button>
             </div>
           </div>
@@ -378,11 +530,111 @@ const ProductSummary = () => {
         </div>
       )}
 
+      {/* Margin Application Panel */}
+      {showMarginPanel && (
+        <div className="max-w-full mx-auto px-4 md:px-6 py-4">
+          <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg shadow-md border border-purple-200 p-4 md:p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Apply Margin to Product Group</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="text-sm font-bold text-gray-600 block mb-2">
+                  Select Product Group
+                </label>
+                <select
+                  value={selectedGroupId}
+                  onChange={(e) => setSelectedGroupId(e.target.value)}
+                  className="w-full p-2 md:p-3 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  <option value="">-- Select a Group --</option>
+                  {productGroups.map((group) => (
+                    <option key={group._id} value={group._id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-bold text-gray-600 block mb-2">
+                  Margin Value (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={marginValue}
+                  onChange={(e) => setMarginValue(e.target.value)}
+                  placeholder="Enter margin amount"
+                  className="w-full p-2 md:p-3 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Selling Price = Purchasing Price + Margin
+                </p>
+              </div>
+
+              <div>
+                <label className="text-sm font-bold text-gray-600 block mb-2">
+                  &nbsp;
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={applyMarginToGroup}
+                    disabled={applyingMargin || !selectedGroupId || marginValue === ""}
+                    className="flex-1 px-3 md:px-4 py-2 md:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {applyingMargin ? "Applying..." : "Apply Margin"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowMarginPanel(false);
+                      setSelectedGroupId("");
+                      setMarginValue("");
+                    }}
+                    className="px-3 md:px-4 py-2 md:py-3 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition font-semibold text-sm"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {selectedGroupId && (
+              <div className="bg-white p-3 rounded border-l-4 border-purple-500">
+                <p className="text-sm text-gray-700">
+                  <span className="font-semibold">
+                    {products.filter((p) => p.productGroup?._id === selectedGroupId).length}
+                  </span>
+                  {" "} products in this group will be updated
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="max-w-full mx-auto px-4 md:px-6 py-6 md:py-8">
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm md:text-base">
             {error}
+          </div>
+        )}
+
+        {lastAppliedMargin !== null && (
+          <div className="bg-green-100 border-l-4 border-green-500 text-green-700 px-4 py-4 rounded-lg mb-6 text-sm md:text-base flex justify-between items-center">
+            <div>
+              <p className="font-bold">✅ Margin Successfully Applied!</p>
+              <p>Margin of <span className="font-semibold">₹{lastAppliedMargin.toFixed(2)}</span> has been applied to all products in the selected group</p>
+            </div>
+            <button
+              onClick={() => {
+                setLastAppliedGroupId("");
+                setLastAppliedMargin(null);
+              }}
+              className="text-green-700 hover:text-green-900 text-xl font-bold"
+            >
+              ✕
+            </button>
           </div>
         )}
 
@@ -441,15 +693,26 @@ const ProductSummary = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {paginatedProducts.map((product, idx) => (
+                      {paginatedProducts.map((product, idx) => {
+                        const isRecentlyUpdated = lastAppliedGroupId && product.productGroup?._id === lastAppliedGroupId;
+                        return (
                         <tr
                           key={product._id}
                           className={`border-b hover:bg-gray-50 transition ${
-                            idx % 2 === 0 ? "bg-white" : "bg-gray-50"
+                            isRecentlyUpdated
+                              ? "bg-green-100 border-l-4 border-l-green-500"
+                              : idx % 2 === 0
+                              ? "bg-white"
+                              : "bg-gray-50"
                           }`}
                         >
                           <td className="px-6 py-4 text-sm font-semibold text-gray-900">
                             {product.name}
+                            {isRecentlyUpdated && (
+                              <span className="ml-2 inline-block bg-green-500 text-white text-xs px-2 py-1 rounded-full">
+                                ✓ Updated
+                              </span>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-700">
                             {product.productGroup?.name || "N/A"}
@@ -468,6 +731,11 @@ const ProductSummary = () => {
                           </td>
                           <td className="px-6 py-4 text-sm text-right text-gray-700">
                             ₹ {product.sellingPrice?.toFixed(2) || "0.00"}
+                            {isRecentlyUpdated && lastAppliedMargin !== null && (
+                              <div className="text-xs text-green-600 font-semibold">
+                                (+ ₹{lastAppliedMargin.toFixed(2)})
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-sm text-right font-semibold">
                             <span
@@ -479,7 +747,7 @@ const ProductSummary = () => {
                                   : "text-gray-700"
                               }
                             >
-                              {product.margin?.toFixed(2) || "0.00"}%
+                              ₹{product.margin?.toFixed(2) || "0.00"}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-sm text-center text-gray-700">
@@ -505,7 +773,8 @@ const ProductSummary = () => {
                             </button>
                           </td>
                         </tr>
-                      ))}
+                      );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -513,11 +782,20 @@ const ProductSummary = () => {
 
             {/* Mobile Card View */}
             <div className="md:hidden space-y-3">
-              {paginatedProducts.map((product) => (
-                <div key={product._id} className="bg-white border rounded-lg p-4 shadow-sm">
+              {paginatedProducts.map((product) => {
+                const isRecentlyUpdated = lastAppliedGroupId && product.productGroup?._id === lastAppliedGroupId;
+                return (
+                <div key={product._id} className={`border rounded-lg p-4 shadow-sm ${isRecentlyUpdated ? "bg-green-50 border-green-400 border-l-4" : "bg-white"}`}>
                   <div className="flex justify-between items-start mb-3">
                     <div>
-                      <h3 className="font-bold text-gray-900 text-sm">{product.name}</h3>
+                      <h3 className="font-bold text-gray-900 text-sm">
+                        {product.name}
+                        {isRecentlyUpdated && (
+                          <span className="ml-2 inline-block bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
+                            ✓ Updated
+                          </span>
+                        )}
+                      </h3>
                       <p className="text-xs text-gray-500 mt-1">{product.productGroup?.name || "N/A"}</p>
                     </div>
                     <div className="flex gap-2">
@@ -554,7 +832,7 @@ const ProductSummary = () => {
                     <div>
                       <p className="text-gray-500">Margin</p>
                       <p className={`font-semibold ${product.margin > 0 ? "text-green-600" : product.margin < 0 ? "text-red-600" : "text-gray-700"}`}>
-                        {product.margin?.toFixed(1) || "0.0"}%
+                        ₹{product.margin?.toFixed(2) || "0.00"}
                       </p>
                     </div>
                   </div>
@@ -566,7 +844,14 @@ const ProductSummary = () => {
                     </div>
                     <div>
                       <p className="text-gray-500">Sell Price</p>
-                      <p className="text-gray-900 font-semibold">₹ {product.sellingPrice?.toFixed(2) || "0.00"}</p>
+                      <p className="text-gray-900 font-semibold">
+                        ₹ {product.sellingPrice?.toFixed(2) || "0.00"}
+                        {isRecentlyUpdated && lastAppliedMargin !== null && (
+                          <div className="text-xs text-green-600 font-semibold">
+                            (+ ₹{lastAppliedMargin.toFixed(2)})
+                          </div>
+                        )}
+                      </p>
                     </div>
                   </div>
                   
@@ -583,7 +868,8 @@ const ProductSummary = () => {
                     </div>
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
 
                 {/* Pagination Controls */}

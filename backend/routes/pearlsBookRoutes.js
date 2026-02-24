@@ -218,7 +218,11 @@ async function generateInvoiceImage(sale) {
 
   const hsnArray = Object.values(hsnSummary);
   const totalHsnItems = hsnArray.length;
-  const estimatedHeight = 250 + (sale.items?.length || 0) * 18 + totalHsnItems * 20 + 400;
+  
+  // Extra height for line spacing and back order section
+  const itemLineSpacing = (sale.items?.length || 0) * 25; // Increased from 18 to 25 for extra spacing
+  const backOrderHeight = (sale.backOrderSummary?.length || 0) > 0 ? 200 + (sale.backOrderSummary?.length || 0) * 20 : 0;
+  const estimatedHeight = 250 + itemLineSpacing + totalHsnItems * 20 + 400 + backOrderHeight;
 
   const canvas = createCanvas(595, Math.max(1200, estimatedHeight));
   const ctx = canvas.getContext("2d");
@@ -360,7 +364,8 @@ async function generateInvoiceImage(sale) {
       drawText(ctx, "Kg", 430, y);
       drawText(ctx, `₹${roundedTotal.toFixed(2)}`, 500, y);
 
-      y += 16;
+      // Extra line spacing for description of goods
+      y += 25;
     });
   }
 
@@ -465,7 +470,8 @@ async function generateInvoiceImage(sale) {
       drawText(ctx, `₹${item.sellingPrice.toFixed(2)}`, 345, y);
       drawText(ctx, `₹${sampleTotal.toFixed(2)}`, 500, y);
 
-      y += 16;
+      // Extra line spacing for description of goods
+      y += 25;
     });
 
     // Sample Products Table Footer
@@ -520,6 +526,61 @@ async function generateInvoiceImage(sale) {
 
   // HSN Table Footer
   drawLine(ctx, 20, y + 2, 575, y + 2);
+
+  // ===== BACK ORDER INVOICE SECTION =====
+  if (sale.backOrderSummary && Array.isArray(sale.backOrderSummary) && sale.backOrderSummary.length > 0) {
+    y += 25;
+    drawLine(ctx, 20, y, 575, y);
+    y += 15;
+
+    ctx.font = "bold 13px Arial";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#c00";
+    ctx.fillText("⚠️ BACK ORDER INVOICE", 297, y);
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#000";
+
+    y += 18;
+    drawLine(ctx, 20, y, 575, y);
+    y += 13;
+
+    ctx.font = "bold 10px Arial";
+    ctx.fillStyle = "#1a365d";
+
+    // Back Order Table Header
+    drawText(ctx, "Description of Goods", 25, y);
+    drawText(ctx, "Requested Qty", 250, y);
+    drawText(ctx, "Confirmed Qty", 360, y);
+    drawText(ctx, "Back Order Qty", 480, y);
+
+    y += 12;
+    drawLine(ctx, 20, y, 575, y);
+    y += 12;
+
+    ctx.font = "10px Arial";
+    ctx.fillStyle = "#000";
+
+    // Back Order Table Body
+    sale.backOrderSummary.forEach((backOrder) => {
+      drawText(ctx, backOrder.product.substring(0, 28), 25, y);
+      drawText(ctx, backOrder.requestedQty.toString(), 250, y);
+      drawText(ctx, backOrder.confirmedQty.toString(), 360, y);
+      drawText(ctx, backOrder.backOrderQty.toString(), 480, y);
+
+      // Extra line spacing
+      y += 25;
+    });
+
+    // Back Order Table Footer
+    drawLine(ctx, 20, y, 575, y);
+    y += 12;
+
+    ctx.font = "11px Arial";
+    ctx.fillStyle = "#c00";
+    drawText(ctx, "Note: Back order items will be dispatched once stock is available", 30, y);
+    y += 12;
+    drawText(ctx, "Please contact us for delivery timeline", 30, y);
+  }
 
   // ===== UPLOAD =====
   const buffer = canvas.toBuffer("image/png");
@@ -702,6 +763,8 @@ async function generateEwayBillImage(sale) {
 
 router.post("/generate-invoice/:id", async (req, res) => {
   try {
+    const { stockAdjustments, invoiceNotes } = req.body;
+
     const sale = await SalesOrder.findById(req.params.id)
       .populate('salesMan', 'name')
       .populate('deliveryMan', 'name')
@@ -709,6 +772,27 @@ router.post("/generate-invoice/:id", async (req, res) => {
 
     if (!sale) {
       return res.status(404).json({ message: "Sale not found" });
+    }
+
+    // ✅ APPLY STOCK ADJUSTMENTS TO ITEMS (for back order handling)
+    let adjustedItems = sale.items;
+    let backOrderSummary = [];
+
+    if (stockAdjustments && Object.keys(stockAdjustments).length > 0) {
+      adjustedItems = sale.items.map((item, idx) => {
+        const adjustedQty = stockAdjustments[idx];
+        if (adjustedQty !== undefined && adjustedQty !== item.qty) {
+          const backOrderQty = item.qty - adjustedQty;
+          backOrderSummary.push({
+            product: item.name,
+            requestedQty: item.qty,
+            confirmedQty: adjustedQty,
+            backOrderQty: backOrderQty,
+          });
+          return { ...item, qty: adjustedQty };
+        }
+        return item;
+      });
     }
 
     // Extract names from populated fields
@@ -738,20 +822,20 @@ router.post("/generate-invoice/:id", async (req, res) => {
     }
     sale.billingPersonName = billingPersonName;
 
-    // ✅ 1. CHECK STOCK (WAREHOUSE AWARE)
-    await checkStockAvailability(sale.items, sale.warehouse);
+    // ✅ 1. CHECK STOCK (WAREHOUSE AWARE) - Use adjusted items
+    await checkStockAvailability(adjustedItems, sale.warehouse);
 
-    // ✅ 2. GENERATE INVOICE
-    const invoiceImage = await generateInvoiceImage(sale);
+    // ✅ 2. GENERATE INVOICE - Use adjusted items
+    const invoiceImage = await generateInvoiceImage({ ...sale, items: adjustedItems, backOrderSummary });
     let ewayImage = null;
 
     if (sale.ewayEnabled) {
-      ewayImage = await generateEwayBillImage(sale);
+      ewayImage = await generateEwayBillImage({ ...sale, items: adjustedItems });
     }
 
-    // ✅ 3. REDUCE STOCK (WAREHOUSE + FIFO)
+    // ✅ 3. REDUCE STOCK (WAREHOUSE + FIFO) - Use adjusted items
     const lowStockAlerts = await reduceStockFIFO(
-      sale.items,
+      adjustedItems,
       sale.warehouse
     );
 
@@ -783,6 +867,8 @@ router.post("/generate-invoice/:id", async (req, res) => {
     await SalesOrder.findByIdAndUpdate(req.params.id, {
       invoiceGenerated: true,
       closingBalance: updatedClosingBalance,
+      invoiceNotes: invoiceNotes || "", // Store notes in database
+      backOrderSummary: backOrderSummary, // Store back order info
     });
 
     console.log(`✅ Customer balance updated: ₹${customer.closingBalance} → ₹${updatedClosingBalance}`);
@@ -875,12 +961,27 @@ router.post("/generate-invoice/:id", async (req, res) => {
       console.error("⚠️ Commission creation failed:", commissionError.message);
     }
 
-    // ✅ 6. WHATSAPP
+    // ✅ 6. WHATSAPP - Include notes and back order info
     const phone = `91${sale.customer.whatsapp}`;
     const customerLoginLink = "https://pearlsfrontend.web.app/customer-login";
-    const message = encodeURIComponent(
-      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${sale.grandTotal}\n\n📄 Invoice: ${invoiceImage}\n\n🛒 Pearls Shopping: ${customerLoginLink}`
-    );
+    
+    // Build message with notes and back order info
+    let messageText = `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${sale.grandTotal}\n\n📄 Invoice: ${invoiceImage}\n\n🛒 Pearls Shopping: ${customerLoginLink}`;
+    
+    // Add back order summary if any
+    if (backOrderSummary.length > 0) {
+      messageText += `\n\n⚠️ Back Order Items:`;
+      backOrderSummary.forEach(bo => {
+        messageText += `\n• ${bo.product}: ${bo.backOrderQty} qty deferred`;
+      });
+    }
+    
+    // Add billing notes if provided
+    if (invoiceNotes && invoiceNotes.trim()) {
+      messageText += `\n\n📝 Notes: ${invoiceNotes}`;
+    }
+
+    const message = encodeURIComponent(messageText);
 
     res.json({
       success: true,

@@ -18,9 +18,15 @@ export default function PearlsBookPage() {
   const [rows, setRows] = useState([]);
   const [expanded, setExpanded] = useState(null);
 
-  const [searchField, setSearchField] = useState("type"); // Current field to search by
-  const [searchValue, setSearchValue] = useState("ALL"); // Value for the selected field
-  const [activeFilters, setActiveFilters] = useState([]); // Array of applied filters
+  const [searchField, setSearchField] = useState("type"); 
+  const [searchValue, setSearchValue] = useState("ALL"); 
+  const [activeFilters, setActiveFilters] = useState([]); 
+
+  // Invoice preview & generation states
+  const [previewOrder, setPreviewOrder] = useState(null);
+  const [stockAdjustments, setStockAdjustments] = useState({});
+  const [invoiceNotes, setInvoiceNotes] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
 
 
   useEffect(() => {
@@ -102,9 +108,31 @@ export default function PearlsBookPage() {
 
 
 
-  const generateInvoice = async (id) => {
+  // Open preview modal for editing stock and notes before sending
+  const openInvoicePreview = (orderId) => {
+    const order = rows.find(r => r._id === orderId);
+    if (order) {
+      setPreviewOrder(order);
+      // Initialize stock adjustments with original quantities
+      const initialAdjustments = {};
+      order.items?.forEach((item, idx) => {
+        initialAdjustments[idx] = item.qty;
+      });
+      setStockAdjustments(initialAdjustments);
+      setInvoiceNotes("");
+    }
+  };
+
+  // Send invoice to WhatsApp with adjustments and notes
+  const sendInvoiceToWhatsApp = async () => {
+    if (!previewOrder) return;
+
+    setIsGenerating(true);
     try {
-      const res = await axios.post(`${API}/generate-invoice/${id}`);
+      const res = await axios.post(`${API}/generate-invoice/${previewOrder._id}`, {
+        stockAdjustments,
+        invoiceNotes,
+      });
 
       // 🔔 LOW STOCK ALERT
       if (res.data.lowStockAlerts?.length) {
@@ -119,8 +147,18 @@ export default function PearlsBookPage() {
       }
 
       window.open(res.data.waUrl, "_blank");
+      
+      // Update the order status
+      setRows(rows.map(r => r._id === previewOrder._id ? { ...r, invoiceGenerated: true } : r));
+      setPreviewOrder(null);
+      setStockAdjustments({});
+      setInvoiceNotes("");
+      
+      alert("✅ Invoice sent to WhatsApp successfully!");
     } catch (err) {
       alert(err.response?.data?.message || "Invoice generation failed");
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -392,7 +430,7 @@ export default function PearlsBookPage() {
                             </button>
                           ) : (
                             <button
-                              onClick={() => generateInvoice(r._id)}
+                              onClick={() => openInvoicePreview(r._id)}
                               className="p-1.5 rounded bg-blue-100 text-blue-600 hover:bg-blue-200 transition"
                               title="Generate Invoice"
                             >
@@ -486,7 +524,7 @@ export default function PearlsBookPage() {
                     </button>
                   ) : (
                     <button
-                      onClick={() => generateInvoice(r._id)}
+                      onClick={() => openInvoicePreview(r._id)}
                       className="flex-1 bg-primary text-white rounded-lg py-2 text-sm hover:bg-blue-700 transition"
                       title="Generate Invoice"
                     >
@@ -505,9 +543,25 @@ export default function PearlsBookPage() {
           </div>
         ))}
       </div>
+
+      {/* INVOICE PREVIEW MODAL */}
+      {previewOrder && (
+        <InvoicePreviewModal
+          order={previewOrder}
+          stockAdjustments={stockAdjustments}
+          setStockAdjustments={setStockAdjustments}
+          invoiceNotes={invoiceNotes}
+          setInvoiceNotes={setInvoiceNotes}
+          onClose={() => {
+            setPreviewOrder(null);
+            setStockAdjustments({});
+            setInvoiceNotes("");
+          }}
+          onSendToWhatsApp={sendInvoiceToWhatsApp}
+          isGenerating={isGenerating}
+        />
+      )}
     </div>
-
-
   );
 }
 
@@ -743,5 +797,220 @@ function LowStockCard({ items }) {
   );
 }
 
+// INVOICE PREVIEW MODAL COMPONENT
+function InvoicePreviewModal({
+  order,
+  stockAdjustments,
+  setStockAdjustments,
+  invoiceNotes,
+  setInvoiceNotes,
+  onClose,
+  onSendToWhatsApp,
+  isGenerating,
+}) {
+  const isSales = order.type === "SALES";
 
+  const handleQuantityChange = (itemIndex, newQty) => {
+    setStockAdjustments({
+      ...stockAdjustments,
+      [itemIndex]: Math.max(0, parseFloat(newQty) || 0),
+    });
+  };
 
+  const calculateAdjustedTotal = () => {
+    let total = 0;
+    order.items?.forEach((item, idx) => {
+      const adjustedQty = stockAdjustments[idx] || item.qty;
+      const price = isSales ? item.sellingPrice : item.purchasePrice;
+      const baseAmount = adjustedQty * price;
+      
+      if (isSales) {
+        let discountAmount = 0;
+        if (item.discountType === "PERCENT") {
+          discountAmount = (baseAmount * item.discountPercent) / 100;
+        } else {
+          discountAmount = item.discountAmount || 0;
+        }
+        const gstAmount = ((baseAmount - discountAmount) * item.gst) / 100;
+        total += baseAmount - discountAmount + gstAmount;
+      } else {
+        const gstAmount = (baseAmount * item.gst) / 100;
+        total += baseAmount + gstAmount;
+      }
+    });
+    return total;
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-8">
+        
+        {/* HEADER */}
+        <div className="bg-gradient-to-r from-primary to-blue-600 text-white p-6 rounded-t-2xl sticky top-0 z-10">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">{order.invoiceId}</h2>
+              <p className="text-sm text-blue-100 mt-1">
+                {isSales ? "Sales Order" : "Purchase Order"} • {order.party}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-white hover:bg-white/20 p-2 rounded-lg transition"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* CONTENT */}
+        <div className="p-6 space-y-6 max-h-[calc(100vh-300px)] overflow-y-auto">
+          
+          {/* ITEMS TABLE WITH STOCK ADJUSTMENT */}
+          <div>
+            <h3 className="text-lg font-bold text-gray-800 mb-4">📦 Order Items</h3>
+            <div className="border rounded-lg overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100 border-b">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Item</th>
+                    <th className="px-4 py-3 text-right">Original Qty</th>
+                    <th className="px-4 py-3 text-right border-l border-yellow-400 bg-yellow-50">
+                      📊 Qty for Order
+                    </th>
+                    <th className="px-4 py-3 text-right">Price</th>
+                    <th className="px-4 py-3 text-right">GST</th>
+                    <th className="px-4 py-3 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {order.items?.map((item, idx) => {
+                    const adjustedQty = stockAdjustments[idx] !== undefined ? stockAdjustments[idx] : item.qty;
+                    const originalQty = item.qty;
+                    const isAdjusted = adjustedQty !== originalQty;
+                    const price = isSales ? item.sellingPrice : item.purchasePrice;
+                    
+                    return (
+                      <tr key={idx} className={`border-b ${isAdjusted ? 'bg-yellow-50' : 'hover:bg-gray-50'}`}>
+                        <td className="px-4 py-3">
+                          <div className="font-semibold">{item.name}</div>
+                          <div className="text-xs text-gray-500">{item.productGroup}</div>
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold">{originalQty}</td>
+                        <td className="px-4 py-3 text-right border-l border-yellow-400 bg-yellow-50">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={adjustedQty}
+                            onChange={(e) => handleQuantityChange(idx, e.target.value)}
+                            className={`w-20 px-2 py-1 border rounded text-right font-semibold ${
+                              isAdjusted ? 'border-orange-500 bg-orange-100' : 'border-gray-300'
+                            }`}
+                          />
+                          {isAdjusted && (
+                            <div className="text-xs text-red-600 font-bold mt-1">
+                              ⚠️ Back Order: {(originalQty - adjustedQty).toFixed(2)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">₹{price.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right">{item.gst}%</td>
+                        <td className="px-4 py-3 text-right font-bold text-primary">
+                          ₹{(adjustedQty * price * (1 + item.gst / 100)).toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ORDER SUMMARY */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-bold text-gray-800 mb-3">Order Summary</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Subtotal:</span>
+                  <span className="font-semibold">₹{order.subtotal?.toFixed(2) || "0.00"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Tax:</span>
+                  <span className="font-semibold">₹{order.totalTax?.toFixed(2) || "0.00"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Transport:</span>
+                  <span className="font-semibold">₹{order.transportCharge?.toFixed(2) || "0.00"}</span>
+                </div>
+                <div className="border-t pt-2 mt-2 flex justify-between font-bold">
+                  <span>Total:</span>
+                  <span className="text-primary">₹{calculateAdjustedTotal().toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* BILLING NOTES */}
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <h4 className="font-bold text-gray-800 mb-3">📝 Billing Notes</h4>
+              <textarea
+                value={invoiceNotes}
+                onChange={(e) => setInvoiceNotes(e.target.value)}
+                placeholder="Add any special notes for this invoice..."
+                className="w-full h-24 p-3 border border-purple-300 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 outline-none text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                These notes will appear on the WhatsApp message
+              </p>
+            </div>
+          </div>
+
+          {/* BACK ORDER WARNING */}
+          {Object.entries(stockAdjustments).some(
+            ([idx, qty]) => qty !== (order.items?.[idx]?.qty || 0)
+          ) && (
+            <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded">
+              <div className="flex gap-3">
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <h4 className="font-bold text-orange-900">Back Order Created</h4>
+                  <p className="text-sm text-orange-800 mt-1">
+                    Some items have been adjusted. The remaining quantities will be marked as back order.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* FOOTER */}
+        <div className="border-t bg-gray-50 px-6 py-4 rounded-b-2xl sticky bottom-0 flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            disabled={isGenerating}
+            className="px-6 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-100 transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSendToWhatsApp}
+            disabled={isGenerating}
+            className="px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50"
+          >
+            {isGenerating ? (
+              <>
+                <span className="inline-block animate-spin">⏳</span>
+                Generating...
+              </>
+            ) : (
+              <>
+                📱 Send to WhatsApp
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -117,6 +117,16 @@ const salesOrderSchema = new mongoose.Schema(
       default: false,
     },
 
+    invoiceNotes: {
+      type: String,
+      default: "",
+    },
+
+    backOrderSummary: {
+      type: Array,
+      default: [],
+    },
+
   },
   { timestamps: true }
 );

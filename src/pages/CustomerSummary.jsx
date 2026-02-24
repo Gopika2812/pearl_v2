@@ -671,7 +671,7 @@ const CustomerSummary = () => {
                       <p className="text-gray-900 font-semibold">{customer.gstin || "-"}</p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Margin</p>
+                      <p className="text-gray-500">Owner Margin</p>
                       <p className={`font-semibold ${customer.margin > 0 ? "text-green-600" : customer.margin < 0 ? "text-red-600" : "text-gray-700"}`}>
                         {customer.margin?.toFixed(1) || "0.0"}%
                       </p>
