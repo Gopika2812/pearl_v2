@@ -27,13 +27,15 @@ export default function PearlsBookPage() {
   const [stockAdjustments, setStockAdjustments] = useState({});
   const [invoiceNotes, setInvoiceNotes] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedInvoiceImage, setGeneratedInvoiceImage] = useState(null);
+  const [invoicePreviewImage, setInvoicePreviewImage] = useState(null);
 
 
   useEffect(() => {
     axios.get(API).then((res) => setRows(res.data));
   }, []);
 
-  const filteredRows = rows.filter((r) => {
+  const baseFilteredRows = rows.filter((r) => {
     // Apply current search field filter
     if (searchField === "type" && searchValue !== "ALL") {
       return r.type === searchValue;
@@ -56,7 +58,10 @@ export default function PearlsBookPage() {
     return true;
   });
 
-  const warehouses = [...new Set(filteredRows.map(r => r.warehouse))];
+  // filteredRows now includes both SALES ORDER and SALES INVOICE records
+  const filteredRows = baseFilteredRows;
+
+  const warehouses = [...new Set(baseFilteredRows.map(r => r.warehouse))];
   const parties = [...new Set(rows.map(r => r.party))];
   const itemNames = [
     ...new Set(
@@ -74,11 +79,10 @@ export default function PearlsBookPage() {
   // );
 
   const getOrderType = (r) => {
-    if (r.type) return r.type;
-
+    if (r.type === "SALES ORDER" || r.type === "SALES INVOICE") return "SALES";
+    if (r.type === "PURCHASE") return "PURCHASE";
     if (r.invoiceId?.includes("PO")) return "PURCHASE";
     if (r.invoiceId?.includes("SI") || r.invoiceId?.includes("INV")) return "SALES";
-
     return "UNKNOWN";
   };
 
@@ -129,14 +133,64 @@ export default function PearlsBookPage() {
 
     setIsGenerating(true);
     try {
+      // Step 1: Generate invoice preview (no actions yet)
       const res = await axios.post(`${API}/generate-invoice/${previewOrder._id}`, {
         stockAdjustments,
         invoiceNotes,
       });
 
+      // Store invoice details for preview
+      setGeneratedInvoiceImage({
+        image: res.data.invoiceImage,
+        waUrl: res.data.waUrl,
+        ewayImage: res.data.ewayImage,
+      });
+      
+      // Show invoice preview modal with print and send options
+      setInvoicePreviewImage(true);
+    } catch (err) {
+      alert(err.response?.data?.message || "Invoice generation failed");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Confirm invoice and perform final actions (stock reduction, balance update, etc.)
+  const confirmInvoiceAction = async (actionType) => {
+    if (!previewOrder) return;
+
+    // If printing, open print dialog first
+    if (actionType === "print" && generatedInvoiceImage?.image) {
+      const printWindow = window.open();
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Invoice Print</title>
+            <style>
+              body { margin: 0; padding: 0; }
+              img { max-width: 100%; height: auto; display: block; }
+            </style>
+          </head>
+          <body>
+            <img src="${generatedInvoiceImage.image}" />
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
+
+    setIsGenerating(true);
+    try {
+      // Step 2: Confirm invoice - this will reduce stock, update balance, create commissions
+      const confirmRes = await axios.post(`${API}/confirm-invoice/${previewOrder._id}`, {
+        stockAdjustments,
+        invoiceNotes,
+      });
+
       // 🔔 LOW STOCK ALERT
-      if (res.data.lowStockAlerts?.length) {
-        const msg = res.data.lowStockAlerts
+      if (confirmRes.data.lowStockAlerts?.length) {
+        const msg = confirmRes.data.lowStockAlerts
           .map(
             (a) =>
               `⚠️ LOW STOCK\n${a.product}\nWarehouse: ${a.warehouse}\nRemaining: ${a.remainingQty}`
@@ -146,20 +200,38 @@ export default function PearlsBookPage() {
         alert(msg);
       }
 
-      window.open(res.data.waUrl, "_blank");
-      
+      // If sending via WhatsApp
+      if (actionType === "whatsapp" && generatedInvoiceImage?.waUrl) {
+        window.open(generatedInvoiceImage.waUrl, "_blank");
+      }
+
       // Update the order status
       setRows(rows.map(r => r._id === previewOrder._id ? { ...r, invoiceGenerated: true } : r));
+      
+      alert(`✅ Invoice ${actionType === "print" ? "printed" : "sent"}! Stock reduced and balance updated.`);
+      
+      // Reset all states
       setPreviewOrder(null);
       setStockAdjustments({});
       setInvoiceNotes("");
-      
-      alert("✅ Invoice sent to WhatsApp successfully!");
+      setGeneratedInvoiceImage(null);
+      setInvoicePreviewImage(false);
     } catch (err) {
-      alert(err.response?.data?.message || "Invoice generation failed");
+      alert(err.response?.data?.message || "Invoice confirmation failed");
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  // Send to WhatsApp after preview confirmation (old name, now calls confirmInvoiceAction)
+  const confirmAndSendToWhatsApp = () => {
+    confirmInvoiceAction("whatsapp");
+  };
+
+  // Close invoice preview without sending
+  const closeInvoicePreview = () => {
+    setInvoicePreviewImage(false);
+    setGeneratedInvoiceImage(null);
   };
 
 
@@ -179,31 +251,27 @@ export default function PearlsBookPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <SummaryCard
           title="Sales Orders"
-          value={filteredRows.filter(r => getOrderType(r) === "SALES").length}
+          value={baseFilteredRows.filter(r => r.type === "SALES ORDER").length}
           icon={<FaShoppingCart />}
         />
 
         <SummaryCard
+          title="Sales Invoices"
+          value={baseFilteredRows.filter(r => r.type === "SALES INVOICE").length}
+          icon={<FaFileInvoice />}
+        />
+
+        <SummaryCard
           title="Purchase Orders"
-          value={filteredRows.filter(r => getOrderType(r) === "PURCHASE").length}
+          value={baseFilteredRows.filter(r => r.type === "PURCHASE").length}
           icon={<FaTruckLoading />}
         />
 
         <SummaryCard
-          title="Sales Amount"
+          title="Total Sales Amount"
           value={`₹${Math.round(
-            filteredRows
-              .filter(r => r.type === "SALES")
-              .reduce((a, b) => a + b.grandTotal, 0) * 100
-          ) / 100}`}
-          icon={<FaRupeeSign />}
-        />
-
-        <SummaryCard
-          title="Purchase Amount"
-          value={`₹${Math.round(
-            filteredRows
-              .filter(r => r.type === "PURCHASE")
+            baseFilteredRows
+              .filter(r => r.type === "SALES ORDER" || r.type === "SALES INVOICE")
               .reduce((a, b) => a + b.grandTotal, 0) * 100
           ) / 100}`}
           icon={<FaRupeeSign />}
@@ -242,7 +310,8 @@ export default function PearlsBookPage() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-1 focus:ring-primary text-sm"
               >
                 <option value="ALL">All Types</option>
-                <option value="SALES">Sales</option>
+                <option value="SALES ORDER">Sales Order</option>
+                <option value="SALES INVOICE">Sales Invoice</option>
                 <option value="PURCHASE">Purchase</option>
               </select>
             </div>
@@ -347,18 +416,19 @@ export default function PearlsBookPage() {
           </thead>
 
           <tbody>
-            {filteredRows.map((r) => (
-              <Fragment key={r._id}>
-                <tr className="border-b even:bg-gray-50 hover:bg-primary/5 transition relative">
+            {filteredRows.map((r, idx) => (
+              <Fragment key={`${r._id}-${idx}`}>
+                <tr className={`border-b transition relative ${r.type === "SALES INVOICE" ? "bg-yellow-50" : "even:bg-gray-50"} hover:bg-primary/5`}>
 
-                  <td className="text-center px-2 py-2 sticky left-0 bg-white z-10 border-r">
+                  <td className="text-center px-2 py-2 sticky left-0 z-10 border-r"
+                      style={{backgroundColor: r.type === "SALES INVOICE" ? "#fffacd" : "white"}}>
                     <button
                       onClick={() =>
-                        setExpanded(expanded === r._id ? null : r._id)
+                        setExpanded(expanded === `${r._id}-${idx}` ? null : `${r._id}-${idx}`)
                       }
                       className="text-gray-600 hover:text-primary text-sm"
                     >
-                      {expanded === r._id ? (
+                      {expanded === `${r._id}-${idx}` ? (
                         <FaChevronUp />
                       ) : (
                         <FaChevronDown />
@@ -366,7 +436,8 @@ export default function PearlsBookPage() {
                     </button>
                   </td>
 
-                  <td className="px-2 py-2 sticky left-8 bg-white z-10 border-r whitespace-nowrap text-xs">
+                  <td className="px-2 py-2 sticky left-8 z-10 border-r whitespace-nowrap text-xs"
+                      style={{backgroundColor: r.type === "SALES INVOICE" ? "#fffacd" : "white"}}>
                     {new Date(r.date).toLocaleDateString('en-GB')}
                   </td>
 
@@ -376,7 +447,7 @@ export default function PearlsBookPage() {
 
                   <td className="px-2 py-2 whitespace-nowrap">
                     <span
-                      className={`px-1.5 py-0.5 rounded text-xs font-bold ${r.type === "SALES"
+                      className={`px-1.5 py-0.5 rounded text-xs font-bold ${r.type === "SALES ORDER" || r.type === "SALES INVOICE"
                         ? "bg-green-100 text-green-700"
                         : "bg-blue-100 text-blue-700"
                         }`}
@@ -385,7 +456,9 @@ export default function PearlsBookPage() {
                     </span>
                   </td>
 
-                  <td className="px-2 py-2 whitespace-nowrap text-xs">{r.party}</td>
+                  <td className="px-2 py-2 whitespace-nowrap text-xs">
+                    {r.party}
+                  </td>
                   <td className="px-2 py-2 whitespace-nowrap text-xs">{r.warehouse}</td>
 
                   <td className="px-2 py-2 text-right whitespace-nowrap text-xs">
@@ -403,11 +476,11 @@ export default function PearlsBookPage() {
                   </td>
 
                   <td className="px-2 py-2 text-right text-xs whitespace-nowrap">
-                   {r.type === "SALES" ? `₹${Number(r.openingBalance).toFixed(2)}` : "—"}
+                   {r.type === "SALES ORDER" || r.type === "SALES INVOICE" ? `₹${Number(r.openingBalance || 0).toFixed(2)}` : "—"}
                   </td>
 
                   <td className="px-2 py-2 text-right font-bold text-xs whitespace-nowrap">
-                    {r.type === "SALES" ? `₹${(Math.round(r.closingBalance * 100) / 100).toFixed(2)}` : "—"}
+                    {r.type === "SALES ORDER" || r.type === "SALES INVOICE" ? `₹${(Math.round(r.closingBalance * 100) / 100).toFixed(2)}` : "—"}
                   </td>
 
 
@@ -418,9 +491,17 @@ export default function PearlsBookPage() {
                         <MiniItemsBadge items={r.items} />
                       )}
 
-                      {r.type === "SALES" && (
+                      {(r.type === "SALES ORDER" || r.type === "SALES INVOICE") && (
                         <>
-                          {r.invoiceGenerated ? (
+                          {r.type === "SALES INVOICE" ? (
+                            <button
+                              disabled
+                              className="p-1.5 rounded bg-green-100 text-green-600 cursor-not-allowed hover:bg-green-200"
+                              title="Invoice Generated"
+                            >
+                              <FaCheckCircle size={14} />
+                            </button>
+                          ) : r.type === "SALES ORDER" && r.invoiceGenerated ? (
                             <button
                               disabled
                               className="p-1.5 rounded bg-green-100 text-green-600 cursor-not-allowed hover:bg-green-200"
@@ -429,6 +510,7 @@ export default function PearlsBookPage() {
                               <FaCheckCircle size={14} />
                             </button>
                           ) : (
+                            // Only show button on ungenerated SALES ORDER
                             <button
                               onClick={() => openInvoicePreview(r._id)}
                               className="p-1.5 rounded bg-blue-100 text-blue-600 hover:bg-blue-200 transition"
@@ -445,7 +527,7 @@ export default function PearlsBookPage() {
                 </tr>
 
                 {/* EXPANDED ROW */}
-                {expanded === r._id && (
+                {expanded === `${r._id}-${idx}` && (
                   <tr>
                     <td colSpan="13" className="bg-primary/5 px-0 py-3 sticky left-0">
                       <div className="bg-white rounded-lg shadow-sm border mx-2">
@@ -460,22 +542,23 @@ export default function PearlsBookPage() {
           </table>
       </div>
 
-      {/* MOBILE VIEW (UNCHANGED – ALREADY GOOD) */}
+      {/* MOBILE VIEW */}
       <div className="md:hidden space-y-3">
-        {filteredRows.map((r) => (
+        {filteredRows.map((r, idx) => (
           <div
-            key={r._id}
-            className="bg-white rounded-xl shadow border p-4"
+            key={`${r._id}-${idx}`}
+            className={`rounded-xl shadow border p-4 ${r.type === "SALES INVOICE" ? "bg-yellow-50" : "bg-white"}`}
           >
             <div className="flex justify-between items-center">
               <span className="text-xs text-gray-500">
                 {new Date(r.date).toLocaleDateString()}
               </span>
               <span
-                className={`text-xs font-bold px-2 py-1 rounded-full ${r.type === "SALES"
-                  ? "bg-green-100 text-green-700"
-                  : "bg-blue-100 text-blue-700"
-                  }`}
+                className={`text-xs font-bold px-2 py-1 rounded-full ${
+                  r.type === "SALES ORDER" || r.type === "SALES INVOICE"
+                    ? "bg-green-100 text-green-700"
+                    : "bg-blue-100 text-blue-700"
+                }`}
               >
                 {r.type}
               </span>
@@ -505,16 +588,24 @@ export default function PearlsBookPage() {
             <div className="flex gap-3 mt-4">
               <button
                 onClick={() =>
-                  setExpanded(expanded === r._id ? null : r._id)
+                  setExpanded(expanded === `${r._id}-${idx}` ? null : `${r._id}-${idx}`)
                 }
                 className="flex-1 border rounded-lg py-2 text-sm"
               >
-                {expanded === r._id ? "Hide Items" : "View Items"}
+                {expanded === `${r._id}-${idx}` ? "Hide Items" : "View Items"}
               </button>
 
-              {r.type === "SALES" && (
+              {(r.type === "SALES ORDER" || r.type === "SALES INVOICE") && (
                 <>
-                  {r.invoiceGenerated ? (
+                  {r.type === "SALES INVOICE" ? (
+                    <button
+                      disabled
+                      className="flex-1 bg-green-600 text-white rounded-lg py-2 text-sm cursor-not-allowed opacity-75"
+                      title="Invoice Generated"
+                    >
+                      ✓ Generated
+                    </button>
+                  ) : r.invoiceGenerated ? (
                     <button
                       disabled
                       className="flex-1 bg-green-600 text-white rounded-lg py-2 text-sm cursor-not-allowed opacity-75"
@@ -535,7 +626,7 @@ export default function PearlsBookPage() {
               )}
             </div>
 
-            {expanded === r._id && (
+            {expanded === `${r._id}-${idx}` && (
               <div className="mt-3">
                 <ExpandedItems row={r} />
               </div>
@@ -559,6 +650,18 @@ export default function PearlsBookPage() {
           }}
           onSendToWhatsApp={sendInvoiceToWhatsApp}
           isGenerating={isGenerating}
+        />
+      )}
+
+      {/* GENERATED INVOICE IMAGE PREVIEW MODAL */}
+      {invoicePreviewImage && generatedInvoiceImage && (
+        <GeneratedInvoicePreviewModal
+          invoiceImage={generatedInvoiceImage.image}
+          waUrl={generatedInvoiceImage.waUrl}
+          onConfirm={() => confirmInvoiceAction("whatsapp")}
+          onPrint={() => confirmInvoiceAction("print")}
+          onClose={closeInvoicePreview}
+          isLoading={isGenerating}
         />
       )}
     </div>
@@ -607,7 +710,7 @@ function MiniItemsBadge({ items }) {
 }
 
 function ExpandedItems({ row }) {
-  const isSales = row.type === "SALES";
+  const isSales = row.type === "SALES ORDER" || row.type === "SALES INVOICE";
 
   return (
     <div className="space-y-4">
@@ -641,7 +744,7 @@ function ExpandedItems({ row }) {
                 <td className="px-3 py-2">{i.hsn}</td>
 
                 <td className="px-3 py-2 text-right">
-                  ₹{(isSales ? i.sellingPrice : i.purchasePrice).toFixed(2)}
+                  ₹{((isSales ? (i.sellingPrice || 0) : (i.purchasePrice || 0)) || 0).toFixed(2)}
                 </td>
 
                 <td className="px-3 py-2 text-right">{i.qty}</td>
@@ -650,14 +753,14 @@ function ExpandedItems({ row }) {
                   <td className="px-3 py-2 text-right">
                     {i.discountType === "PERCENT"
                       ? `${i.discountPercent}%`
-                      : `₹${(i.discountAmount).toFixed(2)}`}
+                      : `₹${((i.discountAmount) || 0).toFixed(2)}`}
                   </td>
                 )}
 
-                <td className="px-3 py-2 text-right">{i.gst}%</td>
+                <td className="px-3 py-2 text-right">{i.gst || 0}%</td>
 
                 <td className="px-3 py-2 text-right font-bold text-primary">
-                  ₹{(i.total).toFixed(2)}
+                  ₹{((i.total) || 0).toFixed(2)}
                 </td>
               </tr>
             ))}
@@ -692,13 +795,13 @@ function ExpandedItems({ row }) {
                   </td>
                   <td className="px-3 py-2 text-center border border-yellow-200">{item.hsn}</td>
                   <td className="px-3 py-2 text-right border border-yellow-200">
-                    ₹{Number(item.sellingPrice).toFixed(2)}
+                    ₹{Number(item.sellingPrice || 0).toFixed(2)}
                   </td>
                   <td className="px-3 py-2 text-right border border-yellow-200">
-                    {item.qty}
+                    {item.qty || 0}
                   </td>
                   <td className="px-3 py-2 text-right font-bold text-yellow-700 border border-yellow-200">
-                    ₹{(item.qty * item.sellingPrice).toFixed(2)}
+                    ₹{(((item.qty || 0) * (item.sellingPrice || 0))).toFixed(2)}
                   </td>
                 </tr>
               ))}
@@ -742,7 +845,102 @@ function SummaryCard({ title, value, icon }) {
   );
 }
 
-function LowStockCard({ items }) {
+// GENERATED INVOICE PREVIEW MODAL COMPONENT
+function GeneratedInvoicePreviewModal({
+  invoiceImage,
+  waUrl,
+  onConfirm,
+  onPrint,
+  onClose,
+  isLoading,
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-8">
+        
+        {/* HEADER */}
+        <div className="bg-gradient-to-r from-primary to-blue-600 text-white p-6 rounded-t-2xl sticky top-0 z-10">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">📄 Invoice Preview</h2>
+              <p className="text-sm text-blue-100 mt-1">
+                You can now print or send this invoice. Stock will be reduced after action.
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-white hover:bg-white/20 p-2 rounded-lg transition"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* INVOICE IMAGE */}
+        <div className="p-6 max-h-[calc(100vh-300px)] overflow-y-auto">
+          <div className="bg-gray-100 rounded-lg overflow-hidden border">
+            <img
+              src={invoiceImage}
+              alt="Generated Invoice"
+              className="w-full h-auto"
+              style={{ maxWidth: "100%" }}
+            />
+          </div>
+
+          {/* PREVIEW INSTRUCTIONS */}
+          <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
+            <p className="text-sm text-green-900">
+              ✅ Invoice generated successfully! Choose to print or send via WhatsApp. Stock and customer balance will be updated immediately after your action.
+            </p>
+          </div>
+        </div>
+
+        {/* FOOTER - WITH PRINT AND SEND OPTIONS */}
+        <div className="border-t bg-gray-50 px-6 py-4 rounded-b-2xl sticky bottom-0 flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            disabled={isLoading}
+            className="px-6 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-100 transition disabled:opacity-50"
+          >
+            Back to Edit
+          </button>
+          <button
+            onClick={onPrint}
+            disabled={isLoading}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-50"
+          >
+            {isLoading ? (
+              <>
+                <span className="inline-block animate-spin">⏳</span>
+                Processing...
+              </>
+            ) : (
+              <>
+                🖨️ Print & Confirm
+              </>
+            )}
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isLoading}
+            className="px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50"
+          >
+            {isLoading ? (
+              <>
+                <span className="inline-block animate-spin">⏳</span>
+                Sending...
+              </>
+            ) : (
+              <>
+                📱 Send & Confirm
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}function LowStockCard({ items }) {
   return (
     <div className="relative group rounded-2xl bg-white border shadow-sm p-5
                     hover:shadow-md transition cursor-pointer">
@@ -808,7 +1006,7 @@ function InvoicePreviewModal({
   onSendToWhatsApp,
   isGenerating,
 }) {
-  const isSales = order.type === "SALES";
+  const isSales = order.type === "SALES ORDER" || order.type === "SALES INVOICE";
 
   const handleQuantityChange = (itemIndex, newQty) => {
     setStockAdjustments({
@@ -821,7 +1019,7 @@ function InvoicePreviewModal({
     let total = 0;
     order.items?.forEach((item, idx) => {
       const adjustedQty = stockAdjustments[idx] || item.qty;
-      const price = isSales ? item.sellingPrice : item.purchasePrice;
+      const price = isSales ? (item.sellingPrice || 0) : (item.purchasePrice || 0);
       const baseAmount = adjustedQty * price;
       
       if (isSales) {
@@ -831,14 +1029,16 @@ function InvoicePreviewModal({
         } else {
           discountAmount = item.discountAmount || 0;
         }
-        const gstAmount = ((baseAmount - discountAmount) * item.gst) / 100;
+        const gstRate = item.gst || item.cgst || item.sgst || 0;
+        const gstAmount = ((baseAmount - discountAmount) * gstRate) / 100;
         total += baseAmount - discountAmount + gstAmount;
       } else {
-        const gstAmount = (baseAmount * item.gst) / 100;
+        const gstRate = item.gst || item.cgst || item.sgst || 0;
+        const gstAmount = (baseAmount * gstRate) / 100;
         total += baseAmount + gstAmount;
       }
     });
-    return total;
+    return total || 0;
   };
 
   return (
@@ -888,7 +1088,8 @@ function InvoicePreviewModal({
                     const adjustedQty = stockAdjustments[idx] !== undefined ? stockAdjustments[idx] : item.qty;
                     const originalQty = item.qty;
                     const isAdjusted = adjustedQty !== originalQty;
-                    const price = isSales ? item.sellingPrice : item.purchasePrice;
+                    const price = isSales ? (item.sellingPrice || 0) : (item.purchasePrice || 0);
+                    const gstRate = item.gst || item.cgst || item.sgst || 0;
                     
                     return (
                       <tr key={idx} className={`border-b ${isAdjusted ? 'bg-yellow-50' : 'hover:bg-gray-50'}`}>
@@ -915,9 +1116,9 @@ function InvoicePreviewModal({
                           )}
                         </td>
                         <td className="px-4 py-3 text-right">₹{price.toFixed(2)}</td>
-                        <td className="px-4 py-3 text-right">{item.gst}%</td>
+                        <td className="px-4 py-3 text-right">{gstRate}%</td>
                         <td className="px-4 py-3 text-right font-bold text-primary">
-                          ₹{(adjustedQty * price * (1 + item.gst / 100)).toFixed(2)}
+                          ₹{(adjustedQty * price * (1 + gstRate / 100)).toFixed(2)}
                         </td>
                       </tr>
                     );

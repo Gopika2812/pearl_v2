@@ -19,46 +19,112 @@ const __dirname = path.dirname(__filename);
 const router = express.Router();
 
 /* ---------------- GET PEARLS BOOK ---------------- */
+// Helper function to ensure items have pricing information
+async function enrichItemsWithPrices(items, isPurchase = false) {
+  if (!Array.isArray(items)) return [];
+  
+  return await Promise.all(items.map(async (item) => {
+    // If price is already set and non-zero, use it
+    if (isPurchase && item.purchasePrice && item.purchasePrice > 0) {
+      return item;
+    }
+    if (!isPurchase && item.sellingPrice && item.sellingPrice > 0) {
+      return item;
+    }
+    
+    // If price is missing, try to fetch from Product model
+    if (item.productId) {
+      try {
+        const product = await Product.findById(item.productId).lean();
+        if (product) {
+          if (isPurchase && !item.purchasePrice) {
+            item.purchasePrice = product.purchasePrice || 0;
+          } else if (!isPurchase && !item.sellingPrice) {
+            item.sellingPrice = product.sellingPrice || 0;
+          }
+        }
+      } catch (err) {
+        console.log(`Could not fetch product prices for ${item.productId}`);
+      }
+    }
+    
+    return item;
+  }));
+}
+
 router.get("/", async (req, res) => {
   try {
     const purchases = await PurchaseOrder.find().lean();
     const sales = await SalesOrder.find().lean();
 
-    const purchaseMapped = purchases.map((p) => ({
+    const purchaseMapped = await Promise.all(purchases.map(async (p) => ({
       _id: p._id,
       type: "PURCHASE",
       date: p.date,
       invoiceId: p.invoiceId,
       party: p.vendor,
       warehouse: p.warehouse,
-      items: Array.isArray(p.items) ? p.items : [],
+      items: await enrichItemsWithPrices(p.items, true),
       subtotal: p.subtotal,
       totalTax: p.totalTax,
       transportCharge: p.transportCharge || 0,
       grandTotal: p.grandTotal,
-    }));
+    })));
 
-    const salesMapped = sales.map((s) => ({
-      _id: s._id,
-      type: "SALES",
-      date: s.createdAt,
-      invoiceId: s.invoiceId,
-      party: s.customer?.name || "",
-      warehouse: s.warehouse,
+    const salesMapped = [];
+    
+    for (const s of sales) {
+      // Always create a SALES ORDER row with original items
+      // Note: Sales order doesn't affect the closing balance, only the opening balance is used
+      const salesOrderRow = {
+        _id: s._id,
+        type: "SALES ORDER",
+        recordId: `${s._id}-SO`,
+        date: s.createdAt,
+        invoiceId: s.invoiceId,
+        party: s.customer?.name || "",
+        warehouse: s.warehouse,
+        openingBalance: s.openingBalance,
+        closingBalance: s.openingBalance, // Sales order doesn't affect balance
+        items: await enrichItemsWithPrices(s.items, false),
+        sampleItems: await enrichItemsWithPrices(s.sampleItems, false),
+        subtotal: s.subtotal,
+        totalTax: s.totalTax,
+        transportCharge: s.transportCharge,
+        grandTotal: s.grandTotal,
+        invoiceGenerated: s.invoiceGenerated || false,
+      };
+      salesMapped.push(salesOrderRow);
 
-      openingBalance: s.openingBalance,
-      closingBalance: s.closingBalance,
+      // If invoice was generated, create a separate SALES INVOICE row with invoice items
+      if (s.invoiceGenerated) {
+        // Calculate closing balance based on invoice amount only
+        const invoiceAmount = s.invoiceGrandTotal || s.grandTotal;
+        const invoiceOpeningBalance = s.openingBalance || 0;
+        const invoiceClosingBalance = invoiceOpeningBalance + invoiceAmount;
 
-      items: Array.isArray(s.items) ? s.items : [],
-      sampleItems: Array.isArray(s.sampleItems) ? s.sampleItems : [],
-      subtotal: s.subtotal,
-      totalTax: s.totalTax,
-      transportCharge: s.transportCharge,
-      grandTotal: s.grandTotal,
-      invoiceGenerated: s.invoiceGenerated || false,
-    }));
-
-
+        const salesInvoiceRow = {
+          _id: s._id,
+          type: "SALES INVOICE",
+          recordId: `${s._id}-SI`,
+          date: s.invoiceDate || s.createdAt,
+          invoiceId: s.invoiceId,
+          party: s.customer?.name || "",
+          warehouse: s.warehouse,
+          openingBalance: invoiceOpeningBalance,
+          closingBalance: invoiceClosingBalance,
+          // Use invoice items if they exist, otherwise fall back to original items
+          items: await enrichItemsWithPrices(s.invoiceItems || s.items, false),
+          sampleItems: await enrichItemsWithPrices(s.invoiceSampleItems || s.sampleItems, false),
+          subtotal: s.invoiceSubtotal || s.subtotal,
+          totalTax: s.invoiceTotalTax || s.totalTax,
+          transportCharge: s.invoiceTransportCharge || s.transportCharge,
+          grandTotal: invoiceAmount,
+          invoiceGenerated: true,
+        };
+        salesMapped.push(salesInvoiceRow);
+      }
+    }
 
     const merged = [...purchaseMapped, ...salesMapped].sort(
       (a, b) => new Date(b.date) - new Date(a.date)
@@ -66,6 +132,7 @@ router.get("/", async (req, res) => {
 
     res.json(merged);
   } catch (err) {
+    console.error("Pearls Book GET error:", err);
     res.status(500).json({ message: "Failed to load Pearls Book" });
   }
 });
@@ -125,8 +192,6 @@ async function reduceStockFIFO(saleItems, warehouse) {
 
   return lowStockAlerts;
 }
-
-
 
 function drawCompanyHeader(ctx, canvasWidth) {
   ctx.textAlign = "center";
@@ -218,11 +283,7 @@ async function generateInvoiceImage(sale) {
 
   const hsnArray = Object.values(hsnSummary);
   const totalHsnItems = hsnArray.length;
-  
-  // Extra height for line spacing and back order section
-  const itemLineSpacing = (sale.items?.length || 0) * 25; // Increased from 18 to 25 for extra spacing
-  const backOrderHeight = (sale.backOrderSummary?.length || 0) > 0 ? 200 + (sale.backOrderSummary?.length || 0) * 20 : 0;
-  const estimatedHeight = 250 + itemLineSpacing + totalHsnItems * 20 + 400 + backOrderHeight;
+  const estimatedHeight = 250 + (sale.items?.length || 0) * 18 + totalHsnItems * 20 + 400;
 
   const canvas = createCanvas(595, Math.max(1200, estimatedHeight));
   const ctx = canvas.getContext("2d");
@@ -364,8 +425,7 @@ async function generateInvoiceImage(sale) {
       drawText(ctx, "Kg", 430, y);
       drawText(ctx, `₹${roundedTotal.toFixed(2)}`, 500, y);
 
-      // Extra line spacing for description of goods
-      y += 25;
+      y += 16;
     });
   }
 
@@ -470,8 +530,7 @@ async function generateInvoiceImage(sale) {
       drawText(ctx, `₹${item.sellingPrice.toFixed(2)}`, 345, y);
       drawText(ctx, `₹${sampleTotal.toFixed(2)}`, 500, y);
 
-      // Extra line spacing for description of goods
-      y += 25;
+      y += 16;
     });
 
     // Sample Products Table Footer
@@ -526,61 +585,6 @@ async function generateInvoiceImage(sale) {
 
   // HSN Table Footer
   drawLine(ctx, 20, y + 2, 575, y + 2);
-
-  // ===== BACK ORDER INVOICE SECTION =====
-  if (sale.backOrderSummary && Array.isArray(sale.backOrderSummary) && sale.backOrderSummary.length > 0) {
-    y += 25;
-    drawLine(ctx, 20, y, 575, y);
-    y += 15;
-
-    ctx.font = "bold 13px Arial";
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#c00";
-    ctx.fillText("⚠️ BACK ORDER INVOICE", 297, y);
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#000";
-
-    y += 18;
-    drawLine(ctx, 20, y, 575, y);
-    y += 13;
-
-    ctx.font = "bold 10px Arial";
-    ctx.fillStyle = "#1a365d";
-
-    // Back Order Table Header
-    drawText(ctx, "Description of Goods", 25, y);
-    drawText(ctx, "Requested Qty", 250, y);
-    drawText(ctx, "Confirmed Qty", 360, y);
-    drawText(ctx, "Back Order Qty", 480, y);
-
-    y += 12;
-    drawLine(ctx, 20, y, 575, y);
-    y += 12;
-
-    ctx.font = "10px Arial";
-    ctx.fillStyle = "#000";
-
-    // Back Order Table Body
-    sale.backOrderSummary.forEach((backOrder) => {
-      drawText(ctx, backOrder.product.substring(0, 28), 25, y);
-      drawText(ctx, backOrder.requestedQty.toString(), 250, y);
-      drawText(ctx, backOrder.confirmedQty.toString(), 360, y);
-      drawText(ctx, backOrder.backOrderQty.toString(), 480, y);
-
-      // Extra line spacing
-      y += 25;
-    });
-
-    // Back Order Table Footer
-    drawLine(ctx, 20, y, 575, y);
-    y += 12;
-
-    ctx.font = "11px Arial";
-    ctx.fillStyle = "#c00";
-    drawText(ctx, "Note: Back order items will be dispatched once stock is available", 30, y);
-    y += 12;
-    drawText(ctx, "Please contact us for delivery timeline", 30, y);
-  }
 
   // ===== UPLOAD =====
   const buffer = canvas.toBuffer("image/png");
@@ -761,10 +765,10 @@ async function generateEwayBillImage(sale) {
   return upload.secure_url;
 }
 
-router.post("/generate-invoice/:id", async (req, res) => {
+router.post("/generate-invoice-preview/:id", async (req, res) => {
   try {
-    const { stockAdjustments, invoiceNotes } = req.body;
-
+    const { stockAdjustments = {}, invoiceNotes = "" } = req.body;
+    
     const sale = await SalesOrder.findById(req.params.id)
       .populate('salesMan', 'name')
       .populate('deliveryMan', 'name')
@@ -772,27 +776,6 @@ router.post("/generate-invoice/:id", async (req, res) => {
 
     if (!sale) {
       return res.status(404).json({ message: "Sale not found" });
-    }
-
-    // ✅ APPLY STOCK ADJUSTMENTS TO ITEMS (for back order handling)
-    let adjustedItems = sale.items;
-    let backOrderSummary = [];
-
-    if (stockAdjustments && Object.keys(stockAdjustments).length > 0) {
-      adjustedItems = sale.items.map((item, idx) => {
-        const adjustedQty = stockAdjustments[idx];
-        if (adjustedQty !== undefined && adjustedQty !== item.qty) {
-          const backOrderQty = item.qty - adjustedQty;
-          backOrderSummary.push({
-            product: item.name,
-            requestedQty: item.qty,
-            confirmedQty: adjustedQty,
-            backOrderQty: backOrderQty,
-          });
-          return { ...item, qty: adjustedQty };
-        }
-        return item;
-      });
     }
 
     // Extract names from populated fields
@@ -822,104 +805,227 @@ router.post("/generate-invoice/:id", async (req, res) => {
     }
     sale.billingPersonName = billingPersonName;
 
-    // ✅ 1. CHECK STOCK (WAREHOUSE AWARE) - Use adjusted items
-    await checkStockAvailability(adjustedItems, sale.warehouse);
+    // ✅ 1. CREATE ADJUSTED ITEMS FOR INVOICE (SALES INVOICE record)
+    const invoicedItems = sale.items.map((item, idx) => {
+      const adjustedQty = stockAdjustments[idx] !== undefined ? stockAdjustments[idx] : item.qty;
+      return {
+        ...item,
+        qty: adjustedQty,
+        total: adjustedQty * item.sellingPrice - (item.discountAmount || 0),
+      };
+    });
 
-    // ✅ 2. GENERATE INVOICE - Use adjusted items
-    const invoiceImage = await generateInvoiceImage({ ...sale, items: adjustedItems, backOrderSummary });
+    // Calculate back order summary
+    const backOrderSummary = sale.items.map((item, idx) => {
+      const requestedQty = item.qty;
+      const confirmedQty = stockAdjustments[idx] !== undefined ? stockAdjustments[idx] : item.qty;
+      const backOrderQty = Math.max(0, requestedQty - confirmedQty);
+
+      return {
+        product: item.name,
+        requestedQty,
+        confirmedQty,
+        backOrderQty,
+      };
+    }).filter(b => b.backOrderQty > 0);
+
+    // Calculate updated totals for invoice
+    let newSubtotal = 0;
+    let newTotalTax = 0;
+    invoicedItems.forEach(item => {
+      const qty = item.qty;
+      const baseAmount = item.sellingPrice * qty;
+      newSubtotal += baseAmount;
+      const taxable = baseAmount - (item.discountAmount || 0);
+      newTotalTax += (taxable * item.gst) / 100;
+    });
+
+    const newGrandTotal = newSubtotal + newTotalTax + (sale.transportCharge || 0);
+
+    // ✅ 2. CHECK STOCK (WAREHOUSE AWARE)
+    await checkStockAvailability(invoicedItems, sale.warehouse);
+
+    // ✅ 3. GENERATE INVOICE (with adjusted items)
+    const invoiceData = {
+      ...sale,
+      items: invoicedItems,
+      subtotal: newSubtotal,
+      totalTax: newTotalTax,
+      grandTotal: newGrandTotal,
+      invoiceNotes: invoiceNotes,
+      backOrderSummary: backOrderSummary,
+    };
+
+    const invoiceImage = await generateInvoiceImage(invoiceData);
     let ewayImage = null;
 
     if (sale.ewayEnabled) {
-      ewayImage = await generateEwayBillImage({ ...sale, items: adjustedItems });
+      ewayImage = await generateEwayBillImage(invoiceData);
     }
 
-    // ✅ 3. REDUCE STOCK (WAREHOUSE + FIFO) - Use adjusted items
-    const lowStockAlerts = await reduceStockFIFO(
-      adjustedItems,
-      sale.warehouse
+    // ✅ Store adjustments for later confirmation
+    const phone = `91${sale.customer.whatsapp}`;
+    const customerLoginLink = "https://pearlsfrontend.web.app/customer-login";
+    const message = encodeURIComponent(
+      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${newGrandTotal}\n\n📄 Invoice: ${invoiceImage}\n\n🛒 Pearls Shopping: ${customerLoginLink}`
     );
 
-    // ✅ 3B. REDUCE STOCK FOR SAMPLE ITEMS
-    if (sale.sampleItems && Array.isArray(sale.sampleItems) && sale.sampleItems.length > 0) {
-      console.log(`\n📦 Processing ${sale.sampleItems.length} sample items for stock reduction...`);
-      await reduceStockFIFO(
-        sale.sampleItems,
-        sale.warehouse
-      );
+    res.json({
+      success: true,
+      invoiceImage,
+      ewayImage,
+      waUrl: `https://wa.me/${phone}?text=${message}`,
+      stockAdjustments, // Send back to frontend for confirmation
+      invoiceNotes,
+    });
+  } catch (err) {
+    console.error("INVOICE PREVIEW ERROR:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ✅ NEW ENDPOINT: Confirm invoice and perform all actions (reduce stock, update balance, create commissions)
+router.post("/confirm-invoice/:id", async (req, res) => {
+  try {
+    const { stockAdjustments = {}, invoiceNotes = "" } = req.body;
+    
+    const sale = await SalesOrder.findById(req.params.id)
+      .populate('salesMan', 'name')
+      .populate('deliveryMan', 'name')
+      .lean();
+
+    if (!sale) {
+      return res.status(404).json({ message: "Sale not found" });
     }
 
-    // ✅ 4. UPDATE CUSTOMER BALANCE (AFTER INVOICE GENERATION)
-    const orderValue = sale.grandTotalWithMargin || sale.grandTotal;
+    // ✅ 1. CREATE ADJUSTED ITEMS FOR INVOICE
+    const invoicedItems = sale.items.map((item, idx) => {
+      const adjustedQty = stockAdjustments[idx] !== undefined ? stockAdjustments[idx] : item.qty;
+      return {
+        ...item,
+        qty: adjustedQty,
+        total: adjustedQty * item.sellingPrice - (item.discountAmount || 0),
+      };
+    });
+
+    // Create adjusted sample items
+    const invoicedSampleItems = sale.sampleItems.map((item, idx) => ({
+      ...item,
+      qty: item.qty, // Sample items typically don't change, but keep the option
+    }));
+
+    // Calculate back order summary
+    const backOrderSummary = sale.items.map((item, idx) => {
+      const requestedQty = item.qty;
+      const confirmedQty = stockAdjustments[idx] !== undefined ? stockAdjustments[idx] : item.qty;
+      const backOrderQty = Math.max(0, requestedQty - confirmedQty);
+
+      return {
+        product: item.name,
+        requestedQty,
+        confirmedQty,
+        backOrderQty,
+      };
+    }).filter(b => b.backOrderQty > 0);
+
+    // Calculate updated totals
+    let newSubtotal = 0;
+    let newTotalTax = 0;
+    invoicedItems.forEach(item => {
+      const qty = item.qty;
+      const baseAmount = item.sellingPrice * qty;
+      newSubtotal += baseAmount;
+      const taxable = baseAmount - (item.discountAmount || 0);
+      newTotalTax += (taxable * item.gst) / 100;
+    });
+
+    const newGrandTotal = newSubtotal + newTotalTax + (sale.transportCharge || 0);
+
+    // ✅ 2. REDUCE STOCK (WAREHOUSE + FIFO) - using invoiced items
+    const lowStockAlerts = await reduceStockFIFO(invoicedItems, sale.warehouse);
+
+    // ✅ 3. REDUCE STOCK FOR SAMPLE ITEMS
+    if (sale.sampleItems && Array.isArray(sale.sampleItems) && sale.sampleItems.length > 0) {
+      console.log(`\n📦 Processing ${sale.sampleItems.length} sample items for stock reduction...`);
+      await reduceStockFIFO(sale.sampleItems, sale.warehouse);
+    }
+
+    // ✅ 4. UPDATE CUSTOMER BALANCE
+    const invoiceAmount = newGrandTotal;
     const customer = await Customer.findById(sale.customer.customerId);
 
     if (!customer) {
       throw new Error("Customer not found");
     }
 
-    // Add sales order amount to customer closing balance
-    const updatedClosingBalance = customer.closingBalance + orderValue;
+    // Invoice opening balance is the current customer closing balance
+    const invoiceOpeningBalance = customer.closingBalance;
+    const invoiceClosingBalance = invoiceOpeningBalance + invoiceAmount;
+
+    // Update customer's actual closing balance
     await Customer.findByIdAndUpdate(sale.customer.customerId, {
-      closingBalance: updatedClosingBalance,
-      totalBalance: updatedClosingBalance,
+      closingBalance: invoiceClosingBalance,
+      totalBalance: invoiceClosingBalance,
     });
 
-    // ✅ Mark invoice as generated and update closing balance in SalesOrder
-    await SalesOrder.findByIdAndUpdate(req.params.id, {
+    // ✅ 5. UPDATE ORIGINAL SALES ORDER WITH INVOICE DETAILS (KEEP ORIGINAL ITEMS)
+    // Save adjusted items in invoiceItems field, keep original items unchanged
+    const updatedSale = await SalesOrder.findByIdAndUpdate(req.params.id, {
+      invoiceItems: invoicedItems,
+      invoiceSampleItems: invoicedSampleItems,
+      invoiceSubtotal: newSubtotal,
+      invoiceTotalTax: newTotalTax,
+      invoiceGrandTotal: newGrandTotal,
+      invoiceTransportCharge: sale.transportCharge || 0,
+      invoiceOpeningBalance: invoiceOpeningBalance,
+      invoiceClosingBalance: invoiceClosingBalance,
+      invoiceNotes: invoiceNotes,
+      backOrderSummary: backOrderSummary,
       invoiceGenerated: true,
-      closingBalance: updatedClosingBalance,
-      invoiceNotes: invoiceNotes || "", // Store notes in database
-      backOrderSummary: backOrderSummary, // Store back order info
-    });
+    }, { new: true });
 
-    console.log(`✅ Customer balance updated: ₹${customer.closingBalance} → ₹${updatedClosingBalance}`);
+    console.log(`✅ SALES INVOICE updated: ${updatedSale._id}`);
 
-    // ✅ 5. CREATE COMMISSIONS (AFTER INVOICE GENERATION)
+    console.log(`✅ Customer balance updated: ₹${invoiceOpeningBalance} → ₹${invoiceClosingBalance}`);
+
+    // ✅ 6. CREATE COMMISSIONS
     try {
       const salesOwnerDoc = sale.salesOwner ? await SalesOwner.findById(sale.salesOwner) : null;
       const salesManDoc = sale.salesMan ? await SalesMan.findById(sale.salesMan) : null;
       const deliveryManDoc = sale.deliveryMan ? await DeliveryMan.findById(sale.deliveryMan) : null;
 
-      // Function to get applicable commission for a person based on role type
       const getCommission = async (personId, roleType) => {
         if (!personId) return { percentage: 0, amount: 0 };
         
-        // Find applicable commission rule (highest minimum order value that doesn't exceed order value)
         const rule = await CommissionRule.findOne({
           personId: personId,
           roleType: roleType,
-          minimumOrderValue: { $lte: orderValue },
+          minimumOrderValue: { $lte: invoiceAmount },
           isActive: true,
         }).sort({ minimumOrderValue: -1 });
         
         if (!rule) return { percentage: 0, amount: 0 };
         
-        const commissionAmount = (orderValue * rule.commissionPercentage) / 100;
+        const commissionAmount = (invoiceAmount * rule.commissionPercentage) / 100;
         return { percentage: rule.commissionPercentage, amount: commissionAmount };
       };
 
-      // Get applicable commissions for all three roles
       const soCommission = await getCommission(sale.salesOwner, "SalesOwner");
       const smCommission = await getCommission(sale.salesMan, "SalesMan");
       const dmCommission = await getCommission(sale.deliveryMan, "DeliveryMan");
 
       const commissionData = {
-        salesOrderId: sale._id,
-        orderValue: orderValue,
+        salesOrderId: req.params.id,
+        orderValue: invoiceAmount,
         invoiceId: sale.invoiceId,
-
-        // Sales Owner
         salesOwnerId: salesOwnerDoc?._id,
         salesOwnerName: salesOwnerDoc?.name,
         salesOwnerCommissionPercentage: soCommission.percentage,
         salesOwnerCommissionAmount: soCommission.amount,
-
-        // Sales Man
         salesManId: salesManDoc?._id,
         salesManName: salesManDoc?.name,
         salesManCommissionPercentage: smCommission.percentage,
         salesManCommissionAmount: smCommission.amount,
-
-        // Delivery Man
         deliveryManId: deliveryManDoc?._id,
         deliveryManName: deliveryManDoc?.name,
         deliveryManCommissionPercentage: dmCommission.percentage,
@@ -934,7 +1040,6 @@ router.post("/generate-invoice/:id", async (req, res) => {
       const commission = new Commission(commissionData);
       await commission.save();
 
-      // Update commission amounts for sales personnel
       if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
         await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
           $inc: { commissionAmount: commission.salesOwnerCommissionAmount }
@@ -961,33 +1066,124 @@ router.post("/generate-invoice/:id", async (req, res) => {
       console.error("⚠️ Commission creation failed:", commissionError.message);
     }
 
-    // ✅ 6. WHATSAPP - Include notes and back order info
-    const phone = `91${sale.customer.whatsapp}`;
-    const customerLoginLink = "https://pearlsfrontend.web.app/customer-login";
+    res.json({
+      success: true,
+      message: "Invoice confirmed and all actions completed",
+      lowStockAlerts,
+    });
+  } catch (err) {
+    console.error("INVOICE CONFIRM ERROR:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Keep old endpoint for backward compatibility (now just calls preview)
+router.post("/generate-invoice/:id", async (req, res) => {
+  try {
+    const { stockAdjustments = {}, invoiceNotes = "" } = req.body;
     
-    // Build message with notes and back order info
-    let messageText = `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${sale.grandTotal}\n\n📄 Invoice: ${invoiceImage}\n\n🛒 Pearls Shopping: ${customerLoginLink}`;
-    
-    // Add back order summary if any
-    if (backOrderSummary.length > 0) {
-      messageText += `\n\n⚠️ Back Order Items:`;
-      backOrderSummary.forEach(bo => {
-        messageText += `\n• ${bo.product}: ${bo.backOrderQty} qty deferred`;
-      });
-    }
-    
-    // Add billing notes if provided
-    if (invoiceNotes && invoiceNotes.trim()) {
-      messageText += `\n\n📝 Notes: ${invoiceNotes}`;
+    const sale = await SalesOrder.findById(req.params.id)
+      .populate('salesMan', 'name')
+      .populate('deliveryMan', 'name')
+      .lean();
+
+    if (!sale) {
+      return res.status(404).json({ message: "Sale not found" });
     }
 
-    const message = encodeURIComponent(messageText);
+    // Extract names from populated fields
+    sale.salesManName = sale.salesMan?.name || "-";
+    sale.deliveryManName = sale.deliveryMan?.name || "-";
+
+    // Fetch customer details including GSTIN
+    const customerDoc = await Customer.findById(sale.customer.customerId).select('gstin name').lean();
+    if (customerDoc) {
+      sale.customer.gstin = customerDoc.gstin || "-";
+    }
+
+    // Fetch billing person name
+    let billingPersonName = "-";
+    if (sale.billingPerson) {
+      let billingPerson = await SalesOwner.findById(sale.billingPerson).select('name').lean();
+      if (!billingPerson) {
+        billingPerson = await SalesMan.findById(sale.billingPerson).select('name').lean();
+      }
+      if (!billingPerson) {
+        billingPerson = await DeliveryMan.findById(sale.billingPerson).select('name').lean();
+      }
+      billingPersonName = billingPerson?.name || "-";
+    }
+    sale.billingPersonName = billingPersonName;
+
+    // ✅ 1. CREATE ADJUSTED ITEMS FOR INVOICE
+    const invoicedItems = sale.items.map((item, idx) => {
+      const adjustedQty = stockAdjustments[idx] !== undefined ? stockAdjustments[idx] : item.qty;
+      return {
+        ...item,
+        qty: adjustedQty,
+        total: adjustedQty * item.sellingPrice - (item.discountAmount || 0),
+      };
+    });
+
+    // Calculate back order summary
+    const backOrderSummary = sale.items.map((item, idx) => {
+      const requestedQty = item.qty;
+      const confirmedQty = stockAdjustments[idx] !== undefined ? stockAdjustments[idx] : item.qty;
+      const backOrderQty = Math.max(0, requestedQty - confirmedQty);
+
+      return {
+        product: item.name,
+        requestedQty,
+        confirmedQty,
+        backOrderQty,
+      };
+    }).filter(b => b.backOrderQty > 0);
+
+    // Calculate updated totals for invoice
+    let newSubtotal = 0;
+    let newTotalTax = 0;
+    invoicedItems.forEach(item => {
+      const qty = item.qty;
+      const baseAmount = item.sellingPrice * qty;
+      newSubtotal += baseAmount;
+      const taxable = baseAmount - (item.discountAmount || 0);
+      newTotalTax += (taxable * item.gst) / 100;
+    });
+
+    const newGrandTotal = newSubtotal + newTotalTax + (sale.transportCharge || 0);
+
+    // ✅ 2. CHECK STOCK
+    await checkStockAvailability(invoicedItems, sale.warehouse);
+
+    // ✅ 3. GENERATE INVOICE
+    const invoiceData = {
+      ...sale,
+      items: invoicedItems,
+      subtotal: newSubtotal,
+      totalTax: newTotalTax,
+      grandTotal: newGrandTotal,
+      invoiceNotes: invoiceNotes,
+      backOrderSummary: backOrderSummary,
+    };
+
+    const invoiceImage = await generateInvoiceImage(invoiceData);
+    let ewayImage = null;
+
+    if (sale.ewayEnabled) {
+      ewayImage = await generateEwayBillImage(invoiceData);
+    }
+
+    // ✅ WHATSAPP
+    const phone = `91${sale.customer.whatsapp}`;
+    const customerLoginLink = "https://pearlsfrontend.web.app/customer-login";
+    const message = encodeURIComponent(
+      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${newGrandTotal}\n\n📄 Invoice: ${invoiceImage}\n\n🛒 Pearls Shopping: ${customerLoginLink}`
+    );
 
     res.json({
       success: true,
       invoiceImage,
       ewayImage,
-      lowStockAlerts,
       waUrl: `https://wa.me/${phone}?text=${message}`,
     });
   } catch (err) {

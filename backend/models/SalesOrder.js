@@ -73,6 +73,65 @@ const salesOrderSchema = new mongoose.Schema(
       },
     ],
 
+    // Invoice items (edited items for the actual invoice)
+    invoiceItems: [
+      {
+        productId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product",
+          required: true,
+        },
+        name: String,
+        hsn: String,
+        qty: Number,
+        sellingPrice: Number,
+
+        discountType: {
+          type: String,
+          enum: ["PERCENT", "AMOUNT"],
+        },
+        discountPercent: Number,
+        discountAmount: Number,
+
+        gst: Number,
+        cgst: Number,
+        sgst: Number,
+        igst: Number,
+
+        total: Number,
+      },
+    ],
+
+    // Invoice sample items
+    invoiceSampleItems: [
+      {
+        productId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product",
+          required: true,
+        },
+        name: String,
+        hsn: String,
+        qty: Number,
+        sellingPrice: Number,
+        isSample: {
+          type: Boolean,
+          default: true,
+        },
+      },
+    ],
+
+    // Invoice totals (when items are edited)
+    invoiceSubtotal: Number,
+    invoiceTotalDiscount: Number,
+    invoiceTotalTax: Number,
+    invoiceTransportCharge: Number,
+    invoiceGrandTotal: Number,
+
+    // Invoice balance (opening and closing balance when invoice is confirmed)
+    invoiceOpeningBalance: Number,
+    invoiceClosingBalance: Number,
+
     subtotal: Number,
     totalDiscount: Number,
     totalTax: Number,
@@ -115,6 +174,12 @@ const salesOrderSchema = new mongoose.Schema(
     invoiceGenerated: {
       type: Boolean,
       default: false,
+    },
+
+    recordType: {
+      type: String,
+      enum: ["SALES ORDER", "SALES INVOICE"],
+      default: "SALES ORDER",
     },
 
     invoiceNotes: {
