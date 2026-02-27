@@ -1,6 +1,7 @@
-import { createCanvas, loadImage } from "canvas";
 import express from "express";
+import fs from "fs/promises";
 import path from "path";
+import puppeteer from "puppeteer";
 import { fileURLToPath } from "url";
 import cloudinary from "../config/cloudinary.js";
 import Commission from "../models/Commission.js";
@@ -18,11 +19,25 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
-/* ---------------- GET PEARLS BOOK ---------------- */
+// Helper function to get logo as base64 data URI
+let logoDataUri = null;
+async function getLogoDataUri() {
+  if (logoDataUri) return logoDataUri; // Cache the logo
+  try {
+    const logoPath = path.join(__dirname, "../../public/logo.jpeg");
+    const logoBuffer = await fs.readFile(logoPath);
+    logoDataUri = `data:image/jpeg;base64,${logoBuffer.toString('base64')}`;
+    return logoDataUri;
+  } catch (err) {
+    console.warn("Logo not found:", err.message);
+    return null;
+  }
+}
+
 // Helper function to ensure items have pricing information
 async function enrichItemsWithPrices(items, isPurchase = false) {
   if (!Array.isArray(items)) return [];
-  
+
   return await Promise.all(items.map(async (item) => {
     // If price is already set and non-zero, use it
     if (isPurchase && item.purchasePrice && item.purchasePrice > 0) {
@@ -31,7 +46,7 @@ async function enrichItemsWithPrices(items, isPurchase = false) {
     if (!isPurchase && item.sellingPrice && item.sellingPrice > 0) {
       return item;
     }
-    
+
     // If price is missing, try to fetch from Product model
     if (item.productId) {
       try {
@@ -47,7 +62,7 @@ async function enrichItemsWithPrices(items, isPurchase = false) {
         console.log(`Could not fetch product prices for ${item.productId}`);
       }
     }
-    
+
     return item;
   }));
 }
@@ -72,10 +87,8 @@ router.get("/", async (req, res) => {
     })));
 
     const salesMapped = [];
-    
+
     for (const s of sales) {
-      // Always create a SALES ORDER row with original items
-      // Note: Sales order doesn't affect the closing balance, only the opening balance is used
       const salesOrderRow = {
         _id: s._id,
         type: "SALES ORDER",
@@ -140,7 +153,7 @@ router.get("/", async (req, res) => {
 async function checkStockAvailability(saleItems, warehouse) {
   for (const saleItem of saleItems) {
     console.log(`\n📦 Checking stock for: ${saleItem.name} (ProductId: ${saleItem.productId})`);
-    
+
     // Check Product model's totalQty (source of truth)
     const product = await Product.findById(saleItem.productId);
 
@@ -193,50 +206,6 @@ async function reduceStockFIFO(saleItems, warehouse) {
   return lowStockAlerts;
 }
 
-function drawCompanyHeader(ctx, canvasWidth) {
-  ctx.textAlign = "center";
-
-  // Company name
-  ctx.fillStyle = "#1a365d";
-  ctx.font = "bold 24px Arial";
-  ctx.fillText("PEARL AGENCY", canvasWidth / 2, 50);
-
-  ctx.fillStyle = "#000";
-  ctx.font = "14px Arial";
-  ctx.fillText("12/13, South By-Pass Road,", canvasWidth / 2, 75);
-  ctx.fillText("Vanarpettai, Tirunelveli - 627003", canvasWidth / 2, 95);
-  ctx.fillText("Mobile No: 9429692970", canvasWidth / 2, 115);
-  ctx.fillText("GSTIN/UIN: 33DULPS2600Q1Z6", canvasWidth / 2, 135);
-  ctx.fillText("GPAY No: 8825847884", canvasWidth / 2, 155);
-  ctx.fillText("State Name: Tamil Nadu, Code: 33", canvasWidth / 2, 175);
-
-  // Generated time (right aligned)
-  ctx.textAlign = "right";
-  ctx.font = "12px Arial";
-  ctx.fillStyle = "#444";
-  ctx.fillText(
-    `Generated on: ${getFormattedDateTime()}`,
-    canvasWidth - 20,
-    200
-  );
-
-  // Divider
-  ctx.strokeStyle = "#999";
-  ctx.beginPath();
-  ctx.moveTo(20, 215);
-  ctx.lineTo(canvasWidth - 20, 215);
-  ctx.stroke();
-
-  ctx.textAlign = "left";
-}
-
-
-function drawBorder(ctx, width, height) {
-  ctx.strokeStyle = "#2b6cb0"; // blue border
-  ctx.lineWidth = 3;
-  ctx.strokeRect(10, 10, width - 20, height - 20);
-}
-
 function getFormattedDateTime() {
   const now = new Date();
   return now.toLocaleString("en-IN", {
@@ -245,10 +214,213 @@ function getFormattedDateTime() {
   });
 }
 
-// ---------------- GENERATE INVOICE IMAGE ----------------
-async function generateInvoiceImage(sale) {
-  // Calculate HSN-wise tax summary
+// Generate HTML Invoice - PAGE 1: ORDER DETAILS + SAMPLE ITEMS
+async function generateInvoiceOrderPage(sale) {
+  const logoDataUri = await getLogoDataUri();
+  
+  const itemsHTML = sale.items.map((item) => `
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd; font-size: 8px; color: #000;">${item.name}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px; color: #000;">${item.hsn}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px; color: #000;">${item.gst}%</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px; color: #000;">${item.qty}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-size: 8px; color: #000;">₹${item.sellingPrice.toFixed(2)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px; color: #000;">Kg</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-size: 8px; color: #000;">₹${(item.total || 0).toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  const sampleItemsHTML = sale.sampleItems && sale.sampleItems.length > 0 ? `
+    <div style="margin-top: 20px; page-break-inside: avoid;">
+      <h3 style="background-color: #1a365d; color: white; padding: 10px; margin: 0; font-size: 10px;">SAMPLE PRODUCTS (NOT BILLED)</h3>
+      <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+        <tr style="background-color: #f0f0f0;">
+          <th style="padding: 8px; border: 1px solid #ddd; text-align: left; font-size: 8px; font-weight: bold;">Description of Goods</th>
+          <th style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px; font-weight: bold;">HSN</th>
+          <th style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px; font-weight: bold;">Qty</th>
+          <th style="padding: 8px; border: 1px solid #ddd; text-align: right; font-size: 8px; font-weight: bold;">Rate</th>
+          <th style="padding: 8px; border: 1px solid #ddd; text-align: right; font-size: 8px; font-weight: bold;">Total</th>
+        </tr>
+        ${sale.sampleItems.map((item) => `
+          <tr>
+            <td style="padding: 8px; border: 1px solid #ddd; font-size: 8px; color: #000;">${item.name}</td>
+            <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px; color: #000;">${item.hsn}</td>
+            <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px; color: #000;">${item.qty}</td>
+            <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-size: 8px; color: #000;">₹${item.sellingPrice.toFixed(2)}</td>
+            <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-size: 8px; color: #000;">₹${(item.qty * item.sellingPrice).toFixed(2)}</td>
+          </tr>
+        `).join('')}
+      </table>
+    </div>
+  ` : '';
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Invoice - Order Details</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: white; padding: 20px; }
+        .invoice-container { 
+          max-width: 420px; 
+          margin: 0 auto; 
+          border: 3px solid #2b6cb0; 
+          padding: 15px;
+          background: white;
+        }
+        .header { display: flex; gap: 20px; margin-bottom: 20px; }
+        .logo-section { flex: 0 0 100px; }
+        .company-section { flex: 1; text-align: right; }
+        .company-section p { margin: 3px 0; font-size: 11px; line-height: 1.4; color: #000; }
+        h1 { color: #1a365d; font-size: 16px; margin: 5px 0; }
+        .section-title { background-color: #1a365d; color: white; padding: 8px; margin: 15px 0 10px 0; font-size: 12px; font-weight: bold; }
+        .sender-buyer { display: flex; gap: 40px; margin: 15px 0; }
+        .sender-buyer-item { flex: 1; }
+        .sender-buyer-item h3 { font-size: 11px; font-weight: bold; margin-bottom: 5px; color: #000; }
+        .sender-buyer-item p { font-size: 10px; margin: 3px 0; line-height: 1.3; color: #000; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        th { background-color: #f0f0f0; padding: 10px; border: 1px solid #ddd; text-align: left; font-size: 11px; font-weight: bold; color: #000; }
+        td { padding: 8px; border: 1px solid #ddd; font-size: 11px; color: #000; }
+        .summary { float: right; width: 40%; margin: 15px 0; }
+        .summary-row { display: flex; justify-content: space-between; margin: 5px 0; padding: 3px 0; border-bottom: 1px solid #ddd; font-size: 11px; color: #000; }
+        .summary-total { font-weight: bold; font-size: 13px; }
+        .balance-section { clear: both; margin-top: 30px; padding-top: 15px; border-top: 2px solid #ddd; }
+        .balance-row { display: flex; justify-content: space-between; margin: 8px 0; font-size: 9px; }
+      </style>
+    </head>
+    <body>
+      <div class="invoice-container">
+        <!-- Header -->
+        <div class="header">
+          ${logoDataUri ? `<div class="logo-section"><img src="${logoDataUri}" style="max-width: 150px; max-height: 150px; object-fit: contain;">
+            <p style="font-size: 9px;">Acknowledgement No: ${sale.invoiceId}</p><br>
+            <p  style="font-size: 9px;">Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}</p>
+            <p style="font-size: 9px; color: #666; margin-top: 5px;">Generated on: ${getFormattedDateTime()}</p>
+          </div>` : ''}
+          <div class="company-section">
+            <p><strong>12/13, South By-Pass Road, Vanarpettai,</strong></p>
+            <p>Tirunelveli - 627003, Tamil Nadu</p>
+            <p>Mobile: 9429692970 | GSTIN: 33DULPS2600Q1Z6</p>
+            <p>GPAY No: 8825847884 | State: Tamil Nadu (Code: 33)</p>
+           
+          </div>
+        </div>
+
+        <!-- Sender & Buyer -->
+        <div class="sender-buyer">
+          <div class="sender-buyer-item">
+            <h3>SENDER (FROM)</h3>
+            <p><strong>PEARL AGENCY</strong></p>
+            <p>12/13, South By-Pass Road,</p>
+            <p>Vanarpettai, Tirunelveli - 627003</p>
+            <p>GSTIN: 33DULPS2600Q1Z6</p>
+            <p>Mobile: 9429692970</p>
+          </div>
+          <div class="sender-buyer-item">
+            <h3>BUYER (BILL TO)</h3>
+            <p><strong>${sale.customer.name}</strong></p>
+            <p>${sale.customer.address}</p>
+            <p>${sale.customer.district}, ${sale.customer.state} - ${sale.customer.pincode}</p>
+            <p>GSTIN: ${sale.customer.gstin || "-"}</p>
+            <p>Mobile: ${sale.customer.whatsapp}</p>
+          </div>
+        </div>
+
+        <!-- Order Details -->
+        <div class="section-title">Order Details</div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 11px;">
+          <div>Invoice No: <strong>${sale.invoiceId}</strong></div>
+          <div>Billing Person: <strong>${sale.billingPersonName || "-"}</strong></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 15px;">
+          
+          <div>Delivery Man: <strong>${sale.deliveryManName || "-"}</strong></div>
+        </div>
+
+        <!-- Items Table -->
+        <table>
+          <tr style="background-color: #f0f0f0;">
+            <th>Description of Goods</th>
+            <th style="text-align: center;">HSN</th>
+            <th style="text-align: center;">GST %</th>
+            <th style="text-align: center;">Qty</th>
+            <th style="text-align: right;">Rate</th>
+            <th style="text-align: center;">Unit</th>
+            <th style="text-align: right;">Total</th>
+          </tr>
+          ${itemsHTML}
+        </table>
+
+        <!-- Summary -->
+        <div class="summary">
+          <div class="summary-row">
+            <span>Total Amount:</span>
+            <span>₹${sale.subtotal.toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>CGST:</span>
+            <span>₹${((sale.subtotal * 5) / 100).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>SGST:</span>
+            <span>₹${((sale.subtotal * 5) / 100).toFixed(2)}</span>
+          </div>
+          <div class="summary-row">
+            <span>Transport:</span>
+            <span>₹${(sale.transportCharge || 0).toFixed(2)}</span>
+          </div>
+          <div class="summary-row summary-total">
+            <span>Grand Total:</span>
+            <span>₹${sale.grandTotal.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <!-- Balance Section -->
+        <div class="balance-section">
+          <div class="balance-row">
+            <span>PREVIOUS BALANCE (Opening Balance):</span>
+            <span><strong>₹${(sale.openingBalance || 0).toFixed(2)}</strong></span>
+          </div>
+          <div class="balance-row">
+            <span>CURRENT BALANCE (Closing Balance):</span>
+            <span><strong>₹${(sale.closingBalance || 0).toFixed(2)}</strong></span>
+          </div>
+        </div>
+
+        ${sampleItemsHTML}
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Convert HTML to image using Puppeteer (A5 format: 420x595px)
+  const browser = await puppeteer.launch({ args: ['--font-render-hinting=none'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 840, height: 1190, deviceScaleFactor: 2 });
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+  const imageBuffer = await page.screenshot({ type: 'png', fullPage: true, scale: 2 });
+  await browser.close();
+
+  // Upload to Cloudinary
+  const upload = await cloudinary.uploader.upload(
+    `data:image/png;base64,${imageBuffer.toString("base64")}`,
+    {
+      folder: "pearls-erp/invoices",
+      public_id: `INV_ORDER_${sale.invoiceId}_${Date.now()}`,
+    }
+  );
+
+  return upload.secure_url;
+}
+
+// PAGE 2: TAX INVOICE (HSN BREAKDOWN)
+async function generateInvoiceTaxPage(sale) {
+  const logoDataUri = await getLogoDataUri();
+  let totalCGST = 0, totalSGST = 0, totalIGST = 0;
   const hsnSummary = {};
+
   if (Array.isArray(sale.items)) {
     sale.items.forEach((item) => {
       if (!hsnSummary[item.hsn]) {
@@ -261,7 +433,6 @@ async function generateInvoiceImage(sale) {
           cgstAmount: 0,
           sgstAmount: 0,
           igstAmount: 0,
-          totalTax: 0,
           total: 0,
         };
       }
@@ -276,486 +447,298 @@ async function generateInvoiceImage(sale) {
       hsnSummary[item.hsn].cgstAmount += cgstAmount;
       hsnSummary[item.hsn].sgstAmount += sgstAmount;
       hsnSummary[item.hsn].igstAmount += igstAmount;
-      hsnSummary[item.hsn].totalTax += cgstAmount + sgstAmount + igstAmount;
       hsnSummary[item.hsn].total += cgstAmount + sgstAmount + igstAmount + taxableValue;
+
+      totalCGST += cgstAmount;
+      totalSGST += sgstAmount;
+      totalIGST += igstAmount;
     });
   }
 
   const hsnArray = Object.values(hsnSummary);
-  const totalHsnItems = hsnArray.length;
-  const estimatedHeight = 250 + (sale.items?.length || 0) * 18 + totalHsnItems * 20 + 400;
+  let totalTaxableValue = 0, grandTotal = 0;
 
-  const canvas = createCanvas(595, Math.max(1200, estimatedHeight));
-  const ctx = canvas.getContext("2d");
-
-  // ===== BACKGROUND =====
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, 595, canvas.height);
-
-  drawBorder(ctx, 595, canvas.height);
-
-  // ===== LOAD AND DRAW LOGO =====
-  let y = 15;
-  try {
-    const logoPath = path.join(__dirname, "../../public/logo.jpeg");
-    const logo = await loadImage(logoPath);
-    const logoWidth = 100;
-    const logoHeight = 75;
-    const logoCenterX = 297 - logoWidth / 2;
-    ctx.drawImage(logo, logoCenterX, y, logoWidth, logoHeight);
-    y += 90;
-  } catch (err) {
-    console.warn("Logo not found, skipping logo display:", err.message);
-    y += 15;
-  }
-
-  // ===== COMPANY HEADER (CENTERED) =====
-  y += 15;
-  ctx.textAlign = "center";
-  ctx.font = "12px Arial";
-  ctx.fillStyle = "#000";
-  ctx.fillText("12/13, South By-Pass Road, Vanarpettai,", 297, y);
-  y += 15;
-  ctx.fillText("Tirunelveli - 627003, Tamil Nadu", 297, y);
-  y += 15;
-  ctx.fillText("Mobile: 9429692970 | GSTIN: 33DULPS2600Q1Z6", 297, y);
-  y += 13;
-  ctx.fillText("GPAY No: 8825847884 | State: Tamil Nadu (Code: 33)", 297, y);
-
-  // ===== HEADER - ACKNOWLEDGEMENT NO & DATE =====
-  y += 18;
-  ctx.font = "bold 13px Arial";
-  ctx.fillText(`Acknowledgement No: ${sale.invoiceId}`, 297, y);
-  y += 18;
-  ctx.font = "12px Arial";
-  ctx.fillText(`Acknowledgement Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}`, 297, y);
-
-  ctx.textAlign = "left";
-
-  // ===== DIVIDER =====
-  y += 18;
-  drawLine(ctx, 20, y, 575, y);
-
-  // ===== SENDER & BUYER DATA =====
-  y += 15;
-
-  // Sender
-  ctx.font = "bold 11px Arial";
-  ctx.fillText("SENDER (FROM)", 30, y);
-
-  // Buyer
-  ctx.fillText("BUYER (BILL TO)", 310, y);
-
-  y += 15;
-  ctx.font = "11px Arial";
-
-  // Sender details
-  drawText(ctx, "PEARL AGENCY", 30, y, 11, true);
-  drawText(ctx, sale.customer.name, 310, y, 11, true);
-
-  y += 14;
-  drawText(ctx, "12/13, South By-Pass Road,", 30, y);
-  // Split buyer address into 2 lines
-  const addressLine1 = sale.customer.address || "";
-  drawText(ctx, addressLine1, 310, y);
-
-  y += 13;
-  drawText(ctx, "Vanarpettai, Tirunelveli - 627003", 30, y);
-  const addressLine2 = `${sale.customer.district}, ${sale.customer.state} - ${sale.customer.pincode}`;
-  drawText(ctx, addressLine2, 310, y);
-
-  y += 13;
-  drawText(ctx, "GSTIN: 33DULPS2600Q1Z6", 30, y);
-  drawText(ctx, `GSTIN: ${sale.customer.gstin || "-"}`, 310, y);
-
-  y += 13;
-  drawText(ctx, "Mobile: 9429692970", 30, y);
-  drawText(ctx, `Mobile: ${sale.customer.whatsapp}`, 310, y);
-
-  // ===== ORDER DETAILS =====
-  y += 18;
-  drawLine(ctx, 20, y, 575, y);
-  y += 12;
-
-  ctx.font = "11px Arial";
-  drawText(ctx, `Invoice No: ${sale.invoiceId}`, 30, y);
-  // Get billing person name
-  const billingPersonName = sale.billingPersonName || "-";
-  drawText(ctx, `Billing Person: ${billingPersonName}`, 310, y);
-
-  y += 14;
-  drawText(ctx, `Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}`, 30, y);
-  drawText(ctx, `Delivery Man: ${sale.deliveryManName || "-"}`, 310, y);
-
-  // ===== ITEMS TABLE HEADER =====
-  y += 20;
-  drawLine(ctx, 20, y, 575, y);
-  y += 13;
-
-  ctx.font = "bold 10px Arial";
-  ctx.fillStyle = "#1a365d";
-
-  // Adjusted column positions for wider description and GST
-  drawText(ctx, "Description of Goods", 25, y);
-  drawText(ctx, "HSN", 200, y);
-  drawText(ctx, "GST %", 260, y);
-  drawText(ctx, "Qty", 305, y);
-  drawText(ctx, "Rate", 345, y);
-  drawText(ctx, "Unit", 430, y);
-  drawText(ctx, "Total", 500, y);
-
-  // ===== ITEMS TABLE BODY =====
-  y += 12;
-  drawLine(ctx, 20, y, 575, y);
-  y += 12;
-
-  ctx.font = "10px Arial";
-  ctx.fillStyle = "#000";
-
-  if (Array.isArray(sale.items)) {
-    sale.items.forEach((item) => {
-      const taxAmount = ((item.sellingPrice * item.qty - item.discountAmount) * item.gst) / 100;
-      const roundedTotal = Math.ceil(item.total * 100) / 100;
-
-      drawText(ctx, item.name.substring(0, 30), 25, y);
-      drawText(ctx, item.hsn, 200, y);
-      drawText(ctx, `${item.gst}%`, 260, y);
-      drawText(ctx, item.qty.toString(), 305, y);
-      drawText(ctx, `₹${item.sellingPrice.toFixed(2)}`, 345, y);
-      drawText(ctx, "Kg", 430, y);
-      drawText(ctx, `₹${roundedTotal.toFixed(2)}`, 500, y);
-
-      y += 16;
-    });
-  }
-
-  // ===== ITEMS TABLE FOOTER =====
-  drawLine(ctx, 20, y, 575, y);
-  y += 15;
-
-  ctx.font = "11px Arial";
-
-  // Summary on right side
-  const summaryX = 350;
-  const roundedSubtotal = Math.ceil(sale.subtotal * 100) / 100;
-  const roundedTotalTax = Math.ceil(sale.totalTax * 100) / 100;
-  const roundedTransport = Math.ceil(sale.transportCharge * 100) / 100;
-  const roundedGrandTotal = Math.ceil(sale.grandTotal * 100) / 100;
-
-  drawText(ctx, `Total Amount: ₹${roundedSubtotal.toFixed(2)}`, summaryX, y);
-  y += 14;
-
-  // Calculate CGST and SGST by aggregating from items
-  let totalCGST = 0,
-    totalSGST = 0,
-    totalIGST = 0;
-  if (Array.isArray(sale.items)) {
-    sale.items.forEach((item) => {
-      const taxable = item.sellingPrice * item.qty - (item.discountAmount || 0);
-      totalCGST += (taxable * item.cgst) / 100;
-      totalSGST += (taxable * item.sgst) / 100;
-      totalIGST += (taxable * item.igst) / 100;
-    });
-  }
-
-  drawText(ctx, `CGST: ₹${Math.ceil(totalCGST * 100) / 100}`, summaryX, y);
-  y += 14;
-
-  drawText(ctx, `SGST: ₹${Math.ceil(totalSGST * 100) / 100}`, summaryX, y);
-  y += 14;
-
-  if (totalIGST > 0) {
-    drawText(ctx, `IGST: ₹${Math.ceil(totalIGST * 100) / 100}`, summaryX, y);
-    y += 14;
-  }
-
-  drawText(ctx, `Transport: ₹${roundedTransport.toFixed(2)}`, summaryX, y);
-  y += 16;
-
-  ctx.font = "bold 12px Arial";
-  drawText(ctx, `Grand Total: ₹${roundedGrandTotal.toFixed(2)}`, summaryX, y);
-
-  // ===== BALANCE SECTION =====
-  y += 20;
-  drawLine(ctx, 20, y, 575, y);
-  y += 12;
-
-  ctx.font = "11px Arial";
-  ctx.fillStyle = "#000";
-
-  drawText(ctx, "PREVIOUS BALANCE (Opening Balance):", 30, y);
-  drawText(ctx, `₹${Number(sale.openingBalance || 0).toFixed(2)}`, 480, y);
-
-  y += 14;
-  drawText(ctx, "CURRENT BALANCE (Closing Balance):", 30, y);
-  drawText(ctx, `₹${Number(sale.closingBalance || 0).toFixed(2)}`, 480, y);
-
-  // ===== SAMPLE PRODUCTS TABLE =====
-  if (sale.sampleItems && Array.isArray(sale.sampleItems) && sale.sampleItems.length > 0) {
-    y += 25;
-    drawLine(ctx, 20, y, 575, y);
-    y += 12;
-
-    ctx.font = "bold 11px Arial";
-    ctx.fillStyle = "#1a365d";
-    ctx.fillText("SAMPLE PRODUCTS (NOT BILLED)", 30, y);
-
-    y += 14;
-    drawLine(ctx, 20, y, 575, y);
-    y += 13;
-
-    ctx.font = "bold 10px Arial";
-    ctx.fillStyle = "#1a365d";
-
-    // Sample Products Table Header
-    drawText(ctx, "Description of Goods", 25, y);
-    drawText(ctx, "HSN", 200, y);
-    drawText(ctx, "Qty", 305, y);
-    drawText(ctx, "Rate", 345, y);
-    drawText(ctx, "Total", 500, y);
-
-    // Sample Products Table Body
-    y += 12;
-    drawLine(ctx, 20, y, 575, y);
-    y += 12;
-
-    ctx.font = "10px Arial";
-    ctx.fillStyle = "#000";
-
-    sale.sampleItems.forEach((item) => {
-      const sampleTotal = item.qty * item.sellingPrice;
-      drawText(ctx, item.name.substring(0, 30), 25, y);
-      drawText(ctx, item.hsn, 200, y);
-      drawText(ctx, item.qty.toString(), 305, y);
-      drawText(ctx, `₹${item.sellingPrice.toFixed(2)}`, 345, y);
-      drawText(ctx, `₹${sampleTotal.toFixed(2)}`, 500, y);
-
-      y += 16;
-    });
-
-    // Sample Products Table Footer
-    drawLine(ctx, 20, y, 575, y);
-    y += 12;
-  }
-
-  // ===== TAX INVOICE SECTION =====
-  y += 13;
-  drawLine(ctx, 20, y, 575, y);
-  y += 12;
-
-  ctx.font = "bold 12px Arial";
-  ctx.textAlign = "center";
-  ctx.fillText("TAX INVOICE", 297, y);
-  ctx.textAlign = "left";
-
-  y += 15;
-  drawLine(ctx, 20, y, 575, y);
-  y += 12;
-
-  // HSN Table Header
-  ctx.font = "bold 10px Arial";
-  ctx.fillStyle = "#1a365d";
-
-  drawText(ctx, "HSN Code", 30, y);
-  drawText(ctx, "Taxable Value", 120, y);
-  drawText(ctx, "CGST (Rate | Amt)", 220, y);
-  drawText(ctx, "SGST (Rate | Amt)", 380, y);
-  drawText(ctx, "Total", 500, y);
-
-  y += 12;
-  drawLine(ctx, 20, y, 575, y);
-  y += 11;
-
-  // HSN Table Body
-  ctx.font = "10px Arial";
-  ctx.fillStyle = "#000";
-
-  hsnArray.forEach((hsnData) => {
-    const cgstDisplay = hsnData.cgstRate > 0 ? `${hsnData.cgstRate}% | ₹${hsnData.cgstAmount.toFixed(2)}` : "-";
-    const sgstDisplay = hsnData.sgstRate > 0 ? `${hsnData.sgstRate}% | ₹${hsnData.sgstAmount.toFixed(2)}` : "-";
-
-    drawText(ctx, hsnData.hsn, 30, y);
-    drawText(ctx, `₹${hsnData.taxableValue.toFixed(2)}`, 120, y);
-    drawText(ctx, cgstDisplay, 220, y);
-    drawText(ctx, sgstDisplay, 380, y);
-    drawText(ctx, `₹${hsnData.total.toFixed(2)}`, 500, y);
-
-    y += 14;
+  hsnArray.forEach((h) => {
+    totalTaxableValue += h.taxableValue;
+    grandTotal += h.total;
   });
 
-  // HSN Table Footer
-  drawLine(ctx, 20, y + 2, 575, y + 2);
+  const rowsHTML = hsnArray.map((h) => `
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd; font-size: 11px;">${h.hsn}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-size: 11px;">₹${h.taxableValue.toFixed(2)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; font-size: 11px;">${h.cgstRate > 0 ? h.cgstRate + "% | ₹" + h.cgstAmount.toFixed(2) : "-"}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; font-size: 11px;">${h.sgstRate > 0 ? h.sgstRate + "% | ₹" + h.sgstAmount.toFixed(2) : "-"}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-size: 11px;">₹${h.total.toFixed(2)}</td>
+    </tr>
+  `).join('');
 
-  // ===== UPLOAD =====
-  const buffer = canvas.toBuffer("image/png");
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Invoice - Tax Invoice</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: white; padding: 20px; }
+        .invoice-container { max-width: 420px; margin: 0 auto; border: 3px solid #2b6cb0; padding: 15px; }
+        h1 { text-align: center; color: #1a365d; font-size: 14px; margin: 15px 0 8px 0; }
+        .invoice-header { text-align: center; font-size: 11px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th { background-color: #f0f0f0; padding: 10px; border: 1px solid #ddd; text-align: left; font-size: 11px; font-weight: bold; color: #000; }
+        td { padding: 8px; border: 1px solid #ddd; font-size: 11px; color: #000; }
+        tr.total { font-weight: bold; background-color: #f9f9f9; color: #000; }
+      </style>
+    </head>
+    <body>
+      <div class="invoice-container">
+        ${logoDataUri ? `<div style="text-align: center; margin-bottom: 20px;"><img src="${logoDataUri}" style="max-width: 100px; max-height: 100px; object-fit: contain;"></div>` : ''}
+        <h1>TAX INVOICE - HSN-WISE SUMMARY</h1>
+        <div class="invoice-header">Invoice No: ${sale.invoiceId} | Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}</div>
+
+        <table>
+          <tr style="background-color: #f0f0f0; font-size: 9px;">
+            <th>HSN Code</th>
+            <th>Taxable Value</th>
+            <th>CGST (Rate | Amt)</th>
+            <th>SGST (Rate | Amt)</th>
+            <th>Total</th>
+          </tr>
+          ${rowsHTML}
+          <tr class="total" style="font-size: 9px;">
+            <td>TOTAL</td>
+            <td style="text-align: right;">₹${totalTaxableValue.toFixed(2)}</td>
+            <td>₹${totalCGST.toFixed(2)}</td>
+            <td>₹${totalSGST.toFixed(2)}</td>
+            <td style="text-align: right;">₹${grandTotal.toFixed(2)}</td>
+          </tr>
+        </table>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const browser = await puppeteer.launch({ args: ['--font-render-hinting=none'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 840, height: 1190, deviceScaleFactor: 2 });
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+  const imageBuffer = await page.screenshot({ type: 'png', fullPage: true, scale: 2 });
+  await browser.close();
 
   const upload = await cloudinary.uploader.upload(
-    `data:image/png;base64,${buffer.toString("base64")}`,
+    `data:image/png;base64,${imageBuffer.toString('base64')}`,
     {
       folder: "pearls-erp/invoices",
-      public_id: `INV_${sale.invoiceId}_${Date.now()}`,
+      public_id: `INV_TAX_${sale.invoiceId}_${Date.now()}`,
     }
   );
 
   return upload.secure_url;
 }
 
-
-
-function drawLine(ctx, x1, y1, x2, y2) {
-  ctx.strokeStyle = "#999";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.stroke();
-}
-
-function drawText(ctx, text, x, y, size = 12, bold = false) {
-  ctx.font = `${bold ? "bold" : ""} ${size}px Arial`;
-  ctx.fillStyle = "#000";
-  ctx.fillText(text, x, y);
-}
-
-
-async function generateEwayBillImage(sale) {
-  const canvas = createCanvas(595, 900);
-  const ctx = canvas.getContext("2d");
-
-  // Background
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, 595, 900);
-
-  drawBorder(ctx, 595, 900);
-
-  // ===== HEADER =====
-  ctx.fillStyle = "#805ad5";
-  ctx.font = "bold 22px Arial";
-  ctx.fillText("E-WAY BILL", 210, 40);
-
-  drawLine(ctx, 20, 50, 575, 50);
-
-  // ================= SUPPLIER (FROM) =================
-  let sy = 80;
-
-  drawText(ctx, "Supplier (From)", 30, sy, 14, true);
-  sy += 22;
-
-  drawText(ctx, "PEARL AGENCY", 30, sy, 12, true);
-  sy += 18;
-
-  drawText(ctx, "12/13, South By-Pass Road,", 30, sy);
-  sy += 16;
-
-  drawText(ctx, "Vanarpettai, Tirunelveli - 627003", 30, sy);
-  sy += 16;
-
-  drawText(ctx, "Mobile No : 9429692970", 30, sy);
-  sy += 16;
-
-  drawText(ctx, "GSTIN/UIN : 33DULPS2600Q1Z6", 30, sy);
-  sy += 16;
-
-  drawText(ctx, "GPAY No : 8825847884", 30, sy);
-  sy += 16;
-
-  drawText(ctx, "State Name : Tamil Nadu, Code : 33", 30, sy);
-  sy += 16;
-
-  drawText(ctx, "E-Mail : agencypearl@gmail.com", 30, sy);
-  sy += 16;
-
-  drawText(ctx, `Warehouse : ${sale.warehouse}`, 30, sy);
-  sy += 20;
-
-  // ================= CUSTOMER (TO) =================
-  let cy = 80;
-
-  drawText(ctx, "Recipient (To)", 310, cy, 14, true);
-  cy += 22;
-
-  drawText(ctx, `Name : ${sale.customer.name}`, 310, cy);
-  cy += 18;
-
-  drawText(ctx, `Address : ${sale.customer.address}`, 310, cy);
-  cy += 18;
-
-  drawText(
-    ctx,
-    `State : ${sale.customer.state} - ${sale.customer.pincode}`,
-    310,
-    cy
-  );
-  cy += 18;
-
-  // ===== COMMON DIVIDER (AUTO HEIGHT) =====
-  const detailsEndY = Math.max(sy, cy) + 10;
-  drawLine(ctx, 20, detailsEndY, 575, detailsEndY);
-
-  // ================= E-WAY DETAILS =================
-  let ey = detailsEndY + 25;
-
-  drawText(ctx, "E-Way Bill Details", 30, ey, 14, true);
-
-  drawText(ctx, `Invoice No : ${sale.invoiceId}`, 30, ey + 25);
-  drawText(ctx, `E-Way Bill No : ${sale.ewayDetails.ewayBillNo}`, 30, ey + 45);
-  drawText(ctx, `E-Way Date : ${sale.ewayDetails.ewayDate}`, 30, ey + 65);
-
-  drawText(ctx, `Vehicle No : ${sale.ewayDetails.vehicleNo}`, 310, ey + 25);
-  drawText(ctx, `Mode : ${sale.ewayDetails.transportMode}`, 310, ey + 45);
-  drawText(ctx, `Transporter : ${sale.ewayDetails.transporterName}`, 310, ey + 65);
-
-  drawLine(ctx, 20, ey + 85, 575, ey + 85);
-
-  // ================= ITEM TABLE =================
-  let y = ey + 110;
-
-  ctx.font = "bold 12px Arial";
-  ctx.fillText("Product", 30, y);
-  ctx.fillText("Qty", 210, y);
-  ctx.fillText("Price", 250, y);
-  ctx.fillText("GST%", 310, y);
-  ctx.fillText("CGST", 360, y);
-  ctx.fillText("SGST", 420, y);
-  ctx.fillText("Total", 480, y);
-
-  drawLine(ctx, 20, y + 5, 575, y + 5);
-
-  ctx.font = "12px Arial";
-  y += 25;
-
-  if (Array.isArray(sale.items)) {
-    sale.items.forEach((item) => {
-      ctx.fillText(item.name, 30, y);
-      ctx.fillText(item.qty.toString(), 210, y);
-      ctx.fillText(`₹${item.sellingPrice}`, 250, y);
-      ctx.fillText(`${item.gst}%`, 310, y);
-      ctx.fillText(`₹${item.cgst}`, 360, y);
-      ctx.fillText(`₹${item.sgst}`, 420, y);
-      ctx.fillText(`₹${item.total}`, 480, y);
-      y += 22;
-    });
+// PAGE 3: BACK ORDER
+async function generateBackOrderPage(sale, backOrderSummary, invoiceNotes = "") {
+  const logoDataUri = await getLogoDataUri();
+  if (!backOrderSummary || backOrderSummary.length === 0) {
+    return null;
   }
 
-  drawLine(ctx, 20, y + 5, 575, y + 5);
+  const rowsHTML = backOrderSummary.map((item, idx) => `
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px;">${idx + 1}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; font-size: 8px;">${item.product}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px;">${item.requestedQty} kg</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px;">${item.confirmedQty} kg</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px; color: #d32f2f; font-weight: bold;">${item.backOrderQty} kg</td>
+    </tr>
+  `).join('');
 
-  // ================= TOTAL SUMMARY =================
-  y += 30;
-  drawText(ctx, `Sub Total : ₹${sale.subtotal}`, 350, y);
-  y += 20;
-  drawText(ctx, `Tax : ₹${sale.totalTax}`, 350, y);
-  y += 20;
-  drawText(ctx, `Transport : ₹${sale.transportCharge}`, 350, y);
-  y += 20;
-  drawText(ctx, `Grand Total : ₹${sale.grandTotal}`, 350, y, 14, true);
+  const totalBackOrderQty = backOrderSummary.reduce((sum, item) => sum + item.backOrderQty, 0);
+  const notesHTML = invoiceNotes ? `<div style="margin-top: 20px; padding: 10px; background-color: #f9f9f9; border: 1px solid #ddd; font-size: 11px;"><strong>Notes:</strong> ${invoiceNotes}</div>` : '';
 
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Back Order Summary</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: white; padding: 20px; }
+        .invoice-container { max-width: 420px; margin: 0 auto; border: 3px solid #2b6cb0; padding: 15px; }
+        .header { display: flex; gap: 10px; margin-bottom: 15px; justify-content: space-between; align-items: flex-start; }
+        .company-info { flex: 1; }
+        .company-info p { font-size: 11px; margin: 3px 0; color: #000; }
+        h1 { text-align: center; color: #d32f2f; font-size: 16px; margin: 20px 0; }
+        .details { display: flex; gap: 30px; margin: 15px 0; font-size: 11px; color: #000; }
+        .detail-item { flex: 1; }
+        .detail-item strong { display: block; margin-bottom: 2px; color: #000; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th { background-color: #f0f0f0; padding: 10px; border: 1px solid #ddd; text-align: left; font-size: 11px; font-weight: bold; color: #000; font-family: Arial, sans-serif; }
+        td { padding: 10px 8px; border: 1px solid #ddd; font-size: 11px; color: #000; font-family: Arial, sans-serif; }
+        .total-row { background-color: #f0f0f0; font-weight: bold; font-size: 11px; color: #000; }
+      </style>
+    </head>
+    <body>
+      <div class="invoice-container">
+        <div class="header">
+          ${logoDataUri ? `<img src="${logoDataUri}" style="max-width: 100px; max-height: 100px; object-fit: contain;">` : ''}
+          <div class="company-info">
+            <p><strong>PEARL AGENCY</strong></p>
+            <p>12/13, South By-Pass Road, Vanarpettai</p>
+            <p>Tirunelveli - 627003, Tamil Nadu</p>
+            <p>Mobile: 9429692970 | GSTIN: 33DULPS2600Q1Z6</p>
+          </div>
+        </div>
 
+        <h1>BACK ORDER SUMMARY</h1>
 
+        <div class="details">
+          <div class="detail-item">
+            <strong>Invoice No: ${sale.invoiceId}</strong>
+            <div>Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}</div>
+          </div>
+          <div class="detail-item">
+            <strong>Customer: ${sale.customer.name}</strong>
+            <div>Phone: ${sale.customer.whatsapp}</div>
+            <div>Address: ${sale.customer.address}</div>
+            <div>${sale.customer.district}, ${sale.customer.state} - ${sale.customer.pincode}</div>
+          </div>
+        </div>
 
-  const buffer = canvas.toBuffer("image/png");
+        <table>
+          <tr style="background-color: #f0f0f0;">
+            <th>Sr. No</th>
+            <th>Product Name</th>
+            <th>Requested Qty</th>
+            <th>Confirmed Qty</th>
+            <th>Back Order Qty</th>
+          </tr>
+          ${rowsHTML}
+          <tr class="total-row">
+            <td colspan="4" style="text-align: right;">Total Back Order Quantity:</td>
+            <td style="text-align: center; color: #d32f2f;">${totalBackOrderQty} kg</td>
+          </tr>
+        </table>
+
+        ${notesHTML}
+      </div>
+    </body>
+    </html>
+  `;
+
+  const browser = await puppeteer.launch({ args: ['--font-render-hinting=none'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 840, height: 1190, deviceScaleFactor: 2 });
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+  const imageBuffer = await page.screenshot({ type: 'png', fullPage: true, scale: 2 });
+  await browser.close();
 
   const upload = await cloudinary.uploader.upload(
-    `data:image/png;base64,${buffer.toString("base64")}`,
+    `data:image/png;base64,${imageBuffer.toString('base64')}`,
+    {
+      folder: "pearls-erp/back-orders",
+      public_id: `BACKORDER_${sale.invoiceId}_${Date.now()}`,
+    }
+  );
+
+  return upload.secure_url;
+}
+
+// E-WAY BILL
+async function generateEwayBillImage(sale) {
+  const logoDataUri = await getLogoDataUri();
+  const itemsHTML = sale.items.map((item) => `
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd; font-size: 8px;">${item.name}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px;">${item.qty}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-size: 8px;">₹${item.sellingPrice.toFixed(2)}</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-size: 8px;">${item.gst}%</td>
+      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-size: 8px;">₹${((item.sellingPrice * item.gst) / 100).toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>E-Way Bill</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: white; padding: 20px; }
+        .invoice-container { max-width: 420px; margin: 0 auto; border: 3px solid #2b6cb0; padding: 15px; }
+        h1 { text-align: center; color: #805ad5; font-size: 14px; margin: 10px 0; font-weight: bold; }
+        .sections { display: flex; gap: 15px; margin: 15px 0; flex-wrap: wrap; }
+        .section { flex: 1; font-size: 11px; color: #000; }
+        .section h3 { background-color: #f0f0f0; padding: 8px; font-size: 12px; margin-bottom: 8px; color: #000; }
+        .section p { margin: 5px 0; color: #000; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th { background-color: #f0f0f0; padding: 8px; border: 1px solid #ddd; font-size: 11px; font-weight: bold; color: #000; }
+        td { padding: 8px; border: 1px solid #ddd; font-size: 11px; color: #000; }
+        .summary { margin-top: 20px; text-align: right; font-size: 11px; color: #000; }
+        .summary-row { margin: 5px 0; padding: 5px 0; color: #000; }
+      </style>
+    </head>
+    <body>
+      <div class="invoice-container">
+        ${logoDataUri ? `<div style="text-align: center; margin-bottom: 20px;"><img src="${logoDataUri}" style="max-width: 100px; max-height: 100px; object-fit: contain;"></div>` : ''}
+        <h1>E-WAY BILL</h1>
+
+        <div class="sections">
+          <div class="section">
+            <h3>Supplier (From)</h3>
+            <p><strong>PEARL AGENCY</strong></p>
+            <p>12/13, South By-Pass Road</p>
+            <p>Vanarpettai, Tirunelveli - 627003</p>
+            <p>Mobile No: 9429692970</p>
+            <p>GSTIN/UIN: 33DULPS2600Q1Z6</p>
+            <p>GPAY No: 8825847884</p>
+            <p>State: Tamil Nadu (Code: 33)</p>
+            <p>Warehouse: ${sale.warehouse}</p>
+          </div>
+          <div class="section">
+            <h3>Recipient (To)</h3>
+            <p><strong>Name: ${sale.customer.name}</strong></p>
+            <p>Address: ${sale.customer.address}</p>
+            <p>State: ${sale.customer.state} - ${sale.customer.pincode}</p>
+          </div>
+        </div>
+
+        <table>
+          <tr style="background-color: #f0f0f0;">
+            <th>Product</th>
+            <th>Qty</th>
+            <th>Price</th>
+            <th>GST%</th>
+            <th>Tax Amount</th>
+          </tr>
+          ${itemsHTML}
+        </table>
+
+        <div class="summary">
+          <div class="summary-row">Sub Total: <strong>₹${sale.subtotal.toFixed(2)}</strong></div>
+          <div class="summary-row">Tax: <strong>₹${sale.totalTax.toFixed(2)}</strong></div>
+          <div class="summary-row">Transport: <strong>₹${(sale.transportCharge || 0).toFixed(2)}</strong></div>
+          <div class="summary-row" style="border-top: 2px solid #ddd; padding-top: 8px; margin-top: 8px;">
+            Grand Total: <strong style="font-size: 13px;">₹${sale.grandTotal.toFixed(2)}</strong>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const browser = await puppeteer.launch({ args: ['--font-render-hinting=none'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 840, height: 1190, deviceScaleFactor: 2 });
+  await page.setContent(html, { waitUntil: 'networkidle0' });
+  const imageBuffer = await page.screenshot({ type: 'png', fullPage: true, scale: 2 });
+  await browser.close();
+
+  const upload = await cloudinary.uploader.upload(
+    `data:image/png;base64,${imageBuffer.toString('base64')}`,
     {
       folder: "pearls-erp/e-way-bills",
       public_id: `EWAY_${sale.invoiceId}_${Date.now()}`,
@@ -765,10 +748,25 @@ async function generateEwayBillImage(sale) {
   return upload.secure_url;
 }
 
+// Old function kept for backward compatibility, but now calls the new page generators
+async function generateInvoiceImage(sale) {
+  // Generate Page 1: Order Details
+  const page1Url = await generateInvoiceOrderPage(sale);
+
+  // Generate Page 2: Tax Invoice
+  const page2Url = await generateInvoiceTaxPage(sale);
+
+  // Return both pages
+  return {
+    page1: page1Url,
+    page2: page2Url, 
+  };
+}
+
 router.post("/generate-invoice-preview/:id", async (req, res) => {
   try {
     const { stockAdjustments = {}, invoiceNotes = "" } = req.body;
-    
+
     const sale = await SalesOrder.findById(req.params.id)
       .populate('salesMan', 'name')
       .populate('deliveryMan', 'name')
@@ -856,24 +854,32 @@ router.post("/generate-invoice-preview/:id", async (req, res) => {
       backOrderSummary: backOrderSummary,
     };
 
-    const invoiceImage = await generateInvoiceImage(invoiceData);
+    const invoicePages = await generateInvoiceImage(invoiceData);
     let ewayImage = null;
 
     if (sale.ewayEnabled) {
       ewayImage = await generateEwayBillImage(invoiceData);
     }
 
+    // Generate back order page if there are back orders
+    let backOrderImage = null;
+    if (backOrderSummary && backOrderSummary.length > 0) {
+      backOrderImage = await generateBackOrderPage(invoiceData, backOrderSummary, invoiceNotes);
+    }
+
     // ✅ Store adjustments for later confirmation
     const phone = `91${sale.customer.whatsapp}`;
     const customerLoginLink = "https://pearlsfrontend.web.app/customer-login";
     const message = encodeURIComponent(
-      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${newGrandTotal}\n\n📄 Invoice: ${invoiceImage}\n\n🛒 Pearls Shopping: ${customerLoginLink}`
+      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${newGrandTotal}\n\n📄 Invoice: ${invoicePages.page1}\n\n🛒 Pearls Shopping: ${customerLoginLink}`
     );
 
     res.json({
       success: true,
-      invoiceImage,
+      invoiceImage: invoicePages.page1,    // Order + Sample Items
+      invoiceTaxPage: invoicePages.page2,  // Tax Invoice
       ewayImage,
+      backOrderImage,
       waUrl: `https://wa.me/${phone}?text=${message}`,
       stockAdjustments, // Send back to frontend for confirmation
       invoiceNotes,
@@ -887,8 +893,8 @@ router.post("/generate-invoice-preview/:id", async (req, res) => {
 // ✅ NEW ENDPOINT: Confirm invoice and perform all actions (reduce stock, update balance, create commissions)
 router.post("/confirm-invoice/:id", async (req, res) => {
   try {
-    const { stockAdjustments = {}, invoiceNotes = "" } = req.body;
-    
+    const { stockAdjustments = {}, invoiceNotes = "", printConfirm = false, sendConfirm = false } = req.body;
+
     const sale = await SalesOrder.findById(req.params.id)
       .populate('salesMan', 'name')
       .populate('deliveryMan', 'name')
@@ -996,16 +1002,16 @@ router.post("/confirm-invoice/:id", async (req, res) => {
 
       const getCommission = async (personId, roleType) => {
         if (!personId) return { percentage: 0, amount: 0 };
-        
+
         const rule = await CommissionRule.findOne({
           personId: personId,
           roleType: roleType,
           minimumOrderValue: { $lte: invoiceAmount },
           isActive: true,
         }).sort({ minimumOrderValue: -1 });
-        
+
         if (!rule) return { percentage: 0, amount: 0 };
-        
+
         const commissionAmount = (invoiceAmount * rule.commissionPercentage) / 100;
         return { percentage: rule.commissionPercentage, amount: commissionAmount };
       };
@@ -1066,11 +1072,91 @@ router.post("/confirm-invoice/:id", async (req, res) => {
       console.error("⚠️ Commission creation failed:", commissionError.message);
     }
 
-    res.json({
+    // ✅ 7. GENERATE INVOICE AND BACK ORDER IMAGES
+    const invoiceData = {
+      ...sale,
+      items: invoicedItems,
+      sampleItems: invoicedSampleItems,
+      subtotal: newSubtotal,
+      totalTax: newTotalTax,
+      grandTotal: newGrandTotal,
+      transportCharge: sale.transportCharge || 0,
+      invoiceNotes: invoiceNotes,
+      backOrderSummary: backOrderSummary,
+      openingBalance: invoiceOpeningBalance,
+      closingBalance: invoiceClosingBalance,
+    };
+
+    const invoicePages = await generateInvoiceImage(invoiceData);
+
+    // Generate back order page if there are back orders
+    let backOrderImage = null;
+    if (backOrderSummary && backOrderSummary.length > 0) {
+      backOrderImage = await generateBackOrderPage(invoiceData, backOrderSummary, invoiceNotes);
+    }
+
+    // ✅ 8. HANDLE PRINT & SEND ACTIONS BASED ON CHECKBOXES
+    let printAction = null;
+    let whatsappAction = null;
+
+    // Handle Print & Confirm
+    if (printConfirm) {
+      printAction = {
+        enabled: true,
+        invoiceImage: invoicePages.page1,    // Order + Sample Items
+        invoiceTaxPage: invoicePages.page2,  // Tax Invoice
+        ewayImage: invoiceData.ewayEnabled ? invoicePages.ewayImage : null,
+        backOrderImage: backOrderImage,
+        instructions: "Ready to print invoice. Please proceed with printing.",
+      };
+    }
+
+    // Handle Send & Confirm (WhatsApp)
+    if (sendConfirm) {
+      const phone = `91${sale.customer.whatsapp}`;
+      const customerLoginLink = "https://pearlsfrontend.web.app/customer-login";
+      const message = encodeURIComponent(
+        `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${newGrandTotal}\n\n📄 Invoice has been generated\n\n🛒 View at: ${customerLoginLink}`
+      );
+
+      whatsappAction = {
+        enabled: true,
+        waUrl: `https://wa.me/${phone}?text=${message}`,
+        phone: phone,
+        customerName: sale.customer.name,
+        invoiceId: sale.invoiceId,
+        amount: newGrandTotal,
+        instructions: "Ready to send invoice via WhatsApp. Please confirm to open WhatsApp.",
+      };
+    }
+
+    const responseData = {
       success: true,
       message: "Invoice confirmed and all actions completed",
       lowStockAlerts,
-    });
+      invoiceImage: invoicePages.page1,    // Order + Sample Items
+      invoiceTaxPage: invoicePages.page2,  // Tax Invoice
+      backOrderImage,
+    };
+
+    // Add actions based on checkbox selection
+    if (printAction && whatsappAction) {
+      responseData.actions = {
+        printAction,
+        whatsappAction,
+        executionOrder: "print_then_send"
+      };
+    } else if (printAction) {
+      responseData.actions = {
+        printAction
+      };
+    } else if (whatsappAction) {
+      responseData.actions = {
+        whatsappAction
+      };
+    }
+
+    res.json(responseData);
   } catch (err) {
     console.error("INVOICE CONFIRM ERROR:", err);
     res.status(500).json({ message: err.message });
@@ -1081,7 +1167,7 @@ router.post("/confirm-invoice/:id", async (req, res) => {
 router.post("/generate-invoice/:id", async (req, res) => {
   try {
     const { stockAdjustments = {}, invoiceNotes = "" } = req.body;
-    
+
     const sale = await SalesOrder.findById(req.params.id)
       .populate('salesMan', 'name')
       .populate('deliveryMan', 'name')
@@ -1166,24 +1252,32 @@ router.post("/generate-invoice/:id", async (req, res) => {
       backOrderSummary: backOrderSummary,
     };
 
-    const invoiceImage = await generateInvoiceImage(invoiceData);
+    const invoicePages = await generateInvoiceImage(invoiceData);
     let ewayImage = null;
 
     if (sale.ewayEnabled) {
       ewayImage = await generateEwayBillImage(invoiceData);
     }
 
+    // Generate back order page if there are back orders
+    let backOrderImage = null;
+    if (backOrderSummary && backOrderSummary.length > 0) {
+      backOrderImage = await generateBackOrderPage(invoiceData, backOrderSummary, invoiceNotes);
+    }
+
     // ✅ WHATSAPP
     const phone = `91${sale.customer.whatsapp}`;
     const customerLoginLink = "https://pearlsfrontend.web.app/customer-login";
     const message = encodeURIComponent(
-      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${newGrandTotal}\n\n📄 Invoice: ${invoiceImage}\n\n🛒 Pearls Shopping: ${customerLoginLink}`
+      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${newGrandTotal}\n\n📄 Invoice: ${invoicePages.page1}\n\n🛒 Pearls Shopping: ${customerLoginLink}`
     );
 
     res.json({
       success: true,
-      invoiceImage,
+      invoiceImage: invoicePages.page1,    // Order + Sample Items
+      invoiceTaxPage: invoicePages.page2,  // Tax Invoice
       ewayImage,
+      backOrderImage,
       waUrl: `https://wa.me/${phone}?text=${message}`,
     });
   } catch (err) {

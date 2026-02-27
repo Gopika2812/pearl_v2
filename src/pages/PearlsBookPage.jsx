@@ -29,6 +29,11 @@ export default function PearlsBookPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedInvoiceImage, setGeneratedInvoiceImage] = useState(null);
   const [invoicePreviewImage, setInvoicePreviewImage] = useState(null);
+  const [displayedImageType, setDisplayedImageType] = useState('invoice'); // 'invoice' or 'backorder'
+  
+  // Checkbox states for Print & Send actions
+  const [printConfirm, setPrintConfirm] = useState(false);
+  const [sendConfirm, setSendConfirm] = useState(false);
 
 
   useEffect(() => {
@@ -141,12 +146,15 @@ export default function PearlsBookPage() {
 
       // Store invoice details for preview
       setGeneratedInvoiceImage({
-        image: res.data.invoiceImage,
+        page1: res.data.invoiceImage,        // Order + Sample Items
+        page2: res.data.invoiceTaxPage,      // Tax Invoice
         waUrl: res.data.waUrl,
         ewayImage: res.data.ewayImage,
+        backOrderImage: res.data.backOrderImage, // Back order page
       });
       
       // Show invoice preview modal with print and send options
+      setDisplayedImageType('invoice'); // Start by showing invoice
       setInvoicePreviewImage(true);
     } catch (err) {
       alert(err.response?.data?.message || "Invoice generation failed");
@@ -155,37 +163,24 @@ export default function PearlsBookPage() {
     }
   };
 
-  // Confirm invoice and perform final actions (stock reduction, balance update, etc.)
-  const confirmInvoiceAction = async (actionType) => {
+  // Confirm invoice and perform actions based on checkboxes
+  const confirmInvoiceAction = async () => {
     if (!previewOrder) return;
-
-    // If printing, open print dialog first
-    if (actionType === "print" && generatedInvoiceImage?.image) {
-      const printWindow = window.open();
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Invoice Print</title>
-            <style>
-              body { margin: 0; padding: 0; }
-              img { max-width: 100%; height: auto; display: block; }
-            </style>
-          </head>
-          <body>
-            <img src="${generatedInvoiceImage.image}" />
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.print();
+    
+    // At least one action must be selected
+    if (!printConfirm && !sendConfirm) {
+      alert("Please select at least one action: Print or Send via WhatsApp");
+      return;
     }
 
     setIsGenerating(true);
     try {
-      // Step 2: Confirm invoice - this will reduce stock, update balance, create commissions
+      // Send confirmation with print and send flags
       const confirmRes = await axios.post(`${API}/confirm-invoice/${previewOrder._id}`, {
         stockAdjustments,
         invoiceNotes,
+        printConfirm,
+        sendConfirm,
       });
 
       // 🔔 LOW STOCK ALERT
@@ -200,15 +195,81 @@ export default function PearlsBookPage() {
         alert(msg);
       }
 
-      // If sending via WhatsApp
-      if (actionType === "whatsapp" && generatedInvoiceImage?.waUrl) {
-        window.open(generatedInvoiceImage.waUrl, "_blank");
+      // Handle Print Action
+      if (printConfirm && confirmRes.data.actions?.printAction) {
+        const printAction = confirmRes.data.actions.printAction;
+        const printWindow = window.open('', '_blank');
+        let content = `
+          <html>
+            <head>
+              <title>Invoice Print</title>
+              <style>
+                body { margin: 0; padding: 0; background: white; }
+                img { max-width: 100%; height: auto; display: block; page-break-after: always; }
+                .page { page-break-after: always; }
+              </style>
+            </head>
+            <body>
+        `;
+        
+        // Add all invoice pages
+        if (printAction.invoiceImage) {
+          content += `<div class="page"><img src="${printAction.invoiceImage}" onload="window.print()" /></div>`;
+        }
+        if (printAction.invoiceTaxPage) {
+          content += `<div class="page"><img src="${printAction.invoiceTaxPage}" /></div>`;
+        }
+        if (printAction.backOrderImage) {
+          content += `<div class="page"><img src="${printAction.backOrderImage}" /></div>`;
+        }
+        
+        content += `
+            </body>
+          </html>
+        `;
+        
+        printWindow.document.write(content);
+        printWindow.document.close();
+        alert("📄 Print dialog opened. Please proceed with printing.");
+      }
+
+      // Handle Send to WhatsApp Action
+      if (sendConfirm && confirmRes.data.actions?.whatsappAction) {
+        const whatsappAction = confirmRes.data.actions.whatsappAction;
+        
+        // Build comprehensive WhatsApp message with all page links
+        const allPagesMessage = encodeURIComponent(
+          `Hello ${whatsappAction.customerName},\n\n` +
+          `📧 Invoice #${whatsappAction.invoiceId}\n` +
+          `💰 Amount: ₹${whatsappAction.amount.toFixed(2)}\n\n` +
+          `📄 *Invoice Pages:*\n` +
+          `1️⃣ Order Details: ${confirmRes.data.invoiceImage}\n` +
+          `2️⃣ Tax Invoice: ${confirmRes.data.invoiceTaxPage}\n` +
+          (confirmRes.data.backOrderImage ? `3️⃣ Back Order: ${confirmRes.data.backOrderImage}\n\n` : `\n`) +
+          `Thank you for your business!\n\n` +
+          `*PEARL AGENCY*\n` +
+          `9429692970`
+        );
+        
+        const whatsappLink = `https://wa.me/${whatsappAction.phone}?text=${allPagesMessage}`;
+        
+        setTimeout(() => {
+          window.open(whatsappLink, "_blank");
+          alert(`📱 WhatsApp opened with all invoice pages. Ready to send to ${whatsappAction.customerName}`);
+        }, 1000);
       }
 
       // Update the order status
       setRows(rows.map(r => r._id === previewOrder._id ? { ...r, invoiceGenerated: true } : r));
       
-      alert(`✅ Invoice ${actionType === "print" ? "printed" : "sent"}! Stock reduced and balance updated.`);
+      const actionText = 
+        printConfirm && sendConfirm 
+          ? "printed and sent via WhatsApp" 
+          : printConfirm 
+          ? "printed" 
+          : "sent via WhatsApp";
+      
+      alert(`✅ Invoice ${actionText}! Stock reduced and balance updated.`);
       
       // Reset all states
       setPreviewOrder(null);
@@ -216,6 +277,9 @@ export default function PearlsBookPage() {
       setInvoiceNotes("");
       setGeneratedInvoiceImage(null);
       setInvoicePreviewImage(false);
+      setDisplayedImageType('invoice');
+      setPrintConfirm(false);
+      setSendConfirm(false);
     } catch (err) {
       alert(err.response?.data?.message || "Invoice confirmation failed");
     } finally {
@@ -223,15 +287,11 @@ export default function PearlsBookPage() {
     }
   };
 
-  // Send to WhatsApp after preview confirmation (old name, now calls confirmInvoiceAction)
-  const confirmAndSendToWhatsApp = () => {
-    confirmInvoiceAction("whatsapp");
-  };
-
   // Close invoice preview without sending
   const closeInvoicePreview = () => {
     setInvoicePreviewImage(false);
     setGeneratedInvoiceImage(null);
+    setDisplayedImageType('invoice');
   };
 
 
@@ -656,12 +716,19 @@ export default function PearlsBookPage() {
       {/* GENERATED INVOICE IMAGE PREVIEW MODAL */}
       {invoicePreviewImage && generatedInvoiceImage && (
         <GeneratedInvoicePreviewModal
-          invoiceImage={generatedInvoiceImage.image}
+          page1={generatedInvoiceImage.page1}
+          page2={generatedInvoiceImage.page2}
+          backOrderImage={generatedInvoiceImage.backOrderImage}
           waUrl={generatedInvoiceImage.waUrl}
-          onConfirm={() => confirmInvoiceAction("whatsapp")}
-          onPrint={() => confirmInvoiceAction("print")}
+          displayedImageType={displayedImageType}
+          setDisplayedImageType={setDisplayedImageType}
+          onConfirm={confirmInvoiceAction}
           onClose={closeInvoicePreview}
           isLoading={isGenerating}
+          printConfirm={printConfirm}
+          setPrintConfirm={setPrintConfirm}
+          sendConfirm={sendConfirm}
+          setSendConfirm={setSendConfirm}
         />
       )}
     </div>
@@ -847,24 +914,33 @@ function SummaryCard({ title, value, icon }) {
 
 // GENERATED INVOICE PREVIEW MODAL COMPONENT
 function GeneratedInvoicePreviewModal({
-  invoiceImage,
+  page1,
+  page2,
+  backOrderImage,
   waUrl,
+  displayedImageType,
+  setDisplayedImageType,
   onConfirm,
-  onPrint,
   onClose,
   isLoading,
+  printConfirm,
+  setPrintConfirm,
+  sendConfirm,
+  setSendConfirm,
 }) {
+  const [showActions, setShowActions] = useState(true);
+
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-8">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[999] p-2 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col">
         
         {/* HEADER */}
-        <div className="bg-gradient-to-r from-primary to-blue-600 text-white p-6 rounded-t-2xl sticky top-0 z-10">
+        <div className="bg-gradient-to-r from-primary to-blue-600 text-white p-4 rounded-t-2xl flex-shrink-0">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold">📄 Invoice Preview</h2>
               <p className="text-sm text-blue-100 mt-1">
-                You can now print or send this invoice. Stock will be reduced after action.
+                Multi-page invoice: Order details • Tax summary • Back order
               </p>
             </div>
             <button
@@ -876,38 +952,208 @@ function GeneratedInvoicePreviewModal({
           </div>
         </div>
 
-        {/* INVOICE IMAGE */}
-        <div className="p-6 max-h-[calc(100vh-300px)] overflow-y-auto">
-          <div className="bg-gray-100 rounded-lg overflow-hidden border">
-            <img
-              src={invoiceImage}
-              alt="Generated Invoice"
-              className="w-full h-auto"
-              style={{ maxWidth: "100%" }}
-            />
+        {/* TABS - All Pages */}
+        <div className="flex border-b bg-gray-100 px-4 pt-2 flex-shrink-0 overflow-x-auto">
+          <button
+            onClick={() => setDisplayedImageType('page1')}
+            className={`px-4 py-3 font-semibold border-b-2 whitespace-nowrap transition ${
+              displayedImageType === 'page1'
+                ? 'border-primary text-primary bg-white'
+                : 'border-transparent text-gray-600 hover:text-primary'
+            }`}
+          >
+            📋 Order Details
+          </button>
+          <button
+            onClick={() => setDisplayedImageType('page2')}
+            className={`px-4 py-3 font-semibold border-b-2 whitespace-nowrap transition ${
+              displayedImageType === 'page2'
+                ? 'border-primary text-primary bg-white'
+                : 'border-transparent text-gray-600 hover:text-primary'
+            }`}
+          >
+            🧾 Tax Invoice
+          </button>
+          {backOrderImage && (
+            <button
+              onClick={() => setDisplayedImageType('backorder')}
+              className={`px-4 py-3 font-semibold border-b-2 whitespace-nowrap transition ${
+                displayedImageType === 'backorder'
+                  ? 'border-red-500 text-red-600 bg-white'
+                  : 'border-transparent text-gray-600 hover:text-red-600'
+              }`}
+            >
+              📦 Back Order
+            </button>
+          )}
+        </div>
+
+        {/* MAIN CONTENT AREA - Split Layout */}
+        <div className="flex flex-1 overflow-hidden">
+          
+          {/* INVOICE PREVIEW - LEFT SIDE (Larger) */}
+          <div className="flex-1 overflow-y-auto bg-gray-50 border-r">
+            <div className="p-6">
+              
+              {/* PAGE 1: ORDER DETAILS */}
+              {displayedImageType === 'page1' && page1 && (
+                <div className="space-y-4">
+                  <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 hover:shadow-md transition">
+                    <img
+                      src={page1}
+                      alt="Invoice - Order Details"
+                      className="w-full h-auto"
+                      style={{ maxWidth: "100%" }}
+                    />
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-900 leading-relaxed">
+                      📋 <strong>Page 1: Order Details</strong><br/>
+                      <span className="text-xs text-blue-700 mt-2">Shows: Header, Sender/Buyer info, Items table, Balance, Sample Products</span>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* PAGE 2: TAX INVOICE */}
+              {displayedImageType === 'page2' && page2 && (
+                <div className="space-y-4">
+                  <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 hover:shadow-md transition">
+                    <img
+                      src={page2}
+                      alt="Invoice - Tax Invoice"
+                      className="w-full h-auto"
+                      style={{ maxWidth: "100%" }}
+                    />
+                  </div>
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <p className="text-sm text-purple-900 leading-relaxed">
+                      🧾 <strong>Page 2: Tax Invoice</strong><br/>
+                      <span className="text-xs text-purple-700 mt-2">HSN-wise breakdown with CGST, SGST, IGST calculations</span>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* PAGE 3: BACK ORDER */}
+              {displayedImageType === 'backorder' && backOrderImage && (
+                <div className="space-y-4">
+                  <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 hover:shadow-md transition">
+                    <img
+                      src={backOrderImage}
+                      alt="Back Order Summary"
+                      className="w-full h-auto"
+                      style={{ maxWidth: "100%" }}
+                    />
+                  </div>
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <p className="text-sm text-orange-900 leading-relaxed">
+                      📦 <strong>Page 3: Back Order Summary</strong><br/>
+                      <span className="text-xs text-orange-700 mt-2">Items that couldn't be delivered now, to be sent later</span>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* PREVIEW INSTRUCTIONS */}
-          <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
-            <p className="text-sm text-green-900">
-              ✅ Invoice generated successfully! Choose to print or send via WhatsApp. Stock and customer balance will be updated immediately after your action.
-            </p>
+          {/* ACTIONS PANEL - RIGHT SIDE */}
+          <div className="w-80 bg-white border-l flex flex-col overflow-hidden">
+            {/* Collapse Button */}
+            <button
+              onClick={() => setShowActions(!showActions)}
+              className="px-4 py-3 border-b bg-gray-50 hover:bg-gray-100 transition text-sm font-semibold text-gray-700 flex items-center justify-between"
+            >
+              <span>⚡ Actions & Options</span>
+              <span className="text-lg">{showActions ? '▼' : '▶'}</span>
+            </button>
+
+            {/* ACTIONS CONTENT */}
+            {showActions && (
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                
+                {/* CHECKBOXES SECTION */}
+                <div className="bg-blue-50 rounded-lg border border-blue-200 p-4 space-y-3">
+                  <h3 className="text-sm font-bold text-gray-800 mb-3">📋 Select Actions:</h3>
+                  
+                  {/* Print & Confirm Checkbox */}
+                  <label className="flex items-start gap-3 cursor-pointer p-3 bg-white rounded-lg hover:bg-blue-50 transition border border-transparent hover:border-blue-300">
+                    <input
+                      type="checkbox"
+                      checked={printConfirm}
+                      onChange={(e) => setPrintConfirm(e.target.checked)}
+                      disabled={isLoading}
+                      className="w-5 h-5 text-blue-600 rounded cursor-pointer disabled:opacity-50 mt-0.5 flex-shrink-0"
+                    />
+                    <div className="flex-1">
+                      <div className="font-semibold text-sm text-gray-800">🖨️ Print & Confirm</div>
+                      <div className="text-xs text-gray-600 mt-1">Take printout of the invoice</div>
+                    </div>
+                  </label>
+
+                  {/* Send & Confirm Checkbox */}
+                  <label className="flex items-start gap-3 cursor-pointer p-3 bg-white rounded-lg hover:bg-green-50 transition border border-transparent hover:border-green-300">
+                    <input
+                      type="checkbox"
+                      checked={sendConfirm}
+                      onChange={(e) => setSendConfirm(e.target.checked)}
+                      disabled={isLoading}
+                      className="w-5 h-5 text-green-600 rounded cursor-pointer disabled:opacity-50 mt-0.5 flex-shrink-0"
+                    />
+                    <div className="flex-1">
+                      <div className="font-semibold text-sm text-gray-800">📱 Send & Confirm</div>
+                      <div className="text-xs text-gray-600 mt-1">Send invoice via WhatsApp</div>
+                    </div>
+                  </label>
+                </div>
+
+                {/* VALIDATION MESSAGE */}
+                {!printConfirm && !sendConfirm && (
+                  <div className="p-3 bg-yellow-50 border border-yellow-300 rounded text-xs text-yellow-800 leading-relaxed">
+                    ⚠️ <strong>Please select</strong> at least one action (Print or Send)
+                  </div>
+                )}
+
+                {printConfirm && sendConfirm && (
+                  <div className="p-3 bg-green-50 border border-green-300 rounded text-xs text-green-800 leading-relaxed">
+                    ✅ <strong>Both actions selected:</strong> Will print invoice and send via WhatsApp
+                  </div>
+                )}
+
+                {printConfirm && !sendConfirm && (
+                  <div className="p-3 bg-blue-50 border border-blue-300 rounded text-xs text-blue-800 leading-relaxed">
+                    📄 <strong>Print only:</strong> Opening print dialog with all pages
+                  </div>
+                )}
+
+                {!printConfirm && sendConfirm && (
+                  <div className="p-3 bg-green-50 border border-green-300 rounded text-xs text-green-800 leading-relaxed">
+                    💬 <strong>Send only:</strong> Opening WhatsApp to send invoice
+                  </div>
+                )}
+
+              </div>
+            )}
           </div>
         </div>
 
-        {/* FOOTER - WITH PRINT AND SEND OPTIONS */}
-        <div className="border-t bg-gray-50 px-6 py-4 rounded-b-2xl sticky bottom-0 flex gap-3 justify-end">
+        {/* FOOTER */}
+        <div className="border-t bg-gray-100 px-6 py-3 flex-shrink-0 flex gap-3 justify-end">
           <button
             onClick={onClose}
             disabled={isLoading}
-            className="px-6 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-100 transition disabled:opacity-50"
+            className="px-6 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-200 transition disabled:opacity-50 text-sm"
           >
-            Back to Edit
+            Cancel
           </button>
           <button
-            onClick={onPrint}
-            disabled={isLoading}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-50"
+            onClick={onConfirm}
+            disabled={isLoading || (!printConfirm && !sendConfirm)}
+            className={`px-6 py-2 rounded-lg font-semibold flex items-center gap-2 transition text-sm ${
+              !printConfirm && !sendConfirm
+                ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                : 'bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50'
+            }`}
           >
             {isLoading ? (
               <>
@@ -916,23 +1162,7 @@ function GeneratedInvoicePreviewModal({
               </>
             ) : (
               <>
-                🖨️ Print & Confirm
-              </>
-            )}
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isLoading}
-            className="px-6 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50"
-          >
-            {isLoading ? (
-              <>
-                <span className="inline-block animate-spin">⏳</span>
-                Sending...
-              </>
-            ) : (
-              <>
-                📱 Send & Confirm
+                ✅ Confirm & Execute
               </>
             )}
           </button>
