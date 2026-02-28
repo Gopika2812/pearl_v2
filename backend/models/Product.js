@@ -20,6 +20,12 @@ const productSchema = new mongoose.Schema(
     hsn: { type: String, default: "" }, // Alias for hsnCode
     gst: { type: Number, default: 0 },
     image: { type: String, default: null }, // Product image URL
+    reorderLevel: { type: Number, default: 10 }, // Alert threshold for reordering
+    reorderQty: { type: Number, default: 20 }, // Quantity to order when threshold reached
+    leadTime: { type: Number, default: 7 }, // Days to receive the order
+    checkPeriod: { type: String, default: "MONTHLY" }, // How often to check stock (DAILY, WEEKLY, MONTHLY, QUARTERLY)
+    lastChecked: { type: Date, default: null }, // Last time stock was reviewed
+    nextCheckDate: { type: Date, default: null }, // Next scheduled check date
   },
   { timestamps: true }
 );

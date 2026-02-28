@@ -28,7 +28,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   const menu = [
     { name: "Home", path: "/", icon: <FaHome /> },
     { name: "Purchase Order", path: "/purchase-order", icon: <FaShoppingCart /> },
-      { name: "Re-Ordering", path: "/reordering", icon: <FaBox /> },
+      { name: "Re-Cycling", path: "/reordering", icon: <FaBox /> },
     { name: "Sales Order", path: "/sales-order", icon: <FaFileInvoice /> },
   
     { name: "Pearls Book", path: "/pearls-book", icon: <FaBook /> },
