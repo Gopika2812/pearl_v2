@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaDownload, FaPrint, FaSpinner } from "react-icons/fa";
+import { API_BASE } from "../api";
 
 const ARAgingPage = () => {
   const [customers, setCustomers] = useState([]);
@@ -20,7 +21,7 @@ const ARAgingPage = () => {
   const fetchARaging = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:5000/api/financial-reports/ar-aging");
+      const response = await fetch(`${API_BASE}/financial-reports/ar-aging`);
       const data = await response.json();
 
       if (data.success) {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaDownload, FaPrint, FaSpinner } from "react-icons/fa";
+import { API_BASE } from "../api";
 
 const ProfitLossPage = () => {
   const [revenue, setRevenue] = useState(0);
@@ -16,7 +17,7 @@ const ProfitLossPage = () => {
   const fetchProfitLoss = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:5000/api/financial-reports/profit-loss");
+      const response = await fetch(`${API_BASE}/financial-reports/profit-loss`);
       const data = await response.json();
 
       if (data.success) {

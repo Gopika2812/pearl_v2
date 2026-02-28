@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaDownload, FaPrint, FaSpinner } from "react-icons/fa";
+import { API_BASE } from "../api";
 
 const BalanceSheetPage = () => {
   const [assets, setAssets] = useState({ current: 0, fixed: 0, total: 0 });
@@ -17,7 +18,7 @@ const BalanceSheetPage = () => {
   const fetchBalanceSheet = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:5000/api/financial-reports/balance-sheet");
+      const response = await fetch(`${API_BASE}/financial-reports/balance-sheet`);
       const data = await response.json();
 
       if (data.success) {

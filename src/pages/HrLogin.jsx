@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
+import { API_BASE } from "../api";
 
 const HrLogin = () => {
   const [email, setEmail] = useState("");
@@ -14,7 +15,7 @@ const HrLogin = () => {
 
     setError("");
 
-    const res = await fetch("http://localhost:5000/api/hr-login", {
+    const res = await fetch(`${API_BASE}/hr-login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
