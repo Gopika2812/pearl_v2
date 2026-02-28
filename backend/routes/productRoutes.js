@@ -4,6 +4,8 @@ import multer from "multer";
 import XLSX from "xlsx";
 import Product from "../models/Product.js";
 import ProductGroup from "../models/ProductGroup.js";
+import PurchaseOrder from "../models/PurchaseOrder.js";
+import SalesOrder from "../models/SalesOrder.js";
 
 const router = express.Router();
 
@@ -98,6 +100,60 @@ router.get("/", async (req, res) => {
       .limit(pageSize)
       .lean();
 
+    // ⚡ Get all PO data aggregated by product in one query
+    const poData = await PurchaseOrder.aggregate([
+      {
+        $match: {
+          status: { $in: ["PLACED", "RECEIVED", "PARTIALLY_RETURNED"] }
+        }
+      },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: "$items.productId",
+          totalReceivedQty: { $sum: "$items.qty" }
+        }
+      }
+    ]);
+
+    // ⚡ Get all invoiced data aggregated by product in one query
+    const invoicedData = await SalesOrder.aggregate([
+      { $unwind: "$invoiceItems" },
+      {
+        $group: {
+          _id: "$invoiceItems.productId",
+          totalInvoicedQty: { $sum: "$invoiceItems.qty" }
+        }
+      }
+    ]);
+
+    // Create maps for O(1) lookup
+    const poDataMap = new Map();
+    for (const po of poData) {
+      poDataMap.set(po._id.toString(), po.totalReceivedQty);
+    }
+
+    const invoicedDataMap = new Map();
+    for (const invoiced of invoicedData) {
+      invoicedDataMap.set(invoiced._id.toString(), invoiced.totalInvoicedQty);
+    }
+
+    // Enhance products with totalQty and availableQty calculation
+    const enhancedProducts = products.map((product) => {
+      const productIdStr = product._id.toString();
+      const bulkQty = product.totalQty || 0;
+      const poQty = poDataMap.get(productIdStr) || 0;
+      const invoicedQty = invoicedDataMap.get(productIdStr) || 0;
+      const stockReceived = bulkQty + poQty;
+      const availableQty = Math.max(0, stockReceived - invoicedQty);
+      
+      return {
+        ...product,
+        totalQty: stockReceived,  // Combined: Bulk + PO (for display as "Total Qty")
+        availableQty: availableQty  // True available: (Bulk + PO) - Invoiced
+      };
+    });
+
     // DIAGNOSTIC MODE - if ?diag=1 is passed
     let diagnosticData = {};
     if (diag === "1") {
@@ -118,7 +174,7 @@ router.get("/", async (req, res) => {
 
     res.json({
       success: true,
-      data: products,
+      data: enhancedProducts,
       pagination: {
         page: pageNum,
         limit: pageSize,
@@ -312,7 +368,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, perQty, units, totalQty, purchasingPrice, sellingPrice, hsnCode, gst } = req.body;
+    const { name, perQty, units, totalQty, purchasingPrice, sellingPrice, margin, hsnCode, gst } = req.body;
 
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -331,6 +387,7 @@ router.put("/:id", async (req, res) => {
         totalQty,
         purchasingPrice,
         sellingPrice,
+        margin,
         hsnCode,
         gst,
       },
@@ -398,4 +455,85 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+// GET: Fetch available qty for a specific product (for Sales Order)
+// Formula: Available = (Product.totalQty + PO qty) - SalesOrder invoiced qty
+router.get("/available/:productId", async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    const product = await Product.findById(productId).lean();
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    // 1️⃣ Get PO qty for this product
+    const poItems = await PurchaseOrder.aggregate([
+      {
+        $match: {
+          status: { $in: ["PLACED", "RECEIVED", "PARTIALLY_RETURNED"] }
+        }
+      },
+      { $unwind: "$items" },
+      {
+        $match: {
+          "items.productId": new mongoose.Types.ObjectId(productId)
+        }
+      },
+      {
+        $group: {
+          _id: "$items.productId",
+          totalReceivedQty: { $sum: "$items.qty" }
+        }
+      }
+    ]);
+
+    // 2️⃣ Get invoiced qty from SalesOrders for this product
+    const invoicedItems = await SalesOrder.aggregate([
+      { $unwind: "$invoiceItems" },
+      {
+        $match: {
+          "invoiceItems.productId": new mongoose.Types.ObjectId(productId)
+        }
+      },
+      {
+        $group: {
+          _id: "$invoiceItems.productId",
+          totalInvoicedQty: { $sum: "$invoiceItems.qty" }
+        }
+      }
+    ]);
+
+    const poQty = poItems.length > 0 ? poItems[0].totalReceivedQty : 0;
+    const bulkQty = product.totalQty || 0;
+    const invoicedQty = invoicedItems.length > 0 ? invoicedItems[0].totalInvoicedQty : 0;
+    
+    // 3️⃣ Calculate: Available = (Bulk + PO) - Invoiced
+    const stockReceived = bulkQty + poQty;
+    const availableQty = stockReceived - invoicedQty;
+
+    res.json({
+      success: true,
+      data: {
+        productId,
+        productName: product.name,
+        bulkQty,
+        poQty,
+        invoicedQty,
+        stockReceived,
+        availableQty: Math.max(0, availableQty) // Never show negative
+      }
+    });
+  } catch (error) {
+    console.error("Fetch available qty Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch available qty"
+    });
+  }
+});
+
 export default router;
+

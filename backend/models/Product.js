@@ -26,7 +26,13 @@ const productSchema = new mongoose.Schema(
 
 // Auto-calculate margin before saving
 productSchema.pre("save", function () {
-  this.margin = (this.sellingPrice || 0) - (this.purchasingPrice || 0);
+  // If margin is explicitly set, use it to calculate sellingPrice
+  if (this.margin !== undefined && this.margin !== null && this.purchasingPrice !== undefined) {
+    this.sellingPrice = (this.purchasingPrice || 0) + this.margin;
+  } else {
+    // Otherwise, calculate margin from selling price
+    this.margin = (this.sellingPrice || 0) - (this.purchasingPrice || 0);
+  }
   // Set hsn as alias for hsnCode
   if (!this.hsn && this.hsnCode) {
     this.hsn = this.hsnCode;
@@ -37,9 +43,20 @@ productSchema.pre("save", function () {
 // Auto-calculate margin on findByIdAndUpdate
 productSchema.pre("findByIdAndUpdate", function (next) {
   const update = this.getUpdate();
-  if (update.sellingPrice || update.purchasingPrice) {
-    const selling = update.sellingPrice || this._conditions.sellingPrice;
-    const purchasing = update.purchasingPrice || this._conditions.purchasingPrice;
+  
+  // If margin is being updated, calculate sellingPrice from it
+  if (update.margin !== undefined && update.margin !== null) {
+    const purchasing = update.purchasingPrice !== undefined 
+      ? update.purchasingPrice 
+      : undefined;
+    if (purchasing !== undefined) {
+      update.sellingPrice = purchasing + update.margin;
+    }
+  }
+  // If sellingPrice or purchasingPrice changed but not margin, recalculate margin
+  else if (update.sellingPrice !== undefined || update.purchasingPrice !== undefined) {
+    const selling = update.sellingPrice !== undefined ? update.sellingPrice : undefined;
+    const purchasing = update.purchasingPrice !== undefined ? update.purchasingPrice : undefined;
     if (selling !== undefined && purchasing !== undefined) {
       update.margin = selling - purchasing;
     }

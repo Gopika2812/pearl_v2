@@ -2,9 +2,11 @@ import { useState } from "react";
 import {
   FaBook,
   FaBox,
+  FaCalculator,
   FaChartBar,
   FaChevronDown,
   FaEllipsisH,
+  FaFileAlt,
   FaFileInvoice,
   FaHome,
   FaMoneyBillWave,
@@ -21,11 +23,14 @@ import { Link, useLocation } from "react-router-dom";
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [financeOpen, setFinanceOpen] = useState(false);
 
   const menu = [
     { name: "Home", path: "/", icon: <FaHome /> },
     { name: "Purchase Order", path: "/purchase-order", icon: <FaShoppingCart /> },
+      { name: "Re-Ordering", path: "/reordering", icon: <FaBox /> },
     { name: "Sales Order", path: "/sales-order", icon: <FaFileInvoice /> },
+  
     { name: "Pearls Book", path: "/pearls-book", icon: <FaBook /> },
     { name: "CRM", path: "/crm", icon: <FaUsers /> },
     { name: "Loading & Dispatch", path: "/dispatch", icon: <FaTruck /> },
@@ -39,6 +44,14 @@ const Sidebar = ({ isOpen, onClose }) => {
     { name: "Customer Summary", path: "/summary/customers", icon: <FaUserClock /> },
     { name: "Vendor Summary", path: "/summary/vendors", icon: <FaTruck /> },
     { name: "Others", path: "/summary/others", icon: <FaEllipsisH /> },
+  ];
+
+  const financeReportItems = [
+    { name: "Trial Balance", path: "/reports/trial-balance", icon: <FaCalculator /> },
+    { name: "Balance Sheet", path: "/reports/balance-sheet", icon: <FaFileAlt /> },
+    { name: "Profit & Loss", path: "/reports/profit-loss", icon: <FaChartBar /> },
+    { name: "AR Aging", path: "/reports/ar-aging", icon: <FaBook /> },
+    { name: "AP Aging", path: "/reports/ap-aging", icon: <FaBook /> },
   ];
 
   const handleLogout = () => {
@@ -102,6 +115,40 @@ const Sidebar = ({ isOpen, onClose }) => {
                         ? "bg-white/20 text-white font-semibold"
                         : "hover:bg-white/10 text-white/80"
                         }`}
+                    >
+                      <span className="text-sm">{item.icon}</span>
+                      <span>{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* FINANCE REPORTS SECTION */}
+          <div className="mx-3 mb-1 mt-4">
+            <button
+              onClick={() => setFinanceOpen(!financeOpen)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+            >
+              <span className="text-lg"><FaChartBar /></span>
+              <span className="text-sm flex-1 text-left">Finance Reports</span>
+              <FaChevronDown
+                className={`text-xs transition-transform ${financeOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {financeOpen && (
+              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                {financeReportItems.map((item, idx) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={idx}
+                      to={item.path}
+                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${active
+                        ? "bg-white/20 text-white font-semibold"
+                        : "hover:bg-white/10 text-white/80"}`}
                     >
                       <span className="text-sm">{item.icon}</span>
                       <span>{item.name}</span>
@@ -192,6 +239,41 @@ const Sidebar = ({ isOpen, onClose }) => {
                         ? "bg-white/20 text-white font-semibold"
                         : "hover:bg-white/10 text-white/80"
                         }`}
+                    >
+                      <span className="text-sm">{item.icon}</span>
+                      <span>{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* FINANCE REPORTS SECTION MOBILE */}
+          <div className="mx-2 mb-1 mt-4">
+            <button
+              onClick={() => setFinanceOpen(!financeOpen)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+            >
+              <span className="text-lg"><FaChartBar /></span>
+              <span className="text-sm flex-1 text-left">Finance Reports</span>
+              <FaChevronDown
+                className={`text-xs transition-transform ${financeOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {financeOpen && (
+              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                {financeReportItems.map((item, idx) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={idx}
+                      to={item.path}
+                      onClick={onClose}
+                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${active
+                        ? "bg-white/20 text-white font-semibold"
+                        : "hover:bg-white/10 text-white/80"}`}
                     >
                       <span className="text-sm">{item.icon}</span>
                       <span>{item.name}</span>

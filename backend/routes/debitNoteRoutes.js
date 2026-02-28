@@ -2,7 +2,9 @@ import express from "express";
 import DebitNote from "../models/DebitNote.js";
 import Product from "../models/Product.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
+import Vendor from "../models/Vendor.js";
 import VoucherType from "../models/VoucherType.js";
+import GLService from "../utils/glService.js";
 
 const router = express.Router();
 
@@ -232,6 +234,34 @@ router.post("/", async (req, res) => {
     );
     
     console.log(`✅ PO status updated to: ${poStatus}`);
+
+    // ✅ REDUCE VENDOR AP (ACCOUNTS PAYABLE) BALANCE
+    if (originalPO.vendor && originalPO.vendor.id) {
+      try {
+        const vendor = await Vendor.findById(originalPO.vendor.id);
+        if (vendor) {
+          const grandTotal = debitNote.grandTotal || 0;
+          const newClosingBalance = Math.max(0, (vendor.closingBalance || 0) - grandTotal);
+          await Vendor.findByIdAndUpdate(
+            originalPO.vendor.id,
+            { closingBalance: newClosingBalance },
+            { new: true }
+          );
+          console.log(`✅ Vendor AP balance reduced: -₹${grandTotal}, New balance: ₹${newClosingBalance}`);
+        }
+      } catch (err) {
+        console.warn(`⚠️ Failed to update vendor balance:`, err.message);
+      }
+    }
+
+    // ✅ POST JOURNAL ENTRY to GL
+    try {
+      const journalEntry = await GLService.postDebitNoteJE(debitNote);
+      console.log(`✅ GL Entry posted: ${journalEntry.jeId}`);
+    } catch (glError) {
+      console.warn("⚠️ GL posting failed (non-blocking):", glError.message);
+      // Don't fail the DN creation if GL posting fails
+    }
 
     res.status(201).json({
       success: true,

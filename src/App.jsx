@@ -6,6 +6,9 @@ import "react-toastify/dist/ReactToastify.css";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
 import { InventoryProvider } from "./context/InventoryContext";
+import APAgingPage from "./pages/APAgingPage";
+import ARAgingPage from "./pages/ARAgingPage";
+import BalanceSheetPage from "./pages/BalanceSheetPage";
 import CRMPage from "./pages/CRMPage";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerSummary from "./pages/CustomerSummary";
@@ -21,6 +24,9 @@ import OthersSummary from "./pages/OthersSummary";
 import PearlsBookPage from "./pages/PearlsBookPage";
 import PearlsShopping from "./pages/PearlsShopping";
 import ProductSummary from "./pages/ProductSummary";
+import ProfitLossPage from "./pages/ProfitLossPage";
+import ReorderingDashboard from "./pages/ReorderingDashboard";
+import TrialBalancePage from "./pages/TrialBalancePage";
 import VendorSummary from "./pages/VendorSummary";
 
 function App() {
@@ -88,6 +94,30 @@ function App() {
                 <Route
                   path="/summary/others"
                   element={<OthersSummary />}
+                />
+                <Route
+                  path="/reports/trial-balance"
+                  element={<TrialBalancePage />}
+                />
+                <Route
+                  path="/reports/balance-sheet"
+                  element={<BalanceSheetPage />}
+                />
+                <Route
+                  path="/reports/profit-loss"
+                  element={<ProfitLossPage />}
+                />
+                <Route
+                  path="/reports/ar-aging"
+                  element={<ARAgingPage />}
+                />
+                <Route
+                  path="/reports/ap-aging"
+                  element={<APAgingPage />}
+                />
+                <Route
+                  path="/reordering"
+                  element={<ReorderingDashboard />}
                 />
               </Routes>
             </div>

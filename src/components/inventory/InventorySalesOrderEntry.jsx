@@ -50,6 +50,7 @@ export default function InventorySalesOrderEntry({
   const [showSampleItemDropdown, setShowSampleItemDropdown] = useState(false);
   const [filteredSampleProducts, setFilteredSampleProducts] = useState([]);
   const [loadingSampleProducts, setLoadingSampleProducts] = useState(false);
+  const [availableQtyCache, setAvailableQtyCache] = useState({});
 
   const [transportCharge, setTransportCharge] = useState(0);
 
@@ -280,6 +281,34 @@ export default function InventorySalesOrderEntry({
     fetchSampleProductsByGroup();
   }, [sampleProductGroup]);
 
+  // Fetch available qty for all filtered products
+  useEffect(() => {
+    if (filteredProducts.length === 0) {
+      setAvailableQtyCache({});
+      return;
+    }
+
+    const fetchAvailableQtyForAll = async () => {
+      const newCache = {};
+
+      for (const product of filteredProducts) {
+        try {
+          const res = await fetch(`${API_BASE}/products/available/${product._id}`);
+          const data = await res.json();
+          newCache[product._id] = data.data?.availableQty || 0;
+        } catch (err) {
+          console.error(`Failed to fetch available qty for ${product._id}:`, err);
+          // Fallback to totalQty from product if available
+          newCache[product._id] = product.totalQty || 0;
+        }
+      }
+
+      setAvailableQtyCache(newCache);
+    };
+
+    fetchAvailableQtyForAll();
+  }, [filteredProducts]);
+
   const filteredProducts_unused = useMemo(() => {
     return productGroup
       ? products.filter((p) => {
@@ -334,8 +363,10 @@ export default function InventorySalesOrderEntry({
     setShowItemDropdown(false);
     setQty(1);
 
-    // ✅ AUTO-FILL (BUT EDITABLE)
-    setSellingPrice(product.sellingPrice);
+    // ✅ AUTO-FILL (WITH CUSTOMER MARGIN APPLIED)
+    const basePrice = product.sellingPrice;
+    const adjustedPrice = basePrice + (basePrice * Number(customerMargin)) / 100;
+    setSellingPrice(adjustedPrice);
     setGst(product.gst);
 
     setCgst(product.gst / 2);
@@ -412,8 +443,12 @@ export default function InventorySalesOrderEntry({
       return;
     }
 
-    // 1️⃣ BASE AMOUNT
-    const baseAmount = Number(sellingPrice) * Number(qty);
+    // 1️⃣ CALCULATE ADJUSTED SELLING PRICE WITH CUSTOMER MARGIN
+    const basSellingPrice = Number(sellingPrice);
+    const adjustedSellingPrice = basSellingPrice + (basSellingPrice * Number(customerMargin)) / 100;
+
+    // 2️⃣ BASE AMOUNT (using adjusted selling price)
+    const baseAmount = adjustedSellingPrice * Number(qty);
 
     // 2️⃣ DISCOUNT (₹ or %)
     const calculatedDiscount =
@@ -445,7 +480,7 @@ export default function InventorySalesOrderEntry({
     // 6️⃣ FINAL TOTAL (ITEM LEVEL)
     const totalAmount = taxableAmount + taxAmount;
 
-    // 7️⃣ PUSH ITEM (STORE EVERYTHING CLEANLY)
+    // 7️⃣ PUSH ITEM (using adjusted selling price with customer margin)
     setItems((prev) => [
       ...prev,
       {
@@ -453,7 +488,7 @@ export default function InventorySalesOrderEntry({
         name: p.name,
         hsn,
         qty: Number(qty),
-        sellingPrice: Number(sellingPrice),
+        sellingPrice: Number(adjustedSellingPrice),
 
         baseAmount,
         discountType,
@@ -551,10 +586,6 @@ export default function InventorySalesOrderEntry({
   const grandTotal =
     subtotal - totalDiscount + totalTax + Number(transportCharge || 0);
 
-  // Calculate margin amount
-  const marginAmount = (grandTotal * customerMargin) / 100;
-  const grandTotalWithMargin = grandTotal + marginAmount;
-
 
   // Round up all item totals and financial values
   const roundedItems = items.map((item) => ({
@@ -567,8 +598,6 @@ export default function InventorySalesOrderEntry({
   const roundedTotalTax = Math.ceil(totalTax * 100) / 100;
   const roundedTransportCharge = Math.ceil(Number(transportCharge || 0) * 100) / 100;
   const roundedGrandTotal = Math.ceil(grandTotal * 100) / 100;
-  const roundedMarginAmount = Math.ceil(marginAmount * 100) / 100;
-  const roundedGrandTotalWithMargin = Math.ceil(grandTotalWithMargin * 100) / 100;
 
   const payload = {
     voucherType,
@@ -598,9 +627,6 @@ export default function InventorySalesOrderEntry({
     totalDiscount: roundedTotalDiscount,
     totalTax: roundedTotalTax,
     grandTotal: roundedGrandTotal,
-    customerMargin,
-    marginAmount: roundedMarginAmount,
-    grandTotalWithMargin: roundedGrandTotalWithMargin,
     ewayEnabled: enableEway,
     ewayDetails: enableEway
       ? {
@@ -884,7 +910,7 @@ export default function InventorySalesOrderEntry({
                 {productsWithStock
                   .filter(p => 
                     p.name.toLowerCase().includes(itemSearch.toLowerCase()) &&
-                    p.availableQty > 0
+                    (availableQtyCache[p._id] || p.availableQty || 0) > 0
                   )
                   .map((p) => (
                     <div
@@ -893,12 +919,12 @@ export default function InventorySalesOrderEntry({
                       className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
                     >
                       <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
-                      <div className="text-gray-500 text-xs">Available: {p.totalQty || 0}</div>
+                      <div className="text-gray-500 text-xs">Available: {availableQtyCache[p._id] ?? p.availableQty ?? 0}</div>
                     </div>
                   ))}
                 {productsWithStock.filter(p => 
                   p.name.toLowerCase().includes(itemSearch.toLowerCase()) &&
-                  p.availableQty > 0
+                  (availableQtyCache[p._id] || p.availableQty || 0) > 0
                 ).length === 0 && (
                   <div className="px-3 py-2 text-gray-500 text-sm">
                     {productsWithStock.length === 0 ? "Select Product Group first" : "No items found"}
@@ -926,7 +952,8 @@ export default function InventorySalesOrderEntry({
               value={qty}
               min={1}
               max={
-                productsWithStock.find(p => p._id === selectedItem)?.availableQty || 1
+                availableQtyCache[selectedItem] ?? 
+                productsWithStock.find(p => p._id === selectedItem)?.availableQty ?? 1
               }
               onChange={(e) => setQty(+e.target.value)}
             />
@@ -1388,7 +1415,7 @@ export default function InventorySalesOrderEntry({
                 Grand Total
               </span>
               <span className="text-3xl font-black text-[#319bab] italic">
-                ₹{grandTotalWithMargin.toFixed(2)}
+                ₹{roundedGrandTotal.toFixed(2)}
               </span>
             </div>
           </div>

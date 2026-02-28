@@ -149,16 +149,16 @@ const ProductSummary = () => {
 
       // Update each product with new selling price
       for (const product of groupProducts) {
-        const newSellingPrice = product.purchasingPrice + margin;
+        const newMargin = margin;
+        const newSellingPrice = product.purchasingPrice + newMargin;
         
         try {
           const response = await fetch(`${API_BASE}/products/${product._id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              margin: newMargin,
               sellingPrice: newSellingPrice,
-              // Don't send margin - let backend calculate it automatically
-              // margin = sellingPrice - purchasingPrice
             }),
           });
           const result = await response.json();
@@ -199,14 +199,19 @@ const ProductSummary = () => {
 
   // Handle Edit Product
   const handleEdit = (product) => {
+    const calculatedMargin = product.margin !== undefined && product.margin !== null 
+      ? product.margin 
+      : ((product.sellingPrice || 0) - (product.purchasingPrice || 0));
+    
     setEditingProduct(product);
     setEditFormData({
       name: product.name,
       perQty: product.perQty,
       units: product.units,
       totalQty: product.totalQty,
-      purchasingPrice: product.purchasingPrice,
-      sellingPrice: product.sellingPrice,
+      purchasingPrice: product.purchasingPrice || 0,
+      sellingPrice: product.sellingPrice || 0,
+      margin: calculatedMargin || 0,
       hsnCode: product.hsnCode,
       gst: product.gst,
     });
@@ -723,8 +728,8 @@ const ProductSummary = () => {
                           <td className="px-6 py-4 text-sm text-gray-700">
                             {product.units}
                           </td>
-                          <td className="px-6 py-4 text-sm text-right font-semibold text-gray-900">
-                            {product.totalQty}
+                          <td className="px-6 py-4 text-sm text-right font-bold text-[#319bab]">
+                            {product.availableQty}
                           </td>
                           <td className="px-6 py-4 text-sm text-right text-gray-700">
                             ₹ {product.purchasingPrice?.toFixed(2) || "0.00"}
@@ -826,8 +831,8 @@ const ProductSummary = () => {
                       <p className="text-gray-900 font-semibold">{product.units}</p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Stock Qty</p>
-                      <p className="text-gray-900 font-semibold">{product.totalQty}</p>
+                      <p className="text-gray-500">Total Qty</p>
+                      <p className="text-[#319bab] font-bold">{product.availableQty}</p>
                     </div>
                     <div>
                       <p className="text-gray-500">Margin</p>
@@ -917,7 +922,7 @@ const ProductSummary = () => {
                       Stock
                     </p>
                     <p className="text-lg md:text-2xl font-bold text-blue-600 mt-1">
-                      {(paginatedProducts.reduce((sum, p) => sum + (p.totalQty || 0), 0) / 1000).toFixed(1)}K
+                      {(paginatedProducts.reduce((sum, p) => sum + (p.availableQty || 0), 0) / 1000).toFixed(1)}K
                     </p>
                   </div>
                   <div className="bg-white p-3 md:p-4 rounded-lg border">
@@ -1035,33 +1040,54 @@ const ProductSummary = () => {
                     type="number"
                     step="0.01"
                     value={editFormData.purchasingPrice || ""}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const newPurchasingPrice = parseFloat(e.target.value) || 0;
+                      const margin = editFormData.margin || 0;
                       setEditFormData({
                         ...editFormData,
-                        purchasingPrice: parseFloat(e.target.value),
-                      })
-                    }
+                        purchasingPrice: newPurchasingPrice,
+                        sellingPrice: newPurchasingPrice + margin,
+                      });
+                    }}
                     className="w-full p-2 border rounded-lg outline-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
 
                 <div>
                   <label className="text-sm font-bold text-gray-600 mb-1 block">
-                    Selling Price
+                    Margin (₹)
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    value={editFormData.sellingPrice || ""}
-                    onChange={(e) =>
+                    value={editFormData.margin !== undefined ? editFormData.margin : ""}
+                    onChange={(e) => {
+                      const newMargin = parseFloat(e.target.value) || 0;
+                      const purchasingPrice = editFormData.purchasingPrice || 0;
                       setEditFormData({
                         ...editFormData,
-                        sellingPrice: parseFloat(e.target.value),
-                      })
-                    }
+                        margin: newMargin,
+                        sellingPrice: purchasingPrice + newMargin,
+                      });
+                    }}
                     className="w-full p-2 border rounded-lg outline-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Adjusts Selling Price</p>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-bold text-gray-600 mb-1 block">
+                  Selling Price
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editFormData.sellingPrice || ""}
+                  readOnly
+                  className="w-full p-2 border rounded-lg bg-gray-100 text-gray-600"
+                />
+                <p className="text-xs text-gray-500 mt-1">Auto-calculated from Margin</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

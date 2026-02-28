@@ -1,7 +1,9 @@
 import express from "express";
 import Product from "../models/Product.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
+import Vendor from "../models/Vendor.js";
 import VoucherType from "../models/VoucherType.js";
+import GLService from "../utils/glService.js";
 
 const router = express.Router();
 
@@ -118,6 +120,34 @@ router.post("/", async (req, res) => {
         } catch (err) {
           console.error(`⚠️ Failed to update product ${item.productId}:`, err.message);
         }
+      }
+
+      // ✅ UPDATE VENDOR AP (ACCOUNTS PAYABLE) BALANCE
+      if (rest.vendor && rest.vendor.id) {
+        try {
+          const vendor = await Vendor.findById(rest.vendor.id);
+          if (vendor) {
+            const grandTotal = rest.grandTotal || 0;
+            const newClosingBalance = (vendor.closingBalance || 0) + grandTotal;
+            await Vendor.findByIdAndUpdate(
+              rest.vendor.id,
+              { closingBalance: newClosingBalance },
+              { new: true }
+            );
+            console.log(`✅ Vendor AP balance updated: +₹${grandTotal}, New balance: ₹${newClosingBalance}`);
+          }
+        } catch (err) {
+          console.warn(`⚠️ Failed to update vendor balance:`, err.message);
+        }
+      }
+
+      // ✅ POST JOURNAL ENTRY to GL
+      try {
+        const journalEntry = await GLService.postPurchaseOrderJE(order);
+        console.log(`✅ GL Entry posted: ${journalEntry.jeId}`);
+      } catch (glError) {
+        console.warn("⚠️ GL posting failed (non-blocking):", glError.message);
+        // Don't fail the PO creation if GL posting fails
       }
 
       voucher.counter += 1;

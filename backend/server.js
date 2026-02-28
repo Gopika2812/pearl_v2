@@ -6,16 +6,19 @@ import express from "express";
 import mongoose from "mongoose";
 
 
+import chartOfAccountsRoutes from "./routes/chartOfAccountsRoutes.js";
 import commissionRuleRoutes from "./routes/commissionRuleRoutes.js";
 import creditNoteRoutes from "./routes/creditNoteRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import debitNoteRoutes from "./routes/debitNoteRoutes.js";
 import deliveryManRoutes from "./routes/deliveryManRoutes.js";
+import financialReportRoutes from "./routes/financialReportRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import pearlsBookRoutes from "./routes/pearlsBookRoutes.js";
 import productGroupRoutes from "./routes/productGroupRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import purchaseOrderRoutes from "./routes/purchaseOrderRoutes.js";
+import reorderingRoutes from "./routes/reorderingRoutes.js";
 import salesManRoutes from "./routes/salesManRoutes.js";
 import salesOrderRoutes from "./routes/salesOrderRoutes.js";
 import salesOwnerRoutes from "./routes/salesOwnerRoutes.js";
@@ -40,6 +43,8 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Routes
+app.use("/api/chart-of-accounts", chartOfAccountsRoutes);
+app.use("/api/financial-reports", financialReportRoutes);
 app.use("/api/vendors", vendorRoutes);
 app.use("/api/product-groups", productGroupRoutes);
 app.use("/api/products", productRoutes);
@@ -56,7 +61,7 @@ app.use("/api/sales-owners", salesOwnerRoutes);
 app.use("/api/sales-men", salesManRoutes);
 app.use("/api/delivery-men", deliveryManRoutes);
 app.use("/api/commission-rules", commissionRuleRoutes);
-
+app.use("/api/reordering", reorderingRoutes);
 
 
 // MongoDB Connect

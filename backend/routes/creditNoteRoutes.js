@@ -9,6 +9,7 @@ import SalesMan from "../models/SalesMan.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
 import { getFinancialYear } from "../utils/financialYear.js";
+import GLService from "../utils/glService.js";
 
 const router = express.Router();
 
@@ -235,6 +236,15 @@ router.post("/", async (req, res) => {
       }
     } else {
       console.warn(`⚠️ No commission record found for sales order: ${originalSalesOrderId}. Invoice: ${originalOrder.invoiceId}`);
+    }
+
+    // ✅ POST JOURNAL ENTRY to GL
+    try {
+      const journalEntry = await GLService.postCreditNoteJE(creditNote);
+      console.log(`✅ GL Entry posted: ${journalEntry.jeId}`);
+    } catch (glError) {
+      console.warn("⚠️ GL posting failed (non-blocking):", glError.message);
+      // Don't fail the CN creation if GL posting fails
     }
 
     res.status(201).json({

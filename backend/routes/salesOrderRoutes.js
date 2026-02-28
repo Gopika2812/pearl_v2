@@ -2,9 +2,11 @@ import express from "express";
 import mongoose from "mongoose";
 import Commission from "../models/Commission.js";
 import Customer from "../models/Customer.js";
+import Product from "../models/Product.js";
 import SalesOrder from "../models/SalesOrder.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
+import GLService from "../utils/glService.js";
 
 
 const router = express.Router();
@@ -115,8 +117,8 @@ router.post("/", async (req, res) => {
     }
 
     const openingBalance = dbCustomer.closingBalance || dbCustomer.totalBalance || 0;
-    // Closing balance will be updated after invoice generation, not during creation
-    const closingBalance = openingBalance;
+    // ✅ FIXED: Closing balance = opening balance + grandTotal (SO increases customer's AR)
+    const closingBalance = openingBalance + grandTotal;
 
 
     // 🧾 Save Sales Order
@@ -161,6 +163,33 @@ router.post("/", async (req, res) => {
 
 
     await salesOrder.save();
+
+    // ✅ REDUCE INVENTORY for each item in SO
+    for (const item of items) {
+      await Product.findByIdAndUpdate(
+        item.productId,
+        {
+          $inc: { totalQty: -item.qty } // Reduce inventory by order quantity
+        },
+        { new: true }
+      );
+    }
+
+    // ✅ UPDATE CUSTOMER CLOSING BALANCE
+    await Customer.findByIdAndUpdate(
+      customer.id,
+      { closingBalance: closingBalance },
+      { new: true }
+    );
+
+    // ✅ POST JOURNAL ENTRY to GL
+    try {
+      const journalEntry = await GLService.postSalesOrderJE(salesOrder);
+      console.log(`✅ GL Entry posted: ${journalEntry.jeId}`);
+    } catch (glError) {
+      console.warn("⚠️ GL posting failed (non-blocking):", glError.message);
+      // Don't fail the SO creation if GL posting fails
+    }
 
     // ✅ Increment voucher counter
     voucher.counter += 1;

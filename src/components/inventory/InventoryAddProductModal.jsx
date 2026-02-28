@@ -10,13 +10,40 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
     totalQty: "",
     purchasingPrice: "",
     sellingPrice: "",
+    margin: "",
     hsnCode: "",
     gst: "",
   });
 
   if (!isOpen) return null;
 
-  const margin = (product.sellingPrice || 0) - (product.purchasingPrice || 0);
+  const calculateSellingPrice = (purchasingPrice, margin) => {
+    return Number(purchasingPrice || 0) + Number(margin || 0);
+  };
+
+  const handleMarginChange = (value) => {
+    const newMargin = Number(value || 0);
+    const purchasingPrice = Number(product.purchasingPrice || 0);
+    const newSellingPrice = calculateSellingPrice(purchasingPrice, newMargin);
+    
+    setProduct({
+      ...product,
+      margin: value,
+      sellingPrice: newSellingPrice.toString(),
+    });
+  };
+
+  const handlePurchasingPriceChange = (value) => {
+    const newPurchasingPrice = Number(value || 0);
+    const margin = Number(product.margin || 0);
+    const newSellingPrice = calculateSellingPrice(newPurchasingPrice, margin);
+    
+    setProduct({
+      ...product,
+      purchasingPrice: value,
+      sellingPrice: newSellingPrice.toString(),
+    });
+  };
 
   const handleBulkUpload = async (e) => {
     const file = e.target.files[0];
@@ -58,12 +85,6 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
       return;
     }
 
-    // Validate prices
-    if (Number(product.sellingPrice) < Number(product.purchasingPrice)) {
-      alert("Selling price cannot be less than purchasing price");
-      return;
-    }
-
     const payload = {
       name: product.name,
       productGroup: product.productGroup,
@@ -72,6 +93,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
       totalQty: Number(product.totalQty || 0),
       purchasingPrice: Number(product.purchasingPrice || 0),
       sellingPrice: Number(product.sellingPrice || 0),
+      margin: Number(product.margin || 0),
       hsnCode: product.hsnCode,
       gst: Number(product.gst || 0),
     };
@@ -98,6 +120,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
         totalQty: "",
         purchasingPrice: "",
         sellingPrice: "",
+        margin: "",
         hsnCode: "",
         gst: "",
       });
@@ -227,7 +250,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
                 className={inputClass}
                 placeholder="Enter purchasing price"
                 value={product.purchasingPrice}
-                onChange={(e) => setProduct({ ...product, purchasingPrice: e.target.value })}
+                onChange={(e) => handlePurchasingPriceChange(e.target.value)}
               />
             </div>
           </div>
@@ -263,13 +286,18 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
 
           {/* 2-Column Grid */}
           <div className="grid grid-cols-2 gap-4 mb-4">
-            {/* Margin (Auto-calculated) */}
-            <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-              <label className={labelClass}>Margin (Auto-Calculated)</label>
-              <div className="text-2xl font-bold text-blue-600">
-                {margin.toFixed(2)}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">Selling - Purchasing</p>
+            {/* Margin */}
+            <div>
+              <label className={labelClass}>Margin (₹)</label>
+              <input
+                type="number"
+                step="0.01"
+                className={inputClass}
+                placeholder="Enter margin amount"
+                value={product.margin}
+                onChange={(e) => handleMarginChange(e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-1">Will adjust Selling Price</p>
             </div>
 
             {/* GST */}

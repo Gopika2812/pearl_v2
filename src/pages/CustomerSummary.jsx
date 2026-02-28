@@ -933,7 +933,7 @@ const CustomerSummary = () => {
                 </div>
                 <div>
                   <label className="text-sm font-bold text-gray-600 mb-1 block">
-                    Margin %
+                    Owner Margin %
                   </label>
                   <input
                     type="number"

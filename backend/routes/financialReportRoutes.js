@@ -1,0 +1,416 @@
+import express from "express";
+import ChartOfAccounts from "../models/ChartOfAccounts.js";
+import Customer from "../models/Customer.js";
+import GeneralLedger from "../models/GeneralLedger.js";
+import JournalEntry from "../models/JournalEntry.js";
+import Vendor from "../models/Vendor.js";
+import GLService from "../utils/glService.js";
+
+const router = express.Router();
+
+/**
+ * Trial Balance Report
+ * Shows debit and credit balance of all GL accounts
+ */
+router.get("/trial-balance", async (req, res) => {
+  try {
+    const { financialYear = "2025-2026" } = req.query;
+
+    const trialBalance = await GLService.getTrialBalance(financialYear);
+
+    return res.json({
+      success: true,
+      financialYear,
+      reportDate: new Date().toLocaleDateString(),
+      data: trialBalance
+    });
+  } catch (error) {
+    console.error("Error generating trial balance:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error generating trial balance"
+    });
+  }
+});
+
+/**
+ * Balance Sheet Report
+ * Shows Assets = Liabilities + Equity
+ */
+router.get("/balance-sheet", async (req, res) => {
+  try {
+    const { financialYear = "2025-2026" } = req.query;
+
+    const balanceSheet = await GLService.getBalanceSheet(financialYear);
+
+    // Format for presentation
+    const formatted = {
+      success: true,
+      financialYear,
+      reportDate: new Date().toLocaleDateString(),
+      assets: {
+        currentAssets: {
+          items: balanceSheet.assets.currentAssets.map(a => ({
+            accountCode: a.accountCode,
+            accountName: a.accountName,
+            balance: a.balance
+          })),
+          total: balanceSheet.assets.currentAssets.reduce((sum, a) => sum + a.balance, 0)
+        },
+        fixedAssets: {
+          items: balanceSheet.assets.fixedAssets.map(a => ({
+            accountCode: a.accountCode,
+            accountName: a.accountName,
+            balance: a.balance
+          })),
+          total: balanceSheet.assets.fixedAssets.reduce((sum, a) => sum + a.balance, 0)
+        },
+        totalAssets: balanceSheet.assets.totalAssets
+      },
+      liabilities: {
+        currentLiabilities: {
+          items: balanceSheet.liabilities.currentLiabilities.map(a => ({
+            accountCode: a.accountCode,
+            accountName: a.accountName,
+            balance: a.balance
+          })),
+          total: balanceSheet.liabilities.currentLiabilities.reduce((sum, a) => sum + a.balance, 0)
+        },
+        longTermLiabilities: {
+          items: balanceSheet.liabilities.longTermLiabilities.map(a => ({
+            accountCode: a.accountCode,
+            accountName: a.accountName,
+            balance: a.balance
+          })),
+          total: balanceSheet.liabilities.longTermLiabilities.reduce((sum, a) => sum + a.balance, 0)
+        },
+        totalLiabilities: balanceSheet.liabilities.totalLiabilities
+      },
+      equity: {
+        items: balanceSheet.equity.items.map(a => ({
+          accountCode: a.accountCode,
+          accountName: a.accountName,
+          balance: a.balance
+        })),
+        totalEquity: balanceSheet.equity.totalEquity
+      },
+      balanceCheckout: {
+        totalAssets: balanceSheet.assets.totalAssets,
+        totalLiabilitiesAndEquity: balanceSheet.liabilities.totalLiabilities + balanceSheet.equity.totalEquity,
+        isBalanced: Math.abs(balanceSheet.assets.totalAssets - (balanceSheet.liabilities.totalLiabilities + balanceSheet.equity.totalEquity)) < 0.01
+      }
+    };
+
+    return res.json(formatted);
+  } catch (error) {
+    console.error("Error generating balance sheet:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error generating balance sheet"
+    });
+  }
+});
+
+/**
+ * Profit & Loss (Income Statement) Report
+ * Shows Revenue - Expenses = Net Profit/Loss
+ */
+router.get("/profit-loss", async (req, res) => {
+  try {
+    const { financialYear = "2025-2026" } = req.query;
+
+    const pl = await GLService.getProfitLoss(financialYear);
+
+    const formatted = {
+      success: true,
+      financialYear,
+      reportDate: new Date().toLocaleDateString(),
+      revenue: {
+        items: pl.revenue.items.map(r => ({
+          accountCode: r.accountCode,
+          accountName: r.accountName,
+          amount: r.amount
+        })),
+        totalRevenue: pl.revenue.total
+      },
+      expenses: {
+        items: pl.expenses.items.map(e => ({
+          accountCode: e.accountCode,
+          accountName: e.accountName,
+          amount: e.amount
+        })),
+        totalExpenses: pl.expenses.total
+      },
+      summary: {
+        totalRevenue: pl.revenue.total,
+        totalExpenses: pl.expenses.total,
+        netProfitLoss: pl.netProfitLoss,
+        profitMarginPercent: pl.revenue.total > 0 ? ((pl.netProfitLoss / pl.revenue.total) * 100).toFixed(2) : 0
+      }
+    };
+
+    return res.json(formatted);
+  } catch (error) {
+    console.error("Error generating P&L:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error generating profit & loss statement"
+    });
+  }
+});
+
+/**
+ * Accounts Receivable (Customer) Aging Report
+ * Shows customer balances aged by days outstanding
+ */
+router.get("/ar-aging", async (req, res) => {
+  try {
+    const customers = await Customer.find({ closingBalance: { $gt: 0 } });
+
+    const arAging = {
+      success: true,
+      reportDate: new Date().toLocaleDateString(),
+      summary: {
+        current0_30: 0,
+        aging31_60: 0,
+        aging61_90: 0,
+        agingOver90: 0,
+        totalAR: 0
+      },
+      customers: []
+    };
+
+    const today = new Date();
+
+    customers.forEach(customer => {
+      const daysOutstanding = Math.floor((today - new Date(customer.createdAt)) / (1000 * 60 * 60 * 24));
+      const balance = customer.closingBalance || 0;
+
+      let ageCategory = "current0_30";
+      if (daysOutstanding > 90) ageCategory = "agingOver90";
+      else if (daysOutstanding > 60) ageCategory = "aging61_90";
+      else if (daysOutstanding > 30) ageCategory = "aging31_60";
+
+      arAging.summary[ageCategory] += balance;
+      arAging.summary.totalAR += balance;
+
+      arAging.customers.push({
+        customerId: customer._id,
+        customerName: customer.name,
+        balance: balance,
+        daysOutstanding: daysOutstanding,
+        ageCategory: ageCategory,
+        lastOrderDate: customer.updatedAt
+      });
+    });
+
+    return res.json(arAging);
+  } catch (error) {
+    console.error("Error generating AR aging:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error generating AR aging report"
+    });
+  }
+});
+
+/**
+ * Accounts Payable (Vendor) Aging Report
+ * Shows vendor balances aged by days outstanding
+ */
+router.get("/ap-aging", async (req, res) => {
+  try {
+    const vendors = await Vendor.find({ closingBalance: { $gt: 0 } });
+
+    const apAging = {
+      success: true,
+      reportDate: new Date().toLocaleDateString(),
+      summary: {
+        current0_30: 0,
+        aging31_60: 0,
+        aging61_90: 0,
+        agingOver90: 0,
+        totalAP: 0
+      },
+      vendors: []
+    };
+
+    const today = new Date();
+
+    vendors.forEach(vendor => {
+      const daysOutstanding = Math.floor((today - new Date(vendor.createdAt)) / (1000 * 60 * 60 * 24));
+      const balance = vendor.closingBalance || 0;
+
+      let ageCategory = "current0_30";
+      if (daysOutstanding > 90) ageCategory = "agingOver90";
+      else if (daysOutstanding > 60) ageCategory = "aging61_90";
+      else if (daysOutstanding > 30) ageCategory = "aging31_60";
+
+      apAging.summary[ageCategory] += balance;
+      apAging.summary.totalAP += balance;
+
+      apAging.vendors.push({
+        vendorId: vendor._id,
+        vendorName: vendor.name,
+        balance: balance,
+        daysOutstanding: daysOutstanding,
+        ageCategory: ageCategory,
+        lastOrderDate: vendor.updatedAt
+      });
+    });
+
+    return res.json(apAging);
+  } catch (error) {
+    console.error("Error generating AP aging:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error generating AP aging report"
+    });
+  }
+});
+
+/**
+ * General Ledger (detailed account transactions)
+ * Shows all transactions for a specific GL account
+ */
+router.get("/general-ledger/:accountCode", async (req, res) => {
+  try {
+    const { accountCode } = req.params;
+    const { financialYear = "2025-2026" } = req.query;
+
+    const glAccount = await GeneralLedger.findOne({
+      accountCode,
+      financialYear
+    });
+
+    if (!glAccount) {
+      return res.status(404).json({
+        success: false,
+        message: "Account not found"
+      });
+    }
+
+    return res.json({
+      success: true,
+      account: {
+        accountCode: glAccount.accountCode,
+        accountName: glAccount.accountName,
+        accountType: glAccount.accountType,
+        openingBalance: glAccount.openingBalance,
+        currentBalance: glAccount.currentBalance,
+        totalDebits: glAccount.totalDebits,
+        totalCredits: glAccount.totalCredits
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching GL account:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching account details"
+    });
+  }
+});
+
+/**
+ * Chart of Accounts (list all accounts)
+ */
+router.get("/chart-of-accounts", async (req, res) => {
+  try {
+    const { financialYear = "2025-2026" } = req.query;
+
+    const coa = await ChartOfAccounts.find({ financialYear, isActive: true })
+      .sort({ accountCode: 1 });
+
+    const formatted = {
+      success: true,
+      financialYear,
+      reportDate: new Date().toLocaleDateString(),
+      accountsByType: {
+        ASSET: coa.filter(a => a.accountType === "ASSET"),
+        LIABILITY: coa.filter(a => a.accountType === "LIABILITY"),
+        EQUITY: coa.filter(a => a.accountType === "EQUITY"),
+        INCOME: coa.filter(a => a.accountType === "INCOME"),
+        EXPENSE: coa.filter(a => a.accountType === "EXPENSE")
+      },
+      total: coa.length
+    };
+
+    return res.json(formatted);
+  } catch (error) {
+    console.error("Error fetching COA:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching chart of accounts"
+    });
+  }
+});
+
+/**
+ * DEBUG: Get all GL accounts with full data
+ */
+router.get("/debug/gl-accounts", async (req, res) => {
+  try {
+    const glAccounts = await GeneralLedger.find({});
+    
+    return res.json({
+      success: true,
+      count: glAccounts.length,
+      accounts: glAccounts.map(acc => ({
+        accountCode: acc.accountCode,
+        accountName: acc.accountName,
+        accountType: acc.accountType,
+        financialYear: acc.financialYear,
+        openingBalance: acc.openingBalance,
+        currentBalance: acc.currentBalance,
+        totalDebits: acc.totalDebits,
+        totalCredits: acc.totalCredits,
+        debitCount: acc.debitCount,
+        creditCount: acc.creditCount,
+        lastTransactionDate: acc.lastTransactionDate,
+        lastTransactionAmount: acc.lastTransactionAmount
+      }))
+    });
+  } catch (error) {
+    console.error("Error fetching GL accounts:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching GL accounts"
+    });
+  }
+});
+
+/**
+ * DEBUG: Get all Journal Entries
+ */
+router.get("/debug/journal-entries", async (req, res) => {
+  try {
+    const entries = await JournalEntry.find({}).sort({ journalDate: -1 }).limit(20);
+    
+    return res.json({
+      success: true,
+      count: entries.length,
+      entries: entries.map(je => ({
+        jeId: je.jeId,
+        referenceModule: je.referenceModule,
+        referenceDocumentNumber: je.referenceDocumentNumber,
+        journalDate: je.journalDate,
+        description: je.description,
+        financialYear: je.financialYear,
+        totalDebit: je.totalDebit,
+        totalCredit: je.totalCredit,
+        isBalanced: je.isBalanced,
+        status: je.status,
+        lineItemsCount: je.lineItems?.length || 0,
+        lineItems: je.lineItems
+      }))
+    });
+  } catch (error) {
+    console.error("Error fetching JE:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching journal entries"
+    });
+  }
+});
+
+export default router;
