@@ -7,6 +7,7 @@ import ProductCategory from "../models/ProductCategory.js";
 import ProductGroup from "../models/ProductGroup.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SalesOrder from "../models/SalesOrder.js";
+import Warehouse from "../models/Warehouse.js";
 
 const router = express.Router();
 
@@ -84,7 +85,10 @@ router.post("/", async (req, res) => {
     });
 
     const savedProduct = await product.save();
-    const populated = await Product.findById(savedProduct._id).populate("productGroup", "name").populate("productCategories", "name");
+    const populated = await Product.findById(savedProduct._id)
+      .populate("productGroup", "name")
+      .populate("productCategories", "name")
+      .populate("warehouse", "name");
 
     res.status(201).json({
       success: true,
@@ -126,6 +130,7 @@ router.get("/", async (req, res) => {
     const products = await Product.find(filter)
       .populate("productGroup", "_id name")
       .populate("productCategories", "_id name")
+      .populate("warehouse", "_id name")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(pageSize)
@@ -304,6 +309,12 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       allProductCategories.map(cat => [cat.name.toLowerCase(), cat._id])
     );
 
+    // ⚡ OPTIMIZATION: Batch load all warehouses for this branch ONCE
+    const allWarehouses = await Warehouse.find({ branchId });
+    const warehouseMap = new Map(
+      allWarehouses.map(wh => [wh.name.toLowerCase(), wh._id])
+    );
+
     // ⚡ OPTIMIZATION: Batch load all existing products in this branch
     const existingProducts = await Product.find({ branchId });
     const existingProductSet = new Set(
@@ -325,6 +336,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const name = normalized.name || "";
       const groupName = normalized.productgroup || "";
       const categoriesStr = normalized.productcategories || ""; // Comma-separated list
+      const warehouseName = normalized.warehouse || ""; // NEW: Extract warehouse name
       const perQty = Number(normalized.perqty || 1); // Default to 1
       const units = normalized.units || "kg"; // Default to kg
       const totalQty = Number(normalized.totalqty || 0);
@@ -417,6 +429,16 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         }
       }
 
+      // Lookup Warehouse ID from map (optional)
+      let warehouseId = null;
+      if (warehouseName) {
+        warehouseId = warehouseMap.get(warehouseName.toLowerCase());
+        if (!warehouseId) {
+          skipped.push({ row, reason: `Warehouse "${warehouseName}" not found` });
+          continue;
+        }
+      }
+
       // Check if product already exists
       const productKey = `${name}|${groupId}`;
       if (existingProductSet.has(productKey)) {
@@ -429,6 +451,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         branchId,
         productGroup: groupId,
         productCategories: categoryIds,
+        warehouse: warehouseId, // NEW: Add warehouse ID
         name,
         perQty: Math.round(perQty),
         units,
@@ -543,7 +566,10 @@ router.put("/:id", async (req, res) => {
       id,
       updateData,
       { new: true, runValidators: true }
-    ).populate("productGroup", "name").populate("productCategories", "name");
+    )
+      .populate("productGroup", "name")
+      .populate("productCategories", "name")
+      .populate("warehouse", "name");
 
     if (!updatedProduct) {
       return res.status(404).json({

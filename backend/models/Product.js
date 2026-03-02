@@ -18,6 +18,12 @@ const productSchema = new mongoose.Schema(
       ref: "ProductCategory",
       default: [],
     },
+    warehouse: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Warehouse",
+      required: false,
+      default: null,
+    },
     name: { type: String, required: true },
     perQty: { type: Number, required: true },
     units: { type: String, required: true }, 

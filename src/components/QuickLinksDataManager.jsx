@@ -55,8 +55,8 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     product: {
       label: "Product",
       endpoint: "/products",
-      displayFields: ["name", "sellingPrice", "productGroup", "productCategories"],
-      editableFields: ["name", "sellingPrice", "marginPercentage", "productGroup", "productCategories"],
+      displayFields: ["name", "sellingPrice", "productGroup", "productCategories", "warehouse"],
+      editableFields: ["name", "sellingPrice", "marginPercentage", "productGroup", "productCategories", "warehouse"],
     },
     customer_category: {
       label: "Customer Category",

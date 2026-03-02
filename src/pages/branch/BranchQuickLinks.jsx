@@ -18,7 +18,7 @@ import InventoryAddVoucherTypeModal from "../../components/inventory/InventoryAd
 import InventoryAddWarehouseModal from "../../components/inventory/InventoryAddWarehouseModal";
 
 export default function BranchQuickLinks() {
-  const { productGroups, productCategories, customerCategories, addData, addLocalVoucher, addLocalWarehouse, addLocalProductCategory, addLocalCustomerCategory, salesOwners } = useInventory();
+  const { productGroups, productCategories, customerCategories, warehouses, addData, addLocalVoucher, addLocalWarehouse, addLocalProductCategory, addLocalCustomerCategory, salesOwners } = useInventory();
   const { currentBranch } = useBranch();
   const [activeModal, setActiveModal] = useState(null);
   const [showQuickLinks, setShowQuickLinks] = useState(true);
@@ -272,6 +272,7 @@ export default function BranchQuickLinks() {
         onSave={(data) => { handleAddData("product", data); setEditingItem(null); }}
         productGroups={productGroups}
         productCategories={productCategories}
+        warehouses={warehouses}
         editingItem={editingItem}
         branchId={branchId}
       />

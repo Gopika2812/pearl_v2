@@ -3,7 +3,7 @@ import { API_BASE } from "../../api";
 import FilterableCheckboxList from "../FilterableCheckboxList";
 import FilterableSelect from "../FilterableSelect";
 
-const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCategories = [], branchId, onSave, editingItem }) => {
+const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCategories = [], warehouses = [], branchId, onSave, editingItem }) => {
   useEffect(() => {
     if (isOpen) {
       console.log("📦 ProductModal opened with props:", {
@@ -20,6 +20,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     name: "",
     productGroup: "",
     productCategories: [],
+    warehouse: "",
     perQty: "",
     units: "kg",
     totalQty: "",
@@ -37,6 +38,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         name: editingItem.name || "",
         productGroup: editingItem.productGroup || editingItem.group || "",
         productCategories: editingItem.productCategories || [],
+        warehouse: editingItem.warehouse || "",
         perQty: editingItem.perQty || "",
         units: editingItem.units || "kg",
         totalQty: editingItem.totalQty || "",
@@ -51,6 +53,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         name: "",
         productGroup: "",
         productCategories: [],
+        warehouse: "",
         perQty: "",
         units: "kg",
         totalQty: "",
@@ -334,6 +337,23 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
               <div style={{color: '#999', fontSize: '13px', padding: '12px', textAlign: 'center', border: '2px solid #e5e7eb', borderRadius: '8px'}}>
                 📦 No product categories available
               </div>
+            )}
+          </div>
+
+          {/* Warehouse - Full Width */}
+          <div className="mb-4">
+            <label className={labelClass}>🏭 Warehouse</label>
+            <FilterableSelect
+              options={Array.isArray(warehouses) ? warehouses : []}
+              value={product.warehouse}
+              onChange={(value) => {
+                setProduct({ ...product, warehouse: value });
+              }}
+              placeholder="-- Select Warehouse (Optional) --"
+              className={inputClass}
+            />
+            {Array.isArray(warehouses) && warehouses.length === 0 && (
+              <p style={{color: '#999', fontSize: '12px', marginTop: '4px'}}>ℹ️ No warehouses available</p>
             )}
           </div>
 
