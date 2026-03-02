@@ -1,12 +1,42 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { API_BASE } from "../../api";
 
-const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave }) => {
+const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave, branchId, editingItem }) => {
   const [voucherName, setVoucherName] = useState("");
-  const [orderType, setOrderType] = useState("PO"); // ✅ PO or SO
+  const [orderType, setOrderType] = useState("PO"); 
+  const [prefix, setPrefix] = useState("");
   const [loading, setLoading] = useState(false);
+  const [existingVouchers, setExistingVouchers] = useState([]);
+  const [fetchingVouchers, setFetchingVouchers] = useState(false);
+
+  // Populate form when editing
+  useEffect(() => {
+    if (editingItem) {
+      setVoucherName(editingItem.name || "");
+      setOrderType(editingItem.orderType || "PO");
+      setPrefix(editingItem.prefix || "");
+    } else {
+      setVoucherName("");
+      setOrderType("PO");
+      setPrefix("");
+    }
+  }, [editingItem]);
+
+  // Fetch existing vouchers for this branch when modal opens
+  useEffect(() => {
+    if (isOpen && branchId) {
+      setFetchingVouchers(true);
+      fetch(`${API_BASE}/voucher-types?branchId=${branchId}`)
+        .then(res => res.json())
+        .then(data => {
+          setExistingVouchers(Array.isArray(data) ? data : data.data || []);
+        })
+        .catch(err => console.error("Failed to fetch vouchers:", err))
+        .finally(() => setFetchingVouchers(false));
+    }
+  }, [isOpen, branchId]);
 
   if (!isOpen) return null;
 
@@ -31,20 +61,43 @@ const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave }) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!voucherName || !orderType || loading) {
-      toast.info("Please fill all fields", toastConfig);
+    if (!voucherName || !orderType || loading || !branchId) {
+      toast.info("Please fill all fields and ensure branch is selected", toastConfig);
       return;
+    }
+
+    // When editing, skip duplicate check for same record, but check others
+    if (!editingItem) {
+      const voucherExists = existingVouchers.some(
+        v => v.name.toLowerCase() === voucherName.trim().toLowerCase() && v.orderType === orderType
+      );
+
+      if (voucherExists) {
+        toast.error(
+          `"${voucherName}" voucher for ${orderType} already exists in this branch!`,
+          toastConfig
+        );
+        return;
+      }
     }
 
     try {
       setLoading(true);
 
-      const res = await fetch(`${API_BASE}/voucher-types`, {
-        method: "POST",
+      // If editing, use PUT; otherwise use POST
+      const method = editingItem ? "PUT" : "POST";
+      const url = editingItem 
+        ? `${API_BASE}/voucher-types/${editingItem._id}` 
+        : `${API_BASE}/voucher-types`;
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: voucherName,
-          orderType, // ✅ CRITICAL
+          orderType,
+          prefix: prefix || "",
+          branchId,
         }),
       });
 
@@ -53,19 +106,19 @@ const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave }) => {
       if (!res.ok) {
         if (res.status === 409) {
           toast.error(
-            "Voucher already exists for this order type",
+            "Voucher already exists for this order type in this branch",
             toastConfig
           );
         } else {
           toast.error(
-            data?.message || "Failed to save voucher type",
+            data?.message || `Failed to ${editingItem ? "update" : "save"} voucher type`,
             toastConfig
           );
         }
         return;
       }
 
-      toast.success("Voucher type created successfully", toastConfig);
+      toast.success(`Voucher type ${editingItem ? "updated" : "created"} successfully`, toastConfig);
 
       // ✅ update UI state only
       onSave(data);
@@ -139,6 +192,23 @@ const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave }) => {
                 </span>
               </p>
             </div>
+
+            {/* Existing Vouchers Section */}
+            {existingVouchers.length > 0 && (
+              <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                <p className="text-xs font-semibold text-blue-900 mb-2">
+                  ✅ Existing Vouchers for This Branch:
+                </p>
+                <div className="space-y-1">
+                  {existingVouchers.map((v) => (
+                    <div key={v._id} className="text-xs text-blue-800 flex justify-between">
+                      <span className="font-medium">{v.name.toUpperCase()}</span>
+                      <span className="text-blue-600">({v.orderType})</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex gap-3 mt-6">

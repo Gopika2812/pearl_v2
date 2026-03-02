@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
-import { FaBars, FaBell, FaChevronDown, FaSignOutAlt } from "react-icons/fa";
+import { FaBars, FaBell, FaBuilding, FaChevronDown, FaSignOutAlt } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
+import { useBranch } from "../context/BranchContext";
 
 const Topbar = ({ onMenuClick }) => {
+  const navigate = useNavigate();
+  const { currentBranch, user, logout } = useBranch();
   const [time, setTime] = useState(new Date());
   const [openProfile, setOpenProfile] = useState(false);
-
-  const user = {
-    name: "Admin",
-    role: "Administrator",
-    image: "https://i.pravatar.cc/150?img=12",
-  };
 
   useEffect(() => {
     const interval = setInterval(() => setTime(new Date()), 1000);
@@ -17,7 +15,8 @@ const Topbar = ({ onMenuClick }) => {
   }, []);
 
   const handleLogout = () => {
-    alert("Logged out successfully");
+    logout();
+    navigate("/branch-login");
   };
 
   return (
@@ -32,10 +31,19 @@ const Topbar = ({ onMenuClick }) => {
           <FaBars size={20} />
         </button>
 
-
         <div className="text-xs sm:text-sm md:text-base font-semibold text-primary">
           {time.toLocaleDateString()} | {time.toLocaleTimeString()}
         </div>
+
+        {/* Branch Display */}
+        {currentBranch && (
+          <div className="hidden md:flex items-center gap-2 ml-4 pl-4 border-l border-gray-300">
+            <FaBuilding className="text-primary text-sm" />
+            <span className="text-xs font-semibold text-gray-700">
+              {currentBranch.name}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Right Actions */}
@@ -53,19 +61,35 @@ const Topbar = ({ onMenuClick }) => {
           className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-full hover:bg-gray-200 transition"
         >
           <img
-            src={user.image}
+            src="https://i.pravatar.cc/150?img=12"
             alt="Profile"
             className="w-8 h-8 rounded-full border"
           />
           <span className="hidden sm:block text-sm font-semibold text-gray-800">
-            {user.name}
+            {user?.username || "Admin"}
           </span>
           <FaChevronDown className="text-gray-500 text-xs" />
         </button>
 
         {/* Dropdown */}
         {openProfile && (
-          <div className="absolute right-0 top-14 w-40 bg-white border rounded-lg shadow-lg overflow-hidden">
+          <div className="absolute right-0 top-14 w-48 bg-white border rounded-lg shadow-lg overflow-hidden">
+            {currentBranch && (
+              <div className="px-4 py-2 text-xs text-gray-500 border-b">
+                <p className="font-semibold text-gray-700 mb-1">Current Branch</p>
+                <p className="text-gray-600">{currentBranch.name}</p>
+              </div>
+            )}
+            <button
+              onClick={() => {
+                setOpenProfile(false);
+                navigate("/branch-login");
+              }}
+              className="w-full flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 text-gray-700 border-t"
+            >
+              <FaBuilding size={14} />
+              Switch Branch
+            </button>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"

@@ -1,33 +1,53 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { API_BASE } from "../../api";
 
-const InventoryAddWarehouseModal = ({ isOpen, onClose, onSave }) => {
-  // Removed locationId from state
+const InventoryAddWarehouseModal = ({ isOpen, onClose, onSave, branchId, editingItem }) => {
   const [warehouse, setWarehouse] = useState({ name: "" });
+  const [loading, setLoading] = useState(false);
+
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingItem) {
+      setWarehouse({ name: editingItem.name || "" });
+    } else {
+      setWarehouse({ name: "" });
+    }
+  }, [editingItem]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  try {
-    const res = await fetch(`${API_BASE}/warehouses`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: warehouse.name }),
-    });
+    try {
+      setLoading(true);
+      
+      // If editing, use PUT; otherwise use POST
+      const method = editingItem ? "PUT" : "POST";
+      const url = editingItem 
+        ? `${API_BASE}/warehouses/${editingItem._id}` 
+        : `${API_BASE}/warehouses`;
 
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.message || "Save failed");
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: warehouse.name, branchId }),
+      });
 
-    alert("Warehouse saved successfully!");
-    onClose();
-    setWarehouse({ name: "" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || `${editingItem ? "Update" : "Save"} failed`);
 
-  } catch (err) {
-    alert("Warehouse save failed: " + err.message);
-  }
-};
+      alert(`Warehouse ${editingItem ? "updated" : "saved"} successfully!`);
+      onSave(json.data || json);
+      onClose();
+      setWarehouse({ name: "" });
+
+    } catch (err) {
+      alert(`Warehouse ${editingItem ? "update" : "save"} failed: ` + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
   return (

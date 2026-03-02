@@ -827,7 +827,11 @@ function ExpandedItems({ row }) {
                 <td className="px-3 py-2 text-right">{i.gst || 0}%</td>
 
                 <td className="px-3 py-2 text-right font-bold text-primary">
-                  ₹{((i.total) || 0).toFixed(2)}
+                  ₹{(
+                    (isSales ? (i.total || 0) : 
+                      ((i.purchasePrice || 0) * (i.qty || 0) * (1 + ((i.gst || 0) / 100)))
+                    ) || 0
+                  ).toFixed(2)}
                 </td>
               </tr>
             ))}

@@ -15,9 +15,15 @@ const getFinancialYear = () => {
 // GET NEXT PAYMENT ID
 router.get("/next-id", async (req, res) => {
   try {
+    const { branchId } = req.query;
     const currentFY = getFinancialYear();
     
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
     let voucher = await VoucherType.findOne({
+      branchId,
       name: "payment",
       orderType: "PM",
     });
@@ -25,6 +31,7 @@ router.get("/next-id", async (req, res) => {
     if (!voucher) {
       // Create if doesn't exist
       voucher = await VoucherType.create({
+        branchId,
         name: "payment",
         orderType: "PM",
         prefix: "PAY",
@@ -87,6 +94,7 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const {
+      branchId,
       paymentType,
       amount,
       paymentMethod,
@@ -100,9 +108,9 @@ router.post("/", async (req, res) => {
       referenceNo,
     } = req.body;
 
-    if (!paymentType || !amount || !paymentMethod) {
+    if (!paymentType || !amount || !paymentMethod || !branchId) {
       return res.status(400).json({
-        message: "Payment type, amount, and payment method are required",
+        message: "Payment type, amount, payment method, and branchId are required",
       });
     }
 
@@ -110,6 +118,7 @@ router.post("/", async (req, res) => {
     const currentFY = getFinancialYear();
     
     let voucher = await VoucherType.findOne({
+      branchId,
       name: "payment",
       orderType: "PM",
     });
@@ -117,6 +126,7 @@ router.post("/", async (req, res) => {
     // Create voucher if it doesn't exist
     if (!voucher) {
       voucher = await VoucherType.create({
+        branchId,
         name: "payment",
         orderType: "PM",
         prefix: "PAY",
@@ -157,8 +167,9 @@ router.post("/", async (req, res) => {
 
     const payment = new Payment({
       paymentId,
+      branchId,
       paymentType,
-      amount,
+      amount: Math.round(Number(amount) || 0),
       paymentMethod,
       paymentDate: paymentDate || new Date(),
       vendor: paymentType === "vendor_payment" ? vendor : undefined,
@@ -187,9 +198,16 @@ router.post("/", async (req, res) => {
 // UPDATE PAYMENT
 router.put("/:id", async (req, res) => {
   try {
+    const updates = req.body;
+
+    // Round numeric fields if provided
+    if (updates.amount !== undefined) {
+      updates.amount = Math.round(Number(updates.amount));
+    }
+
     const payment = await Payment.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updates,
       { new: true }
     );
 

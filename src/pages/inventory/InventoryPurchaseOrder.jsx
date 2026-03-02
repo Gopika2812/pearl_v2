@@ -4,6 +4,7 @@ import { FaSlidersH, FaTimes } from "react-icons/fa";
 // Modals
 import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCustomerModal";
 import InventoryAddDeliveryManModal from "../../components/inventory/InventoryAddDeliveryManModal";
+import InventoryAddProductCategoryModal from "../../components/inventory/InventoryAddProductCategoryModal";
 import InventoryAddProductGroupModal from "../../components/inventory/InventoryAddProductGroupModal";
 import InventoryAddProductModal from "../../components/inventory/InventoryAddProductModal";
 import InventoryAddSalesManModal from "../../components/inventory/InventoryAddSalesManModal";
@@ -15,13 +16,15 @@ import InventoryAddWarehouseModal from "../../components/inventory/InventoryAddW
 import InventoryPurchaseOrderEntry from "../../components/inventory/InventoryPurchaseOrderEntry";
 import InventoryPurchaseOrderHeader from "../../components/inventory/InventoryPurchaseOrderHeader";
 
+import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 
 const InventoryPurchaseOrder = () => {
   const {
-    voucherTypes, productGroups, products,
-    warehouses, vendors, salesOwners, salesMen, deliveryMen, addData, addLocalVoucher
+    voucherTypes, productGroups, productCategories, products,
+    warehouses, vendors, salesOwners, salesMen, deliveryMen, addData, addLocalVoucher, addLocalWarehouse
   } = useInventory();
+  const { currentBranch } = useBranch();
 
   const [activeModal, setActiveModal] = useState(null);
   const [items, setItems] = useState([]);
@@ -41,6 +44,7 @@ const InventoryPurchaseOrder = () => {
     { id: "voucher_type", label: "+ Voucher Type" },
     { id: "vendor", label: "+ Vendor" },
     { id: "product_group", label: "+ Product Group" },
+    { id: "product_category", label: "+ Product Category" },
     { id: "product", label: "+ Product Name" },
     { id: "warehouse", label: "+ Warehouse" },
     { id: "customer", label: "+ Customer Details" },
@@ -138,9 +142,11 @@ const InventoryPurchaseOrder = () => {
         isOpen={activeModal === "voucher_type"}
         onClose={() => setActiveModal(null)}
         onSave={(data) => {
+          // Modal already made the POST request, just update state locally
           addLocalVoucher(data);
           setActiveModal(null);
         }}
+        branchId={currentBranch?._id}
       />
 
       <InventoryAddVendorModal
@@ -150,12 +156,21 @@ const InventoryPurchaseOrder = () => {
           addData("vendor", data);
           setActiveModal(null);
         }}
+        branchId={currentBranch?._id}
       />
 
       <InventoryAddProductGroupModal
         isOpen={activeModal === "product_group"}
         onClose={() => setActiveModal(null)}
         onSave={(data) => { addData("group", data); setActiveModal(null); }}
+        branchId={currentBranch?._id}
+      />
+
+      <InventoryAddProductCategoryModal
+        isOpen={activeModal === "product_category"}
+        onClose={() => setActiveModal(null)}
+        onSave={(data) => { addData("category", data); setActiveModal(null); }}
+        branchId={currentBranch?._id}
       />
 
       <InventoryAddProductModal
@@ -163,12 +178,19 @@ const InventoryPurchaseOrder = () => {
         onClose={() => setActiveModal(null)}
         onSave={(data) => { addData("product", data); setActiveModal(null); }}
         productGroups={productGroups}
+        productCategories={productCategories}
+        branchId={currentBranch?._id}
       />
 
       <InventoryAddWarehouseModal
         isOpen={activeModal === "warehouse"}
         onClose={() => setActiveModal(null)}
-        onSave={(data) => { addData("warehouse", data); setActiveModal(null); }}
+        onSave={(data) => { 
+          // Modal already made the POST request, just update state locally
+          addLocalWarehouse(data); 
+          setActiveModal(null); 
+        }}
+        branchId={currentBranch?._id}
       />
 
       <InventoryAddCustomerModal
@@ -176,24 +198,28 @@ const InventoryPurchaseOrder = () => {
         onClose={() => setActiveModal(null)}
         onSave={(data) => { addData("customer", data); setActiveModal(null); }}
         salesOwners={salesOwners}
+        branchId={currentBranch?._id}
       />
 
       <InventoryAddSalesOwnerModal
         isOpen={activeModal === "sales_owner"}
         onClose={() => setActiveModal(null)}
         onSave={(data) => { addData("sales_owner", data); setActiveModal(null); }}
+        branchId={currentBranch?._id}
       />
 
       <InventoryAddSalesManModal
         isOpen={activeModal === "sales_man"}
         onClose={() => setActiveModal(null)}
         onSave={(data) => { addData("sales_man", data); setActiveModal(null); }}
+        branchId={currentBranch?._id}
       />
 
       <InventoryAddDeliveryManModal
         isOpen={activeModal === "delivery_man"}
         onClose={() => setActiveModal(null)}
         onSave={(data) => { addData("delivery_man", data); setActiveModal(null); }}
+        branchId={currentBranch?._id}
       />
     </div>
   );

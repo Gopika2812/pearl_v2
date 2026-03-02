@@ -55,7 +55,7 @@ const VendorSummary = () => {
     } catch (err) {
       setError(err.message || "Error fetching vendors");
       console.error("Fetch vendors error:", err);
-      console.error("Make sure the backend server is running on http://localhost:5000");
+      console.error("Make sure the backend server is running. Check your VITE_API_BASE_URL in .env configuration");
     } finally {
       setLoading(false);
     }

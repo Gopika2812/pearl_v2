@@ -1,17 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-const InventoryAddSalesManModal = ({ isOpen, onClose, onSave }) => {
+const InventoryAddSalesManModal = ({ isOpen, onClose, onSave, branchId, editingItem }) => {
   const [salesMan, setSalesMan] = useState({
     name: "",
     phone: "",
     role: "Sales Man"
   });
 
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingItem) {
+      setSalesMan({
+        name: editingItem.name || "",
+        phone: editingItem.phone || "",
+        role: editingItem.role || "Sales Man",
+      });
+    } else {
+      setSalesMan({ name: "", phone: "", role: "Sales Man" });
+    }
+  }, [editingItem]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(salesMan);
+    onSave({
+      _id: editingItem?._id,
+      ...salesMan
+    });
     setSalesMan({ name: "", phone: "", role: "Sales Man" });
     onClose();
   };

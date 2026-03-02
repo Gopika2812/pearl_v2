@@ -21,7 +21,7 @@ router.get("/dashboard", async (req, res) => {
       PurchaseOrder.aggregate([
         {
           $match: {
-            status: { $in: ["PLACED", "RECEIVED", "PARTIALLY_RETURNED"] }
+            status: { $in: ["RECEIVED", "PARTIALLY_RETURNED"] }  // Only count received orders, not PLACED
           }
         },
         { $unwind: "$items" },

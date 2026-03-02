@@ -29,10 +29,16 @@ router.get("/", async (req, res) => {
 // GET sales order preview (for new orders)
 router.get("/preview/:voucherType", async (req, res) => {
   try {
-    const { voucherType } = req.params;
+    const { voucherType } = req.query;
+    const { branchId } = req.query;
     const financialYear = getFinancialYear();
 
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
     const voucher = await VoucherType.findOne({
+      branchId,
       name: voucherType.toLowerCase(),
       orderType: "SO",
     });
@@ -61,6 +67,7 @@ router.post("/", async (req, res) => {
   try {
     const {
       voucherType,
+      branchId,
       customer,
       warehouse,
       billingPerson,
@@ -82,14 +89,15 @@ router.post("/", async (req, res) => {
       deliveryMan,
     } = req.body;
 
-    if (!voucherType || !items?.length) {
-      return res.status(400).json({ message: "Invalid sales order data" });
+    if (!voucherType || !items?.length || !branchId) {
+      return res.status(400).json({ message: "Invalid sales order data - branchId is required" });
     }
 
     const financialYear = getFinancialYear();
 
     // 🔑 Fetch voucher
     const voucher = await VoucherType.findOne({
+      branchId,
       name: voucherType.toLowerCase(),
       orderType: "SO",
     });
@@ -118,7 +126,7 @@ router.post("/", async (req, res) => {
 
     const openingBalance = dbCustomer.closingBalance || dbCustomer.totalBalance || 0;
     // ✅ FIXED: Closing balance = opening balance + grandTotal (SO increases customer's AR)
-    const closingBalance = openingBalance + grandTotal;
+    const closingBalance = Math.round(openingBalance + grandTotal);
 
 
     // 🧾 Save Sales Order
@@ -126,6 +134,7 @@ router.post("/", async (req, res) => {
       invoiceId,
       voucherType,
       orderType: "SO",
+      branchId,
 
       customer: {
         customerId: customer.id,
@@ -137,7 +146,7 @@ router.post("/", async (req, res) => {
         pincode: customer.pincode,
       },
 
-      openingBalance,
+      openingBalance: Math.round(openingBalance),
       closingBalance,
 
       warehouse,
@@ -145,14 +154,14 @@ router.post("/", async (req, res) => {
       agent,
       items,
       sampleItems: sampleItems || [],
-      transportCharge,
-      subtotal,
-      totalDiscount,
-      totalTax,
-      grandTotal,
-      customerMargin,
-      marginAmount,
-      grandTotalWithMargin,
+      transportCharge: Math.round(Number(transportCharge) || 0),
+      subtotal: Math.round(Number(subtotal) || 0),
+      totalDiscount: Math.round(Number(totalDiscount) || 0),
+      totalTax: Math.round(Number(totalTax) || 0),
+      grandTotal: Math.round(Number(grandTotal) || 0),
+      customerMargin: Math.round(Number(customerMargin) || 0),
+      marginAmount: Math.round(Number(marginAmount) || 0),
+      grandTotalWithMargin: Math.round(Number(grandTotalWithMargin) || 0),
       ewayEnabled,
       ewayDetails,
       salesOwner,

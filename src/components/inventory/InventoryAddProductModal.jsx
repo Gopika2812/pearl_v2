@@ -1,10 +1,25 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { API_BASE } from "../../api";
+import FilterableCheckboxList from "../FilterableCheckboxList";
+import FilterableSelect from "../FilterableSelect";
 
-const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
+const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCategories = [], branchId, onSave, editingItem }) => {
+  useEffect(() => {
+    if (isOpen) {
+      console.log("📦 ProductModal opened with props:", {
+        productGroups: productGroups?.length || 0,
+        productCategories: productCategories?.length || 0,
+        branchId,
+      });
+      console.log("  Product Groups:", productGroups);
+      console.log("  Product Categories:", productCategories);
+    }
+  }, [isOpen, productGroups, productCategories, branchId]);
+  
   const [product, setProduct] = useState({
     name: "",
     productGroup: "",
+    productCategories: [],
     perQty: "",
     units: "kg",
     totalQty: "",
@@ -15,10 +30,46 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
     gst: "",
   });
 
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingItem) {
+      setProduct({
+        name: editingItem.name || "",
+        productGroup: editingItem.productGroup || editingItem.group || "",
+        productCategories: editingItem.productCategories || [],
+        perQty: editingItem.perQty || "",
+        units: editingItem.units || "kg",
+        totalQty: editingItem.totalQty || "",
+        purchasingPrice: editingItem.purchasingPrice || "",
+        sellingPrice: editingItem.sellingPrice || "",
+        margin: editingItem.margin || "",
+        hsnCode: editingItem.hsnCode || "",
+        gst: editingItem.gst || "",
+      });
+    } else {
+      setProduct({
+        name: "",
+        productGroup: "",
+        productCategories: [],
+        perQty: "",
+        units: "kg",
+        totalQty: "",
+        purchasingPrice: "",
+        sellingPrice: "",
+        margin: "",
+        hsnCode: "",
+        gst: "",
+      });
+    }
+  }, [editingItem]);
+
   if (!isOpen) return null;
 
-  const calculateSellingPrice = (purchasingPrice, margin) => {
-    return Number(purchasingPrice || 0) + Number(margin || 0);
+  const calculateSellingPrice = (purchasingPrice, marginPercent) => {
+    const basePriceNum = Number(purchasingPrice || 0);
+    const marginNum = Number(marginPercent || 0);
+    // Formula: Selling Price = Purchase Price + (Purchase Price × Margin% / 100)
+    return Math.round(basePriceNum + (basePriceNum * marginNum / 100));
   };
 
   const handleMarginChange = (value) => {
@@ -29,7 +80,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
     setProduct({
       ...product,
       margin: value,
-      sellingPrice: newSellingPrice.toString(),
+      sellingPrice: Math.round(newSellingPrice).toString(),
     });
   };
 
@@ -41,7 +92,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
     setProduct({
       ...product,
       purchasingPrice: value,
-      sellingPrice: newSellingPrice.toString(),
+      sellingPrice: Math.round(newSellingPrice).toString(),
     });
   };
 
@@ -49,8 +100,14 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
     const file = e.target.files[0];
     if (!file) return;
 
+    if (!branchId) {
+      alert("Please select a branch first");
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("branchId", branchId);
 
     try {
       const res = await fetch(`${API_BASE}/products/bulk-upload`, {
@@ -85,36 +142,50 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
       return;
     }
 
+    if (!branchId) {
+      alert("Please select a branch first");
+      return;
+    }
+
     const payload = {
+      branchId,
       name: product.name,
       productGroup: product.productGroup,
-      perQty: Number(product.perQty),
+      productCategories: product.productCategories,
+      perQty: Math.round(Number(product.perQty)),
       units: product.units,
-      totalQty: Number(product.totalQty || 0),
-      purchasingPrice: Number(product.purchasingPrice || 0),
-      sellingPrice: Number(product.sellingPrice || 0),
-      margin: Number(product.margin || 0),
+      totalQty: Math.round(Number(product.totalQty || 0)),
+      purchasingPrice: Math.round(Number(product.purchasingPrice || 0)),
+      sellingPrice: Math.round(Number(product.sellingPrice || 0)),
+      margin: Math.round(Number(product.margin || 0)),
       hsnCode: product.hsnCode,
-      gst: Number(product.gst || 0),
+      gst: Math.round(Number(product.gst || 0)),
     };
 
     try {
-      const res = await fetch(`${API_BASE}/products`, {
-        method: "POST",
+      // If editing, use PUT; otherwise use POST
+      const method = editingItem ? "PUT" : "POST";
+      const url = editingItem 
+        ? `${API_BASE}/products/${editingItem._id}` 
+        : `${API_BASE}/products`;
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.message || "Save failed");
+      if (!res.ok) throw new Error(data.message || `${editingItem ? "Update" : "Save"} failed`);
 
-      alert("Product saved successfully!");
+      alert(`Product ${editingItem ? "updated" : "saved"} successfully!`);
       console.log("Saved:", data);
 
       setProduct({
         name: "",
         productGroup: "",
+        productCategories: [],
         perQty: "",
         units: "kg",
         totalQty: "",
@@ -127,8 +198,8 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
 
       onClose();
     } catch (error) {
-      console.error("Product save error:", error.message);
-      alert("Product save failed: " + error.message);
+      console.error(`Product ${editingItem ? "update" : "save"} error:`, error.message);
+      alert(`Product ${editingItem ? "update" : "save"} failed: ` + error.message);
     }
   };
 
@@ -139,7 +210,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
-      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
 
         <div className="bg-primary p-4 text-white">
           <h3 className="text-xl font-bold">Add New Product</h3>
@@ -162,7 +233,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
         </button>
 
 
-        <form onSubmit={handleSubmit} className="p-6 text-gray-700">
+        <form onSubmit={handleSubmit} className="p-6 text-gray-700 overflow-y-auto flex-1">
           {/* Product Name - Full Width */}
           <div className="mb-4">
             <label className={labelClass}>Product Name *</label>
@@ -179,17 +250,91 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
           {/* Product Group - Full Width */}
           <div className="mb-4">
             <label className={labelClass}>Product Group *</label>
-            <select
-              required
-              className={inputClass}
+            <FilterableSelect
+              options={Array.isArray(productGroups) ? productGroups : []}
               value={product.productGroup}
-              onChange={(e) => setProduct({ ...product, productGroup: e.target.value })}
-            >
-              <option value="">-- Select --</option>
-              {productGroups.map(g => (
-                <option key={g._id} value={g._id}>{g.name}</option>
-              ))}
-            </select>
+              onChange={(value) => {
+                console.log("✋ Group selected:", value);
+                setProduct({ ...product, productGroup: value });
+              }}
+              placeholder="-- Select Product Group --"
+              className={inputClass}
+            />
+            {(!Array.isArray(productGroups) || productGroups.length === 0) && (
+              <p style={{color: '#ff6b6b', fontSize: '12px', marginTop: '4px'}}>⚠️ No product groups available</p>
+            )}
+          </div>
+
+          {/* Product Categories - Filterable Checkbox List */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className={labelClass}>🏷️ Product Categories (Optional)</label>
+              {Array.isArray(productCategories) && productCategories.length > 0 && (
+                <div className="flex gap-2">
+                  {product.productCategories.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setProduct({ ...product, productCategories: [] })}
+                      className="text-xs px-3 py-1 bg-red-100 text-red-700 rounded-full hover:bg-red-200 transition font-medium"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                  {product.productCategories.length < productCategories.length && (
+                    <button
+                      type="button"
+                      onClick={() => setProduct({ ...product, productCategories: productCategories.map(c => c._id) })}
+                      className="text-xs px-3 py-1 bg-blue-100 text-blue-700 rounded-full hover:bg-blue-200 transition font-medium"
+                    >
+                      Select All
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Selected Categories Tags */}
+            {product.productCategories.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3 pb-2 border-b">
+                {product.productCategories.map(catId => {
+                  const category = productCategories.find(c => c._id === catId);
+                  return category ? (
+                    <span
+                      key={catId}
+                      className="bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full flex items-center gap-2 font-medium"
+                    >
+                      ✓ {category.name}
+                      <button
+                        type="button"
+                        onClick={() => setProduct({
+                          ...product,
+                          productCategories: product.productCategories.filter(id => id !== catId)
+                        })}
+                        className="text-green-600 hover:text-green-900 font-bold ml-1"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ) : null;
+                })}
+              </div>
+            )}
+
+            {/* Filterable Checkbox List */}
+            {Array.isArray(productCategories) && productCategories.length > 0 ? (
+              <FilterableCheckboxList
+                options={productCategories}
+                selectedIds={product.productCategories}
+                onChange={(selectedIds) => {
+                  setProduct({ ...product, productCategories: selectedIds });
+                }}
+                placeholder="Search categories..."
+              />
+            ) : (
+              <div style={{color: '#999', fontSize: '13px', padding: '12px', textAlign: 'center', border: '2px solid #e5e7eb', borderRadius: '8px'}}>
+                📦 No product categories available
+              </div>
+            )}
           </div>
 
           {/* 2-Column Grid */}
@@ -288,16 +433,17 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
           <div className="grid grid-cols-2 gap-4 mb-4">
             {/* Margin */}
             <div>
-              <label className={labelClass}>Margin (₹)</label>
+              <label className={labelClass}>Margin (%)</label>
               <input
                 type="number"
                 step="0.01"
+                min="0"
                 className={inputClass}
-                placeholder="Enter margin amount"
+                placeholder="Enter margin %"
                 value={product.margin}
                 onChange={(e) => handleMarginChange(e.target.value)}
               />
-              <p className="text-xs text-gray-500 mt-1">Will adjust Selling Price</p>
+              <p className="text-xs text-gray-500 mt-1">Markup % on purchase price</p>
             </div>
 
             {/* GST */}
@@ -316,12 +462,12 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups }) => {
             </div>
           </div>
 
-          {/* Action Buttons - Full Width */}
-          <div className="flex gap-3 mt-6">
+          {/* Action Buttons - Sticky Bottom */}
+          <div className="flex gap-3 mt-6 pb-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 p-2 border rounded-lg hover:bg-gray-50 transition"
+              className="flex-1 p-2 border rounded-lg hover:bg-gray-50 transition font-medium"
             >
               Cancel
             </button>

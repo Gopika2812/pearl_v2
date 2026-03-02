@@ -8,18 +8,19 @@ const router = express.Router();
 router.post("/", async (req, res) => {
   console.log("POST /api/sales-owners", req.body);
   try {
-    const { name, phone, role } = req.body;
+    const { name, phone, role, branchId } = req.body;
 
-    if (!name || !phone) {
-      return res.status(400).json({ message: "Name and phone are required" });
+    if (!name || !phone || !branchId) {
+      return res.status(400).json({ message: "Name, phone, and branchId are required" });
     }
 
-    const exists = await SalesOwner.findOne({ name });
+    const exists = await SalesOwner.findOne({ branchId, name });
     if (exists) {
-      return res.status(400).json({ message: "Sales Owner already exists" });
+      return res.status(400).json({ message: "Sales Owner already exists in this branch" });
     }
 
     const salesOwner = new SalesOwner({
+      branchId,
       name,
       phone,
       role: role || "Sales Owner",
@@ -38,10 +39,16 @@ router.post("/", async (req, res) => {
   }
 });
 
-// ✅ GET all Sales Owners
+// ✅ GET all Sales Owners (filtered by branchId)
 router.get("/", async (req, res) => {
   try {
-    const salesOwners = await SalesOwner.find({ isActive: true }).sort({
+    const { branchId } = req.query;
+
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    const salesOwners = await SalesOwner.find({ branchId, isActive: true }).sort({
       createdAt: -1,
     });
     res.json({

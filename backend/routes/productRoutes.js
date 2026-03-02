@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import multer from "multer";
 import XLSX from "xlsx";
 import Product from "../models/Product.js";
+import ProductCategory from "../models/ProductCategory.js";
 import ProductGroup from "../models/ProductGroup.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SalesOrder from "../models/SalesOrder.js";
@@ -18,12 +19,12 @@ const upload = multer({
 // POST: Add New Product
 router.post("/", async (req, res) => {
   try {
-    const { productGroup, name, perQty, units, totalQty, purchasingPrice, sellingPrice, hsnCode, gst } = req.body;
+    const { productGroup, productCategories = [], name, perQty, units, totalQty, purchasingPrice, sellingPrice, hsnCode, gst, branchId } = req.body;
 
-    if (!name || !perQty || !units || hsnCode === undefined) {
+    if (!name || !perQty || !units || hsnCode === undefined || !branchId) {
       return res.status(400).json({
         success: false,
-        message: "Name, Per Qty, Units, and HSN Code are required",
+        message: "Name, Per Qty, Units, HSN Code, and branchId are required",
       });
     }
 
@@ -35,31 +36,55 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // Verify product group exists if provided
+    // Verify product group exists if provided and belongs to same branch
     if (productGroup) {
-      const groupExists = await ProductGroup.findById(productGroup);
+      const groupExists = await ProductGroup.findOne({ _id: productGroup, branchId });
       if (!groupExists) {
         return res.status(400).json({
           success: false,
-          message: "Product Group not found",
+          message: "Product Group not found or does not belong to this branch",
         });
       }
     }
 
+    // Validate productCategories array if provided
+    const validCategoryIds = [];
+    if (Array.isArray(productCategories) && productCategories.length > 0) {
+      for (const catId of productCategories) {
+        if (!mongoose.Types.ObjectId.isValid(catId)) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid Product Category ID: ${catId}`,
+          });
+        }
+
+        const categoryExists = await ProductCategory.findOne({ _id: catId, branchId });
+        if (!categoryExists) {
+          return res.status(400).json({
+            success: false,
+            message: `Product Category not found or does not belong to this branch: ${catId}`,
+          });
+        }
+        validCategoryIds.push(catId);
+      }
+    }
+
     const product = new Product({
+      branchId,
       productGroup: productGroup || null,
+      productCategories: validCategoryIds,
       name,
-      perQty,
+      perQty: Math.round(Number(perQty) || 0),
       units,
-      totalQty: totalQty || 0,
-      purchasingPrice: purchasingPrice || 0,
-      sellingPrice: sellingPrice || 0,
+      totalQty: Math.round(Number(totalQty) || 0),
+      purchasingPrice: Math.round(Number(purchasingPrice) || 0),
+      sellingPrice: Math.round(Number(sellingPrice) || 0),
       hsnCode,
-      gst: gst || 0,
+      gst: Math.round(Number(gst) || 0),
     });
 
     const savedProduct = await product.save();
-    const populated = await Product.findById(savedProduct._id).populate("productGroup", "name");
+    const populated = await Product.findById(savedProduct._id).populate("productGroup", "name").populate("productCategories", "name");
 
     res.status(201).json({
       success: true,
@@ -79,22 +104,28 @@ router.post("/", async (req, res) => {
 // GET: Fetch All Products with Pagination
 router.get("/", async (req, res) => {
   try {
-    const { page = 1, limit = 50, search = "", diag = "" } = req.query;
+    const { page = 1, limit = 50, search = "", diag = "", branchId } = req.query;
+    
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const pageSize = Math.min(100, Math.max(1, parseInt(limit) || 50)); // Max 100 per page
+    const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 50)); 
     const skip = (pageNum - 1) * pageSize;
 
-    // Build search filter
+    // Build search filter with branchId
     const filter = search
-      ? { name: { $regex: search, $options: "i" } }
-      : {};
+      ? { branchId, name: { $regex: search, $options: "i" } }
+      : { branchId };
 
     // ⚡ Get total count
     const total = await Product.countDocuments(filter);
 
     // ⚡ Fetch paginated results with lean() for faster performance
     const products = await Product.find(filter)
-      .populate("productGroup", "name")
+      .populate("productGroup", "_id name")
+      .populate("productCategories", "_id name")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(pageSize)
@@ -104,7 +135,7 @@ router.get("/", async (req, res) => {
     const poData = await PurchaseOrder.aggregate([
       {
         $match: {
-          status: { $in: ["PLACED", "RECEIVED", "PARTIALLY_RETURNED"] }
+          status: { $in: ["RECEIVED", "PARTIALLY_RETURNED"] }  // Only count received, not PLACED orders
         }
       },
       { $unwind: "$items" },
@@ -221,6 +252,7 @@ router.get("/group/:productGroupId", async (req, res) => {
     // ⚡ Fetch products with lean() for faster performance
     const products = await Product.find(filter)
       .populate("productGroup", "name")
+      .populate("productCategories", "name")
       .sort({ name: 1 })
       .lean();
 
@@ -248,6 +280,11 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       return res.status(400).json({ message: "Excel file required" });
     }
 
+    const { branchId } = req.body;
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet);
@@ -255,14 +292,20 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     console.log("📄 TOTAL ROWS:", rows.length);
     console.log("📄 FIRST ROW RAW:", rows[0]);
 
-    // ⚡ OPTIMIZATION: Batch load all product groups ONCE
-    const allProductGroups = await ProductGroup.find({});
+    // ⚡ OPTIMIZATION: Batch load all product groups for this branch ONCE
+    const allProductGroups = await ProductGroup.find({ branchId });
     const productGroupMap = new Map(
       allProductGroups.map(group => [group.name.toLowerCase(), group._id])
     );
 
-    // ⚡ OPTIMIZATION: Batch load all existing products
-    const existingProducts = await Product.find({});
+    // ⚡ OPTIMIZATION: Batch load all product categories for this branch ONCE
+    const allProductCategories = await ProductCategory.find({ branchId });
+    const productCategoryMap = new Map(
+      allProductCategories.map(cat => [cat.name.toLowerCase(), cat._id])
+    );
+
+    // ⚡ OPTIMIZATION: Batch load all existing products in this branch
+    const existingProducts = await Product.find({ branchId });
     const existingProductSet = new Set(
       existingProducts.map(p => `${p.name}|${p.productGroup}`)
     );
@@ -281,13 +324,44 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
       const name = normalized.name || "";
       const groupName = normalized.productgroup || "";
+      const categoriesStr = normalized.productcategories || ""; // Comma-separated list
       const perQty = Number(normalized.perqty || 1); // Default to 1
       const units = normalized.units || "kg"; // Default to kg
       const totalQty = Number(normalized.totalqty || 0);
-      const purchasingPrice = Number(normalized.purchasingprice || 0);
-      const sellingPrice = Number(normalized.sellingprice || 0);
+      
+      // ✅ Better number parsing with fallback and validation
+      let purchasingPrice = 0;
+      if (normalized.purchasingprice) {
+        const parsed = parseFloat(normalized.purchasingprice.toString().replace(/[^\d.-]/g, ''));
+        purchasingPrice = isNaN(parsed) ? 0 : parsed;
+      }
+      
+      let sellingPrice = 0;
+      if (normalized.sellingprice) {
+        const parsed = parseFloat(normalized.sellingprice.toString().replace(/[^\d.-]/g, ''));
+        sellingPrice = isNaN(parsed) ? 0 : parsed;
+      }
+      
+      // 💰 Calculate sellingPrice from margin if sellingPrice not provided
+      let margin = 0;
+      if (normalized.margin) {
+        const parsed = parseFloat(normalized.margin.toString().replace(/[^\d.-]/g, ''));
+        margin = isNaN(parsed) ? 0 : parsed;
+      }
+      
+      // If sellingPrice is 0 but margin is provided, calculate it
+      if (sellingPrice === 0 && margin > 0 && purchasingPrice > 0) {
+        sellingPrice = purchasingPrice + (purchasingPrice * margin / 100);
+        console.log(`💰 Auto-calculated sellingPrice from margin: ${purchasingPrice} + ${margin}% = ${sellingPrice}`);
+      }
+      
       const hsnCode = normalized.hsncode || "N/A"; // Default to N/A
-      const gst = Number(normalized.gst || 0);
+      
+      let gst = 0;
+      if (normalized.gst) {
+        const parsed = parseFloat(normalized.gst.toString().replace(/[^\d.-]/g, ''));
+        gst = isNaN(parsed) ? 0 : parsed;
+      }
 
       // Only name and product group are mandatory
       if (!name || !groupName) {
@@ -295,9 +369,15 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         continue;
       }
 
-      // Validate prices (skip if invalid)
+      // Validate prices
       if (gst < 0 || gst > 28) {
         skipped.push({ row, reason: "Invalid GST value (0-28)" });
+        continue;
+      }
+
+      // Skip if prices are invalid (but allow 0 for free items)
+      if (isNaN(purchasingPrice) || isNaN(sellingPrice)) {
+        skipped.push({ row, reason: "Invalid purchasing or selling price" });
         continue;
       }
 
@@ -306,7 +386,8 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         continue;
       }
 
-      if (sellingPrice < purchasingPrice) {
+      // Only validate selling >= purchasing IF both are provided (not 0)
+      if (sellingPrice > 0 && purchasingPrice > 0 && sellingPrice < purchasingPrice) {
         skipped.push({ row, reason: "Selling price less than purchase price" });
         continue;
       }
@@ -318,6 +399,24 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         continue;
       }
 
+      // Lookup Product Category IDs from map (optional, comma-separated)
+      const categoryIds = [];
+      if (categoriesStr) {
+        const categoryNames = categoriesStr.split(',').map(c => c.trim()).filter(c => c);
+        for (const catName of categoryNames) {
+          const catId = productCategoryMap.get(catName.toLowerCase());
+          if (!catId) {
+            skipped.push({ row, reason: `Product category "${catName}" not found` });
+            continue;
+          }
+          categoryIds.push(catId);
+        }
+        // Skip entire row if any category is invalid
+        if (categoryIds.length !== categoryNames.length) {
+          continue;
+        }
+      }
+
       // Check if product already exists
       const productKey = `${name}|${groupId}`;
       if (existingProductSet.has(productKey)) {
@@ -325,17 +424,19 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         continue;
       }
 
-      // ✅ Valid record - add to bulk insert list
+      // ✅ Valid record - add to bulk insert list with branchId
       productsToBulkInsert.push({
+        branchId,
         productGroup: groupId,
+        productCategories: categoryIds,
         name,
-        perQty,
+        perQty: Math.round(perQty),
         units,
-        totalQty,
-        purchasingPrice,
-        sellingPrice,
+        totalQty: Math.round(totalQty),
+        purchasingPrice: Math.round(purchasingPrice),
+        sellingPrice: Math.round(sellingPrice),
         hsnCode,
-        gst,
+        gst: Math.round(gst),
       });
     }
 
@@ -368,7 +469,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, perQty, units, totalQty, purchasingPrice, sellingPrice, margin, hsnCode, gst } = req.body;
+    const { name, productGroup, productCategories = [], perQty, units, totalQty, purchasingPrice, sellingPrice, margin, hsnCode, gst, branchId } = req.body;
 
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -378,21 +479,71 @@ router.put("/:id", async (req, res) => {
       });
     }
 
+    // Validate productGroup is a valid ObjectId if provided
+    if (productGroup && !mongoose.Types.ObjectId.isValid(productGroup)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Product Group ID",
+      });
+    }
+
+    // Verify product group exists if provided and belongs to same branch
+    if (productGroup && branchId) {
+      const groupExists = await ProductGroup.findOne({ _id: productGroup, branchId });
+      if (!groupExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Product Group not found or does not belong to this branch",
+        });
+      }
+    }
+
+    // Validate productCategories array if provided
+    const validCategoryIds = [];
+    if (Array.isArray(productCategories) && productCategories.length > 0) {
+      for (const catId of productCategories) {
+        if (!mongoose.Types.ObjectId.isValid(catId)) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid Product Category ID: ${catId}`,
+          });
+        }
+
+        if (branchId) {
+          const categoryExists = await ProductCategory.findOne({ _id: catId, branchId });
+          if (!categoryExists) {
+            return res.status(400).json({
+              success: false,
+              message: `Product Category not found or does not belong to this branch: ${catId}`,
+            });
+          }
+        }
+        validCategoryIds.push(catId);
+      }
+    }
+
+    // Prepare update object - only include provided fields
+    const updateData = {};
+    
+    if (name !== undefined) updateData.name = name;
+    if (productGroup !== undefined) updateData.productGroup = productGroup || null;
+    if (productCategories !== undefined) updateData.productCategories = validCategoryIds;
+    if (perQty !== undefined) updateData.perQty = Math.round(Number(perQty));
+    if (units !== undefined) updateData.units = units;
+    if (totalQty !== undefined) updateData.totalQty = Math.round(Number(totalQty));
+    if (hsnCode !== undefined) updateData.hsnCode = hsnCode;
+    if (gst !== undefined) updateData.gst = Math.round(Number(gst));
+    if (purchasingPrice !== undefined) updateData.purchasingPrice = Math.round(Number(purchasingPrice));
+    if (sellingPrice !== undefined) updateData.sellingPrice = Math.round(Number(sellingPrice));
+    if (margin !== undefined) updateData.margin = Math.round(Number(margin));
+
+    console.log("📝 Updating product", id, "with data:", updateData);
+
     const updatedProduct = await Product.findByIdAndUpdate(
       id,
-      {
-        name,
-        perQty,
-        units,
-        totalQty,
-        purchasingPrice,
-        sellingPrice,
-        margin,
-        hsnCode,
-        gst,
-      },
-      { new: true }
-    ).populate("productGroup", "name");
+      updateData,
+      { new: true, runValidators: true }
+    ).populate("productGroup", "name").populate("productCategories", "name");
 
     if (!updatedProduct) {
       return res.status(404).json({
@@ -400,6 +551,13 @@ router.put("/:id", async (req, res) => {
         message: "Product not found",
       });
     }
+
+    console.log("✅ Product updated:", {
+      id: updatedProduct._id,
+      purchasingPrice: updatedProduct.purchasingPrice,
+      sellingPrice: updatedProduct.sellingPrice,
+      margin: updatedProduct.margin,
+    });
 
     res.json({
       success: true,
@@ -473,7 +631,7 @@ router.get("/available/:productId", async (req, res) => {
     const poItems = await PurchaseOrder.aggregate([
       {
         $match: {
-          status: { $in: ["PLACED", "RECEIVED", "PARTIALLY_RETURNED"] }
+          status: { $in: ["RECEIVED", "PARTIALLY_RETURNED"] }  // Only count received, not PLACED orders
         }
       },
       { $unwind: "$items" },
@@ -531,6 +689,71 @@ router.get("/available/:productId", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch available qty"
+    });
+  }
+});
+
+// POST: Apply group margin percentage to all products in a group or category
+router.post("/apply-group-margin", async (req, res) => {
+  try {
+    const { branchId, productGroupId, productCategoryId, marginPercentage } = req.body;
+
+    if (!branchId || !marginPercentage === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "branchId and marginPercentage are required"
+      });
+    }
+
+    if (!productGroupId && !productCategoryId) {
+      return res.status(400).json({
+        success: false,
+        message: "Either productGroupId or productCategoryId is required"
+      });
+    }
+
+    const query = { branchId };
+    let updateMessage = "";
+
+    if (productGroupId) {
+      query.productGroup = productGroupId;
+      updateMessage = "product group";
+    } else if (productCategoryId) {
+      query.productCategories = productCategoryId;
+      updateMessage = "product category";
+    }
+
+    // Find all matching products and update their margin percentage
+    const result = await Product.updateMany(
+      query,
+      {
+        marginPercentage: marginPercentage,
+        $set: {} // Let the pre-save hook handle margin/price calculations
+      }
+    );
+
+    // Fetch updated products to trigger pre-save hooks for calculations
+    const updatedProducts = await Product.find(query);
+    
+    // Round marginPercentage input
+    const roundedMargin = Math.round(marginPercentage * 100) / 100;
+    
+    // Save each product to trigger pre-save hooks
+    for (const product of updatedProducts) {
+      product.marginPercentage = roundedMargin;
+      await product.save();
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Applied ${roundedMargin}% margin to ${updatedProducts.length} products in the ${updateMessage}`,
+      updatedCount: updatedProducts.length
+    });
+  } catch (error) {
+    console.error("Apply group margin error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to apply group margin"
     });
   }
 });

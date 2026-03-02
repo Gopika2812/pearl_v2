@@ -5,6 +5,7 @@ import {
   FaEdit,
   FaExclamationTriangle,
   FaSearch,
+  FaShoppingCart,
   FaSpinner,
   FaTimes,
   FaTimesCircle,
@@ -21,6 +22,11 @@ const ReorderingDashboard = () => {
   const [editData, setEditData] = useState({});
   const [filterStatus, setFilterStatus] = useState("all"); // all, critical, low, normal
   const [searchTerm, setSearchTerm] = useState(""); // search term for product name/hsn
+  const [showRecyclingModal, setShowRecyclingModal] = useState(false);
+  const [recyclingData, setRecyclingData] = useState(null);
+  const [lastVendor, setLastVendor] = useState(null);
+  const [warehouses, setWarehouses] = useState([]);
+  const [billingPersons, setBillingPersons] = useState([]);
 
   // Fetch dashboard data
   useEffect(() => {
@@ -85,6 +91,196 @@ const ReorderingDashboard = () => {
     } catch (error) {
       console.error("Error updating settings:", error);
       toast.error("Error updating settings");
+    }
+  };
+
+  // Handle recycling action - fetch last vendor and show modal
+  const handleRecyclingAction = async () => {
+    try {
+      if (!selectedProduct) return;
+
+      // Fetch warehouses and billing persons first
+      const [warehousesRes, billingPersonsRes, poRes] = await Promise.all([
+        fetch(`${API_BASE}/warehouses`),
+        fetch(`${API_BASE}/sales-men`), // Billing persons
+        fetch(`${API_BASE}/purchase-orders`),
+      ]);
+
+      const warehousesData = await warehousesRes.json();
+      const billingPersonsData = await billingPersonsRes.json();
+      const poData = await poRes.json();
+
+      if (warehousesData.success) {
+        setWarehouses(warehousesData.data || []);
+      }
+      if (billingPersonsData.success) {
+        setBillingPersons(billingPersonsData.data || []);
+      }
+
+      if (poData.success) {
+        // Find the last PO for this product
+        const relevantPOs = poData.data.filter((po) =>
+          po.items?.some((item) => 
+            item.productId?.toString() === selectedProduct.productId.toString() ||
+            item.productId === selectedProduct.productId
+          )
+        );
+
+        if (relevantPOs.length > 0) {
+          const lastPO = relevantPOs[relevantPOs.length - 1];
+          const lastItem = lastPO.items.find((item) =>
+            item.productId?.toString() === selectedProduct.productId.toString() ||
+            item.productId === selectedProduct.productId
+          );
+
+          // Handle vendor as string, ObjectId or object
+          let vendorName = "";
+          let vendorId = "";
+          
+          if (typeof lastPO.vendor === "object" && lastPO.vendor?._id) {
+            vendorName = lastPO.vendor.name || "";
+            vendorId = lastPO.vendor._id;
+          } else if (typeof lastPO.vendor === "string") {
+            // If vendor is just a name string
+            vendorName = lastPO.vendor;
+            vendorId = lastPO.vendor;
+          }
+
+          // 🔄 Use CURRENT product prices (with margin), not last PO prices
+          const purchasePrice = selectedProduct.purchasingPrice || 0;
+          const sellingPrice = selectedProduct.sellingPrice || purchasePrice;
+          const gst = selectedProduct.gst || 0;
+
+          // Generate next invoice number based on voucher type
+          const voucherType = lastPO.voucherType || "";
+          const lastInvoiceNum = lastPO.invoiceId || "";
+          const match = lastInvoiceNum.match(/\/(\d+)\//);
+          const currentNum = match ? parseInt(match[1]) : 0;
+          const nextNum = (currentNum + 1).toString().padStart(3, "0");
+          const nextInvoiceId = `${voucherType}PO/${nextNum}/${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+
+          setLastVendor({
+            name: vendorName,
+            id: vendorId,
+            city: lastPO.warehouse,
+            invoiceId: lastPO.invoiceId,
+            voucherType: lastPO.voucherType,
+          });
+
+          setRecyclingData({
+            productId: selectedProduct.productId,
+            productName: selectedProduct.productName,
+            vendorId: vendorId,
+            vendorName: vendorName,
+            qty: selectedProduct.reordering.reorderQty,
+            purchasePrice: purchasePrice,
+            sellingPrice: sellingPrice,
+            gst: gst,
+            lastPODate: lastPO.date,
+            lastPOQty: lastItem?.qty,
+            // New fields
+            voucherType: lastPO.voucherType,
+            lastInvoiceId: lastPO.invoiceId,
+            warehouse: lastPO.warehouse,
+            billingPerson: lastPO.billingPerson,
+            // Generated invoice
+            newInvoiceId: nextInvoiceId,
+          });
+        } else {
+          toast.warning("No previous orders found for this product");
+          setRecyclingData({
+            productId: selectedProduct.productId,
+            productName: selectedProduct.productName,
+            qty: selectedProduct.reordering.reorderQty,
+            purchasePrice: 0,
+            sellingPrice: 0,
+            gst: 0,
+          });
+        }
+        setShowRecyclingModal(true);
+      }
+    } catch (error) {
+      console.error("Error fetching vendor data:", error);
+      toast.error("Error loading vendor details");
+    }
+  };
+
+  // Create purchase order from recycling action
+  const handleCreateRecyclingPO = async () => {
+    try {
+      if (!recyclingData?.vendorId) {
+        toast.error("Vendor is required");
+        return;
+      }
+
+      const poPayload = {
+        date: new Date().toISOString(),
+        vendor: recyclingData.vendorId,
+        voucherType: recyclingData.voucherType || "standard",
+        warehouse: recyclingData.warehouse || "",
+        billingPerson: recyclingData.billingPerson || "",
+        items: [
+          {
+            productId: recyclingData.productId,
+            name: recyclingData.productName,
+            qty: recyclingData.qty,
+            purchasePrice: recyclingData.purchasePrice,
+            sellingPrice: recyclingData.sellingPrice,
+            hsn: selectedProduct.hsn,
+            gst: recyclingData.gst,
+          },
+        ],
+        notes: `Auto-created from reordering - Product at ${selectedProduct.status} level | Previous PO: ${recyclingData.lastInvoiceId}`,
+      };
+
+      const res = await fetch(`${API_BASE}/purchase-orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(poPayload),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        // 🔄 Update ONLY purchasing price
+        // Backend hook will auto-calculate: sellingPrice = purchasingPrice + margin
+        const productUpdatePayload = {
+          purchasingPrice: recyclingData.purchasePrice,
+          // Margin stays the same - let hook calculate new selling price
+        };
+
+        const updateRes = await fetch(`${API_BASE}/products/${recyclingData.productId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(productUpdatePayload),
+        });
+
+        const updateData = await updateRes.json();
+
+        if (updateData.success) {
+          // Calculate what the new selling price will be
+          const currentMargin = selectedProduct.sellingPrice - selectedProduct.purchasingPrice;
+          const newSellingPrice = recyclingData.purchasePrice + currentMargin;
+          
+          toast.success(
+            `✅ PO Created: ${data.data.invoiceId}\n💰 Product prices updated!\nNew Purchase Price: ₹${recyclingData.purchasePrice.toFixed(2)}\nNew Selling Price: ₹${newSellingPrice.toFixed(2)}`
+          );
+        } else {
+          // PO created but price update failed
+          toast.warning(
+            `✅ PO Created: ${data.data.invoiceId}\n⚠️ But price update failed. Please update manually.`
+          );
+        }
+
+        setShowRecyclingModal(false);
+        setRecyclingData(null);
+        fetchDashboard();
+      } else {
+        toast.error(data.message || "Failed to create PO");
+      }
+    } catch (error) {
+      console.error("Error creating PO:", error);
+      toast.error("Error creating purchase order");
     }
   };
 
@@ -468,6 +664,15 @@ const ReorderingDashboard = () => {
                         >
                           <FaEdit className="mr-2" /> Edit Settings
                         </button>
+
+                        {(selectedProduct.status === "CRITICAL" || selectedProduct.status === "LOW" || selectedProduct.status === "OUT_OF_STOCK") && (
+                          <button
+                            onClick={handleRecyclingAction}
+                            className="w-full bg-red-600 text-white py-2 rounded-lg font-bold text-sm hover:bg-red-700 transition inline-flex items-center justify-center"
+                          >
+                            <FaShoppingCart className="mr-2" /> 🔄 Recycling Action
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -570,7 +775,270 @@ const ReorderingDashboard = () => {
           </div>
         </div>
       </div>
-    </div>
+      {/* Recycling Action Modal */}
+      {showRecyclingModal && recyclingData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+                <FaShoppingCart className="mr-3 text-red-600" />
+                🔄 Create Recycling Purchase Order
+              </h2>
+              <button
+                onClick={() => {
+                  setShowRecyclingModal(false);
+                  setRecyclingData(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6">
+              {/* Left: PO Form */}
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-bold text-gray-700 mb-2 block">Invoice ID (Auto-Generated)</label>
+                  <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                    <div className="font-bold text-blue-900">{recyclingData.newInvoiceId}</div>
+                  </div>
+                  {recyclingData.lastInvoiceId && (
+                    <div className="text-xs text-gray-500 mt-1">Last: {recyclingData.lastInvoiceId}</div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-sm font-bold text-gray-700 mb-2 block">Product</label>
+                  <div className="bg-gray-100 p-3 rounded-lg">
+                    <div className="font-bold text-gray-900">{recyclingData.productName}</div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-bold text-gray-700 mb-2 block">Vendor *</label>
+                  <input
+                    type="text"
+                    value={recyclingData.vendorName || ""}
+                    onChange={(e) =>
+                      setRecyclingData({ ...recyclingData, vendorName: e.target.value })
+                    }
+                    placeholder="Last vendor will be auto-filled"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-bold text-gray-700 mb-2 block">Warehouse *</label>
+                  <select
+                    value={recyclingData.warehouse || ""}
+                    onChange={(e) =>
+                      setRecyclingData({ ...recyclingData, warehouse: e.target.value })
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option value="">Select Warehouse</option>
+                    {warehouses.map((w) => (
+                      <option key={w._id} value={w.name}>{w.name}</option>
+                    ))}
+                  </select>
+                  {recyclingData.warehouse && (
+                    <div className="text-xs text-gray-500 mt-1">From last order: {recyclingData.warehouse}</div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-sm font-bold text-gray-700 mb-2 block">Billing Person *</label>
+                  <select
+                    value={recyclingData.billingPerson || ""}
+                    onChange={(e) =>
+                      setRecyclingData({ ...recyclingData, billingPerson: e.target.value })
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option value="">Select Billing Person</option>
+                    {billingPersons.map((bp) => (
+                      <option key={bp._id} value={bp._id}>{bp.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-bold text-gray-700 mb-2 block">Quantity (units) *</label>
+                  <input
+                    type="number"
+                    value={recyclingData.qty || ""}
+                    onChange={(e) =>
+                      setRecyclingData({ ...recyclingData, qty: parseInt(e.target.value) || 0 })
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                  <div className="text-xs text-gray-500 mt-1">
+                    (Reorder Qty: {selectedProduct.reordering.reorderQty} units)
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-bold text-gray-700 mb-2 block">
+                    💰 Purchase Price (₹) <span className="text-blue-600">*Will Update Product</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={recyclingData.purchasePrice || ""}
+                    onChange={(e) =>
+                      setRecyclingData({ ...recyclingData, purchasePrice: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full border border-blue-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-blue-50"
+                  />
+                  <div className="text-xs text-blue-600 mt-1">📌 This will be saved as product's purchasing price</div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-bold text-gray-700 mb-2 block">
+                    🏷️ Selling Price (₹) <span className="text-blue-600">*Will Update Product</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={recyclingData.sellingPrice || ""}
+                    onChange={(e) =>
+                      setRecyclingData({ ...recyclingData, sellingPrice: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full border border-blue-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-blue-50"
+                  />
+                  <div className="text-xs text-blue-600 mt-1">📌 This will be saved as product's selling price</div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-bold text-gray-700 mb-2 block">GST (%)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={recyclingData.gst || ""}
+                    onChange={(e) =>
+                      setRecyclingData({ ...recyclingData, gst: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                  <div className="text-xs text-gray-500 mt-1">From last order</div>
+                </div>
+
+                <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
+                  <div className="text-xs text-gray-600 font-semibold mb-1">Estimated PO Total:</div>
+                  <div className="text-2xl font-bold text-orange-600">
+                    ₹{(recyclingData.qty * recyclingData.purchasePrice).toFixed(2)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">With {recyclingData.gst}% GST: ₹{(recyclingData.qty * recyclingData.purchasePrice * (1 + recyclingData.gst / 100)).toFixed(2)}</div>
+                </div>
+              </div>
+
+              {/* Right: Previous Order Details */}
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 max-h-[60vh] overflow-y-auto">
+                <h3 className="font-bold text-gray-900 mb-4">📋 Previous Order Details</h3>
+
+                {lastVendor ? (
+                  <div className="space-y-4">
+                    <div className="bg-white p-3 rounded-lg border border-gray-300">
+                      <div className="text-xs text-gray-600 font-semibold mb-1">Last Invoice ID:</div>
+                      <div className="font-bold text-gray-900">{lastVendor.invoiceId}</div>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg border border-gray-300">
+                      <div className="text-xs text-gray-600 font-semibold mb-1">Voucher Type:</div>
+                      <div className="font-bold text-gray-900">{lastVendor.voucherType || "Standard"}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-gray-600 font-semibold mb-1">Last Vendor:</div>
+                      <div className="font-bold text-gray-900">{lastVendor.name}</div>
+                      {lastVendor.city && (
+                        <div className="text-xs text-gray-600">{lastVendor.city}</div>
+                      )}
+                    </div>
+
+                    {recyclingData.lastPODate && (
+                      <div>
+                        <div className="text-xs text-gray-600 font-semibold mb-1">Last Order Date:</div>
+                        <div className="font-bold text-gray-900">
+                          {new Date(recyclingData.lastPODate).toLocaleDateString()}
+                        </div>
+                      </div>
+                    )}
+
+                    {recyclingData.lastPOQty && (
+                      <div>
+                        <div className="text-xs text-gray-600 font-semibold mb-1">Last Order Qty:</div>
+                        <div className="font-bold text-gray-900">{recyclingData.lastPOQty} units</div>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="text-xs text-gray-600 font-semibold mb-1">Purchase Price (Last Order):</div>
+                      <div className="font-bold text-gray-900">₹{recyclingData.purchasePrice?.toFixed(2)}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-gray-600 font-semibold mb-1">Selling Price (Last Order):</div>
+                      <div className="font-bold text-gray-900">₹{recyclingData.sellingPrice?.toFixed(2)}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-gray-600 font-semibold mb-1">GST (Last Order):</div>
+                      <div className="font-bold text-gray-900">{recyclingData.gst}%</div>
+                    </div>
+
+                    <div className="bg-white p-3 rounded-lg border border-gray-300 mt-4">
+                      <div className="text-xs text-gray-700 font-semibold mb-2">📊 Stock Status:</div>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span>Current Stock:</span>
+                          <span className="font-bold">{selectedProduct.stock.totalCurrentStock}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Effective Available:</span>
+                          <span className="font-bold text-orange-600">{selectedProduct.stock.effectiveAvailable}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Alert Threshold:</span>
+                          <span className="font-bold text-red-600">{selectedProduct.reordering.reorderLevel}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-gray-500 text-sm">
+                    <p>No previous orders found.</p>
+                    <p className="mt-2">Please enter vendor details manually.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowRecyclingModal(false);
+                  setRecyclingData(null);
+                }}
+                className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-400 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateRecyclingPO}
+                className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 transition flex flex-col items-center justify-center"
+              >
+                <div className="flex items-center">
+                  <FaShoppingCart className="mr-2" />
+                  Create PO
+                </div>
+                <div className="text-xs mt-1">+ Update Product Prices</div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}    </div>
   );
 };
 

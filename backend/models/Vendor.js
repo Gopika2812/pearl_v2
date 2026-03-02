@@ -2,7 +2,12 @@ import mongoose from "mongoose";
 
 const vendorSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, unique: true },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      required: true,
+    },
+    name: { type: String, required: true },
     phone: { type: String },
     email: { type: String },
     address: { type: String },
@@ -11,5 +16,8 @@ const vendorSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Create composite unique index: branchId + name
+vendorSchema.index({ branchId: 1, name: 1 }, { unique: true });
 
 export default mongoose.model("Vendor", vendorSchema);

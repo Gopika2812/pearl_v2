@@ -1,17 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-const InventoryAddDeliveryManModal = ({ isOpen, onClose, onSave }) => {
+const InventoryAddDeliveryManModal = ({ isOpen, onClose, onSave, branchId, editingItem }) => {
   const [deliveryMan, setDeliveryMan] = useState({
     name: "",
     phone: "",
     role: "Delivery Man"
   });
 
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingItem) {
+      setDeliveryMan({
+        name: editingItem.name || "",
+        phone: editingItem.phone || "",
+        role: editingItem.role || "Delivery Man",
+      });
+    } else {
+      setDeliveryMan({ name: "", phone: "", role: "Delivery Man" });
+    }
+  }, [editingItem]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(deliveryMan);
+    onSave({
+      _id: editingItem?._id,
+      ...deliveryMan
+    });
     setDeliveryMan({ name: "", phone: "", role: "Delivery Man" });
     onClose();
   };

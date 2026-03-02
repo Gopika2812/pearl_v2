@@ -19,7 +19,8 @@ export default function InventorySalesOrderEntry({
   customers = [],
   salesMen = [],
   deliveryMen = [],
-  salesOwners = []
+  salesOwners = [],
+  branchId = ""
 }) {
   const [voucherType, setVoucherType] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
@@ -103,7 +104,7 @@ export default function InventorySalesOrderEntry({
     const fetchPreview = async () => {
       try {
         const res = await fetch(
-          `${API_BASE}/sales-orders/preview/${voucherType}`
+          `${API_BASE}/sales-orders/preview/${voucherType}?branchId=${branchId}`
         );
         const data = await res.json();
 
@@ -600,6 +601,7 @@ export default function InventorySalesOrderEntry({
   const roundedGrandTotal = Math.ceil(grandTotal * 100) / 100;
 
   const payload = {
+    branchId,
     voucherType,
     customer: selectedCustomer
       ? {

@@ -14,6 +14,11 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       return res.status(400).json({ message: "Excel file required" });
     }
 
+    const { branchId } = req.body;
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
     // Read Excel
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -45,6 +50,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       const exists = await ProductGroup.findOne({
+        branchId,
         name: name,
       });
 
@@ -56,6 +62,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
       try {
         const group = await ProductGroup.create({
+          branchId,
           name,
         });
         console.log("Created product group:", group);
@@ -83,23 +90,25 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 // 🔹 CREATE Product Group
 router.post("/", async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, branchId } = req.body;
 
-    if (!name) {
-      return res.status(400).json({ message: "Product group name is required" });
+    if (!name || !branchId) {
+      return res.status(400).json({ message: "Product group name and branchId are required" });
     }
 
     const exists = await ProductGroup.findOne({
+      branchId,
       name: name.trim(),
     });
 
     if (exists) {
       return res
         .status(400)
-        .json({ message: "Product Group already exists" });
+        .json({ message: "Product Group already exists in this branch" });
     }
 
     const group = new ProductGroup({
+      branchId,
       name: name.trim(),
     });
 
@@ -112,11 +121,22 @@ router.post("/", async (req, res) => {
   }
 });
 
-// 🔹 GET ALL Product Groups
+// 🔹 GET ALL Product Groups (filtered by branchId)
 router.get("/", async (req, res) => {
   try {
-    const groups = await ProductGroup.find()
-      .sort({ createdAt: -1 });
+    const { branchId } = req.query;
+
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    console.log(`🔍 Fetching ProductGroups for branchId: ${branchId}`);
+
+    const groups = await ProductGroup.find({ branchId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    console.log(`✅ Found ${groups.length} ProductGroups:`, groups.map(g => ({ _id: g._id, name: g.name, branchId: g.branchId })));
 
     return res.json(groups);
   } catch (err) {

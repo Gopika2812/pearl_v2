@@ -3,12 +3,27 @@ import { Route, Routes, useLocation } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
+import BranchSidebar from "./components/BranchSidebar";
+import BranchTopbar from "./components/BranchTopbar";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
+import { BranchProvider } from "./context/BranchContext";
 import { InventoryProvider } from "./context/InventoryContext";
+import AdminBranchManagement from "./pages/AdminBranchManagement";
 import APAgingPage from "./pages/APAgingPage";
 import ARAgingPage from "./pages/ARAgingPage";
 import BalanceSheetPage from "./pages/BalanceSheetPage";
+import BranchCreditNote from "./pages/branch/BranchCreditNote";
+import BranchDebitNote from "./pages/branch/BranchDebitNote";
+import BranchDispatch from "./pages/branch/BranchDispatch";
+import BranchHome from "./pages/branch/BranchHome";
+import BranchPO from "./pages/branch/BranchPO";
+import BranchPOPayment from "./pages/branch/BranchPOPayment";
+import BranchQuickLinks from "./pages/branch/BranchQuickLinks";
+import BranchRecycling from "./pages/branch/BranchRecycling";
+import BranchSalesOrder from "./pages/branch/BranchSalesOrder";
+import BranchSummary from "./pages/branch/BranchSummary";
+import BranchLoginPage from "./pages/BranchLoginPage";
 import CRMPage from "./pages/CRMPage";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerSummary from "./pages/CustomerSummary";
@@ -33,98 +48,142 @@ function App() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-
-  const hideLayout = location.pathname === "/login" || location.pathname === "/customer-login" || location.pathname === "/pearls-shopping";
+  // Check if we're on a branch-specific page
+  const isBranchRoute = location.pathname.startsWith("/branch/") || location.pathname === "/branch-home";
+  
+  // Hide layout on login pages
+  const hideLayout =
+    location.pathname === "/" ||
+    location.pathname === "/login" ||
+    location.pathname === "/customer-login" ||
+    location.pathname === "/pearls-shopping";
 
   return (
-    <InventoryProvider>
-      <>
-        <ToastContainer />
+    <BranchProvider>
+      <InventoryProvider>
+        <>
+          <ToastContainer />
 
-        <div className="flex">
-          {/* Sidebar - Visible if not on login page */}
-          {!hideLayout && (
-            <Sidebar
-              isOpen={sidebarOpen}
-              onClose={() => setSidebarOpen(false)}
-            />
-          )}
-
-          {/* Main Content Area */}
-          <div className="flex-1 min-h-screen flex flex-col">
+          <div className="flex">
+            {/* Sidebar - Use branch sidebar if on branch route, otherwise use regular */}
             {!hideLayout && (
-              <Topbar onMenuClick={() => setSidebarOpen(true)} />
+              <>
+                {isBranchRoute ? (
+                  <BranchSidebar
+                    isOpen={sidebarOpen}
+                    onClose={() => setSidebarOpen(false)}
+                  />
+                ) : (
+                  <Sidebar
+                    isOpen={sidebarOpen}
+                    onClose={() => setSidebarOpen(false)}
+                  />
+                )}
+              </>
             )}
 
-            <div className="flex-1 p-6">
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/login" element={<HrLogin />} />
-                <Route path="/customer-login" element={<CustomerLogin />} />
-                <Route path="/pearls-shopping" element={<PearlsShopping />} />
-                <Route
-                  path="/purchase-order"
-                  element={<InventoryPurchaseOrder />}
-                />
-                <Route
-                  path="/sales-order"
-                  element={<InventorySalesOrder />}
-                />
-                <Route path="/pearls-book" element={<PearlsBookPage />} />
-                <Route path="/crm" element={<CRMPage />} />
-                <Route path="/dispatch" element={<DispatchSheetPage />} />
-                <Route path="/employees" element={<EmployeesBookPage />} />
-                <Route
-                  path="/employeepage"
-                  element={<EmployeeDashboardPage />}
-                />
-                <Route path="/hr-control" element={<HRControlPanel />} />
-                <Route
-                  path="/summary/products"
-                  element={<ProductSummary />}
-                />
-                <Route
-                  path="/summary/customers"
-                  element={<CustomerSummary />}
-                />
-                <Route
-                  path="/summary/vendors"
-                  element={<VendorSummary />}
-                />
-                <Route
-                  path="/summary/others"
-                  element={<OthersSummary />}
-                />
-                <Route
-                  path="/reports/trial-balance"
-                  element={<TrialBalancePage />}
-                />
-                <Route
-                  path="/reports/balance-sheet"
-                  element={<BalanceSheetPage />}
-                />
-                <Route
-                  path="/reports/profit-loss"
-                  element={<ProfitLossPage />}
-                />
-                <Route
-                  path="/reports/ar-aging"
-                  element={<ARAgingPage />}
-                />
-                <Route
-                  path="/reports/ap-aging"
-                  element={<APAgingPage />}
-                />
-                <Route
-                  path="/reordering"
-                  element={<ReorderingDashboard />}
-                />
-              </Routes>
+            {/* Main Content Area */}
+            <div className="flex-1 min-h-screen flex flex-col">
+              {!hideLayout && (
+                <>
+                  {isBranchRoute ? (
+                    <BranchTopbar onMenuClick={() => setSidebarOpen(true)} />
+                  ) : (
+                    <Topbar onMenuClick={() => setSidebarOpen(true)} />
+                  )}
+                </>
+              )}
+
+              <div className="flex-1 p-6">
+                <Routes>
+                  <Route path="/" element={<BranchLoginPage />} />
+                  <Route path="/branch-login" element={<BranchLoginPage />} />
+                  <Route path="/home" element={<Home />} />
+                  <Route path="/login" element={<HrLogin />} />
+                  <Route path="/customer-login" element={<CustomerLogin />} />
+                  <Route path="/pearls-shopping" element={<PearlsShopping />} />
+
+                  {/* BRANCH-SPECIFIC ROUTES */}
+                  <Route path="/branch-home" element={<BranchHome />} />
+                  <Route path="/branch/po" element={<BranchPO />} />
+                  <Route path="/branch/recycling" element={<BranchRecycling />} />
+                  <Route path="/branch/debit-note" element={<BranchDebitNote />} />
+                  <Route path="/branch/po-payment" element={<BranchPOPayment />} />
+                  <Route path="/branch/sales-order" element={<BranchSalesOrder />} />
+                  <Route path="/branch/credit-note" element={<BranchCreditNote />} />
+                  <Route path="/branch/dispatch" element={<BranchDispatch />} />
+                  <Route path="/branch/quick-links" element={<BranchQuickLinks />} />
+                  <Route path="/branch/summary" element={<BranchSummary />} />
+
+                  {/* LEGACY ROUTES */}
+                  <Route
+                    path="/purchase-order"
+                    element={<InventoryPurchaseOrder />}
+                  />
+                  <Route
+                    path="/sales-order"
+                    element={<InventorySalesOrder />}
+                  />
+                  <Route path="/pearls-book" element={<PearlsBookPage />} />
+                  <Route path="/crm" element={<CRMPage />} />
+                  <Route path="/dispatch" element={<DispatchSheetPage />} />
+                  <Route path="/employees" element={<EmployeesBookPage />} />
+                  <Route
+                    path="/employeepage"
+                    element={<EmployeeDashboardPage />}
+                  />
+                  <Route path="/hr-control" element={<HRControlPanel />} />
+                  <Route
+                    path="/summary/products"
+                    element={<ProductSummary />}
+                  />
+                  <Route
+                    path="/summary/customers"
+                    element={<CustomerSummary />}
+                  />
+                  <Route
+                    path="/summary/vendors"
+                    element={<VendorSummary />}
+                  />
+                  <Route
+                    path="/summary/others"
+                    element={<OthersSummary />}
+                  />
+                  <Route
+                    path="/reports/trial-balance"
+                    element={<TrialBalancePage />}
+                  />
+                  <Route
+                    path="/reports/balance-sheet"
+                    element={<BalanceSheetPage />}
+                  />
+                  <Route
+                    path="/reports/profit-loss"
+                    element={<ProfitLossPage />}
+                  />
+                  <Route
+                    path="/reports/ar-aging"
+                    element={<ARAgingPage />}
+                  />
+                  <Route
+                    path="/reports/ap-aging"
+                    element={<APAgingPage />}
+                  />
+                  <Route
+                    path="/reordering"
+                    element={<ReorderingDashboard />}
+                  />
+                  <Route
+                    path="/admin/branches"
+                    element={<AdminBranchManagement />}
+                  />
+                </Routes>
             </div>
           </div>
         </div>
       </>
-    </InventoryProvider>
+      </InventoryProvider>
+    </BranchProvider>
   );
 }
 

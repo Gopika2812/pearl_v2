@@ -1,8 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { API_BASE } from "../../api";
 
-const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave }) => {
+const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave, branchId, editingItem }) => {
   const [groupName, setGroupName] = useState("");
+
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingItem) {
+      setGroupName(editingItem.name || "");
+    } else {
+      setGroupName("");
+    }
+  }, [editingItem]);
 
   if (!isOpen) return null;
 
@@ -14,6 +23,7 @@ const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave }) => {
     }
 
     onSave({
+      _id: editingItem?._id,
       name: groupName.trim(),
     });
 
@@ -26,8 +36,14 @@ const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave }) => {
     const file = e.target.files[0];
     if (!file) return;
 
+    if (!branchId) {
+      alert("Please select a branch first");
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("branchId", branchId);
 
     try {
       const res = await fetch(
@@ -61,7 +77,7 @@ const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave }) => {
       <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
         {/* Header */}
         <div className="bg-primary p-4 text-white">
-          <h3 className="text-xl font-bold font-cursive">Create Product Group</h3>
+          <h3 className="text-xl font-bold font-cursive"> Group / Category</h3>
         </div>
 
         <input
@@ -85,12 +101,15 @@ const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave }) => {
         <form onSubmit={handleSave} className="p-6 space-y-5">
           {/* Group Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Product Group Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2 font-semibold">
+              Product Group / Category Name
+            </label>
+            <p className="text-xs text-gray-500 mb-2">This groups products into categories for better organization</p>
             <input
               type="text"
               required
               className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none capitalize"
-              placeholder="e.g. Beverages, Snacks"
+              placeholder="e.g. Beverages, Snacks, Dairy Products"
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
             />
@@ -109,7 +128,7 @@ const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave }) => {
               type="submit"
               className="flex-1 bg-primary text-white px-4 py-2 rounded-lg hover:bg-opacity-90 transition font-semibold shadow-md"
             >
-              Save Group
+              Save Category
             </button>
           </div>
         </form>

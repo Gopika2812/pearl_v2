@@ -1,17 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-const InventoryAddSalesOwnerModal = ({ isOpen, onClose, onSave }) => {
+const InventoryAddSalesOwnerModal = ({ isOpen, onClose, onSave, branchId, editingItem }) => {
   const [salesOwner, setSalesOwner] = useState({
     name: "",
     phone: "",
     role: "Sales Owner"
   });
 
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingItem) {
+      setSalesOwner({
+        name: editingItem.name || "",
+        phone: editingItem.phone || "",
+        role: editingItem.role || "Sales Owner",
+      });
+    } else {
+      setSalesOwner({ name: "", phone: "", role: "Sales Owner" });
+    }
+  }, [editingItem]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(salesOwner);
+    onSave({
+      _id: editingItem?._id,
+      ...salesOwner
+    });
     setSalesOwner({ name: "", phone: "", role: "Sales Owner" });
     onClose();
   };

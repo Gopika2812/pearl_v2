@@ -2,6 +2,7 @@ import express from "express";
 import multer from "multer";
 import XLSX from "xlsx";
 import Customer from "../models/Customer.js";
+import CustomerCategory from "../models/CustomerCategory.js";
 import SalesOwner from "../models/SalesOwner.js";
 
 const router = express.Router();
@@ -24,6 +25,11 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       return res.status(400).json({ message: "Excel file required" });
     }
 
+    const { branchId } = req.body;
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet);
@@ -34,6 +40,11 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     const allSalesOwners = await SalesOwner.find({});
     const salesOwnerMap = new Map(
       allSalesOwners.map(owner => [owner.name.toLowerCase(), owner._id])
+    );
+
+    const allCustomerCategories = await CustomerCategory.find({});
+    const customerCategoryMap = new Map(
+      allCustomerCategories.map(cat => [cat.name.toLowerCase(), cat._id])
     );
 
     const existingCustomers = await Customer.find({}, { name: 1 });
@@ -63,6 +74,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const country = normalized.country || "India";
       const gstin = normalized.gstin || "";
       const salesOwnerName = normalized.salesowner || "";
+      const customerCategoryName = normalized.customercategory || "";
       const margin = parseFloat(normalized.margin) || 0;
       const closingBalance = parseFloat(normalized.closingbalance) || 0;
 
@@ -105,8 +117,19 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         }
       }
 
+      // Lookup CustomerCategory ID from map (optional)
+      let customerCategoryId = null;
+      if (customerCategoryName) {
+        customerCategoryId = customerCategoryMap.get(customerCategoryName.toLowerCase());
+        if (!customerCategoryId) {
+          skipped.push({ row, reason: `Customer Category "${customerCategoryName}" not found` });
+          continue;
+        }
+      }
+
       // ✅ Valid record - add to bulk insert list
       customersToBulkInsert.push({
+        branchId,
         name,
         whatsapp,
         email,
@@ -116,11 +139,12 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         pincode,
         country,
         gstin,
-        totalBalance,
+        totalBalance: Math.round(totalBalance),
         balanceType,
-        closingBalance,
-        margin,
+        closingBalance: Math.round(closingBalance),
+        margin: Math.round(margin),
         salesOwner: salesOwnerId,
+        customerCategory: customerCategoryId,
         accountHolder,
         accountNumber,
         ifsc,
@@ -155,14 +179,20 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
  */
 router.get("/", async (req, res) => {
   try {
-    const { page = 1, limit = 50, search = "" } = req.query;
+    const { page = 1, limit = 50, search = "", branchId } = req.query;
+    
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const pageSize = Math.min(100, Math.max(1, parseInt(limit) || 50)); // Max 100 per page
+    const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 50)); // Max 10000 per page
     const skip = (pageNum - 1) * pageSize;
 
-    // Build search filter
+    // Build search filter with branchId
     const filter = search
       ? {
+          branchId,
           $or: [
             { name: { $regex: search, $options: "i" } },
             { whatsapp: { $regex: search, $options: "i" } },
@@ -170,14 +200,15 @@ router.get("/", async (req, res) => {
             { gstin: { $regex: search, $options: "i" } },
           ],
         }
-      : {};
+      : { branchId };
 
     // ⚡ Get total count
     const total = await Customer.countDocuments(filter);
 
     // ⚡ Fetch paginated results with lean() for faster performance
     const customers = await Customer.find(filter)
-      .populate('salesOwner', 'name phone role')
+      .populate('salesOwner', '_id name phone role')
+      .populate('customerCategory', '_id name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(pageSize)
@@ -220,31 +251,36 @@ router.post("/", async (req, res) => {
       closingBalance,
       margin,
       salesOwner,
+      customerCategory,
       accountHolder,
       accountNumber,
       ifsc,
       branch,
       upi,
+      branchId,
     } = req.body;
 
-    // Basic validation
-    if (!name || !whatsapp || !accountHolder || !accountNumber || !ifsc || !branch) {
+    // Basic validation - only name and branchId are required
+    if (!name || !branchId) {
       return res.status(400).json({
         success: false,
-        message: "Required fields missing",
+        message: "Required fields missing: Customer Name and Branch",
       });
     }
 
-    // Optional: prevent duplicate WhatsApp
-    const existing = await Customer.findOne({ whatsapp });
-    if (existing) {
-      return res.status(409).json({
-        success: false,
-        message: "Customer already exists with this WhatsApp number",
-      });
+    // Optional: prevent duplicate WhatsApp if provided
+    if (whatsapp) {
+      const existing = await Customer.findOne({ branchId, whatsapp });
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          message: "Customer already exists with this WhatsApp number in this branch",
+        });
+      }
     }
 
     const customer = new Customer({
+      branchId,
       name,
       whatsapp,
       email,
@@ -253,9 +289,10 @@ router.post("/", async (req, res) => {
       state,
       pincode,
       gstin,
-      closingBalance: parseFloat(closingBalance) || 0,
-      margin: parseFloat(margin) || 0,
+      closingBalance: Math.round(Number(closingBalance) || 0),
+      margin: Math.round(Number(margin) || 0),
       salesOwner,
+      customerCategory,
       accountHolder,
       accountNumber,
       ifsc,
@@ -287,6 +324,17 @@ router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
+
+    // Round numeric fields if provided
+    if (updates.closingBalance !== undefined) {
+      updates.closingBalance = Math.round(Number(updates.closingBalance));
+    }
+    if (updates.margin !== undefined) {
+      updates.margin = Math.round(Number(updates.margin));
+    }
+    if (updates.totalBalance !== undefined) {
+      updates.totalBalance = Math.round(Number(updates.totalBalance));
+    }
 
     const customer = await Customer.findByIdAndUpdate(id, updates, {
       new: true,

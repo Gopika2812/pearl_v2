@@ -19,9 +19,15 @@ const getFinancialYear = () => {
 // GET NEXT DEBIT NOTE ID
 router.get("/next-id", async (req, res) => {
   try {
+    const { branchId } = req.query;
     const currentFY = getFinancialYear();
     
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
     let voucher = await VoucherType.findOne({
+      branchId,
       name: "debit_note",
       orderType: "DN",
     });
@@ -29,6 +35,7 @@ router.get("/next-id", async (req, res) => {
     if (!voucher) {
       // Create if doesn't exist
       voucher = await VoucherType.create({
+        branchId,
         name: "debit_note",
         orderType: "DN",
         prefix: "DN",
@@ -91,11 +98,16 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const {
+      branchId,
       originalPurchaseOrderId,
       vendor,
       items,
       reason,
     } = req.body;
+
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
 
     // Get the original PO
     const originalPO = await PurchaseOrder.findById(originalPurchaseOrderId);
@@ -107,6 +119,7 @@ router.post("/", async (req, res) => {
     const currentFY = getFinancialYear();
     
     let voucher = await VoucherType.findOne({
+      branchId,
       name: "debit_note",
       orderType: "DN",
     });
@@ -114,6 +127,7 @@ router.post("/", async (req, res) => {
     // Create voucher if it doesn't exist
     if (!voucher) {
       voucher = await VoucherType.create({
+        branchId,
         name: "debit_note",
         orderType: "DN",
         prefix: "DN",
@@ -158,15 +172,16 @@ router.post("/", async (req, res) => {
 
     const debitNote = new DebitNote({
       debitNoteId,
+      branchId,
       originalPurchaseOrderId,
       originalInvoiceId: originalPO.invoiceId,
       vendor: {
         name: vendor?.name || originalPO.vendor || "Unknown",
       },
       items,
-      subtotal,
-      totalTax,
-      grandTotal: subtotal + totalTax,
+      subtotal: Math.round(subtotal),
+      totalTax: Math.round(totalTax),
+      grandTotal: Math.round(subtotal + totalTax),
       reason,
       status: "confirmed",
     });

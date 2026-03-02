@@ -8,24 +8,25 @@ const router = express.Router();
  */
 router.post("/", async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, branchId } = req.body;
 
-    if (!name || !name.trim()) {
+    if (!name || !name.trim() || !branchId) {
       return res.status(400).json({
         success: false,
-        message: "Warehouse name is required",
+        message: "Warehouse name and branchId are required",
       });
     }
 
-    const exists = await Warehouse.findOne({ name: name.trim() });
+    const exists = await Warehouse.findOne({ branchId, name: name.trim() });
     if (exists) {
       return res.status(409).json({
         success: false,
-        message: "Warehouse already exists",
+        message: "Warehouse already exists in this branch",
       });
     }
 
     const warehouse = new Warehouse({
+      branchId,
       name: name.trim(),
     });
 
@@ -47,11 +48,20 @@ router.post("/", async (req, res) => {
 });
 
 /**
- * GET: Fetch All Warehouses
+ * GET: Fetch All Warehouses (filtered by branchId)
  */
 router.get("/", async (req, res) => {
   try {
-    const warehouses = await Warehouse.find().sort({ createdAt: -1 });
+    const { branchId } = req.query;
+
+    if (!branchId) {
+      return res.status(400).json({
+        success: false,
+        message: "branchId is required",
+      });
+    }
+
+    const warehouses = await Warehouse.find({ branchId }).sort({ createdAt: -1 });
 
     res.json({
       success: true,

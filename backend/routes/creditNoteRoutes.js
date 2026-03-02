@@ -116,10 +116,10 @@ router.post("/", async (req, res) => {
         name: originalOrder.customer.name,
       },
       items: returnedItems,
-      subtotal,
-      totalDiscount,
-      totalTax,
-      grandTotal,
+      subtotal: Math.round(subtotal),
+      totalDiscount: Math.round(totalDiscount),
+      totalTax: Math.round(totalTax),
+      grandTotal: Math.round(grandTotal),
       salesOwner: originalOrder.salesOwner,
       salesMan: originalOrder.salesMan,
       deliveryMan: originalOrder.deliveryMan,
@@ -141,7 +141,7 @@ router.post("/", async (req, res) => {
     const customerId = originalOrder.customer.customerId;
     const customer = await Customer.findById(customerId);
     if (customer) {
-      const reducedBalance = customer.closingBalance - grandTotal;
+      const reducedBalance = Math.round(customer.closingBalance - Math.round(grandTotal));
       await Customer.findByIdAndUpdate(customerId, {
         closingBalance: reducedBalance,
         totalBalance: reducedBalance,

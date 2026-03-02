@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-const InventoryAddVendorModal = ({ isOpen, onClose, onSave }) => {
+const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId, editingItem }) => {
   const [vendor, setVendor] = useState({
     name: "",
     phone: "",
@@ -9,13 +9,31 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave }) => {
     gstin: ""
   });
 
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingItem) {
+      setVendor({
+        name: editingItem.name || "",
+        phone: editingItem.phone || "",
+        email: editingItem.email || "",
+        address: editingItem.address || "",
+        gstin: editingItem.gstin || "",
+      });
+    } else {
+      setVendor({ name: "", phone: "", email: "", address: "", gstin: "" });
+    }
+  }, [editingItem]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // ✅ Just pass data to context, context handles POST
-    onSave(vendor);
+    // ✅ Pass _id if editing for context to handle PUT
+    onSave({
+      _id: editingItem?._id,
+      ...vendor
+    });
 
     // Reset form
     setVendor({ name: "", phone: "", email: "", address: "", gstin: "" });

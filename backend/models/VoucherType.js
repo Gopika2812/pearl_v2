@@ -2,6 +2,12 @@ import mongoose from "mongoose";
 
 const voucherTypeSchema = new mongoose.Schema(
   {
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      required: true,
+    },
+
     name: {
       type: String,
       required: true,
@@ -29,5 +35,8 @@ const voucherTypeSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-voucherTypeSchema.index({ name: 1, orderType: 1 }, { unique: true });
-export default mongoose.model("VoucherType", voucherTypeSchema);
+// Create composite unique index: branchId + name + orderType (ONLY allows duplicates across branches)
+voucherTypeSchema.index({ branchId: 1, name: 1, orderType: 1 }, { unique: true });
+
+const VoucherType = mongoose.model("VoucherType", voucherTypeSchema);
+export default VoucherType;

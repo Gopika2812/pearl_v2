@@ -8,14 +8,19 @@ const router = express.Router();
 router.post("/", async (req, res) => {
    console.log("POST /api/vendors", req.body);
   try {
-    const { name, phone, email, address, gstin } = req.body;
+    const { name, phone, email, address, gstin, branchId } = req.body;
 
-    const exists = await Vendor.findOne({ name });
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    const exists = await Vendor.findOne({ branchId, name });
     if (exists) {
-      return res.status(400).json({ message: "Vendor already exists" });
+      return res.status(400).json({ message: "Vendor already exists in this branch" });
     }
 
     const vendor = new Vendor({
+      branchId,
       name,
       phone,
       email,
@@ -31,10 +36,16 @@ router.post("/", async (req, res) => {
   }
 });
 
-// ✅ GET all vendors
+// ✅ GET all vendors (filtered by branchId)
 router.get("/", async (req, res) => {
   try {
-    const vendors = await Vendor.find({ isActive: true }).sort({
+    const { branchId } = req.query;
+
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    const vendors = await Vendor.find({ branchId, isActive: true }).sort({
       createdAt: -1,
     });
     res.json({

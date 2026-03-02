@@ -2,9 +2,11 @@ import { useState } from "react";
 import {
   FaBook,
   FaBox,
+  FaBuilding,
   FaCalculator,
   FaChartBar,
   FaChevronDown,
+  FaCog,
   FaEllipsisH,
   FaFileAlt,
   FaFileInvoice,
@@ -24,6 +26,8 @@ const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [financeOpen, setFinanceOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+ 
 
   const menu = [
     { name: "Home", path: "/", icon: <FaHome /> },
@@ -53,6 +57,12 @@ const Sidebar = ({ isOpen, onClose }) => {
     { name: "AR Aging", path: "/reports/ar-aging", icon: <FaBook /> },
     { name: "AP Aging", path: "/reports/ap-aging", icon: <FaBook /> },
   ];
+
+  const adminItems = [
+    { name: "Branch Management", path: "/admin/branches", icon: <FaBuilding /> },
+  ];
+
+ 
 
   const handleLogout = () => {
     alert("Logged out successfully");
@@ -141,6 +151,40 @@ const Sidebar = ({ isOpen, onClose }) => {
             {financeOpen && (
               <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
                 {financeReportItems.map((item, idx) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={idx}
+                      to={item.path}
+                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${active
+                        ? "bg-white/20 text-white font-semibold"
+                        : "hover:bg-white/10 text-white/80"}`}
+                    >
+                      <span className="text-sm">{item.icon}</span>
+                      <span>{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ADMIN SECTION */}
+          <div className="mx-3 mb-1 mt-4">
+            <button
+              onClick={() => setAdminOpen(!adminOpen)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+            >
+              <span className="text-lg"><FaCog /></span>
+              <span className="text-sm flex-1 text-left">Admin</span>
+              <FaChevronDown
+                className={`text-xs transition-transform ${adminOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {adminOpen && (
+              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                {adminItems.map((item, idx) => {
                   const active = location.pathname === item.path;
                   return (
                     <Link
@@ -265,6 +309,41 @@ const Sidebar = ({ isOpen, onClose }) => {
             {financeOpen && (
               <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
                 {financeReportItems.map((item, idx) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={idx}
+                      to={item.path}
+                      onClick={onClose}
+                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${active
+                        ? "bg-white/20 text-white font-semibold"
+                        : "hover:bg-white/10 text-white/80"}`}
+                    >
+                      <span className="text-sm">{item.icon}</span>
+                      <span>{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ADMIN SECTION MOBILE */}
+          <div className="mx-2 mb-1 mt-4">
+            <button
+              onClick={() => setAdminOpen(!adminOpen)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+            >
+              <span className="text-lg"><FaCog /></span>
+              <span className="text-sm flex-1 text-left">Admin</span>
+              <FaChevronDown
+                className={`text-xs transition-transform ${adminOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {adminOpen && (
+              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                {adminItems.map((item, idx) => {
                   const active = location.pathname === item.path;
                   return (
                     <Link

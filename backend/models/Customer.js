@@ -2,6 +2,11 @@ import mongoose from "mongoose";
 
 const customerSchema = new mongoose.Schema(
   {
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      required: true,
+    },
     // Basic Details
     name: { type: String, required: true, index: true },
     whatsapp: { type: String, default: "", index: true },
@@ -16,6 +21,7 @@ const customerSchema = new mongoose.Schema(
     closingBalance: { type: Number, default: 0 },
     margin: { type: Number, default: 0 }, // Can be positive or negative
     salesOwner: { type: mongoose.Schema.Types.ObjectId, ref: "SalesOwner", default: null, index: true },
+    customerCategory: { type: mongoose.Schema.Types.ObjectId, ref: "CustomerCategory", default: null },
 
     // Bank Details
     accountHolder: { type: String, default: "" },
@@ -26,6 +32,9 @@ const customerSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Create composite unique index: branchId + name (or branchId + email/whatsapp combination)
+customerSchema.index({ branchId: 1, name: 1 }, { unique: true });
 
 const Customer = mongoose.model("Customer", customerSchema);
 export default Customer;

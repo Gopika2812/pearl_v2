@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { API_BASE } from "../../api";
+import FilterableSelect from "../FilterableSelect";
 
-const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [] }) => {
+const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], customerCategories = [], branchId, editingItem }) => {
   const [customer, setCustomer] = useState({
     name: "",
     whatsapp: "",
@@ -14,12 +15,59 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [] }
     closingBalance: 0,
     margin: 0,
     salesOwner: "",
+    customerCategory: "",
     accountHolder: "",
     accountNumber: "",
     ifsc: "",
     branch: "",
     upi: "",
   });
+
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (editingItem) {
+      setCustomer({
+        ...customer,
+        name: editingItem.name || "",
+        whatsapp: editingItem.whatsapp || "",
+        email: editingItem.email || "",
+        address: editingItem.address || "",
+        district: editingItem.district || "",
+        state: editingItem.state || "",
+        pincode: editingItem.pincode || "",
+        gstin: editingItem.gstin || "",
+        closingBalance: editingItem.closingBalance || 0,
+        margin: editingItem.margin || 0,
+        salesOwner: editingItem.salesOwner || "",
+        customerCategory: editingItem.customerCategory || "",
+        accountHolder: editingItem.accountHolder || "",
+        accountNumber: editingItem.accountNumber || "",
+        ifsc: editingItem.ifsc || "",
+        branch: editingItem.branch || "",
+        upi: editingItem.upi || "",
+      });
+    } else {
+      setCustomer({
+        name: "",
+        whatsapp: "",
+        email: "",
+        address: "",
+        district: "",
+        state: "",
+        pincode: "",
+        gstin: "",
+        closingBalance: 0,
+        margin: 0,
+        salesOwner: "",
+        customerCategory: "",
+        accountHolder: "",
+        accountNumber: "",
+        ifsc: "",
+        branch: "",
+        upi: "",
+      });
+    }
+  }, [editingItem]);
 
   if (!isOpen) return null;
   const handleBulkUpload = async (e) => {
@@ -28,6 +76,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [] }
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("branchId", branchId);
 
     try {
       const res = await fetch(`${API_BASE}/customers/bulk-upload`, {
@@ -56,7 +105,15 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [] }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await onSave(customer);
+    
+    // Round numeric values
+    const roundedCustomer = {
+      ...customer,
+      closingBalance: Math.round(Number(customer.closingBalance || 0)),
+      margin: Math.round(Number(customer.margin || 0)),
+    };
+    
+    await onSave(roundedCustomer);
 
     setCustomer({
       name: "",
@@ -70,6 +127,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [] }
       closingBalance: 0,
       margin: 0,
       salesOwner: "",
+      customerCategory: "",
       accountHolder: "",
       accountNumber: "",
       ifsc: "",
@@ -218,20 +276,31 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [] }
 
             <div>
               <label className={labelClass}>Sales Owner</label>
-              <select
-                className={inputClass}
+              <FilterableSelect
+                options={salesOwners.map(owner => ({
+                  _id: owner._id,
+                  name: `${owner.name} (${owner.phone})`
+                }))}
                 value={customer.salesOwner}
-                onChange={(e) =>
-                  setCustomer({ ...customer, salesOwner: e.target.value })
+                onChange={(value) =>
+                  setCustomer({ ...customer, salesOwner: value })
                 }
-              >
-                <option value="">Select Sales Owner</option>
-                {salesOwners.map((owner) => (
-                  <option key={owner._id} value={owner._id}>
-                    {owner.name} ({owner.phone})
-                  </option>
-                ))}
-              </select>
+                placeholder="Select Sales Owner"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Customer Category</label>
+              <FilterableSelect
+                options={customerCategories}
+                value={customer.customerCategory}
+                onChange={(value) =>
+                  setCustomer({ ...customer, customerCategory: value })
+                }
+                placeholder="Select Category"
+                className={inputClass}
+              />
             </div>
 
             <div>

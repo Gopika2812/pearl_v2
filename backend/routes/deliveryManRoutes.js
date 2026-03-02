@@ -8,18 +8,19 @@ const router = express.Router();
 router.post("/", async (req, res) => {
   console.log("POST /api/delivery-men", req.body);
   try {
-    const { name, phone, role } = req.body;
+    const { name, phone, role, branchId } = req.body;
 
-    if (!name || !phone) {
-      return res.status(400).json({ message: "Name and phone are required" });
+    if (!name || !phone || !branchId) {
+      return res.status(400).json({ message: "Name, phone, and branchId are required" });
     }
 
-    const exists = await DeliveryMan.findOne({ name });
+    const exists = await DeliveryMan.findOne({ branchId, name });
     if (exists) {
-      return res.status(400).json({ message: "Delivery Man already exists" });
+      return res.status(400).json({ message: "Delivery Man already exists in this branch" });
     }
 
     const deliveryMan = new DeliveryMan({
+      branchId,
       name,
       phone,
       role: role || "Delivery Man",
@@ -38,10 +39,16 @@ router.post("/", async (req, res) => {
   }
 });
 
-// ✅ GET all Delivery Men
+// ✅ GET all Delivery Men (filtered by branchId)
 router.get("/", async (req, res) => {
   try {
-    const deliveryMen = await DeliveryMan.find({ isActive: true }).sort({
+    const { branchId } = req.query;
+
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    const deliveryMen = await DeliveryMan.find({ branchId, isActive: true }).sort({
       createdAt: -1,
     });
     res.json({

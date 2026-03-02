@@ -19,8 +19,14 @@ const getFinancialYear = () => {
 router.get("/next-invoice/:voucherType", async (req, res) => {
   try {
     const { voucherType } = req.params;
+    const { branchId } = req.query;
+
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
 
     const voucher = await VoucherType.findOne({
+      branchId,
       name: voucherType.toLowerCase(),
       orderType: "PO",
     });
@@ -69,13 +75,34 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
-    const { voucherType, status, ...rest } = req.body;
+    const { voucherType, branchId, status, ...rest } = req.body;
 
     if (!rest.items || rest.items.length === 0) {
       return res.status(400).json({ message: "At least one item is required" });
     }
 
-    const voucher = await VoucherType.findOne({ name: voucherType });
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    // Round numeric fields if provided
+    if (rest.grandTotal !== undefined) {
+      rest.grandTotal = Math.round(Number(rest.grandTotal));
+    }
+    if (rest.subtotal !== undefined) {
+      rest.subtotal = Math.round(Number(rest.subtotal));
+    }
+    if (rest.totalTax !== undefined) {
+      rest.totalTax = Math.round(Number(rest.totalTax));
+    }
+    if (rest.totalDiscount !== undefined) {
+      rest.totalDiscount = Math.round(Number(rest.totalDiscount));
+    }
+    if (rest.transportCharge !== undefined) {
+      rest.transportCharge = Math.round(Number(rest.transportCharge));
+    }
+
+    const voucher = await VoucherType.findOne({ branchId, name: voucherType });
     if (!voucher) {
       return res.status(404).json({ message: "Voucher not found" });
     }
@@ -96,6 +123,7 @@ router.post("/", async (req, res) => {
     const order = new PurchaseOrder({
       invoiceId,
       voucherType,
+      branchId,
       financialYear: currentFY,
       ...rest,
       status: status || "PLACED",

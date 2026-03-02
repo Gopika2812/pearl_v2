@@ -1,0 +1,209 @@
+import express from "express";
+import multer from "multer";
+import XLSX from "xlsx";
+import ProductCategory from "../models/ProductCategory.js";
+
+const router = express.Router();
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+router.post("/bulk-upload", upload.single("file"), async (req, res) => {
+  console.log("FILE RECEIVED:", req.file);
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Excel file required" });
+    }
+
+    const { branchId } = req.body;
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    // Read Excel
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+
+    console.log("Raw rows from Excel:", JSON.stringify(rows, null, 2));
+    console.log("Total rows to process:", rows.length);
+
+    let inserted = [];
+    let skipped = [];
+
+    console.log("PARSED ROWS:", rows);
+
+    for (const row of rows) {
+      console.log("Processing row:", row);
+      const normalized = Object.fromEntries(
+        Object.entries(row).map(([k, v]) => [
+          k.trim().toLowerCase(),
+          String(v).trim(),
+        ])
+      );
+
+      console.log("Normalized row:", normalized);
+      const name = normalized.name;
+      const description = normalized.description || "";
+
+      if (!name) {
+        skipped.push({ row, reason: "Missing product category name" });
+        continue;
+      }
+
+      const exists = await ProductCategory.findOne({
+        branchId,
+        name: name,
+      });
+
+      if (exists) {
+        console.log(`Product Category "${name}" already exists`);
+        skipped.push({ row, reason: "Already exists" });
+        continue;
+      }
+
+      try {
+        const category = await ProductCategory.create({
+          branchId,
+          name,
+          description,
+        });
+        console.log("Created product category:", category);
+        inserted.push(category);
+      } catch (createErr) {
+        console.error("Error creating product category:", createErr.message);
+        skipped.push({ row, reason: `Error: ${createErr.message}` });
+      }
+    }
+
+    console.log("Upload summary - Inserted:", inserted.length, "Skipped:", skipped.length);
+
+    return res.json({
+      message: "Bulk upload completed",
+      insertedCount: inserted.length,
+      skippedCount: skipped.length,
+      skipped,
+    });
+  } catch (err) {
+    console.error("Bulk upload error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 🔹 CREATE Product Category
+router.post("/", async (req, res) => {
+  try {
+    const { name, description, branchId } = req.body;
+
+    if (!name || !branchId) {
+      return res.status(400).json({ message: "Product category name and branchId are required" });
+    }
+
+    const exists = await ProductCategory.findOne({
+      branchId,
+      name: name.trim(),
+    });
+
+    if (exists) {
+      return res
+        .status(400)
+        .json({ message: "Product Category already exists in this branch" });
+    }
+
+    const category = new ProductCategory({
+      branchId,
+      name: name.trim(),
+      description: description || "",
+    });
+
+    await category.save();
+
+    return res.status(201).json(category);
+  } catch (err) {
+    console.error("Product Category save error:", err);
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// 🔹 GET ALL Product Categories (filtered by branchId)
+router.get("/", async (req, res) => {
+  try {
+    const { branchId } = req.query;
+
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    console.log(`🔍 Fetching ProductCategories for branchId: ${branchId}`);
+
+    const categories = await ProductCategory.find({ branchId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    console.log(`✅ Found ${categories.length} ProductCategories:`, categories.map(c => ({ _id: c._id, name: c.name, branchId: c.branchId })));
+
+    return res.json(categories);
+  } catch (err) {
+    console.error("Product Category fetch error:", err);
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// 🔹 GET Single Product Category
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const category = await ProductCategory.findById(id);
+
+    if (!category) {
+      return res.status(404).json({ message: "Product Category not found" });
+    }
+
+    return res.json(category);
+  } catch (err) {
+    console.error("Product Category fetch error:", err);
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// 🔹 UPDATE Product Category
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const category = await ProductCategory.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!category) {
+      return res.status(404).json({ message: "Product Category not found" });
+    }
+
+    return res.json(category);
+  } catch (err) {
+    console.error("Product Category update error:", err);
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// 🔹 DELETE Product Category
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const category = await ProductCategory.findByIdAndDelete(id);
+
+    if (!category) {
+      return res.status(404).json({ message: "Product Category not found" });
+    }
+
+    return res.json({ message: "Product Category deleted successfully", data: category });
+  } catch (err) {
+    console.error("Product Category delete error:", err);
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+export default router;

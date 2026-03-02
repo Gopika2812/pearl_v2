@@ -5,11 +5,17 @@ import { getFinancialYear } from "../utils/financialYear.js";
 const router = express.Router();
 
 /**
- * GET all voucher types
+ * GET all voucher types (filtered by branchId)
  */
 router.get("/", async (req, res) => {
   try {
-    const vouchers = await VoucherType.find().sort({ createdAt: -1 });
+    const { branchId } = req.query;
+    
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    const vouchers = await VoucherType.find({ branchId }).sort({ createdAt: -1 });
     res.json(vouchers);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -23,12 +29,12 @@ router.post("/", async (req, res) => {
   console.log("POST /api/voucher-types", req.body);
 
   try {
-    let { name, orderType } = req.body;
+    let { name, orderType, branchId } = req.body;
 
-    if (!name || !orderType) {
+    if (!name || !orderType || !branchId) {
       return res
         .status(400)
-        .json({ message: "Name and orderType are required" });
+        .json({ message: "Name, orderType, and branchId are required" });
     }
 
     name = name.trim().toLowerCase();
@@ -39,6 +45,7 @@ router.post("/", async (req, res) => {
     const prefix = `${name.replace(/\s+/g, "")}${orderType}`.toUpperCase();
 
     const voucher = new VoucherType({
+      branchId,
       name,
       orderType,
       prefix,
@@ -52,7 +59,7 @@ router.post("/", async (req, res) => {
     if (err.code === 11000) {
       return res
         .status(409)
-        .json({ message: "Voucher type already exists for this order type" });
+        .json({ message: "Voucher type already exists for this order type in this branch" });
     }
 
     return res.status(500).json({ message: err.message });
@@ -65,18 +72,18 @@ router.post("/", async (req, res) => {
  */
 router.post("/generate", async (req, res) => {
   try {
-    let { name, orderType } = req.body;
+    let { name, orderType, branchId } = req.body;
 
-    if (!name || !orderType) {
+    if (!name || !orderType || !branchId) {
       return res
         .status(400)
-        .json({ message: "name and orderType are required" });
+        .json({ message: "name, orderType, and branchId are required" });
     }
 
     name = name.trim().toLowerCase();
     orderType = orderType.trim().toUpperCase();
 
-    const voucher = await VoucherType.findOne({ name, orderType });
+    const voucher = await VoucherType.findOne({ branchId, name, orderType });
 
     if (!voucher) {
       return res.status(404).json({ message: "Voucher type not found" });
@@ -103,6 +110,11 @@ router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
+
+    // Round numeric fields if provided
+    if (updates.counter !== undefined) {
+      updates.counter = Math.round(Number(updates.counter));
+    }
 
     const voucher = await VoucherType.findByIdAndUpdate(id, updates, {
       new: true,

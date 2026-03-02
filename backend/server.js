@@ -5,16 +5,21 @@ import dns from "dns";
 import express from "express";
 import mongoose from "mongoose";
 
+import fixVoucherTypeIndex from "./utils/fixVoucherTypeIndex.js";
 
+import branchRoutes from "./routes/branchRoutes.js";
+import branchUserRoutes from "./routes/branchUserRoutes.js";
 import chartOfAccountsRoutes from "./routes/chartOfAccountsRoutes.js";
 import commissionRuleRoutes from "./routes/commissionRuleRoutes.js";
 import creditNoteRoutes from "./routes/creditNoteRoutes.js";
+import customerCategoryRoutes from "./routes/customerCategoryRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import debitNoteRoutes from "./routes/debitNoteRoutes.js";
 import deliveryManRoutes from "./routes/deliveryManRoutes.js";
 import financialReportRoutes from "./routes/financialReportRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import pearlsBookRoutes from "./routes/pearlsBookRoutes.js";
+import productCategoryRoutes from "./routes/productCategoryRoutes.js";
 import productGroupRoutes from "./routes/productGroupRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import purchaseOrderRoutes from "./routes/purchaseOrderRoutes.js";
@@ -43,13 +48,17 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Routes
+app.use("/api/branches", branchRoutes);
+app.use("/api/branch-users", branchUserRoutes);
 app.use("/api/chart-of-accounts", chartOfAccountsRoutes);
 app.use("/api/financial-reports", financialReportRoutes);
 app.use("/api/vendors", vendorRoutes);
 app.use("/api/product-groups", productGroupRoutes);
+app.use("/api/product-categories", productCategoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/customers", customerRoutes);
+app.use("/api/customer-categories", customerCategoryRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/debit-notes", debitNoteRoutes);
 app.use("/api/payments", paymentRoutes);
@@ -68,7 +77,11 @@ app.use("/api/reordering", reorderingRoutes);
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected"))
+  .then(async () => {
+    console.log("MongoDB Connected");
+    // Fix VoucherType indexes to allow same name in different branches
+    await fixVoucherTypeIndex();
+  })
   .catch((err) => console.error("Mongo Error:", err));
 
 const PORT = process.env.PORT || 5000;
