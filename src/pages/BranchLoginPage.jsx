@@ -20,6 +20,11 @@ export default function BranchLoginPage() {
     const fetchBranches = async () => {
       try {
         const res = await fetch(`${API_BASE}/branches`);
+        
+        if (!res.ok) {
+          throw new Error(`Backend returned ${res.status}`);
+        }
+
         const data = await res.json();
 
         if (data.success && data.data?.length > 0) {
@@ -27,11 +32,20 @@ export default function BranchLoginPage() {
           // Auto-select first branch (usually main branch)
           setSelectedBranch(data.data[0]);
         } else {
-          toast.warning("No branches available. Please contact admin.");
+          toast.error("No branches available. Backend is responding but no data found.");
+          console.error("Backend response:", data);
         }
       } catch (error) {
-        console.error("Error fetching branches:", error);
-        toast.error("Failed to load branches");
+        console.error("❌ Error fetching branches:", error);
+        console.error(
+          "Backend URL:", API_BASE,
+          "\nCheck if backend is deployed and accessible.",
+          "\nIf using production URL, verify backend is running on Render."
+        );
+        toast.error(
+          `Cannot reach backend: ${error.message}. ` +
+          `Check that backend server is running at ${API_BASE}`
+        );
       } finally {
         setLoadingBranches(false);
       }
