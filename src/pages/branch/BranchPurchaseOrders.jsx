@@ -12,10 +12,8 @@ const BranchPurchaseOrders = () => {
 
   // Fetch purchase orders for current branch
   const fetchPurchaseOrders = async () => {
-    // Get branch ID from context or localStorage
-    const branchId = currentBranch?._id || localStorage.getItem("selectedBranchId");
-    
-    if (!branchId) {
+    // Get branch ID from context
+    if (!currentBranch?._id) {
       toast.error("Branch not selected. Please select a branch from the sidebar.");
       return;
     }
@@ -23,7 +21,7 @@ const BranchPurchaseOrders = () => {
     setLoading(true);
     try {
       const res = await fetch(
-        `${API_BASE}/purchase-orders?branchId=${branchId}`
+        `${API_BASE}/purchase-orders?branchId=${currentBranch._id}`
       );
       const data = await res.json();
 

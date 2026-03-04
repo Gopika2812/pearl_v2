@@ -25,7 +25,6 @@ import BranchQuickLinks from "./pages/branch/BranchQuickLinks";
 import BranchRecycling from "./pages/branch/BranchRecycling";
 import BranchSalesOrder from "./pages/branch/BranchSalesOrder";
 import BranchSummary from "./pages/branch/BranchSummary";
-import RecyclingEntry from "./pages/branch/RecyclingEntry";
 import BranchLoginPage from "./pages/BranchLoginPage";
 import CRMPage from "./pages/CRMPage";
 import CustomerLogin from "./pages/CustomerLogin";
@@ -111,7 +110,6 @@ function App() {
                   <Route path="/branch/po" element={<BranchPO />} />
                   <Route path="/branch/purchase-orders" element={<BranchPurchaseOrders />} />
                   <Route path="/branch/recycling" element={<BranchRecycling />} />
-                  <Route path="/branch/restocking" element={<RecyclingEntry />} />
                   <Route path="/branch/debit-note" element={<BranchDebitNote />} />
                   <Route path="/branch/po-payment" element={<BranchPOPayment />} />
                   <Route path="/branch/sales-order" element={<BranchSalesOrder />} />

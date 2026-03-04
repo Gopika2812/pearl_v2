@@ -114,14 +114,24 @@ router.get("/", async (req, res) => {
       return res.status(400).json({ message: "branchId is required" });
     }
 
+    // Convert branchId string to MongoDB ObjectId
+    let branchObjectId;
+    try {
+      branchObjectId = mongoose.Types.ObjectId.isValid(branchId)
+        ? new mongoose.Types.ObjectId(branchId)
+        : branchId;
+    } catch (e) {
+      branchObjectId = branchId;
+    }
+
     const pageNum = Math.max(1, parseInt(page) || 1);
     const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 50)); 
     const skip = (pageNum - 1) * pageSize;
 
-    // Build search filter with branchId
+    // Build search filter with branchId (using ObjectId)
     const filter = search
-      ? { branchId, name: { $regex: search, $options: "i" } }
-      : { branchId };
+      ? { branchId: branchObjectId, name: { $regex: search, $options: "i" } }
+      : { branchId: branchObjectId };
 
     // ⚡ Get total count
     const total = await Product.countDocuments(filter);
