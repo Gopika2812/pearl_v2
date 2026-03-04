@@ -1,20 +1,43 @@
-import { FaShoppingCart } from "react-icons/fa";
+import { useState } from "react";
+import InventorySalesOrderEntry from "../../components/inventory/InventorySalesOrderEntry";
+import InventorySalesOrderHeader from "../../components/inventory/InventorySalesOrderHeader";
+import { useBranch } from "../../context/BranchContext";
+import { useInventory } from "../../context/InventoryContext";
 
-export default function BranchSalesOrder() {
+const BranchSalesOrder = () => {
+  const { voucherTypes, productGroups, productCategories, products, warehouses, customers, salesMen, deliveryMen, salesOwners, customerGroups } = useInventory();
+  const { currentBranch } = useBranch();
+
+  const [items, setItems] = useState([]);
+
+  const soVoucherTypes = voucherTypes.filter(
+    (v) => v.orderType === "SO"
+  );
+
   return (
-    <div className="min-h-screen bg-gray-100 pt-20 md:pt-16 md:pl-64 px-4 md:px-6 pb-10">
-      <div className="max-w-7xl mx-auto">
-        <div className="bg-gradient-to-r from-secondary to-primary text-white rounded-2xl shadow-lg p-8 mb-8">
-          <div className="flex items-center gap-4">
-            <FaShoppingCart className="text-5xl opacity-80" />
-            <h1 className="text-4xl font-bold">Sales Order 🛒</h1>
-          </div>
-        </div>
+    <div className="min-h-screen bg-gray-50 pt-20 md:pt-16 md:pl-64">
+      <div className="w-full max-w-6xl mx-auto px-3 sm:px-6 py-4">
+        <InventorySalesOrderHeader title="Sales Order" />
 
-        <div className="bg-white rounded-2xl shadow-lg p-8">
-          <p className="text-gray-600">Sales Order module coming soon...</p>
+        <div className="mt-5">
+          <InventorySalesOrderEntry
+            items={items}
+            setItems={setItems}
+            branchId={currentBranch?._id}
+            voucherTypes={soVoucherTypes}
+            productGroups={productGroups}
+            products={products}
+            warehouses={warehouses}
+            customers={customers}
+            salesMen={salesMen}
+            deliveryMen={deliveryMen}
+            salesOwners={salesOwners}
+            customerGroups={customerGroups}
+          />
         </div>
       </div>
     </div>
   );
-}
+};
+
+export default BranchSalesOrder;

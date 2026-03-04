@@ -2,7 +2,6 @@ import express from "express";
 import mongoose from "mongoose";
 import Commission from "../models/Commission.js";
 import Customer from "../models/Customer.js";
-import Product from "../models/Product.js";
 import SalesOrder from "../models/SalesOrder.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
@@ -14,24 +13,34 @@ const router = express.Router();
 // GET all sales orders (for OthersSummary)
 router.get("/", async (req, res) => {
   try {
-    const salesOrders = await SalesOrder.find()
-      .select("invoiceId customer grandTotalWithMargin grandTotal closingBalance salesOwner createdAt")
+    const { branchId } = req.query;
+    const query = {};
+    
+    // Filter by branchId if provided
+    if (branchId) {
+      query.branchId = branchId;
+    }
+    
+    const salesOrders = await SalesOrder.find(query)
+      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal closingBalance salesOwner createdAt invoiceGenerated warehouse billingPerson")
       .populate('salesOwner', 'name')
       .sort({ createdAt: -1 });
     
-    res.json({ success: true, data: salesOrders });
+    res.json(salesOrders);
   } catch (error) {
     console.error("Fetch error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch sales orders" });
+    res.status(500).json({ message: "Failed to fetch sales orders" });
   }
 });
 
 // GET sales order preview (for new orders)
 router.get("/preview/:voucherType", async (req, res) => {
   try {
-    const { voucherType } = req.query;
+    const { voucherType } = req.params;  // ✅ FIX: Changed from req.query to req.params
     const { branchId } = req.query;
     const financialYear = getFinancialYear();
+
+    console.log("📋 Preview requested:", { voucherType, branchId });
 
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
@@ -44,6 +53,7 @@ router.get("/preview/:voucherType", async (req, res) => {
     });
 
     if (!voucher) {
+      console.error("❌ Voucher not found for preview:", { branchId, voucherType, orderType: "SO" });
       return res.status(404).json({ message: "Sales voucher not found" });
     }
 
@@ -56,9 +66,10 @@ router.get("/preview/:voucherType", async (req, res) => {
       "0"
     )}/${financialYear}`;
 
+    console.log("✅ Preview generated:", invoiceId);
     res.json({ invoiceId });
   } catch (err) {
-    console.error("Preview Error:", err);
+    console.error("❌ Preview Error:", err.message);
     res.status(500).json({ message: "Failed to generate preview" });
   }
 });
@@ -87,13 +98,19 @@ router.post("/", async (req, res) => {
       salesOwner,
       salesMan,
       deliveryMan,
+      extraExpenses,
+      extraExpenseAmount,
     } = req.body;
 
+    console.log("📤 POST /sales-orders received");
+    
     if (!voucherType || !items?.length || !branchId) {
-      return res.status(400).json({ message: "Invalid sales order data - branchId is required" });
+      console.error("❌ Missing required fields:", { voucherType, itemsLength: items?.length, branchId });
+      return res.status(400).json({ message: "Invalid sales order data - voucherType, items, and branchId are required" });
     }
 
     const financialYear = getFinancialYear();
+    console.log("📅 Financial year:", financialYear);
 
     // 🔑 Fetch voucher
     const voucher = await VoucherType.findOne({
@@ -103,8 +120,11 @@ router.post("/", async (req, res) => {
     });
 
     if (!voucher) {
+      console.error("❌ Voucher not found:", { branchId, voucherType, orderType: "SO" });
       return res.status(404).json({ message: "Sales voucher not found" });
     }
+    
+    console.log("✅ Voucher found:", { prefix: voucher.prefix, counter: voucher.counter });
 
     // 🔁 Reset counter if FY changed
     if (voucher.financialYear !== financialYear) {
@@ -116,13 +136,18 @@ router.post("/", async (req, res) => {
       3,
       "0"
     )}/${financialYear}`;
+    
+    console.log("📝 Generated invoiceId:", invoiceId);
 
     // ✅ FETCH CUSTOMER INSIDE ROUTE
     const dbCustomer = await Customer.findById(customer.id);
 
     if (!dbCustomer) {
+      console.error("❌ Customer not found:", customer.id);
       return res.status(404).json({ message: "Customer not found" });
     }
+    
+    console.log("✅ Customer found:", dbCustomer.name);
 
     const openingBalance = dbCustomer.closingBalance || dbCustomer.totalBalance || 0;
     // ✅ FIXED: Closing balance = opening balance + grandTotal (SO increases customer's AR)
@@ -162,6 +187,14 @@ router.post("/", async (req, res) => {
       customerMargin: Math.round(Number(customerMargin) || 0),
       marginAmount: Math.round(Number(marginAmount) || 0),
       grandTotalWithMargin: Math.round(Number(grandTotalWithMargin) || 0),
+      extraExpenses: (extraExpenses || []).map((exp) => ({
+        expenseId: exp.expenseId,
+        expenseName: exp.expenseName,
+        basePrice: Math.round(Number(exp.basePrice) || 0),
+        days: exp.days,
+        totalPrice: Math.round(Number(exp.totalPrice) || 0),
+      })),
+      extraExpenseAmount: Math.round(Number(extraExpenseAmount) || 0),
       ewayEnabled,
       ewayDetails,
       salesOwner,
@@ -170,19 +203,12 @@ router.post("/", async (req, res) => {
       financialYear,
     });
 
-
+    console.log("💾 About to save SalesOrder...");
     await salesOrder.save();
+    console.log("✅ SalesOrder saved successfully");
 
-    // ✅ REDUCE INVENTORY for each item in SO
-    for (const item of items) {
-      await Product.findByIdAndUpdate(
-        item.productId,
-        {
-          $inc: { totalQty: -item.qty } // Reduce inventory by order quantity
-        },
-        { new: true }
-      );
-    }
+    // ⚠️ INVENTORY REDUCTION REMOVED - Only reduce when invoice is confirmed
+    // Inventory will be reduced when sales invoice is generated, not at order stage
 
     // ✅ UPDATE CUSTOMER CLOSING BALANCE
     await Customer.findByIdAndUpdate(
@@ -190,6 +216,7 @@ router.post("/", async (req, res) => {
       { closingBalance: closingBalance },
       { new: true }
     );
+    console.log("✅ Customer closing balance updated");
 
     // ✅ POST JOURNAL ENTRY to GL
     try {
@@ -203,6 +230,7 @@ router.post("/", async (req, res) => {
     // ✅ Increment voucher counter
     voucher.counter += 1;
     await voucher.save();
+    console.log(`✅ Voucher counter incremented to ${voucher.counter}`);
 
     res.status(201).json({
       message: "Sales order created successfully",
@@ -210,8 +238,9 @@ router.post("/", async (req, res) => {
       data: salesOrder,
     });
   } catch (error) {
-    console.error("Sales Order Save Error:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error("❌ Sales Order Save Error:", error.message);
+    console.error("Stack:", error.stack);
+    res.status(500).json({ message: error.message || "Server error" });
   }
 });
 
@@ -338,6 +367,74 @@ router.delete("/:id", async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Failed to delete sales order" });
+  }
+});
+
+// 🎯 GENERATE INVOICE FROM SALES ORDER
+router.patch("/:id/generate-invoice", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      invoiceItems,
+      invoiceSampleItems,
+      invoiceSubtotal,
+      invoiceTotalDiscount,
+      invoiceTotalTax,
+      invoiceTransportCharge,
+      invoiceGrandTotal,
+      invoiceOpeningBalance,
+      invoiceClosingBalance,
+    } = req.body;
+
+    console.log("📋 Generating invoice for SO:", id);
+
+    // 🔍 FIND SALES ORDER
+    const salesOrder = await SalesOrder.findById(id);
+    if (!salesOrder) {
+      return res.status(404).json({ message: "Sales order not found" });
+    }
+
+    if (salesOrder.invoiceGenerated) {
+      return res.status(400).json({ message: "Invoice already generated for this order" });
+    }
+
+    console.log("✅ SO found:", salesOrder.invoiceId);
+
+    // 📝 UPDATE WITH INVOICE DETAILS
+    salesOrder.invoiceItems = invoiceItems || [];
+    salesOrder.invoiceSampleItems = invoiceSampleItems || [];
+    salesOrder.invoiceSubtotal = Math.round(Number(invoiceSubtotal) || 0);
+    salesOrder.invoiceTotalDiscount = Math.round(Number(invoiceTotalDiscount) || 0);
+    salesOrder.invoiceTotalTax = Math.round(Number(invoiceTotalTax) || 0);
+    salesOrder.invoiceTransportCharge = Math.round(Number(invoiceTransportCharge) || 0);
+    salesOrder.invoiceGrandTotal = Math.round(Number(invoiceGrandTotal) || 0);
+    salesOrder.invoiceOpeningBalance = Math.round(Number(invoiceOpeningBalance) || 0);
+    salesOrder.invoiceClosingBalance = Math.round(Number(invoiceClosingBalance) || 0);
+
+    // 🔄 CONVERT TO SALES INVOICE
+    salesOrder.recordType = "SALES INVOICE";
+    salesOrder.invoiceGenerated = true;
+
+    await salesOrder.save();
+    console.log("✅ Invoice generated:", salesOrder.invoiceId);
+
+    // 🏦 POST INVOICE JOURNAL ENTRY to GL
+    try {
+      const journalEntry = await GLService.postSalesInvoiceJE(salesOrder);
+      console.log(`✅ Invoice GL Entry posted: ${journalEntry.jeId}`);
+    } catch (glError) {
+      console.warn("⚠️ Invoice GL posting failed (non-blocking):", glError.message);
+    }
+
+    res.json({
+      success: true,
+      message: "Invoice generated successfully",
+      invoiceId: salesOrder.invoiceId,
+      data: salesOrder,
+    });
+  } catch (error) {
+    console.error("❌ Invoice generation error:", error.message);
+    res.status(500).json({ message: error.message || "Failed to generate invoice" });
   }
 });
 

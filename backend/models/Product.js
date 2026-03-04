@@ -28,6 +28,7 @@ const productSchema = new mongoose.Schema(
     perQty: { type: Number, required: true },
     units: { type: String, required: true }, 
     totalQty: { type: Number, default: 0 },
+    totalQtyUnit: { type: String, default: "" }, // Unit for total quantity
     purchasingPrice: { type: Number, default: 0 },
     sellingPrice: { type: Number, default: 0 },
     mrp: { type: Number, default: 0 }, // Maximum Retail Price
@@ -43,6 +44,16 @@ const productSchema = new mongoose.Schema(
     checkPeriod: { type: String, default: "MONTHLY" }, // How often to check stock (DAILY, WEEKLY, MONTHLY, QUARTERLY)
     lastChecked: { type: Date, default: null }, // Last time stock was reviewed
     nextCheckDate: { type: Date, default: null }, // Next scheduled check date
+    
+    // Restocking Configuration
+    preferredVendor: { type: String, default: "" }, // Vendor name to auto-order from
+    minStockQty: { type: Number, default: 10 }, // Minimum stock to maintain
+    maxStockQty: { type: Number, default: 50 }, // Maximum stock quantity
+    restockingDays: {
+      type: [String],
+      enum: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
+      default: [],
+    }, // Days when restocking is done
   },
   { timestamps: true }
 );

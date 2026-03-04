@@ -20,6 +20,7 @@ export default function InventorySalesOrderEntry({
   salesMen = [],
   deliveryMen = [],
   salesOwners = [],
+  customerGroups = [],
   branchId = ""
 }) {
   const [voucherType, setVoucherType] = useState("");
@@ -76,6 +77,14 @@ export default function InventorySalesOrderEntry({
   const [deliveryMan, setDeliveryMan] = useState("");
   const [billingPerson, setBillingPerson] = useState("");
   const [customerMargin, setCustomerMargin] = useState(0);
+  
+  // EXTRA EXPENSES STATES
+  const [extraExpenses, setExtraExpenses] = useState([]);
+  const [showExtraExpensesModal, setShowExtraExpensesModal] = useState(false);
+  const [availableExtraExpenses, setAvailableExtraExpenses] = useState([]);
+  const [selectedExpenseId, setSelectedExpenseId] = useState("");
+  const [expenseDays, setExpenseDays] = useState(1);
+  const [expensePrice, setExpensePrice] = useState(0);
   
   // SEARCH STATES FOR TYPING
   const [customerSearch, setCustomerSearch] = useState("");
@@ -144,6 +153,51 @@ export default function InventorySalesOrderEntry({
     loadPoItems();
   }, []);
 
+  // Fetch available extra expenses
+  useEffect(() => {
+    if (!branchId) return;
+    
+    const fetchExtraExpenses = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/expenses/branch/${branchId}`);
+        const data = await res.json();
+        
+        let expensesList = [];
+        if (data.success) {
+          expensesList = data.data || [];
+        } else {
+          expensesList = data || [];
+        }
+        
+        // 📦 FLATTEN: Convert nested expense items into flat list
+        // Database structure: { _id, expenses: [{name, price}, ...], ... }
+        // We need: [{_id: uniqueId, parentId, name: "Freezer", price: 1000}, ...]
+        const flattenedExpenses = [];
+        expensesList.forEach(order => {
+          if (order.expenses && Array.isArray(order.expenses)) {
+            order.expenses.forEach((item, idx) => {
+              flattenedExpenses.push({
+                _id: `${order._id}-${idx}`, // Unique ID combining parent & index
+                parentId: order._id,
+                orderExpenseId: order.expenseId,
+                name: item.name,
+                price: item.price,
+              });
+            });
+          }
+        });
+        
+        setAvailableExtraExpenses(flattenedExpenses);
+        console.log("✅ Flattened expenses:", flattenedExpenses);
+      } catch (err) {
+        console.warn("❌ Failed to load extra expenses:", err);
+        setAvailableExtraExpenses([]);
+      }
+    };
+
+    fetchExtraExpenses();
+  }, [branchId]);
+
   // Fetch customers from backend when searching
   useEffect(() => {
     if (!customerSearch.trim()) {
@@ -157,12 +211,21 @@ export default function InventorySalesOrderEntry({
       setSearchingCustomers(true);
       try {
         const res = await fetch(
-          `${API_BASE}/customers?search=${encodeURIComponent(customerSearch)}&limit=100`
+          `${API_BASE}/customers?search=${encodeURIComponent(customerSearch)}&branchId=${branchId}&limit=100`
         );
         const data = await res.json();
-        setFetchedCustomers(data.data || data || []);
+        
+        if (!res.ok) {
+          console.error("🔴 Customer search failed:", data.message);
+          setFetchedCustomers([]);
+          return;
+        }
+        
+        // API returns { success: true, data: [...], pagination: {...} }
+        const customerList = Array.isArray(data.data) ? data.data : [];
+        setFetchedCustomers(customerList);
       } catch (err) {
-        console.error("Failed to search customers:", err);
+        console.error("❌ Failed to search customers:", err);
         setFetchedCustomers([]);
       } finally {
         setSearchingCustomers(false);
@@ -171,7 +234,7 @@ export default function InventorySalesOrderEntry({
 
     const timer = setTimeout(fetchCustomersFromBackend, 300); // Debounce 300ms
     return () => clearTimeout(timer);
-  }, [customerSearch]);
+  }, [customerSearch, branchId]);
   
   // Initialize with provided customers on mount
   useEffect(() => {
@@ -584,8 +647,14 @@ export default function InventorySalesOrderEntry({
     return s + (taxable * i.gst) / 100;
   }, 0);
 
+  // Calculate extra expenses total
+  const extraExpenseAmount = extraExpenses.reduce(
+    (sum, exp) => sum + exp.totalPrice,
+    0
+  );
+
   const grandTotal =
-    subtotal - totalDiscount + totalTax + Number(transportCharge || 0);
+    subtotal - totalDiscount + totalTax + Number(transportCharge || 0) + extraExpenseAmount;
 
 
   // Round up all item totals and financial values
@@ -598,7 +667,15 @@ export default function InventorySalesOrderEntry({
   const roundedTotalDiscount = Math.ceil(totalDiscount * 100) / 100;
   const roundedTotalTax = Math.ceil(totalTax * 100) / 100;
   const roundedTransportCharge = Math.ceil(Number(transportCharge || 0) * 100) / 100;
+  const roundedExtraExpenseAmount = Math.ceil(extraExpenseAmount * 100) / 100;
+  
+  // 📊 CALCULATE MARGIN AMOUNT (margin already applied to item prices)
+  const marginAmount = customerMargin > 0 
+    ? Math.ceil((roundedSubtotal * customerMargin) / (100 + customerMargin) * 100) / 100
+    : 0;
+  
   const roundedGrandTotal = Math.ceil(grandTotal * 100) / 100;
+  const grandTotalWithMargin = Math.ceil((roundedGrandTotal + marginAmount) * 100) / 100;
 
   const payload = {
     branchId,
@@ -629,6 +706,17 @@ export default function InventorySalesOrderEntry({
     totalDiscount: roundedTotalDiscount,
     totalTax: roundedTotalTax,
     grandTotal: roundedGrandTotal,
+    customerMargin,
+    marginAmount,
+    grandTotalWithMargin,
+    extraExpenses: extraExpenses.map((exp) => ({
+      expenseId: exp.expenseId,
+      expenseName: exp.expenseName,
+      basePrice: Math.ceil(exp.basePrice * 100) / 100,
+      days: exp.days,
+      totalPrice: Math.ceil(exp.totalPrice * 100) / 100,
+    })),
+    extraExpenseAmount: roundedExtraExpenseAmount,
     ewayEnabled: enableEway,
     ewayDetails: enableEway
       ? {
@@ -645,6 +733,44 @@ export default function InventorySalesOrderEntry({
     billingPerson,
   };
 
+  const handleAddExtraExpense = () => {
+    if (!selectedExpenseId || !expenseDays || !expensePrice) {
+      toast.error("Select expense, days, and price");
+      return;
+    }
+
+    const selected = availableExtraExpenses.find(
+      (exp) => exp._id === selectedExpenseId
+    );
+
+    if (!selected) {
+      toast.error("Invalid expense selected");
+      return;
+    }
+
+    // 📦 FLATTENED STRUCTURE: selected = { _id, parentId, name: "Freezer", price: 1000, ... }
+    const newExpense = {
+      id: Date.now(),
+      expenseId: selected.parentId,  // Store parent ID (the actual expense order)
+      expenseName: selected.name || "Extra Expense",  // Use item name (e.g., "Freezer")
+      basePrice: parseFloat(expensePrice) || selected.price,  // Use entered price, fallback to item price
+      days: parseInt(expenseDays),
+      totalPrice: (parseFloat(expensePrice) || selected.price) * parseInt(expenseDays),
+    };
+
+    setExtraExpenses([...extraExpenses, newExpense]);
+    setSelectedExpenseId("");
+    setExpenseDays(1);
+    setExpensePrice(0);
+    setShowExtraExpensesModal(false);
+    toast.success(`${selected.name} added!`);
+  };
+
+  const handleRemoveExtraExpense = (id) => {
+    setExtraExpenses(extraExpenses.filter((exp) => exp.id !== id));
+    toast.info("Extra expense removed");
+  };
+
   const handleFinalAction = async () => {
     if (!voucherType || !warehouse || items.length === 0) {
       return toast.error("Fill all required fields");
@@ -655,6 +781,20 @@ export default function InventorySalesOrderEntry({
     }
 
     try {
+      // 📋 VALIDATE PAYLOAD
+      if (!payload.branchId) {
+        console.error("❌ Missing branchId in payload");
+        return toast.error("Branch ID is missing. Please refresh and try again.");
+      }
+      
+      console.log("📤 Sending payload:", {
+        voucherType: payload.voucherType,
+        branchId: payload.branchId,
+        items: `${payload.items?.length} items`,
+        customer: payload.customer?.name,
+        grandTotal: payload.grandTotal,
+      });
+
       const res = await fetch(`${API_BASE}/sales-orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -663,13 +803,16 @@ export default function InventorySalesOrderEntry({
 
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.message);
+      if (!res.ok) {
+        console.error("❌ Server Error:", data);
+        throw new Error(data.message || "Failed to create sales order");
+      }
 
+      console.log("✅ Sales Order Created:", data.invoiceId);
       toast.success(`Sales Order Created: ${data.invoiceId}`);
-      // NOTE: Customer balance will be updated after invoice generation, not here
-
       setInvoiceId(data.invoiceId);
     } catch (err) {
+      console.error("❌ Error saving Sales Order:", err);
       toast.error(err.message || "Failed to save Sales Order");
     }
   };
@@ -1293,6 +1436,150 @@ export default function InventorySalesOrderEntry({
         />
       </div>
 
+      {/* Extra Expenses Button */}
+      <div className="flex justify-between items-center text-sm bg-gradient-to-r from-orange-50 to-amber-50 p-4 rounded-lg border border-orange-200">
+        <div>
+          <span className="text-gray-600 font-semibold">💰 Extra Expenses</span>
+          <div className="text-xs text-gray-500 mt-1">
+            {extraExpenses.length > 0
+              ? `${extraExpenses.length} expense(s) added - ₹${roundedExtraExpenseAmount.toFixed(2)}`
+              : "Add miscellaneous charges"}
+          </div>
+        </div>
+        <button
+          onClick={() => setShowExtraExpensesModal(true)}
+          className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold transition"
+        >
+          + Add Expense
+        </button>
+      </div>
+
+      {/* Extra Expenses Modal */}
+      {showExtraExpensesModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Add Extra Expense</h3>
+
+            <div className="space-y-4">
+              {/* Select Expense */}
+              <div>
+                <label className={labelClass}>Select Expense</label>
+                <select
+                  className={selectClass}
+                  value={selectedExpenseId}
+                  onChange={(e) => {
+                    setSelectedExpenseId(e.target.value);
+                    // 🎯 AUTO-FILL PRICE from selected expense item
+                    const selected = availableExtraExpenses.find(
+                      (exp) => exp._id === e.target.value
+                    );
+                    if (selected) {
+                      setExpensePrice(selected.price || 0);
+                    }
+                  }}
+                >
+                  <option value="">-- Select Extra Expense --</option>
+                  {availableExtraExpenses.length === 0 ? (
+                    <option disabled>No extra expenses recorded yet</option>
+                  ) : (
+                    availableExtraExpenses.map((exp) => (
+                      <option key={exp._id} value={exp._id}>
+                        {exp.name} (₹{(exp.price || 0).toFixed(2)} per day)
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {/* Price per Day */}
+              <div>
+                <label className={labelClass}>Price per Day (₹)</label>
+                <input
+                  type="number"
+                  className={inputClass}
+                  value={expensePrice}
+                  onChange={(e) => setExpensePrice(+e.target.value || 0)}
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+
+              {/* Number of Days */}
+              <div>
+                <label className={labelClass}>No. of Days</label>
+                <input
+                  type="number"
+                  className={inputClass}
+                  value={expenseDays}
+                  onChange={(e) => setExpenseDays(Math.max(1, +e.target.value || 1))}
+                  min="1"
+                  placeholder="1"
+                />
+              </div>
+
+              {/* Total Calculation */}
+              {expensePrice > 0 && expenseDays > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                  <p className="text-sm text-gray-600">Total Amount</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    ₹{(expensePrice * expenseDays).toFixed(2)}
+                  </p>
+                </div>
+              )}
+
+              {/* Buttons */}
+              <div className="grid grid-cols-2 gap-3 pt-4">
+                <button
+                  onClick={() => setShowExtraExpensesModal(false)}
+                  className="w-full border-2 border-gray-300 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddExtraExpense}
+                  disabled={!selectedExpenseId || !expensePrice || !expenseDays}
+                  className="w-full bg-orange-500 text-white py-2 rounded-lg font-bold hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Add Expense
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Display Added Extra Expenses */}
+      {extraExpenses.length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+          <h4 className="font-bold text-orange-700 text-sm mb-3">Added Expenses:</h4>
+          <div className="space-y-2">
+            {extraExpenses.map((exp) => (
+              <div
+                key={exp.id}
+                className="flex items-center justify-between bg-white p-3 rounded-lg border border-orange-100"
+              >
+                <div>
+                  <p className="font-semibold text-gray-800 text-sm">
+                    {exp.expenseName}
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    ₹{exp.basePrice.toFixed(2)} × {exp.days} days = ₹
+                    {exp.totalPrice.toFixed(2)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleRemoveExtraExpense(exp.id)}
+                  className="text-red-500 hover:text-red-700 transition text-lg"
+                >
+                  <FaTrash />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Sales Man, Delivery Man, and Billing Person */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
@@ -1402,6 +1689,13 @@ export default function InventorySalesOrderEntry({
             <span className="text-gray-500">Transport</span>
             <span className="font-bold">₹{Number(transportCharge || 0).toFixed(2)}</span>
           </div>
+
+          {extraExpenses.length > 0 && (
+            <div className="flex justify-between text-sm bg-orange-50 px-3 py-2 rounded-lg">
+              <span className="text-orange-700 font-semibold">Extra Expenses</span>
+              <span className="font-bold text-orange-600">₹{roundedExtraExpenseAmount.toFixed(2)}</span>
+            </div>
+          )}
 
           {sampleItems.length > 0 && (
             <div className="pt-2 border-t border-yellow-200 mt-2">

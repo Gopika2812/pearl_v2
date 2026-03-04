@@ -4,6 +4,8 @@ import cors from "cors";
 import dns from "dns";
 import express from "express";
 import mongoose from "mongoose";
+import path from "path";
+import { fileURLToPath } from "url";
 
 import fixVoucherTypeIndex from "./utils/fixVoucherTypeIndex.js";
 
@@ -13,10 +15,13 @@ import chartOfAccountsRoutes from "./routes/chartOfAccountsRoutes.js";
 import commissionRuleRoutes from "./routes/commissionRuleRoutes.js";
 import creditNoteRoutes from "./routes/creditNoteRoutes.js";
 import customerCategoryRoutes from "./routes/customerCategoryRoutes.js";
+import customerGroupRoutes from "./routes/customerGroupRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import debitNoteRoutes from "./routes/debitNoteRoutes.js";
 import deliveryManRoutes from "./routes/deliveryManRoutes.js";
+import extraExpenseRoutes from "./routes/extraExpenseRoutes.js";
 import financialReportRoutes from "./routes/financialReportRoutes.js";
+import invoiceRoutes from "./routes/invoiceRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import pearlsBookRoutes from "./routes/pearlsBookRoutes.js";
 import productCategoryRoutes from "./routes/productCategoryRoutes.js";
@@ -47,6 +52,12 @@ app.use(
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+// Serve static files from public folder
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicPath = path.join(__dirname, "../public");
+app.use(express.static(publicPath));
+
 // Routes
 app.use("/api/branches", branchRoutes);
 app.use("/api/branch-users", branchUserRoutes);
@@ -59,11 +70,14 @@ app.use("/api/products", productRoutes);
 app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/customer-categories", customerCategoryRoutes);
+app.use("/api/customer-groups", customerGroupRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/debit-notes", debitNoteRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/expenses", extraExpenseRoutes);
 app.use("/api/voucher-types", voucherTypeRoutes);
 app.use("/api/sales-orders", salesOrderRoutes);
+app.use("/api/invoices", invoiceRoutes);
 app.use("/api/credit-notes", creditNoteRoutes);
 app.use("/api/pearls-book", pearlsBookRoutes);
 app.use("/api/sales-owners", salesOwnerRoutes);

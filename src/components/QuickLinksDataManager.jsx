@@ -64,6 +64,12 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
       displayFields: ["name", "description"],
       editableFields: ["name", "description"],
     },
+    customer_group: {
+      label: "Customer Group",
+      endpoint: "/customer-groups",
+      displayFields: ["name", "description"],
+      editableFields: ["name", "description"],
+    },
     customer: {
       label: "Customer",
       endpoint: "/customers",
@@ -97,6 +103,26 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   };
 
   const config = resourceConfig[type];
+
+  // If config is not found, show error state
+  if (!config) {
+    return (
+      <div className="mt-6">
+        <div className="flex items-center gap-3 mb-6">
+          <button
+            onClick={onCancel}
+            className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg transition font-semibold"
+          >
+            <FaArrowLeft /> Back
+          </button>
+        </div>
+        <div className="bg-gradient-to-br from-red-50 to-orange-50 border-l-4 border-red-500 rounded-lg p-8 text-center shadow-md">
+          <p className="text-red-700 font-bold text-2xl">⚠️ Data Type Not Found</p>
+          <p className="text-gray-600 text-sm mt-3 leading-relaxed">This data type is not configured for viewing. Please contact support if you believe this is an error.</p>
+        </div>
+      </div>
+    );
+  }
 
   // Helper function to format margin display
   const formatMarginDisplay = (item) => {
@@ -278,18 +304,18 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
 
   return (
     <div className="mt-6">
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-6 pb-6 border-b-2 border-gray-200">
         <button
           onClick={onCancel}
-          className="flex items-center gap-2 bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-lg transition"
+          className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg transition font-semibold"
         >
           <FaArrowLeft /> Back
         </button>
-        <h2 className="text-2xl font-bold text-gray-800">{config.label} Records</h2>
+        <h2 className="text-3xl font-bold text-gray-900">{config.label} Records</h2>
         {type === "product" && (
           <button
             onClick={() => setShowGroupMargin(true)}
-            className="ml-auto flex items-center gap-2 bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition"
+            className="ml-auto flex items-center gap-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-5 py-2 rounded-lg transition font-semibold shadow-md"
           >
             💰 Group Margin
           </button>
@@ -297,20 +323,20 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
       </div>
 
       {/* Search Filter */}
-      <div className="mb-4">
+      <div className="mb-6">
         <div className="relative">
-          <FaSearch className="absolute left-3 top-3 text-gray-400" />
+          <FaSearch className="absolute left-4 top-4 text-gray-400 text-lg" />
           <input
             type="text"
             placeholder={`Search by ${config.displayFields.join(", ")}...`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-10 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-primary"
+            className="w-full pl-12 pr-12 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all shadow-sm"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+              className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 text-lg"
             >
               <FaTimes />
             </button>
@@ -328,12 +354,14 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
           <p className="text-gray-600">Loading...</p>
         </div>
       ) : data.length === 0 ? (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-          <p className="text-gray-700">No {config.label.toLowerCase()} records found</p>
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-500 rounded-lg p-8 text-center shadow-sm">
+          <p className="text-gray-700 text-lg font-semibold">📭 No {config.label.toLowerCase()} records</p>
+          <p className="text-gray-600 text-sm mt-2">Create your first record using the + button in Quick Actions</p>
         </div>
       ) : filteredData.length === 0 ? (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
-          <p className="text-gray-700">No {config.label.toLowerCase()} records match your search</p>
+        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-l-4 border-yellow-500 rounded-lg p-8 text-center shadow-sm">
+          <p className="text-gray-700 text-lg font-semibold">🔍 No matches found</p>
+          <p className="text-gray-600 text-sm mt-2">Try adjusting your search terms</p>
         </div>
       ) : (
         <div>

@@ -1,7 +1,9 @@
 import express from "express";
 import mongoose from "mongoose";
+import Branch from "../models/Branch.js";
 import Product from "../models/Product.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
+import RestockingEntry from "../models/RestockingEntry.js";
 import SalesOrder from "../models/SalesOrder.js";
 
 const { ObjectId } = mongoose.Types;
@@ -339,6 +341,196 @@ router.put("/product/:productId/settings", async (req, res) => {
       success: false,
       message: "Error updating settings"
     });
+  }
+});
+
+// ============ RESTOCKING/RECYCLING ENTRY ENDPOINTS ============
+
+// GET - Products below minimum stock threshold
+router.get("/restocking/products-below-threshold", async (req, res) => {
+  try {
+    const { branchId } = req.query;
+
+    // Find products below minStockQty
+    const products = await Product.find({
+      branchId,
+      $expr: { $lt: ["$totalQty", "$minStockQty"] },
+    })
+      .select("name totalQty minStockQty maxStockQty preferredVendor purchasingPrice")
+      .lean();
+
+    // Add restocking recommendation
+    const productsWithRecommendations = products.map((product) => ({
+      ...product,
+      restockingQty: Math.max(0, (product.maxStockQty || 50) - (product.totalQty || 0)),
+    }));
+
+    res.json(productsWithRecommendations);
+  } catch (error) {
+    console.error("Error fetching products below threshold:", error);
+    res.status(500).json({ message: "Failed to fetch products" });
+  }
+});
+
+// POST - Create restocking entry and auto-generate PO
+router.post("/restocking/restock", async (req, res) => {
+  try {
+    const { branchId, productId, vendor, notes } = req.body;
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const product = await Product.findById(productId).session(session);
+      if (!product) {
+        await session.abortTransaction();
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      const branch = await Branch.findById(branchId).session(session);
+
+      // Calculate restocking quantity
+      const restockingQty = Math.max(0, (product.maxStockQty || 50) - (product.totalQty || 0));
+
+      // Create restocking entry
+      const restockingEntry = new RestockingEntry({
+        branchId,
+        productId,
+        productName: product.name,
+        currentQty: product.totalQty,
+        minStockQty: product.minStockQty,
+        maxStockQty: product.maxStockQty,
+        restockingQty,
+        vendor: vendor || product.preferredVendor,
+        purchasingPrice: product.purchasingPrice,
+        status: "INITIATED",
+        notes,
+      });
+
+      await restockingEntry.save({ session });
+
+      // Auto-generate Purchase Order
+      const poCount = await PurchaseOrder.countDocuments({
+        branchId,
+      }).session(session);
+
+      const financialYear = new Date().getFullYear() + "-" + (new Date().getFullYear() + 1);
+      const poNumber = `PO-${branch.code || "MAIN"}-${String(poCount + 1).padStart(4, "0")}-${financialYear}`;
+
+      const purchaseOrder = new PurchaseOrder({
+        branchId,
+        invoiceId: poNumber,
+        vendor: vendor || product.preferredVendor,
+        warehouse: product.warehouse?.name || "Default",
+        items: [
+          {
+            productId: product._id,
+            name: product.name,
+            productGroup: product.productGroup,
+            qty: restockingQty,
+            purchasePrice: product.purchasingPrice,
+            sellingPrice: product.sellingPrice,
+            rowPrice: restockingQty * product.purchasingPrice,
+            hsn: product.hsnCode,
+            gst: product.gst,
+            cgst: product.gst / 2,
+            sgst: product.gst / 2,
+            igst: false,
+            total: restockingQty * product.purchasingPrice * (1 + product.gst / 100),
+          },
+        ],
+        subtotal: restockingQty * product.purchasingPrice,
+        totalTax: Math.round(restockingQty * product.purchasingPrice * (product.gst / 100)),
+        transportCharge: 0,
+        grandTotal: Math.round(
+          restockingQty * product.purchasingPrice * (1 + product.gst / 100)
+        ),
+        status: "PLACED",
+        voucherType: branch.voucherType || "default",
+        financialYear,
+      });
+
+      await purchaseOrder.save({ session });
+
+      // Update restocking entry with PO info
+      restockingEntry.purchaseOrderId = purchaseOrder._id;
+      restockingEntry.purchaseOrderNumber = poNumber;
+      restockingEntry.status = "PO_CREATED";
+      await restockingEntry.save({ session });
+
+      await session.commitTransaction();
+
+      res.json({
+        success: true,
+        message: "Restocking entry created & PO generated",
+        restockingEntry,
+        purchaseOrder: {
+          _id: purchaseOrder._id,
+          invoiceId: purchaseOrder.invoiceId,
+          grandTotal: purchaseOrder.grandTotal,
+        },
+      });
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+  } catch (error) {
+    console.error("Error creating restocking entry:", error);
+    res.status(500).json({ message: "Failed to create restocking entry" });
+  }
+});
+
+// GET - List restocking entries for branch
+router.get("/restocking/entries", async (req, res) => {
+  try {
+    const { branchId, status } = req.query;
+
+    const query = { branchId };
+    if (status) query.status = status;
+
+    const entries = await RestockingEntry.find(query)
+      .populate("productId", "name totalQty")
+      .populate("purchaseOrderId", "invoiceId grandTotal status")
+      .sort({ createdAt: -1 });
+
+    res.json(entries);
+  } catch (error) {
+    console.error("Error fetching restocking entries:", error);
+    res.status(500).json({ message: "Failed to fetch restocking entries" });
+  }
+});
+
+// PUT - Mark restocking as received
+router.put("/restocking/entries/:restockingEntryId/received", async (req, res) => {
+  try {
+    const { restockingEntryId } = req.params;
+
+    const entry = await RestockingEntry.findByIdAndUpdate(
+      restockingEntryId,
+      {
+        status: "RECEIVED",
+        processedAt: new Date(),
+      },
+      { new: true }
+    ).populate("productId");
+
+    // Update product totalQty to reflect received stock
+    if (entry.productId) {
+      await Product.findByIdAndUpdate(entry.productId._id, {
+        $inc: { totalQty: entry.restockingQty },
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Restocking marked as received",
+      entry,
+    });
+  } catch (error) {
+    console.error("Error marking restocking as received:", error);
+    res.status(500).json({ message: "Failed to update restocking status" });
   }
 });
 

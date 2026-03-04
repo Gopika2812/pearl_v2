@@ -5,6 +5,7 @@ import { API_BASE } from "../api";
 const CustomerSummary = () => {
   const [customers, setCustomers] = useState([]);
   const [salesOwners, setSalesOwners] = useState([]);
+  const [customerGroups, setCustomerGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editingCustomer, setEditingCustomer] = useState(null);
@@ -88,9 +89,24 @@ const CustomerSummary = () => {
     }
   };
 
+  // Fetch customer groups
+  const fetchCustomerGroups = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/customer-groups`);
+      const data = await response.json();
+
+      if (data.success) {
+        setCustomerGroups(data.data);
+      }
+    } catch (err) {
+      console.error("Fetch customer groups error:", err);
+    }
+  };
+
   useEffect(() => {
     fetchCustomers();
     fetchSalesOwners();
+    fetchCustomerGroups();
   }, []);
 
   // Force refresh after a short delay to ensure data is fresh
@@ -105,6 +121,7 @@ const CustomerSummary = () => {
   const handleEdit = (customer) => {
     setEditingCustomer(customer);
     const salesOwnerId = typeof customer.salesOwner === 'object' ? customer.salesOwner?._id : customer.salesOwner;
+    const customerGroupId = typeof customer.customerGroup === 'object' ? customer.customerGroup?._id : customer.customerGroup;
     setEditFormData({
       name: customer.name,
       whatsapp: customer.whatsapp,
@@ -118,6 +135,7 @@ const CustomerSummary = () => {
       closingBalance: customer.closingBalance,
       margin: customer.margin,
       salesOwner: salesOwnerId || "",
+      customerGroup: customerGroupId || "",
       accountHolder: customer.accountHolder,
       accountNumber: customer.accountNumber,
       ifsc: customer.ifsc,
@@ -907,6 +925,25 @@ const CustomerSummary = () => {
                     {salesOwners.map((owner) => (
                       <option key={owner._id} value={owner._id}>
                         {owner.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-gray-600 mb-1 block">
+                    Customer Group
+                  </label>
+                  <select
+                    value={editFormData.customerGroup || ""}
+                    onChange={(e) =>
+                      setEditFormData({ ...editFormData, customerGroup: e.target.value })
+                    }
+                    className="w-full p-2 border rounded-lg outline-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">-- Select Customer Group --</option>
+                    {customerGroups.map((group) => (
+                      <option key={group._id} value={group._id}>
+                        {group.name}
                       </option>
                     ))}
                   </select>

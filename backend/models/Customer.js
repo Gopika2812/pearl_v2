@@ -14,14 +14,31 @@ const customerSchema = new mongoose.Schema(
     address: { type: String, default: "" },
     district: { type: String, default: "" },
     state: { type: String, default: "" },
-    pincode: { type: String, default: "" },
     country: { type: String, default: "India" },
+    pincode: { type: String, default: "" },
+    
+    // Tax & Registration
+    registrationType: { type: String, enum: ["regular", "unregistered"], default: "regular" },
     gstin: { type: String, default: "" },
     
-    closingBalance: { type: Number, default: 0 },
+    // Multiple Categories and Groups
+    customerCategories: [
+      { type: mongoose.Schema.Types.ObjectId, ref: "CustomerCategory" }
+    ],
+    customerGroups: [
+      { type: mongoose.Schema.Types.ObjectId, ref: "CustomerGroup" }
+    ],
+    
+    // Business Details
     margin: { type: Number, default: 0 }, // Can be positive or negative
+    credit: { type: Number, default: 0 },
+    debit: { type: Number, default: 0 },
     salesOwner: { type: mongoose.Schema.Types.ObjectId, ref: "SalesOwner", default: null, index: true },
+    
+    // Legacy field - kept for backward compatibility
+    closingBalance: { type: Number, default: 0 },
     customerCategory: { type: mongoose.Schema.Types.ObjectId, ref: "CustomerCategory", default: null },
+    customerGroup: { type: mongoose.Schema.Types.ObjectId, ref: "CustomerGroup", default: null },
 
     // Bank Details
     accountHolder: { type: String, default: "" },
@@ -33,7 +50,7 @@ const customerSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Create composite unique index: branchId + name (or branchId + email/whatsapp combination)
+// Create composite unique index: branchId + name
 customerSchema.index({ branchId: 1, name: 1 }, { unique: true });
 
 const Customer = mongoose.model("Customer", customerSchema);

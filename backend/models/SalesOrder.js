@@ -7,6 +7,12 @@ const salesOrderSchema = new mongoose.Schema(
     voucherType: { type: String, required: true }, // zone1
     orderType: { type: String, default: "SO" },
 
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      required: true,
+    },
+
     warehouse: String,
     billingPerson: String,
     agent: String,
@@ -140,6 +146,24 @@ const salesOrderSchema = new mongoose.Schema(
     customerMargin: Number,
     marginAmount: Number,
     grandTotalWithMargin: Number,
+
+    // Extra Expenses for Sales Order
+    extraExpenses: [
+      {
+        expenseId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "ExtraExpense",
+        },
+        expenseName: String,
+        basePrice: Number,
+        days: Number,
+        totalPrice: Number, // basePrice * days
+      },
+    ],
+    extraExpenseAmount: {
+      type: Number,
+      default: 0, // Total of all extra expenses
+    },
 
     ewayEnabled: Boolean,
     ewayDetails: Object,

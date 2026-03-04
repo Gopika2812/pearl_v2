@@ -3,6 +3,7 @@ import { FaPlus, FaTrash } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { API_BASE } from "../../api";
+import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 
 const InventoryPurchaseOrderEntry = ({
@@ -14,9 +15,12 @@ const InventoryPurchaseOrderEntry = ({
   productGroups,
   salesOwners = [],
   salesMen = [],
-  deliveryMen = []
+  deliveryMen = [],
+  customerGroups = [],
+  onPOSaved = () => {}
 }) => {
   const { warehouses } = useInventory();
+  const { currentBranch } = useBranch();
 
   // Header State
   const [voucherType, setVoucherType] = useState("");
@@ -204,11 +208,12 @@ const InventoryPurchaseOrderEntry = ({
 
   // Fetch next invoice ID from backend
   useEffect(() => {
-    if (!voucherType) return setInvoiceId("");
+    if (!voucherType || !currentBranch) return setInvoiceId("");
     const fetchNextInvoice = async () => {
       try {
+        const branchId = currentBranch?._id || currentBranch?.id;
         const res = await fetch(
-          `${API_BASE}/purchase-orders/next-invoice/${voucherType}`
+          `${API_BASE}/purchase-orders/next-invoice/${voucherType}?branchId=${branchId}`
         );
         const data = await res.json();
         if (res.ok) setInvoiceId(data.nextInvoiceId);
@@ -217,7 +222,7 @@ const InventoryPurchaseOrderEntry = ({
       }
     };
     fetchNextInvoice();
-  }, [voucherType]);
+  }, [voucherType, currentBranch]);
 
   // Place Purchase Order
   const handleFinalAction = async () => {
@@ -228,6 +233,7 @@ const InventoryPurchaseOrderEntry = ({
     if (items.length === 0) return toast.error("Add at least one product!");
 
     const orderData = {
+      branchId: currentBranch?._id || currentBranch?.id,
       voucherType,
       vendor,
       warehouse,
@@ -253,6 +259,8 @@ const InventoryPurchaseOrderEntry = ({
       toast.success("Purchase Order placed successfully!");
       setInvoiceId(data.order.invoiceId);
       setItems([]);
+      // Call parent callback to refresh records
+      onPOSaved();
     } catch (err) {
       console.error(err);
       toast.error("Something went wrong!");

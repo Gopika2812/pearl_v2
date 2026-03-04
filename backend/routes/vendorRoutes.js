@@ -1,14 +1,157 @@
 import express from "express";
 import mongoose from "mongoose";
+import multer from "multer";
+import XLSX from "xlsx";
 import Vendor from "../models/Vendor.js";
 
 const router = express.Router();
+
+// Configure multer with 50MB limit for bulk uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
+
+// ✅ BULK UPLOAD Vendors from Excel
+router.post("/bulk-upload", upload.single("file"), async (req, res) => {
+  console.log("🔥 VENDOR BULK UPLOAD HIT");
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Excel file required" });
+    }
+
+    const { branchId } = req.body;
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+
+    console.log("📄 TOTAL ROWS:", rows.length);
+    console.log("📄 FIRST ROW RAW:", rows[0]);
+    
+    // Debug: Show normalized column names
+    if (rows[0]) {
+      const normalizedKeys = Object.keys(Object.fromEntries(
+        Object.entries(rows[0]).map(([k, v]) => [
+          k.replace(/[\s"\n\r]+/g, "").toLowerCase(),
+          String(v || "").trim(),
+        ])
+      ));
+      console.log("📄 NORMALIZED KEYS:", normalizedKeys);
+    }
+
+    const existingVendors = await Vendor.find({ branchId }, { name: 1 });
+    const existingNames = new Set(
+      existingVendors.map(v => v.name.toLowerCase())
+    );
+
+    let vendorsToBulkInsert = [];
+    let skipped = [];
+
+// 🔄 First pass: Validate and collect all valid records
+    for (const row of rows) {
+      const normalized = Object.fromEntries(
+        Object.entries(row).map(([k, v]) => [
+          k.replace(/[\s"\n\r]+/g, "").toLowerCase(),
+          String(v || "").trim(),
+        ])
+      );
+
+      // Try to find vendor name from multiple possible column names
+      const name = normalized.vendorname || normalized.suppliers || normalized.suppliername || "";
+      const phone = String(normalized.phone || "").trim();
+      const email = normalized.email || "";
+      const address = normalized.address || "";
+      const stateName = normalized.statename || normalized.state || "";
+      const gstRegistrationType = (normalized.gstregistrationtype || normalized.gstregistrationtype || "Regular").toLowerCase().includes("unreg") ? "Unregistered/Consumer" : "Regular";
+      // Try to find GSTIN from multiple possible column names (including the slash version)
+      const gstin = normalized.gstin || normalized.gstin_uin || normalized.gstinuin || normalized["gstin/uin"] || "";
+      const debit = parseFloat(normalized.debit) || 0;
+      const credit = parseFloat(normalized.credit) || 0;
+
+      // ❌ Validation checks
+      if (!name) {
+        skipped.push({ row, reason: "Missing vendor name" });
+        continue;
+      }
+
+      console.log(`✅ Processing vendor: "${name}" | State: "${stateName}" | GST: "${gstin}"`);
+
+      // Check if vendor already exists (case-insensitive)
+      if (existingNames.has(name.toLowerCase())) {
+        skipped.push({ row: name, reason: "Vendor already exists in this branch" });
+        console.log(`⚠️  Skipped: "${name}" - Already exists`);
+        continue;
+      }
+
+      // ✅ Valid record - add to bulk insert list
+      vendorsToBulkInsert.push({
+        branchId: new mongoose.Types.ObjectId(branchId),
+        name,
+        phone: phone || undefined,
+        email: email || undefined,
+        address: address || undefined,
+        stateName: stateName || undefined,
+        gstRegistrationType,
+        gstin: gstin || undefined,
+        debit,
+        credit,
+        isActive: true,
+      });
+
+      // Add to existing names to prevent duplicates in same batch
+      existingNames.add(name.toLowerCase());
+    }
+
+    // 🔄 Second pass: Bulk insert all valid records
+    let insertedCount = 0;
+    if (vendorsToBulkInsert.length > 0) {
+      console.log(`🔄 Attempting to insert ${vendorsToBulkInsert.length} vendors...`);
+      console.log("📦 First vendor to insert:", JSON.stringify(vendorsToBulkInsert[0], null, 2));
+      try {
+        const result = await Vendor.insertMany(vendorsToBulkInsert, { ordered: false });
+        insertedCount = result.length;
+        console.log(`✅ Successfully inserted ${insertedCount} vendors`);
+        console.log("Inserted IDs:", result.map(doc => doc._id));
+      } catch (err) {
+        // Handle duplicate errors gracefully (with ordered: false, some might insert before error)
+        console.error("Bulk insert error:", err.message);
+        if (err.insertedDocs && err.insertedDocs.length > 0) {
+          insertedCount = err.insertedDocs.length;
+          console.log(`⚠️  Partially inserted ${insertedCount} vendors before error`);
+        } else {
+          console.error("❌ No vendors inserted. Error details:", err.code, err.keyPattern);
+        }
+      }
+    } else {
+      console.log(`⚠️  No vendors to insert (all skipped)`);
+    }
+
+    console.log(`\n📊 UPLOAD SUMMARY:\n   ✅ Inserted: ${insertedCount}\n   ⚠️  Skipped: ${skipped.length}`);
+    console.log("Skipped reasons:", skipped.map(s => `${s.row} - ${s.reason}`).join(", "));
+
+    res.status(201).json({
+      message: "Bulk vendor upload completed",
+      insertedCount,
+      skippedCount: skipped.length,
+      skipped,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("Bulk upload error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
 
 // ✅ CREATE vendor
 router.post("/", async (req, res) => {
    console.log("POST /api/vendors", req.body);
   try {
-    const { name, phone, email, address, gstin, branchId } = req.body;
+    const { name, phone, email, address, stateName, gstRegistrationType, gstin, debit, credit, branchId } = req.body;
 
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
@@ -25,7 +168,11 @@ router.post("/", async (req, res) => {
       phone,
       email,
       address,
+      stateName,
+      gstRegistrationType,
       gstin,
+      debit: debit || 0,
+      credit: credit || 0,
       isActive: true,
     });
 
@@ -66,7 +213,7 @@ router.get("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, phone, email, address, gstin, isActive } = req.body;
+    const { name, phone, email, address, stateName, gstRegistrationType, gstin, debit, credit, isActive } = req.body;
 
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -83,7 +230,11 @@ router.put("/:id", async (req, res) => {
         phone,
         email,
         address,
+        stateName,
+        gstRegistrationType,
         gstin,
+        debit,
+        credit,
         isActive,
       },
       { new: true }

@@ -55,19 +55,22 @@ router.get("/next-invoice/:voucherType", async (req, res) => {
 // GET ALL PURCHASE ORDERS
 router.get("/", async (req, res) => {
   try {
-    console.log("🔍 GET /api/purchase-orders - Fetching all POs...");
-    const orders = await PurchaseOrder.find().sort({ createdAt: -1 });
-    console.log(`✅ Found ${orders.length} purchase orders`);
-    console.log("📦 POs:", orders);
+    const { branchId } = req.query;
+    const query = {};
     
-    res.json({
-      success: true,
-      data: orders,
-    });
+    // Filter by branchId if provided
+    if (branchId) {
+      query.branchId = branchId;
+    }
+    
+    console.log("🔍 GET /api/purchase-orders - Fetching POs with query:", query);
+    const orders = await PurchaseOrder.find(query).sort({ createdAt: -1 });
+    console.log(`✅ Found ${orders.length} purchase orders`);
+    
+    res.json(orders);
   } catch (err) {
     console.error("❌ Get POs error:", err);
     res.status(500).json({ 
-      success: false,
       message: err.message 
     });
   }
@@ -221,6 +224,68 @@ router.get("/items", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to load stock" });
+  }
+});
+
+// DELETE PURCHASE ORDER
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const purchaseOrder = await PurchaseOrder.findByIdAndDelete(id);
+
+    if (!purchaseOrder) {
+      return res.status(404).json({ message: "Purchase Order not found" });
+    }
+
+    // Reverse inventory updates if PO was PLACED
+    if (purchaseOrder.status === "PLACED") {
+      for (const item of purchaseOrder.items) {
+        try {
+          const product = await Product.findByIdAndUpdate(
+            item.productId,
+            { $inc: { totalQty: -item.qty } },
+            { new: true }
+          );
+          if (product) {
+            console.log(
+              `✅ Product "${product.name}" inventory reversed: -${item.qty} units`
+            );
+          }
+        } catch (err) {
+          console.error(`⚠️ Failed to reverse product ${item.productId}:`, err.message);
+        }
+      }
+
+      // Reverse vendor AP balance update
+      if (purchaseOrder.vendor) {
+        try {
+          const vendorId = purchaseOrder.vendor.id || purchaseOrder.vendor;
+          const grandTotal = purchaseOrder.grandTotal || 0;
+          await Vendor.findByIdAndUpdate(
+            vendorId,
+            { $inc: { closingBalance: -grandTotal } },
+            { new: true }
+          );
+          console.log(
+            `✅ Vendor AP balance reversed: -₹${grandTotal}`
+          );
+        } catch (err) {
+          console.warn(`⚠️ Failed to reverse vendor balance:`, err.message);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: "Purchase Order deleted successfully",
+    });
+  } catch (err) {
+    console.error("Delete PO error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 });
 

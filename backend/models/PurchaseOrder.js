@@ -26,6 +26,12 @@ const PurchaseItemSchema = new mongoose.Schema({
 
 const PurchaseOrderSchema = new mongoose.Schema(
   {
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      required: true,
+    },
+
     invoiceId: {
       type: String,
       required: true,
@@ -33,6 +39,7 @@ const PurchaseOrderSchema = new mongoose.Schema(
     },
 
     voucherType: String,
+    financialYear: String,
 
     vendor: String,
     warehouse: String,

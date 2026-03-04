@@ -9,18 +9,22 @@ The Excel sheet must have these column headers in the **first row**:
 | Column Name | Data Type | Required | Description | Example |
 |---|---|---|---|---|
 | **CustomerName** | Text | ✅ Yes | Customer's full name (must be unique per branch) | Rajesh Kumar |
-| **WhatsApp** | Text | ❌ Optional | WhatsApp phone number (can be unique if provided) | 9876543210 |
+| **WhatsApp** | Text | ❌ Optional | WhatsApp phone number | 9876543210 |
 | **Email** | Text | ❌ Optional | Customer's email address | rajesh@example.com |
 | **Address** | Text | ❌ Optional | Complete address | 123 Main Street, Downtown |
 | **District** | Text | ❌ Optional | District/City name | Mumbai |
 | **State** | Text | ❌ Optional | State/Province name | Maharashtra |
+| **Country** | Text | ❌ Optional | Country name | India |
 | **Pincode** | Text | ❌ Optional | Postal/ZIP code | 400001 |
+| **RegistrationType** | Text | ❌ Optional | regular or unregistered | regular |
 | **GSTIN** | Text | ❌ Optional | Goods and Services Tax Identification Number | 27AABCD1234H1Z0 |
-| **CustomerCategory** | Text | ❌ Optional | Customer category (must exist in system) | Retail |
+| **CustomerCategories** | Text | ❌ Optional | Comma-separated category names (must exist in system) | Retail,Wholesale |
+| **CustomerGroups** | Text | ❌ Optional | Comma-separated group names (must exist in system) | Premium Customers,VIP |
 | **SalesOwner** | Text | ❌ Optional | Sales owner name (must exist in system) | John Smith |
-| **Margin** | Number | ❌ Optional | Profit margin as percentage (can be positive or negative) | 15.5 |
-| **ClosingBalance** | Number | ❌ Optional | Customer's account closing balance | 5000.00 |
-| **AccountHolderName** | Text | ❌ Optional | Bank account holder's name | Rajesh Kumar |
+| **Margin** | Number | ❌ Optional | Profit margin as percentage (positive/negative) | 15.5 |
+| **Credit** | Number | ❌ Optional | Credit amount for customer account | 10000.00 |
+| **Debit** | Number | ❌ Optional | Debit amount for customer account | 5000.00 |
+| **AccountHolder** | Text | ❌ Optional | Bank account holder's name | Rajesh Kumar |
 | **AccountNumber** | Text | ❌ Optional | Bank account number | 1234567890123456 |
 | **IFSC** | Text | ❌ Optional | IFSC code for bank | ABCD0001234 |
 | **Branch** | Text | ❌ Optional | Bank branch name | Mumbai Main Branch |
@@ -32,25 +36,32 @@ The Excel sheet must have these column headers in the **first row**:
 - **CustomerName**: Must be unique per branch
 
 ### Optional Fields
-- **WhatsApp**: Phone number (no requirement on uniqueness if left blank)
-- **Email**: Can be empty
-- **Address**: Can be left blank
-- **District, State, Pincode**: Location details (can be empty)
-- **GSTIN**: GST number (can be empty)
-- **CustomerCategory**: Must exist in system if provided (case-insensitive)
+- **WhatsApp**: Phone number (optional)
+- **Email**: Email address (optional)
+- **Address**: Physical address (optional)
+- **District, State, Country, Pincode**: Location details (optional)
+- **RegistrationType**: Either "regular" or "unregistered" (default: regular)
+- **GSTIN**: GST identification number (optional)
+- **CustomerCategories**: Multiple categories separated by commas. All must exist in system  
+  Example: `Retail,Wholesale,E-commerce`
+- **CustomerGroups**: Multiple groups separated by commas. All must exist in system  
+  Example: `Premium Customers,VIP,Preferred`
 - **SalesOwner**: Must exist in system if provided (case-insensitive)
-- **Margin**: Can be positive, negative, or zero. Example: 15.5, -5, 0
-- **ClosingBalance**: Account balance (can be 0)
-- **AccountHolderName**: Bank account holder name (can be empty)
-- **AccountNumber**: Valid bank account number (can be empty)
-- **IFSC**: Bank IFSC code (can be empty)
-- **Branch**: Bank branch name (can be empty)
-- **UPI**: Digital payment address (can be empty)
+- **Margin**: Can be positive, negative, or zero  
+  Example: `15.5`, `-5`, `0`
+- **Credit**: Account credit amount (can be 0)
+- **Debit**: Account debit amount (can be 0)
+- **AccountHolder**: Bank account holder name (optional)
+- **AccountNumber**: Valid bank account number (optional)
+- **IFSC**: Bank IFSC code (optional)
+- **Branch**: Bank branch name (optional)
+- **UPI**: Digital payment address (optional)
 
-### Customer Category & Sales Owner Lookup
+### Customer Category, Customer Group & Sales Owner Lookup
 - **CustomerCategory**: System will lookup by name (case-insensitive). If the category doesn't exist, the row will be skipped.
+- **CustomerGroup**: System will lookup by name (case-insensitive). If the group doesn't exist, the row will be skipped.
 - **SalesOwner**: System will lookup by name (case-insensitive). If the sales owner doesn't exist, the row will be skipped.
-- Both fields are **optional** - leave blank if not assigning to any category or owner.
+- All three fields are **optional** - leave blank if not assigning to any category, group, or owner.
 
 ### Duplicate Handling
 - **CustomerName** + Branch = Unique (cannot upload duplicate customer name in same branch)

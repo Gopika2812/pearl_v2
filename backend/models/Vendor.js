@@ -11,7 +11,11 @@ const vendorSchema = new mongoose.Schema(
     phone: { type: String },
     email: { type: String },
     address: { type: String },
+    stateName: { type: String },
+    gstRegistrationType: { type: String, enum: ["Regular", "Unregistered/Consumer"], default: "Regular" },
     gstin: { type: String },
+    debit: { type: Number, default: 0 },
+    credit: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }

@@ -16,6 +16,7 @@ export const InventoryProvider = ({ children }) => {
   const [warehouses, setWarehouses] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [customerCategories, setCustomerCategories] = useState([]);
+  const [customerGroups, setCustomerGroups] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [salesOwners, setSalesOwners] = useState([]);
   const [salesMen, setSalesMen] = useState([]);
@@ -36,6 +37,7 @@ export const InventoryProvider = ({ children }) => {
     fetchWarehouses();
     fetchCustomers();
     fetchCustomerCategories();
+    fetchCustomerGroups();
     fetchSalesOwners();
     fetchSalesMen();
     fetchDeliveryMen();
@@ -56,6 +58,10 @@ export const InventoryProvider = ({ children }) => {
 
   const addLocalCustomerCategory = (saved) => {
     setCustomerCategories(prev => [...prev, saved]);
+  };
+
+  const addLocalCustomerGroup = (saved) => {
+    setCustomerGroups(prev => [...prev, saved]);
   };
 
   const fetchVoucherTypes = async () => {
@@ -168,6 +174,35 @@ export const InventoryProvider = ({ children }) => {
     } catch (err) {
       console.error("❌ CustomerCategory fetch failed", err);
       setCustomerCategories([]);
+    }
+  };
+
+  const fetchCustomerGroups = async () => {
+    try {
+      const branchId = currentBranch?._id;
+      if (!branchId) {
+        console.log("⚠️ No branchId for fetchCustomerGroups");
+        return;
+      }
+      
+      console.log(`👥 Fetching CustomerGroups for branchId: ${branchId}`);
+      const res = await fetch(`${API_BASE}/customer-groups?branchId=${branchId}`);
+      
+      if (!res.ok) {
+        throw new Error(`API error: ${res.status} ${res.statusText}`);
+      }
+      
+      const data = await res.json();
+      console.log(`👥 CustomerGroups raw response:`, data);
+      console.log(`👥 Is array? ${Array.isArray(data)}`);
+      
+      const groupsData = Array.isArray(data) ? data : (data.data || []);
+      console.log(`👥 Processed groups: ${groupsData.length} items`, groupsData.map(g => ({ _id: g._id, name: g.name })));
+      
+      setCustomerGroups(groupsData);
+    } catch (err) {
+      console.error("❌ CustomerGroup fetch failed", err);
+      setCustomerGroups([]);
     }
   };
 
@@ -300,6 +335,7 @@ export const InventoryProvider = ({ children }) => {
       if (type === "group") url = `${API_BASE}/product-groups`;
       if (type === "category") url = `${API_BASE}/product-categories`;
       if (type === "customer_category") url = `${API_BASE}/customer-categories`;
+      if (type === "customer_group") url = `${API_BASE}/customer-groups`;
       if (type === "product") url = `${API_BASE}/products`;
       if (type === "warehouse") url = `${API_BASE}/warehouses`;
       if (type === "customer") url = `${API_BASE}/customers`;
@@ -328,6 +364,7 @@ export const InventoryProvider = ({ children }) => {
       if (type === "group") setProductGroups(prev => [...prev, saved.data || saved]);
       if (type === "category") setProductCategories(prev => [...prev, saved.data || saved]);
       if (type === "customer_category") setCustomerCategories(prev => [...prev, saved.data || saved]);
+      if (type === "customer_group") setCustomerGroups(prev => [...prev, saved.data || saved]);
       if (type === "product") setProducts(prev => [...prev, saved.data || saved]);
       if (type === "warehouse") setWarehouses(prev => [...prev, saved.data || saved]);
       if (type === "customer") setCustomers(prev => [...prev, saved.data || saved]);
@@ -340,14 +377,77 @@ export const InventoryProvider = ({ children }) => {
     }
   };
 
+  // 🔹 UPDATE DATA → CALL BACKEND + REFRESH STATE
+  const updateData = async (type, id, data) => {
+    try {
+      if (!id || !data || typeof data !== "object") {
+        throw new Error("Invalid id or data payload");
+      }
+
+      let url = "";
+
+      if (type === "voucher") url = `${API_BASE}/voucher-types/${id}`;
+      if (type === "vendor") url = `${API_BASE}/vendors/${id}`;
+      if (type === "group") url = `${API_BASE}/product-groups/${id}`;
+      if (type === "category") url = `${API_BASE}/product-categories/${id}`;
+      if (type === "customer_category") url = `${API_BASE}/customer-categories/${id}`;
+      if (type === "customer_group") url = `${API_BASE}/customer-groups/${id}`;
+      if (type === "product") url = `${API_BASE}/products/${id}`;
+      if (type === "warehouse") url = `${API_BASE}/warehouses/${id}`;
+      if (type === "customer") url = `${API_BASE}/customers/${id}`;
+      if (type === "sales_owner") url = `${API_BASE}/sales-owners/${id}`;
+      if (type === "sales_man") url = `${API_BASE}/sales-men/${id}`;
+      if (type === "delivery_man") url = `${API_BASE}/delivery-men/${id}`;
+
+      if (!url) {
+        console.warn("No API for type:", type);
+        return;
+      }
+
+      // Remove _id from data to avoid conflicts
+      const { _id, ...updatePayload } = data;
+
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatePayload),
+      });
+
+      const text = await res.text(); 
+      const updated = text ? JSON.parse(text) : {};
+
+      if (!res.ok) throw new Error(updated.message || "Update failed");
+
+      const updatedData = updated.data || updated;
+
+      if (type === "voucher") setVoucherTypes(prev => prev.map(item => item._id === id ? updatedData : item));
+      if (type === "vendor") setVendors(prev => prev.map(item => item._id === id ? updatedData : item));
+      if (type === "group") setProductGroups(prev => prev.map(item => item._id === id ? updatedData : item));
+      if (type === "category") setProductCategories(prev => prev.map(item => item._id === id ? updatedData : item));
+      if (type === "customer_category") setCustomerCategories(prev => prev.map(item => item._id === id ? updatedData : item));
+      if (type === "customer_group") setCustomerGroups(prev => prev.map(item => item._id === id ? updatedData : item));
+      if (type === "product") setProducts(prev => prev.map(item => item._id === id ? updatedData : item));
+      if (type === "warehouse") setWarehouses(prev => prev.map(item => item._id === id ? updatedData : item));
+      if (type === "customer") setCustomers(prev => prev.map(item => item._id === id ? updatedData : item));
+      if (type === "sales_owner") setSalesOwners(prev => prev.map(item => item._id === id ? updatedData : item));
+      if (type === "sales_man") setSalesMen(prev => prev.map(item => item._id === id ? updatedData : item));
+      if (type === "delivery_man") setDeliveryMen(prev => prev.map(item => item._id === id ? updatedData : item));
+
+      alert("Update successful!");
+    } catch (err) {
+      alert("Update failed: " + err.message);
+    }
+  };
+
+
 
   return (
     <InventoryContext.Provider
       value={{
-        voucherTypes, productGroups, productCategories, customerCategories, products, locations,
+        voucherTypes, productGroups, productCategories, customerCategories, customerGroups, products, locations,
         warehouses, customers, vendors, salesOwners, salesMen, deliveryMen, commissions,
         drafts, finalOrders, fetchWarehouses, fetchCustomers, fetchCommissions,
-        addData, addLocalVoucher, addLocalWarehouse, addLocalProductCategory, addLocalCustomerCategory, saveToDrafts, placeFinalOrder
+        addData, updateData, addLocalVoucher, addLocalWarehouse, addLocalProductCategory, addLocalCustomerCategory, addLocalCustomerGroup, saveToDrafts, placeFinalOrder
       }}
     >
       {children}

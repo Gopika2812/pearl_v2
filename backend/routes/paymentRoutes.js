@@ -1,5 +1,6 @@
 import express from "express";
 import Payment from "../models/Payment.js";
+import Vendor from "../models/Vendor.js";
 import VoucherType from "../models/VoucherType.js";
 
 const router = express.Router();
@@ -69,6 +70,26 @@ router.get("/", async (req, res) => {
       data: payments,
     });
   } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET PAYMENTS FOR SPECIFIC PO
+router.get("/po/:poId", async (req, res) => {
+  try {
+    const { poId } = req.params;
+
+    const payments = await Payment.find({
+      "purchaseOrder.poId": poId,
+      paymentType: "vendor_payment",
+    }).sort({ paymentDate: -1 });
+
+    res.json({
+      success: true,
+      data: payments || [],
+    });
+  } catch (err) {
+    console.error("Get PO payments error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
@@ -183,6 +204,23 @@ router.post("/", async (req, res) => {
     });
 
     await payment.save();
+
+    // ✅ UPDATE VENDOR CREDIT (for vendor payments)
+    if (paymentType === "vendor_payment" && vendor) {
+      try {
+        const vendorId = vendor.vendorId || null;
+        if (vendorId) {
+          const vendorRecord = await Vendor.findByIdAndUpdate(
+            vendorId,
+            { $inc: { credit: Math.round(Number(amount) || 0) } },
+            { new: true }
+          );
+          console.log(`✅ Vendor "${vendorRecord?.name}" credit updated: +₹${amount}`);
+        }
+      } catch (err) {
+        console.warn(`⚠️ Failed to update vendor credit:`, err.message);
+      }
+    }
 
     res.status(201).json({
       success: true,

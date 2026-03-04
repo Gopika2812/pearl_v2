@@ -209,6 +209,7 @@ const ProductSummary = () => {
       perQty: product.perQty,
       units: product.units,
       totalQty: product.totalQty,
+      totalQtyUnit: product.totalQtyUnit || "",
       purchasingPrice: product.purchasingPrice || 0,
       sellingPrice: product.sellingPrice || 0,
       margin: calculatedMargin || 0,
@@ -1025,6 +1026,24 @@ const ProductSummary = () => {
                     setEditFormData({
                       ...editFormData,
                       totalQty: parseFloat(e.target.value),
+                    })
+                  }
+                  className="w-full p-2 border rounded-lg outline-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-bold text-gray-600 mb-1 block">
+                  Total Qty Unit
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., kg, liter, box"
+                  value={editFormData.totalQtyUnit || ""}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      totalQtyUnit: e.target.value,
                     })
                   }
                   className="w-full p-2 border rounded-lg outline-blue-500 focus:ring-1 focus:ring-blue-500"

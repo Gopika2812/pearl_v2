@@ -3,6 +3,7 @@ import multer from "multer";
 import XLSX from "xlsx";
 import Customer from "../models/Customer.js";
 import CustomerCategory from "../models/CustomerCategory.js";
+import CustomerGroup from "../models/CustomerGroup.js";
 import SalesOwner from "../models/SalesOwner.js";
 
 const router = express.Router();
@@ -47,6 +48,11 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       allCustomerCategories.map(cat => [cat.name.toLowerCase(), cat._id])
     );
 
+    const allCustomerGroups = await CustomerGroup.find({});
+    const customerGroupMap = new Map(
+      allCustomerGroups.map(group => [group.name.toLowerCase(), group._id])
+    );
+
     const existingCustomers = await Customer.find({}, { name: 1 });
     const existingNames = new Set(
       existingCustomers.map(c => c.name.toLowerCase())
@@ -70,30 +76,32 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const address = normalized.address || "";
       const district = normalized.district || "";
       const state = normalized.state || "";
-      const pincode = normalized.pincode || "";
       const country = normalized.country || "India";
+      const pincode = normalized.pincode || "";
+      const registrationType = (normalized.registrationtype || "regular").toLowerCase();
       const gstin = normalized.gstin || "";
       const salesOwnerName = normalized.salesowner || "";
-      const customerCategoryName = normalized.customercategory || "";
       const margin = parseFloat(normalized.margin) || 0;
-      const closingBalance = parseFloat(normalized.closingbalance) || 0;
+      const credit = parseFloat(normalized.credit) || 0;
+      const debit = parseFloat(normalized.debit) || 0;
+
+      // Parse comma-separated categories and groups
+      const customerCategoryNames = (normalized.customercategories || "")
+        .split(",")
+        .map(c => c.trim().toLowerCase())
+        .filter(c => c);
+      
+      const customerGroupNames = (normalized.customergroups || "")
+        .split(",")
+        .map(g => g.trim().toLowerCase())
+        .filter(g => g);
 
       // Bank Details
-      const accountHolder = normalized.accountholdername || "";
+      const accountHolder = normalized.accountholder || "";
       const accountNumber = normalized.accountnumber || "";
       const ifsc = normalized.ifsc || "";
       const branch = normalized.branch || "";
       const upi = normalized.upi || "";
-
-      // 💰 Parse "358062.12 Dr" if totalbalance exists
-      let totalBalance = 0;
-      let balanceType = "Dr";
-
-      if (normalized.totalbalance) {
-        const parts = normalized.totalbalance.split(" ");
-        totalBalance = parseFloat(parts[0]) || 0;
-        balanceType = parts[1] || "Dr";
-      }
 
       // ❌ Validation checks
       if (!name) {
@@ -117,14 +125,26 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         }
       }
 
-      // Lookup CustomerCategory ID from map (optional)
-      let customerCategoryId = null;
-      if (customerCategoryName) {
-        customerCategoryId = customerCategoryMap.get(customerCategoryName.toLowerCase());
-        if (!customerCategoryId) {
-          skipped.push({ row, reason: `Customer Category "${customerCategoryName}" not found` });
+      // Lookup CustomerCategory IDs from map (optional, multiple)
+      let customerCategoryIds = [];
+      for (const categoryName of customerCategoryNames) {
+        const categoryId = customerCategoryMap.get(categoryName);
+        if (!categoryId) {
+          skipped.push({ row, reason: `Customer Category "${categoryName}" not found` });
           continue;
         }
+        customerCategoryIds.push(categoryId);
+      }
+
+      // Lookup CustomerGroup IDs from map (optional, multiple)
+      let customerGroupIds = [];
+      for (const groupName of customerGroupNames) {
+        const groupId = customerGroupMap.get(groupName);
+        if (!groupId) {
+          skipped.push({ row, reason: `Customer Group "${groupName}" not found` });
+          continue;
+        }
+        customerGroupIds.push(groupId);
       }
 
       // ✅ Valid record - add to bulk insert list
@@ -136,15 +156,16 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         address,
         district,
         state,
-        pincode,
         country,
+        pincode,
+        registrationType: (registrationType === "unregistered" ? "unregistered" : "regular"),
         gstin,
-        totalBalance: Math.round(totalBalance),
-        balanceType,
-        closingBalance: Math.round(closingBalance),
-        margin: Math.round(margin),
+        margin: Math.round(margin * 100) / 100,
+        credit: Math.round(credit),
+        debit: Math.round(debit),
         salesOwner: salesOwnerId,
-        customerCategory: customerCategoryId,
+        customerCategories: customerCategoryIds,
+        customerGroups: customerGroupIds,
         accountHolder,
         accountNumber,
         ifsc,
@@ -208,7 +229,8 @@ router.get("/", async (req, res) => {
     // ⚡ Fetch paginated results with lean() for faster performance
     const customers = await Customer.find(filter)
       .populate('salesOwner', '_id name phone role')
-      .populate('customerCategory', '_id name')
+      .populate('customerCategories', '_id name')
+      .populate('customerGroups', '_id name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(pageSize)
@@ -246,12 +268,16 @@ router.post("/", async (req, res) => {
       address,
       district,
       state,
+      country,
       pincode,
+      registrationType,
       gstin,
-      closingBalance,
       margin,
+      credit,
+      debit,
       salesOwner,
-      customerCategory,
+      customerCategories,
+      customerGroups,
       accountHolder,
       accountNumber,
       ifsc,
@@ -287,12 +313,16 @@ router.post("/", async (req, res) => {
       address,
       district,
       state,
+      country: country || "India",
       pincode,
+      registrationType: registrationType === "unregistered" ? "unregistered" : "regular",
       gstin,
-      closingBalance: Math.round(Number(closingBalance) || 0),
-      margin: Math.round(Number(margin) || 0),
+      margin: Math.round(Number(margin) * 100) / 100 || 0,
+      credit: Math.round(Number(credit)) || 0,
+      debit: Math.round(Number(debit)) || 0,
       salesOwner,
-      customerCategory,
+      customerCategories: Array.isArray(customerCategories) ? customerCategories : [],
+      customerGroups: Array.isArray(customerGroups) ? customerGroups : [],
       accountHolder,
       accountNumber,
       ifsc,
@@ -330,16 +360,40 @@ router.put("/:id", async (req, res) => {
       updates.closingBalance = Math.round(Number(updates.closingBalance));
     }
     if (updates.margin !== undefined) {
-      updates.margin = Math.round(Number(updates.margin));
+      updates.margin = Math.round(Number(updates.margin) * 100) / 100;
     }
     if (updates.totalBalance !== undefined) {
       updates.totalBalance = Math.round(Number(updates.totalBalance));
+    }
+    if (updates.credit !== undefined) {
+      updates.credit = Math.round(Number(updates.credit));
+    }
+    if (updates.debit !== undefined) {
+      updates.debit = Math.round(Number(updates.debit));
+    }
+
+    // Validate registrationType if provided
+    if (updates.registrationType && !["regular", "unregistered"].includes(updates.registrationType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid registrationType. Must be 'regular' or 'unregistered'",
+      });
+    }
+
+    // Ensure arrays stay as arrays
+    if (updates.customerCategories && !Array.isArray(updates.customerCategories)) {
+      updates.customerCategories = [updates.customerCategories];
+    }
+    if (updates.customerGroups && !Array.isArray(updates.customerGroups)) {
+      updates.customerGroups = [updates.customerGroups];
     }
 
     const customer = await Customer.findByIdAndUpdate(id, updates, {
       new: true,
       runValidators: true,
-    });
+    })
+      .populate('customerCategories', '_id name')
+      .populate('customerGroups', '_id name');
 
     if (!customer) {
       return res.status(404).json({

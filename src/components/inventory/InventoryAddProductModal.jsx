@@ -24,6 +24,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     perQty: "",
     units: "kg",
     totalQty: "",
+    totalQtyUnit: "",
     purchasingPrice: "",
     sellingPrice: "",
     margin: "",
@@ -34,14 +35,44 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
   // Pre-fill form when editing
   useEffect(() => {
     if (editingItem) {
+      // Extract productGroup ID properly - handle string, ObjectId, or object formats
+      let groupValue = "";
+      if (editingItem.productGroup) {
+        if (typeof editingItem.productGroup === "string") {
+          groupValue = editingItem.productGroup;
+        } else if (editingItem.productGroup._id) {
+          groupValue = editingItem.productGroup._id;
+        } else if (editingItem.productGroup.$oid) {
+          groupValue = editingItem.productGroup.$oid;
+        }
+      }
+      
+      // Extract category IDs properly - handle string, ObjectId, or object formats
+      const categories = (editingItem.productCategories || []).map(cat => 
+        typeof cat === "string" ? cat : cat._id || cat.$oid || cat
+      );
+      
+      // Extract warehouse ID properly - handle string, ObjectId, or object formats
+      let warehouseValue = "";
+      if (editingItem.warehouse) {
+        if (typeof editingItem.warehouse === "string") {
+          warehouseValue = editingItem.warehouse;
+        } else if (editingItem.warehouse._id) {
+          warehouseValue = editingItem.warehouse._id;
+        } else if (editingItem.warehouse.$oid) {
+          warehouseValue = editingItem.warehouse.$oid;
+        }
+      }
+      
       setProduct({
         name: editingItem.name || "",
-        productGroup: editingItem.productGroup || editingItem.group || "",
-        productCategories: editingItem.productCategories || [],
-        warehouse: editingItem.warehouse || "",
+        productGroup: groupValue,
+        productCategories: categories,
+        warehouse: warehouseValue,
         perQty: editingItem.perQty || "",
         units: editingItem.units || "kg",
         totalQty: editingItem.totalQty || "",
+        totalQtyUnit: editingItem.totalQtyUnit || "",
         purchasingPrice: editingItem.purchasingPrice || "",
         sellingPrice: editingItem.sellingPrice || "",
         margin: editingItem.margin || "",
@@ -57,6 +88,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         perQty: "",
         units: "kg",
         totalQty: "",
+        totalQtyUnit: "",
         purchasingPrice: "",
         sellingPrice: "",
         margin: "",
@@ -75,6 +107,14 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     return Math.round(basePriceNum + (basePriceNum * marginNum / 100));
   };
 
+  const calculateMargin = (purchasingPrice, sellingPrice) => {
+    const purchaseNum = Number(purchasingPrice || 0);
+    const sellingNum = Number(sellingPrice || 0);
+    if (purchaseNum === 0) return 0;
+    // Formula: Margin % = ((Selling Price - Purchase Price) / Purchase Price) × 100
+    return ((sellingNum - purchaseNum) / purchaseNum) * 100;
+  };
+
   const handleMarginChange = (value) => {
     const newMargin = Number(value || 0);
     const purchasingPrice = Number(product.purchasingPrice || 0);
@@ -84,6 +124,18 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
       ...product,
       margin: value,
       sellingPrice: Math.round(newSellingPrice).toString(),
+    });
+  };
+
+  const handleSellingPriceChange = (value) => {
+    const newSellingPrice = Number(value || 0);
+    const purchasingPrice = Number(product.purchasingPrice || 0);
+    const newMargin = calculateMargin(purchasingPrice, newSellingPrice);
+    
+    setProduct({
+      ...product,
+      sellingPrice: value,
+      margin: Math.round(newMargin * 100) / 100 > 0 ? Math.round(newMargin * 100) / 100 : "",
     });
   };
 
@@ -154,10 +206,14 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
       branchId,
       name: product.name,
       productGroup: product.productGroup,
-      productCategories: product.productCategories,
+      productCategories: (product.productCategories || []).map(cat => 
+        typeof cat === "string" ? cat : cat._id || cat
+      ),
+      warehouse: product.warehouse || null,
       perQty: Math.round(Number(product.perQty)),
       units: product.units,
       totalQty: Math.round(Number(product.totalQty || 0)),
+      totalQtyUnit: product.totalQtyUnit || "",
       purchasingPrice: Math.round(Number(product.purchasingPrice || 0)),
       sellingPrice: Math.round(Number(product.sellingPrice || 0)),
       margin: Math.round(Number(product.margin || 0)),
@@ -192,6 +248,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         perQty: "",
         units: "kg",
         totalQty: "",
+        totalQtyUnit: "",
         purchasingPrice: "",
         sellingPrice: "",
         margin: "",
@@ -396,7 +453,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
           <div className="grid grid-cols-2 gap-4 mb-4">
             {/* Total Qty */}
             <div>
-              <label className={labelClass}>Total Qty (50pkts)</label>
+              <label className={labelClass}>Total Qty</label>
               <input
                 type="number"
                 className={inputClass}
@@ -406,6 +463,21 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
               />
             </div>
 
+            {/* Total Qty Unit */}
+            <div>
+              <label className={labelClass}>Total Qty Unit</label>
+              <input
+                type="text"
+                className={inputClass}
+                placeholder="e.g., box, carton, pallet"
+                value={product.totalQtyUnit}
+                onChange={(e) => setProduct({ ...product, totalQtyUnit: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* 2-Column Grid */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
             {/* Purchasing Price */}
             <div>
               <label className={labelClass}>Purchasing Price</label>
@@ -418,10 +490,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
                 onChange={(e) => handlePurchasingPriceChange(e.target.value)}
               />
             </div>
-          </div>
 
-          {/* 2-Column Grid */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
             {/* Selling Price */}
             <div>
               <label className={labelClass}>Selling Price</label>
@@ -431,9 +500,10 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
                 className={inputClass}
                 placeholder="Enter selling price"
                 value={product.sellingPrice}
-                onChange={(e) => setProduct({ ...product, sellingPrice: e.target.value })}
+                onChange={(e) => handleSellingPriceChange(e.target.value)}
               />
             </div>
+          </div>
 
             {/* HSN Code */}
             <div>
@@ -447,7 +517,6 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
                 onChange={(e) => setProduct({ ...product, hsnCode: e.target.value })}
               />
             </div>
-          </div>
 
           {/* 2-Column Grid */}
           <div className="grid grid-cols-2 gap-4 mb-4">

@@ -1,21 +1,27 @@
 import { useEffect, useState } from "react";
 import { API_BASE } from "../../api";
+import FilterableCheckboxList from "../FilterableCheckboxList";
 import FilterableSelect from "../FilterableSelect";
 
-const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], customerCategories = [], branchId, editingItem }) => {
+const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], customerCategories = [], customerGroups = [], branchId, editingItem }) => {
   const [customer, setCustomer] = useState({
+    _id: null,
     name: "",
+    customerCategories: [],
+    customerGroups: [],
     whatsapp: "",
     email: "",
     address: "",
     district: "",
     state: "",
+    country: "",
     pincode: "",
+    registrationType: "regular",
     gstin: "",
-    closingBalance: 0,
-    margin: 0,
     salesOwner: "",
-    customerCategory: "",
+    margin: 0,
+    credit: 0,
+    debit: 0,
     accountHolder: "",
     accountNumber: "",
     ifsc: "",
@@ -27,19 +33,23 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
   useEffect(() => {
     if (editingItem) {
       setCustomer({
-        ...customer,
+        _id: editingItem._id || null,
         name: editingItem.name || "",
+        customerCategories: Array.isArray(editingItem.customerCategories) ? editingItem.customerCategories : (editingItem.customerCategory ? [editingItem.customerCategory] : []),
+        customerGroups: Array.isArray(editingItem.customerGroups) ? editingItem.customerGroups : (editingItem.customerGroup ? [editingItem.customerGroup] : []),
         whatsapp: editingItem.whatsapp || "",
         email: editingItem.email || "",
         address: editingItem.address || "",
         district: editingItem.district || "",
         state: editingItem.state || "",
+        country: editingItem.country || "",
         pincode: editingItem.pincode || "",
+        registrationType: editingItem.registrationType || "regular",
         gstin: editingItem.gstin || "",
-        closingBalance: editingItem.closingBalance || 0,
-        margin: editingItem.margin || 0,
         salesOwner: editingItem.salesOwner || "",
-        customerCategory: editingItem.customerCategory || "",
+        margin: editingItem.margin || 0,
+        credit: editingItem.credit || 0,
+        debit: editingItem.debit || 0,
         accountHolder: editingItem.accountHolder || "",
         accountNumber: editingItem.accountNumber || "",
         ifsc: editingItem.ifsc || "",
@@ -49,17 +59,21 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     } else {
       setCustomer({
         name: "",
+        customerCategories: [],
+        customerGroups: [],
         whatsapp: "",
         email: "",
         address: "",
         district: "",
         state: "",
+        country: "",
         pincode: "",
+        registrationType: "regular",
         gstin: "",
-        closingBalance: 0,
-        margin: 0,
         salesOwner: "",
-        customerCategory: "",
+        margin: 0,
+        credit: 0,
+        debit: 0,
         accountHolder: "",
         accountNumber: "",
         ifsc: "",
@@ -109,25 +123,31 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     // Round numeric values
     const roundedCustomer = {
       ...customer,
-      closingBalance: Math.round(Number(customer.closingBalance || 0)),
-      margin: Math.round(Number(customer.margin || 0)),
+      credit: Math.round(Number(customer.credit || 0)),
+      debit: Math.round(Number(customer.debit || 0)),
+      margin: Math.round(Number(customer.margin || 0) * 100) / 100,
     };
     
     await onSave(roundedCustomer);
 
     setCustomer({
+      _id: null,
       name: "",
+      customerCategories: [],
+      customerGroups: [],
       whatsapp: "",
       email: "",
       address: "",
       district: "",
       state: "",
+      country: "",
       pincode: "",
+      registrationType: "regular",
       gstin: "",
-      closingBalance: 0,
-      margin: 0,
       salesOwner: "",
-      customerCategory: "",
+      margin: 0,
+      credit: 0,
+      debit: 0,
       accountHolder: "",
       accountNumber: "",
       ifsc: "",
@@ -175,8 +195,8 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
           className="p-6 space-y-5 max-h-[80vh] overflow-y-auto"
         >
           {/* BASIC DETAILS */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
+          <div className="space-y-4">
+            <div>
               <label className={labelClass}>Customer Name *</label>
               <input
                 type="text"
@@ -189,32 +209,86 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
               />
             </div>
 
-            <div>
-              <label className={labelClass}>WhatsApp *</label>
-              <input
-                type="tel"
-                required
-                className={inputClass}
-                value={customer.whatsapp}
-                onChange={(e) =>
-                  setCustomer({ ...customer, whatsapp: e.target.value })
-                }
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Customer Categories</label>
+                {Array.isArray(customerCategories) && customerCategories.length > 0 ? (
+                  <FilterableCheckboxList
+                    options={customerCategories}
+                    selectedIds={customer.customerCategories}
+                    onChange={(selectedIds) => {
+                      setCustomer({ ...customer, customerCategories: selectedIds });
+                    }}
+                    placeholder="Search categories..."
+                  />
+                ) : (
+                  <div style={{color: '#999', fontSize: '13px', padding: '12px', textAlign: 'center', border: '2px solid #e5e7eb', borderRadius: '8px'}}>
+                    📦 No categories available
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className={labelClass}>Customer Groups</label>
+                {Array.isArray(customerGroups) && customerGroups.length > 0 ? (
+                  <FilterableCheckboxList
+                    options={customerGroups}
+                    selectedIds={customer.customerGroups}
+                    onChange={(selectedIds) => {
+                      setCustomer({ ...customer, customerGroups: selectedIds });
+                    }}
+                    placeholder="Search groups..."
+                  />
+                ) : (
+                  <div style={{color: '#999', fontSize: '13px', padding: '12px', textAlign: 'center', border: '2px solid #e5e7eb', borderRadius: '8px'}}>
+                    👥 No groups available
+                  </div>
+                )}
+              </div>
             </div>
+          </div>
+
+          <hr />
+
+          {/* CONTACT DETAILS */}
+          <div className="space-y-4">
+            <h4 className="text-primary font-bold text-sm">📞 Contact Details</h4>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>WhatsApp *</label>
+                <input
+                  type="tel"
+                  required
+                  className={inputClass}
+                  value={customer.whatsapp}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, whatsapp: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Email</label>
+                <input
+                  type="email"
+                  className={inputClass}
+                  value={customer.email}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, email: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          <hr />
+
+          {/* ADDRESS DETAILS */}
+          <div className="space-y-4">
+            <h4 className="text-primary font-bold text-sm">🏠 Address Details</h4>
 
             <div>
-              <label className={labelClass}>Email</label>
-              <input
-                type="email"
-                className={inputClass}
-                value={customer.email}
-                onChange={(e) =>
-                  setCustomer({ ...customer, email: e.target.value })
-                }
-              />
-            </div>
-
-            <div className="col-span-2">
               <label className={labelClass}>Address</label>
               <textarea
                 className={`${inputClass} h-20`}
@@ -225,54 +299,101 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
               />
             </div>
 
-            <div>
-              <label className={labelClass}>District</label>
-              <input
-                type="text"
-                className={inputClass}
-                value={customer.district}
-                onChange={(e) =>
-                  setCustomer({ ...customer, district: e.target.value })
-                }
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>District</label>
+                <input
+                  type="text"
+                  className={inputClass}
+                  value={customer.district}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, district: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>State</label>
+                <input
+                  type="text"
+                  className={inputClass}
+                  value={customer.state}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, state: e.target.value })
+                  }
+                />
+              </div>
             </div>
 
-            <div>
-              <label className={labelClass}>State</label>
-              <input
-                type="text"
-                className={inputClass}
-                value={customer.state}
-                onChange={(e) =>
-                  setCustomer({ ...customer, state: e.target.value })
-                }
-              />
-            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Country</label>
+                <input
+                  type="text"
+                  className={inputClass}
+                  placeholder="e.g., India"
+                  value={customer.country}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, country: e.target.value })
+                  }
+                />
+              </div>
 
-            <div>
-              <label className={labelClass}>Pincode</label>
-              <input
-                type="text"
-                className={inputClass}
-                value={customer.pincode}
-                onChange={(e) =>
-                  setCustomer({ ...customer, pincode: e.target.value })
-                }
-              />
+              <div>
+                <label className={labelClass}>Pincode</label>
+                <input
+                  type="text"
+                  className={inputClass}
+                  value={customer.pincode}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, pincode: e.target.value })
+                  }
+                />
+              </div>
             </div>
+          </div>
 
-            <div className="col-span-2">
-              <label className={labelClass}>GSTIN</label>
-              <input
-                type="text"
-                className={inputClass}
-                value={customer.gstin}
-                onChange={(e) =>
-                  setCustomer({ ...customer, gstin: e.target.value.toUpperCase() })
-                }
-                placeholder="E.g., 27AABCD1234H1Z0"
-              />
+          <hr />
+
+          {/* TAX & REGISTRATION */}
+          <div className="space-y-4">
+            <h4 className="text-primary font-bold text-sm">📋 Tax & Registration</h4>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Registration Type</label>
+                <select
+                  className={inputClass}
+                  value={customer.registrationType}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, registrationType: e.target.value })
+                  }
+                >
+                  <option value="regular">Regular</option>
+                  <option value="unregistered">Unregistered</option>
+                </select>
+              </div>
+
+              <div>
+                <label className={labelClass}>GSTIN</label>
+                <input
+                  type="text"
+                  className={inputClass}
+                  value={customer.gstin}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, gstin: e.target.value.toUpperCase() })
+                  }
+                  placeholder="E.g., 27AABCD1234H1Z0"
+                />
+              </div>
             </div>
+          </div>
+
+          <hr />
+
+          {/* BUSINESS DETAILS */}
+          <div className="space-y-4">
+            <h4 className="text-primary font-bold text-sm">💼 Business Details</h4>
 
             <div>
               <label className={labelClass}>Sales Owner</label>
@@ -290,43 +411,46 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
               />
             </div>
 
-            <div>
-              <label className={labelClass}>Customer Category</label>
-              <FilterableSelect
-                options={customerCategories}
-                value={customer.customerCategory}
-                onChange={(value) =>
-                  setCustomer({ ...customer, customerCategory: value })
-                }
-                placeholder="Select Category"
-                className={inputClass}
-              />
-            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className={labelClass}>Margin (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className={inputClass}
+                  value={customer.margin}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, margin: parseFloat(e.target.value) || 0 })
+                  }
+                  placeholder="Positive or Negative"
+                />
+              </div>
 
-            <div>
-              <label className={labelClass}>Closing Balance</label>
-              <input
-                type="number"
-                step="0.01"
-                className={inputClass}
-                value={customer.closingBalance}
-                onChange={(e) =>
-                  setCustomer({ ...customer, closingBalance: parseFloat(e.target.value) || 0 })
-                }
-              />
-            </div>
+              <div>
+                <label className={labelClass}>Credit</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className={inputClass}
+                  value={customer.credit}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, credit: parseFloat(e.target.value) || 0 })
+                  }
+                />
+              </div>
 
-            <div>
-              <label className={labelClass}>Margin (% - Positive or Negative)</label>
-              <input
-                type="number"
-                step="0.01"
-                className={inputClass}
-                value={customer.margin}
-                onChange={(e) =>
-                  setCustomer({ ...customer, margin: parseFloat(e.target.value) || 0 })
-                }
-              />
+              <div>
+                <label className={labelClass}>Debit</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className={inputClass}
+                  value={customer.debit}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, debit: parseFloat(e.target.value) || 0 })
+                  }
+                />
+              </div>
             </div>
           </div>
 
@@ -335,14 +459,13 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
           {/* BANK DETAILS */}
           <div className="space-y-4 bg-gray-50 p-4 rounded-xl border">
             <h4 className="text-primary font-bold text-sm">
-              Bank Details
+              🏦 Bank Details
             </h4>
 
             <div>
-              <label className={labelClass}>Account Holder *</label>
+              <label className={labelClass}>Account Holder</label>
               <input
                 type="text"
-                required
                 className={inputClass}
                 value={customer.accountHolder}
                 onChange={(e) =>
@@ -355,10 +478,9 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
             </div>
 
             <div>
-              <label className={labelClass}>Account Number *</label>
+              <label className={labelClass}>Account Number</label>
               <input
                 type="text"
-                required
                 className={inputClass}
                 value={customer.accountNumber}
                 onChange={(e) =>
@@ -372,10 +494,9 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>IFSC *</label>
+                <label className={labelClass}>IFSC Code</label>
                 <input
                   type="text"
-                  required
                   className={`${inputClass} uppercase`}
                   value={customer.ifsc}
                   onChange={(e) =>
@@ -385,10 +506,9 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
               </div>
 
               <div>
-                <label className={labelClass}>Branch *</label>
+                <label className={labelClass}>Branch Name</label>
                 <input
                   type="text"
-                  required
                   className={inputClass}
                   value={customer.branch}
                   onChange={(e) =>
@@ -399,7 +519,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
             </div>
 
             <div>
-              <label className={labelClass}>UPI</label>
+              <label className={labelClass}>UPI Number</label>
               <input
                 type="text"
                 className={inputClass}
@@ -407,6 +527,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                 onChange={(e) =>
                   setCustomer({ ...customer, upi: e.target.value })
                 }
+                placeholder="e.g., name@bank"
               />
             </div>
           </div>

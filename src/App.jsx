@@ -17,12 +17,15 @@ import BranchCreditNote from "./pages/branch/BranchCreditNote";
 import BranchDebitNote from "./pages/branch/BranchDebitNote";
 import BranchDispatch from "./pages/branch/BranchDispatch";
 import BranchHome from "./pages/branch/BranchHome";
+import BranchInvoicedOrders from "./pages/branch/BranchInvoicedOrders";
 import BranchPO from "./pages/branch/BranchPO";
 import BranchPOPayment from "./pages/branch/BranchPOPayment";
+import BranchPurchaseOrders from "./pages/branch/BranchPurchaseOrders";
 import BranchQuickLinks from "./pages/branch/BranchQuickLinks";
 import BranchRecycling from "./pages/branch/BranchRecycling";
 import BranchSalesOrder from "./pages/branch/BranchSalesOrder";
 import BranchSummary from "./pages/branch/BranchSummary";
+import RecyclingEntry from "./pages/branch/RecyclingEntry";
 import BranchLoginPage from "./pages/BranchLoginPage";
 import CRMPage from "./pages/CRMPage";
 import CustomerLogin from "./pages/CustomerLogin";
@@ -106,10 +109,13 @@ function App() {
                   {/* BRANCH-SPECIFIC ROUTES */}
                   <Route path="/branch-home" element={<BranchHome />} />
                   <Route path="/branch/po" element={<BranchPO />} />
+                  <Route path="/branch/purchase-orders" element={<BranchPurchaseOrders />} />
                   <Route path="/branch/recycling" element={<BranchRecycling />} />
+                  <Route path="/branch/restocking" element={<RecyclingEntry />} />
                   <Route path="/branch/debit-note" element={<BranchDebitNote />} />
                   <Route path="/branch/po-payment" element={<BranchPOPayment />} />
                   <Route path="/branch/sales-order" element={<BranchSalesOrder />} />
+                  <Route path="/branch/invoiced-order" element={<BranchInvoicedOrders />} />
                   <Route path="/branch/credit-note" element={<BranchCreditNote />} />
                   <Route path="/branch/dispatch" element={<BranchDispatch />} />
                   <Route path="/branch/quick-links" element={<BranchQuickLinks />} />

@@ -108,6 +108,84 @@ class GLService {
   }
 
   /**
+   * Post Sales Invoice Journal Entry (confirmation of invoice)
+   * Invoice confirms the items selected and finalizes the amounts
+   */
+  static async postSalesInvoiceJE(salesInvoice) {
+    try {
+      const jeId = await this.generateJEId();
+      
+      const lineItems = [];
+      let totalTax = 0;
+
+      // Calculate tax from invoice items
+      (salesInvoice.invoiceItems || salesInvoice.items || []).forEach(item => {
+        totalTax += (item.tax || item.gst * item.qty * item.sellingPrice / 100 || 0);
+      });
+
+      // Debit: Accounts Receivable (Customer AR account)
+      lineItems.push({
+        accountCode: "1101", // AR account
+        accountName: "Accounts Receivable",
+        accountType: "ASSET",
+        debit: salesInvoice.invoiceGrandTotal || salesInvoice.grandTotal || 0,
+        credit: 0,
+        remarks: `SI ${salesInvoice.invoiceId} - ${salesInvoice.customer?.name || "Customer"}`
+      });
+
+      // Credit: Sales Revenue (net of tax)
+      const revenueAmount = (salesInvoice.invoiceGrandTotal || salesInvoice.grandTotal || 0) - totalTax;
+      lineItems.push({
+        accountCode: "3001", // Sales Revenue
+        accountName: "Sales Revenue",
+        accountType: "INCOME",
+        debit: 0,
+        credit: revenueAmount,
+        remarks: `SI ${salesInvoice.invoiceId} - Sales Revenue`
+      });
+
+      // Credit: GST Payable (if tax exists)
+      if (totalTax > 0) {
+        lineItems.push({
+          accountCode: "2101", // GST Payable
+          accountName: "GST Payable (Output GST)",
+          accountType: "LIABILITY",
+          debit: 0,
+          credit: totalTax,
+          gstAmount: totalTax,
+          remarks: `SI ${salesInvoice.invoiceId} - GST`
+        });
+      }
+
+      // Create journal entry
+      const journalEntry = new JournalEntry({
+        jeId,
+        referenceModule: "SALES_INVOICE",
+        referenceDocumentId: salesInvoice._id,
+        referenceDocumentNumber: salesInvoice.invoiceId,
+        journalDate: new Date(),
+        description: `Sales Invoice ${salesInvoice.invoiceId} confirmed for ${salesInvoice.customer?.name || "Customer"}`,
+        lineItems,
+        totalDebit: lineItems.reduce((sum, item) => sum + item.debit, 0),
+        totalCredit: lineItems.reduce((sum, item) => sum + item.credit, 0),
+        status: "POSTED",
+        financialYear: salesInvoice.financialYear || "2025-2026"
+      });
+
+      journalEntry.isBalanced = Math.abs(journalEntry.totalDebit - journalEntry.totalCredit) < 0.01;
+      await journalEntry.save();
+
+      // Update GL accounts
+      await this.updateGLAccounts(journalEntry);
+
+      return journalEntry;
+    } catch (error) {
+      console.error("Error posting SI JE:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Post Credit Note Journal Entry (reversal of SO)
    * CN creates: Debit Revenue / Debit GST / Credit AR
    */
