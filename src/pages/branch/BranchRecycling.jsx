@@ -13,8 +13,13 @@ export default function BranchRecycling() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [savingConfig, setSavingConfig] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProducts, setSelectedProducts] = useState(new Set());
+  const [bulkRestockingInProgress, setBulkRestockingInProgress] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, pages: 0, limit: 50 });
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (page = 1) => {
     if (!currentBranch?._id) {
       console.warn("⚠️  Branch not yet loaded in context");
       setLoading(false);
@@ -24,10 +29,16 @@ export default function BranchRecycling() {
     setLoading(true);
     try {
       const branchId = currentBranch._id;
-      const url = `${API_BASE}/products?branchId=${branchId}`;
+      let url = `${API_BASE}/products?branchId=${branchId}&page=${page}&limit=50`;
+      
+      // Add search parameter if search term exists
+      if (searchTerm) {
+        url += `&search=${encodeURIComponent(searchTerm)}`;
+      }
+      
       console.log("🔍 Fetching products from:", url);
+      console.log("📄 Page:", page || 1);
       console.log("📌 Branch ID:", branchId);
-      console.log("📌 Current Branch:", currentBranch);
       
       const res = await fetch(url);
       if (!res.ok) {
@@ -38,16 +49,20 @@ export default function BranchRecycling() {
       console.log("📦 Full API Response:", data);
       
       let productList = [];
+      let paginationInfo = { total: 0, pages: 0, limit: 50 };
       
       // API returns { success, data: [...], pagination: {...} }
       if (data?.data && Array.isArray(data.data)) {
         productList = data.data;
+        paginationInfo = data.pagination || paginationInfo;
         console.log("✨ Extracted products from data.data:", productList.length, "items");
+        console.log("📊 Pagination:", paginationInfo);
       } else if (Array.isArray(data)) {
         productList = data;
         console.log("✨ Response is direct array:", productList.length, "items");
       } else if (data?.products && Array.isArray(data.products)) {
         productList = data.products;
+        paginationInfo = data.pagination || paginationInfo;
         console.log("✨ Extracted products from data.products:", productList.length, "items");
       } else {
         console.warn("⚠️  No products array found in response");
@@ -55,6 +70,7 @@ export default function BranchRecycling() {
       
       console.log("✅ Final product list:", productList);
       setProducts(productList);
+      setPagination(paginationInfo);
       
       if (productList.length === 0) {
         toast.info("No products found for this branch");
@@ -67,16 +83,69 @@ export default function BranchRecycling() {
     }
   };
 
-  // Wait for branch to load from localStorage, then fetch products
+  // Fetch pending sales orders (not yet converted to invoice)
+  const fetchPendingSales = async () => {
+    if (!currentBranch?._id) return null;
+
+    try {
+      const res = await fetch(`${API_BASE}/sales-orders?branchId=${currentBranch._id}`);
+      if (!res.ok) return null;
+
+      const data = await res.json();
+      let salesOrders = [];
+
+      if (data?.data && Array.isArray(data.data)) {
+        salesOrders = data.data;
+      } else if (Array.isArray(data)) {
+        salesOrders = data;
+      }
+
+      // Filter only pending (not invoiced) orders
+      const pendingOrders = salesOrders.filter((so) => !so.invoiceGenerated);
+
+      // Create a map of productId -> total pending qty
+      const pendingMap = {};
+      pendingOrders.forEach((order) => {
+        if (Array.isArray(order.items)) {
+          order.items.forEach((item) => {
+            const prodId = item.productId?._id || item.productId;
+            pendingMap[prodId] = (pendingMap[prodId] || 0) + (item.qty || 0);
+          });
+        }
+      });
+
+      console.log("📊 Pending Sales Map:", pendingMap);
+      return pendingMap;
+    } catch (err) {
+      console.error("❌ Error fetching pending sales:", err);
+      return null;
+    }
+  };
+
+  const [pendingSalesMap, setPendingSalesMap] = useState(null);
+
+  // Fetch both products and pending sales
+  const fetchAllData = async (page = 1) => {
+    await fetchProducts(page);
+    const pendingMap = await fetchPendingSales();
+    setPendingSalesMap(pendingMap || {});
+  };
+
+  // Handle search - reset to page 1
+  const handleSearch = (e) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1); // Reset to first page when searching
+  };
+
   useEffect(() => {
     if (currentBranch?._id) {
       console.log("✅ Branch loaded:", currentBranch.name);
       setBranchLoaded(true);
-      fetchProducts();
+      fetchAllData(currentPage);
     } else {
       setBranchLoaded(false);
     }
-  }, [currentBranch?._id]);
+  }, [currentBranch?._id, currentPage, searchTerm]);
 
   // Categorize products by stock level
   const categorizeProducts = (prods) => {
@@ -180,7 +249,7 @@ export default function BranchRecycling() {
         toast.success(
           `✅ Restocking PO Created!\nInvoice: ${nextVoucherId}\nQty: ${product.reorderQty} units`
         );
-        fetchProducts(); // Refresh products
+        fetchAllData(); // Refresh products and pending sales
       } else {
         toast.error(data.message || "Failed to create restocking PO");
       }
@@ -216,9 +285,17 @@ export default function BranchRecycling() {
 
       const data = await res.json();
       if (data.success || res.ok) {
-        toast.success("✅ Product settings updated!");
+        // Update local state immediately for real-time bucket changes
+        setProducts((prevProducts) =>
+          prevProducts.map((p) =>
+            p._id === editingProduct
+              ? { ...p, ...editValues }
+              : p
+          )
+        );
+        
+        toast.success("✅ Product settings updated! Bucket updated immediately.");
         setEditingProduct(null);
-        fetchProducts(); // Refresh products
       } else {
         toast.error(data.message || "Failed to save settings");
       }
@@ -230,6 +307,105 @@ export default function BranchRecycling() {
     }
   };
 
+  // Toggle product selection for bulk restocking
+  const toggleProductSelection = (productId) => {
+    const newSelected = new Set(selectedProducts);
+    if (newSelected.has(productId)) {
+      newSelected.delete(productId);
+    } else {
+      newSelected.add(productId);
+    }
+    setSelectedProducts(newSelected);
+  };
+
+  // Bulk restock selected products
+  const handleBulkRestock = async () => {
+    if (selectedProducts.size === 0) {
+      toast.error("Please select at least one product");
+      return;
+    }
+
+    setBulkRestockingInProgress(true);
+    const selectedProds = products.filter((p) => selectedProducts.has(p._id));
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const product of selectedProds) {
+      try {
+        if (!product.reorderQty) {
+          failCount++;
+          continue;
+        }
+
+        const lastPO = await fetch(
+          `${API_BASE}/purchase-orders?branchId=${currentBranch._id}&limit=1&sort=-date`
+        ).then((r) => r.json());
+        
+        const lastPOData = lastPO && Array.isArray(lastPO) ? lastPO[0] : null;
+        const nextVoucherId = generateNextVoucherId(lastPOData);
+
+        const vendor = product.preferredVendor || lastPOData?.vendor || "Default Vendor";
+        const voucherType = lastPOData?.voucherType || "standard";
+
+        const poPayload = {
+          branchId: currentBranch._id,
+          invoiceId: nextVoucherId,
+          voucherType,
+          vendor,
+          warehouse: lastPOData?.warehouse || "",
+          billingPerson: user?.id || "",
+          items: [
+            {
+              productId: product._id,
+              name: product.name,
+              productGroup: product.productGroup,
+              qty: product.reorderQty,
+              purchasePrice: product.purchasingPrice,
+              sellingPrice: product.sellingPrice,
+              hsn: product.hsn || product.hsnCode,
+              gst: product.gst,
+              cgst: (product.gst || 0) / 2,
+              sgst: (product.gst || 0) / 2,
+              igst: false,
+            },
+          ],
+          subtotal: product.reorderQty * product.purchasingPrice,
+          totalTax:
+            (product.reorderQty * product.purchasingPrice * product.gst) / 100,
+          transportCharge: 0,
+          grandTotal:
+            product.reorderQty * product.purchasingPrice +
+            (product.reorderQty * product.purchasingPrice * product.gst) / 100,
+          status: "PLACED",
+          date: new Date().toISOString(),
+        };
+
+        const res = await fetch(`${API_BASE}/purchase-orders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(poPayload),
+        });
+
+        if (res.ok) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (err) {
+        console.error("Error restocking product:", product.name, err);
+        failCount++;
+      }
+    }
+
+    toast.success(
+      `✅ Bulk Restocking Complete!\n${successCount} POs created, ${failCount} failed`
+    );
+    setSelectedProducts(new Set());
+    setBulkRestockingInProgress(false);
+    fetchAllData();
+  };
+
+  // API already filters by search term, so just categorize the products
   const { outOfStock, lowStock, normalStock } = categorizeProducts(products);
 
   const StockCategory = ({ title, products: prods, icon: Icon, bgColor, textColor, borderColor }) => (
@@ -249,9 +425,19 @@ export default function BranchRecycling() {
           {prods.map((product) => (
             <div
               key={product._id}
-              className={`${bgColor} border-l-4 ${borderColor} p-5 rounded-lg shadow hover:shadow-lg transition`}
+              className={`${bgColor} border-l-4 ${borderColor} p-5 rounded-lg shadow hover:shadow-lg transition relative`}
             >
-              <div className="flex justify-between items-start mb-3">
+              {/* Checkbox for bulk selection */}
+              <div className="absolute top-4 right-4">
+                <input
+                  type="checkbox"
+                  checked={selectedProducts.has(product._id)}
+                  onChange={() => toggleProductSelection(product._id)}
+                  className="w-5 h-5 cursor-pointer"
+                />
+              </div>
+
+              <div className="flex justify-between items-start mb-3 pr-8">
                 <div className="flex-1">
                   <h3 className="font-bold text-gray-800 text-sm mb-1">
                     {product.name}
@@ -267,6 +453,27 @@ export default function BranchRecycling() {
                     {product.totalQty} {product.units}
                   </span>
                 </div>
+
+                {/* Pending Sales (Not Invoiced) */}
+                {pendingSalesMap && pendingSalesMap[product._id] > 0 && (
+                  <div className="flex justify-between bg-yellow-50 p-2 rounded border-l-2 border-yellow-400">
+                    <span className="text-yellow-700 font-medium">⏳ Pending Sales:</span>
+                    <span className="font-semibold text-yellow-800">
+                      {pendingSalesMap[product._id]} {product.units}
+                    </span>
+                  </div>
+                )}
+
+                {/* Available Qty */}
+                {pendingSalesMap && pendingSalesMap[product._id] > 0 && (
+                  <div className="flex justify-between bg-blue-50 p-2 rounded border-l-2 border-blue-400">
+                    <span className="text-blue-700 font-medium">✓ Available:</span>
+                    <span className="font-semibold text-blue-800">
+                      {Math.max(0, product.totalQty - (pendingSalesMap[product._id] || 0))} {product.units}
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex justify-between">
                   <span className="text-gray-600">Threshold:</span>
                   <span className="font-semibold text-gray-800">
@@ -436,22 +643,101 @@ export default function BranchRecycling() {
 
       <div className="max-w-7xl mx-auto">
         {/* HEADER */}
-        <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-2xl shadow-lg p-8 mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <FaExclamationTriangle className="text-5xl opacity-80" />
-            <div>
-              <h1 className="text-4xl font-bold">Smart Restocking</h1>
-              <p className="text-orange-100 mt-1">Automated Low Stock Alerts & Restocking</p>
+        <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-2xl shadow-lg p-8 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              <FaExclamationTriangle className="text-5xl opacity-80" />
+              <div>
+                <h1 className="text-4xl font-bold">Smart Restocking</h1>
+                <p className="text-orange-100 mt-1">Automated Low Stock Alerts & Restocking</p>
+              </div>
+            </div>
+            <button
+              onClick={fetchAllData}
+              disabled={loading}
+              className="bg-white text-orange-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition disabled:opacity-50 flex items-center gap-2"
+            >
+              <FaSync className={loading ? "animate-spin" : ""} />
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
+
+          {/* Search and Bulk Restock Bar */}
+          <div className="flex gap-3 flex-wrap items-center">
+            <div className="flex-1 min-w-64">
+              <input
+                type="text"
+                placeholder="🔍 Search products by name..."
+                value={searchTerm}
+                onChange={handleSearch}
+                className="w-full px-4 py-2 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-300"
+              />
+            </div>
+
+            {selectedProducts.size > 0 && (
+              <button
+                onClick={handleBulkRestock}
+                disabled={bulkRestockingInProgress}
+                className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 transition disabled:opacity-50 whitespace-nowrap"
+              >
+                ✓ Restock {selectedProducts.size} Product{selectedProducts.size !== 1 ? "s" : ""}
+              </button>
+            )}
+          </div>
+
+          {/* Pagination Controls */}
+          <div className="flex items-center justify-between mt-4 px-4 py-3 bg-white rounded-lg">
+            <div className="text-sm text-gray-600">
+              <span className="font-semibold">Page {pagination.pages > 0 ? currentPage : 0} of {pagination.pages || 0}</span>
+              <span className="ml-3">Total: <strong>{pagination.total}</strong> products</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1 || loading}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ← Previous
+              </button>
+              
+              <div className="flex items-center gap-2 px-3">
+                {Array.from({ length: Math.min(5, pagination.pages) }).map((_, idx) => {
+                  let pageNum;
+                  if (pagination.pages <= 5) {
+                    pageNum = idx + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = idx + 1;
+                  } else if (currentPage >= pagination.pages - 2) {
+                    pageNum = pagination.pages - 4 + idx;
+                  } else {
+                    pageNum = currentPage - 2 + idx;
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-3 py-1 rounded-lg font-semibold transition ${
+                        currentPage === pageNum
+                          ? "bg-orange-500 text-white"
+                          : "border border-gray-300 text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage(Math.min(pagination.pages, currentPage + 1))}
+                disabled={currentPage === pagination.pages || pagination.pages === 0 || loading}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next →
+              </button>
             </div>
           </div>
-          <button
-            onClick={fetchProducts}
-            disabled={loading}
-            className="bg-white text-orange-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition disabled:opacity-50 flex items-center gap-2"
-          >
-            <FaSync className={loading ? "animate-spin" : ""} />
-            {loading ? "Loading..." : "Refresh"}
-          </button>
         </div>
 
         {/* CONTENT */}
