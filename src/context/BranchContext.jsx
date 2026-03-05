@@ -5,6 +5,7 @@ const BranchContext = createContext();
 export function BranchProvider({ children }) {
   const [currentBranch, setCurrentBranch] = useState(null);
   const [user, setUser] = useState(null);
+  const [branchLoaded, setBranchLoaded] = useState(false);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -17,6 +18,9 @@ export function BranchProvider({ children }) {
     if (storedUser) {
       setUser(JSON.parse(storedUser));
     }
+    
+    // Always mark as loaded after attempting to load from localStorage
+    setBranchLoaded(true);
   }, []);
 
   const switchBranch = (branch, userData) => {
@@ -36,8 +40,10 @@ export function BranchProvider({ children }) {
   return (
     <BranchContext.Provider
       value={{
+        branch: currentBranch,
         currentBranch,
         user,
+        branchLoaded,
         switchBranch,
         logout,
       }}

@@ -19,7 +19,7 @@ export default function BranchRecycling() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 0, limit: 50 });
 
-  const fetchProducts = async (page = 1) => {
+  const fetchProducts = async (page = 1, search = "") => {
     if (!currentBranch?._id) {
       console.warn("⚠️  Branch not yet loaded in context");
       setLoading(false);
@@ -32,8 +32,8 @@ export default function BranchRecycling() {
       let url = `${API_BASE}/products?branchId=${branchId}&page=${page}&limit=50`;
       
       // Add search parameter if search term exists
-      if (searchTerm) {
-        url += `&search=${encodeURIComponent(searchTerm)}`;
+      if (search) {
+        url += `&search=${encodeURIComponent(search)}`;
       }
       
       console.log("🔍 Fetching products from:", url);
@@ -49,7 +49,7 @@ export default function BranchRecycling() {
       console.log("📦 Full API Response:", data);
       
       let productList = [];
-      let paginationInfo = { total: 0, pages: 0, limit: 50 };
+      let paginationInfo = { total: 0, pages: 0, limit: 2000 };
       
       // API returns { success, data: [...], pagination: {...} }
       if (data?.data && Array.isArray(data.data)) {
@@ -125,8 +125,8 @@ export default function BranchRecycling() {
   const [pendingSalesMap, setPendingSalesMap] = useState(null);
 
   // Fetch both products and pending sales
-  const fetchAllData = async (page = 1) => {
-    await fetchProducts(page);
+  const fetchAllData = async (page = 1, search = "") => {
+    await fetchProducts(page, search);
     const pendingMap = await fetchPendingSales();
     setPendingSalesMap(pendingMap || {});
   };
@@ -141,7 +141,7 @@ export default function BranchRecycling() {
     if (currentBranch?._id) {
       console.log("✅ Branch loaded:", currentBranch.name);
       setBranchLoaded(true);
-      fetchAllData(currentPage);
+      fetchAllData(currentPage, searchTerm);
     } else {
       setBranchLoaded(false);
     }
@@ -249,7 +249,7 @@ export default function BranchRecycling() {
         toast.success(
           `✅ Restocking PO Created!\nInvoice: ${nextVoucherId}\nQty: ${product.reorderQty} units`
         );
-        fetchAllData(); // Refresh products and pending sales
+        fetchAllData(currentPage, searchTerm); // Refresh products and pending sales
       } else {
         toast.error(data.message || "Failed to create restocking PO");
       }
@@ -402,7 +402,7 @@ export default function BranchRecycling() {
     );
     setSelectedProducts(new Set());
     setBulkRestockingInProgress(false);
-    fetchAllData();
+    fetchAllData(currentPage, searchTerm);
   };
 
   // API already filters by search term, so just categorize the products
@@ -653,7 +653,7 @@ export default function BranchRecycling() {
               </div>
             </div>
             <button
-              onClick={fetchAllData}
+              onClick={() => fetchAllData(currentPage, searchTerm)}
               disabled={loading}
               className="bg-white text-orange-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition disabled:opacity-50 flex items-center gap-2"
             >

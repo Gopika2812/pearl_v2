@@ -188,19 +188,32 @@ router.get("/", async (req, res) => {
   try {
     const { branchId } = req.query;
 
+    console.log("🔍 GET /vendors endpoint hit");
+    console.log("Query branchId (string):", branchId);
+
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
     }
 
-    const vendors = await Vendor.find({ branchId, isActive: true }).sort({
+    // Convert string branchId to ObjectId for proper matching
+    const branchObjectId = mongoose.Types.ObjectId.isValid(branchId)
+      ? new mongoose.Types.ObjectId(branchId)
+      : branchId;
+
+    console.log("Converted branchObjectId:", branchObjectId);
+
+    const vendors = await Vendor.find({ branchId: branchObjectId, isActive: true }).sort({
       createdAt: -1,
     });
+
+    console.log(`✅ Found ${vendors.length} vendors for branch ${branchObjectId}`);
+
     res.json({
       success: true,
       data: vendors,
     });
   } catch (err) {
-    console.error("Fetch Vendor Error:", err);
+    console.error("❌ Fetch Vendor Error:", err);
     res.status(500).json({
       success: false,
       message: "Failed to fetch vendors",

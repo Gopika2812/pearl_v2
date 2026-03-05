@@ -5,12 +5,14 @@ import {
   FaChevronDown,
   FaDollarSign,
   FaFileAlt,
+  FaHandshake,
   FaHome,
   FaLink,
   FaShoppingCart,
   FaSignOutAlt,
   FaTimes,
   FaTruck,
+  FaUsers,
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useBranch } from "../context/BranchContext";
@@ -33,6 +35,8 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     { name: "Credit Note", path: "/branch/credit-note", icon: <FaFileAlt /> },
     { name: "Receipt", path: "/branch/receipt", icon: <FaDollarSign /> },
     { name: "Loading & Dispatch", path: "/branch/dispatch", icon: <FaTruck /> },
+    { name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: <FaHandshake /> },
+    { name: "Customers (Debtors)", path: "/branch/customers", icon: <FaUsers /> },
     { name: "Quick Links", path: "/branch/quick-links", icon: <FaLink /> },
   ];
 

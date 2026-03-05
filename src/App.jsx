@@ -14,6 +14,7 @@ import APAgingPage from "./pages/APAgingPage";
 import ARAgingPage from "./pages/ARAgingPage";
 import BalanceSheetPage from "./pages/BalanceSheetPage";
 import BranchCreditNote from "./pages/branch/BranchCreditNote";
+import BranchCustomers from "./pages/branch/BranchCustomers";
 import BranchDebitNote from "./pages/branch/BranchDebitNote";
 import BranchDispatch from "./pages/branch/BranchDispatch";
 import BranchHome from "./pages/branch/BranchHome";
@@ -25,6 +26,7 @@ import BranchQuickLinks from "./pages/branch/BranchQuickLinks";
 import BranchRecycling from "./pages/branch/BranchRecycling";
 import BranchSalesOrder from "./pages/branch/BranchSalesOrder";
 import BranchSummary from "./pages/branch/BranchSummary";
+import BranchSuppliers from "./pages/branch/BranchSuppliers";
 import BranchLoginPage from "./pages/BranchLoginPage";
 import CRMPage from "./pages/CRMPage";
 import CustomerLogin from "./pages/CustomerLogin";
@@ -116,6 +118,8 @@ function App() {
                   <Route path="/branch/invoiced-order" element={<BranchInvoicedOrders />} />
                   <Route path="/branch/credit-note" element={<BranchCreditNote />} />
                   <Route path="/branch/dispatch" element={<BranchDispatch />} />
+                  <Route path="/branch/suppliers" element={<BranchSuppliers />} />
+                  <Route path="/branch/customers" element={<BranchCustomers />} />
                   <Route path="/branch/quick-links" element={<BranchQuickLinks />} />
                   <Route path="/branch/summary" element={<BranchSummary />} />
 

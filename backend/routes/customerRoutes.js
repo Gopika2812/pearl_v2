@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import multer from "multer";
 import XLSX from "xlsx";
 import Customer from "../models/Customer.js";
@@ -202,9 +203,19 @@ router.get("/", async (req, res) => {
   try {
     const { page = 1, limit = 50, search = "", branchId } = req.query;
     
+    console.log("🔍 GET /customers endpoint hit");
+    console.log("Query params:", { page, limit, search, branchId });
+
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
     }
+
+    // Convert string branchId to ObjectId for proper matching
+    const branchObjectId = mongoose.Types.ObjectId.isValid(branchId)
+      ? new mongoose.Types.ObjectId(branchId)
+      : branchId;
+
+    console.log("Converted branchObjectId:", branchObjectId);
 
     const pageNum = Math.max(1, parseInt(page) || 1);
     const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 50)); // Max 10000 per page
@@ -213,7 +224,7 @@ router.get("/", async (req, res) => {
     // Build search filter with branchId
     const filter = search
       ? {
-          branchId,
+          branchId: branchObjectId,
           $or: [
             { name: { $regex: search, $options: "i" } },
             { whatsapp: { $regex: search, $options: "i" } },
@@ -221,10 +232,11 @@ router.get("/", async (req, res) => {
             { gstin: { $regex: search, $options: "i" } },
           ],
         }
-      : { branchId };
+      : { branchId: branchObjectId };
 
     // ⚡ Get total count
     const total = await Customer.countDocuments(filter);
+    console.log(`📊 Total customers matching filter: ${total}`);
 
     // ⚡ Fetch paginated results with lean() for faster performance
     const customers = await Customer.find(filter)
@@ -235,6 +247,8 @@ router.get("/", async (req, res) => {
       .skip(skip)
       .limit(pageSize)
       .lean();
+
+    console.log(`✅ Returned ${customers.length} customers for page ${pageNum}`);
 
     res.json({
       success: true,
