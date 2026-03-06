@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaArrowUp, FaBox, FaExclamationCircle, FaExclamationTriangle, FaSync } from "react-icons/fa";
+import { FaArrowUp, FaBox, FaExclamationCircle, FaExclamationTriangle, FaList, FaSync, FaThLarge } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -18,6 +18,110 @@ export default function BranchRecycling() {
   const [bulkRestockingInProgress, setBulkRestockingInProgress] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 0, limit: 50 });
+  const [viewMode, setViewMode] = useState("card"); // "card" or "table"
+  const [selectedProductGroup, setSelectedProductGroup] = useState("All"); // Filter by group
+  const [allProducts, setAllProducts] = useState([]); // Store all products for group filtering
+  const [allProductGroups, setAllProductGroups] = useState([]); // Store all unique product groups
+
+  // Fetch all products to get all product groups available
+  const fetchAllProductsForGroups = async () => {
+    if (!currentBranch?._id) return;
+
+    try {
+      const branchId = currentBranch._id;
+      let allProductsData = [];
+      let page = 1;
+      let hasMore = true;
+
+      console.log("🔄 Starting to fetch all products for groups...");
+
+      // Fetch all pages until we get all products
+      while (hasMore) {
+        const url = `${API_BASE}/products?branchId=${branchId}&page=${page}&limit=500`; // Increased limit
+        
+        console.log(`📄 Fetching page ${page} from: ${url}`);
+        
+        const res = await fetch(url);
+        if (!res.ok) {
+          console.warn(`⚠️ API returned status ${res.status}, stopping fetch`);
+          break;
+        }
+        
+        const data = await res.json();
+        console.log(`📦 Page ${page} response:`, data);
+        
+        let productList = [];
+        let pagination = null;
+
+        if (data?.data && Array.isArray(data.data)) {
+          productList = data.data;
+          pagination = data.pagination;
+          console.log(`✨ Extracted ${productList.length} products from data.data`);
+        } else if (Array.isArray(data)) {
+          productList = data;
+          console.log(`✨ Response is direct array with ${productList.length} products`);
+          hasMore = false;
+        } else if (data?.products && Array.isArray(data.products)) {
+          productList = data.products;
+          pagination = data.pagination;
+          console.log(`✨ Extracted ${productList.length} products from data.products`);
+        } else {
+          console.warn("⚠️ No products array found in response");
+          hasMore = false;
+        }
+
+        if (productList.length === 0) {
+          console.log("📭 Empty product list, stopping fetch");
+          hasMore = false;
+        } else {
+          allProductsData = [...allProductsData, ...productList];
+          console.log(`📊 Total products so far: ${allProductsData.length}`);
+
+          // Check if there are more pages
+          if (pagination) {
+            console.log(`📄 Pagination info:`, pagination);
+            if (page >= (pagination.pages || 1)) {
+              hasMore = false;
+            }
+          } else {
+            hasMore = false;
+          }
+        }
+
+        page++;
+
+        // Safety limit to prevent infinite loops
+        if (page > 100) {
+          console.warn("⚠️ Reached max pages (100), stopping");
+          hasMore = false;
+        }
+      }
+
+      console.log(`✅ FINAL: Fetched ${allProductsData.length} total products`);
+      console.log("📋 All products:", allProductsData);
+
+      // Store all products and extract unique groups
+      setAllProducts(allProductsData);
+
+      // Extract unique product groups
+      const groups = new Set(
+        allProductsData
+          .map((p) => {
+            if (p.productGroup && typeof p.productGroup === 'object') {
+              return p.productGroup.name || p.productGroup._id;
+            }
+            return p.productGroup;
+          })
+          .filter(Boolean)
+      );
+      
+      const finalGroups = ["All", ...Array.from(groups).sort()];
+      console.log("🏷️ Unique product groups:", finalGroups);
+      setAllProductGroups(finalGroups);
+    } catch (err) {
+      console.error("❌ Error fetching all product groups:", err);
+    }
+  };
 
   const fetchProducts = async (page = 1, search = "") => {
     if (!currentBranch?._id) {
@@ -142,10 +246,18 @@ export default function BranchRecycling() {
       console.log("✅ Branch loaded:", currentBranch.name);
       setBranchLoaded(true);
       fetchAllData(currentPage, searchTerm);
+      fetchAllProductsForGroups(); // Fetch all groups on load
     } else {
       setBranchLoaded(false);
     }
-  }, [currentBranch?._id, currentPage, searchTerm]);
+  }, [currentBranch?._id]);
+
+  // Handle page and search changes
+  useEffect(() => {
+    if (currentBranch?._id && branchLoaded) {
+      fetchAllData(currentPage, searchTerm);
+    }
+  }, [currentPage, searchTerm]);
 
   // Categorize products by stock level
   const categorizeProducts = (prods) => {
@@ -220,10 +332,13 @@ export default function BranchRecycling() {
             purchasePrice: product.purchasingPrice,
             sellingPrice: product.sellingPrice,
             hsn: product.hsn || product.hsnCode,
-            gst: product.gst,
+            gst: product.gst || 0,
             cgst: (product.gst || 0) / 2,
             sgst: (product.gst || 0) / 2,
             igst: false,
+            subtotal: product.reorderQty * product.purchasingPrice,
+            tax: (product.reorderQty * product.purchasingPrice * (product.gst || 0)) / 100,
+            total: product.reorderQty * product.purchasingPrice + (product.reorderQty * product.purchasingPrice * (product.gst || 0)) / 100,
           },
         ],
         subtotal: product.reorderQty * product.purchasingPrice,
@@ -318,95 +433,149 @@ export default function BranchRecycling() {
     setSelectedProducts(newSelected);
   };
 
-  // Bulk restock selected products
+  // Bulk restock selected products - CREATE SINGLE PO
   const handleBulkRestock = async () => {
     if (selectedProducts.size === 0) {
       toast.error("Please select at least one product");
       return;
     }
 
-    setBulkRestockingInProgress(true);
-    const selectedProds = products.filter((p) => selectedProducts.has(p._id));
-    let successCount = 0;
-    let failCount = 0;
+    // Use allProducts if available (includes products from all groups), otherwise fall back to products
+    const sourceProducts = allProducts.length > 0 ? allProducts : products;
+    const selectedProds = sourceProducts.filter((p) => selectedProducts.has(p._id));
 
-    for (const product of selectedProds) {
-      try {
-        if (!product.reorderQty) {
-          failCount++;
-          continue;
-        }
-
-        const lastPO = await fetch(
-          `${API_BASE}/purchase-orders?branchId=${currentBranch._id}&limit=1&sort=-date`
-        ).then((r) => r.json());
-        
-        const lastPOData = lastPO && Array.isArray(lastPO) ? lastPO[0] : null;
-        const nextVoucherId = generateNextVoucherId(lastPOData);
-
-        const vendor = product.preferredVendor || lastPOData?.vendor || "Default Vendor";
-        const voucherType = lastPOData?.voucherType || "standard";
-
-        const poPayload = {
-          branchId: currentBranch._id,
-          invoiceId: nextVoucherId,
-          voucherType,
-          vendor,
-          warehouse: lastPOData?.warehouse || "",
-          billingPerson: user?.id || "",
-          items: [
-            {
-              productId: product._id,
-              name: product.name,
-              productGroup: product.productGroup,
-              qty: product.reorderQty,
-              purchasePrice: product.purchasingPrice,
-              sellingPrice: product.sellingPrice,
-              hsn: product.hsn || product.hsnCode,
-              gst: product.gst,
-              cgst: (product.gst || 0) / 2,
-              sgst: (product.gst || 0) / 2,
-              igst: false,
-            },
-          ],
-          subtotal: product.reorderQty * product.purchasingPrice,
-          totalTax:
-            (product.reorderQty * product.purchasingPrice * product.gst) / 100,
-          transportCharge: 0,
-          grandTotal:
-            product.reorderQty * product.purchasingPrice +
-            (product.reorderQty * product.purchasingPrice * product.gst) / 100,
-          status: "PLACED",
-          date: new Date().toISOString(),
-        };
-
-        const res = await fetch(`${API_BASE}/purchase-orders`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(poPayload),
-        });
-
-        if (res.ok) {
-          successCount++;
-        } else {
-          failCount++;
-        }
-      } catch (err) {
-        console.error("Error restocking product:", product.name, err);
-        failCount++;
-      }
+    // Validate we found all selected products
+    if (selectedProds.length === 0) {
+      toast.error("❌ Selected products not found in database");
+      console.error("Selected IDs:", Array.from(selectedProducts));
+      console.error("Source products:", sourceProducts.map(p => p._id));
+      return;
     }
 
-    toast.success(
-      `✅ Bulk Restocking Complete!\n${successCount} POs created, ${failCount} failed`
-    );
-    setSelectedProducts(new Set());
-    setBulkRestockingInProgress(false);
-    fetchAllData(currentPage, searchTerm);
+    if (selectedProds.length !== selectedProducts.size) {
+      console.warn(`⚠️ Only found ${selectedProds.length} of ${selectedProducts.size} selected products`);
+    }
+
+    // Validate all products have same vendor
+    const vendors = new Set(selectedProds.map((p) => p.preferredVendor || "Default Vendor"));
+    if (vendors.size > 1) {
+      toast.error("⚠️ All selected products must be from the SAME vendor for single PO");
+      return;
+    }
+
+    // Check all products have reorder qty
+    const productsWithoutQty = selectedProds.filter((p) => !p.reorderQty || p.reorderQty === 0);
+    if (productsWithoutQty.length > 0) {
+      toast.error(`Missing restock qty for: ${productsWithoutQty.map((p) => p.name).join(", ")}`);
+      return;
+    }
+
+    setBulkRestockingInProgress(true);
+
+    try {
+      // Fetch last PO to generate next voucher ID
+      const lastPOResponse = await fetch(
+        `${API_BASE}/purchase-orders?branchId=${currentBranch._id}&limit=1&sort=-date`
+      );
+      const lastPOData = await lastPOResponse.json();
+      const lastPO = lastPOData && Array.isArray(lastPOData) ? lastPOData[0] : null;
+      const nextVoucherId = generateNextVoucherId(lastPO);
+
+      // Get vendor from first product (all validated to be same)
+      const vendor = selectedProds[0].preferredVendor || lastPO?.vendor || "Default Vendor";
+      const voucherType = lastPO?.voucherType || "standard";
+
+      // Build items array with all selected products and calculate totals per item
+      let subtotal = 0;
+      let totalTax = 0;
+
+      const items = selectedProds.map((product) => {
+        const itemSubtotal = product.reorderQty * product.purchasingPrice;
+        const itemTax = (itemSubtotal * (product.gst || 0)) / 100;
+        const itemTotal = itemSubtotal + itemTax;
+
+        subtotal += itemSubtotal;
+        totalTax += itemTax;
+
+        return {
+          productId: product._id,
+          name: product.name,
+          productGroup: product.productGroup,
+          qty: product.reorderQty,
+          purchasePrice: product.purchasingPrice,
+          sellingPrice: product.sellingPrice,
+          hsn: product.hsn || product.hsnCode,
+          gst: product.gst || 0,
+          cgst: (product.gst || 0) / 2,
+          sgst: (product.gst || 0) / 2,
+          igst: false,
+          subtotal: itemSubtotal, // Add item subtotal
+          tax: itemTax, // Add item tax
+          total: itemTotal, // Add item total
+        };
+      });
+
+      const grandTotal = subtotal + totalTax;
+
+      // Create SINGLE purchase order with all items
+      const poPayload = {
+        branchId: currentBranch._id,
+        invoiceId: nextVoucherId,
+        voucherType,
+        vendor,
+        warehouse: lastPO?.warehouse || "",
+        billingPerson: user?.id || "",
+        items, // All items in single array
+        subtotal,
+        totalTax,
+        transportCharge: 0,
+        grandTotal,
+        status: "PLACED",
+        date: new Date().toISOString(),
+      };
+
+      const res = await fetch(`${API_BASE}/purchase-orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(poPayload),
+      });
+
+      const data = await res.json();
+
+      if (data.success || res.ok) {
+        toast.success(
+          `✅ Grouped Restocking PO Created!\nInvoice: ${nextVoucherId}\nItems: ${selectedProds.length}\nTotal: ₹${grandTotal.toFixed(2)}`
+        );
+        setSelectedProducts(new Set());
+        fetchAllData(currentPage, searchTerm);
+      } else {
+        toast.error(data.message || "Failed to create restocking PO");
+      }
+    } catch (err) {
+      console.error("Error:", err);
+      toast.error("Error creating restocking PO");
+    } finally {
+      setBulkRestockingInProgress(false);
+    }
   };
 
   // API already filters by search term, so just categorize the products
   const { outOfStock, lowStock, normalStock } = categorizeProducts(products);
+
+  // Use allProducts when filtering by group, otherwise use paginated products
+  const productsForFiltering = selectedProductGroup !== "All" ? allProducts : products;
+
+  // Filter products by selected group (handle both string and object cases)
+  const filteredProducts = selectedProductGroup === "All" 
+    ? products 
+    : productsForFiltering.filter((p) => {
+        const groupName = p.productGroup && typeof p.productGroup === 'object' 
+          ? (p.productGroup.name || p.productGroup._id)
+          : p.productGroup;
+        return groupName === selectedProductGroup;
+      });
+
+  const { outOfStock: filteredOutOfStock, lowStock: filteredLowStock, normalStock: filteredNormalStock } = categorizeProducts(filteredProducts);
 
   const StockCategory = ({ title, products: prods, icon: Icon, bgColor, textColor, borderColor }) => (
     <div className="mb-8">
@@ -674,13 +843,58 @@ export default function BranchRecycling() {
               />
             </div>
 
+            {/* Product Group Filter */}
+            <select
+              value={selectedProductGroup}
+              onChange={(e) => {
+                setSelectedProductGroup(e.target.value);
+                setSelectedProducts(new Set()); // Clear selection when changing group
+              }}
+              className="px-4 py-2 rounded-lg text-gray-800 bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-300 font-semibold"
+            >
+              {allProductGroups.map((group) => (
+                <option key={String(group)} value={String(group)}>
+                  {String(group)} {group !== "All" ? `(${allProducts.filter((p) => {
+                    const groupName = p.productGroup && typeof p.productGroup === 'object' 
+                      ? (p.productGroup.name || p.productGroup._id)
+                      : p.productGroup;
+                    return groupName === group;
+                  }).length})` : `(${allProducts.length})`}
+                </option>
+              ))}
+            </select>
+
+            {/* View Toggle */}
+            <div className="flex gap-2 bg-white/30 p-1 rounded-lg">
+              <button
+                onClick={() => setViewMode("card")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
+                  viewMode === "card"
+                    ? "bg-white text-orange-600 shadow-md"
+                    : "text-white hover:bg-white/20"
+                }`}
+              >
+                <FaThLarge size={16} /> Card
+              </button>
+              <button
+                onClick={() => setViewMode("table")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
+                  viewMode === "table"
+                    ? "bg-white text-orange-600 shadow-md"
+                    : "text-white hover:bg-white/20"
+                }`}
+              >
+                <FaList size={16} /> Table
+              </button>
+            </div>
+
             {selectedProducts.size > 0 && (
               <button
                 onClick={handleBulkRestock}
                 disabled={bulkRestockingInProgress}
                 className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 transition disabled:opacity-50 whitespace-nowrap"
               >
-                ✓ Restock {selectedProducts.size} Product{selectedProducts.size !== 1 ? "s" : ""}
+                ✓ Restock {selectedProducts.size} Product{selectedProducts.size !== 1 ? "s" : ""} (1 PO)
               </button>
             )}
           </div>
@@ -757,12 +971,13 @@ export default function BranchRecycling() {
           <div className="bg-white rounded-2xl shadow p-8 text-center">
             <p className="text-gray-500">No products found for this branch</p>
           </div>
-        ) : (
+        ) : viewMode === "card" ? (
+          /* CARD VIEW */
           <div className="bg-white rounded-2xl shadow p-8">
             {/* OUT OF STOCK */}
             <StockCategory
               title="🔴 OUT OF STOCK"
-              products={outOfStock}
+              products={filteredOutOfStock}
               icon={FaBox}
               bgColor="bg-red-50"
               textColor="text-red-600"
@@ -772,7 +987,7 @@ export default function BranchRecycling() {
             {/* LOW STOCK */}
             <StockCategory
               title="🟡 LOW STOCK - ACTION REQUIRED"
-              products={lowStock}
+              products={filteredLowStock}
               icon={FaExclamationCircle}
               bgColor="bg-yellow-50"
               textColor="text-yellow-700"
@@ -782,12 +997,131 @@ export default function BranchRecycling() {
             {/* NORMAL STOCK */}
             <StockCategory
               title="🟢 NORMAL STOCK"
-              products={normalStock}
+              products={filteredNormalStock}
               icon={FaBox}
               bgColor="bg-green-50"
               textColor="text-green-700"
               borderColor="border-green-300"
             />
+          </div>
+        ) : (
+          /* TABLE VIEW */
+          <div className="bg-white rounded-2xl shadow overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gradient-to-r from-orange-500 to-red-500 text-white">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-bold">
+                    <input
+                      type="checkbox"
+                      checked={selectedProducts.size === filteredProducts.length && filteredProducts.length > 0}
+                      onChange={() => {
+                        if (selectedProducts.size === filteredProducts.length) {
+                          setSelectedProducts(new Set());
+                        } else {
+                          setSelectedProducts(new Set(filteredProducts.map(p => p._id)));
+                        }
+                      }}
+                      className="w-5 h-5 cursor-pointer"
+                    />
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Product Name</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Units</th>
+                  <th className="px-4 py-3 text-right text-sm font-bold">Current Stock</th>
+                  <th className="px-4 py-3 text-right text-sm font-bold">⏳ Pending Sales</th>
+                  <th className="px-4 py-3 text-right text-sm font-bold">✓ Available</th>
+                  <th className="px-4 py-3 text-right text-sm font-bold">Threshold</th>
+                  <th className="px-4 py-3 text-right text-sm font-bold">Restock Qty</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Preferred Vendor</th>
+                  <th className="px-4 py-3 text-left text-sm font-bold">Status</th>
+                  <th className="px-4 py-3 text-center text-sm font-bold">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map((product, index) => {
+                  const stockStatus = 
+                    product.totalQty === 0 ? "🔴 Out of Stock" :
+                    product.totalQty < (product.reorderLevel || 10) ? "🟡 Low Stock" :
+                    "🟢 Normal";
+                  
+                  const pendingQty = pendingSalesMap?.[product._id] || 0;
+                  const availableQty = Math.max(0, product.totalQty - pendingQty);
+                  
+                  return (
+                    <tr
+                      key={product._id}
+                      className={`${
+                        index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                      } border-b border-gray-200 hover:bg-orange-50/30 transition`}
+                    >
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedProducts.has(product._id)}
+                          onChange={() => toggleProductSelection(product._id)}
+                          className="w-5 h-5 cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-gray-800 text-sm">
+                        {product.name}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 text-sm">
+                        {product.units}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
+                        {product.totalQty}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm">
+                        {pendingQty > 0 ? (
+                          <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full font-semibold">
+                            {pendingQty}
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-blue-700 text-sm">
+                        {availableQty}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-800 text-sm">
+                        {product.reorderLevel || 10}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
+                        {product.reorderQty || 20}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 text-sm">
+                        {product.preferredVendor || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {stockStatus}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex gap-2 justify-center">
+                          <button
+                            onClick={() => startEditProduct(product)}
+                            className="px-3 py-1 bg-blue-500 text-white rounded font-semibold text-xs hover:bg-blue-600 transition"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleRestock(product)}
+                            disabled={restockingInProgress[product._id] || !product.reorderQty}
+                            className={`px-3 py-1 rounded font-semibold text-xs transition ${
+                              restockingInProgress[product._id]
+                                ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                                : product.reorderQty
+                                ? "bg-green-500 text-white hover:bg-green-600"
+                                : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                            }`}
+                          >
+                            {restockingInProgress[product._id] ? "..." : "Restock"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
