@@ -54,6 +54,14 @@ const productSchema = new mongoose.Schema(
       enum: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
       default: [],
     }, // Days when restocking is done
+    
+    // Smart Restocking Configuration based on sales analytics
+    restockingConfig: {
+      salesPeriodDays: { type: Number, default: 7 }, // Number of days to analyze sales
+      sellingQtyInPeriod: { type: Number, default: 0 }, // Auto-calculated: qty sold in period
+      threshold: { type: Number, default: null }, // Manual override for reorder threshold
+      restockingQty: { type: Number, default: null }, // Manual override for restocking quantity
+    },
   },
   { timestamps: true }
 );

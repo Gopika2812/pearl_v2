@@ -1051,25 +1051,33 @@ export default function InventorySalesOrderEntry({
             
             {/* ITEM DROPDOWN */}
             {showItemDropdown && productGroup && warehouse && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
                 {productsWithStock
                   .filter(p => 
-                    p.name.toLowerCase().includes(itemSearch.toLowerCase()) &&
-                    (availableQtyCache[p._id] || p.availableQty || 0) > 0
+                    p.name.toLowerCase().includes(itemSearch.toLowerCase())
                   )
-                  .map((p) => (
-                    <div
-                      key={p._id}
-                      onClick={() => handleItemSelection(p._id)}
-                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
-                    >
-                      <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
-                      <div className="text-gray-500 text-xs">Available: {availableQtyCache[p._id] ?? p.availableQty ?? 0}</div>
-                    </div>
-                  ))}
+                  .map((p) => {
+                    const availableQty = availableQtyCache[p._id] ?? p.availableQty ?? 0;
+                    const isOutOfStock = availableQty === 0;
+                    return (
+                      <div
+                        key={p._id}
+                        onClick={() => !isOutOfStock && handleItemSelection(p._id)}
+                        className={`px-3 py-2 border-b text-sm ${
+                          isOutOfStock 
+                            ? 'bg-gray-50 cursor-not-allowed opacity-60' 
+                            : 'hover:bg-blue-50 cursor-pointer'
+                        }`}
+                      >
+                        <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
+                        <div className={`text-xs ${isOutOfStock ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
+                          Available: {availableQty} {isOutOfStock && '(Out of Stock)'}
+                        </div>
+                      </div>
+                    );
+                  })}
                 {productsWithStock.filter(p => 
-                  p.name.toLowerCase().includes(itemSearch.toLowerCase()) &&
-                  (availableQtyCache[p._id] || p.availableQty || 0) > 0
+                  p.name.toLowerCase().includes(itemSearch.toLowerCase())
                 ).length === 0 && (
                   <div className="px-3 py-2 text-gray-500 text-sm">
                     {productsWithStock.length === 0 ? "Select Product Group first" : "No items found"}
@@ -1210,23 +1218,33 @@ export default function InventorySalesOrderEntry({
               className={`${inputClass} ${!sampleProductGroup ? 'bg-gray-100 cursor-not-allowed' : ''}`}
             />
             {showSampleItemDropdown && sampleProductGroup && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto">
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
                 {loadingSampleProducts && (
                   <div className="px-3 py-2 text-gray-500 text-sm text-center">🔍 Loading products...</div>
                 )}
                 {!loadingSampleProducts && filteredSampleProducts
-                  .filter(p => p.name.toLowerCase().includes(sampleItemSearch.toLowerCase()) && p.totalQty > 0)
-                  .map((p) => (
-                    <div
-                      key={p._id}
-                      onClick={() => handleSampleItemSelection(p._id)}
-                      className="px-3 py-2 hover:bg-yellow-50 cursor-pointer border-b text-sm"
-                    >
-                      <div className="font-semibold">{p.name}</div>
-                      <div className="text-gray-500 text-xs">Available: {p.totalQty || 0}</div>
-                    </div>
-                  ))}
-                {!loadingSampleProducts && filteredSampleProducts.filter(p => p.name.toLowerCase().includes(sampleItemSearch.toLowerCase()) && p.totalQty > 0).length === 0 && (
+                  .filter(p => p.name.toLowerCase().includes(sampleItemSearch.toLowerCase()))
+                  .map((p) => {
+                    const availableQty = p.totalQty || 0;
+                    const isOutOfStock = availableQty === 0;
+                    return (
+                      <div
+                        key={p._id}
+                        onClick={() => !isOutOfStock && handleSampleItemSelection(p._id)}
+                        className={`px-3 py-2 border-b text-sm ${
+                          isOutOfStock 
+                            ? 'bg-gray-50 cursor-not-allowed opacity-60' 
+                            : 'hover:bg-yellow-50 cursor-pointer'
+                        }`}
+                      >
+                        <div className="font-semibold">{p.name}</div>
+                        <div className={`text-xs ${isOutOfStock ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
+                          Available: {availableQty} {isOutOfStock && '(Out of Stock)'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                {!loadingSampleProducts && filteredSampleProducts.filter(p => p.name.toLowerCase().includes(sampleItemSearch.toLowerCase())).length === 0 && (
                   <div className="px-3 py-2 text-gray-500 text-sm">No products available</div>
                 )}
               </div>

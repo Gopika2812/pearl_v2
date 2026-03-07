@@ -77,7 +77,8 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/expenses", extraExpenseRoutes);
 app.use("/api/voucher-types", voucherTypeRoutes);
 app.use("/api/sales-orders", salesOrderRoutes);
-app.use("/api/invoices", invoiceRoutes);
+app.use("/api/sales-invoices", invoiceRoutes); // Frontend calls this
+app.use("/api/invoices", invoiceRoutes); // Legacy support
 app.use("/api/credit-notes", creditNoteRoutes);
 app.use("/api/pearls-book", pearlsBookRoutes);
 app.use("/api/sales-owners", salesOwnerRoutes);

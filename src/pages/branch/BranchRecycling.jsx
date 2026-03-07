@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaArrowUp, FaBox, FaExclamationCircle, FaExclamationTriangle, FaList, FaSync, FaThLarge } from "react-icons/fa";
+import { FaArrowUp, FaBox, FaEdit, FaExclamationCircle, FaExclamationTriangle, FaList, FaSync, FaThLarge } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -22,6 +22,23 @@ export default function BranchRecycling() {
   const [selectedProductGroup, setSelectedProductGroup] = useState("All"); // Filter by group
   const [allProducts, setAllProducts] = useState([]); // Store all products for group filtering
   const [allProductGroups, setAllProductGroups] = useState([]); // Store all unique product groups
+
+  // Restocking Configuration Modal State
+  const [restockingConfigMode, setRestockingConfigMode] = useState(false);
+  const [restockingEditingProduct, setRestockingEditingProduct] = useState(null);
+  const [restockingFormValues, setRestockingFormValues] = useState({
+    salesPeriodDays: 7,
+    sellingQtyInPeriod: 0,
+    threshold: null,
+    restockingQty: null,
+  });
+  const [calculatingSellingQty, setCalculatingSellingQty] = useState(false);
+  const [savingRestockingConfig, setSavingRestockingConfig] = useState(false);
+
+  // Bulk Restock Preview Modal State
+  const [bulkRestockPreviewMode, setBulkRestockPreviewMode] = useState(false);
+  const [bulkRestockPreviewItems, setBulkRestockPreviewItems] = useState([]);
+  const [bulkRestockEditQty, setBulkRestockEditQty] = useState({});
 
   // Fetch all products to get all product groups available
   const fetchAllProductsForGroups = async () => {
@@ -264,10 +281,16 @@ export default function BranchRecycling() {
     return {
       outOfStock: prods.filter((p) => p.totalQty === 0),
       lowStock: prods.filter(
-        (p) => p.totalQty > 0 && p.totalQty < (p.reorderLevel || 10)
+        (p) => {
+          const threshold = p.restockingConfig?.threshold ?? p.reorderLevel ?? 10;
+          return p.totalQty > 0 && p.totalQty < threshold;
+        }
       ),
       normalStock: prods.filter(
-        (p) => p.totalQty >= (p.reorderLevel || 10) && p.totalQty > 0
+        (p) => {
+          const threshold = p.restockingConfig?.threshold ?? p.reorderLevel ?? 10;
+          return p.totalQty >= threshold && p.totalQty > 0;
+        }
       ),
     };
   };
@@ -300,7 +323,8 @@ export default function BranchRecycling() {
 
   // Handle restocking
   const handleRestock = async (product) => {
-    if (!product.reorderQty || product.reorderQty === 0) {
+    const restockQty = product.restockingConfig?.restockingQty ?? product.reorderQty;
+    if (!restockQty || restockQty === 0) {
       toast.error(`Restocking quantity not set for ${product.name}`);
       return;
     }
@@ -328,7 +352,7 @@ export default function BranchRecycling() {
             productId: product._id,
             name: product.name,
             productGroup: product.productGroup,
-            qty: product.reorderQty,
+            qty: restockQty,
             purchasePrice: product.purchasingPrice,
             sellingPrice: product.sellingPrice,
             hsn: product.hsn || product.hsnCode,
@@ -336,18 +360,18 @@ export default function BranchRecycling() {
             cgst: (product.gst || 0) / 2,
             sgst: (product.gst || 0) / 2,
             igst: false,
-            subtotal: product.reorderQty * product.purchasingPrice,
-            tax: (product.reorderQty * product.purchasingPrice * (product.gst || 0)) / 100,
-            total: product.reorderQty * product.purchasingPrice + (product.reorderQty * product.purchasingPrice * (product.gst || 0)) / 100,
+            subtotal: restockQty * product.purchasingPrice,
+            tax: (restockQty * product.purchasingPrice * (product.gst || 0)) / 100,
+            total: restockQty * product.purchasingPrice + (restockQty * product.purchasingPrice * (product.gst || 0)) / 100,
           },
         ],
-        subtotal: product.reorderQty * product.purchasingPrice,
+        subtotal: restockQty * product.purchasingPrice,
         totalTax:
-          (product.reorderQty * product.purchasingPrice * product.gst) / 100,
+          (restockQty * product.purchasingPrice * product.gst) / 100,
         transportCharge: 0,
         grandTotal:
-          product.reorderQty * product.purchasingPrice +
-          (product.reorderQty * product.purchasingPrice * product.gst) / 100,
+          restockQty * product.purchasingPrice +
+          (restockQty * product.purchasingPrice * product.gst) / 100,
         status: "PLACED",
         date: new Date().toISOString(),
       };
@@ -362,7 +386,7 @@ export default function BranchRecycling() {
 
       if (data.success || res.ok) {
         toast.success(
-          `✅ Restocking PO Created!\nInvoice: ${nextVoucherId}\nQty: ${product.reorderQty} units`
+          `✅ Restocking PO Created!\nInvoice: ${nextVoucherId}\nQty: ${restockQty} units`
         );
         fetchAllData(currentPage, searchTerm); // Refresh products and pending sales
       } else {
@@ -422,6 +446,178 @@ export default function BranchRecycling() {
     }
   };
 
+  // Open restocking config modal
+  const openRestockingConfigModal = (product) => {
+    setRestockingEditingProduct(product);
+    setRestockingConfigMode(true);
+    setRestockingFormValues({
+      salesPeriodDays: product.restockingConfig?.salesPeriodDays || 7,
+      sellingQtyInPeriod: product.restockingConfig?.sellingQtyInPeriod || 0,
+      threshold: product.restockingConfig?.threshold,
+      restockingQty: product.restockingConfig?.restockingQty,
+    });
+  };
+
+  // Calculate selling qty for the period
+  const calculateSellingQty = async () => {
+    if (!restockingEditingProduct || !restockingFormValues.salesPeriodDays) return;
+
+    setCalculatingSellingQty(true);
+    try {
+      const productId = restockingEditingProduct._id;
+      const days = restockingFormValues.salesPeriodDays;
+
+      const res = await fetch(
+        `${API_BASE}/products/${productId}/selling-qty/${days}?branchId=${currentBranch._id}`
+      );
+
+      if (!res.ok) throw new Error("Failed to calculate selling qty");
+
+      const data = await res.json();
+      if (data.success) {
+        const calculatedQty = data.sellingQtyInPeriod || 0;
+        
+        // Update form values with calculated qty + auto-filled threshold & restock qty
+        const updatedFormValues = {
+          salesPeriodDays: days,
+          sellingQtyInPeriod: calculatedQty,
+          threshold: calculatedQty,
+          restockingQty: calculatedQty,
+        };
+        
+        setRestockingFormValues(updatedFormValues);
+        
+        // ✅ AUTOMATICALLY SAVE TO DATABASE - ONE STEP PROCESS
+        setSavingRestockingConfig(true);
+        const saveRes = await fetch(
+          `${API_BASE}/products/${productId}/restocking-config`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updatedFormValues),
+          }
+        );
+
+        const saveData = await saveRes.json();
+        if (saveData.success || saveRes.ok) {
+          // Update local product state to reflect changes immediately
+          setProducts((prevProducts) =>
+            prevProducts.map((p) =>
+              p._id === productId
+                ? { ...p, restockingConfig: saveData.restockingConfig || updatedFormValues }
+                : p
+            )
+          );
+          
+          toast.success(`✅ ${calculatedQty} units calculated & auto-saved for last ${days} days!`);
+          
+          // Close modal and refresh
+          setTimeout(() => {
+            setRestockingConfigMode(false);
+            setRestockingEditingProduct(null);
+          }, 500);
+        } else {
+          toast.warning(`⚠️ Calculated: ${calculatedQty} qty but save failed, try again`);
+        }
+      } else {
+        toast.error(data.message || "Failed to calculate selling qty");
+      }
+    } catch (err) {
+      console.error("Error calculating selling qty:", err);
+      toast.error("Error calculating selling quantity");
+    } finally {
+      setCalculatingSellingQty(false);
+      setSavingRestockingConfig(false);
+    }
+  };
+
+  // Auto-save threshold or order qty instantly when edited
+  const autoSaveThresholdOrQty = async (updatedFormValues) => {
+    if (!restockingEditingProduct) return;
+
+    console.log("🔥 AUTOSAVE TRIGGERED!", updatedFormValues);
+    toast.info("💾 Auto-saving threshold/qty...");
+
+    try {
+      console.log("📤 Sending to backend:", {
+        productId: restockingEditingProduct._id,
+        data: updatedFormValues
+      });
+
+      const res = await fetch(
+        `${API_BASE}/products/${restockingEditingProduct._id}/restocking-config`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedFormValues),
+        }
+      );
+
+      const data = await res.json();
+      console.log("📥 Backend response:", data);
+      
+      if (data.success || res.ok) {
+        // Update local product state silently (no toast to avoid spam)
+        setProducts((prevProducts) =>
+          prevProducts.map((p) =>
+            p._id === restockingEditingProduct._id
+              ? { ...p, restockingConfig: data.restockingConfig || updatedFormValues }
+              : p
+          )
+        );
+        console.log("✅ Threshold/Qty auto-saved instantly");
+        toast.success("✅ Saved!");
+      } else {
+        console.error("❌ Save failed:", data.message);
+        toast.error("❌ Failed to save");
+      }
+    } catch (err) {
+      console.error("Error auto-saving threshold/qty:", err);
+      toast.error("❌ Error saving!");
+    }
+  };
+
+  // Save restocking configuration
+  const saveRestockingConfig = async () => {
+    if (!restockingEditingProduct) return;
+
+    setSavingRestockingConfig(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/products/${restockingEditingProduct._id}/restocking-config`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(restockingFormValues),
+        }
+      );
+
+      const data = await res.json();
+      if (data.success || res.ok) {
+        // Update local product state
+        setProducts((prevProducts) =>
+          prevProducts.map((p) =>
+            p._id === restockingEditingProduct._id
+              ? { ...p, restockingConfig: data.restockingConfig || restockingFormValues }
+              : p
+          )
+        );
+
+        toast.success("✅ Restocking configuration updated!");
+        setRestockingConfigMode(false);
+        setRestockingEditingProduct(null);
+      } else {
+        toast.error(data.message || "Failed to save restocking config");
+      }
+    } catch (err) {
+      console.error("Error saving restocking config:", err);
+      toast.error("Error saving restocking configuration");
+    } finally {
+      setSavingRestockingConfig(false);
+    }
+  };
+
+
   // Toggle product selection for bulk restocking
   const toggleProductSelection = (productId) => {
     const newSelected = new Set(selectedProducts);
@@ -433,8 +629,8 @@ export default function BranchRecycling() {
     setSelectedProducts(newSelected);
   };
 
-  // Bulk restock selected products - CREATE SINGLE PO
-  const handleBulkRestock = async () => {
+  // Bulk restock selected products - SHOW PREVIEW
+  const handleBulkRestock = () => {
     if (selectedProducts.size === 0) {
       toast.error("Please select at least one product");
       return;
@@ -463,12 +659,27 @@ export default function BranchRecycling() {
       return;
     }
 
-    // Check all products have reorder qty
-    const productsWithoutQty = selectedProds.filter((p) => !p.reorderQty || p.reorderQty === 0);
-    if (productsWithoutQty.length > 0) {
-      toast.error(`Missing restock qty for: ${productsWithoutQty.map((p) => p.name).join(", ")}`);
-      return;
-    }
+    // Initialize preview with editable qty from CALCULATED SELLING QTY
+    const previewItems = selectedProds.map((p) => ({
+      ...p,
+      previewQty: p.restockingConfig?.sellingQtyInPeriod ?? p.reorderQty ?? 20,
+    }));
+
+    setBulkRestockPreviewItems(previewItems);
+    
+    // Initialize edit qty state with calculated selling qty
+    const qtyMap = {};
+    previewItems.forEach((item) => {
+      qtyMap[item._id] = item.restockingConfig?.sellingQtyInPeriod ?? item.reorderQty ?? 20;
+    });
+    setBulkRestockEditQty(qtyMap);
+
+    setBulkRestockPreviewMode(true);
+  };
+
+  // Confirm bulk restock and create PO
+  const confirmBulkRestock = async () => {
+    if (bulkRestockPreviewItems.length === 0) return;
 
     setBulkRestockingInProgress(true);
 
@@ -482,15 +693,16 @@ export default function BranchRecycling() {
       const nextVoucherId = generateNextVoucherId(lastPO);
 
       // Get vendor from first product (all validated to be same)
-      const vendor = selectedProds[0].preferredVendor || lastPO?.vendor || "Default Vendor";
+      const vendor = bulkRestockPreviewItems[0].preferredVendor || lastPO?.vendor || "Default Vendor";
       const voucherType = lastPO?.voucherType || "standard";
 
-      // Build items array with all selected products and calculate totals per item
+      // Build items array with EDITED quantities
       let subtotal = 0;
       let totalTax = 0;
 
-      const items = selectedProds.map((product) => {
-        const itemSubtotal = product.reorderQty * product.purchasingPrice;
+      const items = bulkRestockPreviewItems.map((product) => {
+        const qty = bulkRestockEditQty[product._id] || product.restockingConfig?.sellingQtyInPeriod || product.reorderQty || 20;
+        const itemSubtotal = qty * product.purchasingPrice;
         const itemTax = (itemSubtotal * (product.gst || 0)) / 100;
         const itemTotal = itemSubtotal + itemTax;
 
@@ -501,7 +713,7 @@ export default function BranchRecycling() {
           productId: product._id,
           name: product.name,
           productGroup: product.productGroup,
-          qty: product.reorderQty,
+          qty, // Use edited qty
           purchasePrice: product.purchasingPrice,
           sellingPrice: product.sellingPrice,
           hsn: product.hsn || product.hsnCode,
@@ -509,9 +721,9 @@ export default function BranchRecycling() {
           cgst: (product.gst || 0) / 2,
           sgst: (product.gst || 0) / 2,
           igst: false,
-          subtotal: itemSubtotal, // Add item subtotal
-          tax: itemTax, // Add item tax
-          total: itemTotal, // Add item total
+          subtotal: itemSubtotal,
+          tax: itemTax,
+          total: itemTotal,
         };
       });
 
@@ -525,7 +737,7 @@ export default function BranchRecycling() {
         vendor,
         warehouse: lastPO?.warehouse || "",
         billingPerson: user?.id || "",
-        items, // All items in single array
+        items,
         subtotal,
         totalTax,
         transportCharge: 0,
@@ -544,9 +756,12 @@ export default function BranchRecycling() {
 
       if (data.success || res.ok) {
         toast.success(
-          `✅ Grouped Restocking PO Created!\nInvoice: ${nextVoucherId}\nItems: ${selectedProds.length}\nTotal: ₹${grandTotal.toFixed(2)}`
+          `✅ Grouped Restocking PO Created!\nInvoice: ${nextVoucherId}\nItems: ${bulkRestockPreviewItems.length}\nTotal: ₹${grandTotal.toFixed(2)}`
         );
         setSelectedProducts(new Set());
+        setBulkRestockPreviewMode(false);
+        setBulkRestockPreviewItems([]);
+        setBulkRestockEditQty({});
         fetchAllData(currentPage, searchTerm);
       } else {
         toast.error(data.message || "Failed to create restocking PO");
@@ -646,13 +861,13 @@ export default function BranchRecycling() {
                 <div className="flex justify-between">
                   <span className="text-gray-600">Threshold:</span>
                   <span className="font-semibold text-gray-800">
-                    {product.reorderLevel || 10}
+                    {product.restockingConfig?.threshold ?? product.reorderLevel ?? 10}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Restock Qty:</span>
                   <span className="font-semibold text-gray-800">
-                    {product.reorderQty || 20}
+                    {product.restockingConfig?.restockingQty ?? product.reorderQty ?? 20}
                   </span>
                 </div>
                 {product.preferredVendor && (
@@ -667,18 +882,21 @@ export default function BranchRecycling() {
 
               <div className="space-y-2">
                 <button
-                  onClick={() => startEditProduct(product)}
-                  className="w-full py-2 px-3 rounded font-semibold text-sm transition border-2 border-blue-500 text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-2"
+                  onClick={() => openRestockingConfigModal(product)}
+                  className="w-full py-2 px-3 rounded font-semibold text-sm transition border-2 border-purple-500 text-purple-600 hover:bg-purple-50 flex items-center justify-center gap-2"
                 >
-                  ⚙️ Edit Settings
+                  <FaEdit /> Edit Settings
                 </button>
                 <button
                   onClick={() => handleRestock(product)}
-                  disabled={restockingInProgress[product._id] || !product.reorderQty}
+                  disabled={
+                    restockingInProgress[product._id] || 
+                    !(product.restockingConfig?.restockingQty ?? product.reorderQty)
+                  }
                   className={`w-full py-2 px-3 rounded font-semibold text-sm transition flex items-center justify-center gap-2 ${
                     restockingInProgress[product._id]
                       ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                      : product.reorderQty
+                      : (product.restockingConfig?.restockingQty ?? product.reorderQty)
                       ? "bg-green-500 text-white hover:bg-green-600"
                       : "bg-gray-300 text-gray-600 cursor-not-allowed"
                   }`}
@@ -792,6 +1010,205 @@ export default function BranchRecycling() {
               className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition disabled:opacity-50"
             >
               {savingConfig ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Restocking Configuration Modal
+  const RestockingConfigModal = () => {
+    if (!restockingEditingProduct) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white p-6 rounded-t-xl sticky top-0">
+            <h2 className="text-2xl font-bold">📊 Smart Restocking Configuration</h2>
+            <p className="text-purple-100 mt-1">{restockingEditingProduct.name}</p>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Step 1: Sales Period Input & Calculate */}
+            <div className="border-b pb-6">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">
+                📅 Step 1: Analyze Sales Period
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Number of Days
+                  </label>
+                  <input
+                    type="number"
+                    value={restockingFormValues.salesPeriodDays}
+                    onChange={(e) =>
+                      setRestockingFormValues((prev) => ({
+                        ...prev,
+                        salesPeriodDays: parseInt(e.target.value) || 7,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="e.g., 7"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Analyze past X days of sales
+                  </p>
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    onClick={calculateSellingQty}
+                    disabled={calculatingSellingQty || !restockingFormValues.salesPeriodDays}
+                    className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 text-white font-semibold hover:from-orange-600 hover:to-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {calculatingSellingQty ? "🔄 Calculating & Saving..." : "🔍 Calculate & Save"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 2: Display Calculated Qty */}
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-5 rounded-lg border-2 border-purple-300">
+              <h3 className="text-lg font-bold text-gray-800 mb-3">
+                📦 Step 2: Calculated Results
+              </h3>
+              <div className="text-center">
+                <div className="text-4xl font-bold text-purple-700">
+                  {restockingFormValues.sellingQtyInPeriod || 0}
+                </div>
+                <div className="text-lg text-gray-600 mt-1">
+                  {restockingEditingProduct.units} sold in last{" "}
+                  <span className="font-semibold">{restockingFormValues.salesPeriodDays}</span> days
+                </div>
+                <p className="text-sm text-gray-600 mt-2 italic">
+                  ✓ This quantity will auto-fill the threshold & order qty below
+                </p>
+              </div>
+            </div>
+
+            {/* Step 3: Configuration Settings */}
+            <div className="border-t pt-6">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">
+                ⚙️ Step 3: Auto-Filled Configuration (Edit if You Want)
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Threshold */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    🚨 Reorder Threshold
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={restockingFormValues.threshold ?? restockingFormValues.sellingQtyInPeriod}
+                      onChange={(e) =>
+                        setRestockingFormValues((prev) => ({
+                          ...prev,
+                          threshold: parseInt(e.target.value) || 0,
+                        }))
+                      }
+                      onBlur={() => {
+                        // Auto-save instantly when user finishes editing
+                        autoSaveThresholdOrQty(restockingFormValues);
+                      }}
+                      className="w-full px-3 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      placeholder="Enter threshold"
+                    />
+                    <span className="absolute right-3 top-3 text-gray-500 text-sm font-bold">
+                      {restockingEditingProduct.units}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-2">
+                    Alert when stock falls below this. Auto-filled with calculated qty.
+                  </p>
+                </div>
+
+                {/* Restocking Qty */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    🛒 Order Quantity
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={restockingFormValues.restockingQty ?? restockingFormValues.sellingQtyInPeriod}
+                      onChange={(e) =>
+                        setRestockingFormValues((prev) => ({
+                          ...prev,
+                          restockingQty: parseInt(e.target.value) || 0,
+                        }))
+                      }
+                      onBlur={() => {
+                        // Auto-save instantly when user finishes editing
+                        autoSaveThresholdOrQty(restockingFormValues);
+                      }}
+                      className="w-full px-3 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      placeholder="Enter order qty"
+                    />
+                    <span className="absolute right-3 top-3 text-gray-500 text-sm font-bold">
+                      {restockingEditingProduct.units}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-2">
+                    How much to order when threshold reached. Auto-filled with calculated qty.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div className="bg-gray-50 p-4 rounded-lg border-l-4 border-gray-400">
+              <p className="text-sm font-bold text-gray-800 mb-3">📋 Configuration Summary:</p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-white p-2 rounded">
+                  <p className="text-gray-600">Period</p>
+                  <p className="font-bold text-gray-800">
+                    {restockingFormValues.salesPeriodDays} days
+                  </p>
+                </div>
+                <div className="bg-white p-2 rounded">
+                  <p className="text-gray-600">Selling Qty</p>
+                  <p className="font-bold text-gray-800">
+                    {restockingFormValues.sellingQtyInPeriod} {restockingEditingProduct.units}
+                  </p>
+                </div>
+                <div className="bg-white p-2 rounded">
+                  <p className="text-gray-600">Threshold</p>
+                  <p className="font-bold text-purple-700">
+                    {restockingFormValues.threshold ?? restockingFormValues.sellingQtyInPeriod}
+                  </p>
+                </div>
+                <div className="bg-white p-2 rounded">
+                  <p className="text-gray-600">Order Qty</p>
+                  <p className="font-bold text-purple-700">
+                    {restockingFormValues.restockingQty ?? restockingFormValues.sellingQtyInPeriod}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div className="bg-gray-50 px-6 py-4 rounded-b-xl flex gap-3 border-t sticky bottom-0">
+            <button
+              onClick={() => {
+                setRestockingConfigMode(false);
+                setRestockingEditingProduct(null);
+              }}
+              className="flex-1 px-4 py-2 rounded-lg border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition"
+            >
+              Close
+            </button>
+            <button
+              onClick={() => {
+                setRestockingConfigMode(false);
+                setRestockingEditingProduct(null);
+              }}
+              className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold hover:from-green-600 hover:to-green-700 transition"
+            >
+              ✅ Configuration Saved!
             </button>
           </div>
         </div>
@@ -1038,9 +1455,12 @@ export default function BranchRecycling() {
               </thead>
               <tbody>
                 {filteredProducts.map((product, index) => {
+                  const threshold = product.restockingConfig?.threshold ?? product.reorderLevel ?? 10;
+                  const restockQty = product.restockingConfig?.restockingQty ?? product.reorderQty ?? 20;
+                  
                   const stockStatus = 
                     product.totalQty === 0 ? "🔴 Out of Stock" :
-                    product.totalQty < (product.reorderLevel || 10) ? "🟡 Low Stock" :
+                    product.totalQty < threshold ? "🟡 Low Stock" :
                     "🟢 Normal";
                   
                   const pendingQty = pendingSalesMap?.[product._id] || 0;
@@ -1082,11 +1502,11 @@ export default function BranchRecycling() {
                       <td className="px-4 py-3 text-right font-semibold text-blue-700 text-sm">
                         {availableQty}
                       </td>
-                      <td className="px-4 py-3 text-right text-gray-800 text-sm">
-                        {product.reorderLevel || 10}
+                      <td className="px-4 py-3 text-right text-gray-800 text-sm font-bold">
+                        {threshold}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
-                        {product.reorderQty || 20}
+                        {restockQty}
                       </td>
                       <td className="px-4 py-3 text-gray-700 text-sm">
                         {product.preferredVendor || "-"}
@@ -1097,14 +1517,14 @@ export default function BranchRecycling() {
                       <td className="px-4 py-3 text-center">
                         <div className="flex gap-2 justify-center">
                           <button
-                            onClick={() => startEditProduct(product)}
-                            className="px-3 py-1 bg-blue-500 text-white rounded font-semibold text-xs hover:bg-blue-600 transition"
+                            onClick={() => openRestockingConfigModal(product)}
+                            className="px-3 py-1 bg-purple-500 text-white rounded font-semibold text-xs hover:bg-purple-600 transition"
                           >
-                            Edit
+                            📊 Config
                           </button>
                           <button
                             onClick={() => handleRestock(product)}
-                            disabled={restockingInProgress[product._id] || !product.reorderQty}
+                            disabled={restockingInProgress[product._id] || !restockQty}
                             className={`px-3 py-1 rounded font-semibold text-xs transition ${
                               restockingInProgress[product._id]
                                 ? "bg-gray-300 text-gray-600 cursor-not-allowed"
@@ -1128,6 +1548,161 @@ export default function BranchRecycling() {
 
       {/* EDIT MODAL */}
       {editingProduct && <EditModal />}
+
+      {/* RESTOCKING CONFIG MODAL */}
+      {restockingConfigMode && <RestockingConfigModal />}
+
+      {/* BULK RESTOCK PREVIEW MODAL */}
+      {bulkRestockPreviewMode && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white p-6 rounded-t-xl sticky top-0">
+              <h2 className="text-2xl font-bold">🛒 Grouped Restocking Preview</h2>
+              <p className="text-orange-100 mt-1">Review and edit quantities before creating PO</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Vendor Info */}
+              <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+                <p className="text-sm text-gray-600">
+                  <strong>Vendor:</strong> {bulkRestockPreviewItems[0]?.preferredVendor || "Default Vendor"}
+                </p>
+                <p className="text-sm text-gray-600">
+                  <strong>Items:</strong> {bulkRestockPreviewItems.length} products
+                </p>
+              </div>
+
+              {/* Products Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-sm font-bold text-gray-700">Product Name</th>
+                      <th className="px-3 py-2 text-center text-sm font-bold text-gray-700">Unit</th>
+                      <th className="px-3 py-2 text-right text-sm font-bold text-gray-700">Price</th>
+                      <th className="px-3 py-2 text-center text-sm font-bold text-gray-700">🛒 Qty</th>
+                      <th className="px-3 py-2 text-right text-sm font-bold text-gray-700">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkRestockPreviewItems.map((product, idx) => {
+                      const qty = bulkRestockEditQty[product._id] || product.restockingConfig?.sellingQtyInPeriod || product.reorderQty || 20;
+                      const subtotal = qty * product.purchasingPrice;
+
+                      return (
+                        <tr key={product._id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                          <td className="px-3 py-3 text-sm font-semibold text-gray-800 border-b">
+                            {product.name}
+                          </td>
+                          <td className="px-3 py-3 text-sm text-center text-gray-600 border-b">
+                            {product.units}
+                          </td>
+                          <td className="px-3 py-3 text-sm text-right text-gray-800 font-semibold border-b">
+                            ₹{product.purchasingPrice}
+                          </td>
+                          <td className="px-3 py-3 text-center border-b">
+                            <input
+                              type="number"
+                              value={qty}
+                              onChange={(e) =>
+                                setBulkRestockEditQty((prev) => ({
+                                  ...prev,
+                                  [product._id]: parseInt(e.target.value) || 0,
+                                }))
+                              }
+                              className="w-20 px-2 py-1 border border-gray-300 rounded text-center font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500"
+                            />
+                          </td>
+                          <td className="px-3 py-3 text-sm text-right text-gray-800 font-bold border-b">
+                            ₹{subtotal.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Summary */}
+              <div className="bg-gradient-to-r from-orange-50 to-orange-100 p-4 rounded-lg border-2 border-orange-300">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-xs text-gray-600">Subtotal</p>
+                    <p className="text-lg font-bold text-orange-700">
+                      ₹
+                      {bulkRestockPreviewItems
+                        .reduce(
+                          (sum, p) =>
+                            sum +
+                            (bulkRestockEditQty[p._id] || p.restockingConfig?.sellingQtyInPeriod || p.reorderQty || 20) * p.purchasingPrice,
+                          0
+                        )
+                        .toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600">Tax (GST)</p>
+                    <p className="text-lg font-bold text-orange-700">
+                      ₹
+                      {bulkRestockPreviewItems
+                        .reduce(
+                          (sum, p) =>
+                            sum +
+                            ((bulkRestockEditQty[p._id] || p.restockingConfig?.sellingQtyInPeriod || p.reorderQty || 20) * p.purchasingPrice * (p.gst || 0)) /
+                              100,
+                          0
+                        )
+                        .toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600">Grand Total</p>
+                    <p className="text-lg font-bold text-orange-700">
+                      ₹
+                      {(
+                        bulkRestockPreviewItems.reduce(
+                          (sum, p) =>
+                            sum +
+                            (bulkRestockEditQty[p._id] || p.restockingConfig?.sellingQtyInPeriod || p.reorderQty || 20) * p.purchasingPrice,
+                          0
+                        ) +
+                        bulkRestockPreviewItems.reduce(
+                          (sum, p) =>
+                            sum +
+                            ((bulkRestockEditQty[p._id] || p.restockingConfig?.sellingQtyInPeriod || p.reorderQty || 20) * p.purchasingPrice * (p.gst || 0)) /
+                              100,
+                          0
+                        )
+                      ).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="bg-gray-50 px-6 py-4 rounded-b-xl flex gap-3 border-t sticky bottom-0">
+              <button
+                onClick={() => {
+                  setBulkRestockPreviewMode(false);
+                  setBulkRestockPreviewItems([]);
+                  setBulkRestockEditQty({});
+                }}
+                className="flex-1 px-4 py-2 rounded-lg border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition"
+              >
+                ✕ Cancel
+              </button>
+              <button
+                onClick={confirmBulkRestock}
+                disabled={bulkRestockingInProgress}
+                className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-orange-600 to-orange-700 text-white font-semibold hover:from-orange-700 hover:to-orange-800 transition disabled:opacity-50"
+              >
+                {bulkRestockingInProgress ? "⏳ Creating PO..." : "✅ Create PO"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

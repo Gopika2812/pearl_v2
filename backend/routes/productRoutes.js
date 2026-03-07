@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import multer from "multer";
 import XLSX from "xlsx";
+import Invoice from "../models/Invoice.js";
 import Product from "../models/Product.js";
 import ProductCategory from "../models/ProductCategory.js";
 import ProductGroup from "../models/ProductGroup.js";
@@ -790,6 +791,120 @@ router.post("/apply-group-margin", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to apply group margin"
+    });
+  }
+});
+
+// GET: Calculate selling quantity for a product in last X days
+router.get("/:productId/selling-qty/:days", async (req, res) => {
+  try {
+    const { productId, days } = req.params;
+    const { branchId } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ success: false, message: "Invalid product ID" });
+    }
+
+    const daysNum = parseInt(days);
+    if (isNaN(daysNum) || daysNum <= 0) {
+      return res.status(400).json({ success: false, message: "Days must be a positive number" });
+    }
+
+    // Calculate date range (last X days)
+    const endDate = new Date();
+    const startDate = new Date(endDate.getTime() - daysNum * 24 * 60 * 60 * 1000);
+
+    // Query invoices for this branch and product in the date range
+    const query = {
+      branchId: mongoose.Types.ObjectId.isValid(branchId) ? branchId : undefined,
+      invoiceDate: { $gte: startDate, $lte: endDate },
+      "items.productId": mongoose.Types.ObjectId.isValid(productId) ? productId : undefined,
+    };
+
+    const invoices = await Invoice.find(query).lean();
+
+    // Sum the quantity of this product from all invoices
+    let totalQty = 0;
+    invoices.forEach((invoice) => {
+      if (Array.isArray(invoice.items)) {
+        invoice.items.forEach((item) => {
+          const itemProductId = item.productId?._id || item.productId;
+          if (itemProductId && itemProductId.toString() === productId) {
+            totalQty += item.qty || 0;
+          }
+        });
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      productId,
+      days: daysNum,
+      sellingQtyInPeriod: totalQty,
+      period: { startDate, endDate },
+      invoiceCount: invoices.length,
+    });
+  } catch (error) {
+    console.error("Calculate selling qty error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to calculate selling quantity"
+    });
+  }
+});
+
+// PUT: Save/Update product restocking configuration
+router.put("/:productId/restocking-config", async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { salesPeriodDays, threshold, restockingQty, sellingQtyInPeriod } = req.body;
+
+    console.log("📥 Backend received:", {
+      productId,
+      salesPeriodDays,
+      threshold,
+      restockingQty,
+      sellingQtyInPeriod,
+    });
+
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ success: false, message: "Invalid product ID" });
+    }
+
+    // Validate inputs
+    if (salesPeriodDays && salesPeriodDays <= 0) {
+      return res.status(400).json({ success: false, message: "Sales period days must be positive" });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    // Update restocking config
+    product.restockingConfig = {
+      salesPeriodDays: salesPeriodDays || product.restockingConfig?.salesPeriodDays || 7,
+      sellingQtyInPeriod: sellingQtyInPeriod !== undefined ? sellingQtyInPeriod : product.restockingConfig?.sellingQtyInPeriod || 0,
+      threshold: threshold !== undefined && threshold !== null ? parseInt(threshold) : (product.restockingConfig?.threshold || null),
+      restockingQty: restockingQty !== undefined && restockingQty !== null ? parseInt(restockingQty) : (product.restockingConfig?.restockingQty || null),
+    };
+
+    console.log("💾 Saving to DB:", product.restockingConfig);
+
+    await product.save();
+
+    console.log("✅ Saved successfully!");
+
+    res.status(200).json({
+      success: true,
+      message: "Restocking configuration updated",
+      restockingConfig: product.restockingConfig,
+    });
+  } catch (error) {
+    console.error("Update restocking config error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update restocking configuration"
     });
   }
 });

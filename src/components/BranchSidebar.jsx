@@ -37,6 +37,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     { name: "Loading & Dispatch", path: "/branch/dispatch", icon: <FaTruck /> },
     { name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: <FaHandshake /> },
     { name: "Customers (Debtors)", path: "/branch/customers", icon: <FaUsers /> },
+    { name: "Sales Reports", path: "/branch/sales-reports", icon: <FaChartBar /> },
     { name: "Quick Links", path: "/branch/quick-links", icon: <FaLink /> },
   ];
 

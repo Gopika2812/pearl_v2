@@ -258,6 +258,42 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           const product = await Product.findById(item.productId).session(session);
           if (product) {
             product.totalQty = (product.totalQty || 0) - (item.qty || 0);
+            
+            // ✅ RECALCULATE selling qty based on configured period
+            if (product.restockingConfig?.salesPeriodDays) {
+              const days = product.restockingConfig.salesPeriodDays;
+              const endDate = new Date();
+              const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
+
+              // Query all invoices for this product in the period (including the one just created)
+              const recentInvoices = await Invoice.find({
+                branchId: salesOrder.branchId,
+                invoiceDate: { $gte: startDate, $lte: endDate },
+                "items.productId": item.productId,
+              }).session(session).lean();
+
+              // Sum total qty sold in period
+              let totalSellingQty = 0;
+              recentInvoices.forEach((inv) => {
+                if (Array.isArray(inv.items)) {
+                  inv.items.forEach((invItem) => {
+                    const invItemProductId = invItem.productId?._id || invItem.productId;
+                    if (invItemProductId && invItemProductId.toString() === item.productId.toString()) {
+                      totalSellingQty += invItem.qty || 0;
+                    }
+                  });
+                }
+              });
+
+              // Update restockingConfig with latest selling qty
+              product.restockingConfig.sellingQtyInPeriod = totalSellingQty;
+              
+              // Also sync restockingQty to match for display
+              product.restockingConfig.restockingQty = totalSellingQty;
+              
+              console.log(`✅ Updated product ${product.name}: selling qty in ${days} days = ${totalSellingQty}`);
+            }
+            
             await product.save({ session });
           }
         }
@@ -397,7 +433,51 @@ router.post("/:invoiceId/upload-cloudinary", upload.single("file"), async (req, 
 });
 
 // GET - Get all invoices for a branch
+// GET sales invoices with pagination and filtering (Sales Reports)
 router.get("", async (req, res) => {
+  try {
+    const { branchId, page = 1, limit = 100, search } = req.query;
+
+    const query = {};
+    if (branchId) query.branchId = branchId;
+
+    // Search by customer name or invoice number
+    if (search) {
+      query.$or = [
+        { invoiceNumber: { $regex: search, $options: "i" } },
+        { "customer.name": { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const invoices = await Invoice.find(query)
+      .populate("customer.customerId", "name whatsapp")
+      .populate("salesOrderId")
+      .sort({ invoiceDate: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Invoice.countDocuments(query);
+    const pages = Math.ceil(total / parseInt(limit));
+
+    res.json({
+      data: invoices,
+      pagination: {
+        total,
+        pages,
+        page: parseInt(page),
+        limit: parseInt(limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching sales invoices:", error);
+    res.status(500).json({ message: "Failed to fetch sales invoices" });
+  }
+});
+
+// Legacy: GET all invoices without pagination
+router.get("/legacy", async (req, res) => {
   try {
     const { branchId, invoiceType, salesOrderId } = req.query;
 

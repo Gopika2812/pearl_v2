@@ -215,7 +215,7 @@ export const InventoryProvider = ({ children }) => {
       }
       
       console.log(`🔌 Fetching Products for branchId: ${branchId}`);
-      const res = await fetch(`${API_BASE}/products?branchId=${branchId}`);
+      const res = await fetch(`${API_BASE}/products?branchId=${branchId}&limit=10000`);
       
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
