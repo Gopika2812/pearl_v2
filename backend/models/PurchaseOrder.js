@@ -56,7 +56,7 @@ const PurchaseOrderSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["DRAFT", "PLACED"],
+      enum: ["DRAFT", "PLACED", "INVOICED"],
       default: "PLACED",
     },
 

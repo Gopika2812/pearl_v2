@@ -137,17 +137,19 @@ router.post("/", async (req, res) => {
       console.log(`✅ Product inventory restored: +${item.qty} units`);
     }
 
-    // 2️⃣ REDUCE CUSTOMER CLOSING BALANCE
+    // 2️⃣ INCREASE CUSTOMER CREDIT (they get money back)
     const customerId = originalOrder.customer.customerId;
     const customer = await Customer.findById(customerId);
     if (customer) {
+      const newCredit = (customer.credit || 0) + Math.round(grandTotal);
       const reducedBalance = Math.round(customer.closingBalance - Math.round(grandTotal));
       await Customer.findByIdAndUpdate(customerId, {
+        credit: newCredit,  // INCREASE credit
         closingBalance: reducedBalance,
         totalBalance: reducedBalance,
       });
       creditNote.customer.closingBalance = reducedBalance;
-      console.log(`✅ Customer balance reduced: ₹${reducedBalance}`);
+      console.log(`✅ Customer credit increased: +₹${Math.round(grandTotal)} (new credit: ₹${newCredit})`);
     }
 
     // 3️⃣ REDUCE COMMISSIONS (proportional to returned amount)

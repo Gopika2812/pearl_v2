@@ -59,23 +59,52 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     }
 
     // Recalculate totals with edited quantities
-    const processedItems = items.map((item) => {
+    // ⚠️ NOTE: item.total already INCLUDES tax, we need to extract pre-tax amount
+    
+    let subtotal = 0;
+    let cgstTotal = 0;
+    let sgstTotal = 0;
+    let igstTotal = 0;
+
+    const recalculatedItems = items.map((item) => {
       const originalItem = salesOrder.items.find(
         (so) => so._id.toString() === item._id
       );
       if (!originalItem) return item;
 
       const confirmedQty = item.confirmedQty || item.qty;
-      const qtyRatio = confirmedQty / originalItem.qty; // Calculate ratio for proportional calculation
+      const qtyRatio = confirmedQty / originalItem.qty;
+
+      // Original item.total already has tax, so scale it proportionally
+      const itemTotalWithTax = Math.round(originalItem.total * qtyRatio * 100) / 100;
+
+      const gstPercent = item.gst || 0;
+      const cgstPercent = item.cgst || 0;
+      const sgstPercent = item.sgst || 0;
+      const igstPercent = item.igst || 0;
+
+      // Extract pre-tax amount
+      const gstFactor = 1 + (gstPercent / 100);
+      const preTaxAmount = Math.round((itemTotalWithTax / gstFactor) * 100) / 100;
+
+      subtotal += preTaxAmount;
+
+      // Calculate tax components
+      const cgstAmount = Math.round((preTaxAmount * cgstPercent / 100) * 100) / 100;
+      const sgstAmount = Math.round((preTaxAmount * sgstPercent / 100) * 100) / 100;
+      const igstAmount = Math.round((preTaxAmount * igstPercent / 100) * 100) / 100;
+
+      cgstTotal += cgstAmount;
+      sgstTotal += sgstAmount;
+      igstTotal += igstAmount;
 
       return {
-        ...item,
+        ...originalItem.toObject(),
         qty: confirmedQty,
-        total: Math.round(originalItem.total * qtyRatio * 100) / 100,
+        total: itemTotalWithTax,
       };
     });
 
-    // Calculate back orders
     const backOrderItems = items
       .filter((item) => item.backOrderQty > 0)
       .map((item) => ({
@@ -83,20 +112,15 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         qty: item.backOrderQty,
       }));
 
-    // Recalculate totals
-    const subtotal = processedItems.reduce((sum, item) => sum + (item.total || 0), 0);
+    // Use the calculated totals from above
     const totalTax = {
-      cgst: Math.round(
-        processedItems.reduce((sum, item) => sum + (item.cgst || 0) * (item.qty / (salesOrder.items.find((o) => o._id.toString() === item._id)?.qty || 1)), 0) * 100
-      ) / 100,
-      sgst: Math.round(
-        processedItems.reduce((sum, item) => sum + (item.sgst || 0) * (item.qty / (salesOrder.items.find((o) => o._id.toString() === item._id)?.qty || 1)), 0) * 100
-      ) / 100,
-      igst: 0,
+      cgst: Math.round(cgstTotal * 100) / 100,
+      sgst: Math.round(sgstTotal * 100) / 100,
+      igst: Math.round(igstTotal * 100) / 100,
     };
     totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
-    const grandTotal = subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0);
+    const grandTotal = Math.round((subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0)) * 100) / 100;
 
     const previewData = {
       invoiceNumber: salesOrder.invoiceId, // Use Sales Order's invoiceId
@@ -112,7 +136,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         gpayNo: "8825847884",
         stateCode: "33",
       },
-      items: processedItems,
+      items: recalculatedItems,
       backOrderItems,
       sampleItems: salesOrder.sampleItems || [],
       subtotal,
@@ -191,19 +215,45 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         });
 
       // Calculate totals
-      const subtotal = processedItems.reduce((sum, item) => sum + (item.total || 0), 0);
+      // ⚠️ NOTE: item.total already INCLUDES tax (calculated as pre_tax × (1 + gst/100))
+      // We need to extract the pre-tax amount and recalculate tax properly
+      
+      let subtotal = 0;
+      let cgstTotal = 0;
+      let sgstTotal = 0;
+      let igstTotal = 0;
+
+      processedItems.forEach((item) => {
+        const gstPercent = item.gst || 0;
+        const cgstPercent = item.cgst || 0;
+        const sgstPercent = item.sgst || 0;
+        const igstPercent = item.igst || 0;
+
+        // Extract pre-tax amount: preTax = itemTotal / (1 + gst/100)
+        const itemTotalWithTax = item.total || 0;
+        const gstFactor = 1 + (gstPercent / 100);
+        const preTaxAmount = Math.round((itemTotalWithTax / gstFactor) * 100) / 100;
+
+        subtotal += preTaxAmount;
+
+        // Calculate tax components
+        const cgstAmount = Math.round((preTaxAmount * cgstPercent / 100) * 100) / 100;
+        const sgstAmount = Math.round((preTaxAmount * sgstPercent / 100) * 100) / 100;
+        const igstAmount = Math.round((preTaxAmount * igstPercent / 100) * 100) / 100;
+
+        cgstTotal += cgstAmount;
+        sgstTotal += sgstAmount;
+        igstTotal += igstAmount;
+      });
+
       const totalTax = {
-        cgst: Math.round(
-          processedItems.reduce((sum, item) => sum + (item.cgst || 0) * (item.qty / (salesOrder.items.find((o) => o._id.toString() === item._id)?.qty || 1)), 0) * 100
-        ) / 100,
-        sgst: Math.round(
-          processedItems.reduce((sum, item) => sum + (item.sgst || 0) * (item.qty / (salesOrder.items.find((o) => o._id.toString() === item._id)?.qty || 1)), 0) * 100
-        ) / 100,
-        igst: 0,
+        cgst: Math.round(cgstTotal * 100) / 100,
+        sgst: Math.round(sgstTotal * 100) / 100,
+        igst: Math.round(igstTotal * 100) / 100,
       };
       totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
-      const grandTotal = subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0);
+      const grandTotal = Math.round((subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0)) * 100) / 100;
 
       // Create invoice
       const invoice = new Invoice({
@@ -303,6 +353,26 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       salesOrder.invoiceGenerated = true;
       salesOrder.invoiceNotes = notes;
       await salesOrder.save({ session });
+
+      // ✅ Update customer's debit and closingBalance on INVOICE GENERATION ONLY
+      // debit = closingBalance (they must always be equal)
+      // Calculate total invoiced amount for this customer
+      if (customer) {
+        const allInvoices = await Invoice.find({
+          "customer.customerId": customer._id,
+          status: "FINALIZED"
+        }).session(session);
+
+        // Sum all invoice grand totals
+        const totalInvoiced = allInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
+        const newDebit = Math.round(totalInvoiced * 100) / 100;
+
+        customer.debit = newDebit;
+        customer.closingBalance = newDebit; // ✅ Keep them EQUAL
+        await customer.save({ session });
+
+        console.log(`✅ Customer ${customer.name} debit updated: ₹${newDebit}`);
+      }
 
       await session.commitTransaction();
 

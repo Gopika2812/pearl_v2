@@ -28,6 +28,7 @@ import productCategoryRoutes from "./routes/productCategoryRoutes.js";
 import productGroupRoutes from "./routes/productGroupRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import purchaseOrderRoutes from "./routes/purchaseOrderRoutes.js";
+import receiptRoutes from "./routes/receiptRoutes.js";
 import reorderingRoutes from "./routes/reorderingRoutes.js";
 import salesManRoutes from "./routes/salesManRoutes.js";
 import salesOrderRoutes from "./routes/salesOrderRoutes.js";
@@ -80,6 +81,7 @@ app.use("/api/sales-orders", salesOrderRoutes);
 app.use("/api/sales-invoices", invoiceRoutes); // Frontend calls this
 app.use("/api/invoices", invoiceRoutes); // Legacy support
 app.use("/api/credit-notes", creditNoteRoutes);
+app.use("/api/receipts", receiptRoutes);
 app.use("/api/pearls-book", pearlsBookRoutes);
 app.use("/api/sales-owners", salesOwnerRoutes);
 app.use("/api/sales-men", salesManRoutes);

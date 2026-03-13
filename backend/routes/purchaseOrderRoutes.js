@@ -3,7 +3,6 @@ import Product from "../models/Product.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import Vendor from "../models/Vendor.js";
 import VoucherType from "../models/VoucherType.js";
-import GLService from "../utils/glService.js";
 
 const router = express.Router();
 
@@ -76,6 +75,31 @@ router.get("/", async (req, res) => {
   }
 });
 
+router.post('/:id/generate-invoice', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await PurchaseOrder.findById(id);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (order.status === 'INVOICED') return res.status(400).json({ message: 'Order already invoiced' });
+
+    // 1. Mark as invoiced
+    order.status = 'INVOICED';
+    await order.save();
+
+    // 2. Increase product qty
+    for (const item of order.items) {
+      await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty } });
+    }
+
+    // No vendor credit update here; UI will calculate outstanding from INVOICED, unpaid POs only
+    res.json({ message: 'Invoice generated, inventory updated.' });
+  } catch (err) {
+    console.error('Generate invoice error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
 router.post("/", async (req, res) => {
   try {
     const { voucherType, branchId, status, ...rest } = req.body;
@@ -134,56 +158,10 @@ router.post("/", async (req, res) => {
 
     await order.save();
 
-    // ✅ UPDATE PRODUCT INVENTORY
-    if (status !== "DRAFT") {
-      for (const item of rest.items) {
-        try {
-          const product = await Product.findByIdAndUpdate(
-            item.productId,
-            { $inc: { totalQty: item.qty } },
-            { new: true }
-          );
-          if (product) {
-            console.log(
-              `✅ Product "${product.name}" inventory updated: +${item.qty} units (New total: ${product.totalQty})`
-            );
-          }
-        } catch (err) {
-          console.error(`⚠️ Failed to update product ${item.productId}:`, err.message);
-        }
-      }
 
-      // ✅ UPDATE VENDOR AP (ACCOUNTS PAYABLE) BALANCE
-      if (rest.vendor && rest.vendor.id) {
-        try {
-          const vendor = await Vendor.findById(rest.vendor.id);
-          if (vendor) {
-            const grandTotal = rest.grandTotal || 0;
-            const newClosingBalance = (vendor.closingBalance || 0) + grandTotal;
-            await Vendor.findByIdAndUpdate(
-              rest.vendor.id,
-              { closingBalance: newClosingBalance },
-              { new: true }
-            );
-            console.log(`✅ Vendor AP balance updated: +₹${grandTotal}, New balance: ₹${newClosingBalance}`);
-          }
-        } catch (err) {
-          console.warn(`⚠️ Failed to update vendor balance:`, err.message);
-        }
-      }
-
-      // ✅ POST JOURNAL ENTRY to GL
-      try {
-        const journalEntry = await GLService.postPurchaseOrderJE(order);
-        console.log(`✅ GL Entry posted: ${journalEntry.jeId}`);
-      } catch (glError) {
-        console.warn("⚠️ GL posting failed (non-blocking):", glError.message);
-        // Don't fail the PO creation if GL posting fails
-      }
-
-      voucher.counter += 1;
-      await voucher.save();
-    }
+    // Only increment voucher counter and save voucher
+    voucher.counter += 1;
+    await voucher.save();
 
     res.status(201).json({
       message: "Purchase Order saved successfully",

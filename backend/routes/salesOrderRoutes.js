@@ -210,13 +210,9 @@ router.post("/", async (req, res) => {
     // ⚠️ INVENTORY REDUCTION REMOVED - Only reduce when invoice is confirmed
     // Inventory will be reduced when sales invoice is generated, not at order stage
 
-    // ✅ UPDATE CUSTOMER CLOSING BALANCE
-    await Customer.findByIdAndUpdate(
-      customer.id,
-      { closingBalance: closingBalance },
-      { new: true }
-    );
-    console.log("✅ Customer closing balance updated");
+    // ⚠️ DO NOT UPDATE CUSTOMER DEBIT/BALANCE HERE
+    // Customer debit will be updated ONLY when invoice is generated
+    console.log("⏳ Customer debit will be updated when invoice is generated");
 
     // ✅ POST JOURNAL ENTRY to GL
     try {
