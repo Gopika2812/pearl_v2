@@ -44,6 +44,56 @@ const POPaymentModal = ({ po, isOpen, onClose, onPaymentSuccess }) => {
     return Math.max(0, (po?.grandTotal || 0) - calculatePaidAmount());
   };
 
+  // Update vendor credit after payment
+  const updateVendorCredit = async (vendorName, paymentAmount, branchId) => {
+    try {
+      // Fetch all vendors for the branch
+      const vendorResponse = await fetch(
+        `${API_BASE}/vendors?branchId=${branchId}`
+      );
+      const vendorData = await vendorResponse.json();
+      const vendors = vendorData.data || [];
+
+      // Find the vendor by name
+      const vendor = vendors.find((v) => v.name === vendorName);
+      if (!vendor) {
+        console.warn(`Vendor not found: ${vendorName}`);
+        return;
+      }
+
+      // Calculate new credit (reduce by payment amount)
+      const newCredit = Math.max(0, vendor.credit - paymentAmount);
+
+      // Update vendor's credit in database
+      const updateResponse = await fetch(`${API_BASE}/vendors/${vendor._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          credit: newCredit,
+          debit: vendor.debit,
+          name: vendor.name,
+          phone: vendor.phone,
+          email: vendor.email,
+          address: vendor.address,
+          stateName: vendor.stateName,
+          gstRegistrationType: vendor.gstRegistrationType,
+          gstin: vendor.gstin,
+          isActive: vendor.isActive,
+        }),
+      });
+
+      if (updateResponse.ok) {
+        console.log(
+          `✅ Vendor credit updated: ${vendorName} (₹${vendor.credit} → ₹${newCredit})`
+        );
+      } else {
+        console.error("Failed to update vendor credit");
+      }
+    } catch (err) {
+      console.error("Error updating vendor credit:", err);
+    }
+  };
+
   const handlePayment = async () => {
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
       return toast.error("Enter a valid payment amount!");
@@ -88,6 +138,13 @@ const POPaymentModal = ({ po, isOpen, onClose, onPaymentSuccess }) => {
       const data = await response.json();
 
       if (response.ok) {
+        // Update vendor credit after successful payment
+        await updateVendorCredit(
+          po.vendor,
+          parseFloat(paymentAmount),
+          currentBranch?._id || currentBranch?.id
+        );
+
         toast.success("Payment recorded successfully!");
         setPaymentAmount("");
         setReferenceNo("");

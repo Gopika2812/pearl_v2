@@ -23,6 +23,7 @@ import BranchPO from "./pages/branch/BranchPO";
 import BranchPOPayment from "./pages/branch/BranchPOPayment";
 import BranchPurchaseOrders from "./pages/branch/BranchPurchaseOrders";
 import BranchQuickLinks from "./pages/branch/BranchQuickLinks";
+import BranchReceipt from "./pages/branch/BranchReceipt";
 import BranchRecycling from "./pages/branch/BranchRecycling";
 import BranchSalesOrder from "./pages/branch/BranchSalesOrder";
 import BranchSalesReports from "./pages/branch/BranchSalesReports";
@@ -123,6 +124,7 @@ function App() {
                   <Route path="/branch/customers" element={<BranchCustomers />} />
                   <Route path="/branch/sales-reports" element={<BranchSalesReports />} />
                   <Route path="/branch/quick-links" element={<BranchQuickLinks />} />
+                  <Route path="/branch/receipt" element={<BranchReceipt />} />
                   <Route path="/branch/summary" element={<BranchSummary />} />
 
                   {/* LEGACY ROUTES */}

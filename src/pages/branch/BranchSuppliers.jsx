@@ -90,38 +90,32 @@ const BranchSuppliers = () => {
             return (
               po.vendor === supplier.name && 
               poBranchId === normalizedBranchId &&
-              po.status !== "CANCELLED"
+              po.status === "INVOICED"
             );
           }
         );
         
         console.log(`Supplier: ${supplier.name}, Total POs matched: ${supplierPOs.length}`);
+
         supplierPOs.forEach((po) => {
+          if (po.status !== "INVOICED") return; // Only consider INVOICED POs
           const poAmount = po.grandTotal || 0;
-          
           // Find payments for this PO
           const poPayments = payments.filter(
             (payment) => {
-              // Normalize both IDs to strings for comparison
               const paymentPoId = payment.purchaseOrder?.poId 
                 ? payment.purchaseOrder.poId.toString() 
                 : null;
               const poId = po._id ? po._id.toString() : null;
-              
-              const isMatched = paymentPoId === poId && payment.status === "completed";
-              
-              return isMatched;
+              return paymentPoId === poId && payment.status === "completed";
             }
           );
-
           const totalPaidForPO = poPayments.reduce(
             (sum, payment) => sum + (payment.amount || 0),
             0
           );
-
           // Outstanding amount = PO total - paid amount
           const outstanding = poAmount - totalPaidForPO;
-
           if (outstanding > 0) {
             outstandingFromPOs += outstanding;
           }

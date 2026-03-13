@@ -1,262 +1,320 @@
 import { useEffect, useState } from "react";
-import { FaPlus, FaTimes, FaTrash } from "react-icons/fa";
+import { FaFileAlt, FaTimes } from "react-icons/fa";
+import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
+import { useBranch } from "../../context/BranchContext";
 
-const DebitNoteModal = ({ isOpen, onClose, onSave, purchaseOrders = [] }) => {
-  const [formData, setFormData] = useState({
-    originalPurchaseOrderId: "",
-    vendor: { name: "" },
-    items: [],
-    reason: "",
-  });
-  const [selectedPO, setSelectedPO] = useState(null);
-  const [currentItem, setCurrentItem] = useState({
-    productId: "",
-    name: "",
-    returnedQty: 0,
-    purchasePrice: 0,
-  });
+const DebitNoteModal = ({ po, isOpen, onClose, onDebitNoteSuccess }) => {
+  const { currentBranch } = useBranch();
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [reason, setReason] = useState("");
 
-  // Log POs when modal opens
+  // Initialize selected items when PO is set
   useEffect(() => {
-    if (isOpen) {
-      console.log("📦 Debit Note Modal - POs received:", purchaseOrders);
-      console.log("📦 POs count:", purchaseOrders.length);
+    if (isOpen && po) {
+      // Initialize with empty returned quantities
+      const items = (po.items || []).map((item) => ({
+        ...item,
+        returnedQty: 0,
+      }));
+      setSelectedItems(items);
+      setReason("");
     }
-  }, [isOpen, purchaseOrders]);
+  }, [isOpen, po]);
 
-  const handlePOSelect = (poId) => {
-    const po = purchaseOrders.find((p) => p._id === poId);
-    console.log("📦 Selected PO:", po);
-    if (po) {
-      setSelectedPO(po);
-      setFormData({
-        ...formData,
-        originalPurchaseOrderId: poId,
-        vendor: { name: po.vendor || "" },
-        items: [],
-      });
-    }
+  const handleReturnedQtyChange = (index, value) => {
+    const newItems = [...selectedItems];
+    const maxQty = newItems[index].qty || 0;
+    const returnedQty = Math.min(parseInt(value) || 0, maxQty);
+    newItems[index].returnedQty = Math.max(0, returnedQty);
+    setSelectedItems(newItems);
   };
 
-  const handleAddItem = () => {
-    if (!currentItem.productId || !currentItem.returnedQty) {
-      alert("Please fill all item fields");
-      return;
-    }
+  const calculateTotals = () => {
+    let subtotal = 0;
+    let totalTax = 0;
+    let totalReturned = 0;
 
-    setFormData({
-      ...formData,
-      items: [...formData.items, { ...currentItem }],
+    selectedItems.forEach((item) => {
+      if (item.returnedQty > 0) {
+        const itemTotal = item.returnedQty * (item.purchasePrice || 0);
+        const itemTax = (itemTotal * (item.gst || 0)) / 100;
+        subtotal += itemTotal;
+        totalTax += itemTax;
+        totalReturned += item.returnedQty;
+      }
     });
-    setCurrentItem({ productId: "", name: "", returnedQty: 0, purchasePrice: 0 });
+
+    return {
+      subtotal: Math.round(subtotal),
+      totalTax: Math.round(totalTax),
+      grandTotal: Math.round(subtotal + totalTax),
+      totalReturned,
+    };
   };
 
-  const handleRemoveItem = (index) => {
-    setFormData({
-      ...formData,
-      items: formData.items.filter((_, i) => i !== index),
-    });
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.originalPurchaseOrderId || formData.items.length === 0) {
-      alert("Please select a PO and add items");
-      return;
+  const handleCreateDebitNote = async () => {
+    // Validate at least one item is returned
+    const itemsToReturn = selectedItems.filter((item) => item.returnedQty > 0);
+    if (itemsToReturn.length === 0) {
+      return toast.error("Please select at least one product to return!");
     }
+
+    if (!reason.trim()) {
+      return toast.error("Please provide a reason for the return!");
+    }
+
+    setSaving(true);
 
     try {
+      const { subtotal, totalTax, grandTotal } = calculateTotals();
+
+      // Prepare items with only returned items
+      const itemsPayload = itemsToReturn.map((item) => ({
+        productId: item.productId,
+        name: item.name,
+        returnedQty: item.returnedQty,
+        purchasePrice: item.purchasePrice,
+        total: item.returnedQty * item.purchasePrice,
+      }));
+
       const response = await fetch(`${API_BASE}/debit-notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          branchId: currentBranch?._id || currentBranch?.id,
+          originalPurchaseOrderId: po._id,
+          vendor: {
+            name: po.vendor,
+          },
+          items: itemsPayload,
+          subtotal,
+          totalTax,
+          grandTotal,
+          reason,
+          status: "confirmed",
+        }),
       });
 
       const data = await response.json();
-      if (data.success) {
-        alert("Debit Note created successfully");
-        onSave(data.data);
-        setFormData({
-          originalPurchaseOrderId: "",
-          vendor: { name: "" },
-          items: [],
-          reason: "",
-        });
+
+      if (response.ok) {
+        // Update vendor debit after successful debit note creation
+        await updateVendorDebit(po.vendor, grandTotal, currentBranch?._id || currentBranch?.id);
+
+        toast.success("Debit note created successfully!");
         onClose();
+        onDebitNoteSuccess?.();
       } else {
-        alert(data.message || "Failed to create debit note");
+        toast.error(data.message || "Failed to create debit note");
       }
     } catch (err) {
-      alert("Error: " + err.message);
+      console.error("Debit note creation error:", err);
+      toast.error("Error creating debit note");
+    } finally {
+      setSaving(false);
     }
   };
 
-  if (!isOpen) return null;
+  // Update vendor debit after debit note creation
+  const updateVendorDebit = async (vendorName, debitAmount, branchId) => {
+    try {
+      // Fetch all vendors for the branch
+      const vendorResponse = await fetch(`${API_BASE}/vendors?branchId=${branchId}`);
+      const vendorData = await vendorResponse.json();
+      const vendors = vendorData.data || [];
+
+      // Find the vendor by name
+      const vendor = vendors.find((v) => v.name === vendorName);
+      if (!vendor) {
+        console.warn(`Vendor not found: ${vendorName}`);
+        return;
+      }
+
+      // Calculate new debit (increase by debit note amount)
+      const newDebit = (vendor.debit || 0) + debitAmount;
+      // Calculate new credit (decrease by debit note amount)
+      const newCredit = Math.max(0, (vendor.credit || 0) - debitAmount);
+
+      // Update vendor's debit and credit in database
+      const updateResponse = await fetch(`${API_BASE}/vendors/${vendor._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          debit: newDebit,
+          credit: newCredit,
+          name: vendor.name,
+          phone: vendor.phone,
+          email: vendor.email,
+          address: vendor.address,
+          stateName: vendor.stateName,
+          gstRegistrationType: vendor.gstRegistrationType,
+          gstin: vendor.gstin,
+          isActive: vendor.isActive,
+        }),
+      });
+
+      if (updateResponse.ok) {
+        console.log(
+          `✅ Vendor updated: ${vendorName}`
+        );
+        console.log(
+          `   Debit: ₹${vendor.debit || 0} → ₹${newDebit}`
+        );
+        console.log(
+          `   Credit: ₹${vendor.credit || 0} → ₹${newCredit}`
+        );
+      } else {
+        console.error("Failed to update vendor debit/credit");
+      }
+    } catch (err) {
+      console.error("Error updating vendor debit:", err);
+    }
+  };
+
+  const totals = calculateTotals();
+
+  if (!isOpen || !po) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="bg-blue-500 text-white p-4 sticky top-0 flex justify-between items-center">
-          <h3 className="text-xl font-bold">Create Debit Note</h3>
-          <button onClick={onClose} className="hover:bg-blue-600 p-2 rounded">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        {/* HEADER */}
+        <div className="sticky top-0 bg-gradient-to-r from-red-600 to-red-700 text-white p-6 flex justify-between items-center">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <FaFileAlt /> Debit Note for {po.invoiceId}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-2xl hover:opacity-75 transition"
+          >
             <FaTimes />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Select PO */}
-          <div>
-            <label className="text-sm font-bold text-gray-600 block mb-2">
-              Select Purchase Order
-            </label>
-            <select
-              value={formData.originalPurchaseOrderId}
-              onChange={(e) => handlePOSelect(e.target.value)}
-              className="w-full p-2 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">-- Select PO --</option>
-              {purchaseOrders.map((po) => (
-                <option key={po._id} value={po._id}>
-                  {po.invoiceId} - {po.vendor} ({po.items?.length || 0} items)
-                </option>
-              ))}
-            </select>
+        <div className="p-6 space-y-6">
+          {/* VENDOR & PO INFO */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-bold mb-1">Vendor</p>
+                <p className="font-bold text-gray-800">{po.vendor}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-bold mb-1">Original PO</p>
+                <p className="font-bold text-[#319bab]">{po.invoiceId}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-bold mb-1">Warehouse</p>
+                <p className="font-bold text-gray-800">{po.warehouse}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 uppercase font-bold mb-1">PO Date</p>
+                <p className="font-bold text-gray-800">
+                  {new Date(po.date).toLocaleDateString("en-IN")}
+                </p>
+              </div>
+            </div>
           </div>
 
-          {/* Vendor Info */}
-          {selectedPO && (
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">
-                <strong>Vendor:</strong> {formData.vendor.name}
-              </p>
-              <p className="text-sm text-gray-600">
-                <strong>Warehouse:</strong> {selectedPO.warehouse || "N/A"}
+          {/* RETURN ITEMS */}
+          <div>
+            <h3 className="font-bold text-[#319bab] mb-4 uppercase text-sm">Select Items to Return</h3>
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100 border-b">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Product</th>
+                    <th className="px-4 py-3 text-center">Available QTY</th>
+                    <th className="px-4 py-3 text-center">Return QTY</th>
+                    <th className="px-4 py-3 text-right">Price</th>
+                    <th className="px-4 py-3 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {selectedItems.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-medium">{item.name}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded font-bold">
+                          {item.qty}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="number"
+                          min="0"
+                          max={item.qty}
+                          value={item.returnedQty || 0}
+                          onChange={(e) => handleReturnedQtyChange(idx, e.target.value)}
+                          className="w-20 border border-gray-300 rounded px-2 py-1 text-center font-bold focus:ring-2 focus:ring-red-500 outline-none"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-right">₹{(item.purchasePrice || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-red-600">
+                        ₹{((item.returnedQty || 0) * (item.purchasePrice || 0)).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* TOTALS */}
+          <div className="grid grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <div className="text-center">
+              <p className="text-xs text-gray-500 uppercase font-bold mb-1">Subtotal</p>
+              <p className="text-2xl font-black text-gray-800">
+                ₹{totals.subtotal.toLocaleString()}
               </p>
             </div>
-          )}
+            <div className="text-center border-l border-r border-gray-300">
+              <p className="text-xs text-gray-500 uppercase font-bold mb-1">Total Tax</p>
+              <p className="text-2xl font-black text-gray-800">
+                ₹{totals.totalTax.toLocaleString()}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500 uppercase font-bold mb-1">Grand Total</p>
+              <p className="text-2xl font-black text-red-600">
+                ₹{totals.grandTotal.toLocaleString()}
+              </p>
+            </div>
+          </div>
 
-          {/* Return Reason */}
+          {/* REASON */}
           <div>
-            <label className="text-sm font-bold text-gray-600 block mb-2">
-              Reason for Return
+            <label className="block text-xs font-bold text-gray-600 mb-2 uppercase">
+              Reason for Return *
             </label>
             <textarea
-              value={formData.reason}
-              onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-              placeholder="Enter reason for return (quality issues, excess stock, etc.)"
-              rows={3}
-              className="w-full p-2 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Enter reason for returning these items (e.g., Damaged, Defective, Wrong quantity, etc.)"
+              rows="3"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-500 outline-none text-sm resize-none"
             />
           </div>
 
-          {/* Add Items */}
-          {selectedPO && (
-            <div className="border-t pt-4">
-              <h4 className="font-semibold text-gray-700 mb-3">Add Return Items</h4>
-
-              <div className="space-y-3 mb-4">
-                <div>
-                  <label className="text-sm font-bold text-gray-600 block mb-1">
-                    Product (from PO)
-                  </label>
-                  <select
-                    value={currentItem.productId}
-                    onChange={(e) => {
-                      const itemIndex = selectedPO.items.findIndex(
-                        (i) => i.productId === e.target.value
-                      );
-                      if (itemIndex !== -1) {
-                        const poItem = selectedPO.items[itemIndex];
-                        setCurrentItem({
-                          ...currentItem,
-                          productId: e.target.value,
-                          name: poItem.name,
-                          purchasePrice: poItem.purchasePrice,
-                        });
-                      }
-                    }}
-                    className="w-full p-2 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">-- Select Product --</option>
-                    {selectedPO.items?.map((item) => (
-                      <option key={item.productId} value={item.productId}>
-                        {item.name} (Available: {item.qty} qty)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-bold text-gray-600 block mb-1">
-                    Quantity to Return
-                  </label>
-                  <input
-                    type="number"
-                    value={currentItem.returnedQty}
-                    onChange={(e) =>
-                      setCurrentItem({
-                        ...currentItem,
-                        returnedQty: parseInt(e.target.value) || 0,
-                      })
-                    }
-                    placeholder="Enter quantity"
-                    className="w-full p-2 border rounded-lg outline-blue-500 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleAddItem}
-                  className="w-full bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 transition font-semibold flex items-center justify-center gap-2"
-                >
-                  <FaPlus size={14} /> Add Item
-                </button>
-              </div>
-
-              {/* Items List */}
-              {formData.items.length > 0 && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <h5 className="font-semibold text-gray-700 mb-2">Items to Return:</h5>
-                  <div className="space-y-2">
-                    {formData.items.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="flex justify-between items-center bg-white p-2 rounded border"
-                      >
-                        <div>
-                          <p className="font-semibold text-gray-900">{item.name}</p>
-                          <p className="text-sm text-gray-600">Qty: {item.returnedQty}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(idx)}
-                          className="bg-red-500 text-white p-2 rounded hover:bg-red-600 transition"
-                        >
-                          <FaTrash size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </form>
-
-        <div className="border-t p-4 flex gap-3 sticky bottom-0 bg-white">
-          <button
-            onClick={onClose}
-            className="flex-1 p-2 border rounded-lg hover:bg-gray-100 transition"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            className="flex-1 p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition font-bold"
-          >
-            Create Debit Note
-          </button>
+          {/* ACTION BUTTONS */}
+          <div className="grid grid-cols-2 gap-3 pt-4 border-t">
+            <button
+              onClick={onClose}
+              className="w-full border-2 border-gray-300 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreateDebitNote}
+              disabled={saving || totals.totalReturned === 0}
+              className="w-full bg-red-600 text-white py-2 rounded-lg font-bold hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <FaFileAlt />
+              {saving ? "Creating..." : `Create Debit Note (₹${totals.grandTotal.toLocaleString()})`}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -123,6 +123,7 @@ const BranchPurchaseOrders = () => {
                     <th className="px-6 py-4 text-right">Grand Total</th>
                     <th className="px-6 py-4 text-center">Status</th>
                     <th className="px-6 py-4 text-center">Date</th>
+                    <th className="px-6 py-4 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -175,6 +176,35 @@ const BranchPurchaseOrders = () => {
                         </td>
                         <td className="px-6 py-4 text-center text-gray-600 text-xs">
                           {new Date(order.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {order.status !== 'INVOICED' ? (
+                            <button
+                              className="bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-3 rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
+                              disabled={loading}
+                              onClick={async () => {
+                                try {
+                                  setLoading(true);
+                                  const res = await fetch(`${API_BASE}/purchase-orders/${order._id}/generate-invoice`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                  });
+                                  const data = await res.json();
+                                  if (!res.ok) throw new Error(data.message || 'Failed to generate invoice');
+                                  toast.success('Invoice generated and inventory/vendor updated!');
+                                  fetchPurchaseOrders();
+                                } catch (err) {
+                                  toast.error(err.message || 'Failed to generate invoice');
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }}
+                            >
+                              Generate Invoice
+                            </button>
+                          ) : (
+                            <span className="text-green-600 font-bold">Invoiced</span>
+                          )}
                         </td>
                       </tr>
 
