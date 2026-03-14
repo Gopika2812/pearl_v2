@@ -18,6 +18,7 @@ import BranchCustomers from "./pages/branch/BranchCustomers";
 import BranchDebitNote from "./pages/branch/BranchDebitNote";
 import BranchDispatch from "./pages/branch/BranchDispatch";
 import BranchHome from "./pages/branch/BranchHome";
+import BranchInsights from "./pages/branch/BranchInsights";
 import BranchInvoicedOrders from "./pages/branch/BranchInvoicedOrders";
 import BranchPO from "./pages/branch/BranchPO";
 import BranchPOPayment from "./pages/branch/BranchPOPayment";
@@ -56,6 +57,7 @@ function App() {
 
   // Check if we're on a branch-specific page
   const isBranchRoute = location.pathname.startsWith("/branch/") || location.pathname === "/branch-home";
+  const isInsightsRoute = location.pathname.startsWith("/branch/insights");
   
   // Hide layout on login pages
   const hideLayout =
@@ -72,7 +74,7 @@ function App() {
 
           <div className="flex">
             {/* Sidebar - Use branch sidebar if on branch route, otherwise use regular */}
-            {!hideLayout && (
+            {!hideLayout && !isInsightsRoute && (
               <>
                 {isBranchRoute ? (
                   <BranchSidebar
@@ -92,15 +94,15 @@ function App() {
             <div className="flex-1 min-h-screen flex flex-col">
               {!hideLayout && (
                 <>
-                  {isBranchRoute ? (
+                  {isBranchRoute && !isInsightsRoute ? (
                     <BranchTopbar onMenuClick={() => setSidebarOpen(true)} />
                   ) : (
-                    <Topbar onMenuClick={() => setSidebarOpen(true)} />
+                    !isInsightsRoute && <Topbar onMenuClick={() => setSidebarOpen(true)} />
                   )}
                 </>
               )}
 
-              <div className="flex-1 p-6">
+              <div className={`flex-1 ${isInsightsRoute ? "p-0" : "p-6"}`}>
                 <Routes>
                   <Route path="/" element={<BranchLoginPage />} />
                   <Route path="/branch-login" element={<BranchLoginPage />} />
@@ -111,6 +113,7 @@ function App() {
 
                   {/* BRANCH-SPECIFIC ROUTES */}
                   <Route path="/branch-home" element={<BranchHome />} />
+                  <Route path="/branch/insights" element={<BranchInsights />} />
                   <Route path="/branch/po" element={<BranchPO />} />
                   <Route path="/branch/purchase-orders" element={<BranchPurchaseOrders />} />
                   <Route path="/branch/recycling" element={<BranchRecycling />} />

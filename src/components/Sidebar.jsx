@@ -31,16 +31,16 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const menu = [
     { name: "Home", path: "/", icon: <FaHome /> },
-    { name: "Purchase Order", path: "/purchase-order", icon: <FaShoppingCart /> },
-      { name: "Re-Cycling", path: "/reordering", icon: <FaBox /> },
-    { name: "Sales Order", path: "/sales-order", icon: <FaFileInvoice /> },
+    // { name: "Purchase Order", path: "/purchase-order", icon: <FaShoppingCart /> },
+    //   { name: "Re-Cycling", path: "/reordering", icon: <FaBox /> },
+    // { name: "Sales Order", path: "/sales-order", icon: <FaFileInvoice /> },
   
-    { name: "Pearls Book", path: "/pearls-book", icon: <FaBook /> },
-    { name: "CRM", path: "/crm", icon: <FaUsers /> },
-    { name: "Loading & Dispatch", path: "/dispatch", icon: <FaTruck /> },
-    { name: "Employees Book", path: "/employees", icon: <FaUserTie /> },
-    { name: "Employee Dashboard", path: "/employeepage", icon: <FaUsers /> },
-    { name: "Payroll & Attendance", path: "/hr-control", icon: <FaMoneyBillWave /> },
+    // { name: "Pearls Book", path: "/pearls-book", icon: <FaBook /> },
+    // { name: "CRM", path: "/crm", icon: <FaUsers /> },
+    // { name: "Loading & Dispatch", path: "/dispatch", icon: <FaTruck /> },
+    // { name: "Employees Book", path: "/employees", icon: <FaUserTie /> },
+    // { name: "Employee Dashboard", path: "/employeepage", icon: <FaUsers /> },
+    // { name: "Payroll & Attendance", path: "/hr-control", icon: <FaMoneyBillWave /> },
   ];
 
   const summaryItems = [
@@ -100,7 +100,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           })}
 
           {/* SUMMARY SECTION */}
-          <div className="mx-3 mb-1 mt-4">
+          {/* <div className="mx-3 mb-1 mt-4">
             <button
               onClick={() => setSummaryOpen(!summaryOpen)}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
@@ -133,10 +133,10 @@ const Sidebar = ({ isOpen, onClose }) => {
                 })}
               </div>
             )}
-          </div>
+          </div> */}
 
           {/* FINANCE REPORTS SECTION */}
-          <div className="mx-3 mb-1 mt-4">
+          {/* <div className="mx-3 mb-1 mt-4">
             <button
               onClick={() => setFinanceOpen(!financeOpen)}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
@@ -167,7 +167,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 })}
               </div>
             )}
-          </div>
+          </div> */}
 
           {/* ADMIN SECTION */}
           <div className="mx-3 mb-1 mt-4">

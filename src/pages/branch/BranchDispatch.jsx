@@ -33,7 +33,14 @@ export default function BranchDispatch() {
 
     // Load products for selected orders
     const handleLoadProductsBulk = () => {
-      if (!selectedOrderIds.length) return;
+      if (!selectedOrderIds.length) {
+        toast.warning("Please select at least one order");
+        return;
+      }
+      if (!selectedVoucher) {
+        toast.warning("Please select a voucher type");
+        return;
+      }
       const selectedOrders = orders.filter((order) => selectedOrderIds.includes(order._id));
       const products = selectedOrders.flatMap((order) =>
         (order.items || []).map((item) => ({
@@ -51,51 +58,75 @@ export default function BranchDispatch() {
         invoiceIds: selectedOrders.map((o) => o.invoiceId || o.poId),
       });
       setLoadedParties(null);
-      toast.success("Products loaded!");
+      toast.success(`Products loaded for ${orderType === 'SO' ? 'Sales' : 'Purchase'} Order!`);
     };
 
     // Load parties for selected orders
     const handleLoadPartiesBulk = async () => {
-      if (!selectedOrderIds.length) return;
+      if (!selectedOrderIds.length) {
+        toast.warning("Please select at least one order");
+        return;
+      }
+      if (!selectedVoucher) {
+        toast.warning("Please select a voucher type");
+        return;
+      }
       setLoading(true);
       try {
         const selectedOrders = orders.filter((order) => selectedOrderIds.includes(order._id));
         const parties = [];
+
+        // Pre-fetch all vendors for the branch if any PO order has vendor as string
+        let allVendors = [];
+        if (orderType === "PO" && selectedOrders.some((o) => typeof o.vendor === 'string')) {
+          const vRes = await fetch(`${API_BASE}/vendors?branchId=${currentBranch._id}`);
+          const vData = await vRes.json();
+          allVendors = vData.data || vData || [];
+        }
+
         for (const order of selectedOrders) {
           if (orderType === "SO") {
             const customerId = order.customer?.customerId || order.customer?.id;
-            const response = await fetch(`${API_BASE}/customers/${customerId}`);
-            const customerData = await response.json();
-            parties.push({
-              name: order.customer?.name,
-              invoiceId: order.invoiceId,
-              value: customerData.debit || 0,
-              valueType: "debit",
-            });
-          } else {
-            // Handle vendor as string or object
-            if (typeof order.vendor === 'string') {
+            if (customerId) {
+              const response = await fetch(`${API_BASE}/customers/${customerId}`);
+              const customerData = await response.json();
               parties.push({
-                name: order.vendor,
-                invoiceId: order.poId,
-                value: 0,
+                name: order.customer?.name || 'Unknown Customer',
+                invoiceId: order.invoiceId,
+                value: customerData.debit || 0,
+                valueType: "debit",
+              });
+            }
+          } else {
+            // Handle vendor as string or object for PO
+            const vendorName = typeof order.vendor === 'string' ? order.vendor : order.vendor?.name;
+            const poInvoiceId = order.invoiceId || order.poId;
+            if (typeof order.vendor === 'string') {
+              // Vendor stored as plain name — look up by name in allVendors
+              const matched = allVendors.find(
+                (v) => v.name?.toLowerCase() === order.vendor.toLowerCase()
+              );
+              parties.push({
+                name: vendorName,
+                invoiceId: poInvoiceId,
+                value: matched?.credit || 0,
                 valueType: "credit",
               });
             } else {
-              const vendorId = order.vendor?.vendorId || order.vendor?.id;
+              const vendorId = order.vendor?.vendorId || order.vendor?._id || order.vendor?.id;
               if (vendorId) {
                 const response = await fetch(`${API_BASE}/vendors/${vendorId}`);
                 const vendorData = await response.json();
                 parties.push({
-                  name: order.vendor?.name,
-                  invoiceId: order.poId,
+                  name: vendorName || 'Unknown Vendor',
+                  invoiceId: poInvoiceId,
                   value: vendorData.credit || 0,
                   valueType: "credit",
                 });
               } else {
                 parties.push({
-                  name: order.vendor?.name || 'Unknown Vendor',
-                  invoiceId: order.poId,
+                  name: vendorName || 'Unknown Vendor',
+                  invoiceId: poInvoiceId,
                   value: 0,
                   valueType: "credit",
                 });
@@ -109,7 +140,7 @@ export default function BranchDispatch() {
           orderType: orderType,
         });
         setLoadedProducts(null);
-        toast.success("Parties loaded!");
+        toast.success(`Parties loaded for ${orderType === 'SO' ? 'Sales' : 'Purchase'} Order!`);
       } catch (error) {
         console.error("Error loading parties:", error);
         toast.error("Failed to load parties");
@@ -146,9 +177,11 @@ export default function BranchDispatch() {
       // Filter by voucher type and get only finalized/invoiced orders
       const filtered = (data || []).filter((order) => {
         if (orderType === "SO") {
+          // Sales Orders: Show only if invoiceGenerated is true
           return order.voucherType === selectedVoucher && order.invoiceGenerated;
         } else {
-          return order.voucherType === selectedVoucher;
+          // Purchase Orders: Show only if status is "INVOICED"
+          return order.voucherType === selectedVoucher && order.status === "INVOICED";
         }
       });
 
@@ -201,16 +234,33 @@ export default function BranchDispatch() {
           orderType: orderType,
         });
       } else {
-        const vendorId = order.vendor?.vendorId || order.vendor?.id;
-        const response = await fetch(`${API_BASE}/vendors/${vendorId}`);
-        const vendorData = await response.json();
+        const poInvoiceId = order.invoiceId || order.poId;
+        const vendorName = typeof order.vendor === 'string' ? order.vendor : order.vendor?.name;
+        let creditValue = 0;
+        if (typeof order.vendor === 'string') {
+          // Vendor stored as plain name — fetch all vendors and match by name
+          const vRes = await fetch(`${API_BASE}/vendors?branchId=${currentBranch._id}`);
+          const vData = await vRes.json();
+          const allVendors = vData.data || vData || [];
+          const matched = allVendors.find(
+            (v) => v.name?.toLowerCase() === order.vendor.toLowerCase()
+          );
+          creditValue = matched?.credit || 0;
+        } else {
+          const vendorId = order.vendor?.vendorId || order.vendor?._id || order.vendor?.id;
+          if (vendorId) {
+            const response = await fetch(`${API_BASE}/vendors/${vendorId}`);
+            const vendorData = await response.json();
+            creditValue = vendorData.credit || 0;
+          }
+        }
         setLoadedParties({
           type: "parties",
           data: [
             {
-              name: order.vendor?.name,
-              invoiceId: order.poId,
-              value: vendorData.credit || 0,
+              name: vendorName || 'Unknown Vendor',
+              invoiceId: poInvoiceId,
+              value: creditValue,
               valueType: "credit",
             },
           ],
@@ -268,26 +318,28 @@ export default function BranchDispatch() {
 
         {/* Selection Panel */}
         <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
+          <h2 className="text-2xl font-bold text-gray-800 mb-6">Filter by Order Type & Voucher</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Order Type */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Order Type
+                <span className="text-red-500">*</span> Order Type
               </label>
               <select
                 value={orderType}
                 onChange={(e) => setOrderType(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
               >
-                <option value="SO">Sales Order</option>
-                <option value="PO">Purchase Order</option>
+                <option value="SO">Sales Order (SO)</option>
+                <option value="PO">Purchase Order (PO)</option>
               </select>
+              <p className="text-xs text-gray-500 mt-1">Select to filter vouchers</p>
             </div>
 
             {/* Voucher Type */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Voucher Type
+                <span className="text-red-500">*</span> Voucher Type
               </label>
               <select
                 value={selectedVoucher}
@@ -301,6 +353,19 @@ export default function BranchDispatch() {
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-gray-500 mt-1">{filteredVouchers.length} types available</p>
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Status
+              </label>
+              <div className="px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg flex items-center h-10">
+                <span className={`text-sm font-semibold ${orders.length > 0 ? 'text-green-600' : 'text-gray-500'}`}>
+                  {orders.length > 0 ? `${orders.length} Order(s) Found` : 'No Orders'}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -310,22 +375,24 @@ export default function BranchDispatch() {
           <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                Orders
+                <FaTruck className="text-primary" /> Available Orders ({orders.length})
               </h3>
               <div className="flex gap-2">
                 <button
                   className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
                   onClick={handleLoadProductsBulk}
                   disabled={!selectedOrderIds.length || loading}
+                  title="Load products from selected orders"
                 >
-                  Products
+                  <FaBox /> Load Products
                 </button>
                 <button
                   className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
                   onClick={handleLoadPartiesBulk}
                   disabled={!selectedOrderIds.length || loading}
+                  title="Load parties (Customer/Vendor) from selected orders"
                 >
-                  Parties
+                  <FaUsers /> Load Parties
                 </button>
               </div>
             </div>
@@ -333,9 +400,9 @@ export default function BranchDispatch() {
               <thead className="bg-gray-200">
                 <tr>
                   <th className="border border-gray-300 px-4 py-2 text-center font-semibold">Select</th>
-                  <th className="border border-gray-300 px-4 py-2 text-left font-semibold">Order ID</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left font-semibold">{orderType === 'SO' ? 'Invoice ID' : 'PO ID'}</th>
                   <th className="border border-gray-300 px-4 py-2 text-left font-semibold">Date</th>
-                  <th className="border border-gray-300 px-4 py-2 text-left font-semibold">Party</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left font-semibold">{orderType === 'SO' ? 'Customer' : 'Vendor'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -365,23 +432,27 @@ export default function BranchDispatch() {
             <div id="loading-slip-content" className="bg-white p-8">
               {/* Header */}
               <div className="border-b-2 border-gray-300 pb-6 mb-6">
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-800">
+                    <h2 className="text-3xl font-bold text-gray-800">
                       LOADING SLIP
                     </h2>
-                    <p className="text-gray-600 mt-1">
-                      {orderType === "SO" ? "Sales Order" : "Purchase Order"}
+                    <p className="text-gray-600 mt-2 text-lg font-semibold">
+                      {orderType === "SO" ? "📦 Sales Order" : "🛒 Purchase Order"}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-600">
                       <span className="font-semibold">Date:</span>{" "}
-                      {new Date().toLocaleDateString()}
+                      {new Date().toLocaleDateString('en-IN')}
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      <span className="font-semibold">Type:</span>{" "}
+                      {selectedVoucher || 'N/A'}
                     </p>
                     <p className="text-sm text-gray-600 mt-1">
                       <span className="font-semibold">Ref:</span>{" "}
-                      {loadedProducts?.invoiceId || loadedParties?.data?.[0]?.invoiceId}
+                      {loadedProducts?.invoiceIds?.join(', ') || loadedParties?.data?.[0]?.invoiceId || 'N/A'}
                     </p>
                   </div>
                 </div>
@@ -403,7 +474,7 @@ export default function BranchDispatch() {
                           HSN
                         </th>
                         <th className="border border-gray-300 px-4 py-2 text-right font-semibold">
-                          Qty
+                          {loadedProducts.orderType === "SO" ? "Sales Order Qty" : "PO Qty"}
                         </th>
                         <th className="border border-gray-300 px-4 py-2 text-center font-semibold">
                           Unit
@@ -436,19 +507,19 @@ export default function BranchDispatch() {
               {loadedParties && (
                 <div className="mb-8">
                   <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <FaUsers /> {orderType === "SO" ? "Customer" : "Vendor"}
+                    <FaUsers /> {loadedParties.orderType === "SO" ? "Customer Details" : "Vendor Details"}
                   </h3>
                   <table className="w-full border-collapse border border-gray-300">
                     <thead className="bg-gray-200">
                       <tr>
                         <th className="border border-gray-300 px-4 py-2 text-left font-semibold">
-                          Party Name
+                          {loadedParties.orderType === "SO" ? "Customer Name" : "Vendor Name"}
                         </th>
                         <th className="border border-gray-300 px-4 py-2 text-right font-semibold">
-                          Invoice ID
+                          {loadedParties.orderType === "SO" ? "Invoice ID" : "PO ID"}
                         </th>
                         <th className="border border-gray-300 px-4 py-2 text-right font-semibold">
-                          {orderType === "SO" ? "Debit (₹)" : "Credit (₹)"}
+                          {loadedParties.orderType === "SO" ? "Debit (₹)" : "Credit (₹)"}
                         </th>
                       </tr>
                     </thead>
@@ -505,11 +576,16 @@ export default function BranchDispatch() {
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
             <FaLock className="mx-auto text-5xl text-gray-400 mb-4" />
             <p className="text-lg text-gray-600 font-semibold mb-2">
-              Select orders to generate loading slip
+              Ready to generate loading slip
             </p>
-            <p className="text-gray-500">
-              Choose order type, voucher type, then select orders from the table and use the action buttons above to load products or parties data.
-            </p>
+            <div className="text-gray-500 text-left max-w-2xl mx-auto">
+              <p className="mb-2"><strong>Step 1:</strong> Select an <span className="text-primary font-semibold">Order Type</span> (Sales Order or Purchase Order)</p>
+              <p className="mb-2"><strong>Step 2:</strong> Select a <span className="text-primary font-semibold">Voucher Type</span> from the filtered list</p>
+              <p className="mb-2"><strong>Step 3:</strong> Review and <span className="text-primary font-semibold">select one or multiple orders</span> from the table below</p>
+              <p className="mb-2"><strong>Step 4:</strong> Click <span className="text-blue-600 font-semibold">"Load Products"</span> to see product details with quantities</p>
+              <p className="mb-2"><strong>Step 5:</strong> Or click <span className="text-green-600 font-semibold">"Load Parties"</span> to see customer/vendor details with invoice info</p>
+              <p><strong>Step 6:</strong> Download the loading slip as PDF</p>
+            </div>
           </div>
         )}
       </div>
