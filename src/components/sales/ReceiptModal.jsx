@@ -3,7 +3,7 @@ import { FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { useBranch } from "../../context/BranchContext";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 
 export default function ReceiptModal({ invoice, isOpen, onClose, onReceiptSuccess }) {
   const { currentBranch } = useBranch();

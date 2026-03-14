@@ -3,7 +3,7 @@ import { useBranch } from "./BranchContext";
 
 const InventoryContext = createContext();
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL + "/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 
 
 export const InventoryProvider = ({ children }) => {

@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import jsPDF from "jspdf";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 const PAGE_SIZE = 10;
 const CHART_PAGE_SIZE = 5;
 
