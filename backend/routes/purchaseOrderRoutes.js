@@ -91,7 +91,20 @@ router.post('/:id/generate-invoice', async (req, res) => {
       await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty } });
     }
 
-    // No vendor credit update here; UI will calculate outstanding from INVOICED, unpaid POs only
+    // 3. Update vendor credit balance (add PO grandTotal to credit)
+    if (order.vendor && order.grandTotal) {
+      const vendorName = typeof order.vendor === 'string' ? order.vendor : order.vendor?.name;
+      const vendorId = typeof order.vendor === 'object' ? (order.vendor?._id || order.vendor?.id) : null;
+      if (vendorId) {
+        await Vendor.findByIdAndUpdate(vendorId, { $inc: { credit: order.grandTotal } });
+      } else if (vendorName) {
+        await Vendor.findOneAndUpdate(
+          { branchId: order.branchId, name: vendorName },
+          { $inc: { credit: order.grandTotal } }
+        );
+      }
+    }
+
     res.json({ message: 'Invoice generated, inventory updated.' });
   } catch (err) {
     console.error('Generate invoice error:', err);
