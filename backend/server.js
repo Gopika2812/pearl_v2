@@ -6,11 +6,13 @@ import express from "express";
 import mongoose from "mongoose";
 import path from "path";
 import { fileURLToPath } from "url";
-
+import auth from "./middleware/auth.js";
+import rbac from "./middleware/rbac.js";
 import fixVoucherTypeIndex from "./utils/fixVoucherTypeIndex.js";
 
 import branchRoutes from "./routes/branchRoutes.js";
 import branchUserRoutes from "./routes/branchUserRoutes.js";
+import superAdminRoutes from "./routes/superAdminRoutes.js";
 import chartOfAccountsRoutes from "./routes/chartOfAccountsRoutes.js";
 import commissionRuleRoutes from "./routes/commissionRuleRoutes.js";
 import creditNoteRoutes from "./routes/creditNoteRoutes.js";
@@ -60,6 +62,7 @@ const publicPath = path.join(__dirname, "../public");
 app.use(express.static(publicPath));
 
 // Routes
+app.use("/api/super-admin", superAdminRoutes);
 app.use("/api/branches", branchRoutes);
 app.use("/api/branch-users", branchUserRoutes);
 app.use("/api/chart-of-accounts", chartOfAccountsRoutes);
@@ -88,7 +91,6 @@ app.use("/api/sales-men", salesManRoutes);
 app.use("/api/delivery-men", deliveryManRoutes);
 app.use("/api/commission-rules", commissionRuleRoutes);
 app.use("/api/reordering", reorderingRoutes);
-
 
 // MongoDB Connect
 dns.setServers(["8.8.8.8", "1.1.1.1"]);

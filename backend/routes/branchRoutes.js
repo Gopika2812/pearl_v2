@@ -1,5 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
+import auth from "../middleware/auth.js";
+import rbac from "../middleware/rbac.js";
 import Branch from "../models/Branch.js";
 
 const router = express.Router();
@@ -57,8 +59,8 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST: Create new branch
-router.post("/", async (req, res) => {
+// POST: Create new branch (SUPER_ADMIN only)
+router.post("/", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
   try {
     const { name, code, location, address, phone, email, manager, logo, color, isMainBranch } = req.body;
 
@@ -108,8 +110,8 @@ router.post("/", async (req, res) => {
   }
 });
 
-// PUT: Update branch
-router.put("/:id", async (req, res) => {
+// PUT: Update branch (SUPER_ADMIN only)
+router.put("/:id", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -163,8 +165,8 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// DELETE: Delete branch
-router.delete("/:id", async (req, res) => {
+// DELETE: Delete branch (SUPER_ADMIN only)
+router.delete("/:id", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
   try {
     const { id } = req.params;
 

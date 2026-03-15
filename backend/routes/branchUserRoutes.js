@@ -1,23 +1,49 @@
 import express from "express";
 import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
 import Branch from "../models/Branch.js";
 import BranchUser from "../models/BranchUser.js";
+import PendingRegistration from "../models/PendingRegistration.js";
+import SuperAdmin from "../models/SuperAdmin.js";
+import { sendOTPEmail } from "../utils/emailService.js";
 
 const router = express.Router();
 
-// POST: Register new user for a branch
+/**
+ * Helper: Generate 6-digit OTP
+ */
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+// POST: Register new user for a branch (with OTP approval)
 router.post("/register", async (req, res) => {
   try {
-    const { username, password, email, branchId, role } = req.body;
+    const { name, username, email, password, confirmPassword, branchCode, role } = req.body;
 
-    if (!username || !password || !branchId) {
+    // Validation
+    if (!name || !username || !email || !password || !confirmPassword || !branchCode || !role) {
       return res.status(400).json({
         success: false,
-        message: "Username, password, and branch are required",
+        message: "All fields are required",
       });
     }
 
-    // Check if user already exists
+    if (password !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Passwords do not match",
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters",
+      });
+    }
+
+    // Check if username already exists
     const existingUser = await BranchUser.findOne({ username });
     if (existingUser) {
       return res.status(400).json({
@@ -26,36 +52,73 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // Verify branch exists
-    const branch = await Branch.findById(branchId);
-    if (!branch) {
-      return res.status(404).json({
+    // Check if pending registration already exists
+    const existingPending = await PendingRegistration.findOne({
+      username,
+      status: "PENDING",
+    });
+    if (existingPending) {
+      return res.status(400).json({
         success: false,
-        message: "Branch not found",
+        message: "Registration already pending approval",
       });
     }
 
-    // Create new user
-    const user = new BranchUser({
+    // Verify branch exists with the code
+    const branch = await Branch.findOne({ code: branchCode.toUpperCase() });
+    if (!branch) {
+      return res.status(404).json({
+        success: false,
+        message: `Branch code "${branchCode}" not found`,
+      });
+    }
+
+    // Get Super Admin email
+    const superAdmin = await SuperAdmin.findOne({ role: "SUPER_ADMIN" });
+    if (!superAdmin) {
+      return res.status(500).json({
+        success: false,
+        message: "Super admin not configured",
+      });
+    }
+
+    // Generate OTP
+    const otp = generateOTP();
+    const otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+    // Create pending registration
+    const pendingReg = new PendingRegistration({
+      name,
       username,
-      password,
-      email: email || "",
-      branch: branchId,
-      branchName: branch.name,
-      role: role || "STAFF",
+      email,
+      password, // Will be hashed before creating actual user
+      branchCode: branchCode.toUpperCase(),
+      role,
+      otp,
+      otpExpires,
+      status: "PENDING",
     });
 
-    await user.save();
+    await pendingReg.save();
+
+    // Send OTP email to super admin (non-blocking - don't delete if fails)
+    try {
+      await sendOTPEmail(superAdmin.email, username, otp, branchCode, role, email);
+      console.log("✅ OTP email sent successfully");
+    } catch (emailError) {
+      console.error("⚠️  Email failed but registration saved:", emailError.text || emailError.message);
+      // Don't delete registration - email is backup only
+      // OTP will be shown in console for testing
+    }
 
     res.status(201).json({
       success: true,
-      message: "User registered successfully",
+      message: "Registration submitted! OTP sent to super admin.",
       data: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        branch: user.branchName,
-        role: user.role,
+        registrationId: pendingReg._id,
+        username: pendingReg.username,
+        email: pendingReg.email,
+        message: "Please wait for super admin approval",
       },
     });
   } catch (error) {
@@ -63,6 +126,93 @@ router.post("/register", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to register user",
+      error: error.message,
+    });
+  }
+});
+
+// POST: Verify OTP and create user
+router.post("/verify-otp", async (req, res) => {
+  try {
+    const { registrationId, otp } = req.body;
+
+    if (!registrationId || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Registration ID and OTP are required",
+      });
+    }
+
+    // Find pending registration
+    const pendingReg = await PendingRegistration.findById(registrationId);
+
+    if (!pendingReg) {
+      return res.status(404).json({
+        success: false,
+        message: "Registration not found",
+      });
+    }
+
+    // Check if OTP is expired
+    if (new Date() > pendingReg.otpExpires) {
+      await PendingRegistration.deleteOne({ _id: registrationId });
+      return res.status(400).json({
+        success: false,
+        message: "OTP has expired. Please register again.",
+      });
+    }
+
+    // Verify OTP
+    if (pendingReg.otp !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP",
+      });
+    }
+
+    // Find branch
+    const branch = await Branch.findOne({ code: pendingReg.branchCode });
+    if (!branch) {
+      return res.status(404).json({
+        success: false,
+        message: "Branch not found",
+      });
+    }
+
+    // Create new BranchUser
+    const newUser = new BranchUser({
+      name: pendingReg.name,
+      username: pendingReg.username,
+      email: pendingReg.email,
+      password: pendingReg.password,
+      role: pendingReg.role,
+      branch: branch._id,
+      status: "ACTIVE",
+    });
+
+    // Save user (password will be hashed by pre-save hook)
+    await newUser.save();
+
+    // Delete pending registration
+    await PendingRegistration.deleteOne({ _id: registrationId });
+
+    console.log(`✅ User "${pendingReg.username}" created successfully from registration`);
+
+    res.status(201).json({
+      success: true,
+      message: "Registration confirmed! You can now login.",
+      data: {
+        userId: newUser._id,
+        username: newUser.username,
+        email: newUser.email,
+        role: newUser.role,
+      },
+    });
+  } catch (error) {
+    console.error("OTP Verification Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to verify OTP",
       error: error.message,
     });
   }
@@ -120,9 +270,22 @@ router.post("/login", async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
+    // Create JWT token
+    const token = jwt.sign(
+      {
+        id: user._id,
+        username: user.username,
+        role: user.role,
+        branch: user.branch._id,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
     res.json({
       success: true,
       message: "Login successful",
+      token,
       data: {
         id: user._id,
         username: user.username,
