@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   FaBox,
+  FaBuilding,
   FaChartBar,
   FaChevronDown,
+  FaCog,
   FaDollarSign,
   FaFileAlt,
   FaHandshake,
@@ -22,6 +24,8 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
   const { branch, logout } = useBranch();
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [user, setUser] = useState(null);
 
   const menuItems = [
     { name: "Home", path: "/branch-home", icon: <FaHome /> },
@@ -44,6 +48,23 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   const summaryItems = [
     { name: "Summary", path: "/branch/summary", icon: <FaChartBar /> },
   ];
+
+  const adminItems = [
+    { name: "Branch Management", path: "/admin/branches", icon: <FaBuilding /> },
+  ];
+
+  // Load user from localStorage
+  useEffect(() => {
+    const userData = localStorage.getItem("user");
+    if (userData) {
+      try {
+        setUser(JSON.parse(userData));
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+        setUser(null);
+      }
+    }
+  }, [location.pathname]);
 
   const handleLogout = () => {
     logout();
@@ -88,6 +109,44 @@ const BranchSidebar = ({ isOpen, onClose }) => {
               </Link>
             );
           })}
+
+          {/* ADMIN SECTION - Only show for ADMIN users */}
+          {user?.role === "ADMIN" && (
+            <div className="mx-3 mb-1 mt-4">
+              <button
+                onClick={() => setAdminOpen(!adminOpen)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+              >
+                <span className="text-lg"><FaCog /></span>
+                <span className="text-sm flex-1 text-left">Admin</span>
+                <FaChevronDown
+                  className={`text-xs transition-transform ${adminOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {adminOpen && (
+                <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                  {adminItems.map((item, idx) => {
+                    const active = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={idx}
+                        to={item.path}
+                        className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
+                          active
+                            ? "bg-white/20 text-white font-semibold"
+                            : "hover:bg-white/10 text-white/80"
+                        }`}
+                      >
+                        <span className="text-sm">{item.icon}</span>
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* SUMMARY SECTION */}
           {/* <div className="mx-3 mb-1 mt-4">
@@ -198,6 +257,45 @@ const BranchSidebar = ({ isOpen, onClose }) => {
               </Link>
             );
           })}
+
+          {/* ADMIN SECTION MOBILE - Only show for ADMIN users */}
+          {user?.role === "ADMIN" && (
+            <div className="mx-2 mb-1 mt-4">
+              <button
+                onClick={() => setAdminOpen(!adminOpen)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+              >
+                <span className="text-lg"><FaCog /></span>
+                <span className="text-sm flex-1 text-left">Admin</span>
+                <FaChevronDown
+                  className={`text-xs transition-transform ${adminOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {adminOpen && (
+                <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                  {adminItems.map((item, idx) => {
+                    const active = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={idx}
+                        to={item.path}
+                        onClick={onClose}
+                        className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
+                          active
+                            ? "bg-white/20 text-white font-semibold"
+                            : "hover:bg-white/10 text-white/80"
+                        }`}
+                      >
+                        <span className="text-sm">{item.icon}</span>
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* SUMMARY SECTION MOBILE */}
           <div className="mx-2 mb-1 mt-4">

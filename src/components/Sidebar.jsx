@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     FaBook,
     FaBox,
@@ -20,63 +20,53 @@ import {
     FaUsers,
     FaUserTie,
 } from "react-icons/fa";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
-  const [summaryOpen, setSummaryOpen] = useState(false);
-  const [financeOpen, setFinanceOpen] = useState(false);
+  const navigate = useNavigate();
   const [adminOpen, setAdminOpen] = useState(false);
- 
+  const [user, setUser] = useState(null);
+
+  // Load user from localStorage on mount and when route changes
+  useEffect(() => {
+    const userData = localStorage.getItem("user");
+    if (userData) {
+      try {
+        setUser(JSON.parse(userData));
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+        setUser(null);
+      }
+    }
+  }, [location.pathname]);
 
   const menu = [
     { name: "Home", path: "/", icon: <FaHome /> },
-    // { name: "Purchase Order", path: "/purchase-order", icon: <FaShoppingCart /> },
-    //   { name: "Re-Cycling", path: "/reordering", icon: <FaBox /> },
-    // { name: "Sales Order", path: "/sales-order", icon: <FaFileInvoice /> },
-  
-    // { name: "Pearls Book", path: "/pearls-book", icon: <FaBook /> },
-    // { name: "CRM", path: "/crm", icon: <FaUsers /> },
-    // { name: "Loading & Dispatch", path: "/dispatch", icon: <FaTruck /> },
-    // { name: "Employees Book", path: "/employees", icon: <FaUserTie /> },
-    // { name: "Employee Dashboard", path: "/employeepage", icon: <FaUsers /> },
-    // { name: "Payroll & Attendance", path: "/hr-control", icon: <FaMoneyBillWave /> },
-  ];
-
-  const summaryItems = [
-    { name: "Product Summary", path: "/summary/products", icon: <FaBox /> },
-    { name: "Customer Summary", path: "/summary/customers", icon: <FaUserClock /> },
-    { name: "Vendor Summary", path: "/summary/vendors", icon: <FaTruck /> },
-    { name: "Others", path: "/summary/others", icon: <FaEllipsisH /> },
-  ];
-
-  const financeReportItems = [
-    { name: "Trial Balance", path: "/reports/trial-balance", icon: <FaCalculator /> },
-    { name: "Balance Sheet", path: "/reports/balance-sheet", icon: <FaFileAlt /> },
-    { name: "Profit & Loss", path: "/reports/profit-loss", icon: <FaChartBar /> },
-    { name: "AR Aging", path: "/reports/ar-aging", icon: <FaBook /> },
-    { name: "AP Aging", path: "/reports/ap-aging", icon: <FaBook /> },
   ];
 
   const adminItems = [
     { name: "Branch Management", path: "/admin/branches", icon: <FaBuilding /> },
   ];
 
- 
-
   const handleLogout = () => {
-    alert("Logged out successfully");
+    // Clear JWT token and user data
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    
+    // Redirect to login
+    navigate("/branch-login");
   };
 
   return (
     <>
       {/* ================= DESKTOP SIDEBAR ================= */}
-      <aside className="hidden md:flex md:flex-col w-64 h-screen bg-gradient-to-b from-primary to-primary/90 text-white shadow-xl fixed left-0 top-0">
+      <aside className="hidden md:flex md:flex-col w-64 h-screen bg-gradient-to-b from-secondary to-secondary/90 text-white shadow-xl fixed left-0 top-0">
         <div className="px-6 py-6 border-b border-white/10 flex justify-center">
           <img
             src="/logo.jpeg"
             alt="Pearls ERP Logo"
-            className="h-12 w-[180px] lg:w-[450px] object-contain rounded-lg"
+            className="h-12 w-[180px] lg:w-[180px] object-contain rounded-lg"
           />
         </div>
 
@@ -89,9 +79,9 @@ const Sidebar = ({ isOpen, onClose }) => {
                 key={index}
                 to={item.path}
                 className={`mx-3 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${active
-                  ? "bg-white text-primary shadow-md font-semibold"
+                  ? "bg-white text-secondary shadow-md font-semibold"
                   : "hover:bg-white/10 text-white/90"
-                  }`}
+                }`}
               >
                 <span className="text-lg">{item.icon}</span>
                 <span className="text-sm">{item.name}</span>
@@ -99,115 +89,47 @@ const Sidebar = ({ isOpen, onClose }) => {
             );
           })}
 
-          {/* SUMMARY SECTION */}
-          {/* <div className="mx-3 mb-1 mt-4">
-            <button
-              onClick={() => setSummaryOpen(!summaryOpen)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-            >
-              <span className="text-lg"><FaChartBar /></span>
-              <span className="text-sm flex-1 text-left">Summary</span>
-              <FaChevronDown
-                className={`text-xs transition-transform ${summaryOpen ? "rotate-180" : ""
-                  }`}
-              />
-            </button>
+          {/* ADMIN SECTION - Only show for ADMIN users */}
+          {user?.role === "ADMIN" && (
+            <div className="mx-3 mb-1 mt-4">
+              <button
+                onClick={() => setAdminOpen(!adminOpen)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+              >
+                <span className="text-lg"><FaCog /></span>
+                <span className="text-sm flex-1 text-left">Admin</span>
+                <FaChevronDown
+                  className={`text-xs transition-transform ${adminOpen ? "rotate-180" : ""}`}
+                />
+              </button>
 
-            {summaryOpen && (
-              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                {summaryItems.map((item, idx) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={idx}
-                      to={item.path}
-                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${active
-                        ? "bg-white/20 text-white font-semibold"
-                        : "hover:bg-white/10 text-white/80"
-                        }`}
-                    >
-                      <span className="text-sm">{item.icon}</span>
-                      <span>{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div> */}
-
-          {/* FINANCE REPORTS SECTION */}
-          {/* <div className="mx-3 mb-1 mt-4">
-            <button
-              onClick={() => setFinanceOpen(!financeOpen)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-            >
-              <span className="text-lg"><FaChartBar /></span>
-              <span className="text-sm flex-1 text-left">Finance Reports</span>
-              <FaChevronDown
-                className={`text-xs transition-transform ${financeOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {financeOpen && (
-              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                {financeReportItems.map((item, idx) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={idx}
-                      to={item.path}
-                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${active
-                        ? "bg-white/20 text-white font-semibold"
-                        : "hover:bg-white/10 text-white/80"}`}
-                    >
-                      <span className="text-sm">{item.icon}</span>
-                      <span>{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div> */}
-
-          {/* ADMIN SECTION */}
-          <div className="mx-3 mb-1 mt-4">
-            <button
-              onClick={() => setAdminOpen(!adminOpen)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-            >
-              <span className="text-lg"><FaCog /></span>
-              <span className="text-sm flex-1 text-left">Admin</span>
-              <FaChevronDown
-                className={`text-xs transition-transform ${adminOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {adminOpen && (
-              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                {adminItems.map((item, idx) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={idx}
-                      to={item.path}
-                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${active
-                        ? "bg-white/20 text-white font-semibold"
-                        : "hover:bg-white/10 text-white/80"}`}
-                    >
-                      <span className="text-sm">{item.icon}</span>
-                      <span>{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+              {adminOpen && (
+                <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                  {adminItems.map((item, idx) => {
+                    const active = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={idx}
+                        to={item.path}
+                        className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${active
+                          ? "bg-white/20 text-white font-semibold"
+                          : "hover:bg-white/10 text-white/80"}`}
+                      >
+                        <span className="text-sm">{item.icon}</span>
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
 
         <div className="p-4 border-t border-white/20">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 bg-white text-primary px-4 py-2 rounded-lg hover:bg-gray-200 transition text-sm font-semibold"
+            className="w-full flex items-center justify-center gap-2 bg-white text-secondary px-4 py-2 rounded-lg hover:bg-gray-200 transition text-sm font-semibold"
           >
             <FaSignOutAlt /> Logout
           </button>
@@ -223,7 +145,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
       {/* ================= MOBILE SIDEBAR ================= */}
       <aside
-        className={`md:hidden fixed top-0 left-0 h-full w-72 bg-gradient-to-b from-primary to-primary/90 text-white shadow-2xl z-50 transform transition-transform duration-300 ${isOpen ? "translate-x-0" : "-translate-x-full"
+        className={`md:hidden fixed top-0 left-0 h-full w-72 bg-gradient-to-b from-secondary to-secondary/90 text-white shadow-2xl z-50 transform transition-transform duration-300 ${isOpen ? "translate-x-0" : "-translate-x-full"
           }`}
       >
         {/* CLOSE */}
@@ -245,7 +167,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 key={index}
                 to={item.path}
                 className={`mx-2 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${active
-                  ? "bg-white text-primary shadow-md font-semibold"
+                  ? "bg-white text-secondary shadow-md font-semibold"
                   : "hover:bg-white/10 text-white/90"
                   }`}
                 onClick={onClose}
@@ -256,119 +178,49 @@ const Sidebar = ({ isOpen, onClose }) => {
             );
           })}
 
-          {/* SUMMARY SECTION MOBILE */}
-          <div className="mx-2 mb-1 mt-4">
-            <button
-              onClick={() => setSummaryOpen(!summaryOpen)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-            >
-              <span className="text-lg"><FaChartBar /></span>
-              <span className="text-sm flex-1 text-left">Summary</span>
-              <FaChevronDown
-                className={`text-xs transition-transform ${summaryOpen ? "rotate-180" : ""
-                  }`}
-              />
-            </button>
+          {/* ADMIN SECTION MOBILE - Only show for ADMIN users */}
+          {user?.role === "ADMIN" && (
+            <div className="mx-2 mb-1 mt-4">
+              <button
+                onClick={() => setAdminOpen(!adminOpen)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+              >
+                <span className="text-lg"><FaCog /></span>
+                <span className="text-sm flex-1 text-left">Admin</span>
+                <FaChevronDown
+                  className={`text-xs transition-transform ${adminOpen ? "rotate-180" : ""}`}
+                />
+              </button>
 
-            {summaryOpen && (
-              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                {summaryItems.map((item, idx) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={idx}
-                      to={item.path}
-                      onClick={onClose}
-                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${active
-                        ? "bg-white/20 text-white font-semibold"
-                        : "hover:bg-white/10 text-white/80"
-                        }`}
-                    >
-                      <span className="text-sm">{item.icon}</span>
-                      <span>{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* FINANCE REPORTS SECTION MOBILE */}
-          <div className="mx-2 mb-1 mt-4">
-            <button
-              onClick={() => setFinanceOpen(!financeOpen)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-            >
-              <span className="text-lg"><FaChartBar /></span>
-              <span className="text-sm flex-1 text-left">Finance Reports</span>
-              <FaChevronDown
-                className={`text-xs transition-transform ${financeOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {financeOpen && (
-              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                {financeReportItems.map((item, idx) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={idx}
-                      to={item.path}
-                      onClick={onClose}
-                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${active
-                        ? "bg-white/20 text-white font-semibold"
-                        : "hover:bg-white/10 text-white/80"}`}
-                    >
-                      <span className="text-sm">{item.icon}</span>
-                      <span>{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* ADMIN SECTION MOBILE */}
-          <div className="mx-2 mb-1 mt-4">
-            <button
-              onClick={() => setAdminOpen(!adminOpen)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-            >
-              <span className="text-lg"><FaCog /></span>
-              <span className="text-sm flex-1 text-left">Admin</span>
-              <FaChevronDown
-                className={`text-xs transition-transform ${adminOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {adminOpen && (
-              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                {adminItems.map((item, idx) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={idx}
-                      to={item.path}
-                      onClick={onClose}
-                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${active
-                        ? "bg-white/20 text-white font-semibold"
-                        : "hover:bg-white/10 text-white/80"}`}
-                    >
-                      <span className="text-sm">{item.icon}</span>
-                      <span>{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+              {adminOpen && (
+                <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                  {adminItems.map((item, idx) => {
+                    const active = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={idx}
+                        to={item.path}
+                        onClick={onClose}
+                        className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${active
+                          ? "bg-white/20 text-white font-semibold"
+                          : "hover:bg-white/10 text-white/80"}`}
+                      >
+                        <span className="text-sm">{item.icon}</span>
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
 
         {/* LOGOUT */}
         <div className="p-4 border-t border-white/20">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 bg-white text-primary px-4 py-2 rounded-lg hover:bg-gray-200 transition text-sm font-semibold"
+            className="w-full flex items-center justify-center gap-2 bg-white text-secondary px-4 py-2 rounded-lg hover:bg-gray-200 transition text-sm font-semibold"
           >
             <FaSignOutAlt /> Logout
           </button>

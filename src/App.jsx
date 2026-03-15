@@ -5,8 +5,11 @@ import "react-toastify/dist/ReactToastify.css";
 
 import BranchSidebar from "./components/BranchSidebar";
 import BranchTopbar from "./components/BranchTopbar";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
+import SuperAdminSidebar from "./components/SuperAdminSidebar";
+import SuperAdminTopbar from "./components/SuperAdminTopbar";
 import { BranchProvider } from "./context/BranchContext";
 import { InventoryProvider } from "./context/InventoryContext";
 import AdminBranchManagement from "./pages/AdminBranchManagement";
@@ -31,6 +34,10 @@ import BranchSalesReports from "./pages/branch/BranchSalesReports";
 import BranchSummary from "./pages/branch/BranchSummary";
 import BranchSuppliers from "./pages/branch/BranchSuppliers";
 import BranchLoginPage from "./pages/BranchLoginPage";
+import BranchRegisterPage from "./pages/BranchRegisterPage";
+import UserRegistrationPage from "./pages/UserRegistrationPage";
+import SuperAdminLoginPage from "./pages/SuperAdminLoginPage";
+import SuperAdminBranchManagement from "./pages/SuperAdminBranchManagement";
 import CRMPage from "./pages/CRMPage";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerSummary from "./pages/CustomerSummary";
@@ -59,10 +66,17 @@ function App() {
   const isBranchRoute = location.pathname.startsWith("/branch/") || location.pathname === "/branch-home";
   const isInsightsRoute = location.pathname.startsWith("/branch/insights");
   
+  // Check if we're on a super admin page
+  const isSuperAdminRoute = location.pathname.startsWith("/super-admin/");
+  
   // Hide layout on login pages
   const hideLayout =
     location.pathname === "/" ||
     location.pathname === "/login" ||
+    location.pathname === "/branch-login" ||
+    location.pathname === "/branch-register" ||
+    location.pathname === "/user-register" ||
+    location.pathname === "/super-admin-login" ||
     location.pathname === "/customer-login" ||
     location.pathname === "/pearls-shopping";
 
@@ -73,10 +87,15 @@ function App() {
           <ToastContainer />
 
           <div className="flex">
-            {/* Sidebar - Use branch sidebar if on branch route, otherwise use regular */}
+            {/* Sidebar - Use branch sidebar if on branch route, super admin if on super admin route, otherwise use regular */}
             {!hideLayout && !isInsightsRoute && (
               <>
-                {isBranchRoute ? (
+                {isSuperAdminRoute ? (
+                  <SuperAdminSidebar
+                    isOpen={sidebarOpen}
+                    onClose={() => setSidebarOpen(false)}
+                  />
+                ) : isBranchRoute ? (
                   <BranchSidebar
                     isOpen={sidebarOpen}
                     onClose={() => setSidebarOpen(false)}
@@ -94,7 +113,9 @@ function App() {
             <div className="flex-1 min-h-screen flex flex-col">
               {!hideLayout && (
                 <>
-                  {isBranchRoute && !isInsightsRoute ? (
+                  {isSuperAdminRoute ? (
+                    <SuperAdminTopbar onMenuClick={() => setSidebarOpen(true)} />
+                  ) : isBranchRoute && !isInsightsRoute ? (
                     <BranchTopbar onMenuClick={() => setSidebarOpen(true)} />
                   ) : (
                     !isInsightsRoute && <Topbar onMenuClick={() => setSidebarOpen(true)} />
@@ -106,29 +127,34 @@ function App() {
                 <Routes>
                   <Route path="/" element={<BranchLoginPage />} />
                   <Route path="/branch-login" element={<BranchLoginPage />} />
+                  <Route path="/branch-register" element={<BranchRegisterPage />} />
+                  <Route path="/user-register" element={<UserRegistrationPage />} />
+                  <Route path="/super-admin-login" element={<SuperAdminLoginPage />} />
+                  <Route path="/super-admin/dashboard" element={<ProtectedRoute element={<SuperAdminBranchManagement />} role={["SUPER_ADMIN"]} />} />
+                  <Route path="/super-admin/branch-management" element={<ProtectedRoute element={<SuperAdminBranchManagement />} role={["SUPER_ADMIN"]} />} />
                   <Route path="/home" element={<Home />} />
                   <Route path="/login" element={<HrLogin />} />
                   <Route path="/customer-login" element={<CustomerLogin />} />
                   <Route path="/pearls-shopping" element={<PearlsShopping />} />
 
-                  {/* BRANCH-SPECIFIC ROUTES */}
-                  <Route path="/branch-home" element={<BranchHome />} />
-                  <Route path="/branch/insights" element={<BranchInsights />} />
-                  <Route path="/branch/po" element={<BranchPO />} />
-                  <Route path="/branch/purchase-orders" element={<BranchPurchaseOrders />} />
-                  <Route path="/branch/recycling" element={<BranchRecycling />} />
-                  <Route path="/branch/debit-note" element={<BranchDebitNote />} />
-                  <Route path="/branch/po-payment" element={<BranchPOPayment />} />
-                  <Route path="/branch/sales-order" element={<BranchSalesOrder />} />
-                  <Route path="/branch/invoiced-order" element={<BranchInvoicedOrders />} />
-                  <Route path="/branch/credit-note" element={<BranchCreditNote />} />
-                  <Route path="/branch/dispatch" element={<BranchDispatch />} />
-                  <Route path="/branch/suppliers" element={<BranchSuppliers />} />
-                  <Route path="/branch/customers" element={<BranchCustomers />} />
-                  <Route path="/branch/sales-reports" element={<BranchSalesReports />} />
-                  <Route path="/branch/quick-links" element={<BranchQuickLinks />} />
-                  <Route path="/branch/receipt" element={<BranchReceipt />} />
-                  <Route path="/branch/summary" element={<BranchSummary />} />
+                  {/* BRANCH-SPECIFIC ROUTES - Protected */}
+                  <Route path="/branch-home" element={<ProtectedRoute element={<BranchHome />} />} />
+                  <Route path="/branch/insights" element={<ProtectedRoute element={<BranchInsights />} />} />
+                  <Route path="/branch/po" element={<ProtectedRoute element={<BranchPO />} />} />
+                  <Route path="/branch/purchase-orders" element={<ProtectedRoute element={<BranchPurchaseOrders />} />} />
+                  <Route path="/branch/recycling" element={<ProtectedRoute element={<BranchRecycling />} />} />
+                  <Route path="/branch/debit-note" element={<ProtectedRoute element={<BranchDebitNote />} />} />
+                  <Route path="/branch/po-payment" element={<ProtectedRoute element={<BranchPOPayment />} />} />
+                  <Route path="/branch/sales-order" element={<ProtectedRoute element={<BranchSalesOrder />} />} />
+                  <Route path="/branch/invoiced-order" element={<ProtectedRoute element={<BranchInvoicedOrders />} />} />
+                  <Route path="/branch/credit-note" element={<ProtectedRoute element={<BranchCreditNote />} />} />
+                  <Route path="/branch/dispatch" element={<ProtectedRoute element={<BranchDispatch />} />} />
+                  <Route path="/branch/suppliers" element={<ProtectedRoute element={<BranchSuppliers />} />} />
+                  <Route path="/branch/customers" element={<ProtectedRoute element={<BranchCustomers />} />} />
+                  <Route path="/branch/sales-reports" element={<ProtectedRoute element={<BranchSalesReports />} />} />
+                  <Route path="/branch/quick-links" element={<ProtectedRoute element={<BranchQuickLinks />} />} />
+                  <Route path="/branch/receipt" element={<ProtectedRoute element={<BranchReceipt />} />} />
+                  <Route path="/branch/summary" element={<ProtectedRoute element={<BranchSummary />} />} />
 
                   {/* LEGACY ROUTES */}
                   <Route
@@ -190,7 +216,7 @@ function App() {
                   />
                   <Route
                     path="/admin/branches"
-                    element={<AdminBranchManagement />}
+                    element={<ProtectedRoute element={<AdminBranchManagement />} role={["ADMIN"]} />}
                   />
                 </Routes>
             </div>

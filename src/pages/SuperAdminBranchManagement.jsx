@@ -1,32 +1,31 @@
 import { useEffect, useState } from "react";
-import { FaBuilding, FaCheck, FaEnvelope, FaPhone, FaPlus, FaTimes, FaTrash, FaUser } from "react-icons/fa";
+import { FaBuilding, FaCheck, FaEnvelope, FaPhone, FaPlus, FaTimes, FaTrash, FaEdit, FaUser, FaUsers } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
 
-export default function AdminBranchManagement() {
+export default function SuperAdminBranchManagement() {
   const navigate = useNavigate();
   const [branches, setBranches] = useState([]);
-  const [users, setUsers] = useState([]);
   const [showBranchModal, setShowBranchModal] = useState(false);
-  const [showUserModal, setShowUserModal] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [editingBranch, setEditingBranch] = useState(null);
+  const [staffMembers, setStaffMembers] = useState([]);
+  const [loadingStaff, setLoadingStaff] = useState(false);
 
-  // Check if user is ADMIN
+  // Check if user is SUPER_ADMIN
   useEffect(() => {
     const userData = localStorage.getItem("user");
     if (!userData) {
-      // Not logged in, redirect to login
-      navigate("/branch-login");
+      navigate("/super-admin-login");
       return;
     }
 
     const user = JSON.parse(userData);
-    if (user.role !== "ADMIN") {
-      // Not ADMIN, redirect to home
+    if (user.role !== "SUPER_ADMIN") {
       toast.error("You do not have permission to access this page");
-      navigate("/branch-home");
+      navigate("/branch-login");
       return;
     }
   }, [navigate]);
@@ -43,18 +42,17 @@ export default function AdminBranchManagement() {
     isMainBranch: false,
   });
 
-  // User Form
-  const [userForm, setUserForm] = useState({
-    username: "",
-    password: "",
-    email: "",
-    role: "STAFF",
-  });
-
   // Fetch branches
   useEffect(() => {
     fetchBranches();
   }, []);
+
+  // Fetch staff members when branch is selected
+  useEffect(() => {
+    if (selectedBranch) {
+      fetchStaffMembers(selectedBranch._id);
+    }
+  }, [selectedBranch]);
 
   const fetchBranches = async () => {
     try {
@@ -69,16 +67,26 @@ export default function AdminBranchManagement() {
     }
   };
 
-  const fetchUsersForBranch = async (branchId) => {
+  const fetchStaffMembers = async (branchId) => {
+    setLoadingStaff(true);
     try {
-      const res = await fetch(`${API_BASE}/branch-users/branch/${branchId}`);
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE}/branch-users/branch/${branchId}`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
       const data = await res.json();
       if (data.success) {
-        setUsers(data.data);
+        setStaffMembers(data.data || []);
+      } else {
+        setStaffMembers([]);
       }
     } catch (error) {
-      console.error("Error fetching users:", error);
-      toast.error("Failed to load users");
+      console.error("Error fetching staff members:", error);
+      setStaffMembers([]);
+    } finally {
+      setLoadingStaff(false);
     }
   };
 
@@ -94,101 +102,105 @@ export default function AdminBranchManagement() {
       }
 
       const token = localStorage.getItem("token");
+      const isEditing = editingBranch !== null;
 
-      const res = await fetch(`${API_BASE}/branches`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify(branchForm),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        toast.success(`✅ Branch created: ${data.data.name}`);
-        setBranches([...branches, data.data]);
-        setShowBranchModal(false);
-        setBranchForm({
-          name: "",
-          code: "",
-          location: "",
-          address: "",
-          phone: "",
-          email: "",
-          manager: "",
-          isMainBranch: false,
+      if (isEditing) {
+        // Update branch
+        const res = await fetch(`${API_BASE}/branches/${editingBranch._id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify(branchForm),
         });
+
+        const data = await res.json();
+
+        if (data.success) {
+          toast.success(`✅ Branch updated: ${data.data.name}`);
+          setBranches(branches.map((b) => (b._id === editingBranch._id ? data.data : b)));
+          setSelectedBranch(data.data);
+          setEditingBranch(null);
+          setShowBranchModal(false);
+          resetForm();
+        } else {
+          toast.error(data.message || "Failed to update branch");
+        }
       } else {
-        toast.error(data.message || "Failed to create branch");
+        // Create new branch
+        const res = await fetch(`${API_BASE}/branches`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify(branchForm),
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          toast.success(`✅ Branch created: ${data.data.name}`);
+          setBranches([...branches, data.data]);
+          setShowBranchModal(false);
+          resetForm();
+        } else {
+          toast.error(data.message || "Failed to create branch");
+        }
       }
     } catch (error) {
-      console.error("Error creating branch:", error);
-      toast.error("Error creating branch");
+      console.error("Error creating/updating branch:", error);
+      toast.error("Error creating/updating branch");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateUser = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+  const resetForm = () => {
+    setBranchForm({
+      name: "",
+      code: "",
+      location: "",
+      address: "",
+      phone: "",
+      email: "",
+      manager: "",
+      isMainBranch: false,
+    });
+    setEditingBranch(null);
+  };
 
-    try {
-      if (!userForm.username || !userForm.password) {
-        toast.error("Username and password are required");
-        setLoading(false);
-        return;
-      }
+  const openEditModal = (branch) => {
+    setEditingBranch(branch);
+    setBranchForm({
+      name: branch.name,
+      code: branch.code,
+      location: branch.location || "",
+      address: branch.address || "",
+      phone: branch.phone || "",
+      email: branch.email || "",
+      manager: branch.manager || "",
+      isMainBranch: branch.isMainBranch || false,
+    });
+    setShowBranchModal(true);
+  };
 
-      const res = await fetch(`${API_BASE}/branch-users/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...userForm,
-          branchId: selectedBranch._id,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        toast.success(`✅ User created: ${data.data.username}`);
-        setUsers([
-          ...users,
-          {
-            _id: data.data.id,
-            username: data.data.username,
-            email: data.data.email,
-            role: data.data.role,
-            status: "ACTIVE",
-          },
-        ]);
-        setShowUserModal(false);
-        setUserForm({
-          username: "",
-          password: "",
-          email: "",
-          role: "STAFF",
-        });
-      } else {
-        toast.error(data.message || "Failed to create user");
-      }
-    } catch (error) {
-      console.error("Error creating user:", error);
-      toast.error("Error creating user");
-    } finally {
-      setLoading(false);
-    }
+  const closeModal = () => {
+    setShowBranchModal(false);
+    resetForm();
   };
 
   const handleDeleteBranch = async (branchId) => {
     if (!window.confirm("Are you sure you want to delete this branch?")) return;
 
     try {
+      const token = localStorage.getItem("token");
       const res = await fetch(`${API_BASE}/branches/${branchId}`, {
         method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
       });
 
       const data = await res.json();
@@ -197,7 +209,6 @@ export default function AdminBranchManagement() {
         toast.success("Branch deleted");
         setBranches(branches.filter((b) => b._id !== branchId));
         setSelectedBranch(null);
-        setUsers([]);
       } else {
         toast.error(data.message || "Failed to delete branch");
       }
@@ -207,25 +218,29 @@ export default function AdminBranchManagement() {
     }
   };
 
-  const handleDeleteUser = async (userId) => {
-    if (!window.confirm("Are you sure you want to delete this user?")) return;
+  const handleRemoveStaff = async (staffId) => {
+    if (!window.confirm("Remove this staff member from the branch?")) return;
 
     try {
-      const res = await fetch(`${API_BASE}/branch-users/${userId}`, {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE}/branch-users/${staffId}`, {
         method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
       });
 
       const data = await res.json();
 
       if (data.success) {
-        toast.success("User deleted");
-        setUsers(users.filter((u) => u._id !== userId));
+        toast.success("Staff member removed");
+        setStaffMembers(staffMembers.filter((s) => s._id !== staffId));
       } else {
-        toast.error(data.message || "Failed to delete user");
+        toast.error(data.message || "Failed to remove staff");
       }
     } catch (error) {
-      console.error("Error deleting user:", error);
-      toast.error("Error deleting user");
+      console.error("Error removing staff:", error);
+      toast.error("Error removing staff");
     }
   };
 
@@ -240,10 +255,13 @@ export default function AdminBranchManagement() {
                 <FaBuilding />
                 Branch Management
               </h1>
-              <p className="text-blue-100">Create and manage branches and user credentials</p>
+              <p className="text-blue-100">Create, edit and manage all branches system-wide</p>
             </div>
             <button
-              onClick={() => setShowBranchModal(true)}
+              onClick={() => {
+                resetForm();
+                setShowBranchModal(true);
+              }}
               className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition"
             >
               <FaPlus />
@@ -270,10 +288,7 @@ export default function AdminBranchManagement() {
                   branches.map((branch) => (
                     <div
                       key={branch._id}
-                      onClick={() => {
-                        setSelectedBranch(branch);
-                        fetchUsersForBranch(branch._id);
-                      }}
+                      onClick={() => setSelectedBranch(branch)}
                       className={`p-4 cursor-pointer transition ${
                         selectedBranch?._id === branch._id
                           ? "bg-primary/10 border-l-4 border-primary"
@@ -282,7 +297,7 @@ export default function AdminBranchManagement() {
                     >
                       <div className="font-bold text-gray-900">{branch.name}</div>
                       <div className="text-sm text-gray-600 mt-1">
-                        <span className="inline-block bg-gray-100 px-2 py-1 rounded">
+                        <span className="inline-block bg-gray-100 px-2 py-1 rounded text-xs font-bold">
                           {branch.code}
                         </span>
                         {branch.isMainBranch && (
@@ -294,16 +309,28 @@ export default function AdminBranchManagement() {
                       <div className="text-xs text-gray-500 mt-2">
                         {branch.location}
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteBranch(branch._id);
-                        }}
-                        className="text-red-500 hover:text-red-700 text-sm mt-2 flex items-center gap-1"
-                      >
-                        <FaTrash size={12} />
-                        Delete
-                      </button>
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(branch);
+                          }}
+                          className="text-blue-500 hover:text-blue-700 text-sm flex items-center gap-1 flex-1 justify-center"
+                        >
+                          <FaEdit size={12} />
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteBranch(branch._id);
+                          }}
+                          className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1 flex-1 justify-center"
+                        >
+                          <FaTrash size={12} />
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -311,20 +338,20 @@ export default function AdminBranchManagement() {
             </div>
           </div>
 
-          {/* Branch Details & Users */}
-          <div className="lg:col-span-2">
+          {/* Branch Details & Staff */}
+          <div className="lg:col-span-2 space-y-6">
             {selectedBranch ? (
-              <div className="space-y-6">
-                {/* Branch Details */}
+              <>
+                {/* Branch Details Card */}
                 <div className="bg-white rounded-2xl shadow-lg p-6">
                   <h2 className="text-2xl font-bold text-gray-900 mb-4">
                     {selectedBranch.name}
                   </h2>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <p className="text-sm text-gray-600 font-semibold">Code</p>
-                      <p className="text-gray-900">{selectedBranch.code}</p>
+                      <p className="text-lg font-bold text-gray-900">{selectedBranch.code}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 font-semibold">Location</p>
@@ -369,90 +396,90 @@ export default function AdminBranchManagement() {
                       </p>
                     </div>
                   </div>
-                </div>
 
-                {/* Users List */}
-                <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                  <div className="bg-primary text-white p-4 font-bold flex justify-between items-center">
-                    <span>👤 Users ({users.length})</span>
+                  <div className="flex gap-3 mt-8 pt-6 border-t">
                     <button
-                      onClick={() => setShowUserModal(true)}
-                      className="bg-green-500 hover:bg-green-600 px-3 py-1 rounded-lg text-sm flex items-center gap-2 transition"
+                      onClick={() => openEditModal(selectedBranch)}
+                      className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-bold transition flex items-center justify-center gap-2"
                     >
-                      <FaPlus size={12} />
-                      Add User
+                      <FaEdit />
+                      Edit Branch
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBranch(selectedBranch._id)}
+                      className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg font-bold transition flex items-center justify-center gap-2"
+                    >
+                      <FaTrash />
+                      Delete Branch
                     </button>
                   </div>
+                </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th className="px-6 py-3 text-left font-bold text-gray-700">Username</th>
-                          <th className="px-6 py-3 text-left font-bold text-gray-700">Email</th>
-                          <th className="px-6 py-3 text-left font-bold text-gray-700">Role</th>
-                          <th className="px-6 py-3 text-left font-bold text-gray-700">Status</th>
-                          <th className="px-6 py-3 text-center font-bold text-gray-700">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {users.length === 0 ? (
-                          <tr>
-                            <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
-                              <p>No users for this branch</p>
-                              <p className="text-xs mt-2">Click "Add User" to create credentials</p>
-                            </td>
-                          </tr>
-                        ) : (
-                          users.map((user) => (
-                            <tr key={user._id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 font-semibold text-gray-900">
-                                <FaUser className="inline mr-2 text-primary" size={12} />
-                                {user.username}
-                              </td>
-                              <td className="px-6 py-4 text-gray-700">{user.email || "—"}</td>
-                              <td className="px-6 py-4">
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                  user.role === "ADMIN"
-                                    ? "bg-red-100 text-red-700"
-                                    : user.role === "MANAGER"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : "bg-gray-100 text-gray-700"
-                                }`}>
-                                  {user.role}
+                {/* Staff Members Card */}
+                <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                  <div className="bg-gradient-to-r from-secondary to-primary text-white p-6">
+                    <h3 className="text-xl font-bold flex items-center gap-2">
+                      <FaUsers />
+                      Staff Members ({staffMembers.length})
+                    </h3>
+                    <p className="text-blue-100 text-sm mt-1">Approved users registered with this branch</p>
+                  </div>
+
+                  {loadingStaff ? (
+                    <div className="p-8 text-center">
+                      <div className="animate-spin text-primary text-3xl mb-2">⟳</div>
+                      <p className="text-gray-600">Loading staff...</p>
+                    </div>
+                  ) : staffMembers.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <FaUser className="text-6xl text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-500">No staff members registered for this branch</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y max-h-96 overflow-y-auto">
+                      {staffMembers.map((staff) => (
+                        <div key={staff._id} className="p-4 hover:bg-gray-50 transition">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <p className="font-bold text-gray-900">{staff.username}</p>
+                              <p className="text-sm text-gray-600 flex items-center gap-1 mt-1">
+                                <FaEnvelope size={12} />
+                                {staff.email}
+                              </p>
+                              <div className="flex gap-2 mt-2">
+                                <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded text-xs font-bold">
+                                  {staff.role}
                                 </span>
-                              </td>
-                              <td className="px-6 py-4">
-                                {user.status === "ACTIVE" ? (
-                                  <span className="text-green-600 font-bold flex items-center gap-1">
-                                    <FaCheck /> Active
+                                {staff.status === "ACTIVE" ? (
+                                  <span className="inline-block bg-green-100 text-green-700 px-3 py-1 rounded text-xs font-bold">
+                                    <FaCheck className="inline mr-1" />
+                                    Active
                                   </span>
                                 ) : (
-                                  <span className="text-red-600 font-bold flex items-center gap-1">
-                                    <FaTimes /> Inactive
+                                  <span className="inline-block bg-gray-100 text-gray-700 px-3 py-1 rounded text-xs font-bold">
+                                    Inactive
                                   </span>
                                 )}
-                              </td>
-                              <td className="px-6 py-4 text-center">
-                                <button
-                                  onClick={() => handleDeleteUser(user._id)}
-                                  className="text-red-500 hover:text-red-700 font-bold"
-                                >
-                                  <FaTrash />
-                                </button>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleRemoveStaff(staff._id)}
+                              className="ml-4 text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded transition"
+                              title="Remove staff member"
+                            >
+                              <FaTrash size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
+              </>
             ) : (
               <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
                 <FaBuilding className="text-6xl text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg">Select a branch to view details and manage users</p>
+                <p className="text-gray-500 text-lg">Select a branch to view details and staff</p>
               </div>
             )}
           </div>
@@ -462,11 +489,11 @@ export default function AdminBranchManagement() {
       {/* Branch Modal */}
       {showBranchModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="bg-gradient-to-r from-secondary to-primary text-white p-6 rounded-t-2xl">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-secondary to-primary text-white p-6 rounded-t-2xl sticky top-0">
               <h2 className="text-2xl font-bold flex items-center gap-2">
                 <FaBuilding />
-                Create New Branch
+                {editingBranch ? "Edit Branch" : "Create New Branch"}
               </h2>
             </div>
 
@@ -488,7 +515,7 @@ export default function AdminBranchManagement() {
 
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Branch Code *
+                    Branch Code * {editingBranch && "(cannot be changed)"}
                   </label>
                   <input
                     type="text"
@@ -496,7 +523,8 @@ export default function AdminBranchManagement() {
                     placeholder="e.g. PF-TRV"
                     value={branchForm.code}
                     onChange={(e) => setBranchForm({ ...branchForm, code: e.target.value.toUpperCase() })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    disabled={editingBranch !== null}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none disabled:bg-gray-100"
                   />
                 </div>
 
@@ -582,7 +610,7 @@ export default function AdminBranchManagement() {
               <div className="flex gap-3 mt-6 pt-6 border-t">
                 <button
                   type="button"
-                  onClick={() => setShowBranchModal(false)}
+                  onClick={closeModal}
                   className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-400 transition"
                 >
                   Cancel
@@ -593,97 +621,7 @@ export default function AdminBranchManagement() {
                   className="flex-1 bg-primary text-white py-2 rounded-lg font-bold hover:bg-opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   <FaCheck />
-                  {loading ? "Creating..." : "Create Branch"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* User Modal */}
-      {showUserModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="bg-gradient-to-r from-secondary to-primary text-white p-6 rounded-t-2xl">
-              <h2 className="text-2xl font-bold flex items-center gap-2">
-                <FaUser />
-                Add User to {selectedBranch?.name}
-              </h2>
-            </div>
-
-            <form onSubmit={handleCreateUser} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Username *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. admin"
-                  value={userForm.username}
-                  onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Password *
-                </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Minimum 6 characters"
-                  value={userForm.password}
-                  onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  placeholder="user@email.com"
-                  value={userForm.email}
-                  onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  Role
-                </label>
-                <select
-                  value={userForm.role}
-                  onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                >
-                  <option value="STAFF">Staff</option>
-                  <option value="MANAGER">Manager</option>
-                  <option value="ADMIN">Admin</option>
-                </select>
-              </div>
-
-              <div className="flex gap-3 mt-6 pt-6 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowUserModal(false)}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-400 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-primary text-white py-2 rounded-lg font-bold hover:bg-opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  <FaCheck />
-                  {loading ? "Creating..." : "Create User"}
+                  {loading ? "Saving..." : editingBranch ? "Update Branch" : "Create Branch"}
                 </button>
               </div>
             </form>
