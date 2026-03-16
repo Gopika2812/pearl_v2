@@ -9,9 +9,6 @@ import { sendOTPEmail } from "../utils/emailService.js";
 
 const router = express.Router();
 
-/**
- * Helper: Generate 6-digit OTP
- */
 const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
@@ -103,12 +100,10 @@ router.post("/register", async (req, res) => {
 
     // Send OTP email to super admin (non-blocking - don't delete if fails)
     try {
-      await sendOTPEmail("pp6638973@gmail.com", username, otp, branchCode, role, email);
+      await sendOTPEmail("gopika.p2812@gmail.com", username, otp, branchCode, role, email);
       console.log("✅ OTP email sent successfully");
     } catch (emailError) {
       console.error("⚠️  Email failed but registration saved:", emailError.text || emailError.message);
-      // Don't delete registration - email is backup only
-      // OTP will be shown in console for testing
     }
 
     res.status(201).json({
