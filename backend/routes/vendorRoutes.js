@@ -15,6 +15,7 @@ const upload = multer({
 // ✅ BULK UPLOAD Vendors from Excel
 router.post("/bulk-upload", upload.single("file"), async (req, res) => {
   console.log("🔥 VENDOR BULK UPLOAD HIT");
+  console.log("📋 Request body:", req.body);
 
   try {
     if (!req.file) {
@@ -22,8 +23,22 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     }
 
     const { branchId } = req.body;
-    if (!branchId) {
-      return res.status(400).json({ message: "branchId is required" });
+    console.log("🔍 Received branchId:", branchId);
+    
+    if (!branchId || branchId === "undefined" || String(branchId).trim() === "") {
+      return res.status(400).json({ 
+        message: "branchId is required", 
+        received: branchId,
+        type: typeof branchId 
+      });
+    }
+
+    // Validate branchId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(branchId)) {
+      return res.status(400).json({ 
+        message: "Invalid branchId format",
+        received: branchId 
+      });
     }
 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });

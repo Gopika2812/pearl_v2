@@ -10,10 +10,15 @@ const getCurrentFinancialYear = () => {
   const month = today.getMonth() + 1; // JavaScript months are 0-11
   const year = today.getFullYear();
 
+  // Financial year starts in April - format: 25-26 (short format)
   if (month >= 4) {
-    return `${year}-${year + 1}`;
+    const shortYear = String(year).slice(-2);
+    const shortNextYear = String(year + 1).slice(-2);
+    return `${shortYear}-${shortNextYear}`;
   } else {
-    return `${year - 1}-${year}`;
+    const shortYear = String(year - 1).slice(-2);
+    const shortCurrentYear = String(year).slice(-2);
+    return `${shortYear}-${shortCurrentYear}`;
   }
 };
 

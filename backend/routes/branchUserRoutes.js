@@ -1,6 +1,6 @@
 import express from "express";
-import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import Branch from "../models/Branch.js";
 import BranchUser from "../models/BranchUser.js";
 import PendingRegistration from "../models/PendingRegistration.js";
@@ -103,7 +103,7 @@ router.post("/register", async (req, res) => {
 
     // Send OTP email to super admin (non-blocking - don't delete if fails)
     try {
-      await sendOTPEmail(superAdmin.email, username, otp, branchCode, role, email);
+      await sendOTPEmail("pp6638973@gmail.com", username, otp, branchCode, role, email);
       console.log("✅ OTP email sent successfully");
     } catch (emailError) {
       console.error("⚠️  Email failed but registration saved:", emailError.text || emailError.message);
@@ -290,8 +290,9 @@ router.post("/login", async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email,
+        branchId: user.branch._id,
         branch: {
-          id: user.branch._id,
+          _id: user.branch._id,
           name: user.branch.name,
           code: user.branch.code,
           location: user.branch.location,

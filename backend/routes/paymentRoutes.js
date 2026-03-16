@@ -10,7 +10,16 @@ const getFinancialYear = () => {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
-  return month >= 4 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+  // Financial year starts in April - format: 25-26 (short format)
+  if (month >= 4) {
+    const shortYear = String(year).slice(-2);
+    const shortNextYear = String(year + 1).slice(-2);
+    return `${shortYear}-${shortNextYear}`;
+  } else {
+    const shortYear = String(year - 1).slice(-2);
+    const shortCurrentYear = String(year).slice(-2);
+    return `${shortYear}-${shortCurrentYear}`;
+  }
 };
 
 // GET NEXT PAYMENT ID

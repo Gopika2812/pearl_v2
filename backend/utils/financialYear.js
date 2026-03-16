@@ -5,8 +5,14 @@ export function getFinancialYear() {
 
   // Financial year starts in April
   if (month >= 4) {
-    return `${year}-${year + 1}`;
+    // Format: 25-26 (short format)
+    const shortYear = String(year).slice(-2);
+    const shortNextYear = String(year + 1).slice(-2);
+    return `${shortYear}-${shortNextYear}`;
   } else {
-    return `${year - 1}-${year}`;
+    // Format: 25-26 (short format)
+    const shortYear = String(year - 1).slice(-2);
+    const shortCurrentYear = String(year).slice(-2);
+    return `${shortYear}-${shortCurrentYear}`;
   }
 }
