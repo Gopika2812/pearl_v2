@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FaSignInAlt, FaUser, FaLock } from "react-icons/fa";
+import { FaLock, FaSignInAlt, FaUser } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -46,8 +46,21 @@ export default function BranchLoginPage() {
         return;
       }
 
+      // Ensure branchId is properly set (handle both _id and id)
+      const branchId = userBranch._id || userBranch.id;
+
       // Store JWT token
       localStorage.setItem("token", data.token);
+      
+      // Store currentBranch with _id for consistency
+      const normalizedBranch = {
+        _id: branchId,
+        id: branchId, // Keep both for compatibility
+        name: userBranch.name,
+        code: userBranch.code,
+        location: userBranch.location,
+      };
+      localStorage.setItem("currentBranch", JSON.stringify(normalizedBranch));
       
       // Store user data with their branch
       const userData = {
@@ -55,15 +68,15 @@ export default function BranchLoginPage() {
         username: data.data.username,
         email: data.data.email,
         role: data.data.role,
-        branch: userBranch,
-        branchId: userBranch._id,
+        branch: normalizedBranch,
+        branchId: branchId,
         branchName: userBranch.name,
         branchCode: userBranch.code,
       };
       localStorage.setItem("user", JSON.stringify(userData));
 
       // Store in context
-      switchBranch(userBranch, userData);
+      switchBranch(normalizedBranch, userData);
 
       toast.success(`✅ Welcome to ${userBranch.name}!`);
 

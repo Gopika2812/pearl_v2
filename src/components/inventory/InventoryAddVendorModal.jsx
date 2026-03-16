@@ -1,7 +1,39 @@
 import { useEffect, useState } from "react";
 import { API_BASE } from "../../api";
 
-const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId, editingItem }) => {
+const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranchId, editingItem }) => {
+  // Get branchId from props or fallback to localStorage
+  const getBranchId = () => {
+    if (propBranchId) return propBranchId;
+    
+    // Fallback to localStorage user data
+    const user = localStorage.getItem("user");
+    if (user) {
+      try {
+        const userData = JSON.parse(user);
+        if (userData.branchId) return userData.branchId;
+      } catch (e) {
+        console.error("Failed to parse user data:", e);
+      }
+    }
+    
+    // Fallback: from currentBranch
+    const currentBranch = localStorage.getItem("currentBranch");
+    if (currentBranch) {
+      try {
+        const branchData = JSON.parse(currentBranch);
+        // Check for both _id and id (localStorage might have either)
+        return branchData._id || branchData.id;
+      } catch (e) {
+        console.error("Failed to parse currentBranch data:", e);
+      }
+    }
+    
+    return null;
+  };
+
+  const actualBranchId = getBranchId();
+
   const [vendor, setVendor] = useState({
     _id: null,
     name: "",
@@ -52,9 +84,15 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId, editingIte
     const file = e.target.files[0];
     if (!file) return;
 
+    if (!actualBranchId) {
+      alert("❌ Branch ID is missing. Please login again.");
+      console.error("Branch ID not available from props or localStorage");
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("branchId", branchId);
+    formData.append("branchId", actualBranchId);
 
     try {
       const res = await fetch(`${API_BASE}/vendors/bulk-upload`, {

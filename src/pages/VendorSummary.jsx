@@ -24,13 +24,49 @@ const VendorSummary = () => {
     { label: "GSTIN", value: "gstin", type: "text" },
   ];
 
+  // Get branchId from localStorage
+  const getBranchId = () => {
+    // Try to get from user data
+    const user = localStorage.getItem("user");
+    if (user) {
+      try {
+        const userData = JSON.parse(user);
+        if (userData.branchId) return userData.branchId;
+      } catch (e) {
+        console.error("Failed to parse user data:", e);
+      }
+    }
+
+    // Try to get from currentBranch
+    const currentBranch = localStorage.getItem("currentBranch");
+    if (currentBranch) {
+      try {
+        const branchData = JSON.parse(currentBranch);
+        return branchData._id || branchData.id;
+      } catch (e) {
+        console.error("Failed to parse currentBranch data:", e);
+      }
+    }
+
+    return null;
+  };
+
   // Fetch vendors data
   const fetchVendors = async () => {
     try {
       setLoading(true);
       setError(null);
-      console.log("Fetching vendors from:", `${API_BASE}/vendors`);
-      const response = await fetch(`${API_BASE}/vendors`);
+
+      const branchId = getBranchId();
+      if (!branchId) {
+        setError("Branch ID not found. Please login again.");
+        setLoading(false);
+        return;
+      }
+
+      const url = `${API_BASE}/vendors?branchId=${branchId}`;
+      console.log("Fetching vendors from:", url);
+      const response = await fetch(url);
       console.log("Response status:", response.status);
       
       if (!response.ok) {
