@@ -3,6 +3,10 @@ import mongoose from "mongoose";
 
 const branchUserSchema = new mongoose.Schema(
   {
+    name: {
+      type: String,
+      default: "",
+    },
     username: {
       type: String,
       required: true,
@@ -30,7 +34,7 @@ const branchUserSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["ADMIN", "MANAGER", "STAFF"],
+      enum: ["ADMIN", "MANAGER", "STAFF", "SALES_OWNER", "SALES_MAN", "DELIVERY_MAN"],
       default: "STAFF",
     },
     status: {
