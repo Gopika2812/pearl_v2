@@ -100,8 +100,8 @@ router.post("/register", async (req, res) => {
 
     // Send OTP email to super admin (non-blocking - don't delete if fails)
     try {
-      await sendOTPEmail("gopika.p2812@gmail.com", username, otp, branchCode, role, email);
-      console.log("✅ OTP email sent successfully");
+      await sendOTPEmail(process.env.EMAILJS_TO_EMAIL, username, otp, branchCode, role, email);
+      console.log("✅ OTP email sent successfully via EmailJS");
     } catch (emailError) {
       console.error("⚠️  Email failed but registration saved:", emailError.text || emailError.message);
     }
