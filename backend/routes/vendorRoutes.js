@@ -85,8 +85,8 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const gstRegistrationType = (normalized.gstregistrationtype || normalized.gstregistrationtype || "Regular").toLowerCase().includes("unreg") ? "Unregistered/Consumer" : "Regular";
       // Try to find GSTIN from multiple possible column names (including the slash version)
       const gstin = normalized.gstin || normalized.gstin_uin || normalized.gstinuin || normalized["gstin/uin"] || "";
-      const debit = parseFloat(normalized.debit) || 0;
-      const credit = parseFloat(normalized.credit) || 0;
+      const debit = parseFloat((normalized.debit || "").replace(/,/g, "")) || 0;
+      const credit = parseFloat((normalized.credit || "").replace(/,/g, "")) || 0;
 
       // ❌ Validation checks
       if (!name) {

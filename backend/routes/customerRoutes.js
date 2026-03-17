@@ -82,9 +82,9 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const registrationType = (normalized.registrationtype || "regular").toLowerCase();
       const gstin = normalized.gstin || "";
       const salesOwnerName = normalized.salesowner || "";
-      const margin = parseFloat(normalized.margin) || 0;
-      const credit = parseFloat(normalized.credit) || 0;
-      const debit = parseFloat(normalized.debit) || 0;
+      const margin = parseFloat((normalized.margin || "").replace(/,/g, "")) || 0;
+      const credit = parseFloat((normalized.credit || "").replace(/,/g, "")) || 0;
+      const debit = parseFloat((normalized.debit || "").replace(/,/g, "")) || 0;
 
       // Parse comma-separated categories and groups
       const customerCategoryNames = (normalized.customercategories || "")
