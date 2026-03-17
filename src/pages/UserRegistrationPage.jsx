@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FaUser, FaEnvelope, FaLock, FaBarcode, FaBriefcase, FaUserPlus, FaShieldAlt } from "react-icons/fa";
+import { FaBarcode, FaBriefcase, FaEnvelope, FaLock, FaUser, FaUserPlus } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -181,60 +181,21 @@ export default function UserRegistrationPage() {
 
         {/* Form */}
         <div className="p-8">
-            {/* REGISTRATION FORM */}
-            <form onSubmit={handleRegister} className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Full Name */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Full Name
-                  </label>
-                  <div className="relative">
-                    <FaUser className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      name="name"
-                      placeholder="Your full name"
-                      value={formData.name}
-                      onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Username */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Username
-                  </label>
-                  <div className="relative">
-                    <FaUser className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      name="username"
-                      placeholder="Choose username"
-                      value={formData.username}
-                      onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Email */}
+          {/* REGISTRATION FORM */}
+          <form onSubmit={handleRegister} className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Full Name */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Email Address
+                  Full Name
                 </label>
                 <div className="relative">
-                  <FaEnvelope className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <FaUser className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input
-                    type="email"
-                    name="email"
-                    placeholder="your@email.com"
-                    value={formData.email}
+                    type="text"
+                    name="name"
+                    placeholder="Your full name"
+                    value={formData.name}
                     onChange={handleChange}
                     className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
                     required
@@ -242,113 +203,151 @@ export default function UserRegistrationPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Branch Code */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Branch Code
-                  </label>
-                  <div className="relative">
-                    <FaBarcode className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      name="branchCode"
-                      placeholder="e.g., PFC001"
-                      value={formData.branchCode}
-                      onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition uppercase"
-                      required
-                    />
-                  </div>
+              {/* Username */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Username
+                </label>
+                <div className="relative">
+                  <FaUser className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    name="username"
+                    placeholder="Choose username"
+                    value={formData.username}
+                    onChange={handleChange}
+                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                    required
+                  />
                 </div>
+              </div>
+            </div>
 
-                {/* Role */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Role
-                  </label>
-                  <div className="relative">
-                    <FaBriefcase className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
-                    <select
-                      name="role"
-                      value={formData.role}
-                      onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition appearance-none bg-white"
-                    >
-                      {ROLES.map((role) => (
-                        <option key={role.value} value={role.value}>
-                          {role.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Email Address
+              </label>
+              <div className="relative">
+                <FaEnvelope className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="your@email.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Branch Code */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Branch Code
+                </label>
+                <div className="relative">
+                  <FaBarcode className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    name="branchCode"
+                    placeholder="e.g., PFC001"
+                    value={formData.branchCode}
+                    onChange={handleChange}
+                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition uppercase"
+                    required
+                  />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Password */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="password"
-                      name="password"
-                      placeholder="Min 6 characters"
-                      value={formData.password}
-                      onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Confirm Password */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Confirm Password
-                  </label>
-                  <div className="relative">
-                    <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="password"
-                      name="confirmPassword"
-                      placeholder="Repeat password"
-                      value={formData.confirmPassword}
-                      onChange={handleChange}
-                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Register Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-primary to-secondary text-white font-bold py-3 rounded-lg hover:shadow-lg transform hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <FaUserPlus />
-                {loading ? "Creating Account..." : "Register"}
-              </button>
-
-              {/* Footer */}
-              <div className="text-center mt-8 pt-6 border-t border-gray-200">
-                <p className="text-gray-600 text-sm">
-                  Already have an account?{" "}
-                  <button
-                    type="button"
-                    onClick={() => navigate("/branch-login")}
-                    className="text-primary font-bold hover:underline"
+              {/* Role */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Role
+                </label>
+                <div className="relative">
+                  <FaBriefcase className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <select
+                    name="role"
+                    value={formData.role}
+                    onChange={handleChange}
+                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition appearance-none bg-white"
                   >
-                    Log in here
-                  </button>
-                </p>
+                    {ROLES.map((role) => (
+                      <option key={role.value} value={role.value}>
+                        {role.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </form>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Password */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="password"
+                    name="password"
+                    placeholder="Min 6 characters"
+                    value={formData.password}
+                    onChange={handleChange}
+                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Confirm Password */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Confirm Password
+                </label>
+                <div className="relative">
+                  <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="password"
+                    name="confirmPassword"
+                    placeholder="Repeat password"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Register Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-primary to-secondary text-white font-bold py-3 rounded-lg hover:shadow-lg transform hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <FaUserPlus />
+              {loading ? "Creating Account..." : "Register"}
+            </button>
+
+            {/* Footer */}
+            <div className="text-center mt-8 pt-6 border-t border-gray-200">
+              <p className="text-gray-600 text-sm">
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => navigate("/branch-login")}
+                  className="text-primary font-bold hover:underline"
+                >
+                  Log in here
+                </button>
+              </p>
+            </div>
+          </form>
         </div>
       </div>
     </div>
