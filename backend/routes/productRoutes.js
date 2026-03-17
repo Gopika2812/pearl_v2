@@ -327,12 +327,16 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     );
 
     // ⚡ OPTIMIZATION: Batch load all existing products in this branch
-    const existingProducts = await Product.find({ branchId });
-    const existingProductSet = new Set(
-      existingProducts.map(p => `${p.name}|${p.productGroup}`)
-    );
+    const existingProducts = await Product.find({ branchId }, { _id: 1, name: 1, productGroup: 1 });
+    const existingProductMap = new Map();
+    existingProducts.forEach((p) => {
+      // productGroup might be null for some old data, handle safely
+      const groupId = p.productGroup ? p.productGroup.toString() : "null";
+      existingProductMap.set(`${p.name.toLowerCase()}|${groupId}`, p._id);
+    });
 
     let productsToBulkInsert = [];
+    let productsToBulkUpdate = [];
     let skipped = [];
 
     // 🔄 First pass: Validate and collect all valid records
@@ -386,79 +390,82 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         gst = isNaN(parsed) ? 0 : parsed;
       }
 
-      // Only name and product group are mandatory
-      if (!name || !groupName) {
-        skipped.push({ row, reason: "Missing name or product group" });
+      // Only name is strictly mandatory. If groupName is missing, we will push it to an "Uncategorized" group.
+      if (!name) {
+        skipped.push({ row, reason: "Missing product name" });
         continue;
       }
 
-      // Validate prices
-      if (gst < 0 || gst > 28) {
-        skipped.push({ row, reason: "Invalid GST value (0-28)" });
-        continue;
+      let finalGroupName = groupName;
+      if (!finalGroupName) {
+        finalGroupName = "General";
       }
 
-      // Skip if prices are invalid (but allow 0 for free items)
-      if (isNaN(purchasingPrice) || isNaN(sellingPrice)) {
-        skipped.push({ row, reason: "Invalid purchasing or selling price" });
-        continue;
-      }
+      // Validate GST bounds loosely, but don't strictly skip
+      if (gst < 0) gst = 0;
+      if (gst > 100) gst = 100;
 
-      if (purchasingPrice < 0 || sellingPrice < 0) {
-        skipped.push({ row, reason: "Prices cannot be negative" });
-        continue;
-      }
+      // Ensure prices are simply not NaN (fallback to 0)
+      if (isNaN(purchasingPrice)) purchasingPrice = 0;
+      if (isNaN(sellingPrice)) sellingPrice = 0;
+      if (purchasingPrice < 0) purchasingPrice = 0;
+      if (sellingPrice < 0) sellingPrice = 0;
 
-      // Only validate selling >= purchasing IF both are provided (not 0)
-      if (sellingPrice > 0 && purchasingPrice > 0 && sellingPrice < purchasingPrice) {
-        skipped.push({ row, reason: "Selling price less than purchase price" });
-        continue;
-      }
-
-      // Lookup Product Group ID from map
-      const groupId = productGroupMap.get(groupName.toLowerCase());
+      // Auto-create Product Group if it doesn't exist
+      let groupId = productGroupMap.get(finalGroupName.toLowerCase());
       if (!groupId) {
-        skipped.push({ row, reason: `Product group "${groupName}" not found` });
-        continue;
+        try {
+          const newGroup = await ProductGroup.create({ name: finalGroupName, branchId });
+          groupId = newGroup._id;
+          productGroupMap.set(finalGroupName.toLowerCase(), groupId);
+          console.log(`✨ Auto-created new Product Group: ${finalGroupName}`);
+        } catch (err) {
+          skipped.push({ row, reason: `Could not create product group: ${err.message}` });
+          continue;
+        }
       }
 
-      // Lookup Product Category IDs from map (optional, comma-separated)
+      // Auto-create Product Categories if they don't exist
       const categoryIds = [];
       if (categoriesStr) {
         const categoryNames = categoriesStr.split(',').map(c => c.trim()).filter(c => c);
         for (const catName of categoryNames) {
-          const catId = productCategoryMap.get(catName.toLowerCase());
+          let catId = productCategoryMap.get(catName.toLowerCase());
           if (!catId) {
-            skipped.push({ row, reason: `Product category "${catName}" not found` });
-            continue;
+            try {
+              const newCat = await ProductCategory.create({ name: catName, branchId });
+              catId = newCat._id;
+              productCategoryMap.set(catName.toLowerCase(), catId);
+              console.log(`✨ Auto-created new Product Category: ${catName}`);
+            } catch (err) {
+              console.warn(`Could not create category ${catName}, skipping category assignment`);
+            }
           }
-          categoryIds.push(catId);
-        }
-        // Skip entire row if any category is invalid
-        if (categoryIds.length !== categoryNames.length) {
-          continue;
+          if (catId) categoryIds.push(catId);
         }
       }
 
-      // Lookup Warehouse ID from map (optional)
+      // Auto-create Warehouse if it doesn't exist
       let warehouseId = null;
       if (warehouseName) {
         warehouseId = warehouseMap.get(warehouseName.toLowerCase());
         if (!warehouseId) {
-          skipped.push({ row, reason: `Warehouse "${warehouseName}" not found` });
-          continue;
+          try {
+            const newWarehouse = await Warehouse.create({ name: warehouseName, branchId });
+            warehouseId = newWarehouse._id;
+            warehouseMap.set(warehouseName.toLowerCase(), warehouseId);
+            console.log(`✨ Auto-created new Warehouse: ${warehouseName}`);
+          } catch (err) {
+            console.warn(`Could not create warehouse ${warehouseName}, skipping warehouse assignment`);
+          }
         }
       }
 
       // Check if product already exists
-      const productKey = `${name}|${groupId}`;
-      if (existingProductSet.has(productKey)) {
-        skipped.push({ row, reason: "Product already exists" });
-        continue;
-      }
+      const productKey = `${name.toLowerCase()}|${groupId.toString()}`;
+      const existingProductId = existingProductMap.get(productKey);
 
-      // ✅ Valid record - add to bulk insert list with branchId
-      productsToBulkInsert.push({
+      const productData = {
         branchId,
         productGroup: groupId,
         productCategories: categoryIds,
@@ -471,20 +478,41 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         sellingPrice: Math.round(sellingPrice),
         hsnCode,
         gst: Math.round(gst),
-      });
+      };
+
+      if (existingProductId) {
+        productsToBulkUpdate.push({
+          updateOne: {
+            filter: { _id: existingProductId },
+            update: { $set: productData }
+          }
+        });
+      } else {
+        productsToBulkInsert.push(productData);
+        // Prevent duplicates in same batch from creating multiple inserts
+        existingProductMap.set(productKey, "pending_insert");
+      }
     }
 
     // ⚡ OPTIMIZATION: Bulk insert all at once
-    let inserted = [];
+    let insertedCount = 0;
     if (productsToBulkInsert.length > 0) {
-      inserted = await Product.insertMany(productsToBulkInsert);
+      const inserted = await Product.insertMany(productsToBulkInsert, { ordered: false });
+      insertedCount = inserted.length;
     }
 
-    console.log(`✅ Uploaded: ${inserted.length}, ⚠️ Skipped: ${skipped.length}`);
+    let updatedCount = 0;
+    if (productsToBulkUpdate.length > 0) {
+      const result = await Product.bulkWrite(productsToBulkUpdate, { ordered: false });
+      updatedCount = result.modifiedCount;
+    }
+
+    console.log(`✅ Uploaded: ${insertedCount}, 🔄 Updated: ${updatedCount}, ⚠️ Skipped: ${skipped.length}`);
 
     return res.json({
       message: "Bulk product upload completed",
-      insertedCount: inserted.length,
+      insertedCount,
+      updatedCount,
       skippedCount: skipped.length,
       skipped,
     });

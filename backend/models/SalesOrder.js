@@ -150,14 +150,8 @@ const salesOrderSchema = new mongoose.Schema(
     // Extra Expenses for Sales Order
     extraExpenses: [
       {
-        expenseId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "ExtraExpense",
-        },
         expenseName: String,
-        basePrice: Number,
-        days: Number,
-        totalPrice: Number, // basePrice * days
+        totalPrice: Number, // Flat amount
       },
     ],
     extraExpenseAmount: {

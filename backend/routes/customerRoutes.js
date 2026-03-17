@@ -54,12 +54,13 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       allCustomerGroups.map(group => [group.name.toLowerCase(), group._id])
     );
 
-    const existingCustomers = await Customer.find({}, { name: 1 });
-    const existingNames = new Set(
-      existingCustomers.map(c => c.name.toLowerCase())
+    const existingCustomers = await Customer.find({ branchId }, { name: 1 });
+    const existingCustomersMap = new Map(
+      existingCustomers.map(c => [c.name.toLowerCase(), c._id])
     );
 
     let customersToBulkInsert = [];
+    let customersToBulkUpdate = [];
     let skipped = [];
 
     // 🔄 First pass: Validate and collect all valid records
@@ -82,9 +83,13 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const registrationType = (normalized.registrationtype || "regular").toLowerCase();
       const gstin = normalized.gstin || "";
       const salesOwnerName = normalized.salesowner || "";
-      const margin = parseFloat((normalized.margin || "").replace(/,/g, "")) || 0;
-      const credit = parseFloat((normalized.credit || "").replace(/,/g, "")) || 0;
-      const debit = parseFloat((normalized.debit || "").replace(/,/g, "")) || 0;
+      const margin = parseFloat(String(normalized.margin || "").replace(/[^0-9.-]+/g, "")) || 0;
+      
+      const rawDebit = normalized.debit || normalized.debitbalance || normalized["debit(₹)"] || normalized.dr || "";
+      const rawCredit = normalized.credit || normalized.creditbalance || normalized["credit(₹)"] || normalized.cr || "";
+      
+      const credit = parseFloat(String(rawCredit).replace(/[^0-9.-]+/g, "")) || 0;
+      const debit = parseFloat(String(rawDebit).replace(/[^0-9.-]+/g, "")) || 0;
 
       // Parse comma-separated categories and groups
       const customerCategoryNames = (normalized.customercategories || "")
@@ -111,10 +116,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       // Check if customer already exists (case-insensitive)
-      if (existingNames.has(name.toLowerCase())) {
-        skipped.push({ row, reason: "Customer already exists" });
-        continue;
-      }
+      const existingCustomerId = existingCustomersMap.get(name.toLowerCase());
 
       // Lookup SalesOwner ID from map
       let salesOwnerId = null;
@@ -148,8 +150,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         customerGroupIds.push(groupId);
       }
 
-      // ✅ Valid record - add to bulk insert list
-      customersToBulkInsert.push({
+      const customerData = {
         branchId,
         name,
         whatsapp,
@@ -162,8 +163,8 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         registrationType: (registrationType === "unregistered" ? "unregistered" : "regular"),
         gstin,
         margin: Math.round(margin * 100) / 100,
-        credit: Number(credit) || 0,
-        debit: Number(debit) || 0,
+        credit: credit,
+        debit: debit,
         salesOwner: salesOwnerId,
         customerCategories: customerCategoryIds,
         customerGroups: customerGroupIds,
@@ -172,18 +173,41 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         ifsc,
         branch,
         upi,
-      });
+      };
+
+      if (existingCustomerId) {
+        // Queue for update
+        customersToBulkUpdate.push({
+          updateOne: {
+            filter: { _id: existingCustomerId },
+            update: { $set: customerData }
+          }
+        });
+      } else {
+        // Queue for insert
+        customersToBulkInsert.push(customerData);
+        existingCustomersMap.set(name.toLowerCase(), "pending_insert");
+      }
     }
 
     // ⚡ OPTIMIZATION: Bulk insert all at once instead of one-by-one
-    let inserted = [];
+    let insertedCount = 0;
     if (customersToBulkInsert.length > 0) {
-      inserted = await Customer.insertMany(customersToBulkInsert);
+      const inserted = await Customer.insertMany(customersToBulkInsert, { ordered: false });
+      insertedCount = inserted.length;
+    }
+
+    // 🔄 Third pass: Bulk update all existing records
+    let updatedCount = 0;
+    if (customersToBulkUpdate.length > 0) {
+      const result = await Customer.bulkWrite(customersToBulkUpdate, { ordered: false });
+      updatedCount = result.modifiedCount;
     }
 
     return res.json({
       message: "Bulk customer upload completed",
-      insertedCount: inserted.length,
+      insertedCount,
+      updatedCount,
       skippedCount: skipped.length,
       skipped,
     });
@@ -240,6 +264,21 @@ router.get("/", async (req, res) => {
     const total = await Customer.countDocuments(filter);
     console.log(`📊 Total customers matching filter: ${total}`);
 
+    // ⚡ Get global totals (ignores search filter, just branch totals)
+    const totalsAggregation = await Customer.aggregate([
+      { $match: { branchId: branchObjectId } },
+      {
+        $group: {
+          _id: null,
+          totalGlobalDebit: { $sum: "$debit" },
+          totalGlobalCredit: { $sum: "$credit" }
+        }
+      }
+    ]);
+    
+    const totalGlobalDebit = totalsAggregation.length > 0 ? totalsAggregation[0].totalGlobalDebit : 0;
+    const totalGlobalCredit = totalsAggregation.length > 0 ? totalsAggregation[0].totalGlobalCredit : 0;
+
     // ⚡ Fetch paginated results with lean() for faster performance
     const customers = await Customer.find(filter)
       .populate('salesOwner', '_id name phone role')
@@ -260,6 +299,8 @@ router.get("/", async (req, res) => {
         limit: pageSize,
         total,
         pages: Math.ceil(total / pageSize),
+        totalGlobalDebit,
+        totalGlobalCredit
       },
     });
   } catch (error) {

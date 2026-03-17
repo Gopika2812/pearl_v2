@@ -60,11 +60,12 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     }
 
     const existingVendors = await Vendor.find({ branchId }, { name: 1 });
-    const existingNames = new Set(
-      existingVendors.map(v => v.name.toLowerCase())
+    const existingVendorsMap = new Map(
+      existingVendors.map(v => [v.name.toLowerCase(), v._id])
     );
 
     let vendorsToBulkInsert = [];
+    let vendorsToBulkUpdate = [];
     let skipped = [];
 
 // 🔄 First pass: Validate and collect all valid records
@@ -85,8 +86,12 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const gstRegistrationType = (normalized.gstregistrationtype || normalized.gstregistrationtype || "Regular").toLowerCase().includes("unreg") ? "Unregistered/Consumer" : "Regular";
       // Try to find GSTIN from multiple possible column names (including the slash version)
       const gstin = normalized.gstin || normalized.gstin_uin || normalized.gstinuin || normalized["gstin/uin"] || "";
-      const debit = parseFloat((normalized.debit || "").replace(/,/g, "")) || 0;
-      const credit = parseFloat((normalized.credit || "").replace(/,/g, "")) || 0;
+      // Parse debit/credit fields more robustly
+      const rawDebit = normalized.debit || normalized.debitbalance || normalized["debit(₹)"] || normalized.dr || "";
+      const rawCredit = normalized.credit || normalized.creditbalance || normalized["credit(₹)"] || normalized.cr || "";
+      
+      const debit = parseFloat(String(rawDebit).replace(/[^0-9.-]+/g, "")) || 0;
+      const credit = parseFloat(String(rawCredit).replace(/[^0-9.-]+/g, "")) || 0;
 
       // ❌ Validation checks
       if (!name) {
@@ -97,14 +102,9 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       console.log(`✅ Processing vendor: "${name}" | State: "${stateName}" | GST: "${gstin}"`);
 
       // Check if vendor already exists (case-insensitive)
-      if (existingNames.has(name.toLowerCase())) {
-        skipped.push({ row: name, reason: "Vendor already exists in this branch" });
-        console.log(`⚠️  Skipped: "${name}" - Already exists`);
-        continue;
-      }
-
-      // ✅ Valid record - add to bulk insert list
-      vendorsToBulkInsert.push({
+      const existingVendorId = existingVendorsMap.get(name.toLowerCase());
+      
+      const vendorData = {
         branchId: new mongoose.Types.ObjectId(branchId),
         name,
         phone: phone || undefined,
@@ -116,42 +116,62 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         debit,
         credit,
         isActive: true,
-      });
+      };
 
-      // Add to existing names to prevent duplicates in same batch
-      existingNames.add(name.toLowerCase());
+      if (existingVendorId) {
+        // Queue for update
+        vendorsToBulkUpdate.push({
+          updateOne: {
+            filter: { _id: existingVendorId },
+            update: { $set: vendorData }
+          }
+        });
+        console.log(`🔄 Queued for update: "${name}"`);
+      } else {
+        // Queue for insert
+        vendorsToBulkInsert.push(vendorData);
+        // Add to map to prevent duplicates in same batch creating multiple inserts
+        existingVendorsMap.set(name.toLowerCase(), "pending_insert");
+      }
     }
 
-    // 🔄 Second pass: Bulk insert all valid records
+    // 🔄 Second pass: Bulk insert all valid new records
     let insertedCount = 0;
     if (vendorsToBulkInsert.length > 0) {
-      console.log(`🔄 Attempting to insert ${vendorsToBulkInsert.length} vendors...`);
-      console.log("📦 First vendor to insert:", JSON.stringify(vendorsToBulkInsert[0], null, 2));
+      console.log(`🔄 Attempting to insert ${vendorsToBulkInsert.length} new vendors...`);
       try {
         const result = await Vendor.insertMany(vendorsToBulkInsert, { ordered: false });
         insertedCount = result.length;
         console.log(`✅ Successfully inserted ${insertedCount} vendors`);
-        console.log("Inserted IDs:", result.map(doc => doc._id));
       } catch (err) {
-        // Handle duplicate errors gracefully (with ordered: false, some might insert before error)
         console.error("Bulk insert error:", err.message);
         if (err.insertedDocs && err.insertedDocs.length > 0) {
           insertedCount = err.insertedDocs.length;
           console.log(`⚠️  Partially inserted ${insertedCount} vendors before error`);
-        } else {
-          console.error("❌ No vendors inserted. Error details:", err.code, err.keyPattern);
         }
       }
-    } else {
-      console.log(`⚠️  No vendors to insert (all skipped)`);
     }
 
-    console.log(`\n📊 UPLOAD SUMMARY:\n   ✅ Inserted: ${insertedCount}\n   ⚠️  Skipped: ${skipped.length}`);
+    // 🔄 Third pass: Bulk update all existing records
+    let updatedCount = 0;
+    if (vendorsToBulkUpdate.length > 0) {
+      console.log(`🔄 Attempting to update ${vendorsToBulkUpdate.length} existing vendors...`);
+      try {
+        const result = await Vendor.bulkWrite(vendorsToBulkUpdate, { ordered: false });
+        updatedCount = result.modifiedCount;
+        console.log(`✅ Successfully updated ${updatedCount} vendors`);
+      } catch (err) {
+        console.error("Bulk update error:", err.message);
+      }
+    }
+
+    console.log(`\n📊 UPLOAD SUMMARY:\n   ✅ Inserted: ${insertedCount}\n   🔄 Updated: ${updatedCount}\n   ⚠️  Skipped: ${skipped.length}`);
     console.log("Skipped reasons:", skipped.map(s => `${s.row} - ${s.reason}`).join(", "));
 
     res.status(201).json({
       message: "Bulk vendor upload completed",
       insertedCount,
+      updatedCount,
       skippedCount: skipped.length,
       skipped,
       timestamp: new Date().toISOString(),

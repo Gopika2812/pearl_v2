@@ -48,7 +48,13 @@ const PurchaseOrderSchema = new mongoose.Schema(
 
     subtotal: Number,
     totalTax: Number,
-    transportCharge: Number,
+    extraExpenses: [
+      {
+        expenseName: String,
+        totalPrice: Number,
+      },
+    ],
+    extraExpenseAmount: { type: Number, default: 0 },
     grandTotal: Number,
 
     billingPerson: String,
