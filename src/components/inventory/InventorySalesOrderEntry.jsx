@@ -926,13 +926,13 @@ export default function InventorySalesOrderEntry({
           <div>
             <label className={labelClass}>Closing Balance</label>
             <input
-              className={`${inputClass} font-bold ${selectedCustomer?.closingBalance && selectedCustomer.closingBalance > 0
+              className={`${inputClass} font-bold ${selectedCustomer?.debit && selectedCustomer.debit > 0
                 ? "text-blue-600"
                 : "text-gray-600"
                 }`}
               value={
                 selectedCustomer
-                  ? `₹${selectedCustomer.closingBalance?.toFixed(2)}`
+                  ? `₹${(selectedCustomer.debit || 0).toFixed(2)}`
                   : ""
               }
               readOnly
