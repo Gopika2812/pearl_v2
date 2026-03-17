@@ -32,6 +32,8 @@ const InventoryPurchaseOrderEntry = ({
 
   // Item Entry State
   const [selectedItem, setSelectedItem] = useState("");
+  const [itemSearch, setItemSearch] = useState("");
+  const [showItemDropdown, setShowItemDropdown] = useState(false);
   const [qty, setQty] = useState(1);
   const [purchasePrice, setPurchasePrice] = useState(0);
   const [sellingPrice, setSellingPrice] = useState(0);
@@ -115,6 +117,7 @@ const InventoryPurchaseOrderEntry = ({
       }
     }
     setSelectedItem("");
+    setItemSearch("");
     setQty(1);
     setPurchasePrice(0);
     setSellingPrice(0);
@@ -129,12 +132,16 @@ const InventoryPurchaseOrderEntry = ({
   // Auto-fetch Product Price / Tax / HSN
   const handleItemSelection = (productId) => {
     setSelectedItem(productId);
+    setShowItemDropdown(false);
+
     // Search in filteredProducts (from API), not the products prop
     const product = filteredProducts.find((p) => p._id === productId);
     if (!product) {
       console.warn("⚠️ Product not found in filtered products:", productId);
       return;
     }
+
+    setItemSearch(product.name);
 
     // Auto-select Product Group if not already selected or if different
     const pGroupId = product.productGroup?._id || product.productGroup || product.groupId?._id || product.groupId;
@@ -195,6 +202,7 @@ const InventoryPurchaseOrderEntry = ({
     toast.success(`${product.name} added!`);
 
     setSelectedItem("");
+    setItemSearch("");
     setSelectedProductData(null);
     setQty(1);
     setPurchasePrice(0);
@@ -431,24 +439,38 @@ const InventoryPurchaseOrderEntry = ({
       <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 space-y-4">
         {/* ROW 1 */}
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-          <div>
+          <div className="relative">
             <label className={labelClass}>Item Name</label>
-            <select
-              className={selectClass}
-              value={selectedItem}
-              onChange={(e) => handleItemSelection(e.target.value)}
-            >
-              <option value="">
-                {filteredProducts.length > 0
-                  ? "Select Product"
-                  : "No products available"}
-              </option>
-              {filteredProducts.length > 0 && filteredProducts.map((p) => (
-                <option key={p._id} value={p._id}>
-                  {p.name} ({p.perQty || 1}:{p.units || ""}) - Qty: {p.totalQty || 0}
-                </option>
-              ))}
-            </select>
+            <input
+              type="text"
+              placeholder="Type item name..."
+              value={itemSearch}
+              onChange={(e) => {
+                setItemSearch(e.target.value);
+                setShowItemDropdown(true);
+              }}
+              onFocus={() => setShowItemDropdown(true)}
+              className={inputClass}
+            />
+            {showItemDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto w-max min-w-full">
+                {filteredProducts
+                  .filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase()))
+                  .map((p) => (
+                    <div
+                      key={p._id}
+                      onClick={() => handleItemSelection(p._id)}
+                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
+                    >
+                      <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
+                      <div className="text-gray-500 text-xs">Qty: {p.totalQty || 0}</div>
+                    </div>
+                  ))}
+                {filteredProducts.filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
+                  <div className="px-3 py-2 text-gray-500 text-sm">No products available</div>
+                )}
+              </div>
+            )}
             {selectedProductData && (
               <div className="text-[10px] text-gray-500 mt-1">
                 Available: {selectedProductData.totalQty || 0} {selectedProductData.units || ""}

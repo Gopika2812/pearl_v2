@@ -34,7 +34,7 @@ const branchUserSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["ADMIN", "MANAGER", "STAFF", "SALES_OWNER", "SALES_MAN", "DELIVERY_MAN"],
+      enum: ["ADMIN", "MANAGER", "STAFF", "SALES_OWNER", "SALESMAN", "DELIVERY_MAN"],
       default: "STAFF",
     },
     status: {
