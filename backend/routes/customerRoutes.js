@@ -206,14 +206,16 @@ router.get("/", async (req, res) => {
     console.log("🔍 GET /customers endpoint hit");
     console.log("Query params:", { page, limit, search, branchId });
 
-    if (!branchId) {
-      return res.status(400).json({ message: "branchId is required" });
+    if (!branchId || branchId === "undefined" || branchId === "null") {
+      return res.status(400).json({ message: "Valid branchId is required" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(branchId)) {
+      return res.status(400).json({ message: "Invalid branchId format" });
     }
 
     // Convert string branchId to ObjectId for proper matching
-    const branchObjectId = mongoose.Types.ObjectId.isValid(branchId)
-      ? new mongoose.Types.ObjectId(branchId)
-      : branchId;
+    const branchObjectId = new mongoose.Types.ObjectId(branchId);
 
     console.log("Converted branchObjectId:", branchObjectId);
 
@@ -301,10 +303,17 @@ router.post("/", async (req, res) => {
     } = req.body;
 
     // Basic validation - only name and branchId are required
-    if (!name || !branchId) {
+    if (!name || !branchId || branchId === "undefined" || branchId === "null") {
       return res.status(400).json({
         success: false,
         message: "Required fields missing: Customer Name and Branch",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(branchId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid branchId format",
       });
     }
 
@@ -334,7 +343,7 @@ router.post("/", async (req, res) => {
       margin: Math.round(Number(margin) * 100) / 100 || 0,
       credit: Number(credit) || 0,
       debit: Number(debit) || 0,
-      salesOwner,
+      salesOwner: salesOwner || null,
       customerCategories: Array.isArray(customerCategories) ? customerCategories : [],
       customerGroups: Array.isArray(customerGroups) ? customerGroups : [],
       accountHolder,
@@ -392,6 +401,10 @@ router.put("/:id", async (req, res) => {
         success: false,
         message: "Invalid registrationType. Must be 'regular' or 'unregistered'",
       });
+    }
+
+    if (updates.salesOwner === "") {
+      updates.salesOwner = null;
     }
 
     // Ensure arrays stay as arrays

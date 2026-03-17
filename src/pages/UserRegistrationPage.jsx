@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FaBarcode, FaBriefcase, FaEnvelope, FaLock, FaUser, FaUserPlus } from "react-icons/fa";
+import { FaBarcode, FaBriefcase, FaEnvelope, FaLock, FaUser, FaUserPlus, FaEye, FaEyeSlash } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -27,6 +27,8 @@ export default function UserRegistrationPage() {
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [registrationId, setRegistrationId] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -293,14 +295,21 @@ export default function UserRegistrationPage() {
                 <div className="relative">
                   <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     name="password"
                     placeholder="Min 6 characters"
                     value={formData.password}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                    className="w-full pl-12 pr-12 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors focus:outline-none"
+                  >
+                    {showPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
                 </div>
               </div>
 
@@ -312,14 +321,21 @@ export default function UserRegistrationPage() {
                 <div className="relative">
                   <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input
-                    type="password"
+                    type={showConfirmPassword ? "text" : "password"}
                     name="confirmPassword"
                     placeholder="Repeat password"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                    className="w-full pl-12 pr-12 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors focus:outline-none"
+                  >
+                    {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
                 </div>
               </div>
             </div>

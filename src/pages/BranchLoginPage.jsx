@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FaLock, FaSignInAlt, FaUser } from "react-icons/fa";
+import { FaLock, FaSignInAlt, FaUser, FaEye, FaEyeSlash } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -11,6 +11,7 @@ export default function BranchLoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -126,14 +127,21 @@ export default function BranchLoginPage() {
               Password
             </label>
             <div className="relative">
-              <FaLock className="absolute left-4 top-3.5 text-gray-400" />
+              <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password"
-                className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                className="w-full pl-10 pr-12 py-3 border-2 border-gray-300 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors focus:outline-none"
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
             </div>
           </div>
 

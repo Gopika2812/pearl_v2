@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FaLock, FaWhatsapp } from "react-icons/fa";
+import { FaLock, FaWhatsapp, FaEye, FaEyeSlash } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { API_BASE } from "../api";
 
@@ -7,6 +7,7 @@ export default function CustomerLogin() {
   const navigate = useNavigate();
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -79,15 +80,22 @@ export default function CustomerLogin() {
               Password
             </label>
             <div className="relative">
-              <FaLock className="absolute left-4 top-4 text-gray-400" />
+              <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                className="w-full pl-10 pr-12 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors focus:outline-none"
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
             </div>
           </div>
 

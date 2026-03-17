@@ -34,7 +34,7 @@ const InventoryPurchaseOrderEntry = ({
   const [selectedItem, setSelectedItem] = useState("");
   const [itemSearch, setItemSearch] = useState("");
   const [showItemDropdown, setShowItemDropdown] = useState(false);
-  const [qty, setQty] = useState(1);
+  const [qty, setQty] = useState("");
   const [purchasePrice, setPurchasePrice] = useState(0);
   const [sellingPrice, setSellingPrice] = useState(0);
   const [displayPrice, setDisplayPrice] = useState(0);
@@ -118,7 +118,7 @@ const InventoryPurchaseOrderEntry = ({
     }
     setSelectedItem("");
     setItemSearch("");
-    setQty(1);
+    setQty("");
     setPurchasePrice(0);
     setSellingPrice(0);
     setDisplayPrice(0);
@@ -150,6 +150,7 @@ const InventoryPurchaseOrderEntry = ({
     }
     
     setSelectedProductData(product);
+    setQty("");
     setPurchasePrice(product.purchasingPrice || product.rate || 0);
     setSellingPrice(product.sellingPrice || product.rate || 0);
     setHsn(product.hsnCode || product.hsncode || "");
@@ -204,7 +205,7 @@ const InventoryPurchaseOrderEntry = ({
     setSelectedItem("");
     setItemSearch("");
     setSelectedProductData(null);
-    setQty(1);
+    setQty("");
     setPurchasePrice(0);
     setSellingPrice(0);
     setDisplayPrice(0);
@@ -504,7 +505,7 @@ const InventoryPurchaseOrderEntry = ({
               type="number"
               className={inputClass}
               value={qty}
-              onChange={(e) => setQty(+e.target.value)}
+              onChange={(e) => setQty(e.target.value === "" ? "" : +e.target.value)}
             />
           </div>
 

@@ -34,7 +34,7 @@ export default function InventorySalesOrderEntry({
   const [loadingProducts, setLoadingProducts] = useState(false);
 
   const [sellingPrice, setSellingPrice] = useState(0);
-  const [qty, setQty] = useState(1);
+  const [qty, setQty] = useState("");
   const [gst, setGst] = useState(0);
   const [cgst, setCgst] = useState(0);
   const [sgst, setSgst] = useState(0);
@@ -46,7 +46,7 @@ export default function InventorySalesOrderEntry({
 
   const [sampleProductGroup, setSampleProductGroup] = useState("");
   const [sampleSelectedItem, setSampleSelectedItem] = useState("");
-  const [sampleQty, setSampleQty] = useState(1);
+  const [sampleQty, setSampleQty] = useState("");
   const [sampleSellingPrice, setSampleSellingPrice] = useState(0);
   const [sampleItemSearch, setSampleItemSearch] = useState("");
   const [showSampleItemDropdown, setShowSampleItemDropdown] = useState(false);
@@ -105,6 +105,7 @@ export default function InventorySalesOrderEntry({
       setProductGroupSearch("");
       setSelectedItem("");
       setItemSearch("");
+      setQty("");
       setItems([]);
       return;
     }
@@ -130,6 +131,7 @@ export default function InventorySalesOrderEntry({
     setProductGroupSearch("");
     setSelectedItem("");
     setItemSearch("");
+    setQty("");
     setItems([]);
 
     fetchPreview();
@@ -244,6 +246,7 @@ export default function InventorySalesOrderEntry({
   useEffect(() => {
     setSelectedItem("");
     setItemSearch("");
+    setQty("");
   }, [warehouse]);
 
   useEffect(() => {
@@ -487,7 +490,7 @@ export default function InventorySalesOrderEntry({
 
 
   const displayPrice = useMemo(() => {
-    const base = sellingPrice * qty;
+    const base = sellingPrice * (Number(qty) || 0);
 
     const discountAmount =
       discountType === "PERCENT"
@@ -505,6 +508,10 @@ export default function InventorySalesOrderEntry({
   const addItem = () => {
     if (!selectedItem) {
       toast.warning("Select item");
+      return;
+    }
+    if (!qty || Number(qty) <= 0) {
+      toast.warning("Quantity must be greater than 0");
       return;
     }
 
@@ -578,7 +585,7 @@ export default function InventorySalesOrderEntry({
     // 8️⃣ RESET FORM
     setSelectedItem("");
     setSellingPrice(0);
-    setQty(1);
+    setQty("");
     setDiscountPercent(0);
     setDiscountAmountInput(0);
     setGst(0);
@@ -613,6 +620,10 @@ export default function InventorySalesOrderEntry({
       toast.warning("Select sample item");
       return;
     }
+    if (!sampleQty || Number(sampleQty) <= 0) {
+      toast.warning("Sample quantity must be greater than 0");
+      return;
+    }
 
     const p = filteredSampleProducts.find((x) => x._id === sampleSelectedItem);
     if (!p) {
@@ -636,7 +647,7 @@ export default function InventorySalesOrderEntry({
 
     setSampleSelectedItem("");
     setSampleItemSearch("");
-    setSampleQty(1);
+    setSampleQty("");
     setSampleSellingPrice(0);
   };
 
@@ -1111,17 +1122,18 @@ export default function InventorySalesOrderEntry({
           </div>
 
           <div>
-            <label className={labelClass}>Qty</label>
+            <label className={labelClass}>Quantity</label>
             <input
               type="number"
               className={inputClass}
               value={qty}
-              min={1}
+              min={0}
               max={
                 availableQtyCache[selectedItem] ?? 
-                productsWithStock.find(p => p._id === selectedItem)?.availableQty ?? 1
+                productsWithStock.find(p => p._id === selectedItem)?.availableQty ?? 0
               }
-              onChange={(e) => setQty(+e.target.value)}
+              onChange={(e) => setQty(e.target.value === "" ? "" : +e.target.value)}
+              placeholder="0"
             />
 
           </div>
@@ -1269,7 +1281,8 @@ export default function InventorySalesOrderEntry({
               type="number"
               className={inputClass}
               value={sampleQty}
-              onChange={(e) => setSampleQty(+e.target.value)}
+              onChange={(e) => setSampleQty(e.target.value === "" ? "" : +e.target.value)}
+              placeholder="0"
             />
           </div>
 
