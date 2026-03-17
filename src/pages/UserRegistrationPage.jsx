@@ -100,10 +100,10 @@ export default function UserRegistrationPage() {
         return;
       }
 
-      // Store registration ID and move to OTP step
-      setRegistrationId(data.data.registrationId);
-      setStep("otp");
-      toast.success("✅ Registration submitted! OTP sent to super admin email.");
+      toast.success("✅ Registration successful! Redirecting to login...");
+      setTimeout(() => {
+        navigate("/branch-login");
+      }, 2000);
     } catch (error) {
       console.error("Registration error:", error);
       toast.error("Registration failed. Please try again.");
@@ -171,20 +171,17 @@ export default function UserRegistrationPage() {
               className="h-16 mx-auto mb-4 rounded-lg"
             />
             <h1 className="text-3xl font-bold">
-              {step === "form" ? "Register Account" : "Enter OTP"}
+              Register Account
             </h1>
             <p className="text-white/80 mt-2">
-              {step === "form"
-                ? "Create your account and join our network"
-                : "Enter the OTP sent to super admin"}
+              Create your account and join our network
             </p>
           </div>
         </div>
 
         {/* Form */}
         <div className="p-8">
-          {step === "form" ? (
-            // REGISTRATION FORM
+            {/* REGISTRATION FORM */}
             <form onSubmit={handleRegister} className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {/* Full Name */}
@@ -328,13 +325,6 @@ export default function UserRegistrationPage() {
                 </div>
               </div>
 
-              {/* Info Box */}
-              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
-                <p className="text-sm text-gray-700">
-                  <strong>ℹ️ Note:</strong> OTP will be sent to super admin email. Ask them for the code to complete registration.
-                </p>
-              </div>
-
               {/* Register Button */}
               <button
                 type="submit"
@@ -359,73 +349,6 @@ export default function UserRegistrationPage() {
                 </p>
               </div>
             </form>
-          ) : (
-            // OTP VERIFICATION FORM
-            <form onSubmit={handleVerifyOTP} className="space-y-6">
-              {/* Success Message */}
-              <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
-                <p className="text-sm text-green-700">
-                  <strong>✅ Registration submitted!</strong> An OTP has been sent to the super admin.
-                </p>
-              </div>
-
-              {/* OTP Input */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Enter OTP Code
-                </label>
-                <div className="relative">
-                  <FaShieldAlt className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="000000"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    maxLength="6"
-                    className="w-full pl-12 pr-4 py-4 border-2 border-gray-300 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition text-center text-2xl font-bold tracking-widest"
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Enter the 6-digit code from super admin's email
-                </p>
-              </div>
-
-              {/* Info Box */}
-              <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-lg">
-                <p className="text-sm text-yellow-700">
-                  <strong>⏱️ Time-sensitive:</strong> OTP is valid for 5 minutes only
-                </p>
-              </div>
-
-              {/* Verify Button */}
-              <button
-                type="submit"
-                disabled={loading || otp.length !== 6}
-                className="w-full bg-gradient-to-r from-primary to-secondary text-white font-bold py-3 rounded-lg hover:shadow-lg transform hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <FaShieldAlt />
-                {loading ? "Verifying OTP..." : "Verify & Complete"}
-              </button>
-
-              {/* Footer */}
-              <div className="text-center mt-8 pt-6 border-t border-gray-200">
-                <p className="text-gray-600 text-sm">
-                  Didn't receive the OTP?{" "}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStep("form");
-                      setOtp("");
-                    }}
-                    className="text-primary font-bold hover:underline"
-                  >
-                    Try again
-                  </button>
-                </p>
-              </div>
-            </form>
-          )}
         </div>
       </div>
     </div>

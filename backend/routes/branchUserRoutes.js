@@ -61,7 +61,7 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // Verify branch exists with the code
+    // Find branch
     const branch = await Branch.findOne({ code: branchCode.toUpperCase() });
     if (!branch) {
       return res.status(404).json({
@@ -70,50 +70,29 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // Get Super Admin email
-    const superAdmin = await SuperAdmin.findOne({ role: "SUPER_ADMIN" });
-    if (!superAdmin) {
-      return res.status(500).json({
-        success: false,
-        message: "Super admin not configured",
-      });
-    }
-
-    // Generate OTP
-    const otp = generateOTP();
-    const otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-
-    // Create pending registration
-    const pendingReg = new PendingRegistration({
+    // Create new BranchUser directly
+    const newUser = new BranchUser({
       name,
       username,
       email,
-      password, // Will be hashed before creating actual user
-      branchCode: branchCode.toUpperCase(),
+      password, // Password will be hashed by pre-save hook
       role,
-      otp,
-      otpExpires,
-      status: "PENDING",
+      branch: branch._id,
+      status: "ACTIVE", // Auto-approve
     });
 
-    await pendingReg.save();
+    await newUser.save();
 
-    // Send OTP email to super admin (non-blocking - don't delete if fails)
-    try {
-      await sendOTPEmail(process.env.EMAILJS_TO_EMAIL, username, otp, branchCode, role, email);
-      console.log("✅ OTP email sent successfully via EmailJS");
-    } catch (emailError) {
-      console.error("⚠️  Email failed but registration saved:", emailError.text || emailError.message);
-    }
+    console.log(`✅ User "${username}" registered and auto-approved`);
 
     res.status(201).json({
       success: true,
-      message: "Registration submitted! OTP sent to super admin.",
+      message: "Registration successful! You can now login.",
       data: {
-        registrationId: pendingReg._id,
-        username: pendingReg.username,
-        email: pendingReg.email,
-        message: "Please wait for super admin approval",
+        userId: newUser._id,
+        username: newUser.username,
+        email: newUser.email,
+        role: newUser.role,
       },
     });
   } catch (error) {
