@@ -59,7 +59,7 @@ const TrialBalancePage = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center pt-20 md:pt-16 md:pl-64">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center pt-20 md:pt-4 md:pl-20">
         <div className="text-center">
           <FaSpinner className="text-4xl text-indigo-600 animate-spin mx-auto mb-4" />
           <p className="text-gray-600 font-semibold">Loading Trial Balance...</p>
@@ -69,7 +69,7 @@ const TrialBalancePage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 pt-20 md:pt-16 md:pl-64 pb-10">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 pt-20 md:pt-4 md:pl-20 pb-10">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">

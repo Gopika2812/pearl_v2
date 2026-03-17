@@ -163,7 +163,7 @@ export default function EmployeeDashboardPage() {
 };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 px-3 sm:px-6 md:pl-64 space-y-6">
+    <div className="min-h-screen bg-gray-50 pt-20 px-3 sm:px-6 md:pl-20 space-y-6">
 
       {/* PROFILE */}
       <div className="bg-white rounded-2xl shadow border p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4">

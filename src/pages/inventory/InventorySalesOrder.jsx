@@ -15,7 +15,7 @@ const InventorySalesOrder = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 md:pt-16 md:pl-64">
+    <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <div className="w-full max-w-6xl mx-auto px-3 sm:px-6 py-4">
         <InventorySalesOrderHeader title="Sales Order" />
 

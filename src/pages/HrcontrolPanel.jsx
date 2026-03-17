@@ -25,7 +25,7 @@ export default function HRControlPanel() {
   const tabs = ["Attendance", "Leave Logs", "Delivery Logs", "Payroll Rules"];
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 md:pl-64 px-3 sm:px-6 space-y-6">
+    <div className="min-h-screen bg-gray-50 pt-20 md:pl-20 px-3 sm:px-6 space-y-6">
 
       {/* HEADER */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">

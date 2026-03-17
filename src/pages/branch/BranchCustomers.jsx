@@ -196,14 +196,35 @@ const BranchCustomers = () => {
     }
   }, [salesOrders, customerPayments]);
 
-  const totalCredit = customers.reduce(
-    (sum, customer) => sum + (customer.credit || 0),
-    0
-  );
-  const totalDebit = customers.reduce(
-    (sum, customer) => sum + (customer.debit || 0),
-    0
-  );
+  // Global Totals calculation
+  const baseGlobalCredit = pagination?.totalGlobalCredit || 0;
+  const baseGlobalDebit = pagination?.totalGlobalDebit || 0;
+
+  let globalOutstandingFromOrders = 0;
+  if (salesOrders.length > 0) {
+    const normalizedBranchId = branchId?.toString();
+    const branchOrders = salesOrders.filter(
+      (order) => order.branchId === normalizedBranchId && order.status !== "CANCELLED"
+    );
+
+    branchOrders.forEach((order) => {
+      const orderAmount = order.grandTotal || 0;
+      const orderPayments = customerPayments.filter(
+        (payment) =>
+          payment.salesOrder?.soId?.toString() === order._id?.toString() &&
+          payment.status === "completed"
+      );
+      const totalReceivedForOrder = orderPayments.reduce((sum, p) => sum + p.amount, 0);
+      const outstanding = orderAmount - totalReceivedForOrder;
+
+      if (outstanding > 0) {
+        globalOutstandingFromOrders += outstanding;
+      }
+    });
+  }
+
+  const totalCredit = baseGlobalCredit;
+  const totalDebit = baseGlobalDebit + globalOutstandingFromOrders;
 
   if (!branchLoaded) {
     return (
@@ -214,7 +235,7 @@ const BranchCustomers = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 md:pl-64 pt-20 md:pt-6">
+    <div className="min-h-screen bg-gray-50 md:pl-20 pt-20 md:pt-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-900 to-blue-800 text-white py-6 px-4 md:px-6 shadow-lg">
         <div className="max-w-6xl mx-auto">

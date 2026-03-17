@@ -297,7 +297,7 @@ export default function PearlsBookPage() {
 
 
   return (
-    <div className="min-h-screen bg-gray-100 pt-20 md:pt-16 md:pl-64 px-3 sm:px-6 pb-10">
+    <div className="min-h-screen bg-gray-100 pt-20 md:pt-4 md:pl-20 px-3 sm:px-6 pb-10">
       {/* HEADER */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-primary">

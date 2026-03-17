@@ -2,7 +2,7 @@ import { FaChartBar } from "react-icons/fa";
 
 export default function BranchSummary() {
   return (
-    <div className="min-h-screen bg-gray-100 pt-20 md:pt-16 md:pl-64 px-4 md:px-6 pb-10">
+    <div className="min-h-screen bg-gray-100 pt-20 md:pt-4 md:pl-20 px-4 md:px-6 pb-10">
       <div className="max-w-7xl mx-auto">
         <div className="bg-gradient-to-r from-secondary to-primary text-white rounded-2xl shadow-lg p-8 mb-8">
           <div className="flex items-center gap-4">

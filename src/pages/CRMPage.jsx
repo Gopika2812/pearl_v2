@@ -68,7 +68,7 @@ export default function CRMPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 md:pl-64 px-4 sm:px-6">
+    <div className="min-h-screen bg-gray-50 pt-20 md:pl-20 px-4 sm:px-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
 
         {/* CUSTOMER LIST */}

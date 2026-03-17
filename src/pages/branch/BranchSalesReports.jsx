@@ -158,7 +158,7 @@ export default function BranchSalesReports() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 md:pl-64 pt-20 md:pt-6 px-4 md:px-6 pb-10">
+    <div className="min-h-screen bg-gray-50 md:pl-20 pt-20 md:pt-6 px-4 md:px-6 pb-10">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl shadow-lg p-8 mb-8">
         <div className="flex items-center gap-4 mb-4">

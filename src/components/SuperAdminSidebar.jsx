@@ -39,25 +39,31 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
   return (
     <>
       {/* ================= DESKTOP SIDEBAR ================= */}
-      <aside className="hidden md:flex md:flex-col w-64 h-screen bg-gradient-to-b from-secondary to-secondary/90 text-white shadow-xl fixed left-0 top-0">
-        <div className="px-6 py-6 border-b border-white/10 flex justify-center">
-          <img
-            src="/logo.jpeg"
-            alt="Pearls ERP Logo"
-            className="h-12 w-[180px] lg:w-[180px] object-contain rounded-lg"
-          />
+      {/* ================= DESKTOP SIDEBAR ================= */}
+      <aside className="hidden md:flex md:flex-col w-20 hover:w-64 transition-all duration-300 h-screen bg-gradient-to-b from-secondary to-secondary/90 text-white shadow-xl fixed left-0 top-0 z-50 overflow-x-hidden group">
+        <div className="px-4 py-6 border-b border-white/10 flex items-center h-[96px]">
+          <div className="flex items-center gap-3 w-full justify-center group-hover:justify-start">
+            <img
+              src="/logo.jpeg"
+              alt="Pearls ERP Logo"
+              className="w-12 h-12 flex-shrink-0 object-contain rounded-lg"
+            />
+            <span className="font-bold text-white whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">Super Admin</span>
+          </div>
         </div>
 
         {/* Super Admin Badge */}
-        <div className="mx-3 mt-4 mb-4 px-4 py-3 bg-yellow-400/20 border border-yellow-400/50 rounded-lg flex items-center gap-3">
-          <FaShieldAlt className="text-yellow-300" />
-          <div>
+        <div className="mx-3 mt-4 mb-4 px-3 py-3 bg-yellow-400/20 border border-yellow-400/50 rounded-lg flex items-center gap-3 overflow-hidden">
+          <div className="w-8 flex justify-center flex-shrink-0">
+            <FaShieldAlt className="text-yellow-300 text-lg" />
+          </div>
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto whitespace-nowrap">
             <p className="text-xs text-yellow-200 font-semibold">SUPER ADMIN</p>
             <p className="text-sm font-bold text-white">{user?.username || "Admin"}</p>
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4">
           {menu.map((item, index) => {
             const active = location.pathname === item.path;
             return (
@@ -65,27 +71,33 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
                 key={index}
                 to={item.path}
                 onClick={() => onClose()}
-                className={`mx-3 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${
+                className={`mx-3 mb-1 flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
                   active
                     ? "bg-white text-secondary shadow-md font-semibold"
                     : "hover:bg-white/10 text-white/90"
                 }`}
+                title={item.name}
               >
-                <span className="text-lg">{item.icon}</span>
-                <span className="text-sm">{item.name}</span>
+                <div className="w-8 flex justify-center flex-shrink-0">
+                  <span className="text-lg">{item.icon}</span>
+                </div>
+                <span className="text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">{item.name}</span>
               </Link>
             );
           })}
         </nav>
 
         {/* Logout Button */}
-        <div className="p-4 border-t border-white/10">
+        <div className="p-4 border-t border-white/10 flex justify-center group-hover:justify-start">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-200 transition font-semibold text-sm"
+            className="w-full flex items-center gap-2 bg-red-500/20 hover:bg-red-500/30 text-red-200 px-3 py-2 rounded-xl transition-colors text-sm font-semibold justify-center group-hover:justify-start overflow-hidden"
+            title="Logout"
           >
-            <FaSignOutAlt />
-            Logout
+            <div className="w-6 flex justify-center flex-shrink-0">
+              <FaSignOutAlt />
+            </div>
+            <span className="opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity duration-300 w-0 group-hover:w-auto">Logout</span>
           </button>
         </div>
       </aside>

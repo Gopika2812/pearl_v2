@@ -214,7 +214,7 @@ const BranchSuppliers = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 md:pl-64 pt-20 md:pt-6">
+    <div className="min-h-screen bg-gray-50 md:pl-20 pt-20 md:pt-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-900 to-blue-800 text-white py-6 px-4 md:px-6 shadow-lg">
         <div className="max-w-6xl mx-auto">

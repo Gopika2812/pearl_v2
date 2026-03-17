@@ -61,7 +61,7 @@ export default function DispatchSheetPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 md:pl-64 px-4 sm:px-6 space-y-8">
+    <div className="min-h-screen bg-gray-50 pt-20 md:pl-20 px-4 sm:px-6 space-y-8">
 
       {/* HEADER */}
       <div>

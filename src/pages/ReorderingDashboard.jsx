@@ -328,7 +328,7 @@ const ReorderingDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 md:ml-64 mt-0">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 px-0 md:pl-20 pt-20 md:pt-4">
       <ToastContainer
         position="top-right"
         autoClose={2500}

@@ -64,7 +64,7 @@ const BranchPurchaseOrders = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 md:pt-16 md:pl-64">
+    <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <ToastContainer
         position="top-right"
         autoClose={2500}

@@ -82,7 +82,7 @@ export default function PearlsShopping() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 md:pl-64">
+    <div className="min-h-screen bg-gray-50 pt-20 md:pl-20">
       {/* HEADER */}
       <div className="bg-white shadow sticky top-20 md:top-0 z-40">
         <div className="px-4 sm:px-6 py-4 flex justify-between items-center">

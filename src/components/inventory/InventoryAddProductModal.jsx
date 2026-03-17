@@ -32,6 +32,9 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     gst: "",
   });
 
+  // State to handle bulk upload results
+  const [uploadResult, setUploadResult] = useState(null);
+
   // Pre-fill form when editing
   useEffect(() => {
     if (editingItem) {
@@ -176,17 +179,47 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         throw new Error(data.message || "Bulk upload failed");
       }
 
-      alert(
-        `Uploaded: ${data.insertedCount}\nSkipped: ${data.skippedCount}`
-      );
-
+      // Set the detailed results into state instead of closing
+      setUploadResult({
+        insertedCount: data.insertedCount || 0,
+        skippedCount: data.skippedCount || 0,
+        skipped: data.skipped || [],
+      });
       console.log("Bulk upload response:", data);
-      onClose();
     } catch (err) {
       console.error("Bulk upload error:", err);
       alert(err.message || "Bulk upload failed");
     }
   };
+
+  const downloadErrorReport = () => {
+    if (!uploadResult || !uploadResult.skipped || uploadResult.skipped.length === 0) return;
+
+    // Create CSV content from skipped items
+    const csvRows = [];
+    // Headers
+    csvRows.push(["Error Reason", "Raw Input Data"].join(","));
+
+    uploadResult.skipped.forEach((item) => {
+      const reason = `"${(item.reason || "Unknown reason").replace(/"/g, '""')}"`;
+      // Convert the varied row object to a readable string
+      const rawData = `"${JSON.stringify(item.row || {}).replace(/"/g, '""')}"`;
+      csvRows.push([reason, rawData].join(","));
+    });
+
+    const csvContent = csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `bulk_upload_errors_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -263,6 +296,12 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     }
   };
 
+  // Close handler that also resets upload results
+  const handleModalClose = () => {
+    setUploadResult(null);
+    onClose();
+  };
+
 
 
   const labelClass = "block text-sm font-medium text-gray-700 mb-1";
@@ -272,8 +311,9 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
       <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
 
-        <div className="bg-primary p-4 text-white">
+        <div className="bg-primary p-4 text-white flex justify-between items-center">
           <h3 className="text-xl font-bold">Add New Product</h3>
+          <button onClick={handleModalClose} className="text-white hover:text-gray-200 font-bold text-xl">&times;</button>
         </div>
 
         <input
@@ -284,17 +324,20 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
           onChange={handleBulkUpload}
         />
 
-        <button
-          type="button"
-          onClick={() => document.getElementById("productBulkUpload").click()}
-          className="w-full bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition"
-        >
-          📤 Bulk Upload Products (Excel)
-        </button>
+        {!uploadResult && (
+          <button
+            type="button"
+            onClick={() => document.getElementById("productBulkUpload").click()}
+            className="w-full bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition"
+          >
+            📤 Bulk Upload Products (Excel)
+          </button>
+        )}
 
 
-        <form onSubmit={handleSubmit} className="p-6 text-gray-700 overflow-y-auto flex-1">
-          {/* Product Name - Full Width */}
+        {!uploadResult && (
+          <form onSubmit={handleSubmit} className="p-6 text-gray-700 overflow-y-auto flex-1">
+            {/* Product Name - Full Width */}
           <div className="mb-4">
             <label className={labelClass}>Product Name *</label>
             <input
@@ -555,7 +598,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
           <div className="flex gap-3 mt-6 pb-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleModalClose}
               className="flex-1 p-2 border rounded-lg hover:bg-gray-50 transition font-medium"
             >
               Cancel
@@ -568,6 +611,45 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
             </button>
           </div>
         </form>
+        )}
+
+        {/* BULK UPLOAD RESULTS VIEW */}
+        {uploadResult && (
+          <div className="p-8 flex flex-col items-center justify-center text-center space-y-6 bg-gray-50 flex-1">
+            <h3 className="text-2xl font-bold text-gray-800">Upload Complete</h3>
+            
+            <div className="flex gap-8 justify-center">
+              <div className="bg-green-100 border border-green-200 rounded-xl p-4 min-w-[120px]">
+                <p className="text-sm text-green-700 font-semibold mb-1">Inserted</p>
+                <p className="text-3xl font-black text-green-600">{uploadResult.insertedCount}</p>
+              </div>
+              
+              <div className={`${uploadResult.skippedCount > 0 ? 'bg-red-100 border-red-200 text-red-700' : 'bg-gray-100 border-gray-200 text-gray-700'} border rounded-xl p-4 min-w-[120px]`}>
+                <p className="text-sm font-semibold mb-1">Skipped</p>
+                <p className="text-3xl font-black">{uploadResult.skippedCount}</p>
+              </div>
+            </div>
+
+            {uploadResult.skippedCount > 0 && (
+              <div className="bg-red-50 p-4 rounded-xl border border-red-100 max-w-lg text-sm text-red-800 text-left">
+                <p className="font-semibold mb-2">⚠️ Some items were skipped due to errors (e.g., missing groups, typos, duplicates, invalid prices).</p>
+                <button 
+                  onClick={downloadErrorReport}
+                  className="w-full mt-2 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold shadow transition-colors flex items-center justify-center gap-2"
+                >
+                  📥 Download Error Report (CSV)
+                </button>
+              </div>
+            )}
+
+            <button 
+              onClick={handleModalClose}
+              className="mt-6 px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold rounded-xl transition"
+            >
+              Close
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

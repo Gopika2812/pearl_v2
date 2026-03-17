@@ -31,9 +31,12 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 md:left-64 h-16 bg-white shadow z-30 flex items-center justify-between px-4 md:px-6">
-      {/* Left: Hamburger (mobile) + Time */}
-      <div className="flex items-center gap-3">
+    <header className="fixed top-0 left-0 right-0 md:left-20 z-30 group md:h-[64px]">
+      <div className="absolute top-0 left-0 right-0 h-4 bg-transparent z-50 hidden md:block" />
+      <div className="bg-white shadow h-full w-full transform md:-translate-y-full md:group-hover:translate-y-0 transition-all duration-300 relative z-40">
+        <div className="flex items-center justify-between px-4 md:px-6 h-full w-full md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300">
+          {/* Left: Hamburger (mobile) + Time */}
+          <div className="flex items-center gap-3">
         <button
           onClick={onMenuClick}
           className="md:hidden p-2 rounded-lg bg-transition hover:bg-primary/20 transition text-primary"
@@ -117,6 +120,8 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
             </div>
           </div>
         )}
+      </div>
+        </div>
       </div>
     </header>
   );

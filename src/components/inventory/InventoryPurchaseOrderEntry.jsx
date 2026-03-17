@@ -46,7 +46,10 @@ const InventoryPurchaseOrderEntry = ({
   const [selectedProductData, setSelectedProductData] = useState(null);
 
   // Footer State
-  const [transportCharge, setTransportCharge] = useState(0);
+  const [extraExpenses, setExtraExpenses] = useState([]);
+  const [showExtraExpensesModal, setShowExtraExpensesModal] = useState(false);
+  const [expenseName, setExpenseName] = useState("");
+  const [expensePrice, setExpensePrice] = useState("");
   
   // Filter products by fetching from API when group changes
   const [filteredProducts, setFilteredProducts] = useState([]);
@@ -227,7 +230,36 @@ const InventoryPurchaseOrderEntry = ({
     const rate = item.igst ? item.gst : item.cgst + item.sgst;
     return sum + (item.rowPrice * rate) / 100;
   }, 0);
-  const grandTotal = subtotal + totalTax + parseFloat(transportCharge || 0);
+  
+  const extraExpenseAmount = extraExpenses.reduce(
+    (acc, exp) => acc + (exp.totalPrice || 0),
+    0
+  );
+  const grandTotal = subtotal + totalTax + extraExpenseAmount;
+
+  const handleAddExtraExpense = () => {
+    if (!expenseName.trim() || !expensePrice) {
+      toast.error("Please enter expense name and price");
+      return;
+    }
+
+    const newExpense = {
+      id: Date.now(),
+      expenseName: expenseName.trim(),
+      totalPrice: parseFloat(expensePrice) || 0,
+    };
+
+    setExtraExpenses((prev) => [...prev, newExpense]);
+    setExpenseName("");
+    setExpensePrice("");
+    setShowExtraExpensesModal(false);
+    toast.success("Expense added!");
+  };
+
+  const handleRemoveExtraExpense = (id) => {
+    setExtraExpenses(extraExpenses.filter((exp) => exp.id !== id));
+    toast.info("Extra expense removed");
+  };
 
   // Fetch next invoice ID from backend
   useEffect(() => {
@@ -247,6 +279,33 @@ const InventoryPurchaseOrderEntry = ({
     fetchNextInvoice();
   }, [voucherType, currentBranch]);
 
+  // Reset Form after submission
+  const resetForm = () => {
+    // Header
+    setVendor("");
+    setWarehouse("");
+    setProductGroup("");
+    setBillingPerson("");
+    
+    // Items
+    setItems([]);
+    setSelectedItem("");
+    setItemSearch("");
+    setQty("");
+    setPurchasePrice(0);
+    setSellingPrice(0);
+    setDisplayPrice(0);
+    setHsn("");
+    setGst(0);
+    setCgst(0);
+    setSgst(0);
+    setIgst(false);
+    setSelectedProductData(null);
+    
+    // Footer
+    setExtraExpenses([]);
+  };
+
   // Place Purchase Order
   const handleFinalAction = async () => {
     if (!voucherType) return toast.error("Select Voucher Type!");
@@ -263,7 +322,11 @@ const InventoryPurchaseOrderEntry = ({
       items,
       subtotal,
       totalTax,
-      transportCharge,
+      extraExpenses: extraExpenses.map((exp) => ({
+        expenseName: exp.expenseName,
+        totalPrice: Math.ceil(exp.totalPrice * 100) / 100,
+      })),
+      extraExpenseAmount,
       grandTotal,
       billingPerson,
       invoiceId,
@@ -281,7 +344,7 @@ const InventoryPurchaseOrderEntry = ({
 
       toast.success("Purchase Order placed successfully!");
       setInvoiceId(data.order.invoiceId);
-      setItems([]);
+      resetForm();
       // Call parent callback to refresh records
       onPOSaved();
     } catch (err) {
@@ -317,7 +380,7 @@ const InventoryPurchaseOrderEntry = ({
 
       {/* HEADER */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100
-                grid grid-cols-1 md:grid-cols-3 gap-4">
+                grid grid-cols-1 md:grid-cols-5 gap-4">
 
         <div>
           <label className={labelClass}>Voucher Type</label>
@@ -361,8 +424,6 @@ const InventoryPurchaseOrderEntry = ({
           </select>
         </div>
 
-       
-
         <div>
           <label className={labelClass}>Warehouse</label>
           <select
@@ -374,22 +435,6 @@ const InventoryPurchaseOrderEntry = ({
             {warehouses.map((w) => (
               <option key={w._id} value={w.name}>
                 {w.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-      </div>
-
-      {/* PRODUCT GROUP & BILLING PERSON */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className={labelClass}>Product Group</label>
-          <select className={selectClass} value={productGroup} onChange={(e) => setProductGroup(e.target.value)}>
-            <option value="">Select Product Group</option>
-            {productGroups.map((g) => (
-              <option key={g._id} value={g._id}>
-                {g.name}
               </option>
             ))}
           </select>
@@ -434,12 +479,32 @@ const InventoryPurchaseOrderEntry = ({
             )}
           </select>
         </div>
+
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        {/* LEFT COLUMN: Input forms */}
+        <div className="xl:col-span-4 space-y-6">
+
+      {/* PRODUCT GROUP (Moved from 2-col to full-width in the left pane) */}
+      <div className="grid grid-cols-1 gap-4">
+        <div>
+          <label className={labelClass}>Product Group</label>
+          <select className={selectClass} value={productGroup} onChange={(e) => setProductGroup(e.target.value)}>
+            <option value="">Select Product Group</option>
+            {productGroups.map((g) => (
+              <option key={g._id} value={g._id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* ITEM ENTRY */}
       <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 space-y-4">
-        {/* ROW 1 */}
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+        {/* ROW 1: Wide Item Name */}
+        <div className="grid grid-cols-1 gap-3">
           <div className="relative">
             <label className={labelClass}>Item Name</label>
             <input
@@ -478,7 +543,10 @@ const InventoryPurchaseOrderEntry = ({
               </div>
             )}
           </div>
+        </div>
 
+        {/* ROW 2: Prices, Qty, HSN */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <label className={labelClass}>Purchase ₹</label>
             <input
@@ -531,8 +599,8 @@ const InventoryPurchaseOrderEntry = ({
           </div>
         </div>
 
-        {/* ROW 2 */}
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+        {/* ROW 3: Taxes and Add Button */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 items-end">
           <div>
             <label className={labelClass}>GST %</label>
             <input
@@ -572,7 +640,7 @@ const InventoryPurchaseOrderEntry = ({
             <span className="text-xs font-bold text-gray-600">IGST</span>
           </div>
 
-          <div className="md:col-span-2">
+          <div className="lg:col-span-4 mt-2">
             <button
               onClick={addItem}
               className="w-full bg-[#319bab] text-white h-[42px] rounded-xl font-bold flex items-center justify-center hover:bg-[#257f87] transition shadow-lg"
@@ -583,94 +651,218 @@ const InventoryPurchaseOrderEntry = ({
         </div>
       </div>
 
-      {/* ADDED ITEMS TABLE */}
-      {items.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold">
-              <tr>
-                <th className="px-4 py-3 text-left">Item</th>
-                <th className="px-4 py-3 text-center">Package</th>
-                <th className="px-4 py-3 text-center">Qty Ordered</th>
-                <th className="px-4 py-3 text-right">Rate</th>
-                <th className="px-4 py-3 text-right">Tax</th>
-                <th className="px-4 py-3 text-right">Total</th>
-                <th className="px-4 py-3 text-center">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {items.map((item, index) => (
-                <tr key={index}>
-                  <td className="px-4 py-3 font-semibold">
-                    {item.name}
-                    <div className="text-[10px] text-gray-400">
-                      HSN: {item.hsn}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-center text-sm">
-                    {item.perQty} {item.units}
-                  </td>
-                  <td className="px-4 py-3 text-center">{item.qty}</td>
-                  <td className="px-4 py-3 text-right">₹{item.purchasePrice}</td>
-                  <td className="px-4 py-3 text-right">
-                    {item.igst
-                      ? `IGST ${item.gst}%`
-                      : `CGST ${item.cgst}% + SGST ${item.sgst}%`}
-                  </td>
-                  <td className="px-4 py-3 text-right font-bold text-[#319bab]">
-                    ₹{item.total}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={() => removeItem(index)}
-                      className="text-red-500 hover:text-red-700 cursor-pointer"
-                      title="Delete item"
-                    >
-                      <FaTrash className="inline-block" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Extra Expenses Section (Moved directly below Item Entry) */}
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-[#319bab] font-black uppercase text-xs tracking-widest">
+            Extra Expenses
+          </h3>
+          <button
+            onClick={() => setShowExtraExpensesModal(true)}
+            className="bg-orange-100 text-orange-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-orange-200 transition flex items-center gap-2"
+          >
+            + Add Expense
+          </button>
         </div>
-      )}
 
-      {/* SUMMARY */}
-      <div className="bg-white p-6 rounded-3xl shadow-xl border border-primary/5 h-fit sticky top-24">
-        <h3 className="text-[#319bab] font-black uppercase text-xs tracking-widest mb-6 border-b pb-2 border-[#319bab]/30">
-          Order Summary
-        </h3>
-        <div className="space-y-4">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Subtotal</span>
-            <span className="font-bold">₹{subtotal.toFixed(2)}</span>
+        {/* Display Added Extra Expenses */}
+        {extraExpenses.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] font-bold">
+                <tr>
+                  <th className="px-3 py-2 text-left">Expense Name</th>
+                  <th className="px-3 py-2 text-right">Amount</th>
+                  <th className="px-3 py-2 text-center">Remove</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {extraExpenses.map((exp) => (
+                  <tr key={exp.id} className="border-b transition hover:bg-gray-50">
+                    <td className="px-3 py-2 font-semibold text-gray-800">
+                      {exp.expenseName}
+                    </td>
+                    <td className="px-3 py-2 text-right font-bold text-orange-600">
+                      ₹{(exp.totalPrice || 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        onClick={() => handleRemoveExtraExpense(exp.id)}
+                        className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition"
+                        title="Remove Expense"
+                      >
+                        <FaTrash />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Tax Amount</span>
-            <span className="font-bold">₹{totalTax.toFixed(2)}</span>
+        ) : (
+          <div className="text-center py-4 text-gray-400 text-sm border-2 border-dashed border-gray-100 rounded-xl">
+            No extra expenses added yet
           </div>
-          <div className="pt-2">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-800 font-black text-xs uppercase">
-                Grand Total
-              </span>
-              <span className="text-3xl font-black text-[#319bab] italic">
-                ₹{grandTotal.toFixed(2)}
+        )}
+      </div>
+
+      </div> {/* END LEFT COLUMN */}
+
+      {/* RIGHT COLUMN: Table and Summary */}
+      <div className="xl:col-span-8 flex flex-col gap-6">
+
+        {/* ADDED ITEMS TABLE */}
+        {items.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold">
+                <tr>
+                  <th className="px-4 py-3 text-left">Item</th>
+                  <th className="px-4 py-3 text-center">Package</th>
+                  <th className="px-4 py-3 text-center">Qty Ordered</th>
+                  <th className="px-4 py-3 text-right">Rate</th>
+                  <th className="px-4 py-3 text-right">Tax</th>
+                  <th className="px-4 py-3 text-right">Total</th>
+                  <th className="px-4 py-3 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {items.map((item, index) => (
+                  <tr key={index}>
+                    <td className="px-4 py-3 font-semibold">
+                      {item.name}
+                      <div className="text-[10px] text-gray-400">
+                        HSN: {item.hsn}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm">
+                      {item.perQty} {item.units}
+                    </td>
+                    <td className="px-4 py-3 text-center">{item.qty}</td>
+                    <td className="px-4 py-3 text-right">₹{item.purchasePrice}</td>
+                    <td className="px-4 py-3 text-right">
+                      {item.igst
+                        ? `IGST ${item.gst}%`
+                        : `CGST ${item.cgst}% + SGST ${item.sgst}%`}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-[#319bab]">
+                      ₹{item.total}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => removeItem(index)}
+                        className="text-red-500 hover:text-red-700 cursor-pointer"
+                        title="Delete item"
+                      >
+                        <FaTrash className="inline-block" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* SUMMARY */}
+        <div className="bg-white p-6 rounded-3xl shadow-xl border border-primary/5 h-fit sticky top-24">
+          <h3 className="text-[#319bab] font-black uppercase text-xs tracking-widest mb-6 border-b pb-2 border-[#319bab]/30">
+            Order Summary
+          </h3>
+          <div className="space-y-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Subtotal</span>
+              <span className="font-bold">₹{subtotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Tax Amount</span>
+              <span className="font-bold">₹{totalTax.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Extra Expenses</span>
+              <span className="font-bold text-orange-500">
+                ₹{extraExpenseAmount.toFixed(2)}
               </span>
             </div>
+            <div className="pt-2">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-800 font-black text-xs uppercase">
+                  Grand Total
+                </span>
+                <span className="text-3xl font-black text-[#319bab] italic">
+                  ₹{grandTotal.toFixed(2)}
+                </span>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 mt-8">
+              <button
+                onClick={handleFinalAction}
+                className="w-full bg-[#319bab] text-white py-3 rounded-xl font-bold uppercase text-[10px] hover:bg-[#257f87] transition"
+              >
+                Place Purchase Order
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-3 mt-8">
-            <button
-              onClick={handleFinalAction}
-              className="w-full bg-[#319bab] text-white py-3 rounded-xl font-bold uppercase text-[10px] hover:bg-[#257f87] transition"
-            >
-              Place Purchase Order
-            </button>
+        </div>
+
+      </div> {/* END RIGHT COLUMN */}
+
+    </div> {/* END MAIN LAYOUT GRID */}
+
+    {/* Extra Expenses Modal */}
+    {showExtraExpensesModal && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">Add Extra Expense</h3>
+
+          <div className="space-y-4">
+            {/* Expense Name */}
+            <div>
+              <label className={labelClass}>Expense Name</label>
+              <input
+                type="text"
+                className={inputClass}
+                value={expenseName}
+                onChange={(e) => setExpenseName(e.target.value)}
+                placeholder="e.g., Loading Charge, Packing Charge"
+              />
+            </div>
+
+            {/* Price */}
+            <div>
+              <label className={labelClass}>Amount (₹)</label>
+              <input
+                type="number"
+                className={inputClass}
+                value={expensePrice}
+                onChange={(e) => setExpensePrice(e.target.value)}
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+              />
+            </div>
+
+            {/* Buttons */}
+            <div className="grid grid-cols-2 gap-3 pt-4">
+              <button
+                onClick={() => setShowExtraExpensesModal(false)}
+                className="w-full border-2 border-gray-300 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddExtraExpense}
+                disabled={!expenseName.trim() || !expensePrice}
+                className="w-full bg-orange-500 text-white py-2 rounded-lg font-bold hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Add Expense
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    )}
+  </div>
   );
 };
 

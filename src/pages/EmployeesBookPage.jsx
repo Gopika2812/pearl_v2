@@ -70,7 +70,7 @@ export default function EmployeesBookPage() {
       : employees.filter((e) => e.department === filterDept);
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 md:pl-64 px-4 sm:px-6 space-y-6">
+    <div className="min-h-screen bg-gray-50 pt-20 md:pl-20 px-4 sm:px-6 space-y-6">
 
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
