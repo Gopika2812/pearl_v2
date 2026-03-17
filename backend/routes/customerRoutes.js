@@ -162,8 +162,8 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         registrationType: (registrationType === "unregistered" ? "unregistered" : "regular"),
         gstin,
         margin: Math.round(margin * 100) / 100,
-        credit: Math.round(credit),
-        debit: Math.round(debit),
+        credit: Number(credit) || 0,
+        debit: Number(debit) || 0,
         salesOwner: salesOwnerId,
         customerCategories: customerCategoryIds,
         customerGroups: customerGroupIds,
@@ -332,8 +332,8 @@ router.post("/", async (req, res) => {
       registrationType: registrationType === "unregistered" ? "unregistered" : "regular",
       gstin,
       margin: Math.round(Number(margin) * 100) / 100 || 0,
-      credit: Math.round(Number(credit)) || 0,
-      debit: Math.round(Number(debit)) || 0,
+      credit: Number(credit) || 0,
+      debit: Number(debit) || 0,
       salesOwner,
       customerCategories: Array.isArray(customerCategories) ? customerCategories : [],
       customerGroups: Array.isArray(customerGroups) ? customerGroups : [],
@@ -380,10 +380,10 @@ router.put("/:id", async (req, res) => {
       updates.totalBalance = Math.round(Number(updates.totalBalance));
     }
     if (updates.credit !== undefined) {
-      updates.credit = Math.round(Number(updates.credit));
+      updates.credit = Number(updates.credit) || 0;
     }
     if (updates.debit !== undefined) {
-      updates.debit = Math.round(Number(updates.debit));
+      updates.debit = Number(updates.debit) || 0;
     }
 
     // Validate registrationType if provided
