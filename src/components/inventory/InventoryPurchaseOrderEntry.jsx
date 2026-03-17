@@ -56,7 +56,7 @@ const InventoryPurchaseOrderEntry = ({
     
     if (!productGroup) {
       console.log("⚠️ No product group selected");
-      setFilteredProducts([]);
+      setFilteredProducts(products || []);
       return;
     }
 
@@ -88,7 +88,7 @@ const InventoryPurchaseOrderEntry = ({
     };
 
     fetchProductsByGroup();
-  }, [productGroup]);
+  }, [productGroup, products]);
 
   // Dynamic Row Price
   useEffect(() => setDisplayPrice(purchasePrice * qty), [qty, purchasePrice]);
@@ -106,6 +106,14 @@ const InventoryPurchaseOrderEntry = ({
 
   // Reset item when Product Group changes
   useEffect(() => {
+    // Check if currently selected item belongs to the new product group
+    if (selectedItem) {
+      const product = filteredProducts.find(p => p._id === selectedItem);
+      const pGroupId = product?.productGroup?._id || product?.productGroup || product?.groupId?._id || product?.groupId;
+      if (pGroupId && String(pGroupId) === String(productGroup)) {
+        return; // Don't reset if it matches the current group
+      }
+    }
     setSelectedItem("");
     setQty(1);
     setPurchasePrice(0);
@@ -116,7 +124,7 @@ const InventoryPurchaseOrderEntry = ({
     setIgst(false);
     setCgst(0);
     setSgst(0);
-  }, [productGroup]);
+  }, [productGroup, selectedItem, filteredProducts]);
 
   // Auto-fetch Product Price / Tax / HSN
   const handleItemSelection = (productId) => {
@@ -126,6 +134,12 @@ const InventoryPurchaseOrderEntry = ({
     if (!product) {
       console.warn("⚠️ Product not found in filtered products:", productId);
       return;
+    }
+
+    // Auto-select Product Group if not already selected or if different
+    const pGroupId = product.productGroup?._id || product.productGroup || product.groupId?._id || product.groupId;
+    if (pGroupId && pGroupId !== productGroup) {
+      setProductGroup(pGroupId);
     }
     
     setSelectedProductData(product);
@@ -423,14 +437,11 @@ const InventoryPurchaseOrderEntry = ({
               className={selectClass}
               value={selectedItem}
               onChange={(e) => handleItemSelection(e.target.value)}
-              disabled={!productGroup}
             >
               <option value="">
-                {!productGroup
-                  ? "Select Product Group first"
-                  : filteredProducts.length > 0
+                {filteredProducts.length > 0
                   ? "Select Product"
-                  : "No products in this group"}
+                  : "No products available"}
               </option>
               {filteredProducts.length > 0 && filteredProducts.map((p) => (
                 <option key={p._id} value={p._id}>

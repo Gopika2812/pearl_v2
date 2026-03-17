@@ -105,7 +105,6 @@ export default function InventorySalesOrderEntry({
       setProductGroupSearch("");
       setSelectedItem("");
       setItemSearch("");
-      setFilteredProducts([]);
       setItems([]);
       return;
     }
@@ -131,7 +130,6 @@ export default function InventorySalesOrderEntry({
     setProductGroupSearch("");
     setSelectedItem("");
     setItemSearch("");
-    setFilteredProducts([]);
     setItems([]);
 
     fetchPreview();
@@ -242,9 +240,8 @@ export default function InventorySalesOrderEntry({
   }, []);
 
 
-  // Reset filtered products and items when warehouse changes
+  // Reset items when warehouse changes
   useEffect(() => {
-    setFilteredProducts([]);
     setSelectedItem("");
     setItemSearch("");
   }, [warehouse]);
@@ -277,7 +274,7 @@ export default function InventorySalesOrderEntry({
   // Fetch products by product group from API
   useEffect(() => {
     if (!productGroup) {
-      setFilteredProducts([]);
+      setFilteredProducts(products); // Use all products if no group
       return;
     }
 
@@ -308,12 +305,12 @@ export default function InventorySalesOrderEntry({
     };
 
     fetchProductsByGroup();
-  }, [productGroup]);
+  }, [productGroup, products]);
 
   // Fetch products for SAMPLE PRODUCTS section when sampleProductGroup changes
   useEffect(() => {
     if (!sampleProductGroup) {
-      setFilteredSampleProducts([]);
+      setFilteredSampleProducts(products); // Use all products if no group
       return;
     }
 
@@ -343,7 +340,7 @@ export default function InventorySalesOrderEntry({
     };
 
     fetchSampleProductsByGroup();
-  }, [sampleProductGroup]);
+  }, [sampleProductGroup, products]);
 
   // Fetch available qty for all filtered products
   useEffect(() => {
@@ -426,6 +423,16 @@ export default function InventorySalesOrderEntry({
     setItemSearch(product.name);
     setShowItemDropdown(false);
     setQty(1);
+
+    // Auto-select Product Group if not already selected or if different
+    const pGroupId = product.productGroup?._id || product.productGroup || product.groupId?._id || product.groupId;
+    if (pGroupId && pGroupId !== productGroup) {
+      setProductGroup(pGroupId);
+      const groupObj = productGroups.find((g) => g._id === pGroupId);
+      if (groupObj) {
+        setProductGroupSearch(groupObj.name);
+      }
+    }
 
     // ✅ AUTO-FILL (WITH CUSTOMER MARGIN APPLIED)
     const basePrice = product.sellingPrice;
@@ -591,6 +598,12 @@ export default function InventorySalesOrderEntry({
     setSampleSelectedItem(id);
     setSampleItemSearch(product.name);
     setShowSampleItemDropdown(false);
+
+    // Auto-select Product Group for sample item
+    const pGroupId = product.productGroup?._id || product.productGroup || product.groupId?._id || product.groupId;
+    if (pGroupId && pGroupId !== sampleProductGroup) {
+      setSampleProductGroup(pGroupId);
+    }
     setSampleQty(1);
     setSampleSellingPrice(product.sellingPrice);
   };
@@ -1045,12 +1058,12 @@ export default function InventorySalesOrderEntry({
                 setShowItemDropdown(true);
               }}
               onFocus={() => setShowItemDropdown(true)}
-              disabled={!productGroup || !warehouse}
-              className={`${inputClass} ${(!productGroup || !warehouse) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+              disabled={!warehouse}
+              className={`${inputClass} ${(!warehouse) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
             />
             
             {/* ITEM DROPDOWN */}
-            {showItemDropdown && productGroup && warehouse && (
+            {showItemDropdown && warehouse && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
                 {productsWithStock
                   .filter(p => 
@@ -1080,7 +1093,7 @@ export default function InventorySalesOrderEntry({
                   p.name.toLowerCase().includes(itemSearch.toLowerCase())
                 ).length === 0 && (
                   <div className="px-3 py-2 text-gray-500 text-sm">
-                    {productsWithStock.length === 0 ? "Select Product Group first" : "No items found"}
+                    No items found
                   </div>
                 )}
               </div>
@@ -1214,10 +1227,9 @@ export default function InventorySalesOrderEntry({
                 setShowSampleItemDropdown(true);
               }}
               onFocus={() => setShowSampleItemDropdown(true)}
-              disabled={!sampleProductGroup}
-              className={`${inputClass} ${!sampleProductGroup ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+              className={inputClass}
             />
-            {showSampleItemDropdown && sampleProductGroup && (
+            {showSampleItemDropdown && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
                 {loadingSampleProducts && (
                   <div className="px-3 py-2 text-gray-500 text-sm text-center">🔍 Loading products...</div>
