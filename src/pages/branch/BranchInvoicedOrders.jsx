@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaFileInvoice, FaSync } from "react-icons/fa";
+import { FaChevronDown, FaEdit, FaFileInvoice, FaSync } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE } from "../../api";
+import EditBillModal from "../../components/EditBillModal";
 import InvoiceGeneratorModal from "../../components/InvoiceGeneratorModal";
 import { useBranch } from "../../context/BranchContext";
 
@@ -11,6 +12,8 @@ const BranchInvoicedOrders = () => {
   const [loading, setLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showEditBillModal, setShowEditBillModal] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
   const [expandedOrders, setExpandedOrders] = useState({});
   const [invoicesByOrder, setInvoicesByOrder] = useState({}); // New: store invoices for each SO
 
@@ -57,6 +60,40 @@ const BranchInvoicedOrders = () => {
   const handleGenerateInvoice = (order) => {
     setSelectedOrder(order);
     setShowModal(true);
+  };
+
+  const handleEditBill = (order) => {
+    setEditingOrder(order);
+    setShowEditBillModal(true);
+  };
+
+  const handleSaveEditedBill = async (updatedOrder) => {
+    try {
+      const res = await fetch(`${API_BASE}/sales-orders/${updatedOrder._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: updatedOrder.items,
+          sampleItems: updatedOrder.sampleItems,
+          grandTotal: updatedOrder.grandTotal,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to update order");
+
+      // Update local state
+      setSalesOrders((prev) =>
+        prev.map((order) =>
+          order._id === updatedOrder._id ? updatedOrder : order
+        )
+      );
+
+      toast.success("Bill updated successfully!");
+    } catch (err) {
+      console.error("Error updating bill:", err);
+      toast.error(err.message || "Failed to update bill");
+    }
   };
 
   const toggleExpanded = (orderId) => {
@@ -299,18 +336,33 @@ const BranchInvoicedOrders = () => {
                           {new Date(order.createdAt).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <button
-                            onClick={() => handleGenerateInvoice(order)}
-                            disabled={order.invoiceGenerated}
-                            className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold mx-auto ${
-                              order.invoiceGenerated
-                                ? "bg-gray-400 text-gray-700 cursor-not-allowed opacity-50"
-                                : "bg-[#319bab] text-white hover:bg-[#257f87]"
-                            }`}
-                          >
-                            <FaFileInvoice />
-                            {order.invoiceGenerated ? "Invoice Generated" : "Generate Invoice"}
-                          </button>
+                          <div className="flex items-center gap-2 justify-center flex-wrap">
+                            <button
+                              onClick={() => handleEditBill(order)}
+                              disabled={order.invoiceGenerated}
+                              className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
+                                order.invoiceGenerated
+                                  ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-50"
+                                  : "bg-orange-500 text-white hover:bg-orange-600"
+                              }`}
+                              title="Edit bill items, quantities, and prices"
+                            >
+                              <FaEdit />
+                              Edit Bill
+                            </button>
+                            <button
+                              onClick={() => handleGenerateInvoice(order)}
+                              disabled={order.invoiceGenerated}
+                              className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
+                                order.invoiceGenerated
+                                  ? "bg-gray-400 text-gray-700 cursor-not-allowed opacity-50"
+                                  : "bg-[#319bab] text-white hover:bg-[#257f87]"
+                              }`}
+                            >
+                              <FaFileInvoice />
+                              {order.invoiceGenerated ? "Invoice Generated" : "Generate Invoice"}
+                            </button>
+                          </div>
                         </td>
                       </tr>
 
@@ -578,6 +630,18 @@ const BranchInvoicedOrders = () => {
             setSelectedOrder(null);
             fetchSalesOrders(); // Refresh list
           }}
+        />
+      )}
+
+      {/* EDIT BILL MODAL */}
+      {showEditBillModal && editingOrder && (
+        <EditBillModal
+          order={editingOrder}
+          onClose={() => {
+            setShowEditBillModal(false);
+            setEditingOrder(null);
+          }}
+          onSave={handleSaveEditedBill}
         />
       )}
     </div>
