@@ -120,7 +120,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     };
     totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
-    const grandTotal = Math.round((subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0)) * 100) / 100;
+    const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0));
 
     const previewData = {
       invoiceNumber: salesOrder.invoiceId, // Use Sales Order's invoiceId
@@ -253,7 +253,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       };
       totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
-      const grandTotal = Math.round((subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0)) * 100) / 100;
+      const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0));
 
       // Create invoice
       const invoice = new Invoice({
@@ -365,7 +365,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
 
         // Sum all invoice grand totals
         const totalInvoiced = allInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
-        const newDebit = Math.round(totalInvoiced * 100) / 100;
+        const newDebit = Math.round(totalInvoiced);
 
         customer.debit = newDebit;
         customer.closingBalance = newDebit; // ✅ Keep them EQUAL

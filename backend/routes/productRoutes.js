@@ -76,13 +76,13 @@ router.post("/", async (req, res) => {
       productGroup: productGroup || null,
       productCategories: validCategoryIds,
       name,
-      perQty: Math.round(Number(perQty) || 0),
+      perQty: Math.round((Number(perQty) || 0) * 100) / 100,
       units,
-      totalQty: Math.round(Number(totalQty) || 0),
-      purchasingPrice: Math.round(Number(purchasingPrice) || 0),
-      sellingPrice: Math.round(Number(sellingPrice) || 0),
+      totalQty: Math.round((Number(totalQty) || 0) * 100) / 100,
+      purchasingPrice: Math.round((Number(purchasingPrice) || 0) * 100) / 100,
+      sellingPrice: Math.round((Number(sellingPrice) || 0) * 100) / 100,
       hsnCode,
-      gst: Math.round(Number(gst) || 0),
+      gst: Math.round((Number(gst) || 0) * 100) / 100,
     });
 
     const savedProduct = await product.save();
@@ -289,7 +289,7 @@ router.get("/group/:productGroupId", async (req, res) => {
 });
 
 router.post("/bulk-upload", upload.single("file"), async (req, res) => {
-  console.log("🔥 BULK UPLOAD HIT");
+  console.log("🔥 BULK UPLOAD HIT (v2 with decimals)");
 
   try {
     if (!req.file) {
@@ -471,13 +471,13 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         productCategories: categoryIds,
         warehouse: warehouseId, // NEW: Add warehouse ID
         name,
-        perQty: Math.round(perQty),
+        perQty: Math.round(perQty * 100) / 100,
         units,
-        totalQty: Math.round(totalQty),
-        purchasingPrice: Math.round(purchasingPrice),
-        sellingPrice: Math.round(sellingPrice),
+        totalQty: Math.round(totalQty * 100) / 100,
+        purchasingPrice: Math.round(purchasingPrice * 100) / 100,
+        sellingPrice: Math.round(sellingPrice * 100) / 100,
         hsnCode,
-        gst: Math.round(gst),
+        gst: Math.round(gst * 100) / 100,
       };
 
       if (existingProductId) {
@@ -590,14 +590,14 @@ router.put("/:id", async (req, res) => {
     if (name !== undefined) updateData.name = name;
     if (productGroup !== undefined) updateData.productGroup = productGroup || null;
     if (productCategories !== undefined) updateData.productCategories = validCategoryIds;
-    if (perQty !== undefined) updateData.perQty = Math.round(Number(perQty));
+    if (perQty !== undefined) updateData.perQty = Math.round(Number(perQty) * 100) / 100;
     if (units !== undefined) updateData.units = units;
-    if (totalQty !== undefined) updateData.totalQty = Math.round(Number(totalQty));
+    if (totalQty !== undefined) updateData.totalQty = Math.round(Number(totalQty) * 100) / 100;
     if (hsnCode !== undefined) updateData.hsnCode = hsnCode;
-    if (gst !== undefined) updateData.gst = Math.round(Number(gst));
-    if (purchasingPrice !== undefined) updateData.purchasingPrice = Math.round(Number(purchasingPrice));
-    if (sellingPrice !== undefined) updateData.sellingPrice = Math.round(Number(sellingPrice));
-    if (margin !== undefined) updateData.margin = Math.round(Number(margin));
+    if (gst !== undefined) updateData.gst = Math.round(Number(gst) * 100) / 100;
+    if (purchasingPrice !== undefined) updateData.purchasingPrice = Math.round(Number(purchasingPrice) * 100) / 100;
+    if (sellingPrice !== undefined) updateData.sellingPrice = Math.round(Number(sellingPrice) * 100) / 100;
+    if (margin !== undefined) updateData.margin = Math.round(Number(margin) * 100) / 100;
 
     console.log("📝 Updating product", id, "with data:", updateData);
 

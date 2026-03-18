@@ -71,20 +71,20 @@ productSchema.pre("save", function () {
   // If marginPercentage is explicitly set, use it to calculate sellingPrice
   if (this.marginPercentage !== undefined && this.marginPercentage > 0 && this.purchasingPrice !== undefined) {
     this.marginPercentage = Math.round(this.marginPercentage * 100) / 100;
-    this.sellingPrice = Math.round((this.purchasingPrice || 0) + ((this.purchasingPrice || 0) * this.marginPercentage / 100));
-    this.margin = Math.round(this.sellingPrice - (this.purchasingPrice || 0));
+    this.sellingPrice = Math.round(((this.purchasingPrice || 0) + ((this.purchasingPrice || 0) * this.marginPercentage / 100)) * 100) / 100;
+    this.margin = Math.round((this.sellingPrice - (this.purchasingPrice || 0)) * 100) / 100;
   }
   // If margin is explicitly set, use it to calculate sellingPrice
   else if (this.margin !== undefined && this.margin !== null && this.purchasingPrice !== undefined) {
-    this.margin = Math.round(this.margin);
-    this.sellingPrice = Math.round((this.purchasingPrice || 0) + this.margin);
+    this.margin = Math.round(this.margin * 100) / 100;
+    this.sellingPrice = Math.round(((this.purchasingPrice || 0) + this.margin) * 100) / 100;
     // Calculate marginPercentage from margin
     if (this.purchasingPrice > 0) {
       this.marginPercentage = Math.round((this.margin / this.purchasingPrice) * 100 * 100) / 100;
     }
   } else {
     // Otherwise, calculate margin from selling price
-    this.margin = Math.round((this.sellingPrice || 0) - (this.purchasingPrice || 0));
+    this.margin = Math.round(((this.sellingPrice || 0) - (this.purchasingPrice || 0)) * 100) / 100;
     if (this.purchasingPrice > 0) {
       this.marginPercentage = Math.round((this.margin / this.purchasingPrice) * 100 * 100) / 100;
     }
@@ -108,13 +108,13 @@ productSchema.pre("findByIdAndUpdate", async function (next) {
     const purchasingPrice = update.purchasingPrice !== undefined 
       ? update.purchasingPrice 
       : (await this.model.findById(this.getFilter()._id))?.purchasingPrice || 0;
-    update.sellingPrice = Math.round(purchasingPrice + (purchasingPrice * update.marginPercentage / 100));
-    update.margin = Math.round(update.sellingPrice - purchasingPrice);
+    update.sellingPrice = Math.round((purchasingPrice + (purchasingPrice * update.marginPercentage / 100)) * 100) / 100;
+    update.margin = Math.round((update.sellingPrice - purchasingPrice) * 100) / 100;
   }
   // If margin is being updated, calculate sellingPrice from it
   else if (update.margin !== undefined && update.margin !== null && update.purchasingPrice !== undefined) {
-    update.margin = Math.round(update.margin);
-    update.sellingPrice = Math.round(update.purchasingPrice + update.margin);
+    update.margin = Math.round(update.margin * 100) / 100;
+    update.sellingPrice = Math.round((update.purchasingPrice + update.margin) * 100) / 100;
     if (update.purchasingPrice > 0) {
       update.marginPercentage = Math.round((update.margin / update.purchasingPrice) * 100 * 100) / 100;
     }
@@ -125,7 +125,7 @@ productSchema.pre("findByIdAndUpdate", async function (next) {
       const currentProduct = await this.model.findById(this.getFilter()._id);
       if (currentProduct && currentProduct.margin !== undefined) {
         // Keep existing margin, calculate selling price: purchasingPrice + margin
-        update.sellingPrice = Math.round(update.purchasingPrice + currentProduct.margin);
+        update.sellingPrice = Math.round((update.purchasingPrice + currentProduct.margin) * 100) / 100;
       }
     } catch (err) {
       console.warn("Could not fetch current product for margin calculation:", err.message);
@@ -133,7 +133,7 @@ productSchema.pre("findByIdAndUpdate", async function (next) {
   }
   // If both sellingPrice and purchasingPrice changed, recalculate margin
   else if (update.sellingPrice !== undefined && update.purchasingPrice !== undefined) {
-    update.margin = Math.round(update.sellingPrice - update.purchasingPrice);
+    update.margin = Math.round((update.sellingPrice - update.purchasingPrice) * 100) / 100;
     if (update.purchasingPrice > 0) {
       update.marginPercentage = Math.round((update.margin / update.purchasingPrice) * 100 * 100) / 100;
     }
@@ -143,7 +143,7 @@ productSchema.pre("findByIdAndUpdate", async function (next) {
     try {
       const currentProduct = await this.model.findById(this.getFilter()._id);
       if (currentProduct && currentProduct.purchasingPrice !== undefined) {
-        update.margin = Math.round(update.sellingPrice - currentProduct.purchasingPrice);
+        update.margin = Math.round((update.sellingPrice - currentProduct.purchasingPrice) * 100) / 100;
         if (currentProduct.purchasingPrice > 0) {
           update.marginPercentage = Math.round((update.margin / currentProduct.purchasingPrice) * 100 * 100) / 100;
         }
