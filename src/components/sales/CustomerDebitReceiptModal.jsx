@@ -55,7 +55,7 @@ export default function CustomerDebitReceiptModal({ isOpen, onClose, onReceiptSu
     try {
       setLoading(true);
       const response = await fetch(
-        `${API_BASE}/customers?branchId=${currentBranch._id}`,
+        `${API_BASE}/customers?branchId=${currentBranch._id}&limit=9999`,
         {
           headers: { "Content-Type": "application/json" },
         }
@@ -63,9 +63,10 @@ export default function CustomerDebitReceiptModal({ isOpen, onClose, onReceiptSu
       const result = await response.json();
       
       // Show all customers, sorted by name
-      const allCustomers = (result?.data || [])
+      const allCustomers = (result?.data || result || [])
         .sort((a, b) => a.name.localeCompare(b.name));
       
+      console.log("Fetched customers:", allCustomers.length);
       setCustomers(allCustomers);
     } catch (error) {
       console.error("Error fetching customers:", error);

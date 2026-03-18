@@ -58,7 +58,7 @@ export default function VendorCreditPaymentModal({
     try {
       setLoading(true);
       const response = await fetch(
-        `${API_BASE}/vendors?branchId=${currentBranch._id}`,
+        `${API_BASE}/vendors?branchId=${currentBranch._id}&limit=9999`,
         {
           headers: { "Content-Type": "application/json" },
         }
@@ -66,9 +66,10 @@ export default function VendorCreditPaymentModal({
       const result = await response.json();
 
       // Show all vendors, sorted by name
-      const allVendors = (result?.data || [])
+      const allVendors = (result?.data || result || [])
         .sort((a, b) => a.name.localeCompare(b.name));
 
+      console.log("Fetched vendors:", allVendors.length);
       setVendors(allVendors);
     } catch (error) {
       console.error("Error fetching vendors:", error);
