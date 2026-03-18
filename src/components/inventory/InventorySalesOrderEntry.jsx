@@ -668,8 +668,8 @@ export default function InventorySalesOrderEntry({
     ? Math.ceil((roundedSubtotal * customerMargin) / (100 + customerMargin) * 100) / 100
     : 0;
 
-  const roundedGrandTotal = Math.ceil(grandTotal * 100) / 100;
-  const grandTotalWithMargin = Math.ceil((roundedGrandTotal + marginAmount) * 100) / 100;
+  const roundedGrandTotal = Math.round(grandTotal);
+  const grandTotalWithMargin = Math.round(roundedGrandTotal + marginAmount);
 
   const payload = {
     branchId,

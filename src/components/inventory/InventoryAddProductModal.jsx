@@ -107,7 +107,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     const basePriceNum = Number(purchasingPrice || 0);
     const marginNum = Number(marginPercent || 0);
     // Formula: Selling Price = Purchase Price + (Purchase Price × Margin% / 100)
-    return Math.round(basePriceNum + (basePriceNum * marginNum / 100));
+    return Math.round((basePriceNum + (basePriceNum * marginNum / 100)) * 100) / 100;
   };
 
   const calculateMargin = (purchasingPrice, sellingPrice) => {
@@ -126,7 +126,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     setProduct({
       ...product,
       margin: value,
-      sellingPrice: Math.round(newSellingPrice).toString(),
+      sellingPrice: newSellingPrice.toString(),
     });
   };
 
@@ -150,7 +150,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     setProduct({
       ...product,
       purchasingPrice: value,
-      sellingPrice: Math.round(newSellingPrice).toString(),
+      sellingPrice: newSellingPrice.toString(),
     });
   };
 
@@ -243,15 +243,15 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         typeof cat === "string" ? cat : cat._id || cat
       ),
       warehouse: product.warehouse || null,
-      perQty: Math.round(Number(product.perQty)),
+      perQty: Math.round(Number(product.perQty) * 100) / 100,
       units: product.units,
-      totalQty: Math.round(Number(product.totalQty || 0)),
+      totalQty: Math.round(Number(product.totalQty || 0) * 100) / 100,
       totalQtyUnit: product.totalQtyUnit || "",
-      purchasingPrice: Math.round(Number(product.purchasingPrice || 0)),
-      sellingPrice: Math.round(Number(product.sellingPrice || 0)),
-      margin: Math.round(Number(product.margin || 0)),
+      purchasingPrice: Math.round(Number(product.purchasingPrice || 0) * 100) / 100,
+      sellingPrice: Math.round(Number(product.sellingPrice || 0) * 100) / 100,
+      margin: Math.round(Number(product.margin || 0) * 100) / 100,
       hsnCode: product.hsnCode,
-      gst: Math.round(Number(product.gst || 0)),
+      gst: Math.round(Number(product.gst || 0) * 100) / 100,
     };
 
     try {
