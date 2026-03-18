@@ -65,8 +65,8 @@ export default function InventorySalesOrderEntry({
   const [transporterName, setTransporterName] = useState("");
   const [poItems, setPoItems] = useState([]);
   const [discountType, setDiscountType] = useState("PERCENT");
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [discountAmountInput, setDiscountAmountInput] = useState(0);
+  const [discountPercent, setDiscountPercent] = useState("");
+  const [discountAmountInput, setDiscountAmountInput] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
@@ -556,12 +556,14 @@ export default function InventorySalesOrderEntry({
     ]);
 
     // 8️⃣ RESET FORM
+    setProductGroup("");
+    setProductGroupSearch("");
     setSelectedItem("");
     setItemSearch("");
     setSellingPrice(0);
     setQty("");
-    setDiscountPercent(0);
-    setDiscountAmountInput(0);
+    setDiscountPercent("");
+    setDiscountAmountInput("");
     setGst(0);
     setIgst(false);
     setHsn("");
@@ -776,8 +778,8 @@ export default function InventorySalesOrderEntry({
     setQty("");
     setSellingPrice(0);
     setDiscountType("PERCENT");
-    setDiscountPercent(0);
-    setDiscountAmountInput(0);
+    setDiscountPercent("");
+    setDiscountAmountInput("");
     setGst(0);
     setCgst(0);
     setSgst(0);
@@ -1175,12 +1177,12 @@ export default function InventorySalesOrderEntry({
               {discountType === "PERCENT" ? (
                 <div>
                   <label className={labelClass}>Discount %</label>
-                  <input type="number" className={inputClass} value={discountPercent} min="0" max="100" onChange={(e) => setDiscountPercent(+e.target.value)} />
+                  <input type="number" className={inputClass} value={discountPercent} min="0" max="100" onChange={(e) => setDiscountPercent(e.target.value === "" ? "" : +e.target.value)} placeholder="0" />
                 </div>
               ) : (
                 <div>
                   <label className={labelClass}>Discount ₹</label>
-                  <input type="number" className={inputClass} value={discountAmountInput} min="0" onChange={(e) => setDiscountAmountInput(+e.target.value)} />
+                  <input type="number" className={inputClass} value={discountAmountInput} min="0" onChange={(e) => setDiscountAmountInput(e.target.value === "" ? "" : +e.target.value)} placeholder="0" />
                 </div>
               )}
             </div>
