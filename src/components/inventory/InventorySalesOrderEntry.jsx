@@ -98,6 +98,7 @@ export default function InventorySalesOrderEntry({
   // REFS FOR CLICK OUTSIDE
   const itemDropdownRef = useRef(null);
   const customerDropdownRef = useRef(null);
+  const productGroupDropdownRef = useRef(null);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -106,6 +107,9 @@ export default function InventorySalesOrderEntry({
       }
       if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target)) {
         setShowCustomerDropdown(false);
+      }
+      if (productGroupDropdownRef.current && !productGroupDropdownRef.current.contains(event.target)) {
+        setShowProductGroupDropdown(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -965,13 +969,15 @@ export default function InventorySalesOrderEntry({
             <div>
               <label className={labelClass}>Closing Balance</label>
               <input
-                className={`${inputClass} font-bold ${selectedCustomer?.debit && selectedCustomer.debit > 0
-                  ? "text-blue-600"
-                  : "text-gray-600"
-                  }`}
+                className={`${inputClass} font-bold ${
+                  selectedCustomer &&
+                  ((selectedCustomer.debit || 0) - (selectedCustomer.credit || 0)) < 0
+                    ? "text-red-500"
+                    : "text-blue-600"
+                }`}
                 value={
                   selectedCustomer
-                    ? `₹${(selectedCustomer.debit || 0).toFixed(2)}`
+                    ? `₹${((selectedCustomer.debit || 0) - (selectedCustomer.credit || 0)).toFixed(2)}`
                     : ""
                 }
                 readOnly
@@ -1041,17 +1047,48 @@ export default function InventorySalesOrderEntry({
             Add Item
           </h3>
 
-          {/* HIDDEN PRODUCT GROUP */}
-          <div className="hidden">
+          {/* PRODUCT GROUP */}
+          <div className="relative" ref={productGroupDropdownRef}>
+            <label className={labelClass}>Product Group</label>
             <input
               type="text"
+              placeholder="Type to search group..."
               value={productGroupSearch}
               onChange={(e) => {
                 setProductGroupSearch(e.target.value);
                 setShowProductGroupDropdown(true);
               }}
+              onFocus={() => setShowProductGroupDropdown(true)}
               className={inputClass}
             />
+            {showProductGroupDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto w-full md:w-80">
+                {productGroups
+                  .filter((g) =>
+                    g.name.toLowerCase().includes(productGroupSearch.toLowerCase())
+                  )
+                  .map((g) => (
+                    <div
+                      key={g._id}
+                      onClick={() => {
+                        setProductGroup(g._id);
+                        setProductGroupSearch(g.name);
+                        setShowProductGroupDropdown(false);
+                      }}
+                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
+                    >
+                      {g.name}
+                    </div>
+                  ))}
+                {productGroups.filter((g) =>
+                  g.name.toLowerCase().includes(productGroupSearch.toLowerCase())
+                ).length === 0 && (
+                  <div className="px-3 py-2 text-gray-500 text-sm">
+                    No group found
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4">
