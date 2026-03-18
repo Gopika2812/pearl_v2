@@ -38,6 +38,7 @@ import salesOwnerRoutes from "./routes/salesOwnerRoutes.js";
 import vendorRoutes from "./routes/vendorRoutes.js";
 import voucherTypeRoutes from "./routes/voucherTypeRoutes.js";
 import warehouseRoutes from "./routes/warehouseRoutes.js";
+import tallyJournalRoutes from "./routes/tallyJournalRoutes.js";
 
 
 const app = express();
@@ -91,6 +92,7 @@ app.use("/api/sales-men", salesManRoutes);
 app.use("/api/delivery-men", deliveryManRoutes);
 app.use("/api/commission-rules", commissionRuleRoutes);
 app.use("/api/reordering", reorderingRoutes);
+app.use("/api/tally-journals", tallyJournalRoutes);
 
 // MongoDB Connect
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
