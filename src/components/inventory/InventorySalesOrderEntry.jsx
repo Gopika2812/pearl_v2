@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { FaPlus, FaTrash } from "react-icons/fa";
 import { ToastContainer, toast } from "react-toastify";
 import { API_BASE } from "../../api";
+import InventoryAddVoucherTypeModal from "./InventoryAddVoucherTypeModal";
+import InventoryAddWarehouseModal from "./InventoryAddWarehouseModal";
+import InventoryAddCustomerModal from "./InventoryAddCustomerModal";
+import InventoryAddProductGroupModal from "./InventoryAddProductGroupModal";
+import InventoryAddSalesManModal from "./InventoryAddSalesManModal";
+import InventoryAddDeliveryManModal from "./InventoryAddDeliveryManModal";
+import InventoryAddProductModal from "./InventoryAddProductModal";
 
 const inputClass =
   "w-full border border-gray-200 rounded-md px-3 py-1.5 focus:ring-1 focus:ring-[#319bab] outline-none text-xs";
@@ -32,6 +39,26 @@ export default function InventorySalesOrderEntry({
   const [selectedItem, setSelectedItem] = useState("");
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [showVoucherModal, setShowVoucherModal] = useState(false);
+  const [localVoucherTypes, setLocalVoucherTypes] = useState(voucherTypes || []);
+
+  const [showWarehouseModal, setShowWarehouseModal] = useState(false);
+  const [localWarehouses, setLocalWarehouses] = useState(warehouses || []);
+
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [localCustomers, setLocalCustomers] = useState(customers || []);
+
+  const [showProductGroupModal, setShowProductGroupModal] = useState(false);
+  const [localProductGroups, setLocalProductGroups] = useState(productGroups || []);
+
+  const [showSalesManModal, setShowSalesManModal] = useState(false);
+  const [localSalesMen, setLocalSalesMen] = useState(salesMen || []);
+
+  const [showDeliveryManModal, setShowDeliveryManModal] = useState(false);
+  const [localDeliveryMen, setLocalDeliveryMen] = useState(deliveryMen || []);
+
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [localProducts, setLocalProducts] = useState(products || []);
 
   const [sellingPrice, setSellingPrice] = useState(0);
   const [qty, setQty] = useState("");
@@ -156,6 +183,35 @@ export default function InventorySalesOrderEntry({
     fetchPreview();
   }, [voucherType]);
 
+  // Keep local voucher types updated if props change
+  useEffect(() => {
+    setLocalVoucherTypes(voucherTypes || []);
+  }, [voucherTypes]);
+
+  useEffect(() => {
+    setLocalWarehouses(warehouses || []);
+  }, [warehouses]);
+
+  useEffect(() => {
+    setLocalCustomers(customers || []);
+  }, [customers]);
+
+  useEffect(() => {
+    setLocalProductGroups(productGroups || []);
+  }, [productGroups]);
+
+  useEffect(() => {
+    setLocalSalesMen(salesMen || []);
+  }, [salesMen]);
+
+  useEffect(() => {
+    setLocalDeliveryMen(deliveryMen || []);
+  }, [deliveryMen]);
+
+  useEffect(() => {
+    setLocalProducts(products || []);
+  }, [products]);
+
   // Load purchase order items for HSN fallback
   useEffect(() => {
     const loadPoItems = async () => {
@@ -252,7 +308,7 @@ export default function InventorySalesOrderEntry({
   // Fetch products by product group from API
   useEffect(() => {
     if (!productGroup) {
-      setFilteredProducts(products); // Use all products if no group
+      setFilteredProducts(localProducts); // Use all products if no group
       return;
     }
 
@@ -283,12 +339,12 @@ export default function InventorySalesOrderEntry({
     };
 
     fetchProductsByGroup();
-  }, [productGroup, products]);
+  }, [productGroup, localProducts]);
 
   // Fetch products for SAMPLE PRODUCTS section when sampleProductGroup changes
   useEffect(() => {
     if (!sampleProductGroup) {
-      setFilteredSampleProducts(products); // Use all products if no group
+      setFilteredSampleProducts(localProducts); // Use all products if no group
       return;
     }
 
@@ -886,10 +942,19 @@ export default function InventorySalesOrderEntry({
         {/* LEFT: VOUCHER, INVOICE, WAREHOUSE */}
         <div className="lg:col-span-3 bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-3 h-fit">
           <div>
-            <label className={labelClass}>Voucher Type</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Voucher Type</label>
+              <button 
+                onClick={() => setShowVoucherModal(true)}
+                className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                title="Create New Voucher Type"
+              >
+                <FaPlus size={12} />
+              </button>
+            </div>
             <select className={selectClass} value={voucherType} onChange={(e) => setVoucherType(e.target.value)}>
               <option value="">-- Select --</option>
-              {voucherTypes.map((v) => (
+              {localVoucherTypes.map((v) => (
                 <option key={v._id} value={v.name}>{v.name}</option>
               ))}
             </select>
@@ -901,10 +966,19 @@ export default function InventorySalesOrderEntry({
           </div>
 
           <div>
-            <label className={labelClass}>Warehouse</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Warehouse</label>
+              <button 
+                onClick={() => setShowWarehouseModal(true)}
+                className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                title="Create New Warehouse"
+              >
+                <FaPlus size={12} />
+              </button>
+            </div>
             <select className={selectClass} value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
               <option value="">-- Select --</option>
-              {warehouses.map((w) => (
+              {localWarehouses.map((w) => (
                 <option key={w._id} value={w.name}>{w.name}</option>
               ))}
             </select>
@@ -919,7 +993,16 @@ export default function InventorySalesOrderEntry({
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 relative" ref={customerDropdownRef}>
-              <label className={labelClass}>Customer</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Customer</label>
+                <button 
+                  onClick={() => setShowCustomerModal(true)}
+                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                  title="Create New Customer"
+                >
+                  <FaPlus size={12} />
+                </button>
+              </div>
               <input
                 type="text"
                 placeholder="Type to search or click to see all customers..."
@@ -1014,17 +1097,35 @@ export default function InventorySalesOrderEntry({
           </h3>
           <div className="grid grid-cols-1 gap-3">
             <div>
-              <label className={labelClass}>Sales Man</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Sales Man</label>
+                <button 
+                  onClick={() => setShowSalesManModal(true)}
+                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                  title="Register New Sales Man"
+                >
+                  <FaPlus size={12} />
+                </button>
+              </div>
               <select className={selectClass} value={salesMan} onChange={(e) => setSalesMan(e.target.value)}>
                 <option value="">-- Select Sales Man --</option>
-                {salesMen.map((sm) => (<option key={sm._id} value={sm._id}>{sm.name} ({sm.phone})</option>))}
+                {localSalesMen.map((sm) => (<option key={sm._id} value={sm._id}>{sm.name} ({sm.phone})</option>))}
               </select>
             </div>
             <div>
-              <label className={labelClass}>Delivery Man</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Delivery Man</label>
+                <button 
+                  onClick={() => setShowDeliveryManModal(true)}
+                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                  title="Register New Delivery Man"
+                >
+                  <FaPlus size={12} />
+                </button>
+              </div>
               <select className={selectClass} value={deliveryMan} onChange={(e) => setDeliveryMan(e.target.value)}>
                 <option value="">-- Select Delivery Man --</option>
-                {deliveryMen.map((dm) => (<option key={dm._id} value={dm._id}>{dm.name} ({dm.phone})</option>))}
+                {localDeliveryMen.map((dm) => (<option key={dm._id} value={dm._id}>{dm.name} ({dm.phone})</option>))}
               </select>
             </div>
             <div>
@@ -1051,7 +1152,16 @@ export default function InventorySalesOrderEntry({
 
           {/* PRODUCT GROUP */}
           <div className="relative" ref={productGroupDropdownRef}>
-            <label className={labelClass}>Product Group</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Product Group</label>
+              <button 
+                onClick={() => setShowProductGroupModal(true)}
+                className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                title="Create New Product Group"
+              >
+                <FaPlus size={12} />
+              </button>
+            </div>
             <input
               type="text"
               placeholder="Type to search group..."
@@ -1093,9 +1203,19 @@ export default function InventorySalesOrderEntry({
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1">
+            {/* ITEM NAME */}
             <div className="relative" ref={itemDropdownRef}>
-              <label className={labelClass}>Item Name</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Select Item</label>
+                <button
+                  onClick={() => setShowProductModal(true)}
+                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                  title="Create New Item"
+                >
+                  <FaPlus size={12} />
+                </button>
+              </div>
               <input
                 type="text"
                 placeholder="Type item name..."
@@ -1542,7 +1662,6 @@ export default function InventorySalesOrderEntry({
           </div>
         )}
 
-        {/* Extra Expenses Modal */}
         {showExtraExpensesModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
@@ -1595,6 +1714,97 @@ export default function InventorySalesOrderEntry({
             </div>
           </div>
         )}
+
+        <InventoryAddVoucherTypeModal
+          isOpen={showVoucherModal}
+          onClose={() => setShowVoucherModal(false)}
+          branchId={branchId}
+          onSave={(newType) => {
+            const addedType = newType.voucher || newType; // Backend returns varying structures sometimes
+            setLocalVoucherTypes(prev => [...prev, addedType]);
+            setVoucherType(addedType.name);
+            setShowVoucherModal(false);
+          }}
+        />
+
+        <InventoryAddWarehouseModal
+          isOpen={showWarehouseModal}
+          onClose={() => setShowWarehouseModal(false)}
+          branchId={branchId}
+          onSave={(newWarehouse) => {
+            setLocalWarehouses(prev => [...prev, newWarehouse]);
+            setWarehouse(newWarehouse.name);
+            setShowWarehouseModal(false);
+          }}
+        />
+
+        <InventoryAddCustomerModal
+          isOpen={showCustomerModal}
+          onClose={() => setShowCustomerModal(false)}
+          branchId={branchId}
+          salesOwners={salesOwners}
+          customerCategories={customerCategories}
+          customerGroups={customerGroups}
+          onSave={(newCustomer) => {
+            // Because the frontend expects the customer object to be in `customers` or `fetchedCustomers` for proper display
+            setLocalCustomers(prev => [...prev, newCustomer]);
+            setFetchedCustomers(prev => [...prev, newCustomer]);
+            setCustomerSearch(newCustomer.name);
+            handleCustomerSelect(newCustomer._id, [newCustomer]); 
+            setShowCustomerModal(false);
+          }}
+        />
+
+        <InventoryAddProductGroupModal
+          isOpen={showProductGroupModal}
+          onClose={() => setShowProductGroupModal(false)}
+          branchId={branchId}
+          onSave={(newGroup) => {
+            setLocalProductGroups(prev => [...prev, newGroup]);
+            setProductGroup(newGroup._id);
+            setProductGroupSearch(newGroup.name);
+            setShowProductGroupModal(false);
+            setShowProductGroupDropdown(false);
+          }}
+        />
+
+        <InventoryAddSalesManModal
+          isOpen={showSalesManModal}
+          onClose={() => setShowSalesManModal(false)}
+          branchId={branchId}
+          onSave={(newSalesMan) => {
+            setLocalSalesMen(prev => [...prev, newSalesMan.data || newSalesMan]);
+            setSalesMan((newSalesMan.data || newSalesMan)._id);
+            setShowSalesManModal(false);
+          }}
+        />
+
+        <InventoryAddDeliveryManModal
+          isOpen={showDeliveryManModal}
+          onClose={() => setShowDeliveryManModal(false)}
+          branchId={branchId}
+          onSave={(newDeliveryMan) => {
+            setLocalDeliveryMen(prev => [...prev, newDeliveryMan.data || newDeliveryMan]);
+            setDeliveryMan((newDeliveryMan.data || newDeliveryMan)._id);
+            setShowDeliveryManModal(false);
+          }}
+        />
+
+        <InventoryAddProductModal
+          isOpen={showProductModal}
+          onClose={() => setShowProductModal(false)}
+          branchId={branchId}
+          productGroups={localProductGroups}
+          warehouses={localWarehouses}
+          onSave={(newProduct) => {
+            setLocalProducts(prev => [...prev, newProduct.data || newProduct]);
+            setFilteredProducts(prev => [...prev, newProduct.data || newProduct]);
+            setSelectedItem((newProduct.data || newProduct)._id);
+            setItemSearch((newProduct.data || newProduct).name);
+            handleProductSelect(newProduct.data || newProduct);
+            setShowProductModal(false);
+          }}
+        />
       </div>
 
       );
