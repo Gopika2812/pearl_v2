@@ -5,7 +5,7 @@ import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 
 const InventorySalesOrder = () => {
-  const { voucherTypes, productGroups, productCategories, products, warehouses, customers, salesMen, deliveryMen, salesOwners, customerGroups } = useInventory();
+  const { voucherTypes, productGroups, productCategories, products, warehouses, customers, salesMen, deliveryMen, salesOwners, customerGroups, customerCategories } = useInventory();
   const { currentBranch } = useBranch();
 
   const [items, setItems] = useState([]);
@@ -33,6 +33,7 @@ const InventorySalesOrder = () => {
             deliveryMen={deliveryMen}
             salesOwners={salesOwners}
             customerGroups={customerGroups}
+            customerCategories={customerCategories}
           />
         </div>
       </div>

@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FaPlus, FaTrash } from "react-icons/fa";
 import { ToastContainer, toast } from "react-toastify";
 import { API_BASE } from "../../api";
+import InventoryAddCustomerModal from "./InventoryAddCustomerModal";
+import InventoryAddDeliveryManModal from "./InventoryAddDeliveryManModal";
+import InventoryAddProductGroupModal from "./InventoryAddProductGroupModal";
+import InventoryAddProductModal from "./InventoryAddProductModal";
+import InventoryAddSalesManModal from "./InventoryAddSalesManModal";
 import InventoryAddVoucherTypeModal from "./InventoryAddVoucherTypeModal";
 import InventoryAddWarehouseModal from "./InventoryAddWarehouseModal";
-import InventoryAddCustomerModal from "./InventoryAddCustomerModal";
-import InventoryAddProductGroupModal from "./InventoryAddProductGroupModal";
-import InventoryAddSalesManModal from "./InventoryAddSalesManModal";
-import InventoryAddDeliveryManModal from "./InventoryAddDeliveryManModal";
-import InventoryAddProductModal from "./InventoryAddProductModal";
 
 const inputClass =
   "w-full border border-gray-200 rounded-md px-3 py-1.5 focus:ring-1 focus:ring-[#319bab] outline-none text-xs";
@@ -28,6 +28,7 @@ export default function InventorySalesOrderEntry({
   deliveryMen = [],
   salesOwners = [],
   customerGroups = [],
+  customerCategories = [],
   branchId = ""
 }) {
   const [voucherType, setVoucherType] = useState("");
