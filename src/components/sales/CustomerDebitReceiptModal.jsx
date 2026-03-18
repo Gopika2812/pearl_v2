@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { FaTimes } from "react-icons/fa";
+import { useEffect, useRef, useState } from "react";
+import { FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { useBranch } from "../../context/BranchContext";
 
@@ -9,12 +9,15 @@ export default function CustomerDebitReceiptModal({ isOpen, onClose, onReceiptSu
   const { currentBranch } = useBranch();
   const [customers, setCustomers] = useState([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
   const [debitAmount, setDebitAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const dropdownRef = useRef(null);
 
   // Fetch customers when modal opens
   useEffect(() => {
@@ -27,12 +30,26 @@ export default function CustomerDebitReceiptModal({ isOpen, onClose, onReceiptSu
   useEffect(() => {
     if (isOpen) {
       setSelectedCustomerId("");
+      setSearchQuery("");
+      setShowDropdown(false);
       setDebitAmount("");
       setPaymentMethod("CASH");
       setReference("");
       setNotes("");
     }
   }, [isOpen]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const fetchCustomers = async () => {
     try {
@@ -45,12 +62,11 @@ export default function CustomerDebitReceiptModal({ isOpen, onClose, onReceiptSu
       );
       const result = await response.json();
       
-      // Filter: customers with debit balance > 0
-      const customersWithDebit = (result?.data || [])
-        .filter((c) => (c.debit || 0) > 0)
-        .sort((a, b) => (b.debit || 0) - (a.debit || 0));
+      // Show all customers, sorted by name
+      const allCustomers = (result?.data || [])
+        .sort((a, b) => a.name.localeCompare(b.name));
       
-      setCustomers(customersWithDebit);
+      setCustomers(allCustomers);
     } catch (error) {
       console.error("Error fetching customers:", error);
       toast.error("Failed to load customers");
@@ -159,24 +175,63 @@ export default function CustomerDebitReceiptModal({ isOpen, onClose, onReceiptSu
               <p className="text-gray-600 text-sm">Loading customers...</p>
             ) : customers.length === 0 ? (
               <p className="text-amber-600 text-sm">
-                No customers with debit balance found
+                No customers found
               </p>
             ) : (
-              <select
-                value={selectedCustomerId}
-                onChange={(e) => {
-                  setSelectedCustomerId(e.target.value);
-                  setDebitAmount("");
-                }}
-                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">-- Select a customer --</option>
-                {customers.map((customer) => (
-                  <option key={customer._id} value={customer._id}>
-                    {customer.name} (Debit: ₹{(customer.debit || 0).toLocaleString()})
-                  </option>
-                ))}
-              </select>
+              <div ref={dropdownRef} className="relative">
+                <div className="relative">
+                  <FaSearch className="absolute left-4 top-3 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search customer by name..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setShowDropdown(true);
+                    }}
+                    onFocus={() => setShowDropdown(true)}
+                    className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                {/* DROPDOWN LIST */}
+                {showDropdown && (
+                  <div className="absolute top-full left-0 right-0 bg-white border-2 border-gray-300 border-t-0 rounded-b-lg shadow-lg max-h-64 overflow-y-auto z-50">
+                    {customers
+                      .filter((c) =>
+                        c.name.toLowerCase().includes(searchQuery.toLowerCase())
+                      )
+                      .map((customer) => (
+                        <div
+                          key={customer._id}
+                          onClick={() => {
+                            setSelectedCustomerId(customer._id);
+                            setSearchQuery(customer.name);
+                            setShowDropdown(false);
+                            setDebitAmount("");
+                          }}
+                          className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b last:border-b-0 transition"
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="font-semibold text-gray-800">
+                              {customer.name}
+                            </span>
+                            <span className="text-xs font-bold text-orange-600">
+                              Debit: ₹{(customer.debit || 0).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    {customers.filter((c) =>
+                      c.name.toLowerCase().includes(searchQuery.toLowerCase())
+                    ).length === 0 && (
+                      <div className="px-4 py-3 text-center text-gray-500 text-sm">
+                        No customers found
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { FaTimes } from "react-icons/fa";
+import { useEffect, useRef, useState } from "react";
+import { FaSearch, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -12,12 +12,15 @@ export default function VendorCreditPaymentModal({
   const { currentBranch } = useBranch();
   const [vendors, setVendors] = useState([]);
   const [selectedVendorId, setSelectedVendorId] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
   const [creditAmount, setCreditAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const dropdownRef = useRef(null);
 
   // Fetch vendors when modal opens
   useEffect(() => {
@@ -30,12 +33,26 @@ export default function VendorCreditPaymentModal({
   useEffect(() => {
     if (isOpen) {
       setSelectedVendorId("");
+      setSearchQuery("");
+      setShowDropdown(false);
       setCreditAmount("");
       setPaymentMethod("CASH");
       setReference("");
       setNotes("");
     }
   }, [isOpen]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const fetchVendors = async () => {
     try {
@@ -48,12 +65,11 @@ export default function VendorCreditPaymentModal({
       );
       const result = await response.json();
 
-      // Filter: vendors with credit balance > 0
-      const vendorsWithCredit = (result?.data || [])
-        .filter((v) => (v.credit || 0) > 0)
-        .sort((a, b) => (b.credit || 0) - (a.credit || 0));
+      // Show all vendors, sorted by name
+      const allVendors = (result?.data || [])
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-      setVendors(vendorsWithCredit);
+      setVendors(allVendors);
     } catch (error) {
       console.error("Error fetching vendors:", error);
       toast.error("Failed to load vendors");
@@ -160,24 +176,63 @@ export default function VendorCreditPaymentModal({
               <p className="text-gray-600 text-sm">Loading vendors...</p>
             ) : vendors.length === 0 ? (
               <p className="text-amber-600 text-sm">
-                No vendors with credit balance found
+                No vendors found
               </p>
             ) : (
-              <select
-                value={selectedVendorId}
-                onChange={(e) => {
-                  setSelectedVendorId(e.target.value);
-                  setCreditAmount("");
-                }}
-                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              >
-                <option value="">-- Select a vendor --</option>
-                {vendors.map((vendor) => (
-                  <option key={vendor._id} value={vendor._id}>
-                    {vendor.name} (Credit: ₹{(vendor.credit || 0).toLocaleString()})
-                  </option>
-                ))}
-              </select>
+              <div ref={dropdownRef} className="relative">
+                <div className="relative">
+                  <FaSearch className="absolute left-4 top-3 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search vendor by name..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setShowDropdown(true);
+                    }}
+                    onFocus={() => setShowDropdown(true)}
+                    className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+
+                {/* DROPDOWN LIST */}
+                {showDropdown && (
+                  <div className="absolute top-full left-0 right-0 bg-white border-2 border-gray-300 border-t-0 rounded-b-lg shadow-lg max-h-64 overflow-y-auto z-50">
+                    {vendors
+                      .filter((v) =>
+                        v.name.toLowerCase().includes(searchQuery.toLowerCase())
+                      )
+                      .map((vendor) => (
+                        <div
+                          key={vendor._id}
+                          onClick={() => {
+                            setSelectedVendorId(vendor._id);
+                            setSearchQuery(vendor.name);
+                            setShowDropdown(false);
+                            setCreditAmount("");
+                          }}
+                          className="px-4 py-3 hover:bg-green-50 cursor-pointer border-b last:border-b-0 transition"
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="font-semibold text-gray-800">
+                              {vendor.name}
+                            </span>
+                            <span className="text-xs font-bold text-orange-600">
+                              Credit: ₹{(vendor.credit || 0).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    {vendors.filter((v) =>
+                      v.name.toLowerCase().includes(searchQuery.toLowerCase())
+                    ).length === 0 && (
+                      <div className="px-4 py-3 text-center text-gray-500 text-sm">
+                        No vendors found
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
