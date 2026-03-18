@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { FaChevronDown, FaChevronUp, FaFileAlt } from "react-icons/fa";
+import { FaChevronDown, FaChevronUp, FaFileAlt, FaPlus } from "react-icons/fa";
 import { toast } from "react-toastify";
+import CustomerDebitReceiptModal from "../../components/sales/CustomerDebitReceiptModal";
 import ReceiptModal from "../../components/sales/ReceiptModal";
 import { useBranch } from "../../context/BranchContext";
 
@@ -12,6 +13,7 @@ export default function BranchReceipt() {
   const [receiptData, setReceiptData] = useState({});
   const [loading, setLoading] = useState(true);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [showDebitReceiptModal, setShowDebitReceiptModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [expandedInvoices, setExpandedInvoices] = useState({});
 
@@ -121,12 +123,21 @@ export default function BranchReceipt() {
       <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4">
         {/* HEADER */}
         <div className="bg-gradient-to-r from-cyan-600 to-cyan-700 text-white rounded-2xl shadow-lg p-8 mb-8">
-          <div className="flex items-center gap-4">
-            <FaFileAlt className="text-5xl opacity-80" />
-            <div>
-              <h1 className="text-4xl font-bold">Receipt Management</h1>
-              <p className="text-cyan-100 mt-2">Receive payments from customers</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <FaFileAlt className="text-5xl opacity-80" />
+              <div>
+                <h1 className="text-4xl font-bold">Receipt Management</h1>
+                <p className="text-cyan-100 mt-2">Receive payments from customers</p>
+              </div>
             </div>
+            <button
+              onClick={() => setShowDebitReceiptModal(true)}
+              className="flex items-center gap-2 bg-white text-cyan-700 px-6 py-3 rounded-lg font-bold hover:bg-gray-100 transition shadow-lg"
+              title="Create Customer Debit Receipt"
+            >
+              <FaPlus /> Debit Receipt
+            </button>
           </div>
         </div>
 
@@ -371,6 +382,16 @@ export default function BranchReceipt() {
         isOpen={showReceiptModal}
         onClose={() => setShowReceiptModal(false)}
         onReceiptSuccess={handleReceiptSuccess}
+      />
+
+      {/* CUSTOMER DEBIT RECEIPT MODAL */}
+      <CustomerDebitReceiptModal
+        isOpen={showDebitReceiptModal}
+        onClose={() => setShowDebitReceiptModal(false)}
+        onReceiptSuccess={() => {
+          setShowDebitReceiptModal(false);
+          fetchSalesInvoices();
+        }}
       />
     </div>
   );

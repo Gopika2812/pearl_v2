@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { FaChevronDown, FaChevronUp, FaCreditCard, FaDollarSign, FaSyncAlt } from "react-icons/fa";
+import { FaChevronDown, FaChevronUp, FaCreditCard, FaDollarSign, FaPlus, FaSyncAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import POPaymentModal from "../../components/inventory/POPaymentModal";
+import VendorCreditPaymentModal from "../../components/inventory/VendorCreditPaymentModal";
 import { useBranch } from "../../context/BranchContext";
 
 export default function BranchPOPayment() {
@@ -10,6 +11,7 @@ export default function BranchPOPayment() {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showVendorPaymentModal, setShowVendorPaymentModal] = useState(false);
   const [selectedPO, setSelectedPO] = useState(null);
   const [paymentData, setPaymentData] = useState({});
   const [expandedPOs, setExpandedPOs] = useState({});
@@ -116,6 +118,13 @@ export default function BranchPOPayment() {
               <FaDollarSign className="text-5xl opacity-80" />
               <h1 className="text-4xl font-bold">PO Payment 💳</h1>
             </div>
+            <button
+              onClick={() => setShowVendorPaymentModal(true)}
+              className="flex items-center gap-2 bg-white text-[#257f87] px-6 py-3 rounded-lg font-bold hover:bg-gray-100 transition shadow-lg"
+              title="Record Vendor Payment"
+            >
+              <FaPlus /> Vendor Payment
+            </button>
           </div>
         </div>
 
@@ -386,6 +395,16 @@ export default function BranchPOPayment() {
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         onPaymentSuccess={handlePaymentSuccess}
+      />
+
+      {/* VENDOR CREDIT PAYMENT MODAL */}
+      <VendorCreditPaymentModal
+        isOpen={showVendorPaymentModal}
+        onClose={() => setShowVendorPaymentModal(false)}
+        onPaymentSuccess={() => {
+          setShowVendorPaymentModal(false);
+          fetchPurchaseOrders();
+        }}
       />
     </div>
   );

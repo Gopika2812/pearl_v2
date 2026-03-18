@@ -84,7 +84,8 @@ export default function ReceiptModal({ invoice, isOpen, onClose, onReceiptSucces
       const response = await fetch(`${API_BASE}/customers?branchId=${branchId}`, {
         headers: { "Content-Type": "application/json" },
       });
-      const customers = await response.json();
+      const result = await response.json();
+      const customers = result?.data || [];
 
       // Find customer by name
       const customer = customers.find(
