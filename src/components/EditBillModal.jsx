@@ -33,11 +33,32 @@ const EditBillModal = ({ order, onClose, onSave }) => {
   // Fetch available products
   const fetchProducts = async () => {
     try {
-      const res = await fetch(`${API_BASE}/products`);
+      const branchId = order?.branchId;
+      if (!branchId) {
+        console.warn("⚠️ branchId not found in order");
+        toast.warning("Unable to load products - branch not set");
+        return;
+      }
+
+      const url = `${API_BASE}/products?branchId=${branchId}&limit=10000`;
+      console.log(`📦 Fetching products from: ${url}`);
+      
+      const res = await fetch(url);
+      
+      if (!res.ok) {
+        const errorData = await res.text();
+        console.error(`❌ Product fetch failed with status ${res.status}:`, errorData);
+        throw new Error(`Server error: ${res.status}`);
+      }
+      
       const data = await res.json();
-      setProducts(Array.isArray(data) ? data : data.products || []);
+      const productList = data.data || data.products || (Array.isArray(data) ? data : []);
+      console.log(`✅ Fetched ${productList.length} products`);
+      setProducts(productList);
     } catch (err) {
-      console.error("Error fetching products:", err);
+      console.error("❌ Error fetching products:", err);
+      toast.error("Failed to load products. Check console for details.");
+      setProducts([]);
     }
   };
 

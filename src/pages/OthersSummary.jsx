@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import {
-  FaCog,
-  FaEdit,
-  FaFileInvoice,
-  FaFilter,
-  FaLayerGroup,
-  FaPlus,
-  FaShoppingCart,
-  FaSync,
-  FaTrash,
-  FaTruck,
-  FaUser,
-  FaWarehouse
+    FaCog,
+    FaEdit,
+    FaFileInvoice,
+    FaFilter,
+    FaLayerGroup,
+    FaPlus,
+    FaShoppingCart,
+    FaSync,
+    FaTrash,
+    FaTruck,
+    FaUser,
+    FaWarehouse
 } from "react-icons/fa";
 import { API_BASE } from "../api";
 import CreditNoteModal from "../components/inventory/CreditNoteModal";
@@ -856,20 +856,33 @@ const OthersSummary = () => {
                             <button
                               onClick={async () => {
                                 try {
-                                  // Fetch full sales order with items
-                                  const response = await fetch(`${API_BASE}/sales-orders/${item._id}`);
-                                  const result = await response.json();
-                                  if (result.success) {
-                                    setSelectedSalesOrderForCredit(result.data);
-                                    setShowCreditNoteModal(true);
-                                  } else if (result.data) {
-                                    // If API returns data directly without success flag
-                                    setSelectedSalesOrderForCredit(result.data);
-                                    setShowCreditNoteModal(true);
+                                  if (!item._id) {
+                                    alert("Sales order ID is missing");
+                                    return;
                                   }
+                                  
+                                  const url = `${API_BASE}/sales-orders/${item._id}`;
+                                  console.log(`📋 Fetching from: ${url}`);
+                                  
+                                  const response = await fetch(url);
+                                  
+                                  if (!response.ok) {
+                                    console.error(`❌ API returned ${response.status}`);  
+                                    throw new Error(`Server error: ${response.status}`);
+                                  }
+                                  
+                                  const result = await response.json();
+                                  const salesOrder = result.success ? result.data : result.data || result;
+                                  
+                                  if (!salesOrder) {
+                                    throw new Error("No sales order data received");
+                                  }
+                                  
+                                  setSelectedSalesOrderForCredit(salesOrder);
+                                  setShowCreditNoteModal(true);
                                 } catch (error) {
-                                  console.error("Failed to fetch sales order:", error);
-                                  alert("Failed to load sales order details");
+                                  console.error("❌ Failed to fetch sales order:", error);
+                                  alert(`Failed to load sales order: ${error.message}`);
                                 }
                               }}
                               className="bg-blue-500 text-white px-2 md:px-3 py-1 md:py-2 rounded-lg hover:bg-blue-600 transition inline-flex items-center gap-1 text-xs md:text-sm font-semibold"
@@ -880,19 +893,33 @@ const OthersSummary = () => {
                             <button
                               onClick={async () => {
                                 try {
-                                  // Fetch full sales order details
-                                  const response = await fetch(`${API_BASE}/sales-orders/${item._id}`);
-                                  const result = await response.json();
-                                  if (result.success) {
-                                    setSelectedSalesOrderForReceipt(result.data);
-                                    setShowSalesReceiptModal(true);
-                                  } else if (result.data) {
-                                    setSelectedSalesOrderForReceipt(result.data);
-                                    setShowSalesReceiptModal(true);
+                                  if (!item._id) {
+                                    alert("Sales order ID is missing");
+                                    return;
                                   }
+                                  
+                                  const url = `${API_BASE}/sales-orders/${item._id}`;
+                                  console.log(`💰 Fetching from: ${url}`);
+                                  
+                                  const response = await fetch(url);
+                                  
+                                  if (!response.ok) {
+                                    console.error(`❌ API returned ${response.status}`);
+                                    throw new Error(`Server error: ${response.status}`);
+                                  }
+                                  
+                                  const result = await response.json();
+                                  const salesOrder = result.success ? result.data : result.data || result;
+                                  
+                                  if (!salesOrder) {
+                                    throw new Error("No sales order data received");
+                                  }
+                                  
+                                  setSelectedSalesOrderForReceipt(salesOrder);
+                                  setShowSalesReceiptModal(true);
                                 } catch (error) {
-                                  console.error("Failed to fetch sales order:", error);
-                                  alert("Failed to load sales order details");
+                                  console.error("❌ Failed to fetch sales order:", error);
+                                  alert(`Failed to load sales order: ${error.message}`);
                                 }
                               }}
                               className="bg-green-500 text-white px-2 md:px-3 py-1 md:py-2 rounded-lg hover:bg-green-600 transition inline-flex items-center gap-1 text-xs md:text-sm font-semibold"
