@@ -14,6 +14,15 @@ const BranchInvoicedOrders = () => {
   const [expandedOrders, setExpandedOrders] = useState({});
   const [invoicesByOrder, setInvoicesByOrder] = useState({}); // New: store invoices for each SO
 
+  // Filter states
+  const [filterVoucherType, setFilterVoucherType] = useState("");
+  const [filterInvoiceId, setFilterInvoiceId] = useState("");
+  const [filterCustomerName, setFilterCustomerName] = useState("");
+  const [filterFromDate, setFilterFromDate] = useState("");
+  const [filterToDate, setFilterToDate] = useState("");
+  const [filterFromTime, setFilterFromTime] = useState("");
+  const [filterToTime, setFilterToTime] = useState("");
+
   // Fetch sales orders for current branch
   const fetchSalesOrders = async () => {
     // Get branch ID from context
@@ -79,6 +88,29 @@ const BranchInvoicedOrders = () => {
     }
   };
 
+  // Filter sales orders based on criteria
+  const filteredSalesOrders = salesOrders.filter((order) => {
+    const matchesVoucherType = filterVoucherType === "" || 
+      (order.voucherType && order.voucherType.toLowerCase().includes(filterVoucherType.toLowerCase()));
+    
+    const matchesInvoiceId = filterInvoiceId === "" || 
+      (order.invoiceId && order.invoiceId.toLowerCase().includes(filterInvoiceId.toLowerCase()));
+    
+    const matchesCustomerName = filterCustomerName === "" || 
+      (order.customer?.name && order.customer.name.toLowerCase().includes(filterCustomerName.toLowerCase()));
+    
+    const orderDate = new Date(order.createdAt);
+    const orderDateStr = orderDate.toISOString().split('T')[0];
+    const orderTimeStr = orderDate.toTimeString().slice(0, 5);
+    
+    const matchesFromDate = filterFromDate === "" || orderDateStr >= filterFromDate;
+    const matchesToDate = filterToDate === "" || orderDateStr <= filterToDate;
+    const matchesFromTime = filterFromTime === "" || filterFromDate === "" || orderDateStr > filterFromDate || (orderDateStr === filterFromDate && orderTimeStr >= filterFromTime);
+    const matchesToTime = filterToTime === "" || filterToDate === "" || orderDateStr < filterToDate || (orderDateStr === filterToDate && orderTimeStr <= filterToTime);
+
+    return matchesVoucherType && matchesInvoiceId && matchesCustomerName && matchesFromDate && matchesToDate && matchesFromTime && matchesToTime;
+  });
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <ToastContainer
@@ -118,14 +150,83 @@ const BranchInvoicedOrders = () => {
           </div>
         </div>
 
+        {/* FILTERS */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">Filters</h3>
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+            
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Invoice ID</label>
+              <input
+                type="text"
+                placeholder="Search invoice ID..."
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-1 focus:ring-[#319bab] outline-none text-sm"
+                value={filterInvoiceId}
+                onChange={(e) => setFilterInvoiceId(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Customer Name</label>
+              <input
+                type="text"
+                placeholder="Search customer..."
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-1 focus:ring-[#319bab] outline-none text-sm"
+                value={filterCustomerName}
+                onChange={(e) => setFilterCustomerName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">From Date</label>
+              <input
+                type="date"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-1 focus:ring-[#319bab] outline-none text-sm"
+                value={filterFromDate}
+                onChange={(e) => setFilterFromDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">From Time</label>
+              <input
+                type="time"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-1 focus:ring-[#319bab] outline-none text-sm"
+                value={filterFromTime}
+                onChange={(e) => setFilterFromTime(e.target.value)}
+                disabled={!filterFromDate}
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">To Date</label>
+              <input
+                type="date"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-1 focus:ring-[#319bab] outline-none text-sm"
+                value={filterToDate}
+                onChange={(e) => setFilterToDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">To Time</label>
+              <input
+                type="time"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-1 focus:ring-[#319bab] outline-none text-sm"
+                value={filterToTime}
+                onChange={(e) => setFilterToTime(e.target.value)}
+                disabled={!filterToDate}
+              />
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-gray-500">
+            Showing {filteredSalesOrders.length} of {salesOrders.length} orders
+          </div>
+        </div>
+
         {/* SALES ORDERS TABLE */}
         {loading ? (
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
             <div className="animate-pulse">Loading sales orders...</div>
           </div>
-        ) : salesOrders.length === 0 ? (
+        ) : filteredSalesOrders.length === 0 ? (
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
-            <p className="text-gray-500">No sales orders found</p>
+            <p className="text-gray-500">{salesOrders.length === 0 ? "No sales orders found" : "No orders match your filters"}</p>
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -143,9 +244,10 @@ const BranchInvoicedOrders = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {salesOrders.map((order) => (
+                  {filteredSalesOrders.map((order) => (
                     <React.Fragment key={order._id}>
                       <tr className="hover:bg-gray-50 transition">
+                       
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <button

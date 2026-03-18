@@ -16,6 +16,13 @@ export default function InventorySalesInvoice() {
   const [editMode, setEditMode] = useState({});
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
 
+  // Filter states
+  const [filterVoucherType, setFilterVoucherType] = useState("");
+  const [filterInvoiceId, setFilterInvoiceId] = useState("");
+  const [filterCustomerName, setFilterCustomerName] = useState("");
+  const [filterFromDate, setFilterFromDate] = useState("");
+  const [filterToDate, setFilterToDate] = useState("");
+
   // Fetch all sales orders
   useEffect(() => {
     fetchSalesOrders();
@@ -127,6 +134,24 @@ export default function InventorySalesInvoice() {
       setGeneratingInvoice(false);
     }
   };
+
+  // Filter sales orders based on criteria
+  const filteredSalesOrders = salesOrders.filter((order) => {
+    const matchesVoucherType = filterVoucherType === "" || 
+      (order.voucherType && order.voucherType.toLowerCase().includes(filterVoucherType.toLowerCase()));
+    
+    const matchesInvoiceId = filterInvoiceId === "" || 
+      (order.invoiceId && order.invoiceId.toLowerCase().includes(filterInvoiceId.toLowerCase()));
+    
+    const matchesCustomerName = filterCustomerName === "" || 
+      (order.customer.name && order.customer.name.toLowerCase().includes(filterCustomerName.toLowerCase()));
+    
+    const orderDate = new Date(order.createdAt);
+    const matchesFromDate = filterFromDate === "" || orderDate >= new Date(filterFromDate);
+    const matchesToDate = filterToDate === "" || orderDate <= new Date(filterToDate + "T23:59:59");
+
+    return matchesVoucherType && matchesInvoiceId && matchesCustomerName && matchesFromDate && matchesToDate;
+  });
 
   const { subtotal, totalTax, grandTotal } = selectedOrder && invoiceItems.length > 0 
     ? calculateTotals() 
@@ -300,16 +325,60 @@ export default function InventorySalesInvoice() {
       </div>
 
       {/* FILTERS */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200">
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" className="w-4 h-4" defaultChecked />
-            <span className="text-sm font-semibold text-gray-700">Pending Orders</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" className="w-4 h-4" />
-            <span className="text-sm font-semibold text-gray-700">Invoiced</span>
-          </label>
+      <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+        <h3 className="text-lg font-bold text-gray-800 mb-4">Filters</h3>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div>
+            <label className={labelClass}>Voucher Type</label>
+            <input
+              type="text"
+              placeholder="Search voucher type..."
+              className={inputClass}
+              value={filterVoucherType}
+              onChange={(e) => setFilterVoucherType(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Invoice ID</label>
+            <input
+              type="text"
+              placeholder="Search invoice ID..."
+              className={inputClass}
+              value={filterInvoiceId}
+              onChange={(e) => setFilterInvoiceId(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Customer Name</label>
+            <input
+              type="text"
+              placeholder="Search customer..."
+              className={inputClass}
+              value={filterCustomerName}
+              onChange={(e) => setFilterCustomerName(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>From Date</label>
+            <input
+              type="date"
+              className={inputClass}
+              value={filterFromDate}
+              onChange={(e) => setFilterFromDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>To Date</label>
+            <input
+              type="date"
+              className={inputClass}
+              value={filterToDate}
+              onChange={(e) => setFilterToDate(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="mt-3 text-xs text-gray-500">
+          Showing {filteredSalesOrders.length} of {salesOrders.length} orders
         </div>
       </div>
 
@@ -318,18 +387,23 @@ export default function InventorySalesInvoice() {
         <div className="text-center py-12">
           <p className="text-gray-500">Loading sales orders...</p>
         </div>
-      ) : salesOrders.length === 0 ? (
+      ) : filteredSalesOrders.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-          <p className="text-gray-500 text-lg">No sales orders found</p>
+          <p className="text-gray-500 text-lg">{salesOrders.length === 0 ? "No sales orders found" : "No orders match your filters"}</p>
         </div>
       ) : (
         <div className="grid gap-4">
-          {salesOrders.map((order) => (
+          {filteredSalesOrders.map((order) => (
             <div
               key={order._id}
               className="bg-white p-6 rounded-lg border border-gray-200 hover:shadow-lg transition"
             >
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
+                <div>
+                  <p className="text-xs font-bold text-gray-500 uppercase">Voucher Type</p>
+                  <p className="text-sm font-semibold text-gray-800">{order.voucherType || "N/A"}</p>
+                </div>
+
                 <div>
                   <p className="text-xs font-bold text-gray-500 uppercase">Invoice ID</p>
                   <p className="text-lg font-bold text-gray-800">{order.invoiceId}</p>
@@ -342,8 +416,8 @@ export default function InventorySalesInvoice() {
                 </div>
 
                 <div>
-                  <p className="text-xs font-bold text-gray-500 uppercase">Items</p>
-                  <p className="text-lg font-bold text-gray-800">{order.items.length}</p>
+                  <p className="text-xs font-bold text-gray-500 uppercase">Date</p>
+                  <p className="text-sm font-semibold text-gray-800">{new Date(order.createdAt).toLocaleDateString()}</p>
                 </div>
 
                 <div>
