@@ -24,7 +24,15 @@ export default function BranchPOPayment() {
       const data = await response.json();
 
       if (data.success || Array.isArray(data.data || data)) {
-        const poData = data.data || data;
+        let poData = data.data || data;
+        
+        // Strictly filter to only INVOICED purchase orders for the active branch
+        const branchIdStr = currentBranch?._id?.toString();
+        poData = poData.filter(po => {
+           const poBranchId = po.branchId?.$oid || po.branchId?.toString();
+           return poBranchId === branchIdStr && po.status === "INVOICED";
+        });
+
         // Sort by latest first
         const sorted = poData.sort((a, b) =>
           new Date(b.createdAt) - new Date(a.createdAt)

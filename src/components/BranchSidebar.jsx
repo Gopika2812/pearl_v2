@@ -3,6 +3,7 @@ import {
   FaBox,
   FaBuilding,
   FaChartBar,
+  FaChartLine,
   FaChevronDown,
   FaCog,
   FaDollarSign,
@@ -26,24 +27,35 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   const { branch, logout } = useBranch();
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [poOpen, setPoOpen] = useState(false);
+  const [soOpen, setSoOpen] = useState(false);
   const [user, setUser] = useState(null);
 
-  const menuItems = [
+  const menuItemsTop = [
     { name: "Home", path: "/branch-home", icon: <FaHome /> },
-    { name: "Purchase Order", path: "/branch/po", icon: <FaShoppingCart /> },
-    { name: "Purchase Orders List", path: "/branch/purchase-orders", icon: <FaBox /> },
+  ];
+
+  const purchaseItems = [
+    { name: "Create PO", path: "/branch/po", icon: <FaShoppingCart /> },
+    { name: "Purchase List", path: "/branch/purchase-orders", icon: <FaBox /> },
     { name: "Restocking", path: "/branch/recycling", icon: <FaBox /> },
     { name: "Debit Note", path: "/branch/debit-note", icon: <FaFileAlt /> },
     { name: "Payment", path: "/branch/po-payment", icon: <FaDollarSign /> },
-    { name: "Sales Order", path: "/branch/sales-order", icon: <FaShoppingCart /> },
+  ];
+
+  const salesItems = [
+    { name: "Create SO", path: "/branch/sales-order", icon: <FaShoppingCart /> },
     { name: "Invoiced Order", path: "/branch/invoiced-order", icon: <FaFileAlt /> },
     { name: "Credit Note", path: "/branch/credit-note", icon: <FaFileAlt /> },
     { name: "Receipt", path: "/branch/receipt", icon: <FaDollarSign /> },
+  ];
+
+  const menuItemsBottom = [
     { name: "Loading & Dispatch", path: "/branch/dispatch", icon: <FaTruck /> },
     { name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: <FaHandshake /> },
     { name: "Customers (Debtors)", path: "/branch/customers", icon: <FaUsers /> },
     { name: "Journal Master", path: "/branch/journals", icon: <FaBook /> },
-    { name: "Sales Reports", path: "/branch/sales-reports", icon: <FaChartBar /> },
+    { name: "Insights & Analysis", path: "/branch/insights", icon: <FaChartLine /> },
     { name: "Quick Links", path: "/branch/quick-links", icon: <FaLink /> },
   ];
 
@@ -66,6 +78,10 @@ const BranchSidebar = ({ isOpen, onClose }) => {
         setUser(null);
       }
     }
+
+    // Auto-open dropdowns if current path is inside them
+    if (purchaseItems.some(i => i.path === location.pathname)) setPoOpen(true);
+    if (salesItems.some(i => i.path === location.pathname)) setSoOpen(true);
   }, [location.pathname]);
 
   const handleLogout = () => {
@@ -94,11 +110,110 @@ const BranchSidebar = ({ isOpen, onClose }) => {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar py-4">
-          {menuItems.map((item, index) => {
+          {menuItemsTop.map((item, index) => {
             const active = location.pathname === item.path;
             return (
               <Link
                 key={index}
+                to={item.path}
+                className={`mx-3 mb-1 flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
+                  active
+                    ? "bg-white text-secondary shadow-md font-semibold"
+                    : "hover:bg-white/10 text-white/90"
+                }`}
+                title={item.name}
+              >
+                <div className="w-8 flex justify-center flex-shrink-0">
+                  <span className="text-lg">{item.icon}</span>
+                </div>
+                <span className="text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300">{item.name}</span>
+              </Link>
+            );
+          })}
+
+          {/* PURCHASE ORDER DROPDOWN */}
+          <div className="mx-3 mb-1 mt-2">
+            <button
+              onClick={() => setPoOpen(!poOpen)}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
+              title="Purchase Order"
+            >
+              <div className="w-8 flex justify-center flex-shrink-0">
+                <span className="text-lg"><FaShoppingCart /></span>
+              </div>
+              <span className="text-sm flex-1 text-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">Purchase Order</span>
+              <div className="w-4 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <FaChevronDown className={`text-xs transition-transform ${poOpen ? "rotate-180" : ""}`} />
+              </div>
+            </button>
+            {poOpen && (
+              <div className="mt-1 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
+                {purchaseItems.map((item, idx) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={idx}
+                      to={item.path}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
+                      }`}
+                      title={item.name}
+                    >
+                      <div className="w-6 flex justify-center flex-shrink-0">
+                        <span className="text-sm">{item.icon}</span>
+                      </div>
+                      <span className="whitespace-nowrap">{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* SALES ORDER DROPDOWN */}
+          <div className="mx-3 mb-1">
+            <button
+              onClick={() => setSoOpen(!soOpen)}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
+              title="Sales Order"
+            >
+              <div className="w-8 flex justify-center flex-shrink-0">
+                <span className="text-lg"><FaShoppingCart /></span>
+              </div>
+              <span className="text-sm flex-1 text-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">Sales Order</span>
+              <div className="w-4 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <FaChevronDown className={`text-xs transition-transform ${soOpen ? "rotate-180" : ""}`} />
+              </div>
+            </button>
+            {soOpen && (
+              <div className="mt-1 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
+                {salesItems.map((item, idx) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={idx}
+                      to={item.path}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
+                      }`}
+                      title={item.name}
+                    >
+                      <div className="w-6 flex justify-center flex-shrink-0">
+                        <span className="text-sm">{item.icon}</span>
+                      </div>
+                       <span className="whitespace-nowrap">{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {menuItemsBottom.map((item, index) => {
+            const active = location.pathname === item.path;
+            return (
+              <Link
+                key={index + "bot"}
                 to={item.path}
                 className={`mx-3 mb-1 flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
                   active
@@ -256,11 +371,94 @@ const BranchSidebar = ({ isOpen, onClose }) => {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto no-scrollbar py-4 px-2">
-          {menuItems.map((item, index) => {
+          {menuItemsTop.map((item, index) => {
             const active = location.pathname === item.path;
             return (
               <Link
                 key={index}
+                to={item.path}
+                className={`mx-2 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${
+                  active
+                    ? "bg-white text-secondary shadow-md font-semibold"
+                    : "hover:bg-white/10 text-white/90"
+                }`}
+                onClick={onClose}
+              >
+                <span className="text-lg">{item.icon}</span>
+                <span className="text-sm">{item.name}</span>
+              </Link>
+            );
+          })}
+
+          {/* PURCHASE ORDER DROPDOWN MOBILE */}
+          <div className="mx-2 mb-1 mt-2">
+            <button
+              onClick={() => setPoOpen(!poOpen)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+            >
+              <span className="text-lg"><FaShoppingCart /></span>
+              <span className="text-sm flex-1 text-left">Purchase Order</span>
+              <FaChevronDown className={`text-xs transition-transform ${poOpen ? "rotate-180" : ""}`} />
+            </button>
+            {poOpen && (
+              <div className="mt-1 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                {purchaseItems.map((item, idx) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={idx}
+                      to={item.path}
+                      onClick={onClose}
+                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
+                        active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
+                      }`}
+                    >
+                      <span className="text-sm">{item.icon}</span>
+                      <span>{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* SALES ORDER DROPDOWN MOBILE */}
+          <div className="mx-2 mb-1">
+            <button
+              onClick={() => setSoOpen(!soOpen)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+            >
+              <span className="text-lg"><FaShoppingCart /></span>
+              <span className="text-sm flex-1 text-left">Sales Order</span>
+              <FaChevronDown className={`text-xs transition-transform ${soOpen ? "rotate-180" : ""}`} />
+            </button>
+            {soOpen && (
+              <div className="mt-1 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                {salesItems.map((item, idx) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={idx}
+                      to={item.path}
+                      onClick={onClose}
+                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
+                        active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
+                      }`}
+                    >
+                      <span className="text-sm">{item.icon}</span>
+                      <span>{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {menuItemsBottom.map((item, index) => {
+            const active = location.pathname === item.path;
+            return (
+              <Link
+                key={index + "bot"}
                 to={item.path}
                 className={`mx-2 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${
                   active

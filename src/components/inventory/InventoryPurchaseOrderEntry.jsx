@@ -5,6 +5,11 @@ import "react-toastify/dist/ReactToastify.css";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
+import InventoryAddProductModal from "./InventoryAddProductModal";
+import InventoryAddProductGroupModal from "./InventoryAddProductGroupModal";
+import InventoryAddVendorModal from "./InventoryAddVendorModal";
+import InventoryAddVoucherTypeModal from "./InventoryAddVoucherTypeModal";
+import InventoryAddWarehouseModal from "./InventoryAddWarehouseModal";
 
 const InventoryPurchaseOrderEntry = ({
   items,
@@ -29,6 +34,28 @@ const InventoryPurchaseOrderEntry = ({
   const [invoiceId, setInvoiceId] = useState("");
   const [productGroup, setProductGroup] = useState("");
   const [billingPerson, setBillingPerson] = useState("");
+
+  // Modal states
+  const [showVoucherModal, setShowVoucherModal] = useState(false);
+  const [localVoucherTypes, setLocalVoucherTypes] = useState(voucherTypes || []);
+
+  const [showVendorModal, setShowVendorModal] = useState(false);
+  const [localVendors, setLocalVendors] = useState(vendors || []);
+
+  const [showWarehouseModal, setShowWarehouseModal] = useState(false);
+  const [localWarehouses, setLocalWarehouses] = useState(warehouses || []);
+
+  const [showProductGroupModal, setShowProductGroupModal] = useState(false);
+  const [localProductGroups, setLocalProductGroups] = useState(productGroups || []);
+
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [localProducts, setLocalProducts] = useState(products || []);
+
+  useEffect(() => { setLocalVoucherTypes(voucherTypes || []); }, [voucherTypes]);
+  useEffect(() => { setLocalVendors(vendors || []); }, [vendors]);
+  useEffect(() => { setLocalWarehouses(warehouses || []); }, [warehouses]);
+  useEffect(() => { setLocalProductGroups(productGroups || []); }, [productGroups]);
+  useEffect(() => { setLocalProducts(products || []); }, [products]);
 
   // Item Entry State
   const [selectedItem, setSelectedItem] = useState("");
@@ -383,14 +410,23 @@ const InventoryPurchaseOrderEntry = ({
                 grid grid-cols-1 md:grid-cols-5 gap-4">
 
         <div>
-          <label className={labelClass}>Voucher Type</label>
+          <div className="flex justify-between items-center mb-1">
+            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">Voucher Type</label>
+            <button 
+              onClick={() => setShowVoucherModal(true)}
+              className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+              title="Create New Voucher Type"
+            >
+              <FaPlus size={12} />
+            </button>
+          </div>
           <select
             className={selectClass}
             value={voucherType}
             onChange={(e) => setVoucherType(e.target.value)}
           >
             <option value="">-- Select --</option>
-            {voucherTypes.map((v) => (
+            {localVoucherTypes.map((v) => (
               <option key={v._id} value={v.name}>
                 {v.name}
               </option>
@@ -409,14 +445,23 @@ const InventoryPurchaseOrderEntry = ({
         </div>
 
         <div>
-          <label className={labelClass}>Vendor</label>
+          <div className="flex justify-between items-center mb-1">
+            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">Vendor</label>
+            <button 
+              onClick={() => setShowVendorModal(true)}
+              className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+              title="Create New Vendor"
+            >
+              <FaPlus size={12} />
+            </button>
+          </div>
           <select
             className={selectClass}
             value={vendor}
             onChange={(e) => setVendor(e.target.value)}
           >
             <option value="">-- Select --</option>
-            {vendors.map((v) => (
+            {localVendors.map((v) => (
               <option key={v._id} value={v.name}>
                 {v.name}
               </option>
@@ -425,14 +470,23 @@ const InventoryPurchaseOrderEntry = ({
         </div>
 
         <div>
-          <label className={labelClass}>Warehouse</label>
+          <div className="flex justify-between items-center mb-1">
+            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">Warehouse</label>
+            <button 
+              onClick={() => setShowWarehouseModal(true)}
+              className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+              title="Create New Warehouse"
+            >
+              <FaPlus size={12} />
+            </button>
+          </div>
           <select
             className={selectClass}
             value={warehouse}
             onChange={(e) => setWarehouse(e.target.value)}
           >
             <option value="">-- Select --</option>
-            {warehouses.map((w) => (
+            {localWarehouses.map((w) => (
               <option key={w._id} value={w.name}>
                 {w.name}
               </option>
@@ -489,10 +543,19 @@ const InventoryPurchaseOrderEntry = ({
       {/* PRODUCT GROUP (Moved from 2-col to full-width in the left pane) */}
       <div className="grid grid-cols-1 gap-4">
         <div>
-          <label className={labelClass}>Product Group</label>
+          <div className="flex justify-between items-center mb-1">
+            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">Product Group</label>
+            <button 
+              onClick={() => setShowProductGroupModal(true)}
+              className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+              title="Create New Product Group"
+            >
+              <FaPlus size={12} />
+            </button>
+          </div>
           <select className={selectClass} value={productGroup} onChange={(e) => setProductGroup(e.target.value)}>
             <option value="">Select Product Group</option>
-            {productGroups.map((g) => (
+            {localProductGroups.map((g) => (
               <option key={g._id} value={g._id}>
                 {g.name}
               </option>
@@ -506,7 +569,16 @@ const InventoryPurchaseOrderEntry = ({
         {/* ROW 1: Wide Item Name */}
         <div className="grid grid-cols-1 gap-3">
           <div className="relative">
-            <label className={labelClass}>Item Name</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">Item Name</label>
+              <button 
+                onClick={() => setShowProductModal(true)}
+                className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                title="Create New Item"
+              >
+                <FaPlus size={12} />
+              </button>
+            </div>
             <input
               type="text"
               placeholder="Type item name..."
@@ -808,6 +880,84 @@ const InventoryPurchaseOrderEntry = ({
       </div> {/* END RIGHT COLUMN */}
 
     </div> {/* END MAIN LAYOUT GRID */}
+
+    <InventoryAddVoucherTypeModal
+      isOpen={showVoucherModal}
+      onClose={() => setShowVoucherModal(false)}
+      branchId={currentBranch?._id || currentBranch?.id}
+      onSave={(newType) => {
+        const addedType = newType.voucher || newType;
+        setLocalVoucherTypes(prev => [...prev, addedType]);
+        setVoucherType(addedType.name);
+        setShowVoucherModal(false);
+      }}
+    />
+
+    <InventoryAddWarehouseModal
+      isOpen={showWarehouseModal}
+      onClose={() => setShowWarehouseModal(false)}
+      branchId={currentBranch?._id || currentBranch?.id}
+      onSave={(newWarehouse) => {
+        setLocalWarehouses(prev => [...prev, newWarehouse]);
+        setWarehouse(newWarehouse.name);
+        setShowWarehouseModal(false);
+      }}
+    />
+
+    <InventoryAddVendorModal
+      isOpen={showVendorModal}
+      onClose={() => setShowVendorModal(false)}
+      branchId={currentBranch?._id || currentBranch?.id}
+      onSave={(newVendor) => {
+        setLocalVendors(prev => [...prev, newVendor]);
+        setVendor(newVendor.name);
+        setShowVendorModal(false);
+      }}
+    />
+
+    <InventoryAddProductGroupModal
+      isOpen={showProductGroupModal}
+      onClose={() => setShowProductGroupModal(false)}
+      branchId={currentBranch?._id || currentBranch?.id}
+      onSave={(newGroup) => {
+        setLocalProductGroups(prev => [...prev, newGroup]);
+        setProductGroup(newGroup._id);
+        setShowProductGroupModal(false);
+      }}
+    />
+
+    <InventoryAddProductModal
+      isOpen={showProductModal}
+      onClose={() => setShowProductModal(false)}
+      branchId={currentBranch?._id || currentBranch?.id}
+      productGroups={localProductGroups}
+      warehouses={localWarehouses}
+      onSave={(newProduct) => {
+        const product = newProduct.data || newProduct;
+        setLocalProducts(prev => [...prev, product]);
+        setFilteredProducts(prev => [...prev, product]);
+        setSelectedItem(product._id);
+        setItemSearch(product.name);
+        
+        const pGroupId = product.productGroup?._id || product.productGroup || product.groupId?._id || product.groupId;
+        if (pGroupId && pGroupId !== productGroup) {
+          setProductGroup(pGroupId);
+        }
+        
+        setSelectedProductData(product);
+        setQty("");
+        setPurchasePrice(product.purchasingPrice || product.rate || 0);
+        setSellingPrice(product.sellingPrice || product.rate || 0);
+        setHsn(product.hsnCode || product.hsncode || "");
+        setGst(product.gst || product.tax || 0);
+        if (!igst) {
+          setCgst((product.gst || product.tax || 0) / 2);
+          setSgst((product.gst || product.tax || 0) / 2);
+        }
+
+        setShowProductModal(false);
+      }}
+    />
 
     {/* Extra Expenses Modal */}
     {showExtraExpensesModal && (

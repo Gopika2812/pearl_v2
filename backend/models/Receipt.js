@@ -29,7 +29,7 @@ const receiptSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ["CASH", "CHEQUE", "BANK_TRANSFER", "UPI", "CREDIT_CARD", "DEBIT_CARD", "OTHER"],
+      enum: ["CASH", "CHEQUE", "BANK_TRANSFER", "UPI", "CREDIT_CARD", "DEBIT_CARD", "OTHER", "BOUNCED"],
       default: "CASH",
     },
     reference: String, // Cheque number, transaction ID, etc.
@@ -38,7 +38,7 @@ const receiptSchema = new mongoose.Schema(
     // Status
     status: {
       type: String,
-      enum: ["confirmed", "cancelled"],
+      enum: ["confirmed", "cancelled", "bounced"],
       default: "confirmed",
     },
     

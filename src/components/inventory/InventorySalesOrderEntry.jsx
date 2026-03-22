@@ -906,8 +906,9 @@ export default function InventorySalesOrderEntry({
 
       console.log("✅ Sales Order Created:", data.invoiceId);
       toast.success(`Sales Order Created: ${data.invoiceId}`);
-      setInvoiceId(data.invoiceId);
-      resetForm();
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     } catch (err) {
       console.error("❌ Error saving Sales Order:", err);
       toast.error(err.message || "Failed to save Sales Order");

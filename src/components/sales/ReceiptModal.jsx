@@ -15,7 +15,7 @@ export default function ReceiptModal({ invoice, isOpen, onClose, onReceiptSucces
 
   useEffect(() => {
     if (isOpen && invoice) {
-      setAmount("");
+      setAmount(invoice.pendingAmount ? invoice.pendingAmount.toString() : "");
       setPaymentMethod("CASH");
       setReference("");
       setNotes("");
@@ -30,8 +30,10 @@ export default function ReceiptModal({ invoice, isOpen, onClose, onReceiptSucces
       return;
     }
 
-    if ((invoice.grandTotal || 0) < receiptAmount) {
-      toast.warning(`Amount cannot exceed invoice total of ₹${(invoice.grandTotal || 0).toLocaleString()}`);
+    const maxAllowed = invoice.pendingAmount !== undefined ? invoice.pendingAmount : invoice.grandTotal || 0;
+    
+    if (maxAllowed < receiptAmount) {
+      toast.warning(`Amount cannot exceed the pending balance of ₹${maxAllowed.toLocaleString()}`);
       return;
     }
 
@@ -61,13 +63,6 @@ export default function ReceiptModal({ invoice, isOpen, onClose, onReceiptSucces
       const result = await receiptResponse.json();
       const createdReceipt = result.data || {};
 
-      // Update customer debit (INCREASE as per user's requirement)
-      await updateCustomerDebit(
-        typeof invoice.customer === "object" ? invoice.customer.name : invoice.customer,
-        receiptAmount,
-        currentBranch._id
-      );
-
       toast.success(`Receipt created successfully! Amount: ₹${receiptAmount.toLocaleString()}`);
       onReceiptSuccess();
     } catch (error) {
@@ -78,47 +73,7 @@ export default function ReceiptModal({ invoice, isOpen, onClose, onReceiptSucces
     }
   };
 
-  const updateCustomerDebit = async (customerName, receiptAmount, branchId) => {
-    try {
-      // Fetch all customers to find matching one
-      const response = await fetch(`${API_BASE}/customers?branchId=${branchId}`, {
-        headers: { "Content-Type": "application/json" },
-      });
-      const result = await response.json();
-      const customers = result?.data || [];
 
-      // Find customer by name
-      const customer = customers.find(
-        (c) => (typeof c.name === "object" ? c.name?.name : c.name) === customerName
-      ) || customers.find(
-        (c) => (typeof c.name === "object" ? c.name?.name : c.name)?.toLowerCase() === customerName?.toLowerCase()
-      );
-
-      if (!customer) {
-        console.warn("Customer not found for debit update");
-        return;
-      }
-
-      // Update: customer.debit INCREASES (payment received)
-      const newDebit = (customer.debit || 0) + receiptAmount;
-      // Also reduce their closing balance (outstanding amount reduces)
-      const newClosingBalance = Math.max(0, (customer.closingBalance || 0) - receiptAmount);
-
-      await fetch(`${API_BASE}/customers/${customer._id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...customer,
-          debit: newDebit,
-          closingBalance: newClosingBalance,
-        }),
-      });
-
-      console.log(`Customer ${customerName} debit updated: +₹${receiptAmount} (new debit: ₹${newDebit})`);
-    } catch (error) {
-      console.error("Error updating customer debit:", error);
-    }
-  };
 
   if (!isOpen || !invoice) return null;
 

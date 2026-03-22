@@ -257,6 +257,28 @@ router.get("/", async (req, res) => {
   }
 });
 
+// ✅ GET single vendor
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid vendor ID" });
+    }
+
+    const vendor = await Vendor.findById(id);
+
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: "Vendor not found" });
+    }
+
+    res.json(vendor);
+  } catch (error) {
+    console.error("Fetch Single Vendor Error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch vendor", error: error.message });
+  }
+});
+
 // ✅ UPDATE vendor
 router.put("/:id", async (req, res) => {
   try {

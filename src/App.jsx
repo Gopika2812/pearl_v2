@@ -31,7 +31,6 @@ import BranchQuickLinks from "./pages/branch/BranchQuickLinks";
 import BranchReceipt from "./pages/branch/BranchReceipt";
 import BranchRecycling from "./pages/branch/BranchRecycling";
 import BranchSalesOrder from "./pages/branch/BranchSalesOrder";
-import BranchSalesReports from "./pages/branch/BranchSalesReports";
 import BranchSummary from "./pages/branch/BranchSummary";
 import BranchSuppliers from "./pages/branch/BranchSuppliers";
 import BranchLoginPage from "./pages/BranchLoginPage";
@@ -153,7 +152,6 @@ function App() {
                   <Route path="/branch/suppliers" element={<ProtectedRoute element={<BranchSuppliers />} />} />
                   <Route path="/branch/customers" element={<ProtectedRoute element={<BranchCustomers />} />} />
                   <Route path="/branch/journals" element={<ProtectedRoute element={<BranchJournalEntries />} />} />
-                  <Route path="/branch/sales-reports" element={<ProtectedRoute element={<BranchSalesReports />} />} />
                   <Route path="/branch/quick-links" element={<ProtectedRoute element={<BranchQuickLinks />} />} />
                   <Route path="/branch/receipt" element={<ProtectedRoute element={<BranchReceipt />} />} />
                   <Route path="/branch/summary" element={<ProtectedRoute element={<BranchSummary />} />} />

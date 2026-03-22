@@ -3,6 +3,7 @@ import { FaList, FaSpinner, FaThLarge } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import CustomerLedgerModal from "../../components/branch/CustomerLedgerModal";
 
 const BranchCustomers = () => {
   const { branch, branchLoaded } = useBranch();
@@ -16,6 +17,7 @@ const BranchCustomers = () => {
   const [pagination, setPagination] = useState({});
   const [salesOrders, setSalesOrders] = useState([]);
   const [customerPayments, setCustomerPayments] = useState([]);
+  const [selectedLedgerCustomer, setSelectedLedgerCustomer] = useState(null);
 
   useEffect(() => {
     console.log("BranchCustomers mounted");
@@ -50,7 +52,7 @@ const BranchCustomers = () => {
 
   const fetchCustomerPayments = async () => {
     try {
-      const url = `${API_BASE}/customer-payments`;
+      const url = `${API_BASE}/receipts`;
       const response = await fetch(url, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
@@ -89,40 +91,8 @@ const BranchCustomers = () => {
 
       let customersData = result.data || [];
 
-      // Calculate outstanding receivables from sales orders and payments
-      const normalizedBranchId = branchId?.toString();
-      customersData = customersData.map((customer) => {
-        const existingDebit = customer.debit || 0;
-        let outstandingFromOrders = 0;
-
-        const customerOrders = salesOrders.filter(
-          (order) =>
-            order.customer === customer.name &&
-            order.branchId === normalizedBranchId &&
-            order.status !== "CANCELLED"
-        );
-
-        customerOrders.forEach((order) => {
-          const orderAmount = order.grandTotal || 0;
-          const orderPayments = customerPayments.filter(
-            (payment) =>
-              payment.salesOrder?.soId?.toString() === order._id?.toString() &&
-              payment.status === "completed"
-          );
-          const totalReceivedForOrder = orderPayments.reduce((sum, p) => sum + p.amount, 0);
-          const outstanding = orderAmount - totalReceivedForOrder;
-
-          if (outstanding > 0) {
-            outstandingFromOrders += outstanding;
-          }
-        });
-
-        return {
-          ...customer,
-          debit: existingDebit + outstandingFromOrders,
-          credit: customer.credit || 0,
-        };
-      });
+      // Backend already returns perfectly calculated debit and credit per customer. 
+      // No need to manually add historical sales orders.
 
       setCustomers(customersData);
       setPagination(result.pagination || {});
@@ -154,77 +124,15 @@ const BranchCustomers = () => {
     }
   }, [searchTerm, branchId, branchLoaded]);
 
-  // Recalculate customer debit when sales orders or payments change
-  useEffect(() => {
-    if (salesOrders.length > 0 || customerPayments.length > 0) {
-      if (customers.length > 0) {
-        const normalizedBranchId = branchId?.toString();
-        const updatedCustomers = customers.map((customer) => {
-          const existingDebit = customer.debit || 0;
-          let outstandingFromOrders = 0;
-
-          const customerOrders = salesOrders.filter(
-            (order) =>
-              order.customer === customer.name &&
-              order.branchId === normalizedBranchId &&
-              order.status !== "CANCELLED"
-          );
-
-          customerOrders.forEach((order) => {
-            const orderAmount = order.grandTotal || 0;
-            const orderPayments = customerPayments.filter(
-              (payment) =>
-                payment.salesOrder?.soId?.toString() === order._id?.toString() &&
-                payment.status === "completed"
-            );
-            const totalReceivedForOrder = orderPayments.reduce((sum, p) => sum + p.amount, 0);
-            const outstanding = orderAmount - totalReceivedForOrder;
-
-            if (outstanding > 0) {
-              outstandingFromOrders += outstanding;
-            }
-          });
-
-          return {
-            ...customer,
-            debit: existingDebit + outstandingFromOrders,
-          };
-        });
-
-        setCustomers(updatedCustomers);
-      }
-    }
-  }, [salesOrders, customerPayments]);
+  // Customer debit is already provided natively by the backend API.
+  // There is no need for local array re-calculation.
 
   // Global Totals calculation
   const baseGlobalCredit = pagination?.totalGlobalCredit || 0;
   const baseGlobalDebit = pagination?.totalGlobalDebit || 0;
 
-  let globalOutstandingFromOrders = 0;
-  if (salesOrders.length > 0) {
-    const normalizedBranchId = branchId?.toString();
-    const branchOrders = salesOrders.filter(
-      (order) => order.branchId === normalizedBranchId && order.status !== "CANCELLED"
-    );
-
-    branchOrders.forEach((order) => {
-      const orderAmount = order.grandTotal || 0;
-      const orderPayments = customerPayments.filter(
-        (payment) =>
-          payment.salesOrder?.soId?.toString() === order._id?.toString() &&
-          payment.status === "completed"
-      );
-      const totalReceivedForOrder = orderPayments.reduce((sum, p) => sum + p.amount, 0);
-      const outstanding = orderAmount - totalReceivedForOrder;
-
-      if (outstanding > 0) {
-        globalOutstandingFromOrders += outstanding;
-      }
-    });
-  }
-
   const totalCredit = baseGlobalCredit;
-  const totalDebit = baseGlobalDebit + globalOutstandingFromOrders;
+  const totalDebit = baseGlobalDebit;
 
   if (!branchLoaded) {
     return (
@@ -405,6 +313,15 @@ const BranchCustomers = () => {
                     </p>
                   </div>
                 </div>
+
+                <div className="mt-2">
+                  <button
+                    onClick={() => setSelectedLedgerCustomer(customer)}
+                    className="w-full py-2 bg-blue-50 text-blue-600 font-semibold rounded-lg hover:bg-blue-600 hover:text-white transition-colors border border-blue-200 hover:border-blue-600 text-sm flex items-center justify-center gap-2"
+                  >
+                    <FaList size={14} /> View Ledger
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -466,6 +383,9 @@ const BranchCustomers = () => {
                   <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold">
                     Credit
                   </th>
+                  <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
+                    Action
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -500,8 +420,16 @@ const BranchCustomers = () => {
                     <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600\">
                       ₹{(customer.debit || 0).toFixed(2)}
                     </td>
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600\">
+                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600">
                       ₹{(customer.credit || 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 md:px-5 py-2 md:py-3 text-center">
+                      <button
+                        onClick={() => setSelectedLedgerCustomer(customer)}
+                        className="px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white rounded-md text-xs font-bold transition-colors"
+                      >
+                        Ledger
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -534,6 +462,15 @@ const BranchCustomers = () => {
         </div>
       )}
         </div>
+
+      {/* LEDGER MODAL */}
+      <CustomerLedgerModal
+        isOpen={!!selectedLedgerCustomer}
+        onClose={() => setSelectedLedgerCustomer(null)}
+        customer={selectedLedgerCustomer}
+        salesOrders={salesOrders}
+        customerPayments={customerPayments}
+      />
     </div>
   );
 };

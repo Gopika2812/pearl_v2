@@ -23,7 +23,7 @@ router.get("/order/:salesOrderId", async (req, res) => {
   try {
     const receipts = await Receipt.find({
       originalSalesOrderId: req.params.salesOrderId,
-      status: "confirmed"
+      status: { $in: ["confirmed", "bounced"] }
     });
     
     res.json({ success: true, data: receipts });
@@ -84,21 +84,35 @@ router.post("/", async (req, res) => {
 
     await receipt.save();
 
-    // UPDATE CUSTOMER DEBIT (INCREASE as per user's requirement)
+    // UPDATE CUSTOMER DEBIT (DECREASE for payment) AND CREDIT
     const customerId = originalOrder.customer.customerId;
     const customer = await Customer.findById(customerId);
     if (customer) {
-      const newDebit = (customer.debit || 0) + amount;
-      const newClosingBalance = Math.max(0, (customer.closingBalance || 0) - amount);
+      let remainingAmount = amount;
+      let currentDebit = customer.debit || 0;
+      let currentCredit = customer.credit || 0;
+
+      // Payment reduces debit first
+      if (currentDebit >= remainingAmount) {
+        currentDebit -= remainingAmount;
+        remainingAmount = 0;
+      } else {
+        // Excess goes to credit
+        remainingAmount -= currentDebit;
+        currentDebit = 0;
+        currentCredit += remainingAmount;
+      }
+
+      const newClosingBalance = (customer.closingBalance || 0) - amount;
       
       await Customer.findByIdAndUpdate(customerId, {
-        debit: newDebit,  // INCREASE debit (payment received)
+        debit: currentDebit,
+        credit: currentCredit,
         closingBalance: newClosingBalance,
         totalBalance: newClosingBalance,
       });
       
-      console.log(`✅ Customer debit increased: +₹${amount} (new debit: ₹${newDebit})`);
-      console.log(`✅ Customer balance reduced: ₹${newClosingBalance}`);
+      console.log(`✅ Customer balance updated: debit: ₹${currentDebit}, credit: ₹${currentCredit}, closingBalance: ₹${newClosingBalance}`);
     }
 
     res.json({
@@ -112,6 +126,70 @@ router.post("/", async (req, res) => {
   }
 });
 
+// CREATE BOUNCE RECORD (reverse payment & create ledger record)
+router.post("/bounce", async (req, res) => {
+  try {
+    const { originalSalesOrderId, amount, notes } = req.body;
+
+    if (!originalSalesOrderId || !amount || amount <= 0) {
+      return res.status(400).json({ success: false, message: "Missing or invalid required fields" });
+    }
+
+    const originalOrder = await SalesOrder.findById(originalSalesOrderId);
+    if (!originalOrder) {
+      return res.status(404).json({ success: false, message: "Sales order not found" });
+    }
+
+    const financialYear = getFinancialYear();
+    const receiptDoc = await Receipt.findOne({ financialYear }).sort({ receiptId: -1 });
+    const nextNumber = receiptDoc ? parseInt(receiptDoc.receiptId.split("/")[1]) + 1 : 1;
+    const receiptId = `BNC/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
+
+    const bounceReceipt = new Receipt({
+      receiptId,
+      originalSalesOrderId,
+      originalInvoiceId: originalOrder.invoiceId,
+      customer: {
+        customerId: originalOrder.customer.customerId,
+        name: originalOrder.customer.name,
+      },
+      amount,
+      paymentMethod: "BOUNCED",
+      reference: "Cheque Bounced",
+      notes: notes || "Bounced Penalty/Return",
+      financialYear,
+      status: "bounced",
+    });
+
+    await bounceReceipt.save();
+
+    // INCREASE CUSTOMER DEBIT (Customer owes the bounced amount again)
+    const customerId = originalOrder.customer.customerId;
+    const customer = await Customer.findById(customerId);
+    if (customer) {
+      const newDebit = (customer.debit || 0) + amount;
+      const newClosingBalance = (customer.closingBalance || 0) + amount;
+      
+      await Customer.findByIdAndUpdate(customerId, {
+        debit: newDebit,
+        closingBalance: newClosingBalance,
+        totalBalance: newClosingBalance,
+      });
+      
+      console.log(`✅ Bounce processed - Customer debit increased to ₹${newDebit}`);
+    }
+
+    res.json({
+      success: true,
+      message: "Bounce recorded successfully",
+      data: bounceReceipt,
+    });
+  } catch (error) {
+    console.error("Error creating bounce record:", error);
+    res.status(500).json({ success: false, message: "Failed to record bounce" });
+  }
+});
+
 // CANCEL receipt (delete receipt entry)
 router.delete("/:receiptId", async (req, res) => {
   try {
@@ -120,20 +198,34 @@ router.delete("/:receiptId", async (req, res) => {
       return res.status(404).json({ success: false, message: "Receipt not found" });
     }
 
-    // REVERSE customer debit update
+    // REVERSE customer payment update
     const customerId = receipt.customer.customerId;
     const customer = await Customer.findById(customerId);
     if (customer) {
-      const reversedDebit = Math.max(0, (customer.debit || 0) - receipt.amount);
+      let remainingAmountToReverse = receipt.amount;
+      let currentDebit = customer.debit || 0;
+      let currentCredit = customer.credit || 0;
+
+      // Reversing a payment: first reduce credit, then increase debit
+      if (currentCredit >= remainingAmountToReverse) {
+        currentCredit -= remainingAmountToReverse;
+        remainingAmountToReverse = 0;
+      } else {
+        remainingAmountToReverse -= currentCredit;
+        currentCredit = 0;
+        currentDebit += remainingAmountToReverse;
+      }
+
       const reversedBalance = (customer.closingBalance || 0) + receipt.amount;
       
       await Customer.findByIdAndUpdate(customerId, {
-        debit: reversedDebit,
+        debit: currentDebit,
+        credit: currentCredit,
         closingBalance: reversedBalance,
         totalBalance: reversedBalance,
       });
       
-      console.log(`✅ Receipt cancelled - Customer debit decreased: -₹${receipt.amount}`);
+      console.log(`✅ Receipt cancelled - Customer balance reverted`);
     }
 
     res.json({

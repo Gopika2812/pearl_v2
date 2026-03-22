@@ -94,21 +94,24 @@ export default function CustomerDebitReceiptModal({ isOpen, onClose, onReceiptSu
       return;
     }
 
-    if (amount > (selectedCustomer.debit || 0)) {
-      toast.warning(
-        `Amount cannot exceed customer's debit balance of ₹${(selectedCustomer.debit || 0).toLocaleString()}`
-      );
-      return;
-    }
+
 
     setSaving(true);
     try {
-      // Calculate new debit balance
-      const newDebit = Math.max(0, (selectedCustomer.debit || 0) - amount);
-      const newClosingBalance = Math.max(
-        0,
-        (selectedCustomer.closingBalance || 0) - amount
-      );
+      let remainingAmount = amount;
+      let currentDebit = selectedCustomer.debit || 0;
+      let currentCredit = selectedCustomer.credit || 0;
+
+      if (currentDebit >= remainingAmount) {
+        currentDebit -= remainingAmount;
+        remainingAmount = 0;
+      } else {
+        remainingAmount -= currentDebit;
+        currentDebit = 0;
+        currentCredit += remainingAmount;
+      }
+
+      const newClosingBalance = (selectedCustomer.closingBalance || 0) - amount;
 
       // Update customer debit balance
       const updateResponse = await fetch(`${API_BASE}/customers/${selectedCustomerId}`, {
@@ -116,7 +119,8 @@ export default function CustomerDebitReceiptModal({ isOpen, onClose, onReceiptSu
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...selectedCustomer,
-          debit: newDebit,
+          debit: currentDebit,
+          credit: currentCredit,
           closingBalance: newClosingBalance,
         }),
       });
@@ -146,6 +150,7 @@ export default function CustomerDebitReceiptModal({ isOpen, onClose, onReceiptSu
   const currentDebit = selectedCustomer?.debit || 0;
   const amount = parseFloat(debitAmount) || 0;
   const newDebit = Math.max(0, currentDebit - amount);
+  const newCredit = Math.max(0, amount - currentDebit);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -282,16 +287,15 @@ export default function CustomerDebitReceiptModal({ isOpen, onClose, onReceiptSu
                     type="number"
                     step="0.01"
                     min="0"
-                    max={currentDebit}
                     value={debitAmount}
                     onChange={(e) => setDebitAmount(e.target.value)}
                     placeholder="0.00"
                     className="w-full pl-8 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-bold text-lg"
                   />
                 </div>
-                {debitAmount && (
+                {currentDebit > 0 && (
                   <p className="text-xs text-gray-600 mt-1">
-                    Max Amount: ₹{(currentDebit).toLocaleString()}
+                    Current Debit: ₹{(currentDebit).toLocaleString()}
                   </p>
                 )}
               </div>
@@ -364,6 +368,12 @@ export default function CustomerDebitReceiptModal({ isOpen, onClose, onReceiptSu
                   <span className="text-gray-800 font-bold">New Debit Balance:</span>
                   <span className="font-black text-blue-600">₹{(newDebit).toLocaleString()}</span>
                 </div>
+                {newCredit > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-800 font-bold">New Credit (Advance):</span>
+                    <span className="font-black text-green-600">₹{(newCredit).toLocaleString()}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { FaChevronDown, FaChevronUp, FaFileAlt, FaPlus } from "react-icons/fa";
 import { toast } from "react-toastify";
 import CustomerDebitReceiptModal from "../../components/sales/CustomerDebitReceiptModal";
 import ReceiptModal from "../../components/sales/ReceiptModal";
+import BounceChequeModal from "../../components/sales/BounceChequeModal";
 import { useBranch } from "../../context/BranchContext";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
@@ -14,7 +15,9 @@ export default function BranchReceipt() {
   const [loading, setLoading] = useState(true);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showDebitReceiptModal, setShowDebitReceiptModal] = useState(false);
+  const [showBounceModal, setShowBounceModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [selectedBounceInvoice, setSelectedBounceInvoice] = useState(null);
   const [expandedInvoices, setExpandedInvoices] = useState({});
 
   useEffect(() => {
@@ -56,7 +59,9 @@ export default function BranchReceipt() {
       const result = await response.json();
       const receipts = result.data || [];
 
-      const totalReceived = (receipts || []).reduce((sum, r) => sum + (r.amount || 0), 0);
+      const totalReceived = (receipts || []).reduce((sum, r) => {
+        return r.paymentMethod === "BOUNCED" ? sum - (r.amount || 0) : sum + (r.amount || 0);
+      }, 0);
 
       setReceiptData((prev) => ({
         ...prev,
@@ -77,14 +82,25 @@ export default function BranchReceipt() {
     }));
   };
 
-  const handleReceivePayment = (invoice) => {
-    setSelectedInvoice(invoice);
+  const handleReceivePayment = (invoice, pending) => {
+    setSelectedInvoice({ ...invoice, pendingAmount: pending });
     setShowReceiptModal(true);
   };
 
   const handleReceiptSuccess = () => {
     setShowReceiptModal(false);
     setSelectedInvoice(null);
+    fetchSalesInvoices();
+  };
+
+  const handleBounceClick = (invoice) => {
+    setSelectedBounceInvoice(invoice);
+    setShowBounceModal(true);
+  };
+
+  const handleBounceSuccess = () => {
+    setShowBounceModal(false);
+    setSelectedBounceInvoice(null);
     fetchSalesInvoices();
   };
 
@@ -177,9 +193,9 @@ export default function BranchReceipt() {
                     const pending = Math.max(0, (invoice.grandTotal || 0) - received);
 
                     return (
-                      <>
+                      <React.Fragment key={invoice._id}>
                         {/* MAIN INVOICE ROW */}
-                        <tr key={invoice._id} className="hover:bg-gray-50 transition">
+                        <tr className="hover:bg-gray-50 transition">
                           <td className="px-2 py-3 text-center">
                             <button
                               onClick={() => toggleExpandInvoice(invoice._id)}
@@ -232,13 +248,28 @@ export default function BranchReceipt() {
                             {formatDate(invoice.date || invoice.createdAt)}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <button
-                              onClick={() => handleReceivePayment(invoice)}
-                              className="inline-flex items-center gap-2 bg-cyan-600 text-white px-3 py-1 rounded-lg font-bold text-xs hover:bg-cyan-700 transition"
-                              title="Receive Payment"
-                            >
-                              <FaFileAlt /> Receive
-                            </button>
+                            <div className="flex justify-center gap-2">
+                              {pending > 0 ? (
+                                <button
+                                  onClick={() => handleReceivePayment(invoice, pending)}
+                                  className="inline-flex items-center gap-2 bg-cyan-600 text-white px-3 py-1 rounded-lg font-bold text-xs hover:bg-cyan-700 transition"
+                                  title="Receive Payment"
+                                >
+                                  <FaFileAlt /> Receive
+                                </button>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 border border-gray-200 px-3 py-1 rounded-lg font-bold text-xs cursor-not-allowed" title="Fully Paid">
+                                  ✓ Paid
+                                </span>
+                              )}
+                              <button
+                                onClick={() => handleBounceClick(invoice)}
+                                className="inline-flex items-center gap-2 bg-red-100 text-red-600 border border-red-200 px-3 py-1 rounded-lg font-bold text-xs hover:bg-red-200 transition"
+                                title="Record Bounced Cheque"
+                              >
+                                Bounce
+                              </button>
+                            </div>
                           </td>
                         </tr>
 
@@ -315,7 +346,7 @@ export default function BranchReceipt() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
@@ -392,6 +423,14 @@ export default function BranchReceipt() {
           setShowDebitReceiptModal(false);
           fetchSalesInvoices();
         }}
+      />
+
+      {/* CHEQUE BOUNCED MODAL */}
+      <BounceChequeModal
+        invoice={selectedBounceInvoice}
+        isOpen={showBounceModal}
+        onClose={() => setShowBounceModal(false)}
+        onBounceSuccess={handleBounceSuccess}
       />
     </div>
   );

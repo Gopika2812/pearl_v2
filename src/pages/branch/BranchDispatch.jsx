@@ -32,7 +32,7 @@ export default function BranchDispatch() {
     };
 
     // Load products for selected orders
-    const handleLoadProductsBulk = () => {
+    const handleLoadProductsBulk = (preventClear = false) => {
       if (!selectedOrderIds.length) {
         toast.warning("Please select at least one order");
         return;
@@ -57,12 +57,14 @@ export default function BranchDispatch() {
         orderType: orderType,
         invoiceIds: selectedOrders.map((o) => o.invoiceId || o.poId),
       });
-      setLoadedParties(null);
-      toast.success(`Products loaded for ${orderType === 'SO' ? 'Sales' : 'Purchase'} Order!`);
+      if (!preventClear) {
+        setLoadedParties(null);
+        toast.success(`Products loaded for ${orderType === 'SO' ? 'Sales' : 'Purchase'} Order!`);
+      }
     };
 
     // Load parties for selected orders
-    const handleLoadPartiesBulk = async () => {
+    const handleLoadPartiesBulk = async (preventClear = false) => {
       if (!selectedOrderIds.length) {
         toast.warning("Please select at least one order");
         return;
@@ -139,14 +141,30 @@ export default function BranchDispatch() {
           data: parties,
           orderType: orderType,
         });
-        setLoadedProducts(null);
-        toast.success(`Parties loaded for ${orderType === 'SO' ? 'Sales' : 'Purchase'} Order!`);
+        if (!preventClear) {
+          setLoadedProducts(null);
+          toast.success(`Parties loaded for ${orderType === 'SO' ? 'Sales' : 'Purchase'} Order!`);
+        }
       } catch (error) {
         console.error("Error loading parties:", error);
         toast.error("Failed to load parties");
       } finally {
         setLoading(false);
       }
+    };
+
+    const handleLoadBothBulk = async () => {
+      if (!selectedOrderIds.length) {
+        toast.warning("Please select at least one order");
+        return;
+      }
+      if (!selectedVoucher) {
+        toast.warning("Please select a voucher type");
+        return;
+      }
+      handleLoadProductsBulk(true);
+      await handleLoadPartiesBulk(true);
+      toast.success("Products & Parties loaded together!");
     };
   const [loading, setLoading] = useState(false);
 
@@ -394,6 +412,14 @@ export default function BranchDispatch() {
                 >
                   <FaUsers /> Load Parties
                 </button>
+                <button
+                  className="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  onClick={handleLoadBothBulk}
+                  disabled={!selectedOrderIds.length || loading}
+                  title="Load both products and parties at once"
+                >
+                  <FaBox />+<FaUsers /> Load Both
+                </button>
               </div>
             </div>
             <table className="w-full border-collapse border border-gray-300">
@@ -417,7 +443,7 @@ export default function BranchDispatch() {
                       />
                     </td>
                     <td className="border border-gray-300 px-4 py-2">{order.invoiceId || order.poId}</td>
-                    <td className="border border-gray-300 px-4 py-2">{order.date ? new Date(order.date).toLocaleDateString() : '-'}</td>
+                    <td className="border border-gray-300 px-4 py-2">{(order.date || order.createdAt) ? new Date(order.date || order.createdAt).toLocaleDateString() : '-'}</td>
                     <td className="border border-gray-300 px-4 py-2">{orderType === 'SO' ? order.customer?.name : (typeof order.vendor === 'string' ? order.vendor : order.vendor?.name)}</td>
                   </tr>
                 ))}

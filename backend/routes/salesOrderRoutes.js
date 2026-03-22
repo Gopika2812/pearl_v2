@@ -22,7 +22,7 @@ router.get("/", async (req, res) => {
     }
     
     const salesOrders = await SalesOrder.find(query)
-      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal closingBalance salesOwner createdAt invoiceGenerated warehouse billingPerson")
+      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType")
       .populate('salesOwner', 'name')
       .sort({ createdAt: -1 });
     
@@ -453,6 +453,54 @@ router.get("/:id", async (req, res) => {
   } catch (error) {
     console.error("Fetch error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch sales order" });
+  }
+});
+
+// ✏️ UPDATE SALES ORDER (From EditBillModal)
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount } = req.body;
+
+    // 1. Find the order first
+    const salesOrder = await SalesOrder.findById(id);
+    if (!salesOrder) {
+      return res.status(404).json({ message: "Sales order not found" });
+    }
+
+    if (salesOrder.invoiceGenerated) {
+      return res.status(400).json({ message: "Cannot edit an order that has already been invoiced" });
+    }
+
+    // 2. Identify the difference in grandTotal so we adjust Customer Balance smoothly
+    // EditBillModal strictly passes rounded grandTotals now but we'll safeguard it:
+    const newGrandTotal = Math.round(Number(grandTotal) || 0);
+    const difference = newGrandTotal - (salesOrder.grandTotal || 0);
+
+    // 3. Update the fields
+    salesOrder.items = items || [];
+    salesOrder.sampleItems = sampleItems || [];
+    salesOrder.subtotal = Math.round(Number(subtotal) || 0);
+    salesOrder.totalTax = Math.round(Number(totalTax) || 0);
+    salesOrder.totalDiscount = Math.round(Number(totalDiscount) || 0);
+    
+    // Set Grand Total variables
+    salesOrder.grandTotal = newGrandTotal;
+    salesOrder.grandTotalWithMargin = newGrandTotal; // Usually margin relies on custom user input, syncing it as backup.
+    
+    // Also shift closing balance for the exact SO receipt
+    salesOrder.closingBalance = (salesOrder.closingBalance || 0) + difference;
+
+    await salesOrder.save();
+
+    res.json({
+      success: true,
+      message: "Sales order updated successfully",
+      data: salesOrder
+    });
+  } catch (err) {
+    console.error("❌ PUT Sales Order Error:", err.message);
+    res.status(500).json({ message: "Failed to update Sales Order" });
   }
 });
 

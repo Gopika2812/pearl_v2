@@ -3,6 +3,7 @@ import { FaList, FaSpinner, FaThLarge } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import VendorLedgerModal from "../../components/branch/VendorLedgerModal";
 
 const BranchSuppliers = () => {
   const { branch, branchLoaded } = useBranch();
@@ -14,6 +15,7 @@ const BranchSuppliers = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [selectedLedgerSupplier, setSelectedLedgerSupplier] = useState(null);
 
   useEffect(() => {
     if (branchLoaded && branchId) {
@@ -103,9 +105,8 @@ const BranchSuppliers = () => {
           // Find payments for this PO
           const poPayments = payments.filter(
             (payment) => {
-              const paymentPoId = payment.purchaseOrder?.poId 
-                ? payment.purchaseOrder.poId.toString() 
-                : null;
+              const rawId = payment.purchaseOrder?.poId;
+              const paymentPoId = rawId?._id ? rawId._id.toString() : rawId?.toString();
               const poId = po._id ? po._id.toString() : null;
               return paymentPoId === poId && payment.status === "completed";
             }
@@ -178,7 +179,8 @@ const BranchSuppliers = () => {
       const poAmount = po.grandTotal || 0;
       const poPayments = payments.filter(
         (payment) => {
-          const paymentPoId = payment.purchaseOrder?.poId?.toString() || payment.purchaseOrder?.poId;
+          const rawId = payment.purchaseOrder?.poId;
+          const paymentPoId = rawId?._id ? rawId._id.toString() : rawId?.toString();
           const poId = po._id?.toString() || po._id;
           return paymentPoId === poId && payment.status === "completed";
         }
@@ -401,6 +403,16 @@ const BranchSuppliers = () => {
                   {supplier.isActive ? "✓ Active" : "Inactive"}
                 </span>
               </div>
+
+              {/* View Ledger Button */}
+              <div className="mt-4 pt-3 border-t border-gray-100 flex justify-center">
+                <button
+                  onClick={() => setSelectedLedgerSupplier(supplier)}
+                  className="w-full py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold rounded-lg transition-colors border border-teal-200 text-sm flex items-center justify-center gap-2"
+                >
+                  <span className="text-base">📅</span> View Ledger
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -439,6 +451,9 @@ const BranchSuppliers = () => {
                 </th>
                 <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
                   Status
+                </th>
+                <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -488,12 +503,29 @@ const BranchSuppliers = () => {
                       {supplier.isActive ? "✓ Active" : "Inactive"}
                     </span>
                   </td>
+                  <td className="px-3 md:px-5 py-2 md:py-3 text-center">
+                    <button
+                      onClick={() => setSelectedLedgerSupplier(supplier)}
+                      className="bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 px-3 py-1 rounded-md text-xs font-bold transition-colors whitespace-nowrap shadow-sm"
+                    >
+                      Transactions
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {/* VENDOR LEDGER MODAL */}
+      <VendorLedgerModal 
+        isOpen={!!selectedLedgerSupplier}
+        onClose={() => setSelectedLedgerSupplier(null)}
+        supplier={selectedLedgerSupplier}
+        purchaseOrders={purchaseOrders}
+        payments={payments}
+      />
     </div>
   );
 };

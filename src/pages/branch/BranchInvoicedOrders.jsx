@@ -4,6 +4,7 @@ import { toast, ToastContainer } from "react-toastify";
 import { API_BASE } from "../../api";
 import EditBillModal from "../../components/EditBillModal";
 import InvoiceGeneratorModal from "../../components/InvoiceGeneratorModal";
+import AggregateSlipModal from "../../components/branch/AggregateSlipModal";
 import { useBranch } from "../../context/BranchContext";
 
 const BranchInvoicedOrders = () => {
@@ -13,6 +14,7 @@ const BranchInvoicedOrders = () => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showEditBillModal, setShowEditBillModal] = useState(false);
+  const [showSlipModal, setShowSlipModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
   const [expandedOrders, setExpandedOrders] = useState({});
   const [invoicesByOrder, setInvoicesByOrder] = useState({}); // New: store invoices for each SO
@@ -75,6 +77,9 @@ const BranchInvoicedOrders = () => {
         body: JSON.stringify({
           items: updatedOrder.items,
           sampleItems: updatedOrder.sampleItems,
+          subtotal: updatedOrder.subtotal,
+          totalTax: updatedOrder.totalTax,
+          totalDiscount: updatedOrder.totalDiscount,
           grandTotal: updatedOrder.grandTotal,
         }),
       });
@@ -176,14 +181,24 @@ const BranchInvoicedOrders = () => {
                 </p>
               </div>
             </div>
-            <button
-              onClick={fetchSalesOrders}
-              disabled={loading}
-              className="flex items-center gap-2 bg-[#319bab] text-white px-4 py-2 rounded-lg hover:bg-[#257f87] transition disabled:opacity-50"
-            >
-              <FaSync className={loading ? "animate-spin" : ""} />
-              Refresh
-            </button>
+            
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowSlipModal(true)}
+                disabled={filteredSalesOrders.length === 0}
+                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 shadow-sm"
+              >
+                <FaFileInvoice /> Generate Slip
+              </button>
+              <button
+                onClick={fetchSalesOrders}
+                disabled={loading}
+                className="flex items-center gap-2 bg-[#319bab] text-white px-4 py-2 rounded-lg hover:bg-[#257f87] transition disabled:opacity-50 shadow-sm"
+              >
+                <FaSync className={loading ? "animate-spin" : ""} />
+                Refresh
+              </button>
+            </div>
           </div>
         </div>
 
@@ -637,6 +652,7 @@ const BranchInvoicedOrders = () => {
       {showEditBillModal && editingOrder && (
         <EditBillModal
           order={editingOrder}
+          branchId={currentBranch?._id}
           onClose={() => {
             setShowEditBillModal(false);
             setEditingOrder(null);
@@ -644,6 +660,13 @@ const BranchInvoicedOrders = () => {
           onSave={handleSaveEditedBill}
         />
       )}
+
+      {/* AGGREGATE SLIP MODAL */}
+      <AggregateSlipModal 
+        isOpen={showSlipModal} 
+        onClose={() => setShowSlipModal(false)} 
+        orders={filteredSalesOrders} 
+      />
     </div>
   );
 };

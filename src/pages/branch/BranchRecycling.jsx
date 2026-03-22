@@ -937,7 +937,10 @@ export default function BranchRecycling() {
                 type="number"
                 value={editValues.reorderLevel}
                 onChange={(e) =>
-                  setEditValues({ ...editValues, reorderLevel: parseInt(e.target.value) || 0 })
+                  setEditValues({
+                    ...editValues,
+                    reorderLevel: e.target.value === "" ? "" : parseInt(e.target.value),
+                  })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="e.g., 10"
@@ -956,7 +959,10 @@ export default function BranchRecycling() {
                 type="number"
                 value={editValues.reorderQty}
                 onChange={(e) =>
-                  setEditValues({ ...editValues, reorderQty: parseInt(e.target.value) || 0 })
+                  setEditValues({
+                    ...editValues,
+                    reorderQty: e.target.value === "" ? "" : parseInt(e.target.value),
+                  })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="e.g., 20"
@@ -1046,7 +1052,7 @@ export default function BranchRecycling() {
                     onChange={(e) =>
                       setRestockingFormValues((prev) => ({
                         ...prev,
-                        salesPeriodDays: parseInt(e.target.value) || 7,
+                        salesPeriodDays: e.target.value === "" ? "" : parseInt(e.target.value),
                       }))
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -1106,7 +1112,7 @@ export default function BranchRecycling() {
                       onChange={(e) =>
                         setRestockingFormValues((prev) => ({
                           ...prev,
-                          threshold: parseInt(e.target.value) || 0,
+                          threshold: e.target.value === "" ? "" : parseInt(e.target.value),
                         }))
                       }
                       onBlur={() => {
@@ -1137,7 +1143,7 @@ export default function BranchRecycling() {
                       onChange={(e) =>
                         setRestockingFormValues((prev) => ({
                           ...prev,
-                          restockingQty: parseInt(e.target.value) || 0,
+                          restockingQty: e.target.value === "" ? "" : parseInt(e.target.value),
                         }))
                       }
                       onBlur={() => {
@@ -1547,10 +1553,10 @@ export default function BranchRecycling() {
       </div>
 
       {/* EDIT MODAL */}
-      {editingProduct && <EditModal />}
+      {editingProduct && EditModal()}
 
       {/* RESTOCKING CONFIG MODAL */}
-      {restockingConfigMode && <RestockingConfigModal />}
+      {restockingConfigMode && RestockingConfigModal()}
 
       {/* BULK RESTOCK PREVIEW MODAL */}
       {bulkRestockPreviewMode && (

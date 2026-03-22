@@ -3,7 +3,7 @@ import { FaPlus, FaSave, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
 
-const EditBillModal = ({ order, onClose, onSave }) => {
+const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   const [items, setItems] = useState([]);
   const [sampleItems, setSampleItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -15,9 +15,10 @@ const EditBillModal = ({ order, onClose, onSave }) => {
     hsn: "",
     qty: 1,
     sellingPrice: 0,
+    gst: 0,
     cgst: 0,
     sgst: 0,
-    igst: 0,
+    igst: false,
     discountAmount: 0,
   });
 
@@ -33,14 +34,16 @@ const EditBillModal = ({ order, onClose, onSave }) => {
   // Fetch available products
   const fetchProducts = async () => {
     try {
-      const branchId = order?.branchId;
-      if (!branchId) {
-        console.warn("⚠️ branchId not found in order");
-        toast.warning("Unable to load products - branch not set");
+      // Get branchId from order or from prop
+      const branch = order?.branchId || branchId;
+      
+      if (!branch) {
+        console.warn("⚠️ branchId not found in order or props");
+        toast.error("Unable to load products - branch information missing");
         return;
       }
 
-      const url = `${API_BASE}/products?branchId=${branchId}&limit=10000`;
+      const url = `${API_BASE}/products?branchId=${branch}&limit=10000`;
       console.log(`📦 Fetching products from: ${url}`);
       
       const res = await fetch(url);
@@ -82,6 +85,7 @@ const EditBillModal = ({ order, onClose, onSave }) => {
   const handleQtyChange = (index, qty) => {
     const updated = [...items];
     updated[index].qty = Math.max(1, parseInt(qty) || 1);
+    updated[index].total = calculateItemTotal(updated[index]);
     setItems(updated);
   };
 
@@ -89,6 +93,7 @@ const EditBillModal = ({ order, onClose, onSave }) => {
   const handlePriceChange = (index, price) => {
     const updated = [...items];
     updated[index].sellingPrice = parseFloat(price) || 0;
+    updated[index].total = calculateItemTotal(updated[index]);
     setItems(updated);
   };
 
@@ -96,6 +101,7 @@ const EditBillModal = ({ order, onClose, onSave }) => {
   const handleDiscountChange = (index, discount) => {
     const updated = [...items];
     updated[index].discountAmount = parseFloat(discount) || 0;
+    updated[index].total = calculateItemTotal(updated[index]);
     setItems(updated);
   };
 
@@ -141,9 +147,10 @@ const EditBillModal = ({ order, onClose, onSave }) => {
       hsn: "",
       qty: 1,
       sellingPrice: 0,
+      gst: 0,
       cgst: 0,
       sgst: 0,
-      igst: 0,
+      igst: false,
       discountAmount: 0,
     });
     setShowAddItemForm(false);
@@ -160,9 +167,10 @@ const EditBillModal = ({ order, onClose, onSave }) => {
         name: product.name,
         hsn: product.hsn,
         sellingPrice: product.sellingPrice || 0,
+        gst: product.gst || 0,
         cgst: product.cgst || 0,
         sgst: product.sgst || 0,
-        igst: product.igst || 0,
+        igst: Boolean(product.igst),
       });
     }
   };
@@ -171,11 +179,21 @@ const EditBillModal = ({ order, onClose, onSave }) => {
   const handleSave = async () => {
     try {
       setLoading(true);
+      
+      const newItemsTotal = calculateGrandTotal();
       const updatedOrder = {
         ...order,
         items,
         sampleItems,
-        grandTotal: calculateGrandTotal(),
+        subtotal: items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0),
+        totalTax: items.reduce((sum, item) => {
+          const sub = item.qty * item.sellingPrice;
+          const discounted = sub - (item.discountAmount || 0);
+          const tax = item.igst ? discounted * (item.gst || 0) / 100 : discounted * ((item.cgst || 0) + (item.sgst || 0)) / 100;
+          return sum + tax;
+        }, 0),
+        totalDiscount: items.reduce((sum, item) => sum + (item.discountAmount || 0), 0),
+        grandTotal: Math.round(newItemsTotal),
       };
 
       // Call onSave callback with updated order
