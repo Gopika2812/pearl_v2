@@ -1,6 +1,7 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
+import { createAuditLog } from "../utils/logUtil.js";
 import Branch from "../models/Branch.js";
 import BranchUser from "../models/BranchUser.js";
 import PendingRegistration from "../models/PendingRegistration.js";
@@ -93,6 +94,7 @@ router.post("/register", async (req, res) => {
         username: newUser.username,
         email: newUser.email,
         role: newUser.role,
+        allowedPages: newUser.allowedPages || [],
       },
     });
   } catch (error) {
@@ -180,6 +182,7 @@ router.post("/verify-otp", async (req, res) => {
         username: newUser.username,
         email: newUser.email,
         role: newUser.role,
+        allowedPages: newUser.allowedPages || [],
       },
     });
   } catch (error) {
@@ -251,10 +254,20 @@ router.post("/login", async (req, res) => {
         username: user.username,
         role: user.role,
         branch: user.branch._id,
+        allowedPages: user.allowedPages || [],
       },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
+
+    // Log successful login
+    await createAuditLog({
+      userId: user._id,
+      username: user.username,
+      branchId: user.branch._id,
+      action: "LOGIN",
+      description: `User ${user.username} logged in to branch ${user.branch.name || user.branch.location || "Branch"}`,
+    });
 
     res.json({
       success: true,
@@ -272,6 +285,7 @@ router.post("/login", async (req, res) => {
           location: user.branch.location,
         },
         role: user.role,
+        allowedPages: user.allowedPages || [],
       },
     });
   } catch (error) {
@@ -368,6 +382,7 @@ router.put("/:id", async (req, res) => {
     if (email !== undefined) updateData.email = email;
     if (role !== undefined) updateData.role = role;
     if (status !== undefined) updateData.status = status;
+    if (req.body.allowedPages !== undefined) updateData.allowedPages = req.body.allowedPages;
 
     const user = await BranchUser.findByIdAndUpdate(id, updateData, {
       new: true,

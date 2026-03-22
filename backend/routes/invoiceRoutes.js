@@ -8,6 +8,7 @@ import Invoice from "../models/Invoice.js";
 import Product from "../models/Product.js";
 import SalesOrder from "../models/SalesOrder.js";
 import { getFinancialYear } from "../utils/financialYear.js";
+import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -301,6 +302,17 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       });
 
       await invoice.save({ session });
+
+      // Log Invoice Finalization
+      await createAuditLog({
+        userId: req.body.finalizedBy || invoice.billingPerson || "System",
+        username: req.body.finalizedByUsername || invoice.billingPerson || "System",
+        branchId: invoice.branchId,
+        action: "FINALIZE_INVOICE",
+        description: `Finalized Invoice: ${invoice.invoiceNumber}. Amount: ₹${invoice.grandTotal}`,
+        targetId: invoice._id,
+        targetModel: "Invoice",
+      });
 
       // Update product totalQty for each invoiced item
       for (const item of processedItems) {

@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { Route, Routes, useLocation } from "react-router-dom";
-import { ToastContainer } from "react-toastify";
+import { useState, useEffect } from "react";
+import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 import BranchSidebar from "./components/BranchSidebar";
@@ -12,6 +12,7 @@ import SuperAdminSidebar from "./components/SuperAdminSidebar";
 import SuperAdminTopbar from "./components/SuperAdminTopbar";
 import { BranchProvider } from "./context/BranchContext";
 import { InventoryProvider } from "./context/InventoryContext";
+import { useBranch } from "./context/BranchContext";
 import AdminBranchManagement from "./pages/AdminBranchManagement";
 import APAgingPage from "./pages/APAgingPage";
 import ARAgingPage from "./pages/ARAgingPage";
@@ -38,6 +39,8 @@ import BranchRegisterPage from "./pages/BranchRegisterPage";
 import UserRegistrationPage from "./pages/UserRegistrationPage";
 import SuperAdminLoginPage from "./pages/SuperAdminLoginPage";
 import SuperAdminBranchManagement from "./pages/SuperAdminBranchManagement";
+import SuperAdminControlSystem from "./pages/SuperAdminControlSystem";
+import SuperAdminAuditLogs from "./pages/SuperAdminAuditLogs";
 import CRMPage from "./pages/CRMPage";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerSummary from "./pages/CustomerSummary";
@@ -58,9 +61,11 @@ import ReorderingDashboard from "./pages/ReorderingDashboard";
 import TrialBalancePage from "./pages/TrialBalancePage";
 import VendorSummary from "./pages/VendorSummary";
 
-function App() {
+function AppContent() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { superAdminViewBranch, user } = useBranch();
 
   // Check if we're on a branch-specific page
   const isBranchRoute = location.pathname.startsWith("/branch/") || location.pathname === "/branch-home";
@@ -68,6 +73,9 @@ function App() {
   
   // Check if we're on a super admin page
   const isSuperAdminRoute = location.pathname.startsWith("/super-admin/");
+
+  // Super admin viewing a branch → treat as branch route for layout purposes
+  const isSuperAdminViewingBranch = !!superAdminViewBranch && isBranchRoute;
   
   // Hide layout on login pages
   const hideLayout =
@@ -80,17 +88,66 @@ function App() {
     location.pathname === "/customer-login" ||
     location.pathname === "/pearls-shopping";
 
+  // RBAC Permission Check
+  useEffect(() => {
+    if (isBranchRoute && !superAdminViewBranch && user) {
+      // Skip check for ADMIN role
+      if (user.role === "ADMIN") return;
+
+      // Map paths to permission IDs
+      const pathPermissionMap = {
+        "/branch-home": "home",
+        "/branch/po": "create-po",
+        "/branch/purchase-orders": "purchase-list",
+        "/branch/recycling": "restocking",
+        "/branch/debit-note": "debit-note",
+        "/branch/po-payment": "payment-po",
+        "/branch/sales-order": "create-so",
+        "/branch/invoiced-order": "invoiced-order",
+        "/branch/credit-note": "credit-note",
+        "/branch/receipt": "receipt",
+        "/branch/dispatch": "dispatch",
+        "/branch/suppliers": "suppliers",
+        "/branch/customers": "customers",
+        "/branch/journals": "journals",
+        "/branch/insights": "insights",
+        "/branch/quick-links": "quick-links",
+        "/branch/summary": "summary",
+        "/admin/branches": "admin-branches",
+      };
+
+      const requiredPermission = pathPermissionMap[location.pathname];
+      const allowedPages = user.allowedPages || [];
+
+      // If page has a defined permission and user doesn't have it, redirect
+      if (requiredPermission && !allowedPages.includes(requiredPermission)) {
+        if (location.pathname !== "/branch-home") {
+          toast.error("You don't have permission to access that page");
+          navigate("/branch-home");
+        }
+      }
+    }
+  }, [location.pathname, isBranchRoute, superAdminViewBranch, navigate, user]);
+
   return (
-    <BranchProvider>
-      <InventoryProvider>
-        <>
-          <ToastContainer />
+    <>
+      <ToastContainer />
 
           <div className="flex">
-            {/* Sidebar - Use branch sidebar if on branch route, super admin if on super admin route, otherwise use regular */}
+            {/* Sidebar logic:
+                - Super admin viewing a branch → BranchSidebar
+                - Super admin pages normally → SuperAdminSidebar
+                - Branch pages → BranchSidebar
+                - Otherwise → Sidebar (legacy)
+            */}
             {!hideLayout && !isInsightsRoute && (
               <>
-                {isSuperAdminRoute ? (
+                {isSuperAdminViewingBranch ? (
+                  <BranchSidebar
+                    isOpen={sidebarOpen}
+                    onClose={() => setSidebarOpen(false)}
+                  />
+                ) : isSuperAdminRoute ? (
                   <SuperAdminSidebar
                     isOpen={sidebarOpen}
                     onClose={() => setSidebarOpen(false)}
@@ -113,7 +170,10 @@ function App() {
             <div className="flex-1 min-h-screen flex flex-col">
               {!hideLayout && (
                 <>
-                  {isSuperAdminRoute ? (
+                  {isSuperAdminViewingBranch ? (
+                    // Super admin has selected a branch → show BranchTopbar
+                    <BranchTopbar onMenuClick={() => setSidebarOpen(true)} />
+                  ) : isSuperAdminRoute ? (
                     <SuperAdminTopbar onMenuClick={() => setSidebarOpen(true)} />
                   ) : isBranchRoute && !isInsightsRoute ? (
                     <BranchTopbar onMenuClick={() => setSidebarOpen(true)} />
@@ -218,11 +278,27 @@ function App() {
                     path="/admin/branches"
                     element={<ProtectedRoute element={<AdminBranchManagement />} role={["ADMIN"]} />}
                   />
+                  <Route
+                    path="/super-admin/control-system"
+                    element={<ProtectedRoute element={<SuperAdminControlSystem />} role={["SUPER_ADMIN"]} />}
+                  />
+                  <Route
+                    path="/super-admin/audit-logs"
+                    element={<ProtectedRoute element={<SuperAdminAuditLogs />} role={["SUPER_ADMIN"]} />}
+                  />
                 </Routes>
             </div>
           </div>
         </div>
       </>
+  );
+}
+
+function App() {
+  return (
+    <BranchProvider>
+      <InventoryProvider>
+        <AppContent />
       </InventoryProvider>
     </BranchProvider>
   );

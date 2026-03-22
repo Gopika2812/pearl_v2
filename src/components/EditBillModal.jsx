@@ -13,7 +13,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     productId: "",
     name: "",
     hsn: "",
-    qty: 1,
+    qty: "",
     sellingPrice: 0,
     gst: 0,
     cgst: 0,
@@ -21,6 +21,9 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     igst: false,
     discountAmount: 0,
   });
+
+  const [productSearch, setProductSearch] = useState("");
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
 
   // Initialize items from order
   useEffect(() => {
@@ -136,7 +139,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       ...newItem,
       productId: newItem.productId,
       name: product.name || newItem.name,
-      hsn: product.hsn || newItem.hsn,
+      hsn: product.hsn || product.hsnCode || newItem.hsn,
       total: calculateItemTotal(newItem),
     };
 
@@ -145,7 +148,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       productId: "",
       name: "",
       hsn: "",
-      qty: 1,
+      qty: "",
       sellingPrice: 0,
       gst: 0,
       cgst: 0,
@@ -153,6 +156,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       igst: false,
       discountAmount: 0,
     });
+    setProductSearch("");
     setShowAddItemForm(false);
     toast.success("Item added to bill");
   };
@@ -161,19 +165,26 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   const handleProductSelect = (productId) => {
     const product = products.find((p) => p._id === productId);
     if (product) {
+      const gstRate = product.gst || 0;
+      const isIgst = Boolean(product.igst || false);
       setNewItem({
         ...newItem,
         productId: product._id,
         name: product.name,
-        hsn: product.hsn,
+        hsn: product.hsn || product.hsnCode || "",
         sellingPrice: product.sellingPrice || 0,
-        gst: product.gst || 0,
-        cgst: product.cgst || 0,
-        sgst: product.sgst || 0,
-        igst: Boolean(product.igst),
+        gst: gstRate,
+        cgst: isIgst ? 0 : gstRate / 2,
+        sgst: isIgst ? 0 : gstRate / 2,
+        igst: isIgst,
       });
     }
   };
+
+  // Filter products based on search term
+  const filteredProducts = products.filter((p) =>
+    p.name.toLowerCase().includes((productSearch || "").toLowerCase())
+  );
 
   // Save changes
   const handleSave = async () => {
@@ -404,20 +415,47 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-2">
-                      Product *
-                    </label>
-                    <select
-                      value={newItem.productId}
-                      onChange={(e) => handleProductSelect(e.target.value)}
-                      className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none"
-                    >
-                      <option value="">Select Product</option>
-                      {products.map((prod) => (
-                        <option key={prod._id} value={prod._id}>
-                          {prod.name}
-                        </option>
-                      ))}
-                    </select>
+                       Product *
+                     </label>
+                     <div className="relative">
+                       <input
+                         type="text"
+                         placeholder="Search product..."
+                         value={productSearch}
+                         onChange={(e) => {
+                           setProductSearch(e.target.value);
+                           setShowProductDropdown(true);
+                           if (e.target.value === "") {
+                             setNewItem({ ...newItem, productId: "", name: "" }); // Reset if cleared
+                           }
+                         }}
+                         onFocus={() => setShowProductDropdown(true)}
+                         onBlur={() => setTimeout(() => setShowProductDropdown(false), 200)}
+                         className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none"
+                       />
+                       {showProductDropdown && (
+                         <ul className="absolute z-10 w-full bg-white border border-gray-300 rounded mt-1 max-h-48 overflow-y-auto shadow-lg">
+                           {filteredProducts.length > 0 ? (
+                             filteredProducts.map((prod) => (
+                               <li
+                                 key={prod._id}
+                                 className="px-3 py-2 hover:bg-green-50 cursor-pointer text-sm"
+                                 onMouseDown={(e) => {
+                                   e.preventDefault(); // Prevent blur
+                                   handleProductSelect(prod._id);
+                                   setProductSearch(prod.name);
+                                   setShowProductDropdown(false);
+                                 }}
+                               >
+                                 {prod.name}
+                               </li>
+                             ))
+                           ) : (
+                             <li className="px-3 py-2 text-gray-500 text-sm">No products found</li>
+                           )}
+                         </ul>
+                       )}
+                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-2">
@@ -427,7 +465,10 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       type="number"
                       value={newItem.qty}
                       onChange={(e) =>
-                        setNewItem({ ...newItem, qty: parseInt(e.target.value) || 1 })
+                        setNewItem({ 
+                          ...newItem, 
+                          qty: e.target.value === "" ? "" : parseInt(e.target.value)
+                        })
                       }
                       className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none"
                       min="1"

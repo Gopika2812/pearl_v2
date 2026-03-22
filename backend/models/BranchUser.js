@@ -46,6 +46,10 @@ const branchUserSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    allowedPages: {
+      type: [String],
+      default: [],
+    },
   },
   { timestamps: true }
 );

@@ -11,6 +11,7 @@ import {
   FaHandshake,
   FaHome,
   FaLink,
+  FaShieldAlt,
   FaShoppingCart,
   FaSignOutAlt,
   FaTimes,
@@ -24,12 +25,19 @@ import { useBranch } from "../context/BranchContext";
 const BranchSidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { branch, logout } = useBranch();
+  const { branch, logout, superAdminViewBranch, setSuperAdminViewBranch, user } = useBranch();
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [poOpen, setPoOpen] = useState(false);
   const [soOpen, setSoOpen] = useState(false);
-  const [user, setUser] = useState(null);
+
+  const isSuperAdminViewing = !!superAdminViewBranch;
+
+  const handleBackToSuperAdmin = () => {
+    setSuperAdminViewBranch(null);
+    navigate("/super-admin/branch-management");
+    if (onClose) onClose();
+  };
 
   const menuItemsTop = [
     { name: "Home", path: "/branch-home", icon: <FaHome /> },
@@ -67,18 +75,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     { name: "Branch Management", path: "/admin/branches", icon: <FaBuilding /> },
   ];
 
-  // Load user from localStorage
   useEffect(() => {
-    const userData = localStorage.getItem("user");
-    if (userData) {
-      try {
-        setUser(JSON.parse(userData));
-      } catch (error) {
-        console.error("Error parsing user data:", error);
-        setUser(null);
-      }
-    }
-
     // Auto-open dropdowns if current path is inside them
     if (purchaseItems.some(i => i.path === location.pathname)) setPoOpen(true);
     if (salesItems.some(i => i.path === location.pathname)) setSoOpen(true);
@@ -88,6 +85,49 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     logout();
     navigate("/branch-login");
   };
+
+  // Permission check helper
+  const isAllowed = (path) => {
+    if (!user) return false;
+    if (user.role === "ADMIN") return true;
+    
+    const allowedPages = user.allowedPages || [];
+    
+    const pathPermissionMap = {
+      "/branch-home": "home",
+      "/branch/po": "create-po",
+      "/branch/purchase-orders": "purchase-list",
+      "/branch/recycling": "restocking",
+      "/branch/debit-note": "debit-note",
+      "/branch/po-payment": "payment-po",
+      "/branch/sales-order": "create-so",
+      "/branch/invoiced-order": "invoiced-order",
+      "/branch/credit-note": "credit-note",
+      "/branch/receipt": "receipt",
+      "/branch/dispatch": "dispatch",
+      "/branch/suppliers": "suppliers",
+      "/branch/customers": "customers",
+      "/branch/journals": "journals",
+      "/branch/insights": "insights",
+      "/branch/quick-links": "quick-links",
+      "/branch/summary": "summary",
+      "/admin/branches": "admin-branches",
+    };
+
+    const permissionId = pathPermissionMap[path];
+    if (!permissionId) return true; // Pages without specific permission ID are public within branch
+
+    const result = allowedPages.includes(permissionId);
+    // console.log(`Path: ${path}, ID: ${permissionId}, Allowed: ${result}, UserPages:`, allowedPages);
+    return result;
+  };
+
+  const filteredTop = menuItemsTop.filter(i => isAllowed(i.path));
+  const filteredPurchase = purchaseItems.filter(i => isAllowed(i.path));
+  const filteredSales = salesItems.filter(i => isAllowed(i.path));
+  const filteredBottom = menuItemsBottom.filter(i => isAllowed(i.path));
+  const filteredAdmin = adminItems.filter(i => isAllowed(i.path));
+  const filteredSummary = summaryItems.filter(i => isAllowed(i.path));
 
   return (
     <>
@@ -110,7 +150,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar py-4">
-          {menuItemsTop.map((item, index) => {
+          {filteredTop.map((item, index) => {
             const active = location.pathname === item.path;
             return (
               <Link
@@ -132,84 +172,88 @@ const BranchSidebar = ({ isOpen, onClose }) => {
           })}
 
           {/* PURCHASE ORDER DROPDOWN */}
-          <div className="mx-3 mb-1 mt-2">
-            <button
-              onClick={() => setPoOpen(!poOpen)}
-              className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
-              title="Purchase Order"
-            >
-              <div className="w-8 flex justify-center flex-shrink-0">
-                <span className="text-lg"><FaShoppingCart /></span>
-              </div>
-              <span className="text-sm flex-1 text-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">Purchase Order</span>
-              <div className="w-4 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <FaChevronDown className={`text-xs transition-transform ${poOpen ? "rotate-180" : ""}`} />
-              </div>
-            </button>
-            {poOpen && (
-              <div className="mt-1 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
-                {purchaseItems.map((item, idx) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={idx}
-                      to={item.path}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                        active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
-                      }`}
-                      title={item.name}
-                    >
-                      <div className="w-6 flex justify-center flex-shrink-0">
-                        <span className="text-sm">{item.icon}</span>
-                      </div>
-                      <span className="whitespace-nowrap">{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {filteredPurchase.length > 0 && (
+            <div className="mx-3 mb-1 mt-2">
+              <button
+                onClick={() => setPoOpen(!poOpen)}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
+                title="Purchase Order"
+              >
+                <div className="w-8 flex justify-center flex-shrink-0">
+                  <span className="text-lg"><FaShoppingCart /></span>
+                </div>
+                <span className="text-sm flex-1 text-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">Purchase Order</span>
+                <div className="w-4 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <FaChevronDown className={`text-xs transition-transform ${poOpen ? "rotate-180" : ""}`} />
+                </div>
+              </button>
+              {poOpen && (
+                <div className="mt-1 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
+                  {filteredPurchase.map((item, idx) => {
+                    const active = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={idx}
+                        to={item.path}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                          active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
+                        }`}
+                        title={item.name}
+                      >
+                        <div className="w-6 flex justify-center flex-shrink-0">
+                          <span className="text-sm">{item.icon}</span>
+                        </div>
+                        <span className="whitespace-nowrap">{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* SALES ORDER DROPDOWN */}
-          <div className="mx-3 mb-1">
-            <button
-              onClick={() => setSoOpen(!soOpen)}
-              className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
-              title="Sales Order"
-            >
-              <div className="w-8 flex justify-center flex-shrink-0">
-                <span className="text-lg"><FaShoppingCart /></span>
-              </div>
-              <span className="text-sm flex-1 text-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">Sales Order</span>
-              <div className="w-4 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <FaChevronDown className={`text-xs transition-transform ${soOpen ? "rotate-180" : ""}`} />
-              </div>
-            </button>
-            {soOpen && (
-              <div className="mt-1 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
-                {salesItems.map((item, idx) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={idx}
-                      to={item.path}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                        active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
-                      }`}
-                      title={item.name}
-                    >
-                      <div className="w-6 flex justify-center flex-shrink-0">
-                        <span className="text-sm">{item.icon}</span>
-                      </div>
-                       <span className="whitespace-nowrap">{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {filteredSales.length > 0 && (
+            <div className="mx-3 mb-1">
+              <button
+                onClick={() => setSoOpen(!soOpen)}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
+                title="Sales Order"
+              >
+                <div className="w-8 flex justify-center flex-shrink-0">
+                  <span className="text-lg"><FaShoppingCart /></span>
+                </div>
+                <span className="text-sm flex-1 text-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">Sales Order</span>
+                <div className="w-4 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <FaChevronDown className={`text-xs transition-transform ${soOpen ? "rotate-180" : ""}`} />
+                </div>
+              </button>
+              {soOpen && (
+                <div className="mt-1 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
+                  {filteredSales.map((item, idx) => {
+                    const active = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={idx}
+                        to={item.path}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                          active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
+                        }`}
+                        title={item.name}
+                      >
+                        <div className="w-6 flex justify-center flex-shrink-0">
+                          <span className="text-sm">{item.icon}</span>
+                        </div>
+                        <span className="whitespace-nowrap">{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
-          {menuItemsBottom.map((item, index) => {
+          {filteredBottom.map((item, index) => {
             const active = location.pathname === item.path;
             return (
               <Link
@@ -251,7 +295,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
 
               {adminOpen && (
                 <div className="mt-2 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
-                  {adminItems.map((item, idx) => {
+                  {filteredAdmin.map((item, idx) => {
                     const active = location.pathname === item.path;
                     return (
                       <Link
@@ -315,6 +359,27 @@ const BranchSidebar = ({ isOpen, onClose }) => {
           </div> */}
         </nav>
 
+        {/* Viewing-branch indicator for Super Admin */}
+        {isSuperAdminViewing && (
+          <div className="mx-3 mb-2 px-3 py-2 bg-orange-500/20 border border-orange-400/40 rounded-lg overflow-hidden">
+            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              <FaShieldAlt className="text-orange-300 text-sm flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] text-orange-200 font-semibold uppercase">Admin View</p>
+                <p className="text-xs text-white font-bold truncate">{superAdminViewBranch?.name}</p>
+              </div>
+            </div>
+            <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              <button
+                onClick={handleBackToSuperAdmin}
+                className="w-full flex items-center gap-2 text-orange-200 hover:text-white text-xs font-semibold transition"
+              >
+                <FaShieldAlt size={10} /> Back to Super Admin
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Logout */}
         <div className="p-4 border-t border-white/20 flex justify-center group-hover:justify-start">
           <button
@@ -371,7 +436,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto no-scrollbar py-4 px-2">
-          {menuItemsTop.map((item, index) => {
+          {filteredTop.map((item, index) => {
             const active = location.pathname === item.path;
             return (
               <Link
@@ -402,7 +467,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
             </button>
             {poOpen && (
               <div className="mt-1 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                {purchaseItems.map((item, idx) => {
+                {filteredPurchase.map((item, idx) => {
                   const active = location.pathname === item.path;
                   return (
                     <Link
@@ -434,7 +499,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
             </button>
             {soOpen && (
               <div className="mt-1 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                {salesItems.map((item, idx) => {
+                {filteredSales.map((item, idx) => {
                   const active = location.pathname === item.path;
                   return (
                     <Link
@@ -454,7 +519,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
             )}
           </div>
 
-          {menuItemsBottom.map((item, index) => {
+          {filteredBottom.map((item, index) => {
             const active = location.pathname === item.path;
             return (
               <Link
@@ -473,8 +538,8 @@ const BranchSidebar = ({ isOpen, onClose }) => {
             );
           })}
 
-          {/* ADMIN SECTION MOBILE - Only show for ADMIN users */}
-          {user?.role === "ADMIN" && (
+          {/* MOBILE ADMIN SECTION */}
+          {user?.role === "ADMIN" && filteredAdmin.length > 0 && (
             <div className="mx-2 mb-1 mt-4">
               <button
                 onClick={() => setAdminOpen(!adminOpen)}
@@ -489,7 +554,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
 
               {adminOpen && (
                 <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                  {adminItems.map((item, idx) => {
+                  {filteredAdmin.map((item, idx) => {
                     const active = location.pathname === item.path;
                     return (
                       <Link
@@ -512,44 +577,59 @@ const BranchSidebar = ({ isOpen, onClose }) => {
             </div>
           )}
 
-          {/* SUMMARY SECTION MOBILE */}
-          <div className="mx-2 mb-1 mt-4">
-            <button
-              onClick={() => setSummaryOpen(!summaryOpen)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-            >
-              <span className="text-lg"><FaChartBar /></span>
-              <span className="text-sm flex-1 text-left">Summary</span>
-              <FaChevronDown
-                className={`text-xs transition-transform ${
-                  summaryOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
+          {/* MOBILE SUMMARY SECTION */}
+          {filteredSummary.length > 0 && (
+            <div className="mx-2 mb-1 mt-4">
+              <button
+                onClick={() => setSummaryOpen(!summaryOpen)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+              >
+                <span className="text-lg"><FaChartBar /></span>
+                <span className="text-sm flex-1 text-left">Summary</span>
+                <FaChevronDown
+                  className={`text-xs transition-transform ${
+                    summaryOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
 
-            {summaryOpen && (
-              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                {summaryItems.map((item, idx) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={idx}
-                      to={item.path}
-                      onClick={onClose}
-                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
-                        active
-                          ? "bg-white/20 text-white font-semibold"
-                          : "hover:bg-white/10 text-white/80"
-                      }`}
-                    >
-                      <span className="text-sm">{item.icon}</span>
-                      <span>{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+              {summaryOpen && (
+                <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                  {filteredSummary.map((item, idx) => {
+                    const active = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={idx}
+                        to={item.path}
+                        onClick={onClose}
+                        className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
+                          active
+                            ? "bg-white/20 text-white font-semibold"
+                            : "hover:bg-white/10 text-white/80"
+                        }`}
+                      >
+                        <span className="text-sm">{item.icon}</span>
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {/* Super Admin Back Button - Mobile */}
+          {isSuperAdminViewing && (
+            <div className="mx-2 mb-2 px-4 py-3 bg-orange-500/20 border border-orange-400/40 rounded-xl">
+              <p className="text-[10px] text-orange-200 font-semibold uppercase mb-1">Admin View: {superAdminViewBranch?.name}</p>
+              <button
+                onClick={handleBackToSuperAdmin}
+                className="flex items-center gap-2 text-orange-200 hover:text-white text-sm font-semibold transition"
+              >
+                <FaShieldAlt size={12} /> Back to Super Admin
+              </button>
+            </div>
+          )}
+
         </nav>
 
         {/* Logout */}

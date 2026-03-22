@@ -47,6 +47,16 @@ export default function BranchHome() {
                   <p className="text-xs text-blue-100 font-semibold mb-1">Address</p>
                   <p className="text-base font-semibold text-white">{branch?.address || "-"}</p>
                 </div>
+                {user?.allowedPages?.length > 0 && (
+                  <div className="bg-white/10 rounded-xl p-4 md:col-span-2 lg:col-span-3 border border-white/20">
+                    <p className="text-xs text-blue-100 font-semibold mb-2 uppercase tracking-widest">Active Permissions (DEBUG)</p>
+                    <div className="flex flex-wrap gap-2">
+                      {user.allowedPages.map(page => (
+                        <span key={page} className="bg-white/20 text-white text-[10px] px-2 py-1 rounded font-bold uppercase">{page}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

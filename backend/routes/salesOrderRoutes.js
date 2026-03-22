@@ -4,6 +4,7 @@ import Commission from "../models/Commission.js";
 import Customer from "../models/Customer.js";
 import SalesOrder from "../models/SalesOrder.js";
 import VoucherType from "../models/VoucherType.js";
+import { createAuditLog } from "../utils/logUtil.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import GLService from "../utils/glService.js";
 
@@ -226,6 +227,17 @@ router.post("/", async (req, res) => {
     // ✅ Increment voucher counter
     voucher.counter += 1;
     await voucher.save();
+    // Log Sales Order creation
+    await createAuditLog({
+      userId: req.body.userId || salesOrder.billingPerson || salesOrder.salesOwner, // Fallback if no explicit userId
+      username: salesOrder.billingPerson || "System", 
+      branchId: salesOrder.branchId,
+      action: "CREATE_SO",
+      description: `Created Sales Order: ${salesOrder.invoiceId} for ${salesOrder.customer.name}. Total: ₹${salesOrder.grandTotal}`,
+      targetId: salesOrder._id,
+      targetModel: "SalesOrder",
+    });
+
     console.log(`✅ Voucher counter incremented to ${voucher.counter}`);
 
     res.status(201).json({
@@ -350,6 +362,17 @@ router.delete("/:id", async (req, res) => {
 
     // 🗑️ DELETE ASSOCIATED COMMISSION RECORD (if any)
     await Commission.deleteOne({ salesOrderId: req.params.id });
+
+    // Log Sales Order deletion
+    await createAuditLog({
+      userId: req.query.userId || "System", // Ideally passed from frontend
+      username: req.query.username || "System",
+      branchId: salesOrder.branchId,
+      action: "DELETE_SO",
+      description: `Deleted Sales Order: ${salesOrder.invoiceId} for ${salesOrder.customer.name}`,
+      targetId: salesOrder._id,
+      targetModel: "SalesOrder",
+    });
 
     // 🗑️ DELETE SALES ORDER
     await SalesOrder.findByIdAndDelete(req.params.id);
@@ -477,6 +500,13 @@ router.put("/:id", async (req, res) => {
     const newGrandTotal = Math.round(Number(grandTotal) || 0);
     const difference = newGrandTotal - (salesOrder.grandTotal || 0);
 
+    // Capture 'before' state for audit log
+    const beforeState = {
+      items: JSON.parse(JSON.stringify(salesOrder.items || [])),
+      grandTotal: salesOrder.grandTotal,
+      subtotal: salesOrder.subtotal,
+    };
+
     // 3. Update the fields
     salesOrder.items = items || [];
     salesOrder.sampleItems = sampleItems || [];
@@ -492,6 +522,25 @@ router.put("/:id", async (req, res) => {
     salesOrder.closingBalance = (salesOrder.closingBalance || 0) + difference;
 
     await salesOrder.save();
+
+    // Log Sales Order update
+    await createAuditLog({
+      userId: req.body.updatedBy || salesOrder.billingPerson || "System",
+      username: req.body.updatedByUsername || salesOrder.billingPerson || "System",
+      branchId: salesOrder.branchId,
+      action: "UPDATE_SO",
+      description: `Updated Sales Order: ${salesOrder.invoiceId}. Total changed from ₹${beforeState.grandTotal} to ₹${salesOrder.grandTotal}`,
+      targetId: salesOrder._id,
+      targetModel: "SalesOrder",
+      changes: {
+        before: beforeState,
+        after: {
+          items: salesOrder.items,
+          grandTotal: salesOrder.grandTotal,
+          subtotal: salesOrder.subtotal,
+        }
+      }
+    });
 
     res.json({
       success: true,

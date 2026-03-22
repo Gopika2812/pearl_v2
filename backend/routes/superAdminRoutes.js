@@ -101,6 +101,22 @@ router.post("/login", async (req, res) => {
   }
 });
 
+/**
+ * GET: Fetch single super admin by ID
+ */
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const admin = await SuperAdmin.findById(id).select("-password");
+    if (!admin) {
+      return res.status(404).json({ success: false, message: "Super Admin not found" });
+    }
+    res.json({ success: true, data: admin });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
 // ==================== SUPER ADMIN DASHBOARD ====================
 
 /**
