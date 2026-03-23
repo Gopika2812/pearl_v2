@@ -9,7 +9,7 @@ import { useInventory } from "../../context/InventoryContext";
 const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 
 export default function BranchDispatch() {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const { voucherTypes } = useInventory();
 
   // State
@@ -170,11 +170,17 @@ export default function BranchDispatch() {
 
   // Filter vouchers by order type
   useEffect(() => {
-    const filtered = voucherTypes.filter((v) => v.orderType === orderType);
+    let filtered = voucherTypes.filter((v) => v.orderType === orderType);
+    
+    // Apply granular voucher authorization
+    if (user?.allowedVoucherTypes && user.allowedVoucherTypes.length > 0) {
+      filtered = filtered.filter(v => user.allowedVoucherTypes.includes(v._id));
+    }
+
     setFilteredVouchers(filtered);
     setSelectedVoucher("");
     setOrders([]);
-  }, [orderType, voucherTypes]);
+  }, [orderType, voucherTypes, user]);
 
   // Fetch orders when voucher changes
   useEffect(() => {
@@ -316,6 +322,25 @@ export default function BranchDispatch() {
       pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
       pdf.save(`Loading-Slip-${Date.now()}.pdf`);
       toast.success("PDF exported successfully!");
+
+      // ✅ Audit log — record that a loading slip was generated
+      try {
+        const invoiceIds = loadedProducts?.invoiceIds?.join(", ") || loadedParties?.data?.map(p => p.invoiceId).join(", ") || "N/A";
+        await fetch(`${API_BASE}/audit-logs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user?._id || user?.id || "System",
+            userModel: "BranchUser",
+            username: user?.username || user?.name || "System",
+            branchId: currentBranch?._id,
+            action: "GENERATE_SLIP",
+            description: `Generated Loading Slip for ${orderType === "SO" ? "Sales" : "Purchase"} Orders [${invoiceIds}] — Voucher: ${selectedVoucher?.toUpperCase()}`,
+          }),
+        });
+      } catch (logErr) {
+        console.warn("⚠️ Audit log for GENERATE_SLIP failed (non-blocking):", logErr);
+      }
     } catch (error) {
       console.error("Error exporting PDF:", error);
       toast.error("Failed to export PDF");

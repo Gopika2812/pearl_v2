@@ -7,7 +7,7 @@ import InvoiceGeneratorModal from "../../components/InvoiceGeneratorModal";
 import AggregateSlipModal from "../../components/branch/AggregateSlipModal";
 import { useBranch } from "../../context/BranchContext";
 
-const BranchInvoicedOrders = () => {
+const BranchClaims = () => {
   const { currentBranch, user } = useBranch();
   const [salesOrders, setSalesOrders] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -17,7 +17,7 @@ const BranchInvoicedOrders = () => {
   const [showSlipModal, setShowSlipModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
   const [expandedOrders, setExpandedOrders] = useState({});
-  const [invoicesByOrder, setInvoicesByOrder] = useState({}); // New: store invoices for each SO
+  const [invoicesByOrder, setInvoicesByOrder] = useState({});
 
   // Filter states
   const [filterVoucherType, setFilterVoucherType] = useState("");
@@ -28,9 +28,8 @@ const BranchInvoicedOrders = () => {
   const [filterFromTime, setFilterFromTime] = useState("");
   const [filterToTime, setFilterToTime] = useState("");
 
-  // Fetch sales orders for current branch
+  // Fetch sales orders for current branch (only claims)
   const fetchSalesOrders = async () => {
-    // Get branch ID from context
     if (!currentBranch?._id) {
       toast.error("Branch not selected. Please select a branch from the sidebar.");
       return;
@@ -39,17 +38,17 @@ const BranchInvoicedOrders = () => {
     setLoading(true);
     try {
       const res = await fetch(
-        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isClaim=false`
+        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isClaim=true`
       );
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.message || "Failed to fetch orders");
+      if (!res.ok) throw new Error(data.message || "Failed to fetch claims");
 
       setSalesOrders(data || []);
-      toast.success(`Fetched ${data?.length || 0} sales orders`);
+      toast.success(`Fetched ${data?.length || 0} claims`);
     } catch (err) {
-      console.error("Error fetching sales orders:", err);
-      toast.error(err.message || "Failed to fetch sales orders");
+      console.error("Error fetching claims:", err);
+      toast.error(err.message || "Failed to fetch claims");
     } finally {
       setLoading(false);
     }
@@ -87,19 +86,18 @@ const BranchInvoicedOrders = () => {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to update order");
+      if (!res.ok) throw new Error(data.message || "Failed to update claim");
 
-      // Update local state
       setSalesOrders((prev) =>
         prev.map((order) =>
           order._id === updatedOrder._id ? updatedOrder : order
         )
       );
 
-      toast.success("Bill updated successfully!");
+      toast.success("Claim updated successfully!");
     } catch (err) {
-      console.error("Error updating bill:", err);
-      toast.error(err.message || "Failed to update bill");
+      console.error("Error updating claim:", err);
+      toast.error(err.message || "Failed to update claim");
     }
   };
 
@@ -109,13 +107,11 @@ const BranchInvoicedOrders = () => {
       [orderId]: !prev[orderId],
     }));
 
-    // Fetch invoices for this sales order when expanding
     if (!expandedOrders[orderId]) {
       fetchInvoicesForOrder(orderId);
     }
   };
 
-  // Fetch invoices for a specific sales order
   const fetchInvoicesForOrder = async (salesOrderId) => {
     try {
       const res = await fetch(
@@ -132,7 +128,6 @@ const BranchInvoicedOrders = () => {
     }
   };
 
-  // Filter sales orders based on criteria
   const filteredSalesOrders = salesOrders.filter((order) => {
     const matchesVoucherType = filterVoucherType === "" || 
       (order.voucherType && order.voucherType.toLowerCase().includes(filterVoucherType.toLowerCase()));
@@ -171,12 +166,12 @@ const BranchInvoicedOrders = () => {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#319bab] to-[#257f87] rounded-xl flex items-center justify-center">
+              <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center">
                 <FaFileInvoice className="text-white text-xl" />
               </div>
               <div>
                 <h1 className="text-2xl font-black text-gray-800">
-                  Sales Orders to Invoice
+                  Claims Orders
                 </h1>
                 <p className="text-xs text-gray-500 uppercase tracking-wide">
                   {currentBranch?.name || "Select a branch"}
@@ -190,7 +185,7 @@ const BranchInvoicedOrders = () => {
                 disabled={filteredSalesOrders.length === 0}
                 className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 shadow-sm"
               >
-                <FaFileInvoice /> Generate Slip
+                <FaFileInvoice /> Generate Claim Slip
               </button>
               <button
                 onClick={fetchSalesOrders}
@@ -269,18 +264,18 @@ const BranchInvoicedOrders = () => {
             </div>
           </div>
           <div className="mt-3 text-xs text-gray-500">
-            Showing {filteredSalesOrders.length} of {salesOrders.length} orders
+            Showing {filteredSalesOrders.length} of {salesOrders.length} claims
           </div>
         </div>
 
-        {/* SALES ORDERS TABLE */}
+        {/* CLAIMS TABLE */}
         {loading ? (
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
-            <div className="animate-pulse">Loading sales orders...</div>
+            <div className="animate-pulse">Loading claims...</div>
           </div>
         ) : filteredSalesOrders.length === 0 ? (
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
-            <p className="text-gray-500">{salesOrders.length === 0 ? "No sales orders found" : "No orders match your filters"}</p>
+            <p className="text-gray-500">{salesOrders.length === 0 ? "No claim orders found" : "No claims match your filters"}</p>
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -301,7 +296,6 @@ const BranchInvoicedOrders = () => {
                   {filteredSalesOrders.map((order) => (
                     <React.Fragment key={order._id}>
                       <tr className="hover:bg-gray-50 transition">
-                       
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <button
@@ -369,10 +363,9 @@ const BranchInvoicedOrders = () => {
                                   ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-50"
                                   : "bg-orange-500 text-white hover:bg-orange-600"
                               }`}
-                              title="Edit bill items, quantities, and prices"
                             >
                               <FaEdit />
-                              Edit Bill
+                              Edit Claim
                             </button>
                             <button
                               onClick={() => handleGenerateInvoice(order)}
@@ -399,118 +392,35 @@ const BranchInvoicedOrders = () => {
                               {(order.items || []).length > 0 && (
                                 <div>
                                   <h4 className="font-bold text-gray-800 mb-3">
-                                    📦 Order Items
+                                    📦 Claim Items
                                   </h4>
                                   <div className="overflow-x-auto">
                                     <table className="w-full text-xs">
                                       <thead className="bg-white text-gray-600 border-b">
                                         <tr>
-                                          <th className="text-left py-2 px-3">
-                                            Product Name
-                                          </th>
-                                          <th className="text-center py-2 px-3">
-                                            HSN
-                                          </th>
-                                          <th className="text-center py-2 px-3">
-                                            Qty
-                                          </th>
-                                          <th className="text-right py-2 px-3">
-                                            Rate
-                                          </th>
-                                          <th className="text-right py-2 px-3">
-                                            Discount
-                                          </th>
-                                          <th className="text-right py-2 px-3">
-                                            Tax
-                                          </th>
-                                          <th className="text-right py-2 px-3">
-                                            Total
-                                          </th>
+                                          <th className="text-left py-2 px-3">Product Name</th>
+                                          <th className="text-center py-2 px-3">HSN</th>
+                                          <th className="text-center py-2 px-3">Qty</th>
+                                          <th className="text-right py-2 px-3">Rate</th>
+                                          <th className="text-right py-2 px-3">Discount</th>
+                                          <th className="text-right py-2 px-3">Tax</th>
+                                          <th className="text-right py-2 px-3">Total</th>
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y">
                                         {(order.items || []).map((item, idx) => (
                                           <tr key={idx} className="bg-white">
-                                            <td className="py-2 px-3 font-semibold">
-                                              {item.name}
-                                            </td>
-                                            <td className="py-2 px-3 text-center text-gray-600">
-                                              {item.hsn}
-                                            </td>
-                                            <td className="py-2 px-3 text-center font-semibold">
-                                              {item.qty}
-                                            </td>
-                                            <td className="py-2 px-3 text-right">
-                                              ₹{item.sellingPrice?.toFixed(2)}
-                                            </td>
-                                            <td className="py-2 px-3 text-right text-red-500">
-                                              ₹
-                                              {(item.discountAmount || 0).toFixed(
-                                                2
-                                              )}
-                                            </td>
+                                            <td className="py-2 px-3 font-semibold">{item.name}</td>
+                                            <td className="py-2 px-3 text-center text-gray-600">{item.hsn}</td>
+                                            <td className="py-2 px-3 text-center font-semibold">{item.qty}</td>
+                                            <td className="py-2 px-3 text-right">₹{item.sellingPrice?.toFixed(2)}</td>
+                                            <td className="py-2 px-3 text-right text-red-500">₹{(item.discountAmount || 0).toFixed(2)}</td>
                                             <td className="py-2 px-3 text-right text-blue-600">
-                                              {item.igst
-                                                ? `IGST ${item.gst}%`
-                                                : `CGST ${item.cgst}% + SGST ${item.sgst}%`}
+                                              {item.igst ? `IGST ${item.gst}%` : `CGST ${item.cgst}% + SGST ${item.sgst}%`}
                                             </td>
-                                            <td className="py-2 px-3 text-right font-bold text-[#319bab]">
-                                              ₹{item.total?.toLocaleString()}
-                                            </td>
+                                            <td className="py-2 px-3 text-right font-bold text-[#319bab]">₹{item.total?.toLocaleString()}</td>
                                           </tr>
                                         ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* SAMPLE ITEMS */}
-                              {(order.sampleItems || []).length > 0 && (
-                                <div>
-                                  <h4 className="font-bold text-gray-800 mb-3 text-yellow-700">
-                                    🎁 Sample Items
-                                  </h4>
-                                  <div className="overflow-x-auto">
-                                    <table className="w-full text-xs">
-                                      <thead className="bg-yellow-50 text-gray-600 border-b">
-                                        <tr>
-                                          <th className="text-left py-2 px-3">
-                                            Product Name
-                                          </th>
-                                          <th className="text-center py-2 px-3">
-                                            HSN
-                                          </th>
-                                          <th className="text-center py-2 px-3">
-                                            Qty
-                                          </th>
-                                          <th className="text-right py-2 px-3">
-                                            Rate
-                                          </th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y">
-                                        {(order.sampleItems || []).map(
-                                          (item, idx) => (
-                                            <tr
-                                              key={idx}
-                                              className="bg-yellow-50"
-                                            >
-                                              <td className="py-2 px-3 font-semibold">
-                                                {item.name}
-                                              </td>
-                                              <td className="py-2 px-3 text-center text-gray-600">
-                                                {item.hsn}
-                                              </td>
-                                              <td className="py-2 px-3 text-center font-semibold">
-                                                {item.qty}
-                                              </td>
-                                              <td className="py-2 px-3 text-right">
-                                                ₹{item.sellingPrice?.toFixed(2)}
-                                              </td>
-                                            </tr>
-                                          )
-                                        )}
                                       </tbody>
                                     </table>
                                   </div>
@@ -520,124 +430,6 @@ const BranchInvoicedOrders = () => {
                           </td>
                         </tr>
                       )}
-
-                      {/* EXPANDED SALES INVOICES ROW */}
-                      {expandedOrders[order._id] &&
-                        (invoicesByOrder[order._id] || []).length > 0 && (
-                          <tr className="bg-green-50">
-                            <td colSpan="7" className="px-6 py-4">
-                              <div className="space-y-4">
-                                <h4 className="font-bold text-gray-800">
-                                  📄 Sales Invoices Generated
-                                </h4>
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-xs">
-                                    <thead className="bg-white text-gray-600 border-b">
-                                      <tr>
-                                        <th className="text-left py-2 px-3">
-                                          Invoice No
-                                        </th>
-                                        <th className="text-center py-2 px-3">
-                                          Date
-                                        </th>
-                                        <th className="text-left py-2 px-3">
-                                          Product Name
-                                        </th>
-                                        <th className="text-center py-2 px-3">
-                                          SO Qty
-                                        </th>
-                                        <th className="text-center py-2 px-3">
-                                          Invoice Qty
-                                        </th>
-                                        <th className="text-center py-2 px-3">
-                                          Pending ⚠️
-                                        </th>
-                                        <th className="text-right py-2 px-3">
-                                          Amount
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y">
-                                      {(invoicesByOrder[order._id] || []).map(
-                                        (invoice) =>
-                                          invoice.items.map(
-                                            (invoiceItem, itemIdx) => {
-                                              const originalItem = order.items.find(
-                                                (i) =>
-                                                  i.productId?.toString() ===
-                                                  invoiceItem.productId?.toString()
-                                              );
-                                              const backOrderQty =
-                                                (originalItem?.qty || 0) -
-                                                invoiceItem.qty;
-
-                                              return (
-                                                <tr
-                                                  key={`${invoice._id}-${itemIdx}`}
-                                                  className="bg-white"
-                                                >
-                                                  <td className="py-2 px-3 font-semibold text-[#319bab]">
-                                                    {itemIdx === 0
-                                                      ? invoice.invoiceNumber
-                                                      : ""}
-                                                  </td>
-                                                  <td className="py-2 px-3 text-center text-gray-600">
-                                                    {itemIdx === 0
-                                                      ? new Date(
-                                                          invoice.invoiceDate
-                                                        ).toLocaleString("en-IN", {
-                                                          day: "2-digit",
-                                                          month: "2-digit",
-                                                          year: "numeric",
-                                                          hour: "2-digit",
-                                                          minute: "2-digit",
-                                                          hour12: true,
-                                                        })
-                                                      : ""}
-                                                  </td>
-                                                  <td className="py-2 px-3 font-semibold">
-                                                    {invoiceItem.name}
-                                                  </td>
-                                                  <td className="py-2 px-3 text-center font-semibold">
-                                                    {originalItem?.qty || "-"}
-                                                  </td>
-                                                  <td className="py-2 px-3 text-center font-semibold text-green-600">
-                                                    {invoiceItem.qty}
-                                                  </td>
-                                                  <td className="py-2 px-3 text-center font-semibold text-red-600">
-                                                    {backOrderQty > 0
-                                                      ? backOrderQty
-                                                      : "0"}
-                                                  </td>
-                                                  <td className="py-2 px-3 text-right font-bold text-[#319bab]">
-                                                    ₹
-                                                    {(
-                                                      invoiceItem.total || 0
-                                                    ).toLocaleString()}
-                                                  </td>
-                                                </tr>
-                                              );
-                                            }
-                                          )
-                                      )}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-
-                      {expandedOrders[order._id] &&
-                        (invoicesByOrder[order._id] || []).length === 0 && (
-                          <tr className="bg-blue-50">
-                            <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                              <p className="text-sm">
-                                No invoices generated yet for this sales order
-                              </p>
-                            </td>
-                          </tr>
-                        )}
                     </React.Fragment>
                   ))}
                 </tbody>
@@ -647,24 +439,23 @@ const BranchInvoicedOrders = () => {
         )}
       </div>
 
-      {/* INVOICE PREVIEW MODAL */}
+      {/* MODALS */}
       {showModal && selectedOrder && (
         <InvoiceGeneratorModal
           order={selectedOrder}
           onClose={() => {
             setShowModal(false);
             setSelectedOrder(null);
-            fetchSalesOrders(); // Refresh list
+            fetchSalesOrders();
           }}
           onSuccess={() => {
             setShowModal(false);
             setSelectedOrder(null);
-            fetchSalesOrders(); // Refresh list
+            fetchSalesOrders();
           }}
         />
       )}
 
-      {/* EDIT BILL MODAL */}
       {showEditBillModal && editingOrder && (
         <EditBillModal
           order={editingOrder}
@@ -677,7 +468,6 @@ const BranchInvoicedOrders = () => {
         />
       )}
 
-      {/* AGGREGATE SLIP MODAL */}
       <AggregateSlipModal 
         isOpen={showSlipModal} 
         onClose={() => setShowSlipModal(false)} 
@@ -687,4 +477,4 @@ const BranchInvoicedOrders = () => {
   );
 };
 
-export default BranchInvoicedOrders;
+export default BranchClaims;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { FaChevronDown, FaChevronUp, FaFileAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import CreditNoteModal from "../../components/sales/CreditNoteModal";
@@ -7,7 +7,7 @@ import { useBranch } from "../../context/BranchContext";
 const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 
 export default function BranchCreditNote() {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const [salesInvoices, setSalesInvoices] = useState([]);
   const [creditNoteData, setCreditNoteData] = useState({});
   const [loading, setLoading] = useState(true);
@@ -31,6 +31,11 @@ export default function BranchCreditNote() {
       let invoices = (data || [])
         .filter((si) => si.invoiceGenerated && si.status !== "CANCELLED" && si.status !== "DRAFT")
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      // Apply granular voucher authorization
+      if (user?.allowedVoucherTypes && user.allowedVoucherTypes.length > 0) {
+        invoices = invoices.filter(si => user.allowedVoucherTypes.includes(si.voucherTypeId || si.voucherType?._id || si.voucherType));
+      }
 
       setSalesInvoices(invoices);
 
@@ -169,9 +174,9 @@ export default function BranchCreditNote() {
                     const isExpanded = expandedInvoices[invoice._id] || false;
 
                     return (
-                      <>
+                      <Fragment key={invoice._id}>
                         {/* MAIN INVOICE ROW */}
-                        <tr key={invoice._id} className="hover:bg-gray-50 transition">
+                        <tr className="hover:bg-gray-50 transition">
                           <td className="px-2 py-3 text-center">
                             <button
                               onClick={() => toggleExpandInvoice(invoice._id)}
@@ -307,7 +312,7 @@ export default function BranchCreditNote() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>

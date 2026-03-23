@@ -6,13 +6,18 @@ import { useInventory } from "../../context/InventoryContext";
 
 const InventorySalesOrder = () => {
   const { voucherTypes, productGroups, productCategories, products, warehouses, customers, salesMen, deliveryMen, salesOwners, customerGroups, customerCategories } = useInventory();
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
 
   const [items, setItems] = useState([]);
 
-  const soVoucherTypes = voucherTypes.filter(
+  let soVoucherTypes = voucherTypes.filter(
     (v) => v.orderType === "SO"
   );
+
+  // Apply granular voucher authorization
+  if (user?.allowedVoucherTypes && user.allowedVoucherTypes.length > 0) {
+    soVoucherTypes = soVoucherTypes.filter(v => user.allowedVoucherTypes.includes(v._id));
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">

@@ -55,6 +55,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     { name: "Create SO", path: "/branch/sales-order", icon: <FaShoppingCart /> },
     { name: "Invoiced Order", path: "/branch/invoiced-order", icon: <FaFileAlt /> },
     { name: "Credit Note", path: "/branch/credit-note", icon: <FaFileAlt /> },
+    { name: "Claims", path: "/branch/claims", icon: <FaFileAlt /> },
     { name: "Receipt", path: "/branch/receipt", icon: <FaDollarSign /> },
   ];
 
@@ -62,6 +63,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     { name: "Loading & Dispatch", path: "/branch/dispatch", icon: <FaTruck /> },
     { name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: <FaHandshake /> },
     { name: "Customers (Debtors)", path: "/branch/customers", icon: <FaUsers /> },
+    { name: "Product Records", path: "/branch/product-records", icon: <FaBox /> },
     { name: "Journal Master", path: "/branch/journals", icon: <FaBook /> },
     { name: "Insights & Analysis", path: "/branch/insights", icon: <FaChartLine /> },
     { name: "Quick Links", path: "/branch/quick-links", icon: <FaLink /> },
@@ -71,9 +73,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     { name: "Summary", path: "/branch/summary", icon: <FaChartBar /> },
   ];
 
-  const adminItems = [
-    { name: "Branch Management", path: "/admin/branches", icon: <FaBuilding /> },
-  ];
+
 
   useEffect(() => {
     // Auto-open dropdowns if current path is inside them
@@ -89,7 +89,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   // Permission check helper
   const isAllowed = (path) => {
     if (!user) return false;
-    if (user.role === "ADMIN") return true;
+    if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
     
     const allowedPages = user.allowedPages || [];
     
@@ -103,15 +103,16 @@ const BranchSidebar = ({ isOpen, onClose }) => {
       "/branch/sales-order": "create-so",
       "/branch/invoiced-order": "invoiced-order",
       "/branch/credit-note": "credit-note",
+      "/branch/claims": "claims",
       "/branch/receipt": "receipt",
       "/branch/dispatch": "dispatch",
       "/branch/suppliers": "suppliers",
       "/branch/customers": "customers",
+      "/branch/product-records": "product-records",
       "/branch/journals": "journals",
       "/branch/insights": "insights",
       "/branch/quick-links": "quick-links",
       "/branch/summary": "summary",
-      "/admin/branches": "admin-branches",
     };
 
     const permissionId = pathPermissionMap[path];
@@ -126,7 +127,6 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   const filteredPurchase = purchaseItems.filter(i => isAllowed(i.path));
   const filteredSales = salesItems.filter(i => isAllowed(i.path));
   const filteredBottom = menuItemsBottom.filter(i => isAllowed(i.path));
-  const filteredAdmin = adminItems.filter(i => isAllowed(i.path));
   const filteredSummary = summaryItems.filter(i => isAllowed(i.path));
 
   return (
@@ -274,51 +274,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
             );
           })}
 
-          {/* ADMIN SECTION - Only show for ADMIN users */}
-          {user?.role === "ADMIN" && (
-            <div className="mx-3 mb-1 mt-4">
-              <button
-                onClick={() => setAdminOpen(!adminOpen)}
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
-                title="Admin"
-              >
-                <div className="w-8 flex justify-center flex-shrink-0">
-                  <span className="text-lg"><FaCog /></span>
-                </div>
-                <span className="text-sm flex-1 text-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">Admin</span>
-                <div className="w-4 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <FaChevronDown
-                    className={`text-xs transition-transform ${adminOpen ? "rotate-180" : ""}`}
-                  />
-                </div>
-              </button>
 
-              {adminOpen && (
-                <div className="mt-2 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
-                  {filteredAdmin.map((item, idx) => {
-                    const active = location.pathname === item.path;
-                    return (
-                      <Link
-                        key={idx}
-                        to={item.path}
-                        className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition-colors ${
-                          active
-                            ? "bg-white/20 text-white font-semibold"
-                            : "hover:bg-white/10 text-white/80"
-                        }`}
-                        title={item.name}
-                      >
-                        <div className="w-6 flex justify-center flex-shrink-0">
-                          <span className="text-sm">{item.icon}</span>
-                        </div>
-                        <span className="whitespace-nowrap">{item.name}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* SUMMARY SECTION */}
           {/* <div className="mx-3 mb-1 mt-4">
@@ -538,44 +494,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
             );
           })}
 
-          {/* MOBILE ADMIN SECTION */}
-          {user?.role === "ADMIN" && filteredAdmin.length > 0 && (
-            <div className="mx-2 mb-1 mt-4">
-              <button
-                onClick={() => setAdminOpen(!adminOpen)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-              >
-                <span className="text-lg"><FaCog /></span>
-                <span className="text-sm flex-1 text-left">Admin</span>
-                <FaChevronDown
-                  className={`text-xs transition-transform ${adminOpen ? "rotate-180" : ""}`}
-                />
-              </button>
 
-              {adminOpen && (
-                <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                  {filteredAdmin.map((item, idx) => {
-                    const active = location.pathname === item.path;
-                    return (
-                      <Link
-                        key={idx}
-                        to={item.path}
-                        onClick={onClose}
-                        className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
-                          active
-                            ? "bg-white/20 text-white font-semibold"
-                            : "hover:bg-white/10 text-white/80"
-                        }`}
-                      >
-                        <span className="text-sm">{item.icon}</span>
-                        <span>{item.name}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* MOBILE SUMMARY SECTION */}
           {filteredSummary.length > 0 && (

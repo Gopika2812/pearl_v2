@@ -7,7 +7,7 @@ import VendorCreditPaymentModal from "../../components/inventory/VendorCreditPay
 import { useBranch } from "../../context/BranchContext";
 
 export default function BranchPOPayment() {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -32,6 +32,11 @@ export default function BranchPOPayment() {
            const poBranchId = po.branchId?.$oid || po.branchId?.toString();
            return poBranchId === branchIdStr && po.status === "INVOICED";
         });
+
+        // Apply granular voucher authorization
+        if (user?.allowedVoucherTypes && user.allowedVoucherTypes.length > 0) {
+          poData = poData.filter(po => user.allowedVoucherTypes.includes(po.voucherTypeId || po.voucherType?._id || po.voucherType));
+        }
 
         // Sort by latest first
         const sorted = poData.sort((a, b) =>

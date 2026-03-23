@@ -10,8 +10,10 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
+import { useBranch } from "../context/BranchContext";
 
 const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
+  const { user } = useBranch();
   const [activeTab, setActiveTab] = useState("edit");
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -99,6 +101,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             items: editedItems,
             notes,
             invoiceType,
+            finalizedBy: user?.id || user?._id,
+            finalizedByUsername: user?.username || user?.billingPerson,
           }),
         }
       );

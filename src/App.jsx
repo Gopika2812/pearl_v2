@@ -18,6 +18,7 @@ import APAgingPage from "./pages/APAgingPage";
 import ARAgingPage from "./pages/ARAgingPage";
 import BalanceSheetPage from "./pages/BalanceSheetPage";
 import BranchCreditNote from "./pages/branch/BranchCreditNote";
+import BranchClaims from "./pages/branch/BranchClaims";
 import BranchCustomers from "./pages/branch/BranchCustomers";
 import BranchDebitNote from "./pages/branch/BranchDebitNote";
 import BranchDispatch from "./pages/branch/BranchDispatch";
@@ -34,6 +35,7 @@ import BranchRecycling from "./pages/branch/BranchRecycling";
 import BranchSalesOrder from "./pages/branch/BranchSalesOrder";
 import BranchSummary from "./pages/branch/BranchSummary";
 import BranchSuppliers from "./pages/branch/BranchSuppliers";
+import BranchProductRecords from "./pages/branch/BranchProductRecords";
 import BranchLoginPage from "./pages/BranchLoginPage";
 import BranchRegisterPage from "./pages/BranchRegisterPage";
 import UserRegistrationPage from "./pages/UserRegistrationPage";
@@ -91,8 +93,8 @@ function AppContent() {
   // RBAC Permission Check
   useEffect(() => {
     if (isBranchRoute && !superAdminViewBranch && user) {
-      // Skip check for ADMIN role
-      if (user.role === "ADMIN") return;
+      // Skip check for ADMIN and SUPER_ADMIN roles
+      if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return;
 
       // Map paths to permission IDs
       const pathPermissionMap = {
@@ -105,6 +107,7 @@ function AppContent() {
         "/branch/sales-order": "create-so",
         "/branch/invoiced-order": "invoiced-order",
         "/branch/credit-note": "credit-note",
+        "/branch/claims": "claims",
         "/branch/receipt": "receipt",
         "/branch/dispatch": "dispatch",
         "/branch/suppliers": "suppliers",
@@ -170,10 +173,7 @@ function AppContent() {
             <div className="flex-1 min-h-screen flex flex-col">
               {!hideLayout && (
                 <>
-                  {isSuperAdminViewingBranch ? (
-                    // Super admin has selected a branch → show BranchTopbar
-                    <BranchTopbar onMenuClick={() => setSidebarOpen(true)} />
-                  ) : isSuperAdminRoute ? (
+                  {user?.role === "SUPER_ADMIN" ? (
                     <SuperAdminTopbar onMenuClick={() => setSidebarOpen(true)} />
                   ) : isBranchRoute && !isInsightsRoute ? (
                     <BranchTopbar onMenuClick={() => setSidebarOpen(true)} />
@@ -208,6 +208,7 @@ function AppContent() {
                   <Route path="/branch/sales-order" element={<ProtectedRoute element={<BranchSalesOrder />} />} />
                   <Route path="/branch/invoiced-order" element={<ProtectedRoute element={<BranchInvoicedOrders />} />} />
                   <Route path="/branch/credit-note" element={<ProtectedRoute element={<BranchCreditNote />} />} />
+                  <Route path="/branch/claims" element={<ProtectedRoute element={<BranchClaims />} />} />
                   <Route path="/branch/dispatch" element={<ProtectedRoute element={<BranchDispatch />} />} />
                   <Route path="/branch/suppliers" element={<ProtectedRoute element={<BranchSuppliers />} />} />
                   <Route path="/branch/customers" element={<ProtectedRoute element={<BranchCustomers />} />} />
@@ -215,6 +216,7 @@ function AppContent() {
                   <Route path="/branch/quick-links" element={<ProtectedRoute element={<BranchQuickLinks />} />} />
                   <Route path="/branch/receipt" element={<ProtectedRoute element={<BranchReceipt />} />} />
                   <Route path="/branch/summary" element={<ProtectedRoute element={<BranchSummary />} />} />
+                  <Route path="/branch/product-records" element={<ProtectedRoute element={<BranchProductRecords />} />} />
 
                   {/* LEGACY ROUTES */}
                   <Route

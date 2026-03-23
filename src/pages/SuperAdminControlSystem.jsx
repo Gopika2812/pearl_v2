@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaBuilding, FaCheck, FaShieldAlt, FaUser, FaUsers, FaUsersCog, FaLock, FaGlobe, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign, FaTruck, FaHandshake, FaChartLine, FaLink, FaBook, FaChartBar, FaChevronRight } from "react-icons/fa";
+import { FaBuilding, FaCheck, FaShieldAlt, FaUser, FaUsers, FaUsersCog, FaLock, FaGlobe, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign, FaTruck, FaHandshake, FaChartLine, FaLink, FaBook, FaChartBar, FaChevronRight, FaEdit, FaTrash } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -20,9 +20,7 @@ const PAGE_DEFINITIONS = [
   { id: "customers", name: "Customers (Debtors)", icon: <FaUsers />, category: "Directory" },
   { id: "journals", name: "Journal Master", icon: <FaBook />, category: "Accounts" },
   { id: "insights", name: "Insights & Analysis", icon: <FaChartLine />, category: "Reports" },
-  { id: "summary", name: "General Summary", icon: <FaChartBar />, category: "Reports" },
   { id: "quick-links", name: "Quick Links", icon: <FaLink />, category: "General" },
-  { id: "admin-branches", name: "Branch Management (Local)", icon: <FaBuilding />, category: "Admin" },
 ];
 
 export default function SuperAdminControlSystem() {
@@ -34,6 +32,10 @@ export default function SuperAdminControlSystem() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [userPermissions, setUserPermissions] = useState([]);
+  const [fieldPermissions, setFieldPermissions] = useState({});
+  const [actionPermissions, setActionPermissions] = useState({});
+  const [voucherTypes, setVoucherTypes] = useState([]);
+  const [allowedVoucherTypes, setAllowedVoucherTypes] = useState([]);
 
   // Check Super Admin auth
   useEffect(() => {
@@ -58,6 +60,7 @@ export default function SuperAdminControlSystem() {
   useEffect(() => {
     if (selectedBranch) {
       fetchBranchUsers(selectedBranch._id);
+      fetchVoucherTypes(selectedBranch._id);
       setSelectedUser(null);
       setUserPermissions([]);
     }
@@ -67,6 +70,9 @@ export default function SuperAdminControlSystem() {
   useEffect(() => {
     if (selectedUser) {
       setUserPermissions(selectedUser.allowedPages || []);
+      setFieldPermissions(selectedUser.fieldPermissions || {});
+      setActionPermissions(selectedUser.actionPermissions || {});
+      setAllowedVoucherTypes(selectedUser.allowedVoucherTypes || []);
     }
   }, [selectedUser]);
 
@@ -77,6 +83,16 @@ export default function SuperAdminControlSystem() {
       if (data.success) setBranches(data.data);
     } catch (err) {
       toast.error("Failed to fetch branches");
+    }
+  };
+
+  const fetchVoucherTypes = async (branchId) => {
+    try {
+      const res = await fetch(`${API_BASE}/voucher-types/branch/${branchId}`);
+      const data = await res.json();
+      if (data.success) setVoucherTypes(data.data);
+    } catch (err) {
+      console.error("Failed to fetch voucher types", err);
     }
   };
 
@@ -101,6 +117,26 @@ export default function SuperAdminControlSystem() {
     }
   };
 
+  const toggleFieldPermission = (field) => {
+    setFieldPermissions(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
+  };
+
+  const toggleActionPermission = (action) => {
+    setActionPermissions(prev => ({
+      ...prev,
+      [action]: !prev[action]
+    }));
+  };
+
+  const toggleVoucherType = (vtId) => {
+    setAllowedVoucherTypes(prev => 
+      prev.includes(vtId) ? prev.filter(id => id !== vtId) : [...prev, vtId]
+    );
+  };
+
   const handleSavePermissions = async () => {
     if (!selectedUser) return;
     setSaving(true);
@@ -112,14 +148,26 @@ export default function SuperAdminControlSystem() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ allowedPages: userPermissions })
+        body: JSON.stringify({ 
+          allowedPages: userPermissions,
+          fieldPermissions: fieldPermissions,
+          actionPermissions: actionPermissions,
+          allowedVoucherTypes: allowedVoucherTypes
+        })
       });
       const data = await res.json();
       if (data.success) {
         toast.success(`Permissions updated for ${selectedUser.username}`);
         // Update local state
-        setBranchUsers(branchUsers.map(u => u._id === selectedUser._id ? { ...u, allowedPages: userPermissions } : u));
-        setSelectedUser({ ...selectedUser, allowedPages: userPermissions });
+        const updatedUser = { 
+          ...selectedUser, 
+          allowedPages: userPermissions,
+          fieldPermissions: fieldPermissions,
+          actionPermissions: actionPermissions,
+          allowedVoucherTypes: allowedVoucherTypes
+        };
+        setBranchUsers(branchUsers.map(u => u._id === selectedUser._id ? updatedUser : u));
+        setSelectedUser(updatedUser);
       } else {
         toast.error(data.message || "Failed to update permissions");
       }
@@ -288,6 +336,146 @@ export default function SuperAdminControlSystem() {
                       </div>
                     </div>
                   ))}
+
+                  {/* New Granular Permissions Section */}
+                  <div className="md:col-span-2 mt-8 pt-8 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Action Permissions */}
+                    <div className="space-y-4">
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 flex items-center gap-2">
+                        <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                        Advanced Action Control
+                      </h4>
+                      <div className="space-y-3">
+                        {[
+                          { id: "edit", name: "Allow Edit Records", icon: <FaEdit /> },
+                          { id: "delete", name: "Allow Delete Records", icon: <FaTrash /> },
+                          { id: "restock", name: "Allow Restocking Logic", icon: <FaBox /> }
+                        ].map(action => {
+                          const isAllowed = actionPermissions[action.id] !== false; // Default to true if not set
+                          return (
+                            <div
+                              key={action.id}
+                              onClick={() => toggleActionPermission(action.id)}
+                              className={`flex items-center gap-4 px-5 py-3 rounded-2xl border-2 cursor-pointer transition-all duration-300 ${
+                                isAllowed
+                                  ? "border-red-200 bg-red-50/30"
+                                  : "border-gray-100 bg-gray-50 opacity-60"
+                              }`}
+                            >
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                                isAllowed ? "bg-red-500 text-white" : "bg-gray-200 text-gray-400"
+                              }`}>
+                                {action.icon}
+                              </div>
+                              <div className="flex-1">
+                                <p className={`text-xs font-bold ${isAllowed ? "text-gray-900" : "text-gray-500"}`}>{action.name}</p>
+                              </div>
+                              <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                                isAllowed ? "bg-red-500 border-red-500 text-white" : "border-gray-200"
+                              }`}>
+                                {isAllowed && <FaCheck size={8} />}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Field Visibility Permissions */}
+                    <div className="space-y-4">
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-500 flex items-center gap-2">
+                        <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
+                        Field Visibility Control
+                      </h4>
+                      <div className="space-y-3">
+                        {[
+                          { id: "purchasingPrice", name: "Show Purchasing Price", icon: <FaDollarSign /> },
+                          { id: "margin", name: "Show Margin & GST Info", icon: <FaChartBar /> },
+                          { id: "totalQty", name: "Show Total Stock Levels", icon: <FaBox /> }
+                        ].map(field => {
+                          const isAllowed = fieldPermissions[field.id] !== false; // Default to true if not set
+                          return (
+                            <div
+                              key={field.id}
+                              onClick={() => toggleFieldPermission(field.id)}
+                              className={`flex items-center gap-4 px-5 py-3 rounded-2xl border-2 cursor-pointer transition-all duration-300 ${
+                                isAllowed
+                                  ? "border-purple-200 bg-purple-50/30"
+                                  : "border-gray-100 bg-gray-50 opacity-60"
+                              }`}
+                            >
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                                isAllowed ? "bg-purple-500 text-white" : "bg-gray-200 text-gray-400"
+                              }`}>
+                                {field.icon}
+                              </div>
+                              <div className="flex-1">
+                                <p className={`text-xs font-bold ${isAllowed ? "text-gray-900" : "text-gray-500"}`}>{field.name}</p>
+                              </div>
+                              <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                                isAllowed ? "bg-purple-500 border-purple-500 text-white" : "border-gray-200"
+                              }`}>
+                                {isAllowed && <FaCheck size={8} />}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Voucher Type Access Section */}
+                    <div className="md:col-span-2 mt-8 pt-8 border-t border-gray-100 space-y-4">
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 flex items-center gap-2">
+                        <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+                        Voucher Type Authorization
+                      </h4>
+                      <p className="text-gray-400 text-[10px] font-bold uppercase mb-4 italic">
+                        If none selected, all types are allowed by default. Once one is selected, only those will be visible to the user.
+                      </p>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                        {voucherTypes.length === 0 ? (
+                          <div className="col-span-full py-4 text-center text-gray-400 text-xs font-bold border-2 border-dashed border-gray-100 rounded-2xl">
+                            No custom voucher types found for this branch
+                          </div>
+                        ) : (
+                          voucherTypes.map(vt => {
+                            const isSelected = allowedVoucherTypes.includes(vt._id);
+                            return (
+                              <div
+                                key={vt._id}
+                                onClick={() => toggleVoucherType(vt._id)}
+                                className={`flex items-center gap-3 px-4 py-3 rounded-2xl border-2 cursor-pointer transition-all duration-300 ${
+                                  isSelected
+                                    ? "border-blue-200 bg-blue-50/30 font-bold"
+                                    : "border-gray-50 bg-white hover:border-gray-200 opacity-70"
+                                }`}
+                              >
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                                  isSelected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-400"
+                                }`}>
+                                  <FaFileAlt size={14} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-xs truncate ${isSelected ? "text-gray-900" : "text-gray-500"}`}>
+                                    {vt.name.toUpperCase()}
+                                  </p>
+                                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">
+                                    {vt.orderType} • {vt.prefix}
+                                  </p>
+                                </div>
+                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                                  isSelected ? "bg-blue-600 border-blue-600 text-white" : "border-gray-200"
+                                }`}>
+                                  {isSelected && <FaCheck size={8} />}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (

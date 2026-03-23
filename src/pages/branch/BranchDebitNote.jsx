@@ -6,7 +6,7 @@ import DebitNoteModal from "../../components/inventory/DebitNoteModal";
 import { useBranch } from "../../context/BranchContext";
 
 export default function BranchDebitNote() {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [debitNoteData, setDebitNoteData] = useState({});
   const [loading, setLoading] = useState(false);
@@ -25,9 +25,15 @@ export default function BranchDebitNote() {
         const poData = data.data || data;
         // Sort by latest first
         const validPOs = poData.filter((po) => po.status !== "CANCELLED" && po.status !== "DRAFT");
-        const sorted = validPOs.sort((a, b) =>
+        let sorted = validPOs.sort((a, b) =>
           new Date(b.createdAt) - new Date(a.createdAt)
         );
+
+        // Apply granular voucher authorization
+        if (user?.allowedVoucherTypes && user.allowedVoucherTypes.length > 0) {
+          sorted = sorted.filter(po => user.allowedVoucherTypes.includes(po.voucherTypeId || po.voucherType?._id || po.voucherType));
+        }
+
         setPurchaseOrders(sorted);
 
         // Fetch debit notes for each PO

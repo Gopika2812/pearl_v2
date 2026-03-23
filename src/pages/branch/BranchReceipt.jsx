@@ -9,7 +9,7 @@ import { useBranch } from "../../context/BranchContext";
 const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 
 export default function BranchReceipt() {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const [salesInvoices, setSalesInvoices] = useState([]);
   const [receiptData, setReceiptData] = useState({});
   const [loading, setLoading] = useState(true);
@@ -36,6 +36,11 @@ export default function BranchReceipt() {
       let invoices = (data || [])
         .filter((si) => si.invoiceGenerated && si.status !== "CANCELLED" && si.status !== "DRAFT")
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      // Apply granular voucher authorization
+      if (user?.allowedVoucherTypes && user.allowedVoucherTypes.length > 0) {
+        invoices = invoices.filter(si => user.allowedVoucherTypes.includes(si.voucherTypeId || si.voucherType?._id || si.voucherType));
+      }
 
       setSalesInvoices(invoices);
 

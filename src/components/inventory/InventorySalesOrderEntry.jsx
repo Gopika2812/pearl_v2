@@ -9,6 +9,7 @@ import InventoryAddProductModal from "./InventoryAddProductModal";
 import InventoryAddSalesManModal from "./InventoryAddSalesManModal";
 import InventoryAddVoucherTypeModal from "./InventoryAddVoucherTypeModal";
 import InventoryAddWarehouseModal from "./InventoryAddWarehouseModal";
+import { useBranch } from "../../context/BranchContext";
 
 const inputClass =
   "w-full border border-gray-200 rounded-md px-3 py-1.5 focus:ring-1 focus:ring-[#319bab] outline-none text-xs";
@@ -31,6 +32,7 @@ export default function InventorySalesOrderEntry({
   customerCategories = [],
   branchId = ""
 }) {
+  const { user } = useBranch();
   const [voucherType, setVoucherType] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [warehouse, setWarehouse] = useState("");
@@ -122,11 +124,13 @@ export default function InventorySalesOrderEntry({
   const [fetchedCustomers, setFetchedCustomers] = useState([]);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isClaim, setIsClaim] = useState(false);
 
   // REFS FOR CLICK OUTSIDE
   const itemDropdownRef = useRef(null);
   const customerDropdownRef = useRef(null);
   const productGroupDropdownRef = useRef(null);
+  const sampleItemDropdownRef = useRef(null);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -138,6 +142,9 @@ export default function InventorySalesOrderEntry({
       }
       if (productGroupDropdownRef.current && !productGroupDropdownRef.current.contains(event.target)) {
         setShowProductGroupDropdown(false);
+      }
+      if (sampleItemDropdownRef.current && !sampleItemDropdownRef.current.contains(event.target)) {
+        setShowSampleItemDropdown(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -375,7 +382,7 @@ export default function InventorySalesOrderEntry({
     };
 
     fetchSampleProductsByGroup();
-  }, [sampleProductGroup, products]);
+  }, [sampleProductGroup, localProducts]);
 
   // Fetch available qty for all filtered products
   useEffect(() => {
@@ -470,7 +477,13 @@ export default function InventorySalesOrderEntry({
     }
 
     // ✅ AUTO-FILL (WITH CUSTOMER MARGIN APPLIED)
-    const basePrice = product.sellingPrice;
+    // Check if customer has locked price enabled and product has a locked price set
+    let basePrice = product.sellingPrice;
+    if (selectedCustomer?.isLockedPriceEnabled && product.lockedPrice > 0) {
+      basePrice = product.lockedPrice;
+      console.log(`🔒 Applying Locked Price: ${basePrice} instead of ${product.sellingPrice}`);
+    }
+    
     const adjustedPrice = basePrice + (basePrice * Number(customerMargin)) / 100;
     setSellingPrice(adjustedPrice);
     setGst(product.gst);
@@ -736,6 +749,8 @@ export default function InventorySalesOrderEntry({
 
   const payload = {
     branchId,
+    createdBy: user?.id || user?._id,
+    createdByUsername: user?.username || user?.fullName || user?.billingPerson,
     voucherType,
     customer: selectedCustomer
       ? {
@@ -784,6 +799,7 @@ export default function InventorySalesOrderEntry({
     salesMan,
     deliveryMan,
     billingPerson,
+    isClaim,
   };
 
   const handleAddExtraExpense = () => {
@@ -863,6 +879,7 @@ export default function InventorySalesOrderEntry({
     setVehicleNo("");
     setTransportMode("Road");
     setTransporterName("");
+    setIsClaim(false);
   };
 
   const handleFinalAction = async () => {
@@ -984,6 +1001,19 @@ export default function InventorySalesOrderEntry({
                 <option key={w._id} value={w.name}>{w.name}</option>
               ))}
             </select>
+          </div>
+
+          <div className="flex items-center gap-2 mt-2 bg-yellow-50 p-2 rounded-lg border border-yellow-100">
+            <input
+              id="isClaim"
+              type="checkbox"
+              className="w-4 h-4 text-[#319bab] border-gray-300 rounded focus:ring-[#319bab]"
+              checked={isClaim}
+              onChange={(e) => setIsClaim(e.target.checked)}
+            />
+            <label htmlFor="isClaim" className="text-xs font-bold text-yellow-800 uppercase tracking-tight cursor-pointer">
+              Mark as Claim
+            </label>
           </div>
         </div>
 
@@ -1396,7 +1426,7 @@ export default function InventorySalesOrderEntry({
             <p className="text-xs text-yellow-600">Sample products are tracked but do not affect the bill total</p>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-              <div className="relative md:col-span-2">
+              <div className="relative md:col-span-2" ref={sampleItemDropdownRef}>
                 <label className={labelClass}>Item</label>
                 <input
                   type="text"

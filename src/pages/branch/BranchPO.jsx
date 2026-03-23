@@ -11,13 +11,16 @@ const BranchPO = () => {
     voucherTypes, productGroups, productCategories, products,
     warehouses, vendors, salesOwners, salesMen, deliveryMen, customerGroups
   } = useInventory();
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
 
   const [items, setItems] = useState([]);
 
-  const poVoucherTypes = voucherTypes.filter(
-    (v) => v.orderType === "PO"
-  );
+  let poVoucherTypes = voucherTypes.filter((v) => v.orderType === "PO");
+
+  // Apply granular voucher authorization
+  if (user?.allowedVoucherTypes && user.allowedVoucherTypes.length > 0) {
+    poVoucherTypes = poVoucherTypes.filter(v => user.allowedVoucherTypes.includes(v._id));
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">

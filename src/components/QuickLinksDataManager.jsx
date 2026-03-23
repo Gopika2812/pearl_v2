@@ -1,17 +1,20 @@
 import axios from "axios";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, Fragment } from "react";
 import { FaArrowLeft, FaChevronDown, FaChevronLeft, FaChevronRight, FaChevronUp, FaEdit, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
 import { useBranch } from "../context/BranchContext";
 
 const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
+  const fieldPermissions = user?.fieldPermissions || {};
+  const actionPermissions = user?.actionPermissions || {};
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" }); // New sorting state
   const itemsPerPage = 10;
   const branchId = currentBranch?._id;
 
@@ -55,8 +58,19 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     product: {
       label: "Product",
       endpoint: "/products",
-      displayFields: ["name", "sellingPrice", "productGroup", "productCategories", "warehouse"],
-      editableFields: ["name", "sellingPrice", "marginPercentage", "productGroup", "productCategories", "warehouse"],
+      displayFields: ["name", "sellingPrice", "lockedPrice", "productGroup", "productCategories", "warehouse"],
+      editableFields: ["name", "sellingPrice", "lockedPrice", "productGroup", "productCategories", "warehouse"],
+      excludedFields: [
+        "mrp", "margin", "marginPercentage", "hsnCode", "hsn", 
+        "reorderLevel", "reorderQty", "leadTime", "checkPeriod", 
+        "lastChecked", "nextCheckDate", "preferredVendor", 
+        "minStockQty", "maxStockQty", "restockingDays", "restockingConfig"
+      ],
+      detailedFields: [
+        "productGroup", "productCategories", "name", "perQty", "units", 
+        "totalQty", "totalQtyUnit", "purchasingPrice", "sellingPrice", 
+        "lockedPrice", "margin", "hsnCode", "gst"
+      ]
     },
     customer_category: {
       label: "Customer Category",
@@ -73,8 +87,13 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     customer: {
       label: "Customer",
       endpoint: "/customers",
-      displayFields: ["name", "whatsapp", "email", "salesOwner", "customerCategory"],
-      editableFields: ["name", "whatsapp", "email"],
+      displayFields: ["name", "whatsapp", "email", "isLockedPriceEnabled", "salesOwner", "customerCategory"],
+      editableFields: ["name", "whatsapp", "email", "isLockedPriceEnabled"],
+      detailedFields: [
+        "name", "whatsapp", "email", "address", "district", "state", "pincode", 
+        "registrationType", "gstin", "isLockedPriceEnabled", "salesOwner", 
+        "margin", "credit", "debit"
+      ]
     },
     vendor: {
       label: "Vendor",
@@ -102,7 +121,24 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     },
   };
 
-  const config = resourceConfig[type];
+  // Filter config based on permissions
+  const config = { ...resourceConfig[type] };
+  if (config && config.displayFields) {
+    config.displayFields = config.displayFields.filter(field => {
+      if (field === "purchasingPrice" && fieldPermissions.purchasingPrice === false) return false;
+      if (["margin", "marginPercentage", "gst"].includes(field) && fieldPermissions.margin === false) return false;
+      if (["totalQty", "totalQtyUnit"].includes(field) && fieldPermissions.totalQty === false) return false;
+      return true;
+    });
+  }
+  if (config && config.detailedFields) {
+    config.detailedFields = config.detailedFields.filter(field => {
+      if (field === "purchasingPrice" && fieldPermissions.purchasingPrice === false) return false;
+      if (["margin", "marginPercentage", "gst"].includes(field) && fieldPermissions.margin === false) return false;
+      if (["totalQty", "totalQtyUnit"].includes(field) && fieldPermissions.totalQty === false) return false;
+      return true;
+    });
+  }
 
   // If config is not found, show error state
   if (!config) {
@@ -193,6 +229,14 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     onEdit(item);
   };
 
+  const handleSort = (key) => {
+    let direction = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
+  };
+
   const applyGroupMargin = async () => {
     if (!groupMarginData.marginPercentage || groupMarginData.marginPercentage === "") {
       toast.error("Please enter a margin percentage");
@@ -276,16 +320,37 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     });
   });
 
-  // Reset to page 1 when search query changes
+  // Sort the filtered data
+  const sortedData = [...filteredData].sort((a, b) => {
+    if (!sortConfig.key) return 0;
+
+    const key = sortConfig.key;
+    let valA = a[key];
+    let valB = b[key];
+
+    // Handle nested objects (extract name)
+    if (valA && typeof valA === "object") valA = valA.name || String(valA);
+    if (valB && typeof valB === "object") valB = valB.name || String(valB);
+
+    // Convert to lowercase for string comparison
+    if (typeof valA === "string") valA = valA.toLowerCase();
+    if (typeof valB === "string") valB = valB.toLowerCase();
+
+    if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+    if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  // Reset to page 1 when search query or sort changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, sortConfig]);
 
-  // Calculate pagination
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  // Calculate pagination based on sorted data
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedData = filteredData.slice(startIndex, endIndex);
+  const paginatedData = sortedData.slice(startIndex, endIndex);
 
   // Handle page navigation
   const goToNextPage = () => {
@@ -368,126 +433,166 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
           {/* Pagination Info - Simple */}
           <div className="mb-4 p-2 bg-blue-50 rounded-lg text-center">
             <p className="text-xs text-gray-700">
-              Showing <span className="font-bold">{startIndex + 1}</span>-<span className="font-bold">{Math.min(endIndex, filteredData.length)}</span> of <span className="font-bold">{filteredData.length}</span> records (Page <span className="font-bold">{currentPage}</span>/<span className="font-bold">{totalPages}</span>)
+              Showing <span className="font-bold">{startIndex + 1}</span>-<span className="font-bold">{Math.min(endIndex, sortedData.length)}</span> of <span className="font-bold">{sortedData.length}</span> records (Page <span className="font-bold">{currentPage}</span>/<span className="font-bold">{totalPages}</span>)
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            {paginatedData.map((item) => (
-            <div
-              key={item._id}
-              className="border-b border-gray-200 hover:bg-gray-50 transition"
-            >
-              <div
-                onClick={() => setExpandedId(expandedId === item._id ? null : item._id)}
-                className="flex items-center justify-between p-4 cursor-pointer"
-              >
-                <div className="flex-1">
-                  <h3 className="font-bold text-lg text-gray-900">{item.name}</h3>
-                  <p className="text-sm text-gray-600">
-                    {config.displayFields
-                      .filter(f => f !== "name")
-                      .map(f => {
-                        const value = item[f];
-                        // Extract name from populated objects (show only names, not IDs)
-                        let displayValue = "-";
-                        
-                        // Special formatting for margin
-                        if (f === "margin" || f === "marginPercentage") {
-                          displayValue = formatMarginDisplay(item);
-                        } else if (typeof value === "object" && value !== null) {
-                          if (Array.isArray(value)) {
-                            displayValue = value
-                              .map(v => (v && v.name ? v.name : ""))
-                              .filter(Boolean)
-                              .join(", ");
-                          } else if (value.name) {
-                            displayValue = value.name;
-                          }
-                        } else if (typeof value === "number") {
-                          // Round numbers to remove floating points
-                          displayValue = Math.round(value);
-                        } else {
-                          displayValue = value || "-";
-                        }
-                        return `${f}: ${displayValue}`;
-                      })
-                      .join(" | ")}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEdit(item);
-                    }}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 transition"
-                  >
-                    <FaEdit /> Edit
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(item._id);
-                    }}
-                    className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg flex items-center gap-2 transition"
-                  >
-                    <FaTrash /> Delete
-                  </button>
-                  <button className="text-gray-600">
-                    {expandedId === item._id ? <FaChevronUp /> : <FaChevronDown />}
-                  </button>
-                </div>
-              </div>
-
-              {expandedId === item._id && (
-                <div className="bg-gray-50 p-4 border-t border-gray-200">
-                  <div className="grid grid-cols-2 gap-4">
-                    {Object.entries(item).map(([key, value]) => (
-                      key !== "_id" &&
-                      key !== "branchId" &&
-                      key !== "__v" &&
-                      !key.includes("createdAt") &&
-                      !key.includes("updatedAt") && (
-                        <div key={key}>
-                          <label className="block text-sm font-semibold text-gray-700 capitalize">
-                            {key.replace(/([A-Z])/g, " $1")}
-                          </label>
-                          <p className="text-gray-600 text-sm break-words">
-                            {(() => {
-                              // Special formatting for margin fields
-                              if (key === "margin" || key === "marginPercentage") {
-                                return formatMarginDisplay(item);
-                              }
-                              
-                              if (typeof value === "object" && value !== null) {
-                                if (Array.isArray(value)) {
-                                  return value
-                                    .map(v => (v && v.name ? v.name : ""))
-                                    .filter(Boolean)
-                                    .join(", ");
-                                } else {
-                                  return value.name || JSON.stringify(value);
-                                }
-                              }
-                              
-                              // Round numbers to remove floating points
-                              if (typeof value === "number") {
-                                return Math.round(value);
-                              }
-                              
-                              return String(value);
-                            })()}
-                          </p>
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    {config.displayFields.map((field) => (
+                      <th 
+                        key={field} 
+                        onClick={() => handleSort(field)}
+                        className="p-4 font-bold text-gray-700 uppercase text-xs tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          {field.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
+                          {sortConfig.key === field ? (
+                            sortConfig.direction === "asc" ? <FaChevronUp className="text-primary" /> : <FaChevronDown className="text-primary" />
+                          ) : (
+                            <FaChevronDown className="text-gray-300 opacity-50" />
+                          )}
                         </div>
-                      )
+                      </th>
                     ))}
-                  </div>
-                </div>
-              )}
+                    {(actionPermissions.edit !== false || actionPermissions.delete !== false) && (
+                      <th className="p-4 font-bold text-gray-700 uppercase text-xs tracking-wider text-right">Actions</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedData.map((item) => (
+                    <React.Fragment key={item._id}>
+                      <tr 
+                        onClick={() => setExpandedId(expandedId === item._id ? null : item._id)}
+                        className={`hover:bg-blue-50/50 transition cursor-pointer group ${expandedId === item._id ? 'bg-blue-50/80' : ''}`}
+                      >
+                        {config.displayFields.map((field, idx) => {
+                          const value = item[field];
+                          let displayValue = "-";
+
+                          if (field === "margin" || field === "marginPercentage") {
+                            displayValue = formatMarginDisplay(item);
+                          } else if (typeof value === "object" && value !== null) {
+                            if (Array.isArray(value)) {
+                              displayValue = value
+                                .map((v) => (v && v.name ? v.name : ""))
+                                .filter(Boolean)
+                                .join(", ");
+                            } else if (value.name) {
+                              displayValue = value.name;
+                            }
+                          } else if (typeof value === "number") {
+                            displayValue = Math.round(value * 100) / 100;
+                          } else {
+                            displayValue = value || "-";
+                          }
+
+                          return (
+                            <td key={field} className="p-4 text-sm text-gray-700 font-medium">
+                              <div className="flex items-center gap-2">
+                                {idx === 0 && (
+                                  <span className="text-gray-400">
+                                    {expandedId === item._id ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
+                                  </span>
+                                )}
+                                {displayValue}
+                              </div>
+                            </td>
+                          );
+                        })}
+                        {(actionPermissions.edit !== false || actionPermissions.delete !== false) && (
+                          <td className="p-4 text-right">
+                            <div className="flex items-center justify-end gap-2 px-2">
+                              {actionPermissions.edit !== false && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(item);
+                                  }}
+                                  className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition"
+                                  title="Edit"
+                                >
+                                  <FaEdit size={14} />
+                                </button>
+                              )}
+                              {actionPermissions.delete !== false && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(item._id);
+                                  }}
+                                  className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition"
+                                  title="Delete"
+                                >
+                                  <FaTrash size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                      {expandedId === item._id && (
+                        <tr className="bg-gray-50/80 animate-in fade-in duration-300">
+                          <td colSpan={config.displayFields.length + ((actionPermissions.edit !== false || actionPermissions.delete !== false) ? 1 : 0)} className="p-6">
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                              {config.detailedFields ? (
+                                config.detailedFields.map((key) => {
+                                  const value = item[key];
+                                  return (
+                                    <div key={key} className="space-y-1">
+                                      <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
+                                        {key.replace(/([A-Z])/g, " $1")}
+                                      </label>
+                                      <p className="text-xs text-gray-700 font-semibold break-words">
+                                        {(() => {
+                                          if (key === "margin" || key === "marginPercentage") return formatMarginDisplay(item);
+                                          if (typeof value === "object" && value !== null) {
+                                            return Array.isArray(value) ? value.map(v => v.name || "-").join(", ") : (value.name || "-");
+                                          }
+                                          return String(value === null || value === undefined ? "-" : value);
+                                        })()}
+                                      </p>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                Object.entries(item).map(([key, value]) => (
+                                  key !== "_id" &&
+                                  key !== "branchId" &&
+                                  key !== "__v" &&
+                                  !key.includes("createdAt") &&
+                                  !key.includes("updatedAt") && (
+                                    <div key={key} className="space-y-1">
+                                      <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
+                                        {key.replace(/([A-Z])/g, " $1")}
+                                      </label>
+                                      <p className="text-xs text-gray-700 font-semibold break-words">
+                                        {(() => {
+                                          if (key === "margin" || key === "marginPercentage") return formatMarginDisplay(item);
+                                          if (typeof value === "object" && value !== null) {
+                                            return Array.isArray(value) ? value.map(v => v.name || "-").join(", ") : (value.name || "-");
+                                          }
+                                          return String(value === null || value === undefined ? "-" : value);
+                                        })()}
+                                      </p>
+                                    </div>
+                                  )
+                                ))
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-            </div>
+          </div>
 
           {/* Pagination Controls - Simplified */}
           <div className="mt-6 flex items-center justify-center gap-3">

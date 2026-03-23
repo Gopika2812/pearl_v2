@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { FaArrowUp, FaBox, FaEdit, FaExclamationCircle, FaExclamationTriangle, FaList, FaSync, FaThLarge } from "react-icons/fa";
+import { FaArrowUp, FaBox, FaChevronDown, FaChevronUp, FaEdit, FaExclamationCircle, FaExclamationTriangle, FaList, FaSync, FaThLarge } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 export default function BranchRecycling() {
   const { currentBranch, user } = useBranch();
+  const fieldPermissions = user?.fieldPermissions || {};
+  const actionPermissions = user?.actionPermissions || {};
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [restockingInProgress, setRestockingInProgress] = useState({});
@@ -22,6 +24,7 @@ export default function BranchRecycling() {
   const [selectedProductGroup, setSelectedProductGroup] = useState("All"); // Filter by group
   const [allProducts, setAllProducts] = useState([]); // Store all products for group filtering
   const [allProductGroups, setAllProductGroups] = useState([]); // Store all unique product groups
+  const [sortConfig, setSortConfig] = useState({ key: "status", direction: "asc" }); // Default: Out of Stock first
 
   // Restocking Configuration Modal State
   const [restockingConfigMode, setRestockingConfigMode] = useState(false);
@@ -319,6 +322,14 @@ export default function BranchRecycling() {
     const fyear = parts[2] || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
     
     return `${prefix}/${String(currentNum + 1).padStart(3, "0")}/${fyear}`;
+  };
+
+  const handleSort = (key) => {
+    let direction = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
   };
 
   // Handle restocking
@@ -774,21 +785,56 @@ export default function BranchRecycling() {
     }
   };
 
-  // API already filters by search term, so just categorize the products
-  const { outOfStock, lowStock, normalStock } = categorizeProducts(products);
+  // Sorting logic for products
+  const getSortedProducts = (prods) => {
+    return [...prods].sort((a, b) => {
+      const { key, direction } = sortConfig;
+      
+      if (key === "status") {
+        // Priority: Out of Stock (0) > Low (1) > Normal (2)
+        const getStatusPriority = (p) => {
+          const threshold = p.restockingConfig?.threshold ?? p.reorderLevel ?? 10;
+          if (p.totalQty === 0) return 0;
+          if (p.totalQty < threshold) return 1;
+          return 2;
+        };
+        const priorityA = getStatusPriority(a);
+        const priorityB = getStatusPriority(b);
+        return direction === "asc" ? priorityA - priorityB : priorityB - priorityA;
+      }
+      
+      if (key === "name") {
+        const nameA = a.name.toLowerCase();
+        const nameB = b.name.toLowerCase();
+        if (nameA < nameB) return direction === "asc" ? -1 : 1;
+        if (nameA > nameB) return direction === "asc" ? 1 : -1;
+        return 0;
+      }
+      
+      if (key === "totalQty") {
+        return direction === "asc" ? a.totalQty - b.totalQty : b.totalQty - a.totalQty;
+      }
+      
+      return 0;
+    });
+  };
+
+  const { outOfStock, lowStock, normalStock } = categorizeProducts(getSortedProducts(products));
 
   // Use allProducts when filtering by group, otherwise use paginated products
   const productsForFiltering = selectedProductGroup !== "All" ? allProducts : products;
 
   // Filter products by selected group (handle both string and object cases)
-  const filteredProducts = selectedProductGroup === "All" 
-    ? products 
-    : productsForFiltering.filter((p) => {
-        const groupName = p.productGroup && typeof p.productGroup === 'object' 
-          ? (p.productGroup.name || p.productGroup._id)
-          : p.productGroup;
-        return groupName === selectedProductGroup;
-      });
+  const filteredProducts = getSortedProducts(
+    selectedProductGroup === "All" 
+      ? products 
+      : productsForFiltering.filter((p) => {
+          const groupName = p.productGroup && typeof p.productGroup === 'object' 
+            ? (p.productGroup.name || p.productGroup._id)
+            : p.productGroup;
+          return groupName === selectedProductGroup;
+        })
+  );
 
   const { outOfStock: filteredOutOfStock, lowStock: filteredLowStock, normalStock: filteredNormalStock } = categorizeProducts(filteredProducts);
 
@@ -831,15 +877,16 @@ export default function BranchRecycling() {
               </div>
 
               <div className="space-y-2 mb-4 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Current Stock:</span>
-                  <span className="font-semibold text-gray-800">
-                    {product.totalQty} {product.units}
-                  </span>
-                </div>
+                {fieldPermissions.totalQty !== false && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Current Stock:</span>
+                    <span className="font-semibold text-gray-800">
+                      {product.totalQty} {product.units}
+                    </span>
+                  </div>
+                )}
 
-                {/* Pending Sales (Not Invoiced) */}
-                {pendingSalesMap && pendingSalesMap[product._id] > 0 && (
+                {fieldPermissions.totalQty !== false && pendingSalesMap && pendingSalesMap[product._id] > 0 && (
                   <div className="flex justify-between bg-yellow-50 p-2 rounded border-l-2 border-yellow-400">
                     <span className="text-yellow-700 font-medium">⏳ Pending Sales:</span>
                     <span className="font-semibold text-yellow-800">
@@ -848,8 +895,7 @@ export default function BranchRecycling() {
                   </div>
                 )}
 
-                {/* Available Qty */}
-                {pendingSalesMap && pendingSalesMap[product._id] > 0 && (
+                {fieldPermissions.totalQty !== false && pendingSalesMap && pendingSalesMap[product._id] > 0 && (
                   <div className="flex justify-between bg-blue-50 p-2 rounded border-l-2 border-blue-400">
                     <span className="text-blue-700 font-medium">✓ Available:</span>
                     <span className="font-semibold text-blue-800">
@@ -881,31 +927,35 @@ export default function BranchRecycling() {
               </div>
 
               <div className="space-y-2">
-                <button
-                  onClick={() => openRestockingConfigModal(product)}
-                  className="w-full py-2 px-3 rounded font-semibold text-sm transition border-2 border-purple-500 text-purple-600 hover:bg-purple-50 flex items-center justify-center gap-2"
-                >
-                  <FaEdit /> Edit Settings
-                </button>
-                <button
-                  onClick={() => handleRestock(product)}
-                  disabled={
-                    restockingInProgress[product._id] || 
-                    !(product.restockingConfig?.restockingQty ?? product.reorderQty)
-                  }
-                  className={`w-full py-2 px-3 rounded font-semibold text-sm transition flex items-center justify-center gap-2 ${
-                    restockingInProgress[product._id]
-                      ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                      : (product.restockingConfig?.restockingQty ?? product.reorderQty)
-                      ? "bg-green-500 text-white hover:bg-green-600"
-                      : "bg-gray-300 text-gray-600 cursor-not-allowed"
-                  }`}
-                >
-                  <FaArrowUp />
-                  {restockingInProgress[product._id]
-                    ? "Processing..."
-                    : "Restock Now"}
-                </button>
+                {actionPermissions.edit !== false && (
+                  <button
+                    onClick={() => openRestockingConfigModal(product)}
+                    className="w-full py-2 px-3 rounded font-semibold text-sm transition border-2 border-purple-500 text-purple-600 hover:bg-purple-50 flex items-center justify-center gap-2"
+                  >
+                    <FaEdit /> Edit Settings
+                  </button>
+                )}
+                {actionPermissions.restock !== false && (
+                  <button
+                    onClick={() => handleRestock(product)}
+                    disabled={
+                      restockingInProgress[product._id] || 
+                      !(product.restockingConfig?.restockingQty ?? product.reorderQty)
+                    }
+                    className={`w-full py-2 px-3 rounded font-semibold text-sm transition flex items-center justify-center gap-2 ${
+                      restockingInProgress[product._id]
+                        ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                        : (product.restockingConfig?.restockingQty ?? product.reorderQty)
+                        ? "bg-green-500 text-white hover:bg-green-600"
+                        : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                    }`}
+                  >
+                    <FaArrowUp />
+                    {restockingInProgress[product._id]
+                      ? "Processing..."
+                      : "Restock Now"}
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -1311,7 +1361,7 @@ export default function BranchRecycling() {
               </button>
             </div>
 
-            {selectedProducts.size > 0 && (
+            {selectedProducts.size > 0 && actionPermissions.restock !== false && (
               <button
                 onClick={handleBulkRestock}
                 disabled={bulkRestockingInProgress}
@@ -1447,16 +1497,58 @@ export default function BranchRecycling() {
                       className="w-5 h-5 cursor-pointer"
                     />
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-bold">Product Name</th>
+                  <th 
+                    onClick={() => handleSort("name")}
+                    className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      Product Name
+                      {sortConfig.key === "name" ? (
+                        sortConfig.direction === "asc" ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />
+                      ) : (
+                        <FaChevronDown size={10} className="opacity-30" />
+                      )}
+                    </div>
+                  </th>
                   <th className="px-4 py-3 text-left text-sm font-bold">Units</th>
-                  <th className="px-4 py-3 text-right text-sm font-bold">Current Stock</th>
-                  <th className="px-4 py-3 text-right text-sm font-bold">⏳ Pending Sales</th>
-                  <th className="px-4 py-3 text-right text-sm font-bold">✓ Available</th>
+                  {fieldPermissions.totalQty !== false && (
+                    <>
+                      <th 
+                        onClick={() => handleSort("totalQty")}
+                        className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                      >
+                        <div className="flex items-center justify-end gap-2">
+                          Current Stock
+                          {sortConfig.key === "totalQty" ? (
+                            sortConfig.direction === "asc" ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />
+                          ) : (
+                            <FaChevronDown size={10} className="opacity-30" />
+                          )}
+                        </div>
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-bold">⏳ Pending Sales</th>
+                      <th className="px-4 py-3 text-right text-sm font-bold">✓ Available</th>
+                    </>
+                  )}
                   <th className="px-4 py-3 text-right text-sm font-bold">Threshold</th>
                   <th className="px-4 py-3 text-right text-sm font-bold">Restock Qty</th>
                   <th className="px-4 py-3 text-left text-sm font-bold">Preferred Vendor</th>
-                  <th className="px-4 py-3 text-left text-sm font-bold">Status</th>
-                  <th className="px-4 py-3 text-center text-sm font-bold">Actions</th>
+                  <th 
+                    onClick={() => handleSort("status")}
+                    className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      Status
+                      {sortConfig.key === "status" ? (
+                        sortConfig.direction === "asc" ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />
+                      ) : (
+                        <FaChevronDown size={10} className="opacity-30" />
+                      )}
+                    </div>
+                  </th>
+                  {(actionPermissions.edit !== false || actionPermissions.restock !== false) && (
+                    <th className="px-4 py-3 text-center text-sm font-bold">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -1493,21 +1585,25 @@ export default function BranchRecycling() {
                       <td className="px-4 py-3 text-gray-700 text-sm">
                         {product.units}
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
-                        {product.totalQty}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm">
-                        {pendingQty > 0 ? (
-                          <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full font-semibold">
-                            {pendingQty}
-                          </span>
-                        ) : (
-                          <span className="text-gray-500">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold text-blue-700 text-sm">
-                        {availableQty}
-                      </td>
+                      {fieldPermissions.totalQty !== false && (
+                        <>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
+                            {product.totalQty}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm">
+                            {pendingQty > 0 ? (
+                              <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full font-semibold">
+                                {pendingQty}
+                              </span>
+                            ) : (
+                              <span className="text-gray-500">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-blue-700 text-sm">
+                            {availableQty}
+                          </td>
+                        </>
+                      )}
                       <td className="px-4 py-3 text-right text-gray-800 text-sm font-bold">
                         {threshold}
                       </td>
@@ -1520,29 +1616,35 @@ export default function BranchRecycling() {
                       <td className="px-4 py-3 text-sm">
                         {stockStatus}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex gap-2 justify-center">
-                          <button
-                            onClick={() => openRestockingConfigModal(product)}
-                            className="px-3 py-1 bg-purple-500 text-white rounded font-semibold text-xs hover:bg-purple-600 transition"
-                          >
-                            📊 Config
-                          </button>
-                          <button
-                            onClick={() => handleRestock(product)}
-                            disabled={restockingInProgress[product._id] || !restockQty}
-                            className={`px-3 py-1 rounded font-semibold text-xs transition ${
-                              restockingInProgress[product._id]
-                                ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                                : product.reorderQty
-                                ? "bg-green-500 text-white hover:bg-green-600"
-                                : "bg-gray-300 text-gray-600 cursor-not-allowed"
-                            }`}
-                          >
-                            {restockingInProgress[product._id] ? "..." : "Restock"}
-                          </button>
-                        </div>
-                      </td>
+                      {(actionPermissions.edit !== false || actionPermissions.restock !== false) && (
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex gap-2 justify-center">
+                            {actionPermissions.edit !== false && (
+                              <button
+                                onClick={() => openRestockingConfigModal(product)}
+                                className="px-3 py-1 bg-purple-500 text-white rounded font-semibold text-xs hover:bg-purple-600 transition"
+                              >
+                                📊 Config
+                              </button>
+                            )}
+                            {actionPermissions.restock !== false && (
+                              <button
+                                onClick={() => handleRestock(product)}
+                                disabled={restockingInProgress[product._id] || !restockQty}
+                                className={`px-3 py-1 rounded font-semibold text-xs transition ${
+                                  restockingInProgress[product._id]
+                                    ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                                    : product.reorderQty
+                                    ? "bg-green-500 text-white hover:bg-green-600"
+                                    : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                                }`}
+                              >
+                                {restockingInProgress[product._id] ? "..." : "Restock"}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

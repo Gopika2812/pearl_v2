@@ -27,6 +27,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     totalQtyUnit: "",
     purchasingPrice: "",
     sellingPrice: "",
+    lockedPrice: "",
     margin: "",
     hsnCode: "",
     gst: "",
@@ -78,6 +79,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         totalQtyUnit: editingItem.totalQtyUnit || "",
         purchasingPrice: editingItem.purchasingPrice || "",
         sellingPrice: editingItem.sellingPrice || "",
+        lockedPrice: editingItem.lockedPrice || "",
         margin: editingItem.margin || "",
         hsnCode: editingItem.hsnCode || "",
         gst: editingItem.gst || "",
@@ -94,6 +96,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         totalQtyUnit: "",
         purchasingPrice: "",
         sellingPrice: "",
+        lockedPrice: "",
         margin: "",
         hsnCode: "",
         gst: "",
@@ -225,7 +228,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     e.preventDefault();
 
     // Validate required fields
-    if (!product.name || !product.productGroup || !product.perQty || !product.units || !product.hsnCode) {
+    if (!product.name || !product.productGroup || !product.perQty || !product.units) {
       alert("Please fill in all required fields");
       return;
     }
@@ -249,8 +252,8 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
       totalQtyUnit: product.totalQtyUnit || "",
       purchasingPrice: Math.round(Number(product.purchasingPrice || 0) * 100) / 100,
       sellingPrice: Math.round(Number(product.sellingPrice || 0) * 100) / 100,
-      margin: Math.round(Number(product.margin || 0) * 100) / 100,
-      hsnCode: product.hsnCode,
+      lockedPrice: Math.round(Number(product.lockedPrice || 0) * 100) / 100,
+      hsnCode: product.hsnCode || "0000",
       gst: Math.round(Number(product.gst || 0) * 100) / 100,
     };
 
@@ -284,6 +287,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         totalQtyUnit: "",
         purchasingPrice: "",
         sellingPrice: "",
+        lockedPrice: "",
         margin: "",
         hsnCode: "",
         gst: "",
@@ -492,32 +496,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
             </div>
           </div>
 
-          {/* 2-Column Grid */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            {/* Total Qty */}
-            <div>
-              <label className={labelClass}>Total Qty</label>
-              <input
-                type="number"
-                className={inputClass}
-                placeholder="e.g., 50"
-                value={product.totalQty}
-                onChange={(e) => setProduct({ ...product, totalQty: e.target.value })}
-              />
-            </div>
 
-            {/* Total Qty Unit */}
-            <div>
-              <label className={labelClass}>Total Qty Unit</label>
-              <input
-                type="text"
-                className={inputClass}
-                placeholder="e.g., box, carton, pallet"
-                value={product.totalQtyUnit}
-                onChange={(e) => setProduct({ ...product, totalQtyUnit: e.target.value })}
-              />
-            </div>
-          </div>
 
           {/* 2-Column Grid */}
           <div className="grid grid-cols-2 gap-4 mb-4">
@@ -548,50 +527,36 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
             </div>
           </div>
 
-            {/* HSN Code */}
-            <div>
-              <label className={labelClass}>HSN Code *</label>
-              <input
-                type="text"
-                required
-                className={inputClass}
-                placeholder="Enter HSN code"
-                value={product.hsnCode}
-                onChange={(e) => setProduct({ ...product, hsnCode: e.target.value })}
-              />
-            </div>
-
-          {/* 2-Column Grid */}
           <div className="grid grid-cols-2 gap-4 mb-4">
-            {/* Margin */}
+            {/* Locked Selling Price */}
             <div>
-              <label className={labelClass}>Margin (%)</label>
+              <label className={labelClass}>Locked Selling Price (₹)</label>
               <input
                 type="number"
                 step="0.01"
-                min="0"
                 className={inputClass}
-                placeholder="Enter margin %"
-                value={product.margin}
-                onChange={(e) => handleMarginChange(e.target.value)}
+                placeholder="Enter locked price"
+                value={product.lockedPrice}
+                onChange={(e) => setProduct({ ...product, lockedPrice: e.target.value })}
               />
-              <p className="text-xs text-gray-500 mt-1">Markup % on purchase price</p>
             </div>
+          </div>
 
-            {/* GST */}
-            <div>
-              <label className={labelClass}>GST (%)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="28"
-                className={inputClass}
-                placeholder="Enter GST %"
-                value={product.gst}
-                onChange={(e) => setProduct({ ...product, gst: e.target.value })}
-              />
-            </div>
+
+
+          {/* GST - Full Width now */}
+          <div className="mb-4">
+            <label className={labelClass}>GST (%)</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="28"
+              className={inputClass}
+              placeholder="Enter GST %"
+              value={product.gst}
+              onChange={(e) => setProduct({ ...product, gst: e.target.value })}
+            />
           </div>
 
           {/* Action Buttons - Sticky Bottom */}

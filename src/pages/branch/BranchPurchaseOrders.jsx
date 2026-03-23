@@ -175,7 +175,14 @@ const BranchPurchaseOrders = () => {
                           </span>
                         </td>
                         <td className="px-6 py-4 text-center text-gray-600 text-xs">
-                          {new Date(order.createdAt).toLocaleDateString()}
+                          {new Date(order.createdAt).toLocaleString("en-IN", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: true,
+                          })}
                         </td>
                         <td className="px-6 py-4 text-center">
                           {order.status !== 'INVOICED' ? (
