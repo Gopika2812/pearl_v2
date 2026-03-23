@@ -31,6 +31,7 @@ const productSchema = new mongoose.Schema(
     totalQtyUnit: { type: String, default: "" }, // Unit for total quantity
     purchasingPrice: { type: Number, default: 0 },
     sellingPrice: { type: Number, default: 0 },
+    lockedPrice: { type: Number, default: 0 },
     mrp: { type: Number, default: 0 }, // Maximum Retail Price
     margin: { type: Number, default: 0 },
     marginPercentage: { type: Number, default: 0 }, // Margin as percentage for group calculations

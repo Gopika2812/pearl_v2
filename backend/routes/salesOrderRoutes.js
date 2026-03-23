@@ -7,6 +7,9 @@ import VoucherType from "../models/VoucherType.js";
 import { createAuditLog } from "../utils/logUtil.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import GLService from "../utils/glService.js";
+import Product from "../models/Product.js";
+import ProductGroup from "../models/ProductGroup.js";
+
 
 
 const router = express.Router();
@@ -21,6 +24,10 @@ router.get("/", async (req, res) => {
     if (branchId) {
       query.branchId = branchId;
     }
+
+    if (req.query.isClaim !== undefined) {
+      query.isClaim = req.query.isClaim === "true";
+    }
     
     const salesOrders = await SalesOrder.find(query)
       .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType")
@@ -33,6 +40,125 @@ router.get("/", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch sales orders" });
   }
 });
+
+// GET selling history (for Product Records)
+router.get("/history", async (req, res) => {
+  try {
+    const { branchId, fromDate, toDate, productGroupId, productId } = req.query;
+
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    const matchQuery = {
+      branchId: new mongoose.Types.ObjectId(branchId),
+    };
+
+    if (fromDate || toDate) {
+      matchQuery.createdAt = {};
+      if (fromDate) matchQuery.createdAt.$gte = new Date(fromDate);
+      if (toDate) {
+        const end = new Date(toDate);
+        end.setHours(23, 59, 59, 999);
+        matchQuery.createdAt.$lte = end;
+      }
+    }
+
+    const aggregation = [
+      { $match: matchQuery },
+      { $unwind: "$items" },
+    ];
+
+    if (productId) {
+      aggregation.push({
+        $match: { "items.productId": new mongoose.Types.ObjectId(productId) }
+      });
+    }
+
+    aggregation.push(
+      {
+        $lookup: {
+          from: "products",
+          localField: "items.productId",
+          foreignField: "_id",
+          as: "productInfo"
+        }
+      },
+      { $unwind: "$productInfo" }
+    );
+
+    if (productGroupId) {
+      aggregation.push({
+        $match: { "productInfo.productGroup": new mongoose.Types.ObjectId(productGroupId) }
+      });
+    }
+
+    aggregation.push(
+      {
+        $lookup: {
+          from: "productgroups",
+          localField: "productInfo.productGroup",
+          foreignField: "_id",
+          as: "groupInfo"
+        }
+      },
+      {
+        $unwind: {
+          path: "$groupInfo",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          date: "$createdAt",
+          invoiceId: 1,
+          voucherType: 1,
+          productName: "$items.name",
+          productGroupName: "$groupInfo.name",
+          purchasingPrice: "$productInfo.purchasingPrice",
+          gst: "$items.gst",
+          qty: "$items.qty",
+          sellingPrice: "$items.sellingPrice",
+          discountAmount: "$items.discountAmount",
+          // Calculate discount per unit
+          discountPerUnit: {
+            $cond: [
+              { $gt: ["$items.qty", 0] },
+              { $divide: ["$items.discountAmount", "$items.qty"] },
+              0
+            ]
+          },
+          // Gross Profit per unit = (actual selling price per unit) - cost
+          grossProfit: {
+            $subtract: [
+              {
+                $subtract: [
+                  "$items.sellingPrice",
+                  {
+                    $cond: [
+                      { $gt: ["$items.qty", 0] },
+                      { $divide: ["$items.discountAmount", "$items.qty"] },
+                      0
+                    ]
+                  }
+                ]
+              },
+              "$productInfo.purchasingPrice"
+            ]
+          }
+        }
+      },
+      { $sort: { date: -1 } }
+    );
+
+    const history = await SalesOrder.aggregate(aggregation);
+    res.json(history);
+  } catch (error) {
+    console.error("Aggregation error:", error);
+    res.status(500).json({ message: "Failed to fetch sales history" });
+  }
+});
+
 
 // GET sales order preview (for new orders)
 router.get("/preview/:voucherType", async (req, res) => {
@@ -101,6 +227,7 @@ router.post("/", async (req, res) => {
       deliveryMan,
       extraExpenses,
       extraExpenseAmount,
+      isClaim,
     } = req.body;
 
     console.log("📤 POST /sales-orders received");
@@ -202,6 +329,7 @@ router.post("/", async (req, res) => {
       salesMan,
       deliveryMan,
       financialYear,
+      isClaim: isClaim || false,
     });
 
     console.log("💾 About to save SalesOrder...");

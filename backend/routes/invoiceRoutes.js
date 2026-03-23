@@ -435,6 +435,7 @@ router.get("/:invoiceId", async (req, res) => {
 router.put("/:invoiceId/print", async (req, res) => {
   try {
     const { invoiceId } = req.params;
+    const { printedBy, printedByUsername, branchId } = req.body;
 
     const invoice = await Invoice.findByIdAndUpdate(
       invoiceId,
@@ -444,6 +445,18 @@ router.put("/:invoiceId/print", async (req, res) => {
       },
       { new: true }
     );
+
+    if (invoice) {
+      await createAuditLog({
+        userId: printedBy || invoice.billingPerson || "System",
+        username: printedByUsername || invoice.billingPerson || "System",
+        branchId: branchId || invoice.branchId,
+        action: "PRINT_BILL",
+        description: `Printed Bill: ${invoice.invoiceNumber}. Print #${invoice.printCount}. Amount: ₹${invoice.grandTotal}`,
+        targetId: invoice._id,
+        targetModel: "Invoice",
+      });
+    }
 
     res.json(invoice);
   } catch (error) {

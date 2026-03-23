@@ -50,6 +50,21 @@ const branchUserSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    fieldPermissions: {
+      type: Map,
+      of: Boolean,
+      default: {},
+    },
+    actionPermissions: {
+      type: Map,
+      of: Boolean,
+      default: {},
+    },
+    allowedVoucherTypes: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: "VoucherType",
+      default: [],
+    },
   },
   { timestamps: true }
 );

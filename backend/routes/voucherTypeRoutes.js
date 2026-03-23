@@ -12,13 +12,31 @@ router.get("/", async (req, res) => {
     const { branchId } = req.query;
     
     if (!branchId) {
-      return res.status(400).json({ message: "branchId is required" });
+      return res.status(400).json({ success: false, message: "branchId is required" });
     }
 
     const vouchers = await VoucherType.find({ branchId }).sort({ createdAt: -1 });
-    res.json(vouchers);
+    res.json({ success: true, data: vouchers });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * GET voucher types by branchId (RESTful style)
+ */
+router.get("/branch/:branchId", async (req, res) => {
+  try {
+    const { branchId } = req.params;
+    
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: "branchId is required" });
+    }
+
+    const vouchers = await VoucherType.find({ branchId }).sort({ createdAt: -1 });
+    res.json({ success: true, data: vouchers });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
@@ -54,15 +72,15 @@ router.post("/", async (req, res) => {
     });
 
     const saved = await voucher.save();
-    return res.status(201).json(saved);
+    return res.status(201).json({ success: true, data: saved });
   } catch (err) {
     if (err.code === 11000) {
       return res
         .status(409)
-        .json({ message: "Voucher type already exists for this order type in this branch" });
+        .json({ success: false, message: "Voucher type already exists for this order type in this branch" });
     }
 
-    return res.status(500).json({ message: err.message });
+    return res.status(500).json({ success: false, message: err.message });
   }
 });
 
@@ -97,9 +115,9 @@ router.post("/generate", async (req, res) => {
       "0"
     )}/${fy}`;
 
-    res.json({ invoiceNo });
+    res.json({ success: true, invoiceNo });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
@@ -122,12 +140,12 @@ router.put("/:id", async (req, res) => {
     });
 
     if (!voucher) {
-      return res.status(404).json({ message: "Voucher type not found" });
+      return res.status(404).json({ success: false, message: "Voucher type not found" });
     }
 
-    res.json(voucher);
+    res.json({ success: true, data: voucher });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
@@ -141,12 +159,12 @@ router.delete("/:id", async (req, res) => {
     const voucher = await VoucherType.findByIdAndDelete(id);
 
     if (!voucher) {
-      return res.status(404).json({ message: "Voucher type not found" });
+      return res.status(404).json({ success: false, message: "Voucher type not found" });
     }
 
-    res.json({ message: "Voucher type deleted successfully", data: voucher });
+    res.json({ success: true, message: "Voucher type deleted successfully", data: voucher });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 

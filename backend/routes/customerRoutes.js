@@ -341,6 +341,7 @@ router.post("/", async (req, res) => {
       branch,
       upi,
       branchId,
+      isLockedPriceEnabled,
     } = req.body;
 
     // Basic validation - only name and branchId are required
@@ -392,6 +393,7 @@ router.post("/", async (req, res) => {
       ifsc,
       branch,
       upi,
+      isLockedPriceEnabled: isLockedPriceEnabled === true || isLockedPriceEnabled === "true",
     });
 
     const savedCustomer = await customer.save();

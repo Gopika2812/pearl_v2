@@ -95,6 +95,9 @@ router.post("/register", async (req, res) => {
         email: newUser.email,
         role: newUser.role,
         allowedPages: newUser.allowedPages || [],
+        fieldPermissions: newUser.fieldPermissions || {},
+        actionPermissions: newUser.actionPermissions || {},
+        allowedVoucherTypes: newUser.allowedVoucherTypes || [],
       },
     });
   } catch (error) {
@@ -183,6 +186,9 @@ router.post("/verify-otp", async (req, res) => {
         email: newUser.email,
         role: newUser.role,
         allowedPages: newUser.allowedPages || [],
+        fieldPermissions: newUser.fieldPermissions || {},
+        actionPermissions: newUser.actionPermissions || {},
+        allowedVoucherTypes: newUser.allowedVoucherTypes || [],
       },
     });
   } catch (error) {
@@ -255,6 +261,9 @@ router.post("/login", async (req, res) => {
         role: user.role,
         branch: user.branch._id,
         allowedPages: user.allowedPages || [],
+        fieldPermissions: user.fieldPermissions || {},
+        actionPermissions: user.actionPermissions || {},
+        allowedVoucherTypes: user.allowedVoucherTypes || [],
       },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
@@ -286,6 +295,9 @@ router.post("/login", async (req, res) => {
         },
         role: user.role,
         allowedPages: user.allowedPages || [],
+        fieldPermissions: user.fieldPermissions || {},
+        actionPermissions: user.actionPermissions || {},
+        allowedVoucherTypes: user.allowedVoucherTypes || [],
       },
     });
   } catch (error) {
@@ -383,6 +395,9 @@ router.put("/:id", async (req, res) => {
     if (role !== undefined) updateData.role = role;
     if (status !== undefined) updateData.status = status;
     if (req.body.allowedPages !== undefined) updateData.allowedPages = req.body.allowedPages;
+    if (req.body.fieldPermissions !== undefined) updateData.fieldPermissions = req.body.fieldPermissions;
+    if (req.body.actionPermissions !== undefined) updateData.actionPermissions = req.body.actionPermissions;
+    if (req.body.allowedVoucherTypes !== undefined) updateData.allowedVoucherTypes = req.body.allowedVoucherTypes;
 
     const user = await BranchUser.findByIdAndUpdate(id, updateData, {
       new: true,

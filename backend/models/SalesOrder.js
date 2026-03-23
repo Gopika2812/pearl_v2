@@ -200,14 +200,9 @@ const salesOrderSchema = new mongoose.Schema(
       default: "SALES ORDER",
     },
 
-    invoiceNotes: {
-      type: String,
-      default: "",
-    },
-
-    backOrderSummary: {
-      type: Array,
-      default: [],
+    isClaim: {
+      type: Boolean,
+      default: false,
     },
 
   },

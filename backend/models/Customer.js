@@ -33,6 +33,7 @@ const customerSchema = new mongoose.Schema(
     margin: { type: Number, default: 0 }, // Can be positive or negative
     credit: { type: Number, default: 0 },
     debit: { type: Number, default: 0 },
+    isLockedPriceEnabled: { type: Boolean, default: false },
     salesOwner: { type: mongoose.Schema.Types.ObjectId, ref: "SalesOwner", default: null, index: true },
     
     // Legacy field - kept for backward compatibility
