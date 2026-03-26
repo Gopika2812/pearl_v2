@@ -30,6 +30,8 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     isLockedPriceEnabled: false,
   });
 
+  const [isFetchingGst, setIsFetchingGst] = useState(false);
+
   // Pre-fill form when editing
   useEffect(() => {
     if (editingItem) {
@@ -160,6 +162,39 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     });
 
     onClose();
+  };
+
+  const handleFetchGstDetails = async () => {
+    if (!customer.gstin || customer.gstin.length !== 15) {
+      alert("Please enter a valid 15-character GSTIN");
+      return;
+    }
+
+    setIsFetchingGst(true);
+    try {
+      const res = await fetch(`${API_BASE}/gst/search/${customer.gstin}`);
+      const result = await res.json();
+
+      if (!res.ok) throw new Error(result.message || "Failed to fetch GST details");
+
+      if (result.success && result.data) {
+        const { legalName, address, state, pincode, district } = result.data;
+        setCustomer(prev => ({
+          ...prev,
+          name: legalName || prev.name,
+          address: address || prev.address,
+          state: state || prev.state,
+          pincode: pincode || prev.pincode,
+          district: district || prev.district || "",
+          registrationType: "regular"
+        }));
+      }
+    } catch (err) {
+      console.error("GST Fetch Error:", err);
+      alert(err.message || "Error fetching GST details");
+    } finally {
+      setIsFetchingGst(false);
+    }
   };
 
   const labelClass = "text-sm font-bold text-gray-600 mb-1 block";
@@ -380,15 +415,29 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
 
               <div>
                 <label className={labelClass}>GSTIN</label>
-                <input
-                  type="text"
-                  className={inputClass}
-                  value={customer.gstin}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, gstin: e.target.value.toUpperCase() })
-                  }
-                  placeholder="E.g., 27AABCD1234H1Z0"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className={`${inputClass} flex-1`}
+                    value={customer.gstin}
+                    onChange={(e) =>
+                      setCustomer({ ...customer, gstin: e.target.value.toUpperCase() })
+                    }
+                    placeholder="E.g., 27AABCD1234H1Z0"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleFetchGstDetails}
+                    disabled={isFetchingGst || !customer.gstin}
+                    className={`px-3 py-2 rounded-lg font-bold text-xs uppercase transition shadow-sm ${
+                      isFetchingGst 
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                        : "bg-orange-500 text-white hover:bg-orange-600 active:scale-95"
+                    }`}
+                  >
+                    {isFetchingGst ? "..." : "🔍 Fetch"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

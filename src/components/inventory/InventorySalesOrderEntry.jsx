@@ -86,13 +86,6 @@ export default function InventorySalesOrderEntry({
 
 
 
-  const [enableEway, setEnableEway] = useState(false);
-  const [ewayBillNo, setEwayBillNo] = useState("");
-
-  const [ewayDate, setEwayDate] = useState("");
-  const [vehicleNo, setVehicleNo] = useState("");
-  const [transportMode, setTransportMode] = useState("Road");
-  const [transporterName, setTransporterName] = useState("");
   const [poItems, setPoItems] = useState([]);
   const [discountType, setDiscountType] = useState("PERCENT");
   const [discountPercent, setDiscountPercent] = useState("");
@@ -125,6 +118,12 @@ export default function InventorySalesOrderEntry({
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClaim, setIsClaim] = useState(false);
+  const [isLocked, setIsLocked] = useState(false); // New state for Lock Price checkbox
+
+  // Check if current user is Admin or Super Admin
+  const isAdmin = useMemo(() => {
+    return user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+  }, [user]);
 
   // REFS FOR CLICK OUTSIDE
   const itemDropdownRef = useRef(null);
@@ -461,6 +460,7 @@ export default function InventorySalesOrderEntry({
     const product = productsWithStock.find(p => p._id === id);
     if (!product) return;
 
+    setIsLocked(false);
     setSelectedItem(id);
     setItemSearch(product.name);
     setShowItemDropdown(false);
@@ -495,6 +495,27 @@ export default function InventorySalesOrderEntry({
 
     if (customerId) {
       fetchRecentOrders(customerId, id);
+      // Fetch customer-specific locked price
+      fetchCustomerLockedPrice(customerId, id);
+    }
+  };
+
+  const fetchCustomerLockedPrice = async (cId, pId) => {
+    try {
+      const res = await fetch(`${API_BASE}/customer-locked-prices/${cId}/${pId}?branchId=${branchId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.data.lockedPrice > 0) {
+          setSellingPrice(data.data.lockedPrice);
+          setIsLocked(true); // Auto-check if already locked
+          console.log(`🔒 Applying Customer-Specific Locked Price: ${data.data.lockedPrice}`);
+        }
+      } else {
+        setIsLocked(false);
+      }
+    } catch (err) {
+      console.error("Failed to fetch customer locked price:", err);
+      setIsLocked(false);
     }
   };
 
@@ -548,7 +569,7 @@ export default function InventorySalesOrderEntry({
   }, [sellingPrice, qty, gst, discountType, discountPercent, discountAmountInput]);
 
 
-  const addItem = () => {
+  const addItem = async () => {
     if (!selectedItem) {
       toast.warning("Select item");
       return;
@@ -625,7 +646,25 @@ export default function InventorySalesOrderEntry({
       },
     ]);
 
-    // 8️⃣ RESET FORM
+    // 8️⃣ SAVE LOCKED PRICE IF CHECKED
+    if (isAdmin && isLocked) {
+      try {
+        await fetch(`${API_BASE}/customer-locked-prices`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            branchId,
+            customerId: customerId,
+            productId: selectedItem,
+            lockedPrice: Number(sellingPrice),
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to save locked price:", err);
+      }
+    }
+
+    // 9️⃣ RESET FORM
     setProductGroup("");
     setProductGroupSearch("");
     setSelectedItem("");
@@ -785,16 +824,6 @@ export default function InventorySalesOrderEntry({
       totalPrice: Math.ceil(exp.totalPrice * 100) / 100,
     })),
     extraExpenseAmount: roundedExtraExpenseAmount,
-    ewayEnabled: enableEway,
-    ewayDetails: enableEway
-      ? {
-        ewayBillNo,
-        ewayDate,
-        vehicleNo,
-        transportMode,
-        transporterName,
-      }
-      : null,
     salesOwner: salesOwnerId,
     salesMan,
     deliveryMan,
@@ -872,13 +901,6 @@ export default function InventorySalesOrderEntry({
     setExpenseName("");
     setExpensePrice("");
 
-    // E-Way
-    setEnableEway(false);
-    setEwayBillNo("");
-    setEwayDate("");
-    setVehicleNo("");
-    setTransportMode("Road");
-    setTransporterName("");
     setIsClaim(false);
   };
 
@@ -1294,8 +1316,26 @@ export default function InventorySalesOrderEntry({
                 <input className={inputClass} value={hsn} readOnly />
               </div>
               <div>
-                <label className={labelClass}>Selling ₹</label>
-                <input type="number" className={inputClass} value={sellingPrice} onChange={(e) => setSellingPrice(+e.target.value)} />
+                <label className={labelClass}>
+                  Selling ₹ {isAdmin && (
+                    <span className="ml-2 inline-flex items-center gap-1 cursor-pointer" onClick={() => setIsLocked(!isLocked)}>
+                      <input 
+                        type="checkbox" 
+                        checked={isLocked} 
+                        onChange={(e) => setIsLocked(e.target.checked)}
+                        className="w-3 h-3 text-[#319bab] border-gray-300 rounded focus:ring-[#319bab]"
+                      />
+                      <span className="text-[9px] text-[#319bab]">LOCK</span>
+                    </span>
+                  )}
+                </label>
+                <input 
+                  type="number" 
+                  className={`${inputClass} ${!isAdmin ? 'bg-gray-100 cursor-not-allowed' : ''}`} 
+                  value={sellingPrice} 
+                  onChange={(e) => setSellingPrice(+e.target.value)} 
+                  readOnly={!isAdmin}
+                />
               </div>
             </div>
 
@@ -1529,54 +1569,8 @@ export default function InventorySalesOrderEntry({
           </div>
         </div>
 
-        {/* RIGHT: E-WAY BILL AND SUMMARY */}
         <div className="lg:col-span-6 space-y-4">
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 h-fit space-y-3">
-            <div className="flex items-center justify-between border-b pb-2 border-gray-100">
-              <h3 className="text-[#319bab] font-black uppercase text-xs tracking-widest">
-                E-Way Bill Details
-              </h3>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" checked={enableEway} onChange={(e) => setEnableEway(e.target.checked)} />
-                <span className="text-xs font-bold text-gray-600">Enable E-Way</span>
-              </div>
-            </div>
-
-            {enableEway ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelClass}>E-Way Bill No</label>
-                  <input type="text" className={inputClass} value={ewayBillNo} onChange={(e) => setEwayBillNo(e.target.value)} placeholder="Enter E-Way No" />
-                </div>
-                <div>
-                  <label className={labelClass}>E-Way Date</label>
-                  <input type="date" className={inputClass} value={ewayDate} onChange={(e) => setEwayDate(e.target.value)} />
-                </div>
-                <div>
-                  <label className={labelClass}>Vehicle No</label>
-                  <input type="text" className={inputClass} value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} placeholder="TN09AB1234" />
-                </div>
-                <div>
-                  <label className={labelClass}>Transport Mode</label>
-                  <select className={selectClass} value={transportMode} onChange={(e) => setTransportMode(e.target.value)}>
-                    <option value="Road">Road</option>
-                    <option value="Rail">Rail</option>
-                    <option value="Air">Air</option>
-                    <option value="Ship">Ship</option>
-                  </select>
-                </div>
-                <div className="md:col-span-2">
-                  <label className={labelClass}>Transporter</label>
-                  <input type="text" className={inputClass} value={transporterName} onChange={(e) => setTransporterName(e.target.value)} placeholder="ABC Logistics" />
-                </div>
-              </div>
-            ) : (
-              <div className="p-6 text-center text-gray-400 text-sm font-semibold">
-                Enable E-Way Bill to add transport details
-              </div>
-            )}
-
-            {/* ORDER SUMMARY */}
+          {/* ORDER SUMMARY */}
             <div className="bg-white p-6 rounded-2xl shadow-lg border border-primary/5 h-fit">
               <h3 className="text-[#319bab] font-black uppercase text-sm tracking-widest mb-4 border-b pb-2 border-[#319bab]/30">
                 Order Summary
@@ -1625,7 +1619,6 @@ export default function InventorySalesOrderEntry({
             </div>
           </div>
         </div>
-      </div>
 
       {/* RIGHT SIDE RECENT ORDERS PANEL */}
         {showRecentPanel && recentOrders.length > 0 && (

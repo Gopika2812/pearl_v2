@@ -146,6 +146,23 @@ const invoiceSchema = new mongoose.Schema(
     whatsappSent: { type: Boolean, default: false },
     whatsappSentAt: Date,
     whatsappCount: { type: Number, default: 0 },
+
+    // E-Invoice & E-Way Bill Details
+    einvoiceStatus: {
+      type: String,
+      enum: ["NOT_GENERATED", "GENERATED", "CANCELLED", "FAILED"],
+      default: "NOT_GENERATED",
+    },
+    irn: String,
+    ackNo: String,
+    ackDate: String,
+    qrCodeUrl: String,
+    signedInvoice: String,
+    signedQrCode: String,
+    
+    ewayBillNo: String,
+    ewayBillDate: String,
+    ewayBillValidUntil: String,
   },
   { timestamps: true }
 );

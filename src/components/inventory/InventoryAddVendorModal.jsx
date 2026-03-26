@@ -47,6 +47,8 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
     credit: 0,
   });
 
+  const [isFetchingGst, setIsFetchingGst] = useState(false);
+
   // Pre-fill form when editing
   useEffect(() => {
     if (editingItem) {
@@ -147,6 +149,37 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
 
     // Close modal
     onClose();
+  };
+
+  const handleFetchGstDetails = async () => {
+    if (!vendor.gstin || vendor.gstin.length !== 15) {
+      alert("Please enter a valid 15-character GSTIN");
+      return;
+    }
+
+    setIsFetchingGst(true);
+    try {
+      const res = await fetch(`${API_BASE}/gst/search/${vendor.gstin}`);
+      const result = await res.json();
+
+      if (!res.ok) throw new Error(result.message || "Failed to fetch GST details");
+
+      if (result.success && result.data) {
+        const { legalName, address, state, pincode } = result.data;
+        setVendor(prev => ({
+          ...prev,
+          name: legalName || prev.name,
+          address: address || prev.address,
+          stateName: state || prev.stateName,
+          gstRegistrationType: "Regular"
+        }));
+      }
+    } catch (err) {
+      console.error("GST Fetch Error:", err);
+      alert(err.message || "Error fetching GST details");
+    } finally {
+      setIsFetchingGst(false);
+    }
   };
 
   return (
@@ -272,15 +305,29 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
 
               <div>
                 <label className="text-sm font-bold text-gray-600 mb-1 block">GSTIN</label>
-                <input
-                  type="text"
-                  placeholder="E.g., 33AAACF2643K1ZU"
-                  className="w-full p-2 border rounded-lg outline-primary focus:ring-1 focus:ring-primary uppercase"
-                  value={vendor.gstin}
-                  onChange={(e) =>
-                    setVendor({ ...vendor, gstin: e.target.value.toUpperCase() })
-                  }
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="E.g., 33AAACF2643K1ZU"
+                    className="w-full p-2 border rounded-lg outline-primary focus:ring-1 focus:ring-primary uppercase flex-1"
+                    value={vendor.gstin}
+                    onChange={(e) =>
+                      setVendor({ ...vendor, gstin: e.target.value.toUpperCase() })
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={handleFetchGstDetails}
+                    disabled={isFetchingGst || !vendor.gstin}
+                    className={`px-3 py-2 rounded-lg font-bold text-xs uppercase transition shadow-sm ${
+                      isFetchingGst 
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                        : "bg-orange-500 text-white hover:bg-orange-600 active:scale-95"
+                    }`}
+                  >
+                    {isFetchingGst ? "..." : "🔍 Fetch"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
