@@ -253,47 +253,69 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
     const style = `
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.3; }
-        .page { width: 148mm; min-height: 210mm; padding: 5mm; margin: 0 auto; page-break-after: always; }
-        .page-content { max-width: 136mm; margin: 0 auto; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.5; color: #333; }
+        .page { width: 210mm; min-height: 297mm; padding: 10mm; margin: 0 auto; page-break-after: always; background: white; }
+        .page-content { max-width: 190mm; margin: 0 auto; }
         
-        .top-header { display: flex; gap: 10px; margin-bottom: 10px; border-bottom: 2px solid #1e40af; padding-bottom: 8px; }
-        .logo-box { width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; border-radius: 5px; flex-shrink: 0; overflow: hidden; }
+        .top-header { display: flex; gap: 20px; margin-bottom: 20px; border-bottom: 3px solid #1e40af; padding-bottom: 15px; }
+        .logo-box { width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; border-radius: 8px; flex-shrink: 0; overflow: hidden; }
         .logo-box img { width: 100%; height: 100%; object-fit: contain; }
         .company-header { flex: 1; }
-        .company-name { font-size: 14px; font-weight: bold; color: #1e40af; margin-bottom: 2px; }
-        .company-address { font-size: 8px; color: #333; line-height: 1.2; margin-bottom: 2px; }
-        .company-contact { font-size: 7px; color: #666; }
+        .company-name { font-size: 22px; font-weight: bold; color: #1e40af; margin-bottom: 5px; text-transform: uppercase; }
+        .company-address { font-size: 13px; color: #333; line-height: 1.4; margin-bottom: 5px; }
+        .company-contact { font-size: 12px; color: #666; }
         
-        .order-header { display: flex; justify-content: space-between; margin: 8px 0; font-size: 8px; }
+        .order-header { display: flex; justify-content: space-between; margin: 15px 0; font-size: 13px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 10px; }
         .order-header-col { flex: 1; }
         .section-title { 
-          font-size: 11px; 
+          font-size: 16px; 
           font-weight: bold; 
           color: #fff; 
           background: #1e40af; 
-          padding: 4px 6px; 
-          margin: 8px 0 6px 0;
+          padding: 6px 12px; 
+          margin: 15px 0 10px 0;
+          border-radius: 4px;
         }
         
-        .row { display: flex; gap: 15px; margin: 6px 0; font-size: 8px; }
+        .row { display: flex; gap: 20px; margin: 10px 0; font-size: 13px; }
         .col { flex: 1; }
-        .label { font-weight: bold; color: #333; }
+        .label { font-weight: bold; color: #1e40af; }
         
-        table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 8px; }
-        th { background: #1e40af; color: white; padding: 3px 3px; text-align: left; border: 1px solid #ccc; }
-        td { border: 1px solid #ddd; padding: 3px 3px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 12px; }
+        th { background: #1e40af; color: white; padding: 10px; text-align: left; border: 1px solid #1e3a8a; font-weight: 600; }
+        td { border: 1px solid #e5e7eb; padding: 8px 10px; color: #333; }
         
-        .total-section { text-align: right; margin: 8px 0; font-size: 8px; }
-        .grand-total { font-size: 10px; font-weight: bold; color: #1e40af; margin-top: 4px; }
-        .footer { text-align: center; font-size: 7px; color: #999; margin-top: 10px; }
-        .balance-info { background: #f0f0f0; padding: 4px; margin: 8px 0; font-size: 8px; }
-        .sample-section { background: #fffacd; padding: 6px; margin: 8px 0; }
-        .back-order-section { background: #ffcccc; padding: 6px; margin: 8px 0; }
+        .total-section { text-align: right; margin: 20px 0; font-size: 13px; line-height: 1.6; }
+        .grand-total { font-size: 18px; font-weight: bold; color: #1e40af; margin-top: 10px; border-top: 2px solid #1e40af; padding-top: 5px; }
+        .footer { text-align: center; font-size: 10px; color: #94a3b8; margin-top: 20px; }
+        .copy-label { 
+          text-align: right; 
+          font-weight: 800; 
+          color: #dc2626; 
+          font-size: 18px; 
+          margin-top: 25px;
+          border-top: 2px solid #e5e7eb;
+          padding-top: 15px;
+          letter-spacing: 1.5px;
+          text-transform: uppercase;
+        }
+        .balance-info { background: #f8fafc; padding: 10px; margin: 12px 0; font-size: 13px; border-left: 4px solid #1e40af; border-radius: 4px; }
+        .sample-section { background: #fffbeb; padding: 12px; margin: 15px 0; border: 1px solid #fef3c7; border-radius: 6px; }
+        .back-order-section { background: #fef2f2; padding: 12px; margin: 15px 0; border: 1px solid #fee2e2; border-radius: 6px; }
         
-        .sender-buyer { display: flex; gap: 10px; margin: 8px 0; border: 1px solid #ccc; padding: 6px; }
-        .sender-buyer-col { flex: 1; font-size: 7px; }
-        .sender-buyer-col strong { font-size: 8px; display: block; margin-bottom: 2px; }
+        .sender-buyer { display: flex; gap: 20px; margin: 15px 0; border: 1px solid #e5e7eb; padding: 15px; border-radius: 6px; background: #f8fafc; }
+        .sender-buyer-col { flex: 1; font-size: 12px; line-height: 1.5; }
+        .sender-buyer-col strong { font-size: 13px; display: block; margin-bottom: 5px; color: #1e40af; }
+        
+        .certification { 
+          font-size: 11px; 
+          font-style: italic; 
+          margin-top: 25px; 
+          color: #666; 
+          border-top: 1px solid #e5e7eb;
+          padding-top: 10px;
+          line-height: 1.5;
+        }
         
         @media print { 
           body { margin: 0; padding: 0; } 
@@ -307,229 +329,255 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
     // If specific format requested, generate only that
     const formats = format ? [format] : ["ORDER_DETAILS", "TAX_INVOICE"];
 
-    // Invoice Format 1: ORDER DETAILS
-    if (formats.includes("ORDER_DETAILS")) {
-      html += `
-        <div class="page">
-          <div class="page-content">
-            <!-- TOP HEADER WITH LOGO -->
-            <div class="top-header">
-              <div class="logo-box"><img src="/logo.jpeg" alt="Pearl Agency Logo" /></div>
-              <div class="company-header">
-                <div class="company-name">PEARL AGENCY</div>
-                <div class="company-address">
-                  <strong>12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu</strong><br/>
-                  Mobile: ${previewData?.seller?.phone || "9429692970"} | GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
-                  GPAY No: ${previewData?.seller?.gpayNo || "8825847884"} | State: Tamil Nadu (Code: ${previewData?.seller?.stateCode || "33"})
-                </div>
-              </div>
-            </div>
-
-            <div class="section-title">📋 ORDER DETAILS</div>
-
-            <!-- ORDER INFO -->
-            <div class="order-header">
-              <div class="order-header-col">
-                <div class="label">Invoice No:</div>
-                <div>${generatedInvoice?.invoiceNumber || "Generated Auto"}</div>
-              </div>
-              <div class="order-header-col">
-                <div class="label">Date:</div>
-                <div>${new Date().toLocaleDateString("en-IN")}</div>
-              </div>
-              <div class="order-header-col">
-                <div class="label">Billing Person:</div>
-                <div>${previewData?.billingPerson || "-"}</div>
-              </div>
-            </div>
-
-            <!-- SENDER & BUYER -->
-            <div class="sender-buyer">
-              <div class="sender-buyer-col">
-                <strong>SENDER (FROM)</strong>
-                ${previewData?.seller?.name}<br/>
-                ${previewData?.seller?.address}<br/>
-                GSTIN: ${previewData?.seller?.gstin}<br/>
-                Phone: ${previewData?.seller?.phone}
-              </div>
-              <div class="sender-buyer-col">
-                <strong>BUYER (BILL TO)</strong>
-                ${previewData?.customer?.name}<br/>
-                ${previewData?.customer?.address}<br/>
-                ${previewData?.customer?.district}, ${previewData?.customer?.state} ${previewData?.customer?.pincode}<br/>
-                Mobile: ${previewData?.customer?.whatsapp || "-"}
-              </div>
-            </div>
-
-            <!-- PRODUCT DETAILS TABLE -->
-            <div class="section-title">📦 PRODUCT DETAILS</div>
-            <table>
-              <thead>
-                <tr>
-                  <th style="flex: 2;">Product Name</th>
-                  <th>HSN</th>
-                  <th style="text-align: right;">Qty</th>
-                  <th style="text-align: right;">Price</th>
-                  <th style="text-align: right;">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${previewData?.items?.map(item => `
-                  <tr>
-                    <td>${item.name}</td>
-                    <td>${item.hsn || "-"}</td>
-                    <td style="text-align: right;">${item.qty}</td>
-                    <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
-                    <td style="text-align: right;">₹${item.total?.toFixed(2) || 0}</td>
-                  </tr>
-                `).join("")}
-              </tbody>
-            </table>
-
-            <!-- SAMPLE PRODUCTS TABLE -->
-            ${previewData?.sampleItems?.length > 0 ? `
-              <div class="sample-section">
-                <strong>🎁 SAMPLE PRODUCTS (NOT BILLED)</strong>
-                <table style="margin-top: 5px;">
-                  <thead>
-                    <tr>
-                      <th>Product Name</th>
-                      <th>HSN</th>
-                      <th style="text-align: right;">Qty</th>
-                      <th style="text-align: right;">Price</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${previewData.sampleItems.map(item => `
-                      <tr>
-                        <td>${item.name}</td>
-                        <td>${item.hsn || "-"}</td>
-                        <td style="text-align: right;">${item.qty}</td>
-                        <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
-                      </tr>
-                    `).join("")}
-                  </tbody>
-                </table>
-              </div>
-            ` : ""}
-
-            <!-- TOTALS -->
-            <div class="total-section">
-              <div>Subtotal: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
-              <div>CGST (${previewData?.items?.[0]?.cgst || 0}%): <strong>₹${previewData?.totalTax?.cgst?.toFixed(2) || 0}</strong></div>
-              <div>SGST (${previewData?.items?.[0]?.sgst || 0}%): <strong>₹${previewData?.totalTax?.sgst?.toFixed(2) || 0}</strong></div>
-              ${previewData?.transportCharge > 0 ? `<div>Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
-              ${previewData?.extraExpenseAmount > 0 ? `<div>Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
-              <div class="grand-total">Grand Total: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
-            </div>
-
-            <!-- BALANCE INFO -->
-            <div class="balance-info">
-              <div><strong>Opening Balance:</strong> ₹${previewData?.openingBalance?.toFixed(2) || 0}</div>
-              <div><strong>Closing Balance:</strong> ₹${previewData?.closingBalance?.toFixed(2) || 0}</div>
-            </div>
-
-            <!-- NOTES -->
-            ${previewData?.notes ? `<div style="margin: 10px 0; padding: 8px; background: #f9f9f9; font-size: 9px;"><strong>Notes:</strong> ${previewData.notes}</div>` : ""}
-
-            <div class="footer">Invoice generated on ${new Date().toLocaleString("en-IN")}</div>
-          </div>
-        </div>
-      `;
-    }
-
-    // Invoice Format 2: TAX INVOICE (HSN-wise summary)
-    if (formats.includes("TAX_INVOICE")) {
-      html += `
-        <div class="page">
-          <div class="page-content">
-            <!-- TOP HEADER WITH LOGO -->
-            <div class="top-header">
-              <div class="logo-box"><img src="/logo.jpeg" alt="Pearl Agency Logo" /></div>
-              <div class="company-header">
-                <div class="company-name">PEARL AGENCY</div>
-                <div class="company-address">
-                  <strong>12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu</strong><br/>
-                  Mobile: ${previewData?.seller?.phone || "9429692970"} | GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
-                  GPAY No: ${previewData?.seller?.gpayNo || "8825847884"} | State: Tamil Nadu (Code: ${previewData?.seller?.stateCode || "33"})
-                </div>
-              </div>
-            </div>
-
-            <div class="section-title">🧾 TAX INVOICE - HSN-WISE SUMMARY</div>
-
-            <div style="text-align: center; margin-bottom: 12px; font-size: 9px;">
-              <strong>Invoice No: ${generatedInvoice?.invoiceNumber || "Auto"}</strong> | Date: ${new Date().toLocaleDateString("en-IN")}
-            </div>
-
-            <table>
-              <thead>
-                <tr>
-                  <th>HSN Code</th>
-                  <th style="text-align: right;">Taxable Value</th>
-                  <th style="text-align: right;">CGST (Rate | Amt)</th>
-                  <th style="text-align: right;">SGST (Rate | Amt)</th>
-                  <th style="text-align: right;">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${previewData?.items?.map((item, idx) => `
-                  <tr>
-                    <td>${item.hsn || "N/A"}</td>
-                    <td style="text-align: right;">₹${item.total?.toFixed(2) || 0}</td>
-                    <td style="text-align: right;">${item.cgst || 0}% | ₹${((item.total || 0) * (item.cgst || 0) / 100).toFixed(2)}</td>
-                    <td style="text-align: right;">${item.sgst || 0}% | ₹${((item.total || 0) * (item.sgst || 0) / 100).toFixed(2)}</td>
-                    <td style="text-align: right;">₹${(item.total + ((item.total || 0) * (item.cgst || 0) / 100) + ((item.total || 0) * (item.sgst || 0) / 100)).toFixed(2)}</td>
-                  </tr>
-                `).join("")}
-              </tbody>
-            </table>
-
-            <div class="total-section">
-              <div>Taxable Value: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
-              <div>CGST (${previewData?.items?.[0]?.cgst || 0}%): <strong>₹${previewData?.totalTax?.cgst?.toFixed(2) || 0}</strong></div>
-              <div>SGST (${previewData?.items?.[0]?.sgst || 0}%): <strong>₹${previewData?.totalTax?.sgst?.toFixed(2) || 0}</strong></div>
-              <div class="grand-total">TOTAL AMOUNT: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
-            </div>
-
-            <!-- BACK ORDER SECTION (if applicable) -->
-            ${editedItems.some(item => item.backOrderQty > 0) ? `
-              <div style="margin-top: 15px; padding-top: 10px; border-top: 2px solid #1e40af;">
-                <div class="section-title">📦 BACK ORDER SUMMARY</div>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Product Name</th>
-                      <th style="text-align: right;">Requested</th>
-                      <th style="text-align: right;">Confirmed</th>
-                      <th style="text-align: right;">Pending ⚠️</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${editedItems.map((item, idx) => item.backOrderQty > 0 ? `
-                      <tr>
-                        <td>${item.name}</td>
-                        <td style="text-align: right;">${item.qty}</td>
-                        <td style="text-align: right;">${item.confirmedQty}</td>
-                        <td style="text-align: right; color: red; font-weight: bold;">${item.backOrderQty}</td>
-                      </tr>
-                    ` : "").join("")}
-                  </tbody>
-                </table>
-                <div class="back-order-section">
-                  <strong>Total Pending: ${editedItems.reduce((sum, item) => sum + (item.backOrderQty || 0), 0)} units</strong>
-                  <div style="margin-top: 5px; font-size: 7px;">
-                    📅 Expected delivery by ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString("en-IN")}
+    // Define copies to generate
+    const isReEdited = !!order.isReEdited || !!order.invoiceGenerated;
+    const copies = isReEdited ? ["RE-EDIT ORIGINAL", "RE-EDIT COPY 1"] : ["ORIGINAL INVOICE", "COPY 1"];
+    
+    // Generate each selected format for each copy
+    copies.forEach(copyTitle => {
+      // Invoice Format 1: ORDER DETAILS
+      if (formats.includes("ORDER_DETAILS")) {
+        html += `
+          <div class="page">
+            <div class="page-content">
+              <!-- TOP HEADER WITH LOGO -->
+              <div class="top-header">
+                <div class="logo-box"><img src="/logo.jpeg" alt="Pearl Agency Logo" /></div>
+                <div class="company-header">
+                  <div class="company-name">PEARL AGENCY</div>
+                  <div class="company-address">
+                    <strong>12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu</strong><br/>
+                    Mobile: ${previewData?.seller?.phone || "9429692970"} | GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
+                    GPAY No: ${previewData?.seller?.gpayNo || "8825847884"} | State: Tamil Nadu (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
               </div>
-            ` : ""}
 
-            <div class="footer">Tax Invoice as per GST regulations</div>
+              <div class="section-title">📋 ORDER DETAILS</div>
+
+              <!-- ORDER INFO -->
+              <div class="order-header">
+                <div class="order-header-col">
+                  <div class="label">Invoice No:</div>
+                  <div style="font-weight: bold; color: #1e40af;">${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</div>
+                </div>
+                <div class="order-header-col">
+                  <div class="label">Date:</div>
+                  <div>${new Date().toLocaleDateString("en-IN")}</div>
+                </div>
+                <div class="order-header-col">
+                  <div class="label">Billing Person:</div>
+                  <div style="font-weight: bold;">${previewData?.billingPerson || "-"}</div>
+                </div>
+              </div>
+
+              <!-- SENDER & BUYER -->
+              <div class="sender-buyer">
+                <div class="sender-buyer-col">
+                  <strong>SENDER (FROM)</strong>
+                  ${previewData?.seller?.name || "PEARL AGENCY"}<br/>
+                  ${previewData?.seller?.address || "Vanarpettai, Tirunelveli"}<br/>
+                  GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
+                  Phone: ${previewData?.seller?.phone || "9429692970"}
+                </div>
+                <div class="sender-buyer-col">
+                  <strong>BUYER (BILL TO)</strong>
+                  ${previewData?.customer?.name}<br/>
+                  ${previewData?.customer?.address}<br/>
+                  ${previewData?.customer?.district ? previewData?.customer?.district + ', ' : ''}${previewData?.customer?.state || ""} ${previewData?.customer?.pincode || ""}<br/>
+                  Mobile: ${previewData?.customer?.whatsapp || "-"}
+                </div>
+              </div>
+
+              <!-- PRODUCT DETAILS TABLE -->
+              <div class="section-title">📦 PRODUCT DETAILS</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 40%;">Product Name</th>
+                    <th>HSN</th>
+                    <th style="text-align: right;">Qty</th>
+                    <th style="text-align: right;">Price</th>
+                    <th style="text-align: right;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${previewData?.items?.map(item => `
+                    <tr>
+                      <td>${item.name}</td>
+                      <td>${item.hsn || "-"}</td>
+                      <td style="text-align: right;">${item.qty} ${item.unit || "Kg"}</td>
+                      <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
+                      <td style="text-align: right;">₹${item.total?.toFixed(2) || 0}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+
+              <!-- SAMPLE PRODUCTS TABLE -->
+              ${previewData?.sampleItems?.length > 0 ? `
+                <div class="sample-section">
+                  <strong>🎁 SAMPLE PRODUCTS (NOT BILLED)</strong>
+                  <table style="margin-top: 5px;">
+                    <thead>
+                      <tr>
+                        <th>Product Name</th>
+                        <th>HSN</th>
+                        <th style="text-align: right;">Qty</th>
+                        <th style="text-align: right;">Price</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${previewData.sampleItems.map(item => `
+                        <tr>
+                          <td>${item.name}</td>
+                          <td>${item.hsn || "-"}</td>
+                          <td style="text-align: right;">${item.qty}</td>
+                          <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
+                        </tr>
+                      `).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              ` : ""}
+
+              <!-- TOTALS AND BALANCE -->
+              <div style="display: flex; gap: 10px;">
+                <div style="flex: 1;">
+                   <!-- BALANCE INFO -->
+                  <div class="balance-info">
+                    <div><strong>Opening Balance:</strong> ₹${previewData?.openingBalance?.toFixed(2) || 0}</div>
+                    <div><strong>Closing Balance:</strong> ₹${previewData?.closingBalance?.toFixed(2) || 0}</div>
+                  </div>
+                  
+                  <!-- NOTES -->
+                  ${previewData?.notes ? `<div style="margin: 5px 0; padding: 5px; background: #f9f9f9; font-size: 7px; border: 1px solid #eee;"><strong>Notes:</strong> ${previewData.notes}</div>` : ""}
+                </div>
+
+                <div class="total-section" style="flex: 1;">
+                  <div>Subtotal: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
+                  <div>CGST (${previewData?.items?.[0]?.cgst || 0}%): <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
+                  <div>SGST (${previewData?.items?.[0]?.sgst || 0}%): <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>
+                  ${previewData?.transportCharge > 0 ? `<div>Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
+                  ${previewData?.extraExpenseAmount > 0 ? `<div>Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
+                  <div class="grand-total">Grand Total: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
+                </div>
+              </div>
+
+              <div class="certification">Certified that the particulars given above are true and correct.</div>
+              <div class="copy-label">${copyTitle}</div>
+              <div class="footer">E. & O.E. | Generated on ${new Date().toLocaleString("en-IN")}</div>
+            </div>
           </div>
-        </div>
-      `;
-    }
+        `;
+      }
+
+      // Invoice Format 2: TAX INVOICE (HSN-wise summary)
+      if (formats.includes("TAX_INVOICE")) {
+        html += `
+          <div class="page">
+            <div class="page-content">
+              <!-- TOP HEADER WITH LOGO -->
+              <div class="top-header">
+                <div class="logo-box"><img src="/logo.jpeg" alt="Pearl Agency Logo" /></div>
+                <div class="company-header">
+                  <div class="company-name">PEARL AGENCY</div>
+                  <div class="company-address">
+                    <strong>12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu</strong><br/>
+                    Mobile: ${previewData?.seller?.phone || "9429692970"} | GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
+                    GPAY No: ${previewData?.seller?.gpayNo || "8825847884"} | State: Tamil Nadu (Code: ${previewData?.seller?.stateCode || "33"})
+                  </div>
+                </div>
+              </div>
+
+              <div class="section-title">🧾 TAX INVOICE - HSN-WISE SUMMARY</div>
+
+              <div style="text-align: center; margin-bottom: 20px; font-size: 13px;">
+                <strong>Invoice No: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</strong> | Date: ${new Date().toLocaleDateString("en-IN")}
+              </div>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>HSN Code</th>
+                    <th style="text-align: right;">Taxable Value</th>
+                    <th style="text-align: right;">CGST (Rate | Amt)</th>
+                    <th style="text-align: right;">SGST (Rate | Amt)</th>
+                    <th style="text-align: right;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(() => {
+                    const hsnMap = {};
+                    (previewData?.items || []).forEach(item => {
+                      const hsn = item.hsn || "N/A";
+                      if (!hsnMap[hsn]) {
+                        hsnMap[hsn] = { taxable: 0, cgst: 0, sgst: 0, total: 0, cgstRate: item.cgst || 0, sgstRate: item.sgst || 0 };
+                      }
+                      const taxable = item.total || 0;
+                      const cgstAmt = (taxable * (item.cgst || 0)) / 100;
+                      const sgstAmt = (taxable * (item.sgst || 0)) / 100;
+                      hsnMap[hsn].taxable += taxable;
+                      hsnMap[hsn].cgst += cgstAmt;
+                      hsnMap[hsn].sgst += sgstAmt;
+                      hsnMap[hsn].total += taxable + cgstAmt + sgstAmt;
+                    });
+                    return Object.entries(hsnMap).map(([hsn, data]) => `
+                      <tr>
+                        <td>${hsn}</td>
+                        <td style="text-align: right;">₹${data.taxable.toFixed(2)}</td>
+                        <td style="text-align: right;">${data.cgstRate}% | ₹${data.cgst.toFixed(2)}</td>
+                        <td style="text-align: right;">${data.sgstRate}% | ₹${data.sgst.toFixed(2)}</td>
+                        <td style="text-align: right;">₹${data.total.toFixed(2)}</td>
+                      </tr>
+                    `).join("");
+                  })()}
+                </tbody>
+              </table>
+
+              <div class="total-section">
+                <div>Taxable Value: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
+                <div>CGST (${previewData?.items?.[0]?.cgst || 0}%): <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
+                <div>SGST (${previewData?.items?.[0]?.sgst || 0}%): <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>
+                <div class="grand-total">TOTAL AMOUNT: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
+              </div>
+
+              <!-- BACK ORDER SECTION (if applicable) -->
+    ${editedItems.some(item => item.backOrderQty > 0) ? `
+      <div style="margin-top: 15px; padding-top: 10px; border-top: 2px solid #1e40af;">
+        <div class="section-title">📦 BACK ORDER SUMMARY</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Product Name</th>
+              <th style="text-align: right;">Requested</th>
+              <th style="text-align: right;">Confirmed</th>
+              <th style="text-align: right;">Pending ⚠️</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${editedItems.map((item, idx) => item.backOrderQty > 0 ? `
+              <tr>
+                <td>${item.name}</td>
+                <td style="text-align: right;">${item.qty}</td>
+                <td style="text-align: right;">${item.confirmedQty}</td>
+                <td style="text-align: right; color: red; font-weight: bold;">${item.backOrderQty}</td>
+              </tr>
+            ` : "").join("")}
+          </tbody>
+        </table>
+      </div>
+      ${previewData?.notes ? `<div style="margin-top: 15px; padding: 12px; background: #f8fafc; font-size: 13px; border: 1px dashed #cbd5e1; border-radius: 4px;"><strong>Notes:</strong> ${previewData.notes}</div>` : ""}
+    ` : ""}
+
+              <div class="certification">Certified that the particulars given above are true and correct.</div>
+              <div class="copy-label">${copyTitle}</div>
+              <div class="footer">Tax Invoice as per GST regulations | Generated on ${new Date().toLocaleString("en-IN")}</div>
+            </div>
+          </div>
+        `;
+      }
+    });
 
 
     html += "</body></html>";
@@ -542,8 +590,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         {/* HEADER */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 flex items-center justify-between text-white">
           <div>
-            <h2 className="text-2xl font-bold">📄 Invoice Generator</h2>
-            <p className="text-sm opacity-90">SO: {order.invoiceId}</p>
+            <h2 className="text-2xl font-bold">📄 {order.invoiceGenerated ? "Re-edit Invoice" : "Invoice Generator"}</h2>
+            <p className="text-sm opacity-90">SO: {order.invoiceId} {order.invoiceGenerated ? "(RE-EDITING)" : ""}</p>
           </div>
           <button
             onClick={onClose}

@@ -205,6 +205,19 @@ const salesOrderSchema = new mongoose.Schema(
       default: false,
     },
 
+    // RE-EDIT REQUEST FIELDS
+    reEditRequestStatus: {
+      type: String,
+      enum: ["NONE", "PENDING", "APPROVED", "REJECTED"],
+      default: "NONE",
+    },
+    reEditRequestBy: String,
+    reEditRequestAt: Date,
+    isReEdited: {
+      type: Boolean,
+      default: false, // Flag for labeling as "RE-EDIT ORIGINAL"
+    },
+
   },
   { timestamps: true }
 );

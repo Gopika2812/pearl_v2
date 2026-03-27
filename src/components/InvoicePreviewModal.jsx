@@ -211,7 +211,7 @@ const InvoicePreviewModal = ({ order, onClose }) => {
                 : "text-gray-600 hover:text-gray-800"
             }`}
           >
-            📄 Preview (3 Pages)
+            📄 Preview (Original & Copy)
           </button>
           <button
             onClick={() => setActiveTab("details")}
@@ -388,11 +388,11 @@ const InvoicePreviewModal = ({ order, onClose }) => {
               {invoiceData?.invoiceImages ? (
                 <>
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <h3 className="font-bold text-gray-800 mb-2">📄 3-Page Invoice Preview</h3>
+                    <h3 className="font-bold text-gray-800 mb-2">📄 Multi-Copy Invoice Preview</h3>
                     <div className="text-sm text-gray-700">
-                      <p className="mb-1"><strong>Page 1:</strong> Order Details (with confirmed quantities)</p>
-                      <p className="mb-1"><strong>Page 2:</strong> Tax Invoice (HSN breakdown)</p>
-                      <p><strong>Page 3:</strong> Back Order Summary (pending items)</p>
+                      <p className="mb-1"><strong>Original:</strong> Order Details & Tax Invoice</p>
+                      <p className="mb-1"><strong>Copy 1:</strong> Duplicate Order Details & Tax Invoice</p>
+                      <p><strong>Back Order:</strong> Pending items (if any)</p>
                     </div>
                   </div>
                   
@@ -400,7 +400,16 @@ const InvoicePreviewModal = ({ order, onClose }) => {
                     {invoiceData.invoiceImages.map((image, idx) => (
                       <div key={idx} className="border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-50 shadow-lg">
                         <div className="bg-gray-200 p-2 text-center font-bold text-gray-700">
-                          Page {idx + 1}: {idx === 0 ? "Order Details" : idx === 1 ? "Tax Invoice" : "Back Order Summary"}
+                          {(() => {
+                            const labels = [
+                              "Original: Order Details",
+                              "Original: Tax Invoice",
+                              "Copy 1: Order Details",
+                              "Copy 1: Tax Invoice",
+                              "Back Order Summary"
+                            ];
+                            return labels[idx] || `Page ${idx + 1}`;
+                          })()}
                         </div>
                         <img
                           src={image}

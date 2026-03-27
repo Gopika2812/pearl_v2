@@ -27,8 +27,9 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     totalQtyUnit: "",
     purchasingPrice: "",
     sellingPrice: "",
-    lockedPrice: "",
-    margin: "",
+    adminMargin: "",
+    marginPercentage: "",
+    mrp: "",
     hsnCode: "",
     gst: "",
   });
@@ -79,8 +80,9 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         totalQtyUnit: editingItem.totalQtyUnit || "",
         purchasingPrice: editingItem.purchasingPrice || "",
         sellingPrice: editingItem.sellingPrice || "",
-        lockedPrice: editingItem.lockedPrice || "",
-        margin: editingItem.margin || "",
+        adminMargin: editingItem.adminMargin || "",
+        marginPercentage: editingItem.marginPercentage || "",
+        mrp: editingItem.mrp || "",
         hsnCode: editingItem.hsnCode || "",
         gst: editingItem.gst || "",
       });
@@ -97,7 +99,8 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         purchasingPrice: "",
         sellingPrice: "",
         lockedPrice: "",
-        margin: "",
+        marginPercentage: "",
+        mrp: "",
         hsnCode: "",
         gst: "",
       });
@@ -128,7 +131,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     
     setProduct({
       ...product,
-      margin: value,
+      marginPercentage: value,
       sellingPrice: newSellingPrice.toString(),
     });
   };
@@ -141,13 +144,13 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     setProduct({
       ...product,
       sellingPrice: value,
-      margin: Math.round(newMargin * 100) / 100 > 0 ? Math.round(newMargin * 100) / 100 : "",
+      marginPercentage: Math.round(newMargin * 100) / 100 !== 0 ? Math.round(newMargin * 100) / 100 : "",
     });
   };
 
   const handlePurchasingPriceChange = (value) => {
     const newPurchasingPrice = Number(value || 0);
-    const margin = Number(product.margin || 0);
+    const margin = Number(product.marginPercentage || 0);
     const newSellingPrice = calculateSellingPrice(newPurchasingPrice, margin);
     
     setProduct({
@@ -252,7 +255,9 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
       totalQtyUnit: product.totalQtyUnit || "",
       purchasingPrice: Math.round(Number(product.purchasingPrice || 0) * 100) / 100,
       sellingPrice: Math.round(Number(product.sellingPrice || 0) * 100) / 100,
-      lockedPrice: Math.round(Number(product.lockedPrice || 0) * 100) / 100,
+      adminMargin: Math.round(Number(product.adminMargin || 0) * 100) / 100,
+      marginPercentage: Math.round(Number(product.marginPercentage || 0) * 100) / 100,
+      mrp: Math.round(Number(product.mrp || 0) * 100) / 100,
       hsnCode: product.hsnCode || "0000",
       gst: Math.round(Number(product.gst || 0) * 100) / 100,
     };
@@ -498,47 +503,64 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
 
 
 
-          {/* 2-Column Grid */}
           <div className="grid grid-cols-2 gap-4 mb-4">
             {/* Purchasing Price */}
             <div>
-              <label className={labelClass}>Purchasing Price</label>
+              <label className={labelClass}>Purchasing Price (₹)</label>
               <input
                 type="number"
                 step="0.01"
                 className={inputClass}
-                placeholder="Enter purchasing price"
+                placeholder="0.00"
                 value={product.purchasingPrice}
                 onChange={(e) => handlePurchasingPriceChange(e.target.value)}
               />
             </div>
 
-            {/* Selling Price */}
+            {/* Normal Margin */}
             <div>
-              <label className={labelClass}>Selling Price</label>
+              <label className={labelClass}>Normal Margin (%)</label>
               <input
                 type="number"
                 step="0.01"
                 className={inputClass}
-                placeholder="Enter selling price"
-                value={product.sellingPrice}
-                onChange={(e) => handleSellingPriceChange(e.target.value)}
+                placeholder="e.g. 10"
+                value={product.marginPercentage}
+                onChange={(e) => handleMarginChange(e.target.value)}
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-4">
-            {/* Locked Selling Price */}
+            {/* Selling Price */}
             <div>
-              <label className={labelClass}>Locked Selling Price (₹)</label>
+              <label className={labelClass}>Selling Price (₹)</label>
               <input
                 type="number"
                 step="0.01"
                 className={inputClass}
-                placeholder="Enter locked price"
-                value={product.lockedPrice}
-                onChange={(e) => setProduct({ ...product, lockedPrice: e.target.value })}
+                placeholder="0.00"
+                value={product.sellingPrice}
+                onChange={(e) => handleSellingPriceChange(e.target.value)}
               />
+            </div>
+
+            {/* Admin Margin */}
+            <div>
+              <label className={labelClass}>Admin Margin (%) (Override)</label>
+              <input
+                type="number"
+                step="0.01"
+                className={inputClass}
+                placeholder="e.g. -10"
+                value={product.adminMargin}
+                onChange={(e) => setProduct({ ...product, adminMargin: e.target.value })}
+              />
+              {product.adminMargin && product.sellingPrice && (
+                <p className="text-[10px] text-primary font-bold mt-1">
+                  Net Rate: ₹{(Number(product.sellingPrice) + (Number(product.sellingPrice) * Number(product.adminMargin) / 100)).toFixed(2)}
+                </p>
+              )}
             </div>
           </div>
 

@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { FaTimes, FaDownload, FaBoxOpen } from "react-icons/fa";
-import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const AggregateSlipModal = ({ isOpen, onClose, orders }) => {
   // Aggregate items from all provided orders
@@ -45,20 +45,68 @@ const AggregateSlipModal = ({ isOpen, onClose, orders }) => {
 
   if (!isOpen) return null;
 
-  const handleExportPDF = async () => {
-    const element = document.getElementById("aggregate-slip-content");
-    const canvas = await html2canvas(element, { scale: 2 });
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(22);
+    doc.setTextColor(49, 155, 171); // #319bab ish
+    doc.text("Picking Slip", 14, 22);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Generated: ${new Date().toLocaleString("en-IN")}`, 14, 30);
+    
+    // Stats
+    doc.text(`Total Orders: ${orders.length}`, 14, 40);
+    doc.text(`Total Unique Items: ${aggregatedItems.length}`, 14, 45);
+    
+    // Table Data
+    const tableColumn = ["S.No", "Product Name", "HSN", "Total Quantity Required"];
+    const tableRows = aggregatedItems.map((item, index) => [
+      index + 1,
+      item.name,
+      item.hsn || "-",
+      item.qty
+    ]);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 55,
+      theme: 'grid',
+      headStyles: { 
+        fillColor: [49, 155, 171], // #319bab
+        textColor: 255,
+        fontSize: 10,
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      bodyStyles: { 
+        fontSize: 9,
+        cellPadding: 3
+      },
+      alternateRowStyles: { 
+        fillColor: [245, 247, 249] 
+      },
+      columnStyles: {
+        0: { cellWidth: 15, halign: 'center' },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 30, halign: 'center' },
+        3: { cellWidth: 40, halign: 'right' },
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 1) {
+          const itemName = tableRows[data.row.index][1];
+          if (itemName.includes("(Sample)")) {
+            data.cell.styles.fillColor = [255, 251, 235]; // yellow-50
+            data.cell.styles.textColor = [161, 98, 7]; // yellow-700
+          }
+        }
+      }
     });
 
-    const imgWidth = 210;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-    pdf.save(`Packing-Slip-${new Date().toLocaleDateString("en-IN")}.pdf`);
+    doc.save(`Packing-Slip-${new Date().toLocaleDateString("en-IN")}.pdf`);
   };
 
   return (

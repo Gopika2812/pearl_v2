@@ -398,6 +398,7 @@ router.put("/:id", async (req, res) => {
     if (req.body.fieldPermissions !== undefined) updateData.fieldPermissions = req.body.fieldPermissions;
     if (req.body.actionPermissions !== undefined) updateData.actionPermissions = req.body.actionPermissions;
     if (req.body.allowedVoucherTypes !== undefined) updateData.allowedVoucherTypes = req.body.allowedVoucherTypes;
+    if (req.body.allowedQuickLinks !== undefined) updateData.allowedQuickLinks = req.body.allowedQuickLinks;
 
     const user = await BranchUser.findByIdAndUpdate(id, updateData, {
       new: true,

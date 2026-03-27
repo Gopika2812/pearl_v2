@@ -476,16 +476,31 @@ export default function InventorySalesOrderEntry({
       }
     }
 
-    // ✅ AUTO-FILL (WITH CUSTOMER MARGIN APPLIED)
-    // Check if customer has locked price enabled and product has a locked price set
-    let basePrice = product.sellingPrice;
-    if (selectedCustomer?.isLockedPriceEnabled && product.lockedPrice > 0) {
-      basePrice = product.lockedPrice;
-      console.log(`🔒 Applying Locked Price: ${basePrice} instead of ${product.sellingPrice}`);
-    }
+    // 🛡️ NEW ADDITIVE LOGIC: Final Price = PurchasingPrice * (1 + (NormalMargin + AdminMargin/CustomerMargin) / 100)
+    const purchasingPrice = Number(product.purchasingPrice || 0);
+    const normalMargin = Number(product.marginPercentage || 0);
     
-    const adjustedPrice = basePrice + (basePrice * Number(customerMargin)) / 100;
-    setSellingPrice(adjustedPrice);
+    // Determine relative margin: Admin Margin overrides Customer Margin
+    let relativeMargin = Number(customerMargin || 0);
+    if (product.adminMargin !== undefined && product.adminMargin !== null && product.adminMargin !== "") {
+      relativeMargin = Number(product.adminMargin);
+      console.log(`🛡️ Using Admin Margin: ${relativeMargin}% (Normal: ${normalMargin}%)`);
+    } else {
+      console.log(`🛡️ Using Customer Margin: ${relativeMargin}% (Normal: ${normalMargin}%)`);
+    }
+
+    const totalMargin = normalMargin + relativeMargin;
+    let adjustedPrice = 0;
+    
+    if (purchasingPrice > 0) {
+      adjustedPrice = purchasingPrice + (purchasingPrice * totalMargin / 100);
+    } else {
+      // Fallback if purchasing price is missing
+      const baseSellingPrice = Number(product.sellingPrice || 0);
+      adjustedPrice = baseSellingPrice + (baseSellingPrice * relativeMargin / 100);
+    }
+
+    setSellingPrice(Math.round(adjustedPrice * 100) / 100);
     setGst(product.gst);
 
     setCgst(product.gst / 2);
@@ -585,9 +600,8 @@ export default function InventorySalesOrderEntry({
       return;
     }
 
-    // 1️⃣ CALCULATE ADJUSTED SELLING PRICE WITH CUSTOMER MARGIN
-    const basSellingPrice = Number(sellingPrice);
-    const adjustedSellingPrice = basSellingPrice + (basSellingPrice * Number(customerMargin)) / 100;
+    // 1️⃣ USE SELLING PRICE AS IS (Already adjusted with margin during selection)
+    const adjustedSellingPrice = Number(sellingPrice);
 
     // 2️⃣ BASE AMOUNT (using adjusted selling price)
     const baseAmount = adjustedSellingPrice * Number(qty);

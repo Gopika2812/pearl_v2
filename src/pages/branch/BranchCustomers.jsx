@@ -291,6 +291,12 @@ const BranchCustomers = () => {
                       <span className="text-gray-700">{customer.state}</span>
                     </p>
                   )}
+                  <p className="text-gray-600">
+                    <span className="font-semibold text-gray-800">Margin:</span>{" "}
+                    <span className={`font-bold ${customer.margin < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                      {customer.margin || 0}%
+                    </span>
+                  </p>
                 </div>
 
                 {/* Divider */}
@@ -377,6 +383,9 @@ const BranchCustomers = () => {
                   <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
                     Country
                   </th>
+                  <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
+                    Margin (%)
+                  </th>
                   <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold">
                     Debit
                   </th>
@@ -414,10 +423,13 @@ const BranchCustomers = () => {
                     <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
                       {customer.state || "-"}
                     </td>
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700\">
+                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
                       {customer.country || "-"}
                     </td>
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600\">
+                    <td className={`px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-bold ${customer.margin < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                      {customer.margin || 0}%
+                    </td>
+                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600">
                       ₹{(customer.debit || 0).toFixed(2)}
                     </td>
                     <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600">

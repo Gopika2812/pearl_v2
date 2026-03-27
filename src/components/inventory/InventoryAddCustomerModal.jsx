@@ -27,7 +27,6 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     ifsc: "",
     branch: "",
     upi: "",
-    isLockedPriceEnabled: false,
   });
 
   const [isFetchingGst, setIsFetchingGst] = useState(false);
@@ -58,7 +57,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         ifsc: editingItem.ifsc || "",
         branch: editingItem.branch || "",
         upi: editingItem.upi || "",
-        isLockedPriceEnabled: editingItem.isLockedPriceEnabled || false,
+        upi: editingItem.upi || "",
       });
     } else {
       setCustomer({
@@ -83,7 +82,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         ifsc: "",
         branch: "",
         upi: "",
-        isLockedPriceEnabled: false,
+        upi: "",
       });
     }
   }, [editingItem]);
@@ -158,7 +157,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
       ifsc: "",
       branch: "",
       upi: "",
-      isLockedPriceEnabled: false,
+      upi: "",
     });
 
     onClose();
@@ -473,7 +472,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                   className={inputClass}
                   value={customer.margin}
                   onChange={(e) =>
-                    setCustomer({ ...customer, margin: parseFloat(e.target.value) || 0 })
+                    setCustomer({ ...customer, margin: e.target.value })
                   }
                   placeholder="Positive or Negative"
                 />
@@ -487,7 +486,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                   className={inputClass}
                   value={customer.credit}
                   onChange={(e) =>
-                    setCustomer({ ...customer, credit: parseFloat(e.target.value) || 0 })
+                    setCustomer({ ...customer, credit: e.target.value })
                   }
                 />
               </div>
@@ -500,7 +499,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                   className={inputClass}
                   value={customer.debit}
                   onChange={(e) =>
-                    setCustomer({ ...customer, debit: parseFloat(e.target.value) || 0 })
+                    setCustomer({ ...customer, debit: e.target.value })
                   }
                 />
               </div>
@@ -509,20 +508,6 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
 
           <hr />
 
-          <div className="flex items-center gap-3 bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">
-            <input
-              type="checkbox"
-              id="isLockedPriceEnabled"
-              className="w-4 h-4 text-primary rounded focus:ring-primary cursor-pointer"
-              checked={customer.isLockedPriceEnabled}
-              onChange={(e) =>
-                setCustomer({ ...customer, isLockedPriceEnabled: e.target.checked })
-              }
-            />
-            <label htmlFor="isLockedPriceEnabled" className="text-sm font-bold text-blue-700 cursor-pointer select-none">
-              🔒 Enable Locked Price for this Customer
-            </label>
-          </div>
 
           {/* BANK DETAILS */}
           <div className="space-y-4 bg-gray-50 p-4 rounded-xl border">

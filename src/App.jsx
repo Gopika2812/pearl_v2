@@ -62,6 +62,7 @@ import ProfitLossPage from "./pages/ProfitLossPage";
 import ReorderingDashboard from "./pages/ReorderingDashboard";
 import TrialBalancePage from "./pages/TrialBalancePage";
 import VendorSummary from "./pages/VendorSummary";
+import BranchAdminRequests from "./pages/branch/BranchAdminRequests";
 
 function AppContent() {
   const location = useLocation();
@@ -217,6 +218,7 @@ function AppContent() {
                   <Route path="/branch/receipt" element={<ProtectedRoute element={<BranchReceipt />} />} />
                   <Route path="/branch/summary" element={<ProtectedRoute element={<BranchSummary />} />} />
                   <Route path="/branch/product-records" element={<ProtectedRoute element={<BranchProductRecords />} />} />
+                  <Route path="/branch/admin-requests" element={<ProtectedRoute element={<BranchAdminRequests />} role={["ADMIN"]} />} />
 
                   {/* LEGACY ROUTES */}
                   <Route

@@ -65,6 +65,10 @@ const branchUserSchema = new mongoose.Schema(
       ref: "VoucherType",
       default: [],
     },
+    allowedQuickLinks: {
+      type: [String],
+      default: [],
+    },
   },
   { timestamps: true }
 );

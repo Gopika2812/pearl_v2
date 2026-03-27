@@ -164,20 +164,25 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   // Handle product selection for new item
   const handleProductSelect = (productId) => {
     const product = products.find((p) => p._id === productId);
+    console.log("🔍 Selected product for new item:", product);
+    
     if (product) {
       const gstRate = product.gst || 0;
       const isIgst = Boolean(product.igst || false);
+      const price = product.sellingPrice || product.mrp || 0;
+      
       setNewItem({
         ...newItem,
         productId: product._id,
         name: product.name,
         hsn: product.hsn || product.hsnCode || "",
-        sellingPrice: product.sellingPrice || 0,
+        sellingPrice: price,
         gst: gstRate,
         cgst: isIgst ? 0 : gstRate / 2,
         sgst: isIgst ? 0 : gstRate / 2,
         igst: isIgst,
       });
+      console.log("✅ New item state updated with price:", price);
     }
   };
 

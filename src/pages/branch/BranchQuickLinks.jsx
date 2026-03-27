@@ -16,8 +16,9 @@ import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 import { 
   FaBox, FaBuilding, FaChevronRight, FaFileAlt, FaHandshake, 
-  FaLink, FaPlus, FaShoppingCart, FaTruck, FaUsers 
+  FaLink, FaPlus, FaShoppingCart, FaTruck, FaUsers, FaWarehouse, FaTags, FaStore, FaUserLock 
 } from "react-icons/fa";
+import { QUICK_LINKS_CONFIG, QUICK_LINKS_CATEGORIES } from "../../utils/quickLinksConfig";
 
 export default function BranchQuickLinks() {
   const { 
@@ -25,55 +26,47 @@ export default function BranchQuickLinks() {
     customerGroups, warehouses, updateData, addData,
     addLocalVoucher, addLocalWarehouse, salesOwners 
   } = useInventory();
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const [activeModal, setActiveModal] = useState(null);
   const [viewingData, setViewingData] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
 
   const branchId = currentBranch?._id;
 
-  const categories = [
-    {
-      title: "System & Billing",
-      icon: <FaFileAlt />,
-      color: "from-blue-600 to-blue-700",
-      items: [
-        { id: "voucher_type", label: "Voucher Type", desc: "Manage billing prefixes and counters" },
-        { id: "warehouse", label: "Warehouse", desc: "Configure storage locations" },
-      ]
-    },
-    {
-      title: "Inventory Master",
-      icon: <FaBox />,
-      color: "from-emerald-600 to-emerald-700",
-      items: [
-        { id: "product_group", label: "Product Group", desc: "High-level product classification" },
-        { id: "product_category", label: "Product Category", desc: "Sub-levels and item organization" },
-        { id: "product", label: "Product", desc: "Pricing, GST, and stock details" },
-      ]
-    },
-    {
-      title: "Customer Management",
-      icon: <FaUsers />,
-      color: "from-purple-600 to-purple-700",
-      items: [
-        { id: "customer_category", label: "Customer Category", desc: "Retail, Wholesale, etc." },
-        { id: "customer_group", label: "Customer Group", desc: "Grouping for loyalty or analysis" },
-        { id: "customer", label: "Customer", desc: "Full CRM and contact details" },
-      ]
-    },
-    {
-      title: "People & Logistics",
-      icon: <FaHandshake />,
-      color: "from-orange-600 to-orange-700",
-      items: [
-        { id: "vendor", label: "Vendor", desc: "Supplier records and GSTIN" },
-        { id: "sales_owner", label: "Sales Owner", desc: "Primary account managers" },
-        { id: "sales_man", label: "Sales Man", desc: "Field staff and representatives" },
-        { id: "delivery_man", label: "Delivery Man", desc: "Dispatch and transport personnel" },
-      ]
-    }
-  ];
+  const categories = QUICK_LINKS_CATEGORIES.map(cat => ({
+    title: cat.title,
+    items: cat.items.map(itemId => {
+      const config = QUICK_LINKS_CONFIG[itemId];
+      const iconMap = {
+        voucher_type: <FaFileAlt />,
+        warehouse: <FaWarehouse />,
+        product_group: <FaTags />,
+        product_category: <FaBox />,
+        product: <FaStore />,
+        customer_category: <FaUsers />,
+        customer_group: <FaUsers />,
+        customer: <FaBuilding />,
+        vendor: <FaHandshake />,
+        sales_owner: <FaUserLock />,
+        sales_man: <FaUsers />,
+        delivery_man: <FaTruck />
+      };
+      return {
+        id: itemId,
+        label: config.label,
+        icon: iconMap[itemId] || <FaLink />,
+        path: `/quick-links/${itemId.replace(/_/g, '-')}`
+      };
+    })
+  }));
+
+  const filteredCategories = categories.map(cat => ({
+    ...cat,
+    items: cat.items.filter(item => {
+      if (!user?.allowedQuickLinks || user.allowedQuickLinks.length === 0) return true;
+      return user.allowedQuickLinks.includes(item.id);
+    })
+  })).filter(cat => cat.items.length > 0);
 
   const handleAddData = (type, data) => {
     // Check if this is an update (has _id) or create
@@ -127,7 +120,7 @@ export default function BranchQuickLinks() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {categories.map((cat, idx) => (
+            {filteredCategories.map((cat, idx) => (
               <div 
                 key={idx} 
                 className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow"

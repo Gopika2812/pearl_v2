@@ -286,9 +286,9 @@ const BranchClaims = () => {
                     <th className="px-6 py-4 text-left">Invoice ID</th>
                     <th className="px-6 py-4 text-left">Customer</th>
                     <th className="px-6 py-4 text-center">Items</th>
-                    <th className="px-6 py-4 text-right">Grand Total</th>
-                    <th className="px-6 py-4 text-center">Status</th>
-                    <th className="px-6 py-4 text-center">Date</th>
+                    {user?.fieldPermissions?.claims_grandTotal !== false && <th className="px-6 py-4 text-right">Grand Total</th>}
+                    {user?.fieldPermissions?.claims_invoiceGenerated !== false && <th className="px-6 py-4 text-center">Status</th>}
+                    {user?.fieldPermissions?.claims_createdAt !== false && <th className="px-6 py-4 text-center">Date</th>}
                     <th className="px-6 py-4 text-center">Action</th>
                   </tr>
                 </thead>
@@ -329,30 +329,36 @@ const BranchClaims = () => {
                               (order.sampleItems || []).length}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-right font-bold text-[#319bab]">
-                          ₹{(order.grandTotal || 0).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          {order.invoiceGenerated ? (
-                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
-                              ✓ Invoiced
-                            </span>
-                          ) : (
-                            <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs font-semibold">
-                              Pending
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-center text-gray-600 text-xs">
-                          {new Date(order.createdAt).toLocaleString("en-IN", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            hour12: true,
-                          })}
-                        </td>
+                        {user?.fieldPermissions?.claims_grandTotal !== false && (
+                          <td className="px-6 py-4 text-right font-bold text-[#319bab]">
+                            ₹{(order.grandTotal || 0).toLocaleString()}
+                          </td>
+                        )}
+                        {user?.fieldPermissions?.claims_invoiceGenerated !== false && (
+                          <td className="px-6 py-4 text-center">
+                            {order.invoiceGenerated ? (
+                              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
+                                ✓ Invoiced
+                              </span>
+                            ) : (
+                              <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs font-semibold">
+                                Pending
+                              </span>
+                            )}
+                          </td>
+                        )}
+                        {user?.fieldPermissions?.claims_createdAt !== false && (
+                          <td className="px-6 py-4 text-center text-gray-600 text-xs">
+                            {new Date(order.createdAt).toLocaleString("en-IN", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: true,
+                            })}
+                          </td>
+                        )}
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center gap-2 justify-center flex-wrap">
                             <button

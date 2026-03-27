@@ -21,7 +21,7 @@ const upload = multer({
 // POST: Add New Product
 router.post("/", async (req, res) => {
   try {
-    const { productGroup, productCategories = [], name, perQty, units, totalQty, purchasingPrice, sellingPrice, lockedPrice, hsnCode, gst, branchId } = req.body;
+    const { productGroup, productCategories = [], name, perQty, units, totalQty, purchasingPrice, sellingPrice, adminMargin, marginPercentage, lockedPrice, hsnCode, gst, branchId } = req.body;
 
     if (!name || !perQty || !units || hsnCode === undefined || !branchId) {
       return res.status(400).json({
@@ -81,6 +81,8 @@ router.post("/", async (req, res) => {
       totalQty: Math.round((Number(totalQty) || 0) * 100) / 100,
       purchasingPrice: Math.round((Number(purchasingPrice) || 0) * 100) / 100,
       sellingPrice: Math.round((Number(sellingPrice) || 0) * 100) / 100,
+      adminMargin: Math.round((Number(adminMargin) || 0) * 100) / 100,
+      marginPercentage: Math.round((Number(marginPercentage) || 0) * 100) / 100,
       lockedPrice: Math.round((Number(lockedPrice) || 0) * 100) / 100,
       hsnCode,
       gst: Math.round((Number(gst) || 0) * 100) / 100,
@@ -532,7 +534,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, productGroup, productCategories = [], perQty, units, totalQty, purchasingPrice, sellingPrice, lockedPrice, margin, hsnCode, gst, branchId } = req.body;
+    const { name, productGroup, productCategories = [], perQty, units, totalQty, purchasingPrice, sellingPrice, adminMargin, marginPercentage, lockedPrice, margin, hsnCode, gst, branchId } = req.body;
 
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -598,6 +600,8 @@ router.put("/:id", async (req, res) => {
     if (gst !== undefined) updateData.gst = Math.round(Number(gst) * 100) / 100;
     if (purchasingPrice !== undefined) updateData.purchasingPrice = Math.round(Number(purchasingPrice) * 100) / 100;
     if (sellingPrice !== undefined) updateData.sellingPrice = Math.round(Number(sellingPrice) * 100) / 100;
+    if (adminMargin !== undefined) updateData.adminMargin = Math.round(Number(adminMargin) * 100) / 100;
+    if (marginPercentage !== undefined) updateData.marginPercentage = Math.round(Number(marginPercentage) * 100) / 100;
     if (lockedPrice !== undefined) updateData.lockedPrice = Math.round(Number(lockedPrice) * 100) / 100;
     if (margin !== undefined) updateData.margin = Math.round(Number(margin) * 100) / 100;
 

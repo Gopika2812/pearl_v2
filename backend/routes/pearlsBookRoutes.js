@@ -332,7 +332,7 @@ function getFormattedDateTime() {
 }
 
 // Generate HTML Invoice - PAGE 1: ORDER DETAILS + SAMPLE ITEMS (MATCHING FIRST IMAGE)
-async function generateInvoiceOrderPage(sale) {
+async function generateInvoiceOrderPage(sale, copyTitle = "ORIGINAL INVOICE", isReEdited = false) {
   const logoDataUri = await getLogoDataUri();
   
   const itemsHTML = sale.items.map((item) => `
@@ -371,190 +371,59 @@ async function generateInvoiceOrderPage(sale) {
     </div>
   ` : '';
 
-  const html = `
+    const html = `
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
       <meta charset="UTF-8">
       <title>Invoice - Order Details</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: white; padding: 15px; }
-        .invoice-container { 
-          max-width: 800px; 
-          margin: 0 auto; 
-          border: 3px solid #2b6cb0; 
-          padding: 20px;
-          background: white;
-        }
-        
-        /* Header with Logo and Company Details */
-        .header-top { display: flex; gap: 30px; margin-bottom: 20px; align-items: flex-start; }
-        .logo-section { flex: 0 0 120px; text-align: center; }
-        .logo-section img { max-width: 120px; max-height: 120px; object-fit: contain; }
-        
-        .company-info-box { 
-          flex: 1; 
-          padding: 12px; 
-          border: 2px solid #2b6cb0;
-          background-color: #f5f5f5;
-        }
-        .company-info-box p { 
-          margin: 4px 0; 
-          font-size: 10px; 
-          line-height: 1.4; 
-          color: #000; 
-        }
-        
-        /* Acknowledgement section under logo */
-        .ack-section { 
-          margin-top: 8px;
-          font-size: 9px; 
-          color: #000; 
-          line-height: 1.3;
-        }
-        
-        /* Sender and Buyer */
-        .sender-buyer { 
-          display: flex; 
-          gap: 40px; 
-          margin: 20px 0;
-          border-top: 1px solid #ccc;
-          padding-top: 15px;
-          border-bottom: 1px solid #ccc;
-          padding-bottom: 15px;
-        }
-        
-        .sender-buyer-item { flex: 1; }
-        .sender-buyer-item h3 { 
-          font-size: 11px; 
-          font-weight: bold; 
-          background-color: #e8e8e8;
-          padding: 6px 8px;
-          margin-bottom: 8px;
-          color: #000;
-        }
-        .sender-buyer-item p { 
-          font-size: 9px; 
-          margin: 3px 0; 
-          line-height: 1.4; 
-          color: #000; 
-        }
-        
-        /* Order Details Section */
-        .order-details-box {
-          background-color: #1a365d;
-          color: white;
-          padding: 10px;
-          margin: 15px 0;
-          font-size: 12px;
-          font-weight: bold;
-        }
-        
-        .order-details { 
-          display: flex; 
-          justify-content: space-between; 
-          margin: 10px 0;
-          font-size: 10px;
-          color: #000;
-        }
-        
-        /* Items Table */
-        table { 
-          width: 100%; 
-          border-collapse: collapse; 
-          margin: 15px 0;
-          border: 1px solid #999;
-        }
-        
-        thead { background-color: #e8e8e8; }
-        
-        th { 
-          padding: 8px; 
-          border: 1px solid #999; 
-          text-align: left; 
-          font-size: 10px; 
-          font-weight: bold; 
-          color: #000; 
-        }
-        
-        td { 
-          padding: 8px; 
-          border: 1px solid #999; 
-          font-size: 10px; 
-          color: #000; 
-        }
-        
-        /* Summary Section */
-        .summary-section {
-          display: flex;
-          justify-content: space-between;
-          margin: 15px 0;
-        }
-        
-        .summary-box {
-          width: 48%;
-          border: 1px solid #999;
-          padding: 10px;
-        }
-        
-        .summary-row { 
-          display: flex; 
-          justify-content: space-between; 
-          margin: 5px 0;
-          padding: 4px 0;
-          border-bottom: 1px solid #e8e8e8;
-          font-size: 10px;
-          color: #000;
-        }
-        
-        .summary-row.total { 
-          font-weight: bold; 
-          font-size: 11px;
-          border-bottom: 2px solid #999;
-          padding: 6px 0;
-        }
-        
-        /* Balance Section */
-        .balance-section {
-          margin-top: 15px;
-          border-top: 1px solid #999;
-          padding-top: 10px;
-        }
-        
-        .balance-row { 
-          display: flex; 
-          justify-content: space-between; 
-          margin: 6px 0; 
-          font-size: 10px;
-          color: #000;
-        }
-        
-        .balance-row strong {
-          font-weight: bold;
-        }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: white; padding: 30px; color: #333; }
+        .invoice-container { max-width: 800px; margin: 0 auto; border: 3px solid #1e40af; padding: 30px; position: relative; }
+        .header-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 2px solid #1e40af; padding-bottom: 20px; }
+        .logo-section { display: flex; gap: 20px; align-items: center; }
+        .logo-section img { width: 100px; height: 100px; object-fit: contain; }
+        .company-info-box { text-align: right; }
+        .company-info-box p { font-size: 13px; margin-bottom: 4px; font-weight: 500; }
+        .sender-buyer { display: flex; gap: 30px; margin-bottom: 30px; }
+        .sender-buyer-item { flex: 1; padding: 15px; border: 1px solid #e5e7eb; border-radius: 6px; background: #f8fafc; }
+        .sender-buyer-item h3 { font-size: 13px; color: #1e40af; margin-bottom: 10px; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; text-transform: uppercase; }
+        .sender-buyer-item p { font-size: 12px; line-height: 1.5; }
+        .order-details-box { background: #1e40af; color: white; padding: 8px 15px; font-size: 14px; font-weight: bold; margin-bottom: 15px; border-radius: 4px; }
+        .order-details { display: flex; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px; }
+        .order-details div { font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 12px; }
+        th { background: #1e40af; color: white; padding: 12px; text-align: left; font-weight: 600; border: 1px solid #1e3a8a; }
+        td { padding: 10px 12px; border: 1px solid #e5e7eb; }
+        .summary-section { display: flex; justify-content: space-between; margin-top: 25px; gap: 30px; }
+        .summary-box { flex: 1; border: 1px solid #e5e7eb; border-radius: 6px; padding: 15px; background: #f8fafc; }
+        .summary-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+        .summary-row.total { border-top: 2px solid #1e40af; padding-top: 10px; margin-top: 10px; font-weight: bold; color: #1e40af; font-size: 15px; }
+        .balance-section { margin-top: 20px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 15px; background: #fffbeb; }
+        .balance-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+        .certification { font-size: 11px; font-style: italic; color: #666; margin-top: 35px; border-top: 1px solid #e5e7eb; padding-top: 15px; line-height: 1.5; }
+        .copy-badge { text-align: right; font-weight: 800; color: #dc2626; font-size: 16px; margin-top: 20px; letter-spacing: 1px; text-transform: uppercase; }
+        .footer-tag { text-align: center; color: #94a3b8; font-size: 10px; margin-top: 30px; }
       </style>
     </head>
     <body>
       <div class="invoice-container">
-        
-        <!-- HEADER: LOGO + COMPANY INFO -->
+        <!-- HEADER -->
         <div class="header-top">
           <div class="logo-section">
-            ${logoDataUri ? `<img src="${logoDataUri}" alt="Pearl Foods Logo">` : ''}
-            <div class="ack-section">
-              <p><strong>Acknowledgement No:</strong></p>
-              <p>${sale.invoiceId}</p>
-              <p style="margin-top: 6px;"><strong>Date: 1/3/2026</strong></p>
-              <p style="margin-top: 6px; font-size: 8px; color: #666;">Generated on: ${getFormattedDateTime()}</p>
+            ${logoDataUri ? `<img src="${logoDataUri}" alt="Logo">` : ''}
+            <div>
+              <p style="font-size: 10px; font-weight: bold; color: #1e40af; margin-bottom: 4px;">Acknowledgement No:</p>
+              <p style="font-size: 11px; font-weight: 900;">${sale.invoiceId}</p>
+              <p style="margin-top: 5px; font-size: 9px;"><strong>Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}</strong></p>
             </div>
           </div>
-          
           <div class="company-info-box">
-            <p><strong>12/13, South By-Pass Road, Vanarpettai,</strong></p>
+            <p><strong>PEARL AGENCY</strong></p>
+            <p>12/13, South By-Pass Road, Vanarpettai</p>
             <p>Tirunelveli - 627003, Tamil Nadu</p>
             <p>Mobile: 9429692970 | GSTIN: 33DULPS2600Q1Z6</p>
-            <p>GPAY No: 8825847884 | State: Tamil Nadu (Code: 33)</p>
           </div>
         </div>
 
@@ -563,45 +432,32 @@ async function generateInvoiceOrderPage(sale) {
           <div class="sender-buyer-item">
             <h3>SENDER (FROM)</h3>
             <p><strong>PEARL AGENCY</strong></p>
-            <p>12/13, South By-Pass Road,</p>
-            <p>Vanarpettai, Tirunelveli - 627003</p>
+            <p>Tirunelveli - 627003</p>
             <p>GSTIN: 33DULPS2600Q1Z6</p>
-            <p>Mobile: 9429692970</p>
           </div>
-          
           <div class="sender-buyer-item">
             <h3>BUYER (BILL TO)</h3>
-            <p><strong>${sale.customer.name}</strong></p>
-            <p>${sale.customer.address}</p>
-            <p>${sale.customer.district ? sale.customer.district + ', ' : ''}${sale.customer.state}</p>
-            <p>GSTIN: ${sale.customer.gstin || "-"}</p>
-            <p>Mobile: ${sale.customer.whatsapp}</p>
+            <p><strong>${sale.customer?.name || "Customer"}</strong></p>
+            <p>${sale.customer?.address || "Address"}</p>
+            <p>${sale.customer?.district || ""}, ${sale.customer?.state || ""}</p>
+            <p>Mobile: ${sale.customer?.whatsapp || "-"}</p>
           </div>
         </div>
 
-        <!-- ORDER DETAILS HEADER -->
-        <div class="order-details-box">Order Details</div>
-        
+        <div class="order-details-box">${isReEdited ? "RE-EDIT " : ""}Order Details</div>
         <div class="order-details">
-          <div><strong>Invoice No: ${sale.invoiceId}</strong></div>
-          <div><strong>Billing Person: ${sale.billingPersonName || "-"}</strong></div>
-        </div>
-        
-        <div class="order-details">
-          <div><strong>Delivery Man: ${sale.deliveryManName || "-"}</strong></div>
+          <div><strong>Invoice No:</strong> ${sale.invoiceId}</div>
+          <div><strong>Billing Person:</strong> ${sale.billingPersonName || "-"}</div>
         </div>
 
-        <!-- ITEMS TABLE -->
         <table>
           <thead>
             <tr>
-              <th>Description of Goods</th>
-              <th>HSN</th>
-              <th>GST %</th>
-              <th>Qty</th>
-              <th>Rate</th>
-              <th>Unit</th>
-              <th>Total</th>
+              <th>Description</th>
+              <th style="text-align: center;">HSN</th>
+              <th style="text-align: center;">Qty</th>
+              <th style="text-align: right;">Rate</th>
+              <th style="text-align: right;">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -609,51 +465,29 @@ async function generateInvoiceOrderPage(sale) {
           </tbody>
         </table>
 
-        <!-- SUMMARY SECTION -->
         <div class="summary-section">
-          <div></div>
           <div class="summary-box">
-            <div class="summary-row">
-              <span>Total Amount:</span>
-              <span>₹${sale.subtotal.toFixed(2)}</span>
-            </div>
-            <div class="summary-row">
-              <span>CGST:</span>
-              <span>₹${((sale.subtotal * 5) / 100).toFixed(2)}</span>
-            </div>
-            <div class="summary-row">
-              <span>SGST:</span>
-              <span>₹${((sale.subtotal * 5) / 100).toFixed(2)}</span>
-            </div>
-            <div class="summary-row">
-              <span>Transport:</span>
-              <span>₹${(sale.transportCharge || 0).toFixed(2)}</span>
-            </div>
-            <div class="summary-row total">
-              <span>Grand Total:</span>
-              <span>₹${sale.grandTotal.toFixed(2)}</span>
-            </div>
+             <div class="summary-row"><span>Subtotal:</span><span>₹${sale.subtotal?.toFixed(2) || '0.00'}</span></div>
+             <div class="summary-row"><span>Tax (GST):</span><span>₹${(sale.totalTax?.total || 0).toFixed(2)}</span></div>
+             <div class="summary-row"><span>Transport:</span><span>₹${(sale.transportCharge || 0).toFixed(2)}</span></div>
+             <div class="summary-row total"><span>GRAND TOTAL:</span><span>₹${sale.grandTotal?.toFixed(2) || '0.00'}</span></div>
           </div>
         </div>
 
-        <!-- BALANCE SECTION -->
         <div class="balance-section">
-          <div class="balance-row">
-            <span>PREVIOUS BALANCE (Opening Balance):</span>
-            <span><strong>₹${(sale.openingBalance || 0).toFixed(2)}</strong></span>
-          </div>
-          <div class="balance-row">
-            <span>CURRENT BALANCE (Closing Balance):</span>
-            <span><strong>₹${(sale.closingBalance || 0).toFixed(2)}</strong></span>
-          </div>
+          <div class="balance-row"><span>Previous Balance:</span><strong>₹${(sale.openingBalance || 0).toFixed(2)}</strong></div>
+          <div class="balance-row"><span>Closing Balance:</span><strong>₹${(sale.closingBalance || 0).toFixed(2)}</strong></div>
         </div>
 
-        <!-- SAMPLE PRODUCTS -->
+        <div class="certification">Certified that the particulars given above are true and correct. E. & O.E.</div>
+        <div class="copy-badge">${copyTitle}</div>
+        <div class="footer-tag">Digitally generated by Pearls ERP System</div>
+        
         ${sampleItemsHTML}
       </div>
     </body>
     </html>
-  `;
+    `;
 
   // Convert HTML to image using Puppeteer (A4 format: 800x1200px)
   const browser = await launchBrowser();
@@ -690,7 +524,7 @@ async function generateInvoiceOrderPage(sale) {
 }
 
 // PAGE 2: TAX INVOICE (HSN BREAKDOWN)
-async function generateInvoiceTaxPage(sale) {
+async function generateInvoiceTaxPage(sale, copyTitle = "ORIGINAL INVOICE", backOrderSummary = [], invoiceNotes = "", isReEdited = false) {
   const logoDataUri = await getLogoDataUri();
   let totalCGST = 0, totalSGST = 0, totalIGST = 0;
   const hsnSummary = {};
@@ -739,13 +573,40 @@ async function generateInvoiceTaxPage(sale) {
 
   const rowsHTML = hsnArray.map((h) => `
     <tr>
-      <td style="padding: 8px; border: 1px solid #ddd; font-size: 11px;">${h.hsn}</td>
-      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-size: 11px;">₹${h.taxableValue.toFixed(2)}</td>
-      <td style="padding: 8px; border: 1px solid #ddd; font-size: 11px;">${h.cgstRate > 0 ? h.cgstRate + "% | ₹" + h.cgstAmount.toFixed(2) : "-"}</td>
-      <td style="padding: 8px; border: 1px solid #ddd; font-size: 11px;">${h.sgstRate > 0 ? h.sgstRate + "% | ₹" + h.sgstAmount.toFixed(2) : "-"}</td>
-      <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-size: 11px;">₹${h.total.toFixed(2)}</td>
+      <td style="padding: 12px; border: 1px solid #ddd; font-size: 13px;">${h.hsn}</td>
+      <td style="padding: 12px; border: 1px solid #ddd; text-align: right; font-size: 13px;">₹${h.taxableValue.toFixed(2)}</td>
+      <td style="padding: 12px; border: 1px solid #ddd; font-size: 13px;">${h.cgstRate > 0 ? h.cgstRate + "% | ₹" + h.cgstAmount.toFixed(2) : "-"}</td>
+      <td style="padding: 12px; border: 1px solid #ddd; font-size: 13px;">${h.sgstRate > 0 ? h.sgstRate + "% | ₹" + h.sgstAmount.toFixed(2) : "-"}</td>
+      <td style="padding: 12px; border: 1px solid #ddd; text-align: right; font-size: 13px;">₹${h.total.toFixed(2)}</td>
     </tr>
   `).join('');
+
+  const backOrderHTML = backOrderSummary && backOrderSummary.length > 0 ? `
+    <div style="margin-top: 30px; border-top: 3px solid #dc2626; padding-top: 20px;">
+      <h2 style="color: #dc2626; font-size: 18px; margin-bottom: 15px; text-transform: uppercase;">Back Order Summary</h2>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+        <thead>
+          <tr style="background-color: #fee2e2;">
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: left; font-size: 13px;">Product Name</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center; font-size: 13px;">Ordered</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center; font-size: 13px;">Supplied</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center; font-size: 13px;">Back Order</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${backOrderSummary.map(bo => `
+            <tr>
+              <td style="padding: 10px 12px; border: 1px solid #ddd; font-size: 13px;">${bo.product}</td>
+              <td style="padding: 10px 12px; border: 1px solid #ddd; text-align: center; font-size: 13px;">${bo.requestedQty}</td>
+              <td style="padding: 10px 12px; border: 1px solid #ddd; text-align: center; font-size: 13px;">${bo.confirmedQty}</td>
+              <td style="padding: 10px 12px; border: 1px solid #ddd; text-align: center; font-size: 13px; font-weight: bold; color: #dc2626;">${bo.backOrderQty}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ${invoiceNotes ? `<p style="font-size: 13px; font-style: italic; color: #4b5563;"><strong>Notes:</strong> ${invoiceNotes}</p>` : ''}
+    </div>
+  ` : '';
 
   const html = `
     <!DOCTYPE html>
@@ -755,43 +616,57 @@ async function generateInvoiceTaxPage(sale) {
       <title>Invoice - Tax Invoice</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: white; padding: 20px; }
-        .invoice-container { max-width: 420px; margin: 0 auto; border: 3px solid #2b6cb0; padding: 15px; }
-        h1 { text-align: center; color: #1a365d; font-size: 14px; margin: 15px 0 8px 0; }
-        .invoice-header { text-align: center; font-size: 11px; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-        th { background-color: #f0f0f0; padding: 10px; border: 1px solid #ddd; text-align: left; font-size: 11px; font-weight: bold; color: #000; }
-        td { padding: 8px; border: 1px solid #ddd; font-size: 11px; color: #000; }
-        tr.total { font-weight: bold; background-color: #f9f9f9; color: #000; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: white; padding: 30px; }
+        .invoice-container { max-width: 800px; margin: 0 auto; border: 3px solid #1e40af; padding: 30px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th { background-color: #f8fafc; padding: 12px; border: 1px solid #ddd; text-align: left; font-size: 13px; font-weight: bold; color: #1e40af; }
+        td { padding: 10px 12px; border: 1px solid #ddd; font-size: 13px; color: #333; }
+        tr.total { font-weight: bold; background-color: #f1f5f9; color: #1e40af; }
       </style>
     </head>
     <body>
       <div class="invoice-container">
-        ${logoDataUri ? `<div style="text-align: center; margin-bottom: 20px;"><img src="${logoDataUri}" style="max-width: 100px; max-height: 100px; object-fit: contain;"></div>` : ''}
-        <h1>TAX INVOICE - HSN-WISE SUMMARY</h1>
-        <div class="invoice-header">Invoice No: ${sale.invoiceId} | Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}</div>
+        <!-- HEADER -->
+        <div style="text-align: center; margin-bottom: 25px; border-bottom: 2px solid #1e40af; padding-bottom: 20px;">
+           ${logoDataUri ? `<img src="${logoDataUri}" style="max-width: 100px; margin-bottom: 15px;">` : ''}
+           <h1 style="margin: 0; font-size: 20px; color: #1e40af; text-transform: uppercase;">${isReEdited ? "RE-EDIT " : ""}Tax Invoice - HSN Statement</h1>
+           <p style="font-size: 14px; margin-top: 10px;">Invoice No: <strong>${sale.invoiceId}</strong> | Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}</p>
+        </div>
 
         <table>
-          <tr style="background-color: #f0f0f0; font-size: 9px;">
-            <th>HSN Code</th>
-            <th>Taxable Value</th>
-            <th>CGST (Rate | Amt)</th>
-            <th>SGST (Rate | Amt)</th>
-            <th>Total</th>
-          </tr>
-          ${rowsHTML}
-          <tr class="total" style="font-size: 9px;">
-            <td>TOTAL</td>
-            <td style="text-align: right;">₹${totalTaxableValue.toFixed(2)}</td>
-            <td>₹${totalCGST.toFixed(2)}</td>
-            <td>₹${totalSGST.toFixed(2)}</td>
-            <td style="text-align: right;">₹${grandTotal.toFixed(2)}</td>
-          </tr>
+          <thead>
+            <tr>
+              <th>HSN Code</th>
+              <th style="text-align: right;">Taxable Value</th>
+              <th>CGST (Rate | Amt)</th>
+              <th>SGST (Rate | Amt)</th>
+              <th style="text-align: right;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHTML}
+            <tr class="total">
+              <td>TOTAL</td>
+              <td style="text-align: right;">₹${totalTaxableValue.toFixed(2)}</td>
+              <td>₹${totalCGST.toFixed(2)}</td>
+              <td>₹${totalSGST.toFixed(2)}</td>
+              <td style="text-align: right;">₹${grandTotal.toFixed(2)}</td>
+            </tr>
+          </tbody>
         </table>
+
+        ${backOrderHTML}
+
+        <div class="certification" style="font-size: 11px; font-style: italic; color: #666; margin-top: 40px; border-top: 1px solid #e5e7eb; padding-top: 15px;">
+          Certified that the particulars given above are true and correct. Tax Invoice as per GST regulations.
+        </div>
+        <div class="copy-badge" style="text-align: right; font-weight: 800; color: #dc2626; font-size: 18px; margin-top: 15px; letter-spacing: 1px; text-transform: uppercase;">
+          ${copyTitle}
+        </div>
       </div>
     </body>
     </html>
-  `;
+    `;
 
   const browser = await launchBrowser();
   
@@ -1064,19 +939,27 @@ async function generateEwayBillImage(sale) {
   }
 }
 
-// Old function kept for backward compatibility, but now calls the new page generators
-async function generateInvoiceImage(sale) {
-  // Generate Page 1: Order Details
-  const page1Url = await generateInvoiceOrderPage(sale);
+// Generate both Original and Copy 1
+async function generateInvoiceImage(sale, backOrderSummary = [], invoiceNotes = "") {
+  console.log("📄 Generating Dual Copy Invoices (Original & Copy 1)...");
+  
+  const isReEdited = !!sale.isReEdited || !!sale.invoiceGenerated;
+  const copies = isReEdited ? ["RE-EDIT ORIGINAL", "RE-EDIT COPY 1"] : ["ORIGINAL INVOICE", "COPY 1"];
 
-  // Generate Page 2: Tax Invoice
-  const page2Url = await generateInvoiceTaxPage(sale);
+  // ORIGINAL SET
+  const originalOrder = await generateInvoiceOrderPage(sale, copies[0], isReEdited);
+  const originalTax = await generateInvoiceTaxPage(sale, copies[0], backOrderSummary, invoiceNotes, isReEdited);
 
-  // Return both pages
-  return {
-    page1: page1Url,
-    page2: page2Url, 
-  };
+  // COPY 1 SET
+  const copy1Order = await generateInvoiceOrderPage(sale, copies[1], isReEdited);
+  const copy1Tax = await generateInvoiceTaxPage(sale, copies[1], backOrderSummary, invoiceNotes, isReEdited);
+
+  return [
+    originalOrder,
+    originalTax,
+    copy1Order,
+    copy1Tax
+  ];
 }
 
 router.post("/generate-invoice-preview/:id", async (req, res) => {
@@ -1173,7 +1056,7 @@ router.post("/generate-invoice-preview/:id", async (req, res) => {
       backOrderSummary: backOrderSummary,
     };
 
-    const invoicePages = await generateInvoiceImage(invoiceData);
+    const invoicePages = await generateInvoiceImage(invoiceData, backOrderSummary, notes);
     let ewayImage = null;
 
     if (sale.ewayEnabled) {
@@ -1190,15 +1073,14 @@ router.post("/generate-invoice-preview/:id", async (req, res) => {
     const phone = `91${sale.customer.whatsapp}`;
     const customerLoginLink = "https://pearlsfrontend.web.app/customer-login";
     const message = encodeURIComponent(
-      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${newGrandTotal}\n\n📄 Invoice: ${invoicePages.page1}\n\n🛒 Pearls Shopping: ${customerLoginLink}`
+      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${newGrandTotal}\n\n📄 Invoice: ${invoicePages[0]}\n\n🛒 Pearls Shopping: ${customerLoginLink}`
     );
 
-    // Prepare response with all 3 pages
+    // Prepare response with all pages
     const invoiceImages = [
-      invoicePages.page1,    // Page 1: Order Details
-      invoicePages.page2,    // Page 2: Tax Invoice
-      backOrderImage || invoicePages.page1, // Page 3: Back Order (or fallback)
-    ];
+      ...invoicePages,    // Original & Copy 1
+      backOrderImage,     // Back Order page
+    ].filter(Boolean);
 
     const invoiceLinks = invoiceImages.map((img, idx) => 
       img ? `${img}#page${idx + 1}` : null
@@ -1208,8 +1090,8 @@ router.post("/generate-invoice-preview/:id", async (req, res) => {
       success: true,
       invoiceImages,          // Array of all 3 pages
       invoiceLinks,           // Shareable links
-      invoiceImage: invoicePages.page1,    // Order + Sample Items (backward compat)
-      invoiceTaxPage: invoicePages.page2,  // Tax Invoice
+      invoiceImage: invoicePages[0],    // Order + Sample Items (backward compat)
+      invoiceTaxPage: invoicePages[1],  // Tax Invoice
       ewayImage,
       backOrderImage,
       waUrl: `https://wa.me/${phone}?text=${message}`,
@@ -1419,13 +1301,12 @@ router.post("/confirm-invoice/:id", async (req, res) => {
       closingBalance: invoiceClosingBalance,
     };
 
-    const invoicePages = await generateInvoiceImage(invoiceData);
+    // ✅ 7. GENERATE DUAL-COPY INVOICE (Tax Invoice now includes Back Order)
+    const invoicePages = await generateInvoiceImage(invoiceData, backOrderSummary, invoiceNotes);
 
-    // Generate back order page if there are back orders
-    let backOrderImage = null;
-    if (backOrderSummary && backOrderSummary.length > 0) {
-      backOrderImage = await generateBackOrderPage(invoiceData, backOrderSummary, invoiceNotes);
-    }
+    const invoiceImages = [
+      ...invoicePages
+    ].filter(Boolean);
 
     // ✅ 8. HANDLE PRINT & SEND ACTIONS BASED ON CHECKBOXES
     let printAction = null;
@@ -1435,11 +1316,9 @@ router.post("/confirm-invoice/:id", async (req, res) => {
     if (printConfirm) {
       printAction = {
         enabled: true,
-        invoiceImage: invoicePages.page1,    // Order + Sample Items
-        invoiceTaxPage: invoicePages.page2,  // Tax Invoice
-        ewayImage: invoiceData.ewayEnabled ? invoicePages.ewayImage : null,
-        backOrderImage: backOrderImage,
-        instructions: "Ready to print invoice. Please proceed with printing.",
+        invoiceImages: invoiceImages,
+        ewayImage: invoiceData.ewayEnabled ? invoicePages[1] : null, // Eway corresponds to Tax Invoice logic usually
+        instructions: "Ready to print dual invoice copies. Please proceed.",
       };
     }
 
@@ -1466,9 +1345,7 @@ router.post("/confirm-invoice/:id", async (req, res) => {
       success: true,
       message: "Invoice confirmed and all actions completed",
       lowStockAlerts,
-      invoiceImage: invoicePages.page1,    // Order + Sample Items
-      invoiceTaxPage: invoicePages.page2,  // Tax Invoice
-      backOrderImage,
+      invoiceImages
     };
 
     // Add actions based on checkbox selection
@@ -1586,17 +1463,10 @@ router.post("/generate-invoice/:id", async (req, res) => {
       backOrderSummary: backOrderSummary,
     };
 
-    const invoicePages = await generateInvoiceImage(invoiceData);
-    let ewayImage = null;
+    const invoicePages = await generateInvoiceImage(invoiceData, backOrderSummary, notes); // Now returns array of 4, Tax pages include Back Order
 
     if (sale.ewayEnabled) {
       ewayImage = await generateEwayBillImage(invoiceData);
-    }
-
-    // Generate back order page if there are back orders
-    let backOrderImage = null;
-    if (backOrderSummary && backOrderSummary.length > 0) {
-      backOrderImage = await generateBackOrderPage(invoiceData, backOrderSummary, notes);
     }
 
     // ✅ 4. REDUCE INVENTORY for invoiced items (only what was actually confirmed/invoiced)
@@ -1633,15 +1503,13 @@ router.post("/generate-invoice/:id", async (req, res) => {
     const phone = `91${sale.customer.whatsapp}`;
     const customerLoginLink = "https://pearlsfrontend.web.app/customer-login";
     const message = encodeURIComponent(
-      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${newGrandTotal}\n\n📄 Invoice: ${invoicePages.page1}\n\n🛒 Pearls Shopping: ${customerLoginLink}`
+      `Hello ${sale.customer.name},\n\nInvoice No: ${sale.invoiceId}\nAmount: ₹${newGrandTotal}\n\n📄 Invoice: ${invoicePages[0]}\n\n🛒 Pearls Shopping: ${customerLoginLink}`
     );
 
-    // Prepare response with all 3 pages
+    // Prepare response with all pages
     const invoiceImages = [
-      invoicePages.page1,    // Page 1: Order Details
-      invoicePages.page2,    // Page 2: Tax Invoice
-      backOrderImage || invoicePages.page1, // Page 3: Back Order (or fallback)
-    ];
+      ...invoicePages,    // Original & Copy 1
+    ].filter(Boolean);
 
     const invoiceLinks = invoiceImages.map((img, idx) => 
       img ? `${img}#page${idx + 1}` : null
@@ -1649,13 +1517,11 @@ router.post("/generate-invoice/:id", async (req, res) => {
 
     res.json({
       success: true,
-      invoiceImages,          // Array of all 3 pages
+      invoiceImages,          // Array of all 4 pages
       invoiceLinks,           // Shareable links
-      invoiceImage: invoicePages.page1,    // Order + Sample Items (backward compat)
-      invoiceTaxPage: invoicePages.page2,  // Tax Invoice
+      invoiceImage: invoicePages[0],    // Order + Sample Items (backward compat)
+      invoiceTaxPage: invoicePages[1],  // Tax Invoice + Back Order
       ewayImage,
-      backOrderImage,
-      waUrl: `https://wa.me/${phone}?text=${message}`,
     });
   } catch (err) {
     console.error("INVOICE ERROR:", err);

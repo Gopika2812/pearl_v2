@@ -67,6 +67,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     { name: "Journal Master", path: "/branch/journals", icon: <FaBook /> },
     { name: "Insights & Analysis", path: "/branch/insights", icon: <FaChartLine /> },
     { name: "Quick Links", path: "/branch/quick-links", icon: <FaLink /> },
+    { name: "Admin Requests", path: "/branch/admin-requests", icon: <FaShieldAlt /> },
   ];
 
   const summaryItems = [
@@ -113,6 +114,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
       "/branch/insights": "insights",
       "/branch/quick-links": "quick-links",
       "/branch/summary": "summary",
+      "/branch/admin-requests": "admin-requests",
     };
 
     const permissionId = pathPermissionMap[path];

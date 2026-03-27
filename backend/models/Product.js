@@ -38,6 +38,7 @@ const productSchema = new mongoose.Schema(
     hsnCode: { type: String, required: true },
     hsn: { type: String, default: "" }, // Alias for hsnCode
     gst: { type: Number, default: 0 },
+    adminMargin: { type: Number, default: 0 }, // Additional margin for Sales Order override
     image: { type: String, default: null }, // Product image URL
     reorderLevel: { type: Number, default: 10 }, // Alert threshold for reordering
     reorderQty: { type: Number, default: 20 }, // Quantity to order when threshold reached

@@ -1,8 +1,9 @@
 import axios from "axios";
 import React, { useEffect, useState, Fragment } from "react";
-import { FaArrowLeft, FaChevronDown, FaChevronLeft, FaChevronRight, FaChevronUp, FaEdit, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
+import { FaEdit, FaTrash, FaCheck, FaTimes, FaPlus, FaPlusCircle, FaSync, FaSave, FaExclamationTriangle, FaBox, FaArrowLeft, FaEye, FaArrowRight, FaLink, FaExternalLinkAlt, FaImage, FaChevronDown, FaChevronLeft, FaChevronRight, FaChevronUp, FaSearch } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
+import { QUICK_LINKS_CONFIG } from "../utils/quickLinksConfig";
 import { useBranch } from "../context/BranchContext";
 
 const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
@@ -30,112 +31,53 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   const [productCategories, setProductCategories] = useState([]);
   const [applyingMargin, setApplyingMargin] = useState(false);
 
-  const resourceConfig = {
-    voucher_type: {
-      label: "Voucher Type",
-      endpoint: "/voucher-types",
-      displayFields: ["name", "orderType", "prefix", "counter"],
-      editableFields: ["name", "orderType", "prefix", "counter"],
-    },
-    warehouse: {
-      label: "Warehouse",
-      endpoint: "/warehouses",
-      displayFields: ["name"],
-      editableFields: ["name"],
-    },
-    product_group: {
-      label: "Product Group",
-      endpoint: "/product-groups",
-      displayFields: ["name", "description"],
-      editableFields: ["name", "description"],
-    },
-    product_category: {
-      label: "Product Category",
-      endpoint: "/product-categories",
-      displayFields: ["name", "description"],
-      editableFields: ["name", "description"],
-    },
-    product: {
-      label: "Product",
-      endpoint: "/products",
-      displayFields: ["name", "sellingPrice", "lockedPrice", "productGroup", "productCategories", "warehouse"],
-      editableFields: ["name", "sellingPrice", "lockedPrice", "productGroup", "productCategories", "warehouse"],
-      excludedFields: [
-        "mrp", "margin", "marginPercentage", "hsnCode", "hsn", 
-        "reorderLevel", "reorderQty", "leadTime", "checkPeriod", 
-        "lastChecked", "nextCheckDate", "preferredVendor", 
-        "minStockQty", "maxStockQty", "restockingDays", "restockingConfig"
-      ],
-      detailedFields: [
-        "productGroup", "productCategories", "name", "perQty", "units", 
-        "totalQty", "totalQtyUnit", "purchasingPrice", "sellingPrice", 
-        "lockedPrice", "margin", "hsnCode", "gst"
-      ]
-    },
-    customer_category: {
-      label: "Customer Category",
-      endpoint: "/customer-categories",
-      displayFields: ["name", "description"],
-      editableFields: ["name", "description"],
-    },
-    customer_group: {
-      label: "Customer Group",
-      endpoint: "/customer-groups",
-      displayFields: ["name", "description"],
-      editableFields: ["name", "description"],
-    },
-    customer: {
-      label: "Customer",
-      endpoint: "/customers",
-      displayFields: ["name", "whatsapp", "email", "isLockedPriceEnabled", "salesOwner", "customerCategory"],
-      editableFields: ["name", "whatsapp", "email", "isLockedPriceEnabled"],
-      detailedFields: [
-        "name", "whatsapp", "email", "address", "district", "state", "pincode", 
-        "registrationType", "gstin", "isLockedPriceEnabled", "salesOwner", 
-        "margin", "credit", "debit"
-      ]
-    },
-    vendor: {
-      label: "Vendor",
-      endpoint: "/vendors",
-      displayFields: ["name", "gstin", "email", "phone"],
-      editableFields: ["name", "gstin", "email"],
-    },
-    sales_owner: {
-      label: "Sales Owner",
-      endpoint: "/sales-owners",
-      displayFields: ["name", "phone", "email"],
-      editableFields: ["name", "phone", "email"],
-    },
-    sales_man: {
-      label: "Sales Man",
-      endpoint: "/sales-men",
-      displayFields: ["name", "phone", "email", "commissionPercentage"],
-      editableFields: ["name", "phone", "email"],
-    },
-    delivery_man: {
-      label: "Delivery Man",
-      endpoint: "/delivery-men",
-      displayFields: ["name", "phone", "email", "vehicleNumber"],
-      editableFields: ["name", "phone", "email"],
-    },
-  };
+  const resourceConfig = QUICK_LINKS_CONFIG;
 
-  // Filter config based on permissions
+  // 🛡️ Filter config based on permissions
   const config = { ...resourceConfig[type] };
+  
+  // 🛡️ SECURITY: Even if they manually got to this type, block if not in allowedQuickLinks
+  const isAllowedType = !user?.allowedQuickLinks || user.allowedQuickLinks.length === 0 || user.allowedQuickLinks.includes(type);
+  if (!isAllowedType) {
+    return (
+      <div className="mt-6">
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+          <p className="text-red-700 font-bold">Access Denied</p>
+          <p className="text-red-600 text-sm">You do not have permission to view {type.replace(/_/g, " ")} records.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (config && config.displayFields) {
     config.displayFields = config.displayFields.filter(field => {
+      const granularKey = `${type}_${field}`;
+      
+      // 🛡️ Priority 1: Granular Key (explicitly set)
+      if (fieldPermissions[granularKey] === false) return false;
+      if (fieldPermissions[granularKey] === true) return true;
+
+      // 🛡️ Priority 2: Global Keys (fallback)
       if (field === "purchasingPrice" && fieldPermissions.purchasingPrice === false) return false;
+      if (field === "adminMargin" && fieldPermissions.adminMargin === false) return false;
       if (["margin", "marginPercentage", "gst"].includes(field) && fieldPermissions.margin === false) return false;
       if (["totalQty", "totalQtyUnit"].includes(field) && fieldPermissions.totalQty === false) return false;
+      
       return true;
     });
   }
   if (config && config.detailedFields) {
     config.detailedFields = config.detailedFields.filter(field => {
+      const granularKey = `${type}_${field}`;
+      
+      if (fieldPermissions[granularKey] === false) return false;
+      if (fieldPermissions[granularKey] === true) return true;
+
       if (field === "purchasingPrice" && fieldPermissions.purchasingPrice === false) return false;
+      if (field === "adminMargin" && fieldPermissions.adminMargin === false) return false;
       if (["margin", "marginPercentage", "gst"].includes(field) && fieldPermissions.margin === false) return false;
       if (["totalQty", "totalQtyUnit"].includes(field) && fieldPermissions.totalQty === false) return false;
+      
       return true;
     });
   }
@@ -161,10 +103,18 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   }
 
   // Helper function to format margin display
-  const formatMarginDisplay = (item) => {
-    if (item.marginPercentage) {
-      const roundedMargin = Math.round(item.margin || 0);
-      return `${Math.round(item.marginPercentage)} % - ${roundedMargin}`;
+  const formatMarginDisplay = (item, key) => {
+    if (key === "marginPercentage" || key === "adminMargin") {
+      const val = item[key];
+      return (val !== undefined && val !== null) ? `${val}%` : "-";
+    }
+    
+    // Fallback for special combined display if needed
+    if (item.marginPercentage && item.margin !== undefined && item.margin !== null) {
+      return `${Math.round(item.marginPercentage)}% - ₹${Math.round(item.margin)}`;
+    }
+    if (item.margin !== undefined && item.margin !== null) {
+      return `${item.margin}%`;
     }
     return "-";
   };
@@ -474,19 +424,24 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                           const value = item[field];
                           let displayValue = "-";
 
-                          if (field === "margin" || field === "marginPercentage") {
-                            displayValue = formatMarginDisplay(item);
+                          if (field === "margin" || field === "marginPercentage" || field === "adminMargin") {
+                            displayValue = formatMarginDisplay(item, field);
                           } else if (typeof value === "object" && value !== null) {
                             if (Array.isArray(value)) {
                               displayValue = value
-                                .map((v) => (v && v.name ? v.name : ""))
+                                .map((v) => (v && v.name ? v.name : (v && v._id ? v._id : "")))
                                 .filter(Boolean)
                                 .join(", ");
                             } else if (value.name) {
                               displayValue = value.name;
+                            } else if (value._id) {
+                              displayValue = value._id;
                             }
                           } else if (typeof value === "number") {
                             displayValue = Math.round(value * 100) / 100;
+                            if (field === "debit" || field === "credit" || field === "sellingPrice") {
+                              displayValue = `₹${displayValue.toFixed(2)}`;
+                            }
                           } else {
                             displayValue = value || "-";
                           }
@@ -549,9 +504,9 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                                       </label>
                                       <p className="text-xs text-gray-700 font-semibold break-words">
                                         {(() => {
-                                          if (key === "margin" || key === "marginPercentage") return formatMarginDisplay(item);
+                                          if (key === "margin" || key === "marginPercentage" || key === "adminMargin") return formatMarginDisplay(item, key);
                                           if (typeof value === "object" && value !== null) {
-                                            return Array.isArray(value) ? value.map(v => v.name || "-").join(", ") : (value.name || "-");
+                                            return Array.isArray(value) ? value.map(v => v.name || v._id || "-").join(", ") : (value.name || value._id || "-");
                                           }
                                           return String(value === null || value === undefined ? "-" : value);
                                         })()}
@@ -572,9 +527,9 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                                       </label>
                                       <p className="text-xs text-gray-700 font-semibold break-words">
                                         {(() => {
-                                          if (key === "margin" || key === "marginPercentage") return formatMarginDisplay(item);
+                                          if (key === "margin" || key === "marginPercentage" || key === "adminMargin") return formatMarginDisplay(item, key);
                                           if (typeof value === "object" && value !== null) {
-                                            return Array.isArray(value) ? value.map(v => v.name || "-").join(", ") : (value.name || "-");
+                                            return Array.isArray(value) ? value.map(v => v.name || v._id || "-").join(", ") : (value.name || v._id || "-");
                                           }
                                           return String(value === null || value === undefined ? "-" : value);
                                         })()}

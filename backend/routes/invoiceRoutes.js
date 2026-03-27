@@ -7,6 +7,9 @@ import Customer from "../models/Customer.js";
 import Invoice from "../models/Invoice.js";
 import Product from "../models/Product.js";
 import SalesOrder from "../models/SalesOrder.js";
+import SalesOwner from "../models/SalesOwner.js";
+import SalesMan from "../models/SalesMan.js";
+import DeliveryMan from "../models/DeliveryMan.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
 
@@ -123,9 +126,23 @@ router.post("/preview/:salesOrderId", async (req, res) => {
 
     const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0));
 
+    // Fetch billing person name
+    let billingPersonName = "-";
+    if (salesOrder.billingPerson) {
+      let billingPerson = await SalesOwner.findById(salesOrder.billingPerson).select('name').lean();
+      if (!billingPerson) {
+        billingPerson = await SalesMan.findById(salesOrder.billingPerson).select('name').lean();
+      }
+      if (!billingPerson) {
+        billingPerson = await DeliveryMan.findById(salesOrder.billingPerson).select('name').lean();
+      }
+      billingPersonName = billingPerson?.name || "-";
+    }
+
     const previewData = {
       invoiceNumber: salesOrder.invoiceId, // Use Sales Order's invoiceId
       salesOrderId,
+      billingPerson: billingPersonName,
       customer: salesOrder.customer,
       seller: {
         name: salesOrder.branchId?.name || "PEARL AGENCY",
@@ -256,52 +273,76 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
 
       const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0));
 
-      // Create invoice
-      const invoice = new Invoice({
-        invoiceNumber,
-        invoiceDate: new Date(),
-        financialYear,
-        salesOrderId: salesOrder._id,
-        branchId: salesOrder.branchId,
-        warehouse: salesOrder.warehouse,
-        billingPerson: salesOrder.billingPerson,
-        deliveryPerson: salesOrder.deliveryMan,
-        customer: {
-          customerId: customer._id,
-          name: customer.name,
-          whatsapp: customer.whatsapp,
-          address: customer.address,
-          district: customer.district,
-          state: customer.state,
-          pincode: customer.pincode,
-        },
-        seller: {
-          name: branch.name || "PEARL AGENCY",
-          address: "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003",
-          state: "Tamil Nadu",
-          pincode: "627003",
-          gstin: "33DULPS2600Q1Z6",
-          phone: "9429692970",
-          gpayNo: "8825847884",
-          stateCode: "33",
-        },
-        items: processedItems,
-        backOrderItems,
-        sampleItems: salesOrder.sampleItems || [],
-        subtotal,
-        totalTax,
-        transportCharge: salesOrder.transportCharge || 0,
-        extraExpenses: salesOrder.extraExpenses || [],
-        extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
-        grandTotal,
-        openingBalance: salesOrder.openingBalance || 0,
-        closingBalance: (salesOrder.openingBalance || 0) + grandTotal,
-        invoiceNotes: notes,
-        invoiceType,
-        status: "FINALIZED",
-      });
+      // 🏁 Check if invoice already exists (common during re-edit/re-generation)
+      let invoice = await Invoice.findOne({ invoiceNumber }).session(session);
 
-      await invoice.save({ session });
+      if (invoice) {
+        // 🔄 Update existing invoice instead of creating new one to avoid duplicate key error
+        invoice.invoiceDate = new Date();
+        invoice.items = processedItems;
+        invoice.backOrderItems = backOrderItems;
+        invoice.sampleItems = salesOrder.sampleItems || [];
+        invoice.subtotal = subtotal;
+        invoice.totalTax = totalTax;
+        invoice.transportCharge = salesOrder.transportCharge || 0;
+        invoice.extraExpenses = salesOrder.extraExpenses || [];
+        invoice.extraExpenseAmount = salesOrder.extraExpenseAmount || 0;
+        invoice.grandTotal = grandTotal;
+        invoice.openingBalance = salesOrder.openingBalance || 0;
+        invoice.closingBalance = (salesOrder.openingBalance || 0) + grandTotal;
+        invoice.invoiceNotes = notes;
+        invoice.invoiceType = invoiceType;
+        invoice.status = "FINALIZED";
+        
+        await invoice.save({ session });
+      } else {
+        // ✨ Create new invoice if it doesn't exist
+        invoice = new Invoice({
+          invoiceNumber,
+          invoiceDate: new Date(),
+          financialYear,
+          salesOrderId: salesOrder._id,
+          branchId: salesOrder.branchId,
+          warehouse: salesOrder.warehouse,
+          billingPerson: salesOrder.billingPerson,
+          deliveryPerson: salesOrder.deliveryMan,
+          customer: {
+            customerId: customer._id,
+            name: customer.name,
+            whatsapp: customer.whatsapp,
+            address: customer.address,
+            district: customer.district,
+            state: customer.state,
+            pincode: customer.pincode,
+          },
+          seller: {
+            name: branch.name || "PEARL AGENCY",
+            address: "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003",
+            state: "Tamil Nadu",
+            pincode: "627003",
+            gstin: "33DULPS2600Q1Z6",
+            phone: "9429692970",
+            gpayNo: "8825847884",
+            stateCode: "33",
+          },
+          items: processedItems,
+          backOrderItems,
+          sampleItems: salesOrder.sampleItems || [],
+          subtotal,
+          totalTax,
+          transportCharge: salesOrder.transportCharge || 0,
+          extraExpenses: salesOrder.extraExpenses || [],
+          extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
+          grandTotal,
+          openingBalance: salesOrder.openingBalance || 0,
+          closingBalance: (salesOrder.openingBalance || 0) + grandTotal,
+          invoiceNotes: notes,
+          invoiceType,
+          status: "FINALIZED",
+        });
+        
+        await invoice.save({ session });
+      }
 
       // Log Invoice Finalization
       await createAuditLog({

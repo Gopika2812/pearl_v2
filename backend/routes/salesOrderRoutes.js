@@ -30,7 +30,7 @@ router.get("/", async (req, res) => {
     }
     
     const salesOrders = await SalesOrder.find(query)
-      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType")
+      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited")
       .populate('salesOwner', 'name')
       .sort({ createdAt: -1 });
     
@@ -541,8 +541,8 @@ router.patch("/:id/generate-invoice", async (req, res) => {
       return res.status(404).json({ message: "Sales order not found" });
     }
 
-    if (salesOrder.invoiceGenerated) {
-      return res.status(400).json({ message: "Invoice already generated for this order" });
+    if (salesOrder.invoiceGenerated && salesOrder.reEditRequestStatus !== "APPROVED") {
+      return res.status(400).json({ message: "Invoice already generated for this order. Request re-edit permission from admin to modify." });
     }
 
     console.log("✅ SO found:", salesOrder.invoiceId);
@@ -561,6 +561,12 @@ router.patch("/:id/generate-invoice", async (req, res) => {
     // 🔄 CONVERT TO SALES INVOICE
     salesOrder.recordType = "SALES INVOICE";
     salesOrder.invoiceGenerated = true;
+
+    // If this was a re-edit, mark it and reset request status
+    if (salesOrder.reEditRequestStatus === "APPROVED") {
+      salesOrder.isReEdited = true;
+      salesOrder.reEditRequestStatus = "NONE";
+    }
 
     await salesOrder.save();
     console.log("✅ Invoice generated:", salesOrder.invoiceId);
@@ -619,8 +625,8 @@ router.put("/:id", async (req, res) => {
       return res.status(404).json({ message: "Sales order not found" });
     }
 
-    if (salesOrder.invoiceGenerated) {
-      return res.status(400).json({ message: "Cannot edit an order that has already been invoiced" });
+    if (salesOrder.invoiceGenerated && salesOrder.reEditRequestStatus !== "APPROVED") {
+      return res.status(400).json({ message: "Cannot edit an order that has already been invoiced without admin approval" });
     }
 
     // 2. Identify the difference in grandTotal so we adjust Customer Balance smoothly
@@ -646,6 +652,12 @@ router.put("/:id", async (req, res) => {
     salesOrder.grandTotal = newGrandTotal;
     salesOrder.grandTotalWithMargin = newGrandTotal; // Usually margin relies on custom user input, syncing it as backup.
     
+    // Reset re-edit status after successful update
+    if (salesOrder.reEditRequestStatus === "APPROVED") {
+      salesOrder.reEditRequestStatus = "NONE";
+      salesOrder.isReEdited = true; // Mark as re-edited for invoice labeling
+    }
+
     // Also shift closing balance for the exact SO receipt
     salesOrder.closingBalance = (salesOrder.closingBalance || 0) + difference;
 
@@ -678,6 +690,100 @@ router.put("/:id", async (req, res) => {
   } catch (err) {
     console.error("❌ PUT Sales Order Error:", err.message);
     res.status(500).json({ message: "Failed to update Sales Order" });
+  }
+});
+
+// 📨 REQUEST RE-EDIT PERMISSION
+router.patch("/:id/request-re-edit", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username, requestedBy } = req.body;
+    const staffName = username || requestedBy || "Unknown Staff";
+
+    const salesOrder = await SalesOrder.findById(id);
+    if (!salesOrder) {
+      return res.status(404).json({ message: "Sales order not found" });
+    }
+
+    if (!salesOrder.invoiceGenerated) {
+      return res.status(400).json({ message: "Order is not invoiced yet. You can edit it directly." });
+    }
+
+    salesOrder.reEditRequestStatus = "PENDING";
+    salesOrder.reEditRequestBy = staffName;
+    salesOrder.reEditRequestAt = new Date();
+
+    await salesOrder.save();
+
+    // Log request
+    await createAuditLog({
+      userId: req.body.userId || "System",
+      username: username || "System",
+      branchId: salesOrder.branchId,
+      action: "REQUEST_REEDIT",
+      description: `Requested re-edit permission for Invoice: ${salesOrder.invoiceId}`,
+      targetId: salesOrder._id,
+      targetModel: "SalesOrder",
+    });
+
+    res.json({
+      success: true,
+      message: "Re-edit request submitted to admin",
+      data: salesOrder,
+    });
+  } catch (err) {
+    console.error("❌ Re-edit Request Error:", err.message);
+    res.status(500).json({ message: "Failed to submit re-edit request" });
+  }
+});
+
+// 📋 GET PENDING RE-EDIT REQUESTS FOR BRANCH
+router.get("/re-edit-requests/branch/:branchId", async (req, res) => {
+  try {
+    const { branchId } = req.params;
+    const requests = await SalesOrder.find({
+      branchId,
+      reEditRequestStatus: "PENDING",
+    })
+      .select("invoiceId customer reEditRequestBy reEditRequestAt grandTotal")
+      .sort({ reEditRequestAt: -1 });
+
+    res.json({ success: true, data: requests });
+  } catch (err) {
+    console.error("❌ Fetch Re-edit Requests Error:", err.message);
+    res.status(500).json({ message: "Failed to fetch re-edit requests" });
+  }
+});
+
+// ✅ APPROVE RE-EDIT REQUEST
+router.patch("/:id/approve-re-edit", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const salesOrder = await SalesOrder.findById(id);
+    if (!salesOrder) return res.status(404).json({ message: "Order not found" });
+
+    salesOrder.reEditRequestStatus = "APPROVED";
+    await salesOrder.save();
+
+    res.json({ success: true, message: "Re-edit request approved" });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to approve request" });
+  }
+});
+
+// ❌ REJECT RE-EDIT REQUEST
+router.patch("/:id/reject-re-edit", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const salesOrder = await SalesOrder.findById(id);
+    if (!salesOrder) return res.status(404).json({ message: "Order not found" });
+
+    salesOrder.reEditRequestStatus = "REJECTED";
+    await salesOrder.save();
+
+    res.json({ success: true, message: "Re-edit request rejected" });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to reject request" });
   }
 });
 

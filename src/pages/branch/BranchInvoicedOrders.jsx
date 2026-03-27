@@ -18,6 +18,7 @@ const BranchInvoicedOrders = () => {
   const [editingOrder, setEditingOrder] = useState(null);
   const [expandedOrders, setExpandedOrders] = useState({});
   const [invoicesByOrder, setInvoicesByOrder] = useState({}); // New: store invoices for each SO
+  const [requestingReEdit, setRequestingReEdit] = useState(null); // ID of order currently requesting re-edit
 
   // Filter states
   const [filterVoucherType, setFilterVoucherType] = useState("");
@@ -100,6 +101,28 @@ const BranchInvoicedOrders = () => {
     } catch (err) {
       console.error("Error updating bill:", err);
       toast.error(err.message || "Failed to update bill");
+    }
+  };
+
+  const handleRequestReEdit = async (orderId) => {
+    setRequestingReEdit(orderId);
+    try {
+      const res = await fetch(`${API_BASE}/sales-orders/${orderId}/request-re-edit`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestedBy: user?.username || user?.billingPerson })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Re-edit request submitted to admin");
+        fetchSalesOrders(); // Refresh to show pending status
+      } else {
+        toast.error(data.message || "Failed to submit request");
+      }
+    } catch (err) {
+      toast.error("Error submitting re-edit request");
+    } finally {
+      setRequestingReEdit(null);
     }
   };
 
@@ -340,9 +363,26 @@ const BranchInvoicedOrders = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                           {order.invoiceGenerated ? (
-                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
-                              ✓ Invoiced
-                            </span>
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
+                                ✓ Invoiced
+                              </span>
+                              {order.reEditRequestStatus === "PENDING" && (
+                                <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                  Re-edit Pending
+                                </span>
+                              )}
+                              {order.reEditRequestStatus === "APPROVED" && (
+                                <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                  Re-edit Approved
+                                </span>
+                              )}
+                              {order.reEditRequestStatus === "REJECTED" && (
+                                <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                  Re-edit Rejected
+                                </span>
+                              )}
+                            </div>
                           ) : (
                             <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs font-semibold">
                               Pending
@@ -361,30 +401,42 @@ const BranchInvoicedOrders = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center gap-2 justify-center flex-wrap">
+                            {order.invoiceGenerated && (!order.reEditRequestStatus || order.reEditRequestStatus === "NONE" || order.reEditRequestStatus === "REJECTED") && (
+                                <button
+                                    onClick={() => handleRequestReEdit(order._id)}
+                                    disabled={requestingReEdit === order._id}
+                                    className="bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-2 rounded-lg transition text-xs font-bold flex items-center gap-2 shadow-md shadow-indigo-200 whitespace-nowrap"
+                                    title="Click to request permission from admin to re-edit this invoiced bill"
+                                >
+                                    <FaSync className={requestingReEdit === order._id ? "animate-spin" : ""} />
+                                    {order.reEditRequestStatus === "REJECTED" ? "Re-request Edit" : "Request Re-edit"}
+                                </button>
+                            )}
+
                             <button
                               onClick={() => handleEditBill(order)}
-                              disabled={order.invoiceGenerated}
+                              disabled={order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED"}
                               className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
-                                order.invoiceGenerated
+                                order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED"
                                   ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-50"
-                                  : "bg-orange-500 text-white hover:bg-orange-600"
+                                  : "bg-orange-500 text-white hover:bg-orange-600 shadow-md shadow-orange-500/20"
                               }`}
-                              title="Edit bill items, quantities, and prices"
+                              title={order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED" ? "Requires Admin approval to edit invoiced bill" : "Edit bill items"}
                             >
                               <FaEdit />
                               Edit Bill
                             </button>
                             <button
                               onClick={() => handleGenerateInvoice(order)}
-                              disabled={order.invoiceGenerated}
+                              disabled={order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED"}
                               className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
-                                order.invoiceGenerated
+                                order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED"
                                   ? "bg-gray-400 text-gray-700 cursor-not-allowed opacity-50"
-                                  : "bg-[#319bab] text-white hover:bg-[#257f87]"
+                                  : "bg-[#319bab] text-white hover:bg-[#257f87] shadow-md shadow-[#319bab]/20"
                               }`}
                             >
                               <FaFileInvoice />
-                              {order.invoiceGenerated ? "Invoice Generated" : "Generate Invoice"}
+                              {order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED" ? "Invoice Generated" : order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
                             </button>
                           </div>
                         </td>
