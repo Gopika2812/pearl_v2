@@ -510,6 +510,101 @@ router.put("/:id", async (req, res) => {
 });
 
 /**
+ * PATCH: Request Credit Limit Bypass
+ */
+router.patch("/:id/request-credit-bypass", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { requestedBy } = req.body;
+
+    const customer = await Customer.findByIdAndUpdate(
+      id,
+      {
+        creditLimitRequestStatus: "PENDING",
+        creditLimitRequestBy: requestedBy || "Unknown Staff",
+        creditLimitRequestAt: new Date(),
+      },
+      { new: true }
+    );
+
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    res.json({ success: true, message: "Credit bypass requested", data: customer });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * PATCH: Approve Credit Limit Bypass
+ */
+router.patch("/:id/approve-credit-bypass", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const customer = await Customer.findByIdAndUpdate(
+      id,
+      {
+        isCreditBypassed: true,
+        creditLimitRequestStatus: "APPROVED",
+      },
+      { new: true }
+    );
+
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    res.json({ success: true, message: "Credit bypass approved", data: customer });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * PATCH: Reject Credit Limit Bypass
+ */
+router.patch("/:id/reject-credit-bypass", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const customer = await Customer.findByIdAndUpdate(
+      id,
+      {
+        isCreditBypassed: false,
+        creditLimitRequestStatus: "REJECTED",
+      },
+      { new: true }
+    );
+
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    res.json({ success: true, message: "Credit bypass rejected", data: customer });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET: Fetch Pending Credit Bypass Requests for a Branch
+ */
+router.get("/credit-requests/branch/:branchId", async (req, res) => {
+  try {
+    const { branchId } = req.params;
+    const requests = await Customer.find({
+      branchId,
+      creditLimitRequestStatus: "PENDING"
+    }).select("name whatsapp debit creditLimit creditLimitRequestBy creditLimitRequestAt");
+
+    res.json({ success: true, data: requests });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * DELETE: Delete Customer
  */
 router.delete("/:id", async (req, res) => {

@@ -113,6 +113,7 @@ router.get("/history", async (req, res) => {
           date: "$createdAt",
           invoiceId: 1,
           voucherType: 1,
+          customerName: "$customer.name",
           productName: "$items.name",
           productGroupName: "$groupInfo.name",
           purchasingPrice: "$productInfo.purchasingPrice",
@@ -248,8 +249,23 @@ router.post("/", async (req, res) => {
     });
 
     if (!voucher) {
-      console.error("❌ Voucher not found:", { branchId, voucherType, orderType: "SO" });
       return res.status(404).json({ message: "Sales voucher not found" });
+    }
+
+    // 💳 CREDIT LIMIT CHECK
+    const customerDoc = await Customer.findById(customer.id || customer.customerId || customer._id);
+    if (customerDoc) {
+      const netBalance = (customerDoc.debit || 0) - (customerDoc.credit || 0);
+      const orderTotal = grandTotalWithMargin || grandTotal || 0;
+      const totalAfterOrder = netBalance + orderTotal;
+      
+      if (totalAfterOrder > customerDoc.creditLimit && !customerDoc.isCreditBypassed) {
+        return res.status(403).json({ 
+          success: false, 
+          isCreditLimitExceeded: true,
+          message: `Credit Limit Exceeded! Customer net balance (₹${netBalance.toLocaleString()}) plus this order (₹${orderTotal.toLocaleString()}) exceeds the limit of ₹${customerDoc.creditLimit.toLocaleString()}. Admin permission required to proceed.` 
+        });
+      }
     }
     
     console.log("✅ Voucher found:", { prefix: voucher.prefix, counter: voucher.counter });
@@ -571,6 +587,15 @@ router.patch("/:id/generate-invoice", async (req, res) => {
     await salesOrder.save();
     console.log("✅ Invoice generated:", salesOrder.invoiceId);
 
+    // 💳 RESET CREDIT BYPASS FOR CUSTOMER
+    if (salesOrder.customer?.customerId) {
+      await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
+        isCreditBypassed: false,
+        creditLimitRequestStatus: "NONE"
+      });
+      console.log("🔄 Credit bypass reset for customer");
+    }
+
     // 🏦 POST INVOICE JOURNAL ENTRY to GL
     try {
       const journalEntry = await GLService.postSalesInvoiceJE(salesOrder);
@@ -784,6 +809,77 @@ router.patch("/:id/reject-re-edit", async (req, res) => {
     res.json({ success: true, message: "Re-edit request rejected" });
   } catch (err) {
     res.status(500).json({ message: "Failed to reject request" });
+  }
+});
+
+// DELETE - Cancel and remove Sales Order (with sequence restoration)
+router.delete("/:id/cancel", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, username } = req.body; // For audit logging
+
+    console.log(`🗑️ Attempting to cancel Sales Order: ${id}`);
+
+    const salesOrder = await SalesOrder.findById(id);
+    if (!salesOrder) {
+      return res.status(404).json({ success: false, message: "Sales order not found" });
+    }
+
+    const { invoiceId, branchId, voucherType, financialYear, invoiceGenerated } = salesOrder;
+
+    // 1️⃣ CHECK SEQUENCE RESTORATION
+    // Logic: If this was the LATEST bill for this voucher type, we can decrement the counter
+    const voucher = await VoucherType.findOne({
+      branchId,
+      name: voucherType.toLowerCase(),
+      orderType: "SO",
+      financialYear
+    });
+
+    if (voucher) {
+      // Extract numeric part of invoiceId (e.g., "SO/005/2025-26" -> 5)
+      const parts = invoiceId.split("/");
+      const currentCounterInInvoice = parseInt(parts[1], 10);
+
+      // If the current sequence is exactly currentCounterInInvoice + 1, it means this was the last one
+      if (voucher.counter === currentCounterInInvoice + 1) {
+        voucher.counter -= 1;
+        await voucher.save();
+        console.log(`✅ Voucher sequence restored: ${invoiceId} was the latest. Counter back to ${voucher.counter}`);
+      } else {
+        console.log(`ℹ️ Voucher sequence NOT restored: ${invoiceId} (Num: ${currentCounterInInvoice}) was not the latest (Voucher Counter: ${voucher.counter})`);
+      }
+    }
+
+    // 2️⃣ DELETE ASSOCIATED INVOICE (if any)
+    if (invoiceGenerated) {
+      const Invoice = mongoose.model("Invoice");
+      await Invoice.deleteOne({ salesOrderId: id });
+      console.log(`✅ Associated invoice for ${invoiceId} deleted`);
+    }
+
+    // 3️⃣ DELETE SALES ORDER (triggers hooks for balance reversion)
+    const deletedOrder = await SalesOrder.findByIdAndDelete(id);
+    
+    // 4️⃣ AUDIT LOG
+    await createAuditLog({
+      userId: userId || "System",
+      username: username || "System",
+      branchId,
+      action: "CANCEL_BILL",
+      description: `Cancelled and deleted Bill: ${invoiceId}. Reverted balance and commissions.`,
+      targetId: id,
+      targetModel: "SalesOrder",
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Bill ${invoiceId} cancelled successfully. Financial impacts reverted.`,
+    });
+
+  } catch (error) {
+    console.error("❌ Bill Cancellation Error:", error);
+    res.status(500).json({ success: false, message: "Failed to cancel bill", error: error.message });
   }
 });
 

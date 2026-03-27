@@ -47,6 +47,17 @@ const customerSchema = new mongoose.Schema(
     ifsc: { type: String, default: "" },
     branch: { type: String, default: "" },
     upi: { type: String, default: "" },
+    
+    // Credit Limit System
+    creditLimit: { type: Number, default: 200000 },
+    isCreditBypassed: { type: Boolean, default: false },
+    creditLimitRequestStatus: { 
+      type: String, 
+      enum: ["NONE", "PENDING", "APPROVED", "REJECTED"], 
+      default: "NONE" 
+    },
+    creditLimitRequestBy: { type: String, default: "" },
+    creditLimitRequestAt: { type: Date },
   },
   { timestamps: true }
 );
