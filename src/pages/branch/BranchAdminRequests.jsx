@@ -1,30 +1,34 @@
 import { useEffect, useState } from "react";
-import { FaCheck, FaTimes, FaHistory, FaFileInvoice, FaUser, FaClock, FaCheckCircle, FaTimesCircle } from "react-icons/fa";
+import { FaCheck, FaTimes, FaHistory, FaFileInvoice, FaUser, FaClock, FaCheckCircle, FaTimesCircle, FaCreditCard } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 export default function BranchAdminRequests() {
   const { branch, user } = useBranch();
-  const [requests, setRequests] = useState([]);
+  const [reEditRequests, setReEditRequests] = useState([]);
+  const [creditRequests, setCreditRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (branch?._id) {
-      fetchRequests();
+      fetchAllRequests();
     }
   }, [branch?._id]);
 
-  const fetchRequests = async () => {
+  const fetchAllRequests = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/sales-orders/re-edit-requests/branch/${branch?._id}`);
-      const data = await res.json();
-      if (data.success) {
-        setRequests(data.data);
-      } else {
-        toast.error(data.message || "Failed to fetch requests");
-      }
+      // Fetch Re-edit requests
+      const reEditRes = await fetch(`${API_BASE}/sales-orders/re-edit-requests/branch/${branch?._id}`);
+      const reEditData = await reEditRes.json();
+      if (reEditData.success) setReEditRequests(reEditData.data);
+
+      // Fetch Credit Limit requests
+      const creditRes = await fetch(`${API_BASE}/customers/credit-requests/branch/${branch?._id}`);
+      const creditData = await creditRes.json();
+      if (creditData.success) setCreditRequests(creditData.data);
+
     } catch (err) {
       toast.error("Error connecting to server");
     } finally {
@@ -32,7 +36,7 @@ export default function BranchAdminRequests() {
     }
   };
 
-  const handleAction = async (id, action) => {
+  const handleReEditAction = async (id, action) => {
     try {
       const res = await fetch(`${API_BASE}/sales-orders/${id}/${action}-re-edit`, {
         method: "PATCH",
@@ -40,8 +44,26 @@ export default function BranchAdminRequests() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(`Request ${action === 'approve' ? 'Approved' : 'Rejected'}`);
-        fetchRequests(); // Refresh list
+        toast.success(`Re-edit ${action === 'approve' ? 'Approved' : 'Rejected'}`);
+        fetchAllRequests();
+      } else {
+        toast.error(data.message || `Failed to ${action} request`);
+      }
+    } catch (err) {
+      toast.error("Error updating request");
+    }
+  };
+
+  const handleCreditAction = async (customerId, action) => {
+    try {
+      const res = await fetch(`${API_BASE}/customers/${customerId}/${action}-credit-bypass`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Credit Bypass ${action === 'approve' ? 'Approved' : 'Rejected'}`);
+        fetchAllRequests();
       } else {
         toast.error(data.message || `Failed to ${action} request`);
       }
@@ -61,94 +83,131 @@ export default function BranchAdminRequests() {
                 <div className="p-3 bg-secondary/10 rounded-2xl text-secondary">
                   <FaHistory />
                 </div>
-                Re-edit Permissions
+                Admin Permissions
               </h1>
-              <p className="text-gray-500 mt-2 font-medium tracking-tight uppercase text-xs tracking-[0.2em]">Manage re-edit requests from branch personnel</p>
+              <p className="text-gray-500 mt-2 font-medium tracking-tight uppercase text-xs tracking-[0.2em]">Manage re-edit and credit limit bypass requests</p>
             </div>
         </div>
 
-        {/* Requests Table */}
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="bg-gray-900 p-6 flex items-center justify-between">
-            <h3 className="text-white font-bold flex items-center gap-2">
-              <FaFileInvoice className="text-secondary" />
-              Pending Requests ({requests.length})
-            </h3>
-            <button 
-                onClick={fetchRequests}
-                className="text-xs font-bold text-gray-400 hover:text-white transition"
-            >
-                Refresh List
-            </button>
+        <div className="grid grid-cols-1 gap-8">
+          {/* Section 1: Credit Limit Requests */}
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-secondary p-6 flex items-center justify-between">
+              <h3 className="text-white font-bold flex items-center gap-2">
+                <FaCreditCard className="text-white" />
+                Credit Limit Bypass Requests ({creditRequests.length})
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Customer</th>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Balance / Limit</th>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Requested By</th>
+                    <th className="px-6 py-4 text-center font-black text-gray-400 uppercase tracking-widest text-[10px]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {loading ? (
+                    <tr><td colSpan="4" className="px-6 py-8 text-center text-gray-400 italic">Loading...</td></tr>
+                  ) : creditRequests.length === 0 ? (
+                    <tr><td colSpan="4" className="px-6 py-8 text-center text-gray-400 italic font-bold">No pending credit limit requests</td></tr>
+                  ) : (
+                    creditRequests.map((req) => (
+                      <tr key={req._id} className="hover:bg-gray-50/50 transition-colors group">
+                        <td className="px-6 py-4">
+                          <p className="font-black text-gray-900">{req.name}</p>
+                          <p className="text-[10px] text-gray-400">{req.whatsapp}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="font-black text-red-600">₹{req.debit?.toLocaleString()}</span>
+                            <span className="text-[10px] text-gray-400">Limit: ₹{req.creditLimit?.toLocaleString()}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-gray-600 flex items-center gap-2">
+                              <FaUser size={10} /> {req.creditLimitRequestBy}
+                            </span>
+                            <span className="text-[10px] text-gray-400">
+                              {new Date(req.creditLimitRequestAt).toLocaleString()}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleCreditAction(req._id, "approve")}
+                              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition"
+                            >
+                              <FaCheck size={10} /> <span className="text-[10px] font-bold uppercase">Approve</span>
+                            </button>
+                            <button
+                              onClick={() => handleCreditAction(req._id, "reject")}
+                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition"
+                            >
+                              <FaTimes size={10} /> <span className="text-[10px] font-bold uppercase">Reject</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Invoice ID</th>
-                  <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Customer</th>
-                  <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Requested By</th>
-                  <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Amount</th>
-                  <th className="px-6 py-4 text-center font-black text-gray-400 uppercase tracking-widest text-[10px]">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {loading ? (
+          {/* Section 2: Re-edit Requests */}
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-gray-900 p-6 flex items-center justify-between">
+              <h3 className="text-white font-bold flex items-center gap-2">
+                <FaFileInvoice className="text-secondary" />
+                Pending Re-edit Requests ({reEditRequests.length})
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <td colSpan="5" className="px-6 py-12 text-center text-gray-400 font-bold italic">Loading requests...</td>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Invoice ID</th>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Customer</th>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Requested By</th>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Amount</th>
+                    <th className="px-6 py-4 text-center font-black text-gray-400 uppercase tracking-widest text-[10px]">Actions</th>
                   </tr>
-                ) : requests.length === 0 ? (
-                  <tr>
-                    <td colSpan="5" className="px-6 py-12 text-center text-gray-400 font-bold italic">No pending re-edit requests found</td>
-                  </tr>
-                ) : (
-                  requests.map((req) => (
-                    <tr key={req._id} className="hover:bg-gray-50/50 transition-colors group">
-                      <td className="px-6 py-4">
-                        <span className="font-black text-gray-900 group-hover:text-secondary transition-colors">{req.invoiceId}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="font-bold text-gray-700">{req.customer?.name}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                            <span className="font-bold text-gray-600 flex items-center gap-2">
-                                <FaUser size={10} className="text-gray-400" /> {req.reEditRequestBy}
-                            </span>
-                            <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1 mt-0.5">
-                                <FaClock size={8} /> {new Date(req.reEditRequestAt).toLocaleString()}
-                            </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 font-black text-gray-900">
-                        ₹{req.grandTotal?.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-3">
-                          <button
-                            onClick={() => handleAction(req._id, "approve")}
-                            className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-xl shadow-lg shadow-green-500/20 transition-all hover:scale-110 active:scale-95 flex items-center gap-2 px-4"
-                            title="Approve Re-edit"
-                          >
-                            <FaCheck size={12} />
-                            <span className="text-[10px] font-black uppercase">Approve</span>
-                          </button>
-                          <button
-                            onClick={() => handleAction(req._id, "reject")}
-                            className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-xl shadow-lg shadow-red-500/20 transition-all hover:scale-110 active:scale-95 flex items-center gap-2 px-4"
-                            title="Reject Request"
-                          >
-                            <FaTimes size={12} />
-                            <span className="text-[10px] font-black uppercase">Reject</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {loading ? (
+                    <tr><td colSpan="5" className="px-6 py-8 text-center text-gray-400 italic">Loading...</td></tr>
+                  ) : reEditRequests.length === 0 ? (
+                    <tr><td colSpan="5" className="px-6 py-8 text-center text-gray-400 italic font-bold">No pending re-edit requests</td></tr>
+                  ) : (
+                    reEditRequests.map((req) => (
+                      <tr key={req._id} className="hover:bg-gray-50/50 transition-colors group">
+                        <td className="px-6 py-4 font-black text-gray-900">{req.invoiceId || "N/A"}</td>
+                        <td className="px-6 py-4 font-bold text-gray-700">{req.customer?.name}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col text-[10px]">
+                            <span className="font-bold text-gray-600 flex items-center gap-1"><FaUser size={8} /> {req.reEditRequestBy}</span>
+                            <span className="text-gray-400 flex items-center gap-1 mt-0.5"><FaClock size={8} /> {new Date(req.reEditRequestAt).toLocaleString()}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 font-black text-gray-900">₹{req.grandTotal?.toLocaleString()}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button onClick={() => handleReEditAction(req._id, "approve")} className="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition uppercase text-[10px] font-bold"><FaCheck size={10} /> Approve</button>
+                            <button onClick={() => handleReEditAction(req._id, "reject")} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition uppercase text-[10px] font-bold"><FaTimes size={10} /> Reject</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

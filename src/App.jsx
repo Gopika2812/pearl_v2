@@ -36,6 +36,8 @@ import BranchSalesOrder from "./pages/branch/BranchSalesOrder";
 import BranchSummary from "./pages/branch/BranchSummary";
 import BranchSuppliers from "./pages/branch/BranchSuppliers";
 import BranchProductRecords from "./pages/branch/BranchProductRecords";
+import BranchLockedPrices from "./pages/branch/BranchLockedPrices";
+import BranchAdminRequests from "./pages/branch/BranchAdminRequests";
 import BranchLoginPage from "./pages/BranchLoginPage";
 import BranchRegisterPage from "./pages/BranchRegisterPage";
 import UserRegistrationPage from "./pages/UserRegistrationPage";
@@ -62,7 +64,7 @@ import ProfitLossPage from "./pages/ProfitLossPage";
 import ReorderingDashboard from "./pages/ReorderingDashboard";
 import TrialBalancePage from "./pages/TrialBalancePage";
 import VendorSummary from "./pages/VendorSummary";
-import BranchAdminRequests from "./pages/branch/BranchAdminRequests";
+
 
 function AppContent() {
   const location = useLocation();
@@ -218,6 +220,7 @@ function AppContent() {
                   <Route path="/branch/receipt" element={<ProtectedRoute element={<BranchReceipt />} />} />
                   <Route path="/branch/summary" element={<ProtectedRoute element={<BranchSummary />} />} />
                   <Route path="/branch/product-records" element={<ProtectedRoute element={<BranchProductRecords />} />} />
+                  <Route path="/branch/locked-prices" element={<ProtectedRoute element={<BranchLockedPrices />} />} />
                   <Route path="/branch/admin-requests" element={<ProtectedRoute element={<BranchAdminRequests />} role={["ADMIN"]} />} />
 
                   {/* LEGACY ROUTES */}

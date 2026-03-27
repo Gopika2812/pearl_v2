@@ -9,7 +9,7 @@ export default function BranchSalesReports() {
   const branchId = branch?._id;
 
   const [activeTab, setActiveTab] = useState("product"); // "product" or "customer"
-  const [viewMode, setViewMode] = useState("card"); // "card" or "table"
+  const [viewMode, setViewMode] = useState("table"); // \"table\" or \"card\"
   const [loading, setLoading] = useState(false);
   
   // Filters
@@ -252,16 +252,6 @@ export default function BranchSalesReports() {
 
         <div className="flex gap-2 bg-gray-200 p-1 rounded-lg ml-auto">
           <button
-            onClick={() => setViewMode("card")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition ${
-              viewMode === "card"
-                ? "bg-white text-purple-600 shadow-md"
-                : "text-gray-700 hover:bg-gray-100"
-            }`}
-          >
-            <FaThLarge size={16} /> Card
-          </button>
-          <button
             onClick={() => setViewMode("table")}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition ${
               viewMode === "table"
@@ -270,6 +260,16 @@ export default function BranchSalesReports() {
             }`}
           >
             <FaList size={16} /> Table
+          </button>
+          <button
+            onClick={() => setViewMode("card")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition ${
+              viewMode === "card"
+                ? "bg-white text-purple-600 shadow-md"
+                : "text-gray-700 hover:bg-gray-100"
+            }`}
+          >
+            <FaThLarge size={16} /> Card
           </button>
         </div>
       </div>

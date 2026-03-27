@@ -20,7 +20,7 @@ export default function BranchRecycling() {
   const [bulkRestockingInProgress, setBulkRestockingInProgress] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 0, limit: 50 });
-  const [viewMode, setViewMode] = useState("card"); // "card" or "table"
+  const [viewMode, setViewMode] = useState("table"); // \"table\" or \"card\"
   const [selectedProductGroup, setSelectedProductGroup] = useState("All"); // Filter by group
   const [allProducts, setAllProducts] = useState([]); // Store all products for group filtering
   const [allProductGroups, setAllProductGroups] = useState([]); // Store all unique product groups
@@ -811,32 +811,96 @@ export default function BranchRecycling() {
         return 0;
       }
       
+      if (key === "units") {
+        const valA = (a.units || "").toLowerCase();
+        const valB = (b.units || "").toLowerCase();
+        if (valA < valB) return direction === "asc" ? -1 : 1;
+        if (valA > valB) return direction === "asc" ? 1 : -1;
+        return 0;
+      }
+
       if (key === "totalQty") {
         return direction === "asc" ? a.totalQty - b.totalQty : b.totalQty - a.totalQty;
       }
-      
-      return 0;
+
+      if (key === "pendingSales") {
+        const pendingA = pendingSalesMap?.[a._id] || 0;
+        const pendingB = pendingSalesMap?.[b._id] || 0;
+        return direction === "asc" ? pendingA - pendingB : pendingB - pendingA;
+      }
+
+      if (key === "available") {
+        const availA = Math.max(0, a.totalQty - (pendingSalesMap?.[a._id] || 0));
+        const availB = Math.max(0, b.totalQty - (pendingSalesMap?.[b._id] || 0));
+        return direction === "asc" ? availA - availB : availB - availA;
+      }
+
+      if (key === "threshold") {
+        const threshA = a.restockingConfig?.threshold ?? a.reorderLevel ?? 10;
+        const threshB = b.restockingConfig?.threshold ?? b.reorderLevel ?? 10;
+        return direction === "asc" ? threshA - threshB : threshB - threshA;
+      }
+
+      if (key === "restockingQty") {
+        const qtyA = a.restockingConfig?.restockingQty ?? a.reorderQty ?? 20;
+        const qtyB = b.restockingConfig?.restockingQty ?? b.reorderQty ?? 20;
+        return direction === "asc" ? qtyA - qtyB : qtyB - qtyA;
+      }
+
+      if (key === "preferredVendor") {
+        const valA = (a.preferredVendor?.name || "").toLowerCase();
+        const valB = (b.preferredVendor?.name || "").toLowerCase();
+        if (valA < valB) return direction === "asc" ? -1 : 1;
+        if (valA > valB) return direction === "asc" ? 1 : -1;
+        return 0;
+      }
     });
   };
 
-  const { outOfStock, lowStock, normalStock } = categorizeProducts(getSortedProducts(products));
+  // Use allProducts for global sorting and filtering if available
+  const baseProducts = allProducts.length > 0 ? allProducts : products;
 
-  // Use allProducts when filtering by group, otherwise use paginated products
-  const productsForFiltering = selectedProductGroup !== "All" ? allProducts : products;
+  // Global filtering for all products
+  const getFilteredAndSorted = (prods) => {
+    const filtered = prods.filter(p => {
+      // Group filter
+      if (selectedProductGroup !== "All") {
+        const groupName = p.productGroup && typeof p.productGroup === 'object' 
+          ? (p.productGroup.name || p.productGroup._id)
+          : p.productGroup;
+        if (groupName !== selectedProductGroup) return false;
+      }
+      
+      // Search filter
+      if (searchTerm) {
+        const lowerSearch = searchTerm.toLowerCase();
+        const matchesName = p.name?.toLowerCase().includes(lowerSearch);
+        const matchesSku = p.sku?.toLowerCase().includes(lowerSearch);
+        if (!matchesName && !matchesSku) return false;
+      }
+      
+      return true;
+    });
+    
+    return getSortedProducts(filtered);
+  };
 
-  // Filter products by selected group (handle both string and object cases)
-  const filteredProducts = getSortedProducts(
-    selectedProductGroup === "All" 
-      ? products 
-      : productsForFiltering.filter((p) => {
-          const groupName = p.productGroup && typeof p.productGroup === 'object' 
-            ? (p.productGroup.name || p.productGroup._id)
-            : p.productGroup;
-          return groupName === selectedProductGroup;
-        })
+  const filteredProducts = getFilteredAndSorted(baseProducts);
+
+  // Client-side pagination for the filtered/sorted list
+  const itemsPerPage = 50;
+  const totalFilteredPages = Math.ceil(filteredProducts.length / itemsPerPage);
+  const paginatedProducts = filteredProducts.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   );
 
-  const { outOfStock: filteredOutOfStock, lowStock: filteredLowStock, normalStock: filteredNormalStock } = categorizeProducts(filteredProducts);
+  // Categorization for card view based on global filtered list (showing all action required)
+  const { 
+    outOfStock: filteredOutOfStock, 
+    lowStock: filteredLowStock, 
+    normalStock: filteredNormalStock 
+  } = categorizeProducts(filteredProducts);
 
   const StockCategory = ({ title, products: prods, icon: Icon, bgColor, textColor, borderColor }) => (
     <div className="mb-8">
@@ -1322,6 +1386,7 @@ export default function BranchRecycling() {
               onChange={(e) => {
                 setSelectedProductGroup(e.target.value);
                 setSelectedProducts(new Set()); // Clear selection when changing group
+                setCurrentPage(1); // Reset to first page
               }}
               className="px-4 py-2 rounded-lg text-gray-800 bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-300 font-semibold"
             >
@@ -1340,16 +1405,6 @@ export default function BranchRecycling() {
             {/* View Toggle */}
             <div className="flex gap-2 bg-white/30 p-1 rounded-lg">
               <button
-                onClick={() => setViewMode("card")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
-                  viewMode === "card"
-                    ? "bg-white text-orange-600 shadow-md"
-                    : "text-white hover:bg-white/20"
-                }`}
-              >
-                <FaThLarge size={16} /> Card
-              </button>
-              <button
                 onClick={() => setViewMode("table")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
                   viewMode === "table"
@@ -1358,6 +1413,16 @@ export default function BranchRecycling() {
                 }`}
               >
                 <FaList size={16} /> Table
+              </button>
+              <button
+                onClick={() => setViewMode("card")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
+                  viewMode === "card"
+                    ? "bg-white text-orange-600 shadow-md"
+                    : "text-white hover:bg-white/20"
+                }`}
+              >
+                <FaThLarge size={16} /> Card
               </button>
             </div>
 
@@ -1375,8 +1440,8 @@ export default function BranchRecycling() {
           {/* Pagination Controls */}
           <div className="flex items-center justify-between mt-4 px-4 py-3 bg-white rounded-lg">
             <div className="text-sm text-gray-600">
-              <span className="font-semibold">Page {pagination.pages > 0 ? currentPage : 0} of {pagination.pages || 0}</span>
-              <span className="ml-3">Total: <strong>{pagination.total}</strong> products</span>
+              <span className="font-semibold">Page {allProducts.length > 0 ? (totalFilteredPages > 0 ? currentPage : 0) : (pagination.pages > 0 ? currentPage : 0)} of {allProducts.length > 0 ? totalFilteredPages : (pagination.pages || 0)}</span>
+              <span className="ml-3">Total: <strong>{allProducts.length > 0 ? filteredProducts.length : pagination.total}</strong> products</span>
             </div>
             <div className="flex gap-2">
               <button
@@ -1388,14 +1453,15 @@ export default function BranchRecycling() {
               </button>
               
               <div className="flex items-center gap-2 px-3">
-                {Array.from({ length: Math.min(5, pagination.pages) }).map((_, idx) => {
+                {Array.from({ length: Math.min(5, allProducts.length > 0 ? totalFilteredPages : pagination.pages) }).map((_, idx) => {
                   let pageNum;
-                  if (pagination.pages <= 5) {
+                  const totalP = allProducts.length > 0 ? totalFilteredPages : pagination.pages;
+                  if (totalP <= 5) {
                     pageNum = idx + 1;
                   } else if (currentPage <= 3) {
                     pageNum = idx + 1;
-                  } else if (currentPage >= pagination.pages - 2) {
-                    pageNum = pagination.pages - 4 + idx;
+                  } else if (currentPage >= totalP - 2) {
+                    pageNum = totalP - 4 + idx;
                   } else {
                     pageNum = currentPage - 2 + idx;
                   }
@@ -1417,8 +1483,8 @@ export default function BranchRecycling() {
               </div>
 
               <button
-                onClick={() => setCurrentPage(Math.min(pagination.pages, currentPage + 1))}
-                disabled={currentPage === pagination.pages || pagination.pages === 0 || loading}
+                onClick={() => setCurrentPage(Math.min(allProducts.length > 0 ? totalFilteredPages : pagination.pages, currentPage + 1))}
+                disabled={currentPage === (allProducts.length > 0 ? totalFilteredPages : pagination.pages) || (allProducts.length > 0 ? totalFilteredPages : pagination.pages) === 0 || loading}
                 className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next →
@@ -1486,12 +1552,12 @@ export default function BranchRecycling() {
                   <th className="px-4 py-3 text-left text-sm font-bold">
                     <input
                       type="checkbox"
-                      checked={selectedProducts.size === filteredProducts.length && filteredProducts.length > 0}
+                      checked={selectedProducts.size === paginatedProducts.length && paginatedProducts.length > 0}
                       onChange={() => {
-                        if (selectedProducts.size === filteredProducts.length) {
+                        if (selectedProducts.size === paginatedProducts.length) {
                           setSelectedProducts(new Set());
                         } else {
-                          setSelectedProducts(new Set(filteredProducts.map(p => p._id)));
+                          setSelectedProducts(new Set(paginatedProducts.map(p => p._id)));
                         }
                       }}
                       className="w-5 h-5 cursor-pointer"
@@ -1501,50 +1567,59 @@ export default function BranchRecycling() {
                     onClick={() => handleSort("name")}
                     className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
                   >
-                    <div className="flex items-center gap-2">
-                      Product Name
-                      {sortConfig.key === "name" ? (
-                        sortConfig.direction === "asc" ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />
-                      ) : (
-                        <FaChevronDown size={10} className="opacity-30" />
-                      )}
-                    </div>
+                    Product Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-bold">Units</th>
+                  <th 
+                    onClick={() => handleSort("units")}
+                    className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                  >
+                    Units {sortConfig.key === "units" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  </th>
                   {fieldPermissions.totalQty !== false && (
                     <>
                       <th 
                         onClick={() => handleSort("totalQty")}
                         className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
                       >
-                        <div className="flex items-center justify-end gap-2">
-                          Current Stock
-                          {sortConfig.key === "totalQty" ? (
-                            sortConfig.direction === "asc" ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />
-                          ) : (
-                            <FaChevronDown size={10} className="opacity-30" />
-                          )}
-                        </div>
+                        Current Stock {sortConfig.key === "totalQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                       </th>
-                      <th className="px-4 py-3 text-right text-sm font-bold">⏳ Pending Sales</th>
-                      <th className="px-4 py-3 text-right text-sm font-bold">✓ Available</th>
+                      <th 
+                        onClick={() => handleSort("pendingSales")}
+                        className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                      >
+                        ⏳ Pending Sales {sortConfig.key === "pendingSales" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th 
+                        onClick={() => handleSort("available")}
+                        className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                      >
+                        ✓ Available {sortConfig.key === "available" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
                     </>
                   )}
-                  <th className="px-4 py-3 text-right text-sm font-bold">Threshold</th>
-                  <th className="px-4 py-3 text-right text-sm font-bold">Restock Qty</th>
-                  <th className="px-4 py-3 text-left text-sm font-bold">Preferred Vendor</th>
+                  <th 
+                    onClick={() => handleSort("threshold")}
+                    className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                  >
+                    Threshold {sortConfig.key === "threshold" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  </th>
+                  <th 
+                    onClick={() => handleSort("restockingQty")}
+                    className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                  >
+                    Restock Qty {sortConfig.key === "restockingQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  </th>
+                  <th 
+                    onClick={() => handleSort("preferredVendor")}
+                    className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                  >
+                    Preferred Vendor {sortConfig.key === "preferredVendor" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  </th>
                   <th 
                     onClick={() => handleSort("status")}
                     className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
                   >
-                    <div className="flex items-center gap-2">
-                      Status
-                      {sortConfig.key === "status" ? (
-                        sortConfig.direction === "asc" ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />
-                      ) : (
-                        <FaChevronDown size={10} className="opacity-30" />
-                      )}
-                    </div>
+                    Status {sortConfig.key === "status" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
                   {(actionPermissions.edit !== false || actionPermissions.restock !== false) && (
                     <th className="px-4 py-3 text-center text-sm font-bold">Actions</th>
@@ -1552,7 +1627,7 @@ export default function BranchRecycling() {
                 </tr>
               </thead>
               <tbody>
-                {filteredProducts.map((product, index) => {
+                {paginatedProducts.map((product, index) => {
                   const threshold = product.restockingConfig?.threshold ?? product.reorderLevel ?? 10;
                   const restockQty = product.restockingConfig?.restockingQty ?? product.reorderQty ?? 20;
                   

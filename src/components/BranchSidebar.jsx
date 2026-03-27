@@ -18,6 +18,7 @@ import {
   FaTruck,
   FaUsers,
   FaBook,
+  FaLock,
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useBranch } from "../context/BranchContext";
@@ -64,6 +65,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     { name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: <FaHandshake /> },
     { name: "Customers (Debtors)", path: "/branch/customers", icon: <FaUsers /> },
     { name: "Product Records", path: "/branch/product-records", icon: <FaBox /> },
+    { name: "Locked Prices", path: "/branch/locked-prices", icon: <FaLock /> },
     { name: "Journal Master", path: "/branch/journals", icon: <FaBook /> },
     { name: "Insights & Analysis", path: "/branch/insights", icon: <FaChartLine /> },
     { name: "Quick Links", path: "/branch/quick-links", icon: <FaLink /> },
@@ -115,6 +117,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
       "/branch/quick-links": "quick-links",
       "/branch/summary": "summary",
       "/branch/admin-requests": "admin-requests",
+      "/branch/locked-prices": "locked-prices",
     };
 
     const permissionId = pathPermissionMap[path];

@@ -126,6 +126,34 @@ const BranchInvoicedOrders = () => {
     }
   };
 
+  const handleCancelBill = async (order) => {
+    if (!window.confirm(`Are you sure you want to CANCEL and DELETE bill ${order.invoiceId}? This will revert all financial impacts (customer balance, commissions) and cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/sales-orders/${order._id}/cancel`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          userId: user?.id || user?._id, 
+          username: user?.username || user?.billingPerson 
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message);
+        fetchSalesOrders(); // Refresh list
+      } else {
+        toast.error(data.message || "Failed to cancel bill");
+      }
+    } catch (err) {
+      console.error("Error cancelling bill:", err);
+      toast.error("An error occurred while cancelling the bill");
+    }
+  };
+
   const toggleExpanded = (orderId) => {
     setExpandedOrders((prev) => ({
       ...prev,
@@ -427,19 +455,30 @@ const BranchInvoicedOrders = () => {
                               Edit Bill
                             </button>
                             <button
-                              onClick={() => handleGenerateInvoice(order)}
-                              disabled={order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED"}
-                              className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
-                                order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED"
-                                  ? "bg-gray-400 text-gray-700 cursor-not-allowed opacity-50"
-                                  : "bg-[#319bab] text-white hover:bg-[#257f87] shadow-md shadow-[#319bab]/20"
-                              }`}
-                            >
-                              <FaFileInvoice />
-                              {order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED" ? "Invoice Generated" : order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
-                            </button>
-                          </div>
-                        </td>
+                               onClick={() => handleGenerateInvoice(order)}
+                               disabled={order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED"}
+                               className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
+                                 order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED"
+                                   ? "bg-gray-400 text-gray-700 cursor-not-allowed opacity-50"
+                                   : "bg-[#319bab] text-white hover:bg-[#257f87] shadow-md shadow-[#319bab]/20"
+                               }`}
+                             >
+                               <FaFileInvoice />
+                               {order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED" ? "Invoice Generated" : order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
+                             </button>
+
+                             {user?.role === "ADMIN" && (
+                               <button
+                                 onClick={() => handleCancelBill(order)}
+                                 className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-red-500 text-white hover:bg-red-600 shadow-md shadow-red-500/20"
+                                 title="Cancel this bill and revert all changes"
+                               >
+                                 <FaTrash />
+                                 Cancel Bill
+                               </button>
+                             )}
+                           </div>
+                         </td>
                       </tr>
 
                       {/* EXPANDED ITEMS ROW */}

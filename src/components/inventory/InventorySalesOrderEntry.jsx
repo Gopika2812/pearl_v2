@@ -124,6 +124,14 @@ export default function InventorySalesOrderEntry({
   const isAdmin = useMemo(() => {
     return user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   }, [user]);
+  
+  const isCreditLimitExceeded = useMemo(() => {
+    if (!selectedCustomer) return false;
+    const netBalance = (selectedCustomer.debit || 0) - (selectedCustomer.credit || 0);
+    const currentLimit = selectedCustomer.creditLimit || 200000;
+    // Strictly block if net balance is already over limit and no bypass is active
+    return netBalance > currentLimit && !selectedCustomer.isCreditBypassed;
+  }, [selectedCustomer]);
 
   // REFS FOR CLICK OUTSIDE
   const itemDropdownRef = useRef(null);
@@ -561,9 +569,10 @@ export default function InventorySalesOrderEntry({
     setSalesOwnerId(ownerId);
     setCustomerMargin(customer?.margin || 0);
 
-    // Fetch recent orders for selected customer + selected item
+    // Fetch recent orders + locked price for selected customer + selected item
     if (selectedItem) {
       fetchRecentOrders(id, selectedItem);
+      fetchCustomerLockedPrice(id, selectedItem);
     }
   };
 
@@ -585,6 +594,10 @@ export default function InventorySalesOrderEntry({
 
 
   const addItem = async () => {
+    if (isCreditLimitExceeded) {
+      toast.error("Credit Limit Exceeded! Please request permission from admin to add items.");
+      return;
+    }
     if (!selectedItem) {
       toast.warning("Select item");
       return;
@@ -657,6 +670,7 @@ export default function InventorySalesOrderEntry({
         taxAmount,
 
         total: totalAmount,
+        lockedPrice: isLocked ? Number(sellingPrice) : (p.lockedPrice || 0),
       },
     ]);
 
@@ -954,6 +968,11 @@ export default function InventorySalesOrderEntry({
 
       if (!res.ok) {
         console.error("❌ Server Error:", data);
+        if (res.status === 403 && data.isCreditLimitExceeded) {
+          toast.error(data.message, { autoClose: 5000 });
+          setIsSubmitting(false);
+          return;
+        }
         throw new Error(data.message || "Failed to create sales order");
       }
 
@@ -967,6 +986,32 @@ export default function InventorySalesOrderEntry({
       toast.error(err.message || "Failed to save Sales Order");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const requestCreditLimitBypass = async () => {
+    if (!customerId) return;
+    try {
+      const res = await fetch(`${API_BASE}/customers/${customerId}/request-credit-bypass`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestedBy: user?.username || user?.name || "Unknown Staff"
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Credit limit bypass requested from admin");
+        // Update local state to reflect pending status
+        setSelectedCustomer(prev => ({
+          ...prev,
+          creditLimitRequestStatus: "PENDING"
+        }));
+      } else {
+        toast.error(data.message || "Failed to request bypass");
+      }
+    } catch (err) {
+      toast.error("Error requesting credit bypass");
     }
   };
 
@@ -1135,6 +1180,42 @@ export default function InventorySalesOrderEntry({
                 }
                 readOnly
               />
+              {selectedCustomer && (selectedCustomer.debit + grandTotalWithMargin) > (selectedCustomer.creditLimit || 200000) && !selectedCustomer.isCreditBypassed && (
+                <div className="mt-1 flex flex-col gap-1">
+                  <div className="text-[9px] text-red-600 font-black uppercase bg-red-50 p-1 rounded border border-red-100 flex items-center justify-between">
+                    <span>Credit Limit Reached! (Max: ₹{(selectedCustomer.creditLimit || 200000).toLocaleString()})</span>
+                  </div>
+                  {selectedCustomer.creditLimitRequestStatus === "PENDING" ? (
+                    <div className="text-[10px] text-orange-600 font-bold italic bg-orange-50 p-1 rounded border border-orange-100 text-center">
+                      Permission Request Pending...
+                    </div>
+                  ) : selectedCustomer.creditLimitRequestStatus === "REJECTED" ? (
+                    <div className="flex flex-col gap-1">
+                      <div className="text-[10px] text-red-600 font-bold italic bg-red-50 p-1 rounded border border-red-200 text-center">
+                        Permission Rejected
+                      </div>
+                      <button 
+                        onClick={requestCreditLimitBypass}
+                        className="text-[10px] bg-secondary text-white font-bold py-1 px-2 rounded-md hover:bg-secondary/90 transition shadow-sm"
+                      >
+                        Request Again
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={requestCreditLimitBypass}
+                      className="text-[10px] bg-secondary text-white font-bold py-1 px-2 rounded-md hover:bg-secondary/90 transition shadow-sm"
+                    >
+                      Request Billing Permission
+                    </button>
+                  )}
+                </div>
+              )}
+              {selectedCustomer?.isCreditBypassed && (
+                <div className="mt-1 text-[10px] text-green-700 font-black uppercase bg-green-50 p-1 rounded border border-green-200 text-center">
+                  Bypass Permission Granted
+                </div>
+              )}
             </div>
 
             <div className="lg:col-span-2">
@@ -1213,12 +1294,45 @@ export default function InventorySalesOrderEntry({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-4">
 
         {/* LEFT: ADD ITEM */}
-        <div className="lg:col-span-4 bg-primary/5 p-4 rounded-xl border border-primary/10 space-y-3 h-fit">
+        <div className="lg:col-span-4 bg-primary/5 p-4 rounded-xl border border-primary/10 space-y-3 h-fit min-h-[400px] flex flex-col relative overflow-hidden">
           <h3 className="text-[#319bab] font-black uppercase text-xs tracking-widest border-b pb-2 border-[#319bab]/30">
             Add Item
           </h3>
 
-          {/* PRODUCT GROUP */}
+          {isCreditLimitExceeded ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-4 bg-white/50 backdrop-blur-sm rounded-lg border-2 border-dashed border-red-200">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-red-700 font-black text-sm uppercase">Credit Limit Exceeded</h4>
+                <p className="text-[10px] text-gray-500 font-bold mt-1">
+                  Customer's debit balance (₹{selectedCustomer?.debit?.toLocaleString()}) exceeds the limit (₹{(selectedCustomer?.creditLimit || 200000).toLocaleString()}).
+                </p>
+              </div>
+              
+              {selectedCustomer?.creditLimitRequestStatus === "PENDING" ? (
+                <div className="w-full py-3 px-4 bg-orange-100 text-orange-700 rounded-xl font-bold text-[11px] border border-orange-200 animate-pulse">
+                  PERMISSION REQUEST PENDING...
+                </div>
+              ) : (
+                <button 
+                  onClick={requestCreditLimitBypass}
+                  className="w-full bg-secondary text-white py-3 px-4 rounded-xl font-black text-xs hover:bg-secondary/90 transition shadow-lg shadow-secondary/20 flex items-center justify-center gap-2"
+                >
+                  REQUEST BILLING PERMISSION
+                </button>
+              )}
+              
+              <p className="text-[9px] text-gray-400 italic">
+                * Item selection is disabled until Admin grants bypass permission.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* PRODUCT GROUP */}
           <div className="relative" ref={productGroupDropdownRef}>
             <div className="flex justify-between items-center mb-1">
               <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Product Group</label>
@@ -1414,7 +1528,9 @@ export default function InventorySalesOrderEntry({
               <FaPlus className="mr-2" /> ADD ITEM
             </button>
           </div>
-        </div>
+        </>
+      )}
+    </div>
 
         {/* RIGHT: ITEMS TABLE */}
         <div className="lg:col-span-8 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden h-fit flex flex-col">
@@ -1448,7 +1564,14 @@ export default function InventorySalesOrderEntry({
                       <td className="px-4 py-3 text-right">
                         {item.igst ? `IGST ${item.gst}%` : `CGST ${item.cgst}% + SGST ${item.sgst}%`}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-[#319bab]">₹{item.total.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="font-bold text-[#319bab]">₹{item.total.toFixed(2)}</div>
+                        {item.lockedPrice > 0 && (
+                          <div className="text-[10px] text-orange-600 font-bold bg-orange-50 px-1 rounded inline-block mt-0.5" title="Customer Locked Price">
+                            Locked: ₹{item.lockedPrice}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-center">
                         <button onClick={() => removeItem(index)} className="text-red-500 hover:text-red-700">
                           <FaTrash />
@@ -1845,6 +1968,5 @@ export default function InventorySalesOrderEntry({
           }}
         />
       </div>
-
-      );
+    );
 }

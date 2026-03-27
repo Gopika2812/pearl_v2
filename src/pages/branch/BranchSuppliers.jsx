@@ -11,11 +11,12 @@ const BranchSuppliers = () => {
 
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState("card"); // "card" or "table"
+  const [viewMode, setViewMode] = useState("table"); // "table" or "card"
   const [searchTerm, setSearchTerm] = useState("");
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [payments, setPayments] = useState([]);
   const [selectedLedgerSupplier, setSelectedLedgerSupplier] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
 
   useEffect(() => {
     if (branchLoaded && branchId) {
@@ -151,14 +152,6 @@ const BranchSuppliers = () => {
     }
   };
 
-  const filteredSuppliers = searchTerm
-    ? suppliers.filter((supplier) =>
-        supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        supplier.gstin?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        supplier.email?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    : suppliers;
-
   // Helper function to get outstanding PO count for a supplier
   const getOutstandingPOCount = (supplierName) => {
     const normalizedBranchId = typeof branchId === 'string' ? branchId : branchId?.toString();
@@ -197,6 +190,52 @@ const BranchSuppliers = () => {
 
     return outstandingCount;
   };
+
+  const handleSort = (key) => {
+    let direction = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortedSuppliers = (data) => {
+    return [...data].sort((a, b) => {
+      const { key, direction } = sortConfig;
+      
+      if (key === "name") {
+        const valA = a.name.toLowerCase();
+        const valB = b.name.toLowerCase();
+        if (valA < valB) return direction === "asc" ? -1 : 1;
+        if (valA > valB) return direction === "asc" ? 1 : -1;
+        return 0;
+      }
+      
+      if (key === "outstandingPOs") {
+        const valA = getOutstandingPOCount(a.name);
+        const valB = getOutstandingPOCount(b.name);
+        return direction === "asc" ? valA - valB : valB - valA;
+      }
+      
+      if (key === "credit" || key === "debit") {
+        const valA = a[key] || 0;
+        const valB = b[key] || 0;
+        return direction === "asc" ? valA - valB : valB - valA;
+      }
+      
+      return 0;
+    });
+  };
+
+  const filteredSuppliers = getSortedSuppliers(
+    searchTerm
+      ? suppliers.filter((supplier) =>
+          supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          supplier.gstin?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          supplier.email?.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      : suppliers
+  );
 
   const totalCredit = filteredSuppliers.reduce(
     (sum, supplier) => sum + (supplier.credit || 0),
@@ -287,16 +326,6 @@ const BranchSuppliers = () => {
             {/* View Toggle */}
             <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
               <button
-                onClick={() => setViewMode("card")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
-                  viewMode === "card"
-                    ? "bg-white text-blue-600 shadow-md"
-                    : "text-gray-600 hover:text-blue-600"
-                }`}
-              >
-                <FaThLarge size={16} /> Card
-              </button>
-              <button
                 onClick={() => setViewMode("table")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
                   viewMode === "table"
@@ -305,6 +334,16 @@ const BranchSuppliers = () => {
                 }`}
               >
                 <FaList size={16} /> Table
+              </button>
+              <button
+                onClick={() => setViewMode("card")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
+                  viewMode === "card"
+                    ? "bg-white text-blue-600 shadow-md"
+                    : "text-gray-600 hover:text-blue-600"
+                }`}
+              >
+                <FaThLarge size={16} /> Card
               </button>
             </div>
           </div>
@@ -422,8 +461,8 @@ const BranchSuppliers = () => {
           <table className="w-full">
             <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
               <tr>
-                <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                  Supplier Name
+                <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("name")}>
+                  Supplier Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                 </th>
                 <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
                   GSTIN
@@ -440,14 +479,14 @@ const BranchSuppliers = () => {
                 <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
                   State
                 </th>
-                <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
-                  Outstanding POs
+                <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("outstandingPOs")}>
+                  Outstanding POs {sortConfig.key === "outstandingPOs" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                 </th>
-                <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold">
-                  Credit
+                <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("credit")}>
+                  Credit {sortConfig.key === "credit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                 </th>
-                <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold">
-                  Debit
+                <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("debit")}>
+                  Debit {sortConfig.key === "debit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                 </th>
                 <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
                   Status

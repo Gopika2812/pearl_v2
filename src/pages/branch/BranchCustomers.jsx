@@ -11,13 +11,14 @@ const BranchCustomers = () => {
 
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState("card"); // "card" or "table"
+  const [viewMode, setViewMode] = useState("table"); // "table" or "card"
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({});
   const [salesOrders, setSalesOrders] = useState([]);
   const [customerPayments, setCustomerPayments] = useState([]);
   const [selectedLedgerCustomer, setSelectedLedgerCustomer] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
 
   useEffect(() => {
     console.log("BranchCustomers mounted");
@@ -142,6 +143,38 @@ const BranchCustomers = () => {
     );
   }
 
+  const handleSort = (key) => {
+    let direction = "asc";
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc";
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortedCustomers = (data) => {
+    return [...data].sort((a, b) => {
+      const { key, direction } = sortConfig;
+      
+      if (key === "name") {
+        const valA = a.name.toLowerCase();
+        const valB = b.name.toLowerCase();
+        if (valA < valB) return direction === "asc" ? -1 : 1;
+        if (valA > valB) return direction === "asc" ? 1 : -1;
+        return 0;
+      }
+      
+      if (key === "margin" || key === "debit" || key === "credit") {
+        const valA = a[key] || 0;
+        const valB = b[key] || 0;
+        return direction === "asc" ? valA - valB : valB - valA;
+      }
+      
+      return 0;
+    });
+  };
+
+  const sortedCustomers = getSortedCustomers(customers);
+
   return (
     <div className="min-h-screen bg-gray-50 md:pl-20 pt-20 md:pt-6">
       {/* Header */}
@@ -207,16 +240,6 @@ const BranchCustomers = () => {
             {/* View Toggle */}
             <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
               <button
-                onClick={() => setViewMode("card")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
-                  viewMode === "card"
-                    ? "bg-white text-blue-600 shadow-md"
-                    : "text-gray-600 hover:text-blue-600"
-                }`}
-              >
-                <FaThLarge size={16} /> Card
-              </button>
-              <button
                 onClick={() => setViewMode("table")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
                   viewMode === "table"
@@ -225,6 +248,16 @@ const BranchCustomers = () => {
                 }`}
               >
                 <FaList size={16} /> Table
+              </button>
+              <button
+                onClick={() => setViewMode("card")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
+                  viewMode === "card"
+                    ? "bg-white text-blue-600 shadow-md"
+                    : "text-gray-600 hover:text-blue-600"
+                }`}
+              >
+                <FaThLarge size={16} /> Card
               </button>
             </div>
           </div>
@@ -362,8 +395,8 @@ const BranchCustomers = () => {
             <table className="w-full">
               <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                 <tr>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                    Customer Name
+                  <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("name")}>
+                    Customer Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
                   <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
                     GSTIN
@@ -383,14 +416,14 @@ const BranchCustomers = () => {
                   <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
                     Country
                   </th>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
-                    Margin (%)
+                  <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("margin")}>
+                    Margin (%) {sortConfig.key === "margin" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold">
-                    Debit
+                  <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("debit")}>
+                    Debit {sortConfig.key === "debit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold">
-                    Credit
+                  <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("credit")}>
+                    Credit {sortConfig.key === "credit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
                   <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
                     Action
@@ -398,7 +431,7 @@ const BranchCustomers = () => {
                 </tr>
               </thead>
               <tbody>
-                {customers.map((customer, index) => (
+                {sortedCustomers.map((customer, index) => (
                   <tr
                     key={customer._id}
                     className={`${
