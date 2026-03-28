@@ -11,8 +11,9 @@ const BranchSalesOrder = () => {
 
   let soVoucherTypes = voucherTypes.filter((v) => v.orderType === "SO");
   
-  // Apply granular voucher authorization
-  if (user?.allowedVoucherTypes && user.allowedVoucherTypes.length > 0) {
+  // Apply granular voucher authorization (skip for Admins)
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+  if (!isAdmin && user?.allowedVoucherTypes && user.allowedVoucherTypes.length > 0) {
     soVoucherTypes = soVoucherTypes.filter(v => user.allowedVoucherTypes.includes(v._id));
   }
 

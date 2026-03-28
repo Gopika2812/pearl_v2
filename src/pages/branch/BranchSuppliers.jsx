@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
-import { FaList, FaSpinner, FaThLarge } from "react-icons/fa";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import { useInventory } from "../../context/InventoryContext";
 import VendorLedgerModal from "../../components/branch/VendorLedgerModal";
+import InventoryAddVendorModal from "../../components/inventory/InventoryAddVendorModal";
+
 
 const BranchSuppliers = () => {
   const { branch, branchLoaded } = useBranch();
   const branchId = branch?._id;
 
+  const { addData, updateData } = useInventory();
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState("table"); // "table" or "card"
@@ -17,6 +21,8 @@ const BranchSuppliers = () => {
   const [payments, setPayments] = useState([]);
   const [selectedLedgerSupplier, setSelectedLedgerSupplier] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
 
   useEffect(() => {
     if (branchLoaded && branchId) {
@@ -144,13 +150,29 @@ const BranchSuppliers = () => {
       if (suppliers.length === 0) {
         toast.info("No suppliers found for this branch");
       }
-    } catch (error) {
-      console.error("Error fetching suppliers:", error);
-      toast.error(`Failed to fetch suppliers: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleAddSupplier = async (data) => {
+    try {
+      if (data._id) {
+        const { _id, ...updatePayload } = data;
+        await updateData("vendor", _id, updatePayload);
+        toast.success("Supplier updated successfully");
+      } else {
+        const dataWithBranch = { ...data, branchId };
+        await addData("vendor", dataWithBranch);
+        toast.success("Supplier added successfully");
+      }
+      fetchSuppliers();
+    } catch (error) {
+      console.error("Error saving supplier:", error);
+      toast.error("Failed to save supplier");
+    }
+  };
+
 
   // Helper function to get outstanding PO count for a supplier
   const getOutstandingPOCount = (supplierName) => {
@@ -256,13 +278,57 @@ const BranchSuppliers = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 md:pl-20 pt-20 md:pt-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-900 to-blue-800 text-white py-6 px-4 md:px-6 shadow-lg">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl md:text-4xl font-bold mb-1">Suppliers (Creditors)</h1>
-          <p className="text-blue-100 text-sm md:text-base">Manage supplier accounts and track outstanding balances</p>
+      {/* Header & Controls */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 mx-4 md:mx-6 mt-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-primary/10 p-2.5 rounded-xl">
+              <FaList className="text-xl text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-gray-900 tracking-tight">
+                Suppliers (Creditors)
+              </h1>
+              <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">
+                Manage your vendor accounts and balances
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+            >
+              <FaPlus /> Add Supplier
+            </button>
+            
+            <div className="flex bg-gray-100 p-1 rounded-xl items-center">
+              <button
+                onClick={() => setViewMode("table")}
+                className={`p-2 rounded-lg transition-all ${
+                  viewMode === "table"
+                    ? "bg-white text-primary shadow-sm"
+                    : "text-gray-400 hover:text-gray-600"
+                }`}
+              >
+                <FaList size={18} />
+              </button>
+              <button
+                onClick={() => setViewMode("card")}
+                className={`p-2 rounded-lg transition-all ${
+                  viewMode === "card"
+                    ? "bg-white text-primary shadow-sm"
+                    : "text-gray-400 hover:text-gray-600"
+                }`}
+              >
+                <FaThLarge size={18} />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
+
 
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
         {/* Information Banner */}
@@ -565,8 +631,18 @@ const BranchSuppliers = () => {
         purchaseOrders={purchaseOrders}
         payments={payments}
       />
+
+      {isAddModalOpen && (
+        <InventoryAddVendorModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onSave={handleAddSupplier}
+          branchId={branchId}
+        />
+      )}
     </div>
   );
 };
+
 
 export default BranchSuppliers;

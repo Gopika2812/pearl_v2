@@ -464,6 +464,38 @@ export default function InventorySalesOrderEntry({
 
 
 
+  const updateSellingPrice = (product, cMargin) => {
+    if (!product) return 0;
+
+    // 🛡️ NEW ADDITIVE LOGIC: Final Price = PurchasingPrice * (1 + (NormalMargin + AdminMargin/CustomerMargin) / 100)
+    const purchasingPrice = Number(product.purchasingPrice || 0);
+    const normalMargin = Number(product.marginPercentage || 0);
+
+    // Determine relative margin: Admin Margin overrides Customer Margin (only if non-zero)
+    let relativeMargin = Number(cMargin || 0);
+    if (product.adminMargin !== undefined && product.adminMargin !== null && product.adminMargin !== "" && Number(product.adminMargin) !== 0) {
+      relativeMargin = Number(product.adminMargin);
+      console.log(`🛡️ Using Admin Margin: ${relativeMargin}% (Normal: ${normalMargin}%)`);
+    } else {
+      console.log(`🛡️ Using Customer Margin: ${relativeMargin}% (Normal: ${normalMargin}%)`);
+    }
+
+    const totalMargin = normalMargin + relativeMargin;
+    let adjustedPrice = 0;
+
+    if (purchasingPrice > 0) {
+      adjustedPrice = purchasingPrice + (purchasingPrice * totalMargin / 100);
+    } else {
+      // Fallback if purchasing price is missing
+      const baseSellingPrice = Number(product.sellingPrice || 0);
+      adjustedPrice = baseSellingPrice + (baseSellingPrice * relativeMargin / 100);
+    }
+
+    const finalPrice = Math.round(adjustedPrice * 100) / 100;
+    setSellingPrice(finalPrice);
+    return finalPrice;
+  };
+
   const handleItemSelection = (id) => {
     const product = productsWithStock.find(p => p._id === id);
     if (!product) return;
@@ -484,31 +516,10 @@ export default function InventorySalesOrderEntry({
       }
     }
 
-    // 🛡️ NEW ADDITIVE LOGIC: Final Price = PurchasingPrice * (1 + (NormalMargin + AdminMargin/CustomerMargin) / 100)
-    const purchasingPrice = Number(product.purchasingPrice || 0);
-    const normalMargin = Number(product.marginPercentage || 0);
-    
-    // Determine relative margin: Admin Margin overrides Customer Margin
-    let relativeMargin = Number(customerMargin || 0);
-    if (product.adminMargin !== undefined && product.adminMargin !== null && product.adminMargin !== "") {
-      relativeMargin = Number(product.adminMargin);
-      console.log(`🛡️ Using Admin Margin: ${relativeMargin}% (Normal: ${normalMargin}%)`);
-    } else {
-      console.log(`🛡️ Using Customer Margin: ${relativeMargin}% (Normal: ${normalMargin}%)`);
-    }
+    // 🛡️ Calculate and set price
+    updateSellingPrice(product, customerMargin);
 
-    const totalMargin = normalMargin + relativeMargin;
-    let adjustedPrice = 0;
-    
-    if (purchasingPrice > 0) {
-      adjustedPrice = purchasingPrice + (purchasingPrice * totalMargin / 100);
-    } else {
-      // Fallback if purchasing price is missing
-      const baseSellingPrice = Number(product.sellingPrice || 0);
-      adjustedPrice = baseSellingPrice + (baseSellingPrice * relativeMargin / 100);
-    }
-
-    setSellingPrice(Math.round(adjustedPrice * 100) / 100);
+    setGst(product.gst);
     setGst(product.gst);
 
     setCgst(product.gst / 2);
@@ -573,6 +584,12 @@ export default function InventorySalesOrderEntry({
     if (selectedItem) {
       fetchRecentOrders(id, selectedItem);
       fetchCustomerLockedPrice(id, selectedItem);
+      
+      // Recalculate price based on new customer's margin
+      const product = productsWithStock.find(p => p._id === selectedItem);
+      if (product) {
+        updateSellingPrice(product, customer?.margin || 0);
+      }
     }
   };
 

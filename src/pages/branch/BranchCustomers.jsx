@@ -1,14 +1,20 @@
 import { useEffect, useState } from "react";
-import { FaList, FaSpinner, FaThLarge } from "react-icons/fa";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import { useInventory } from "../../context/InventoryContext";
 import CustomerLedgerModal from "../../components/branch/CustomerLedgerModal";
+import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCustomerModal";
+
 
 const BranchCustomers = () => {
   const { branch, branchLoaded } = useBranch();
   const branchId = branch?._id;
 
+  const { 
+    customerCategories, customerGroups, salesOwners, addData, updateData 
+  } = useInventory();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState("table"); // "table" or "card"
@@ -19,6 +25,8 @@ const BranchCustomers = () => {
   const [customerPayments, setCustomerPayments] = useState([]);
   const [selectedLedgerCustomer, setSelectedLedgerCustomer] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
 
   useEffect(() => {
     console.log("BranchCustomers mounted");
@@ -125,6 +133,25 @@ const BranchCustomers = () => {
     }
   }, [searchTerm, branchId, branchLoaded]);
 
+  const handleAddCustomer = async (data) => {
+    try {
+      if (data._id) {
+        const { _id, ...updatePayload } = data;
+        await updateData("customer", _id, updatePayload);
+        toast.success("Customer updated successfully");
+      } else {
+        const dataWithBranch = { ...data, branchId };
+        await addData("customer", dataWithBranch);
+        toast.success("Customer added successfully");
+      }
+      fetchCustomers(currentPage);
+    } catch (error) {
+      console.error("Error saving customer:", error);
+      toast.error("Failed to save customer");
+    }
+  };
+
+
   // Customer debit is already provided natively by the backend API.
   // There is no need for local array re-calculation.
 
@@ -177,13 +204,57 @@ const BranchCustomers = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 md:pl-20 pt-20 md:pt-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-900 to-blue-800 text-white py-6 px-4 md:px-6 shadow-lg">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl md:text-4xl font-bold mb-1">Customers (Debtors)</h1>
-          <p className="text-blue-100 text-sm md:text-base">Manage customer accounts and track receivables</p>
+      {/* Header & Controls */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 mx-4 md:mx-6 mt-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-primary/10 p-2.5 rounded-xl">
+              <FaList className="text-xl text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-gray-900 tracking-tight">
+                Customers (Debtors)
+              </h1>
+              <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">
+                Manage your client base and balances
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+            >
+              <FaPlus /> Add Customer
+            </button>
+            
+            <div className="flex bg-gray-100 p-1 rounded-xl items-center">
+              <button
+                onClick={() => setViewMode("table")}
+                className={`p-2 rounded-lg transition-all ${
+                  viewMode === "table"
+                    ? "bg-white text-primary shadow-sm"
+                    : "text-gray-400 hover:text-gray-600"
+                }`}
+              >
+                <FaList size={18} />
+              </button>
+              <button
+                onClick={() => setViewMode("card")}
+                className={`p-2 rounded-lg transition-all ${
+                  viewMode === "card"
+                    ? "bg-white text-primary shadow-sm"
+                    : "text-gray-400 hover:text-gray-600"
+                }`}
+              >
+                <FaThLarge size={18} />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
+
 
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
         {/* Summary Cards */}
@@ -516,8 +587,21 @@ const BranchCustomers = () => {
         salesOrders={salesOrders}
         customerPayments={customerPayments}
       />
+
+      {isAddModalOpen && (
+        <InventoryAddCustomerModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onSave={handleAddCustomer}
+          salesOwners={salesOwners}
+          customerCategories={customerCategories}
+          customerGroups={customerGroups}
+          branchId={branchId}
+        />
+      )}
     </div>
   );
 };
+
 
 export default BranchCustomers;

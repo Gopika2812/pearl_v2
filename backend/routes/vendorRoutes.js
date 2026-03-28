@@ -68,7 +68,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     let vendorsToBulkUpdate = [];
     let skipped = [];
 
-// 🔄 First pass: Validate and collect all valid records
+    // 🔄 First pass: Validate and collect all valid records
     for (const row of rows) {
       const normalized = Object.fromEntries(
         Object.entries(row).map(([k, v]) => [
@@ -78,32 +78,32 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       );
 
       // Try to find vendor name from multiple possible column names
-      const name = normalized.vendorname || normalized.suppliers || normalized.suppliername || "";
-      const phone = String(normalized.phone || "").trim();
+      const name = normalized.vendorname || normalized.suppliers || normalized.suppliername || normalized.name || normalized.vendor || "";
+      const phone = String(normalized.phone || normalized.whatsapp || normalized.mobilenumber || "").trim();
       const email = normalized.email || "";
       const address = normalized.address || "";
       const stateName = normalized.statename || normalized.state || "";
-      const gstRegistrationType = (normalized.gstregistrationtype || normalized.gstregistrationtype || "Regular").toLowerCase().includes("unreg") ? "Unregistered/Consumer" : "Regular";
-      // Try to find GSTIN from multiple possible column names (including the slash version)
+      const gstRegistrationType = (normalized.gstregistrationtype || normalized.registrationtype || "Regular").toLowerCase().includes("unreg") ? "Unregistered/Consumer" : "Regular";
+      
+      // Try to find GSTIN from multiple possible column names
       const gstin = normalized.gstin || normalized.gstin_uin || normalized.gstinuin || normalized["gstin/uin"] || "";
+      
       // Parse debit/credit fields more robustly
-      const rawDebit = normalized.debit || normalized.debitbalance || normalized["debit(₹)"] || normalized.dr || "";
-      const rawCredit = normalized.credit || normalized.creditbalance || normalized["credit(₹)"] || normalized.cr || "";
+      const rawDebit = normalized.debit || normalized.debitbalance || normalized["debit(₹)"] || normalized.dr || normalized.openingdebit || "";
+      const rawCredit = normalized.credit || normalized.creditbalance || normalized["credit(₹)"] || normalized.cr || normalized.openingcredit || "";
       
       const debit = parseFloat(String(rawDebit).replace(/[^0-9.-]+/g, "")) || 0;
       const credit = parseFloat(String(rawCredit).replace(/[^0-9.-]+/g, "")) || 0;
 
       // ❌ Validation checks
       if (!name) {
-        skipped.push({ row, reason: "Missing vendor name" });
+        skipped.push({ row, reason: "Missing vendor name (Checked: vendorname, suppliers, suppliername, name, vendor)" });
         continue;
       }
 
-      console.log(`✅ Processing vendor: "${name}" | State: "${stateName}" | GST: "${gstin}"`);
-
       // Check if vendor already exists (case-insensitive)
       const existingVendorId = existingVendorsMap.get(name.toLowerCase());
-      
+
       const vendorData = {
         branchId: new mongoose.Types.ObjectId(branchId),
         name,
@@ -113,12 +113,12 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         stateName: stateName || undefined,
         gstRegistrationType,
         gstin: gstin || undefined,
-        debit,
-        credit,
+        debit: Math.round(debit * 100) / 100,
+        credit: Math.round(credit * 100) / 100,
         isActive: true,
       };
 
-      if (existingVendorId) {
+      if (existingVendorId && existingVendorId !== "pending_insert") {
         // Queue for update
         vendorsToBulkUpdate.push({
           updateOne: {

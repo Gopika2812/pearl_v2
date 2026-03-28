@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { FaEdit, FaFileInvoice, FaSync, FaTrash } from "react-icons/fa";
 import { API_BASE } from "../api";
+import { useBranch } from "../context/BranchContext";
 
 const VoucherTypeSummary = () => {
+  const { currentBranch } = useBranch();
   const [voucherTypes, setVoucherTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,9 +18,10 @@ const VoucherTypeSummary = () => {
   // Fetch voucher types data
   const fetchVoucherTypes = async () => {
     try {
+      if (!currentBranch?._id) return;
       setLoading(true);
       setError(null);
-      const response = await fetch(`${API_BASE}/voucher-types`);
+      const response = await fetch(`${API_BASE}/voucher-types?branchId=${currentBranch._id}`);
       const data = await response.json();
 
       if (data.success) {
@@ -36,14 +39,14 @@ const VoucherTypeSummary = () => {
 
   useEffect(() => {
     fetchVoucherTypes();
-  }, []);
+  }, [currentBranch?._id]);
 
   // Handle Edit
   const handleEdit = (voucherType) => {
     setEditingVoucherType(voucherType);
     setEditFormData({
       name: voucherType.name,
-      code: voucherType.code,
+      prefix: voucherType.prefix,
     });
     setShowEditModal(true);
   };
@@ -88,7 +91,7 @@ const VoucherTypeSummary = () => {
   // Filter voucher types
   const filteredVoucherTypes = voucherTypes.filter(vt =>
     vt.name.toLowerCase().includes(searchValue.toLowerCase()) ||
-    (vt.code && vt.code.toLowerCase().includes(searchValue.toLowerCase()))
+    (vt.prefix && vt.prefix.toLowerCase().includes(searchValue.toLowerCase()))
   );
 
   if (loading) return <div className="p-6 text-center">Loading...</div>;
@@ -129,15 +132,21 @@ const VoucherTypeSummary = () => {
           <thead className="bg-gray-200">
             <tr>
               <th className="px-6 py-3 text-left text-gray-800 font-semibold">Name</th>
-              <th className="px-6 py-3 text-left text-gray-800 font-semibold">Code</th>
+              <th className="px-6 py-3 text-left text-gray-800 font-semibold">Prefix</th>
+              <th className="px-6 py-3 text-left text-gray-800 font-semibold">Type</th>
               <th className="px-6 py-3 text-center text-gray-800 font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredVoucherTypes.map((vt) => (
               <tr key={vt._id} className="border-t hover:bg-gray-50">
-                <td className="px-6 py-4">{vt.name}</td>
-                <td className="px-6 py-4">{vt.code || "-"}</td>
+                <td className="px-6 py-4 capitalize">{vt.name}</td>
+                <td className="px-6 py-4 uppercase font-bold text-blue-600">{vt.prefix || "-"}</td>
+                <td className="px-6 py-4">
+                  <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${vt.orderType === 'SO' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                    {vt.orderType === 'SO' ? 'SALES' : 'PURCHASE'}
+                  </span>
+                </td>
                 <td className="px-6 py-4 text-center space-x-2">
                   <button
                     onClick={() => handleEdit(vt)}
@@ -172,9 +181,9 @@ const VoucherTypeSummary = () => {
             />
             <input
               type="text"
-              placeholder="Code"
-              value={editFormData.code || ""}
-              onChange={(e) => setEditFormData({ ...editFormData, code: e.target.value })}
+              placeholder="Prefix"
+              value={editFormData.prefix || ""}
+              onChange={(e) => setEditFormData({ ...editFormData, prefix: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <div className="flex gap-2 justify-end">

@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import auth from "./middleware/auth.js";
 import rbac from "./middleware/rbac.js";
 import fixVoucherTypeIndex from "./utils/fixVoucherTypeIndex.js";
+import fixVendorIndex from "./utils/fixVendorIndex.js";
 
 import branchRoutes from "./routes/branchRoutes.js";
 import branchUserRoutes from "./routes/branchUserRoutes.js";
@@ -43,6 +44,7 @@ import auditLogRoutes from "./routes/auditLogRoutes.js";
 import gstRoutes from "./routes/gstRoutes.js";
 import customerLockedPriceRoutes from "./routes/customerLockedPriceRoutes.js";
 import eInvoiceRoutes from "./routes/eInvoiceRoutes.js";
+import otherTransactionRoutes from "./routes/otherTransactionRoutes.js";
 
 
 const app = express();
@@ -101,6 +103,7 @@ app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/gst", gstRoutes);
 app.use("/api/customer-locked-prices", customerLockedPriceRoutes);
 app.use("/api/einvoice", eInvoiceRoutes);
+app.use("/api/other-transactions", otherTransactionRoutes);
 
 // MongoDB Connect
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
@@ -108,8 +111,9 @@ mongoose
   .connect(process.env.MONGO_URI)
   .then(async () => {
     console.log("MongoDB Connected");
-    // Fix VoucherType indexes to allow same name in different branches
+    // Fix VoucherType and Vendor indexes to allow same name in different branches
     await fixVoucherTypeIndex();
+    await fixVendorIndex();
   })
   .catch((err) => console.error("Mongo Error:", err));
 

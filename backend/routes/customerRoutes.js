@@ -72,7 +72,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         ])
       );
 
-      const name = normalized.customername;
+      const name = normalized.customername || normalized.name || normalized.debtorname;
       const whatsapp = String(normalized.whatsapp || "").trim();
       const email = normalized.email || "";
       const address = normalized.address || "";
@@ -92,12 +92,12 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const debit = parseFloat(String(rawDebit).replace(/[^0-9.-]+/g, "")) || 0;
 
       // Parse comma-separated categories and groups
-      const customerCategoryNames = (normalized.customercategories || "")
+      const customerCategoryNames = (normalized.customercategories || normalized.customercategory || "")
         .split(",")
         .map(c => c.trim().toLowerCase())
         .filter(c => c);
       
-      const customerGroupNames = (normalized.customergroups || "")
+      const customerGroupNames = (normalized.customergroups || normalized.customergroup || "")
         .split(",")
         .map(g => g.trim().toLowerCase())
         .filter(g => g);

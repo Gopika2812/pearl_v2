@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaEdit, FaFileInvoice, FaSync } from "react-icons/fa";
+import { FaChevronDown, FaEdit, FaFileInvoice, FaSync, FaTrash } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE } from "../../api";
 import EditBillModal from "../../components/EditBillModal";
@@ -467,7 +467,7 @@ const BranchInvoicedOrders = () => {
                                {order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED" ? "Invoice Generated" : order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
                              </button>
 
-                             {user?.role === "ADMIN" && (
+                             {(user?.role === "ADMIN" || user?.role === "MANAGER" || user?.role === "SUPER_ADMIN") && (
                                <button
                                  onClick={() => handleCancelBill(order)}
                                  className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-red-500 text-white hover:bg-red-600 shadow-md shadow-red-500/20"

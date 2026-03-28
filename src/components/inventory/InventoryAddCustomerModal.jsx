@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FaTimes, FaCloudUploadAlt, FaIdCard, FaMapMarkedAlt, FaPhoneAlt, FaBuilding, FaWallet, FaChevronRight } from "react-icons/fa";
 import { API_BASE } from "../../api";
 import FilterableCheckboxList from "../FilterableCheckboxList";
 import FilterableSelect from "../FilterableSelect";
@@ -30,6 +31,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
   });
 
   const [isFetchingGst, setIsFetchingGst] = useState(false);
+  const [uploadResults, setUploadResults] = useState(null);
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -57,7 +59,6 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         ifsc: editingItem.ifsc || "",
         branch: editingItem.branch || "",
         upi: editingItem.upi || "",
-        upi: editingItem.upi || "",
       });
     } else {
       setCustomer({
@@ -82,12 +83,12 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         ifsc: "",
         branch: "",
         upi: "",
-        upi: "",
       });
     }
   }, [editingItem]);
 
   if (!isOpen) return null;
+
   const handleBulkUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -108,23 +109,21 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         throw new Error(data.message || "Bulk upload failed");
       }
 
-      alert(
-        `Uploaded: ${data.insertedCount}\nSkipped: ${data.skippedCount}`
-      );
-
-      console.log("Customer bulk upload:", data);
-      onClose();
+      setUploadResults({
+        inserted: data.insertedCount || 0,
+        updated: data.updatedCount || 0,
+        skipped: data.skippedCount || 0,
+        skippedDetails: data.skipped || []
+      });
     } catch (err) {
       console.error("Customer bulk upload error:", err);
       alert(err.message || "Bulk upload failed");
     }
   };
 
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Round numeric values
     const roundedCustomer = {
       ...customer,
       credit: Math.round(Number(customer.credit || 0)),
@@ -133,33 +132,6 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     };
     
     await onSave(roundedCustomer);
-
-    setCustomer({
-      _id: null,
-      name: "",
-      customerCategories: [],
-      customerGroups: [],
-      whatsapp: "",
-      email: "",
-      address: "",
-      district: "",
-      state: "",
-      country: "",
-      pincode: "",
-      registrationType: "regular",
-      gstin: "",
-      salesOwner: "",
-      margin: 0,
-      credit: 0,
-      debit: 0,
-      accountHolder: "",
-      accountNumber: "",
-      ifsc: "",
-      branch: "",
-      upi: "",
-      upi: "",
-    });
-
     onClose();
   };
 
@@ -196,412 +168,422 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     }
   };
 
-  const labelClass = "text-sm font-bold text-gray-600 mb-1 block";
-  const inputClass =
-    "w-full p-2 border rounded-lg outline-primary focus:ring-1 focus:ring-primary";
+  const labelClass = "text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block";
+  const inputClass = "w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl outline-primary focus:ring-2 focus:ring-primary/20 focus:bg-white focus:border-primary transition-all duration-200 text-sm font-semibold text-gray-800 placeholder:text-gray-300";
+
+  // RESULTS VIEW AFTER UPLOAD
+  if (uploadResults) {
+    return (
+      <div className="fixed inset-0 bg-[#f8fafc] z-[160] flex flex-col p-6 overflow-y-auto animate-in zoom-in-95 duration-300">
+        <div className="max-w-3xl mx-auto w-full space-y-8 pb-20">
+          
+          <div className="bg-white rounded-3xl p-8 shadow-2xl border border-gray-100 text-center">
+            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <FaCloudUploadAlt className="text-4xl" />
+            </div>
+            <h2 className="text-3xl font-black text-gray-900 tracking-tight">Bulk Upload Summary</h2>
+            <p className="text-gray-400 font-bold uppercase tracking-widest text-xs mt-2">Data Processed Successfully</p>
+            
+            <div className="grid grid-cols-3 gap-4 mt-10">
+              <div className="bg-green-50/50 p-6 rounded-2xl border border-green-100">
+                <p className="text-3xl font-black text-green-700">{uploadResults.inserted}</p>
+                <p className="text-[10px] font-bold text-green-600 uppercase mt-1">Inserted</p>
+              </div>
+              <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100">
+                <p className="text-3xl font-black text-blue-700">{uploadResults.updated}</p>
+                <p className="text-[10px] font-bold text-blue-600 uppercase mt-1">Updated</p>
+              </div>
+              <div className="bg-orange-50/50 p-6 rounded-2xl border border-orange-100">
+                <p className="text-3xl font-black text-orange-700">{uploadResults.skipped}</p>
+                <p className="text-[10px] font-bold text-orange-600 uppercase mt-1">Skipped</p>
+              </div>
+            </div>
+          </div>
+
+          {uploadResults.skipped > 0 && (
+            <div className="bg-white rounded-3xl shadow-xl border border-red-100 overflow-hidden">
+              <div className="bg-red-50 px-8 py-4 border-b border-red-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-red-600 font-black">⚠️</span>
+                  <p className="text-red-700 font-black text-sm uppercase tracking-wider">Missing Customers Detail</p>
+                </div>
+                <span className="px-3 py-1 bg-white text-red-600 rounded-full text-[10px] font-black">{uploadResults.skipped} FOUND</span>
+              </div>
+              
+              <div className="max-h-[400px] overflow-y-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-8 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Customer Identity</th>
+                      <th className="px-8 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Failure Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {uploadResults.skippedDetails.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-8 py-4">
+                          <p className="text-sm font-black text-gray-800">
+                            {item.row?.CustomerName || item.row?.Name || item.row?.DebtorName || `Unknown (Row ${idx + 2})`}
+                          </p>
+                          <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">{item.row?.WhatsApp || "No Phone"}</p>
+                        </td>
+                        <td className="px-8 py-4">
+                          <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-50 border border-red-100 rounded-full">
+                            <span className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse"></span>
+                            <span className="text-[10px] text-red-600 font-black uppercase tracking-tighter">{item.reason}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-4">
+            <button 
+              onClick={() => {
+                setUploadResults(null);
+                onClose();
+                // To allow immediate re-upload if needed, we might want to refresh the parent
+                if (typeof window !== 'undefined') window.location.reload();
+              }}
+              className="flex-1 bg-gray-900 text-white p-5 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-gray-200 hover:-translate-y-1 transition-all active:scale-95"
+            >
+              Finish & Refresh Hub
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
-      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
-
-        <div className="bg-primary p-4 text-white">
-          <h3 className="text-xl font-bold">Register New Customer</h3>
+    <div className="fixed inset-0 bg-[#f8fafc] z-[150] flex flex-col animate-in fade-in slide-in-from-bottom-5 duration-300">
+      
+      {/* HEADER SECTION --- Sticky */}
+      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-gray-100 px-6 py-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="bg-primary/10 p-2.5 rounded-xl">
+            <FaBuilding className="text-xl text-primary" />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-gray-900 tracking-tight">
+              {editingItem ? "Edit Customer Details" : "Register New Customer"}
+            </h3>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Customer Relationship Management</p>
+          </div>
         </div>
-
-        <input
-          type="file"
-          accept=".xlsx,.xls"
-          hidden
-          id="customerBulkUpload"
-          onChange={handleBulkUpload}
-        />
-
-        <button
-          type="button"
-          onClick={() =>
-            document.getElementById("customerBulkUpload").click()
-          }
-          className="w-full bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition"
+        <button 
+          onClick={onClose}
+          className="p-3 bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all duration-200 group active:scale-95 shadow-sm border border-gray-100"
         >
-          📤 Bulk Upload Customers (Excel)
+          <FaTimes className="text-xl group-hover:rotate-90 transition-transform duration-300" />
         </button>
+      </div>
 
-
-
-        <form
-          onSubmit={handleSubmit}
-          className="p-6 space-y-5 max-h-[80vh] overflow-y-auto"
-        >
-          {/* BASIC DETAILS */}
-          <div className="space-y-4">
-            <div>
-              <label className={labelClass}>Customer Name *</label>
-              <input
-                type="text"
-                required
-                className={inputClass}
-                value={customer.name}
-                onChange={(e) =>
-                  setCustomer({ ...customer, name: e.target.value })
-                }
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>Customer Categories</label>
-                {Array.isArray(customerCategories) && customerCategories.length > 0 ? (
-                  <FilterableCheckboxList
-                    options={customerCategories}
-                    selectedIds={customer.customerCategories}
-                    onChange={(selectedIds) => {
-                      setCustomer({ ...customer, customerCategories: selectedIds });
-                    }}
-                    placeholder="Search categories..."
-                  />
-                ) : (
-                  <div style={{color: '#999', fontSize: '13px', padding: '12px', textAlign: 'center', border: '2px solid #e5e7eb', borderRadius: '8px'}}>
-                    📦 No categories available
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className={labelClass}>Customer Groups</label>
-                {Array.isArray(customerGroups) && customerGroups.length > 0 ? (
-                  <FilterableCheckboxList
-                    options={customerGroups}
-                    selectedIds={customer.customerGroups}
-                    onChange={(selectedIds) => {
-                      setCustomer({ ...customer, customerGroups: selectedIds });
-                    }}
-                    placeholder="Search groups..."
-                  />
-                ) : (
-                  <div style={{color: '#999', fontSize: '13px', padding: '12px', textAlign: 'center', border: '2px solid #e5e7eb', borderRadius: '8px'}}>
-                    👥 No groups available
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <hr />
-
-          {/* CONTACT DETAILS */}
-          <div className="space-y-4">
-            <h4 className="text-primary font-bold text-sm">📞 Contact Details</h4>
+      {/* MAIN CONTENT --- Full Screen Scrollable */}
+      <div className="flex-1 overflow-y-auto px-6 py-8">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* LEFT SIDE: PRIMARY INFO & CONFIG */}
+          <div className="lg:col-span-8 space-y-8">
             
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>WhatsApp *</label>
-                <input
-                  type="tel"
-                  required
-                  className={inputClass}
-                  value={customer.whatsapp}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, whatsapp: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Email</label>
-                <input
-                  type="email"
-                  className={inputClass}
-                  value={customer.email}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, email: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-          </div>
-
-          <hr />
-
-          {/* ADDRESS DETAILS */}
-          <div className="space-y-4">
-            <h4 className="text-primary font-bold text-sm">🏠 Address Details</h4>
-
-            <div>
-              <label className={labelClass}>Address</label>
-              <textarea
-                className={`${inputClass} h-20`}
-                value={customer.address}
-                onChange={(e) =>
-                  setCustomer({ ...customer, address: e.target.value })
-                }
+            {/* BULK UPLOAD INTEGRATION */}
+            <div className="bg-white rounded-3xl p-1 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                hidden
+                id="customerBulkUpload"
+                onChange={handleBulkUpload}
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>District</label>
-                <input
-                  type="text"
-                  className={inputClass}
-                  value={customer.district}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, district: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>State</label>
-                <input
-                  type="text"
-                  className={inputClass}
-                  value={customer.state}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, state: e.target.value })
-                  }
-                />
+              <div 
+                onClick={() => document.getElementById("customerBulkUpload").click()}
+                className="group flex flex-col md:flex-row items-center gap-6 p-8 cursor-pointer rounded-2xl relative overflow-hidden transition-all duration-300"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-green-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                
+                <div className="bg-green-100 p-6 rounded-2xl text-green-600 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-inner z-10">
+                  <FaCloudUploadAlt className="text-4xl" />
+                </div>
+                
+                <div className="flex-1 text-center md:text-left z-10">
+                  <h4 className="text-green-800 font-black text-xl leading-tight">Fast-Track Bulk Upload</h4>
+                  <p className="text-green-600/70 text-sm mt-1 font-medium">Instantly add hundreds of customers via Excel (.xlsx, .xls)</p>
+                  
+                  <div className="mt-4 flex flex-wrap gap-2 justify-center md:justify-start">
+                    {['Name', 'WhatsApp', 'Email', 'Address', 'GSTIN', 'Margin', 'Debit'].map(tag => (
+                      <span key={tag} className="px-3 py-1 bg-white/80 border border-green-100 text-green-700 rounded-lg text-[10px] font-bold shadow-sm">{tag}</span>
+                    ))}
+                  </div>
+                </div>
+                <FaChevronRight className="hidden md:block text-2xl text-green-300 group-hover:text-green-500 group-hover:translate-x-2 transition-all duration-300 z-10" />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>Country</label>
-                <input
-                  type="text"
-                  className={inputClass}
-                  placeholder="e.g., India"
-                  value={customer.country}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, country: e.target.value })
-                  }
-                />
-              </div>
+            {/* MAIN FORM */}
+            <form onSubmit={handleSubmit} id="customerForm" className="space-y-8">
+              
+              {/* SECTION: BASIC IDENTITY */}
+              <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 space-y-6">
+                <div className="flex items-center gap-3 pb-4 border-b border-gray-50">
+                  <span className="p-2 bg-blue-50 text-blue-500 rounded-lg"><FaIdCard size={18} /></span>
+                  <h4 className="text-gray-900 font-black text-lg tracking-tight uppercase">Basic Identity</h4>
+                </div>
 
-              <div>
-                <label className={labelClass}>Pincode</label>
-                <input
-                  type="text"
-                  className={inputClass}
-                  value={customer.pincode}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, pincode: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-          </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="md:col-span-2">
+                    <label className={labelClass}>Full Customer Name / Legal Identity *</label>
+                    <input
+                      type="text"
+                      required
+                      className={inputClass}
+                      placeholder="e.g., Jane Cooper or Acme Corp"
+                      value={customer.name}
+                      onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
+                    />
+                  </div>
 
-          <hr />
+                  <div>
+                    <label className={labelClass}>Customer Categories</label>
+                    {Array.isArray(customerCategories) && customerCategories.length > 0 ? (
+                      <FilterableCheckboxList
+                        options={customerCategories}
+                        selectedIds={customer.customerCategories}
+                        onChange={(selectedIds) => setCustomer({ ...customer, customerCategories: selectedIds })}
+                        placeholder="Search categories..."
+                      />
+                    ) : (
+                      <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-6 text-center text-gray-400 text-sm italic">
+                        No categories found
+                      </div>
+                    )}
+                  </div>
 
-          {/* TAX & REGISTRATION */}
-          <div className="space-y-4">
-            <h4 className="text-primary font-bold text-sm">📋 Tax & Registration</h4>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>Registration Type</label>
-                <select
-                  className={inputClass}
-                  value={customer.registrationType}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, registrationType: e.target.value })
-                  }
-                >
-                  <option value="regular">Regular</option>
-                  <option value="unregistered">Unregistered</option>
-                </select>
-              </div>
-
-              <div>
-                <label className={labelClass}>GSTIN</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className={`${inputClass} flex-1`}
-                    value={customer.gstin}
-                    onChange={(e) =>
-                      setCustomer({ ...customer, gstin: e.target.value.toUpperCase() })
-                    }
-                    placeholder="E.g., 27AABCD1234H1Z0"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleFetchGstDetails}
-                    disabled={isFetchingGst || !customer.gstin}
-                    className={`px-3 py-2 rounded-lg font-bold text-xs uppercase transition shadow-sm ${
-                      isFetchingGst 
-                        ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
-                        : "bg-orange-500 text-white hover:bg-orange-600 active:scale-95"
-                    }`}
-                  >
-                    {isFetchingGst ? "..." : "🔍 Fetch"}
-                  </button>
+                  <div>
+                    <label className={labelClass}>Customer Groups</label>
+                    {Array.isArray(customerGroups) && customerGroups.length > 0 ? (
+                      <FilterableCheckboxList
+                        options={customerGroups}
+                        selectedIds={customer.customerGroups}
+                        onChange={(selectedIds) => setCustomer({ ...customer, customerGroups: selectedIds })}
+                        placeholder="Search groups..."
+                      />
+                    ) : (
+                      <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-6 text-center text-gray-400 text-sm italic">
+                        No groups found
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+
+              {/* SECTION: CONTACT & LOCATION */}
+              <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* CONTACT */}
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3 pb-2">
+                      <span className="p-2 bg-purple-50 text-purple-500 rounded-lg"><FaPhoneAlt size={16} /></span>
+                      <h4 className="text-gray-900 font-black text-sm tracking-widest uppercase">Connectivity</h4>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-6">
+                      <div>
+                        <label className={labelClass}>WhatsApp Number *</label>
+                        <input
+                          type="tel"
+                          required
+                          className={inputClass}
+                          placeholder="+91 XXXXX XXXXX"
+                          value={customer.whatsapp}
+                          onChange={(e) => setCustomer({ ...customer, whatsapp: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Email Address</label>
+                        <input
+                          type="email"
+                          className={inputClass}
+                          placeholder="client@example.com"
+                          value={customer.email}
+                          onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ADDRESS */}
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3 pb-2">
+                      <span className="p-2 bg-orange-50 text-orange-500 rounded-lg"><FaMapMarkedAlt size={16} /></span>
+                      <h4 className="text-gray-900 font-black text-sm tracking-widest uppercase">Physical Address</h4>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-6">
+                      <div>
+                        <label className={labelClass}>Street Address / Area</label>
+                        <textarea
+                          className={`${inputClass} h-[132px] resize-none`}
+                          placeholder="Plot No. 123, Industry Zone..."
+                          value={customer.address}
+                          onChange={(e) => setCustomer({ ...customer, address: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ADDRESS METADATA */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className={labelClass}>District</label>
+                    <input type="text" className={inputClass} value={customer.district} onChange={(e) => setCustomer({ ...customer, district: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>State</label>
+                    <input type="text" className={inputClass} value={customer.state} onChange={(e) => setCustomer({ ...customer, state: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Pincode</label>
+                    <input type="text" className={inputClass} value={customer.pincode} onChange={(e) => setCustomer({ ...customer, pincode: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Country</label>
+                    <input type="text" className={inputClass} value={customer.country} onChange={(e) => setCustomer({ ...customer, country: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION: FINANCIAL & TAX */}
+              <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 space-y-6">
+                <div className="flex items-center gap-3 pb-4 border-b border-gray-50">
+                  <span className="p-2 bg-green-50 text-green-500 rounded-lg"><FaWallet size={18} /></span>
+                  <h4 className="text-gray-900 font-black text-lg tracking-tight uppercase">Tax & Financials</h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className={labelClass}>Registration Type</label>
+                    <select
+                      className={inputClass}
+                      value={customer.registrationType}
+                      onChange={(e) => setCustomer({ ...customer, registrationType: e.target.value })}
+                    >
+                      <option value="regular">Regular / GST Registered</option>
+                      <option value="unregistered">Unregistered</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>GSTIN (15 Digits)</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className={`${inputClass} flex-1`}
+                        placeholder="e.g., 27AABCD1234H1Z0"
+                        value={customer.gstin}
+                        onChange={(e) => setCustomer({ ...customer, gstin: e.target.value.toUpperCase() })}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleFetchGstDetails}
+                        disabled={isFetchingGst || !customer.gstin}
+                        className={`px-4 rounded-xl font-bold text-[10px] uppercase transition-all shadow-sm flex items-center gap-2 ${
+                          isFetchingGst ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-orange-500 text-white hover:bg-orange-600 active:scale-95 shadow-orange-200"
+                        }`}
+                      >
+                        {isFetchingGst ? "..." : "🔍 Auto-Fill"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-50">
+                  <div>
+                    <label className={labelClass}>Default Margin (%)</label>
+                    <input type="number" step="0.01" className={inputClass} value={customer.margin} onChange={(e) => setCustomer({ ...customer, margin: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Opening Credit</label>
+                    <input type="number" className={inputClass} value={customer.credit} onChange={(e) => setCustomer({ ...customer, credit: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Opening Debit</label>
+                    <input type="number" className={inputClass} value={customer.debit} onChange={(e) => setCustomer({ ...customer, debit: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+            </form>
           </div>
 
-          <hr />
-
-          {/* BUSINESS DETAILS */}
-          <div className="space-y-4">
-            <h4 className="text-primary font-bold text-sm">💼 Business Details</h4>
-
-            <div>
-              <label className={labelClass}>Sales Owner</label>
-              <FilterableSelect
-                options={salesOwners.map(owner => ({
-                  _id: owner._id,
-                  name: `${owner.name} (${owner.phone})`
-                }))}
-                value={customer.salesOwner}
-                onChange={(value) =>
-                  setCustomer({ ...customer, salesOwner: value })
-                }
-                placeholder="Select Sales Owner"
-                className={inputClass}
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
+          {/* RIGHT SIDE: SETTINGS & OWNER --- Sticky */}
+          <div className="lg:col-span-4 space-y-8">
+            <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 space-y-6 sticky top-28">
+              <h4 className="text-gray-900 font-black text-lg tracking-tight uppercase border-b border-gray-50 pb-4">Assignment</h4>
+              
               <div>
-                <label className={labelClass}>Margin (%)</label>
-                <input
-                  type="number"
-                  step="0.01"
+                <label className={labelClass}>Sales Relationship Manager</label>
+                <FilterableSelect
+                  options={salesOwners.map(owner => ({
+                    _id: owner._id,
+                    name: `${owner.name} (${owner.phone})`
+                  }))}
+                  value={customer.salesOwner}
+                  onChange={(value) => setCustomer({ ...customer, salesOwner: value })}
+                  placeholder="Select Sales Owner"
                   className={inputClass}
-                  value={customer.margin}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, margin: e.target.value })
-                  }
-                  placeholder="Positive or Negative"
                 />
               </div>
 
-              <div>
-                <label className={labelClass}>Credit</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className={inputClass}
-                  value={customer.credit}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, credit: e.target.value })
-                  }
-                />
+              <div className="bg-gray-50/50 rounded-2xl p-6 border border-gray-100 space-y-6">
+                <h5 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Bank Details (Optional)</h5>
+                
+                <div className="space-y-4">
+                  <input type="text" className={inputClass} placeholder="Account Holder Name" value={customer.accountHolder} onChange={(e) => setCustomer({ ...customer, accountHolder: e.target.value })} />
+                  <input type="text" className={inputClass} placeholder="Account Number" value={customer.accountNumber} onChange={(e) => setCustomer({ ...customer, accountNumber: e.target.value })} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="text" className={`${inputClass} uppercase`} placeholder="IFSC" value={customer.ifsc} onChange={(e) => setCustomer({ ...customer, ifsc: e.target.value })} />
+                    <input type="text" className={inputClass} placeholder="Branch" value={customer.branch} onChange={(e) => setCustomer({ ...customer, branch: e.target.value })} />
+                  </div>
+                  <input type="text" className={inputClass} placeholder="UPI ID (optional)" value={customer.upi} onChange={(e) => setCustomer({ ...customer, upi: e.target.value })} />
+                </div>
               </div>
-
-              <div>
-                <label className={labelClass}>Debit</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className={inputClass}
-                  value={customer.debit}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, debit: e.target.value })
-                  }
-                />
+              
+              <div className="bg-blue-600 rounded-2xl p-6 text-white text-center shadow-xl shadow-blue-200">
+                <p className="text-xs font-bold opacity-80 uppercase tracking-widest mb-1 shadow-sm">Registration Status</p>
+                <p className="font-black text-lg">{editingItem ? "MODIFICATION MODE" : "INITIAL REGISTRATION"}</p>
               </div>
             </div>
           </div>
+        </div>
+      </div>
 
-          <hr />
-
-
-          {/* BANK DETAILS */}
-          <div className="space-y-4 bg-gray-50 p-4 rounded-xl border">
-            <h4 className="text-primary font-bold text-sm">
-              🏦 Bank Details
-            </h4>
-
-            <div>
-              <label className={labelClass}>Account Holder</label>
-              <input
-                type="text"
-                className={inputClass}
-                value={customer.accountHolder}
-                onChange={(e) =>
-                  setCustomer({
-                    ...customer,
-                    accountHolder: e.target.value,
-                  })
-                }
-              />
-            </div>
-
-            <div>
-              <label className={labelClass}>Account Number</label>
-              <input
-                type="text"
-                className={inputClass}
-                value={customer.accountNumber}
-                onChange={(e) =>
-                  setCustomer({
-                    ...customer,
-                    accountNumber: e.target.value,
-                  })
-                }
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>IFSC Code</label>
-                <input
-                  type="text"
-                  className={`${inputClass} uppercase`}
-                  value={customer.ifsc}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, ifsc: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Branch Name</label>
-                <input
-                  type="text"
-                  className={inputClass}
-                  value={customer.branch}
-                  onChange={(e) =>
-                    setCustomer({ ...customer, branch: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className={labelClass}>UPI Number</label>
-              <input
-                type="text"
-                className={inputClass}
-                value={customer.upi}
-                onChange={(e) =>
-                  setCustomer({ ...customer, upi: e.target.value })
-                }
-                placeholder="e.g., name@bank"
-              />
-            </div>
+      {/* FOOTER ACTION BAR --- Sticky */}
+      <div className="sticky bottom-0 bg-white/95 backdrop-blur-md border-t border-gray-100 px-8 py-6 flex items-center justify-center gap-4 shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+        <div className="max-w-6xl w-full flex items-center justify-between gap-6">
+          <div className="hidden md:block">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-tighter">Required Fields Marked (*)</p>
           </div>
-
-          {/* ACTIONS */}
-          <div className="flex gap-3 pt-4 sticky bottom-0 bg-white">
+          <div className="flex gap-4 w-full md:w-auto">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 p-2 border rounded-lg"
+              className="flex-1 md:flex-none px-12 py-3 border-2 border-gray-100 text-gray-500 font-black rounded-2xl hover:bg-gray-50 hover:text-gray-700 transition-all duration-200 uppercase tracking-wider text-sm active:scale-95"
             >
               Cancel
             </button>
             <button
+              form="customerForm"
               type="submit"
-              className="flex-1 p-2 bg-primary text-white rounded-lg font-bold shadow-lg"
+              className="flex-1 md:flex-none px-16 py-4 bg-primary text-white font-black rounded-2xl hover:bg-primary/90 transition-all duration-300 shadow-xl shadow-primary/20 uppercase tracking-widest text-sm hover:-translate-y-1 active:scale-95"
             >
-              Save Customer
+              {editingItem ? "Update Record" : "Register Customer"}
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

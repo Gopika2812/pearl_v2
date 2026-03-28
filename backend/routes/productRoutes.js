@@ -71,6 +71,17 @@ router.post("/", async (req, res) => {
       }
     }
 
+    const pPrice = Math.round((Number(purchasingPrice) || 0) * 100) / 100;
+    const sPrice = Math.round((Number(sellingPrice) || 0) * 100) / 100;
+    let finalMargin = 0;
+    let finalMarginPercentage = Number(marginPercentage) || 0;
+
+    // Auto-calculate margin if prices provided but marginPercentage is not
+    if (pPrice > 0 && sPrice > 0 && (!marginPercentage || Number(marginPercentage) === 0)) {
+      finalMargin = Math.round((sPrice - pPrice) * 100) / 100;
+      finalMarginPercentage = Math.round((finalMargin / pPrice) * 100 * 100) / 100;
+    }
+
     const product = new Product({
       branchId,
       productGroup: productGroup || null,
@@ -79,10 +90,11 @@ router.post("/", async (req, res) => {
       perQty: Math.round((Number(perQty) || 0) * 100) / 100,
       units,
       totalQty: Math.round((Number(totalQty) || 0) * 100) / 100,
-      purchasingPrice: Math.round((Number(purchasingPrice) || 0) * 100) / 100,
-      sellingPrice: Math.round((Number(sellingPrice) || 0) * 100) / 100,
+      purchasingPrice: pPrice,
+      sellingPrice: sPrice,
       adminMargin: Math.round((Number(adminMargin) || 0) * 100) / 100,
-      marginPercentage: Math.round((Number(marginPercentage) || 0) * 100) / 100,
+      margin: finalMargin,
+      marginPercentage: finalMarginPercentage,
       lockedPrice: Math.round((Number(lockedPrice) || 0) * 100) / 100,
       hsnCode,
       gst: Math.round((Number(gst) || 0) * 100) / 100,
@@ -468,6 +480,15 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const productKey = `${name.toLowerCase()}|${groupId.toString()}`;
       const existingProductId = existingProductMap.get(productKey);
 
+      // 💰 Calculate margin and marginPercentage
+      let finalMargin = 0;
+      let finalMarginPercentage = margin; 
+
+      if (purchasingPrice > 0 && sellingPrice > 0) {
+        finalMargin = sellingPrice - purchasingPrice;
+        finalMarginPercentage = (finalMargin / purchasingPrice) * 100;
+      }
+
       const productData = {
         branchId,
         productGroup: groupId,
@@ -479,6 +500,8 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         totalQty: Math.round(totalQty * 100) / 100,
         purchasingPrice: Math.round(purchasingPrice * 100) / 100,
         sellingPrice: Math.round(sellingPrice * 100) / 100,
+        margin: Math.round(finalMargin * 100) / 100,
+        marginPercentage: Math.round(finalMarginPercentage * 100) / 100,
         hsnCode,
         gst: Math.round(gst * 100) / 100,
       };

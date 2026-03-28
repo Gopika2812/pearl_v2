@@ -222,36 +222,63 @@ const salesOrderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-salesOrderSchema.post("deleteOne", { document: true }, async function(doc) {
+/**
+ * Helper function to revert all financial and inventory impacts when a Sales Order is deleted
+ */
+async function revertOrderEffects(doc) {
   try {
     if (!doc) return;
     
     // Lazy load models to avoid circular dependencies
-    const Commission = mongoose.model("Commission");
     const Customer = mongoose.model("Customer");
+    const Commission = mongoose.model("Commission");
     const SalesOwner = mongoose.model("SalesOwner");
     const SalesMan = mongoose.model("SalesMan");
     const DeliveryMan = mongoose.model("DeliveryMan");
+    const Product = mongoose.model("Product");
     
     const orderValue = doc.grandTotalWithMargin || doc.grandTotal || 0;
     const customerId = doc.customer?.customerId;
     
-    console.log(`🗑️ Reverting sales order deletion: Invoice ${doc.invoiceId}`);
+    console.log(`🗑️ Reverting sales order effects: Invoice ${doc.invoiceId}`);
     
-    // 1️⃣ REVERT CUSTOMER CLOSING BALANCE
+    // 1️⃣ REVERT CUSTOMER BALANCE (Debit and Closing Balance)
     if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
       const customer = await Customer.findById(customerId);
       if (customer) {
-        const revertedBalance = customer.closingBalance - orderValue;
+        // If invoice was generated, we must revert both debit and closingBalance
+        // In this system, they are kept equal for invoiced orders
+        const amountToRevert = doc.invoiceGrandTotal || orderValue;
+        const newBalance = Math.round((customer.closingBalance || 0) - amountToRevert);
+        
         await Customer.findByIdAndUpdate(customerId, {
-          closingBalance: revertedBalance,
-          totalBalance: revertedBalance,
+          debit: newBalance,
+          closingBalance: newBalance,
+          totalBalance: newBalance,
         });
-        console.log(`✅ Customer balance reverted: ₹${revertedBalance}`);
+        console.log(`✅ Customer ${customer.name} balance reverted: -₹${amountToRevert}. New: ₹${newBalance}`);
       }
     }
     
-    // 2️⃣ REVERT COMMISSIONS FROM SALES PERSONNEL
+    // 2️⃣ RESTORE PRODUCT STOCK (Only if invoice was generated)
+    if (doc.invoiceGenerated) {
+      console.log("📦 Restoring product stock...");
+      const itemsToRestore = (doc.invoiceItems && doc.invoiceItems.length > 0) ? doc.invoiceItems : doc.items;
+      const samplesToRestore = (doc.invoiceSampleItems && doc.invoiceSampleItems.length > 0) ? doc.invoiceSampleItems : doc.sampleItems;
+      
+      const allItems = [...(itemsToRestore || []), ...(samplesToRestore || [])];
+      
+      for (const item of allItems) {
+        if (item.productId && item.qty > 0) {
+          await Product.findByIdAndUpdate(item.productId, {
+            $inc: { totalQty: item.qty }
+          });
+          console.log(`✅ Stock restored for ${item.name || 'Product'}: +${item.qty}`);
+        }
+      }
+    }
+    
+    // 3️⃣ REVERT COMMISSIONS
     const commission = await Commission.findOne({ salesOrderId: doc._id });
     if (commission) {
       // Revert Sales Owner Commission
@@ -284,74 +311,20 @@ salesOrderSchema.post("deleteOne", { document: true }, async function(doc) {
     }
     
   } catch (error) {
-    console.error("❌ Error in post-delete hook:", error.message);
+    console.error("❌ Error reverting order effects:", error.message);
   }
+}
+
+salesOrderSchema.post("deleteOne", { document: true }, async function(doc) {
+  await revertOrderEffects(doc);
+});
+
+salesOrderSchema.post("findOneAndDelete", async function(doc) {
+  await revertOrderEffects(doc);
 });
 
 salesOrderSchema.post("findByIdAndDelete", async function(doc) {
-  try {
-    if (!doc) return;
-    
-    // Lazy load models
-    const Commission = mongoose.model("Commission");
-    const Customer = mongoose.model("Customer");
-    const SalesOwner = mongoose.model("SalesOwner");
-    const SalesMan = mongoose.model("SalesMan");
-    const DeliveryMan = mongoose.model("DeliveryMan");
-    
-    const orderValue = doc.grandTotalWithMargin || doc.grandTotal || 0;
-    const customerId = doc.customer?.customerId;
-    
-    console.log(`🗑️ Reverting sales order deletion: Invoice ${doc.invoiceId}`);
-    
-    // 1️⃣ REVERT CUSTOMER CLOSING BALANCE
-    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
-      const customer = await Customer.findById(customerId);
-      if (customer) {
-        const revertedBalance = customer.closingBalance - orderValue;
-        await Customer.findByIdAndUpdate(customerId, {
-          closingBalance: revertedBalance,
-          totalBalance: revertedBalance,
-        });
-        console.log(`✅ Customer balance reverted: ₹${revertedBalance}`);
-      }
-    }
-    
-    // 2️⃣ REVERT COMMISSIONS FROM SALES PERSONNEL
-    const commission = await Commission.findOne({ salesOrderId: doc._id });
-    if (commission) {
-      // Revert Sales Owner Commission
-      if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
-        await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
-          $inc: { commissionAmount: -commission.salesOwnerCommissionAmount }
-        });
-        console.log(`✅ Sales Owner commission reverted: -₹${commission.salesOwnerCommissionAmount}`);
-      }
-      
-      // Revert Sales Man Commission
-      if (commission.salesManId && commission.salesManCommissionAmount > 0) {
-        await SalesMan.findByIdAndUpdate(commission.salesManId, {
-          $inc: { commissionAmount: -commission.salesManCommissionAmount }
-        });
-        console.log(`✅ Sales Man commission reverted: -₹${commission.salesManCommissionAmount}`);
-      }
-      
-      // Revert Delivery Man Commission
-      if (commission.deliveryManId && commission.deliveryManCommissionAmount > 0) {
-        await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, {
-          $inc: { commissionAmount: -commission.deliveryManCommissionAmount }
-        });
-        console.log(`✅ Delivery Man commission reverted: -₹${commission.deliveryManCommissionAmount}`);
-      }
-      
-      // Delete Commission Record
-      await Commission.deleteOne({ salesOrderId: doc._id });
-      console.log(`✅ Commission record deleted`);
-    }
-    
-  } catch (error) {
-    console.error("❌ Error in findByIdAndDelete post-hook:", error.message);
-  }
+  await revertOrderEffects(doc);
 });
 
 export default mongoose.model("SalesOrder", salesOrderSchema);

@@ -35,6 +35,8 @@ import BranchRecycling from "./pages/branch/BranchRecycling";
 import BranchSalesOrder from "./pages/branch/BranchSalesOrder";
 import BranchSummary from "./pages/branch/BranchSummary";
 import BranchSuppliers from "./pages/branch/BranchSuppliers";
+import BranchOtherPayment from "./pages/branch/BranchOtherPayment";
+import BranchOtherReceipt from "./pages/branch/BranchOtherReceipt";
 import BranchProductRecords from "./pages/branch/BranchProductRecords";
 import BranchLockedPrices from "./pages/branch/BranchLockedPrices";
 import BranchAdminRequests from "./pages/branch/BranchAdminRequests";
@@ -189,6 +191,9 @@ function AppContent() {
               <div className={`flex-1 ${isInsightsRoute ? "p-0" : "p-6"}`}>
                 <Routes>
                   <Route path="/" element={<BranchLoginPage />} />
+                  <Route path="/branch/other-payment" element={<BranchOtherPayment />} />
+                  <Route path="/branch/other-receipt" element={<BranchOtherReceipt />} />
+                  <Route path="/branch/recycling" element={<BranchRecycling />} />
                   <Route path="/branch-login" element={<BranchLoginPage />} />
                   <Route path="/branch-register" element={<BranchRegisterPage />} />
                   <Route path="/user-register" element={<UserRegistrationPage />} />

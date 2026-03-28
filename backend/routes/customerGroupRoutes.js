@@ -38,13 +38,13 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       console.log("Processing row:", row);
       const normalized = Object.fromEntries(
         Object.entries(row).map(([k, v]) => [
-          k.trim().toLowerCase(),
-          String(v).trim(),
+          k.replace(/[\s"\n\r]+/g, "").toLowerCase(),
+          String(v || "").trim(),
         ])
       );
 
       console.log("Normalized row:", normalized);
-      const name = normalized.name || normalized.customergroupname;
+      const name = normalized.name || normalized.customergroupname || normalized.customergroup || normalized.customergroups;
       const description = normalized.description || "";
 
       if (!name) {

@@ -109,13 +109,19 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
       return (val !== undefined && val !== null) ? `${val}%` : "-";
     }
     
+    // Absolute Margin (₹)
+    if (key === "margin") {
+      if (typeof item.margin === 'number' && item.margin !== 0) {
+        return `₹${item.margin.toFixed(2)}`;
+      }
+      return (item.margin !== undefined && item.margin !== null) ? item.margin : "-";
+    }
+    
     // Fallback for special combined display if needed
     if (item.marginPercentage && item.margin !== undefined && item.margin !== null) {
       return `${Math.round(item.marginPercentage)}% - ₹${Math.round(item.margin)}`;
     }
-    if (item.margin !== undefined && item.margin !== null) {
-      return `${item.margin}%`;
-    }
+    
     return "-";
   };
 
@@ -439,7 +445,14 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                             }
                           } else if (typeof value === "number") {
                             displayValue = Math.round(value * 100) / 100;
-                            if (field === "debit" || field === "credit" || field === "sellingPrice") {
+                            if (field === "debit" || field === "credit" || field === "sellingPrice" || field === "purchasingPrice") {
+                              displayValue = `₹${displayValue.toFixed(2)}`;
+                            }
+                          } else if (typeof value === "string" && !isNaN(parseFloat(value)) && isFinite(value)) {
+                            // Handle numeric strings
+                            const num = parseFloat(value);
+                            displayValue = Math.round(num * 100) / 100;
+                            if (field === "debit" || field === "credit" || field === "sellingPrice" || field === "purchasingPrice") {
                               displayValue = `₹${displayValue.toFixed(2)}`;
                             }
                           } else {

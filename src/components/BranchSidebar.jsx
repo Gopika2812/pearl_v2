@@ -19,6 +19,9 @@ import {
   FaUsers,
   FaBook,
   FaLock,
+  FaMoneyBillWave,
+  FaDownload,
+  FaPlusCircle,
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useBranch } from "../context/BranchContext";
@@ -31,6 +34,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   const [adminOpen, setAdminOpen] = useState(false);
   const [poOpen, setPoOpen] = useState(false);
   const [soOpen, setSoOpen] = useState(false);
+  const [othersOpen, setOthersOpen] = useState(false);
 
   const isSuperAdminViewing = !!superAdminViewBranch;
 
@@ -59,6 +63,11 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     { name: "Claims", path: "/branch/claims", icon: <FaFileAlt /> },
     { name: "Receipt", path: "/branch/receipt", icon: <FaDollarSign /> },
   ];
+  
+  const otherTransactionsItems = [
+    { name: "Other Payment", path: "/branch/other-payment", icon: <FaMoneyBillWave /> },
+    { name: "Other Receipt", path: "/branch/other-receipt", icon: <FaDownload /> },
+  ];
 
   const menuItemsBottom = [
     { name: "Loading & Dispatch", path: "/branch/dispatch", icon: <FaTruck /> },
@@ -82,6 +91,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     // Auto-open dropdowns if current path is inside them
     if (purchaseItems.some(i => i.path === location.pathname)) setPoOpen(true);
     if (salesItems.some(i => i.path === location.pathname)) setSoOpen(true);
+    if (otherTransactionsItems.some(i => i.path === location.pathname)) setOthersOpen(true);
   }, [location.pathname]);
 
   const handleLogout = () => {
@@ -108,6 +118,8 @@ const BranchSidebar = ({ isOpen, onClose }) => {
       "/branch/credit-note": "credit-note",
       "/branch/claims": "claims",
       "/branch/receipt": "receipt",
+      "/branch/other-payment": "other-payment",
+      "/branch/other-receipt": "other-receipt",
       "/branch/dispatch": "dispatch",
       "/branch/suppliers": "suppliers",
       "/branch/customers": "customers",
@@ -131,6 +143,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   const filteredTop = menuItemsTop.filter(i => isAllowed(i.path));
   const filteredPurchase = purchaseItems.filter(i => isAllowed(i.path));
   const filteredSales = salesItems.filter(i => isAllowed(i.path));
+  const filteredOthers = otherTransactionsItems.filter(i => isAllowed(i.path));
   const filteredBottom = menuItemsBottom.filter(i => isAllowed(i.path));
   const filteredSummary = summaryItems.filter(i => isAllowed(i.path));
 
@@ -236,6 +249,47 @@ const BranchSidebar = ({ isOpen, onClose }) => {
               {soOpen && (
                 <div className="mt-1 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
                   {filteredSales.map((item, idx) => {
+                    const active = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={idx}
+                        to={item.path}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                          active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
+                        }`}
+                        title={item.name}
+                      >
+                        <div className="w-6 flex justify-center flex-shrink-0">
+                          <span className="text-sm">{item.icon}</span>
+                        </div>
+                        <span className="whitespace-nowrap">{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* OTHER TRANSACTIONS DROPDOWN */}
+          {filteredOthers.length > 0 && (
+            <div className="mx-3 mb-1">
+              <button
+                onClick={() => setOthersOpen(!othersOpen)}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
+                title="Other Transactions"
+              >
+                <div className="w-8 flex justify-center flex-shrink-0">
+                  <span className="text-lg"><FaPlusCircle /></span>
+                </div>
+                <span className="text-sm flex-1 text-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">Other Transactions</span>
+                <div className="w-4 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <FaChevronDown className={`text-xs transition-transform ${othersOpen ? "rotate-180" : ""}`} />
+                </div>
+              </button>
+              {othersOpen && (
+                <div className="mt-1 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
+                  {filteredOthers.map((item, idx) => {
                     const active = location.pathname === item.path;
                     return (
                       <Link
@@ -479,6 +533,42 @@ const BranchSidebar = ({ isOpen, onClose }) => {
               </div>
             )}
           </div>
+
+          {/* OTHER TRANSACTIONS DROPDOWN MOBILE */}
+          {filteredOthers.length > 0 && (
+            <div className="mx-2 mb-1">
+              <button
+                onClick={() => setOthersOpen(!othersOpen)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
+              >
+                <span className="text-lg"><FaPlusCircle /></span>
+                <span className="text-sm flex-1 text-left">Other Transactions</span>
+                <FaChevronDown className={`text-xs transition-transform ${othersOpen ? "rotate-180" : ""}`} />
+              </button>
+              {othersOpen && (
+                <div className="mt-1 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
+                  {filteredOthers.map((item, idx) => {
+                    const active = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={idx}
+                        to={item.path}
+                        onClick={onClose}
+                        className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
+                          active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
+                        }`}
+                      >
+                        <div className="w-6 flex justify-center flex-shrink-0">
+                          <span className="text-sm">{item.icon}</span>
+                        </div>
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {filteredBottom.map((item, index) => {
             const active = location.pathname === item.path;

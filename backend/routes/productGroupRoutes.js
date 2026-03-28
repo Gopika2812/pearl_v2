@@ -36,13 +36,13 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       console.log("Processing row:", row);
       const normalized = Object.fromEntries(
         Object.entries(row).map(([k, v]) => [
-          k.trim().toLowerCase(),
-          String(v).trim(),
+          k.replace(/[\s"\n\r]+/g, "").toLowerCase(),
+          String(v || "").trim(),
         ])
       );
 
       console.log("Normalized row:", normalized);
-      const name = normalized.name;
+      const name = normalized.name || normalized.productgroup || normalized.productgroups || normalized.productgroupname;
 
       if (!name) {
         skipped.push({ row, reason: "Missing product group name" });

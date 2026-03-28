@@ -1,0 +1,94 @@
+import express from "express";
+import OtherTransaction from "../models/OtherTransaction.js";
+import mongoose from "mongoose";
+
+const router = express.Router();
+
+// Financial Year Helper
+const getFinancialYear = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  if (month >= 4) {
+    return `${year}-${(year + 1).toString().slice(-2)}`;
+  } else {
+    return `${year - 1}-${year.toString().slice(-2)}`;
+  }
+};
+
+// GET ALL OTHER TRANSACTIONS FOR A BRANCH
+router.get("/", async (req, res) => {
+  try {
+    const { branchId, type } = req.query;
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    const query = { branchId };
+    if (type) {
+      query.type = type.toUpperCase();
+    }
+
+    const transactions = await OtherTransaction.find(query).sort({ date: -1 });
+    res.json(transactions);
+  } catch (err) {
+    console.error("Get Other Transactions error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// CREATE NEW OTHER TRANSACTION
+router.post("/", async (req, res) => {
+  try {
+    const { branchId, type, ledgerGroup, ledgerName, amount, gst, note, recordedBy } = req.body;
+
+    if (!branchId || !type || !ledgerGroup || !ledgerName || amount === undefined) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const currentFY = getFinancialYear();
+    
+    // Generate a simple unique ID
+    const count = await OtherTransaction.countDocuments({ branchId, type: type.toUpperCase() });
+    const prefix = type.toUpperCase() === "PAYMENT" ? "OTH-PAY" : "OTH-REC";
+    const transactionId = `${prefix}/${String(count + 1).padStart(4, "0")}/${currentFY}`;
+
+    const newTransaction = new OtherTransaction({
+      branchId,
+      transactionId,
+      type: type.toUpperCase(),
+      ledgerGroup,
+      ledgerName,
+      amount: Number(amount),
+      gst: Number(gst || 0),
+      note,
+      recordedBy,
+    });
+
+    await newTransaction.save();
+
+    res.status(201).json({
+      message: `${type} recorded successfully`,
+      transaction: newTransaction,
+    });
+  } catch (err) {
+    console.error("Create Other Transaction error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE TRANSACTION
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await OtherTransaction.findByIdAndDelete(id);
+    if (!deleted) {
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+    res.json({ message: "Transaction deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+export default router;

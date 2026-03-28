@@ -68,29 +68,45 @@ const FilterableCheckboxList = ({
       </div>
 
       {/* Checkbox Options */}
-      <div className="border-2 border-gray-200 rounded-lg p-3 bg-white">
-        {filteredOptions.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3">
-            {filteredOptions.map(opt => (
-              <label
-                key={opt._id}
-                className="flex items-center p-2 cursor-pointer hover:bg-blue-50 rounded-lg transition duration-150"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(opt._id)}
-                  onChange={() => handleToggle(opt._id)}
-                  className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary cursor-pointer"
-                />
-                <span className="ml-2 text-sm text-gray-900">{opt.name}</span>
-              </label>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-4 text-gray-500 text-sm">
-            No options match your search
-          </div>
-        )}
+      <div className="border-2 border-gray-100 rounded-xl overflow-hidden bg-white shadow-sm">
+        <div className="max-h-60 overflow-y-auto custom-scrollbar p-1">
+          {filteredOptions.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              {filteredOptions.map(opt => {
+                const isSelected = selectedIds.includes(opt._id);
+                return (
+                  <label
+                    key={opt._id}
+                    className={`flex items-center p-2.5 cursor-pointer rounded-lg transition-all duration-200 ${
+                      isSelected 
+                        ? "bg-primary/10 border-primary/20" 
+                        : "hover:bg-gray-50 text-gray-700"
+                    }`}
+                  >
+                    <div className="relative flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggle(opt._id)}
+                        className="w-5 h-5 text-primary border-gray-300 rounded focus:ring-primary focus:ring-offset-0 cursor-pointer transition-all"
+                      />
+                    </div>
+                    <span className={`ml-3 text-sm font-medium transition-colors ${
+                      isSelected ? "text-primary shadow-sm" : "text-gray-600"
+                    }`}>
+                      {opt.name}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-6 text-gray-400 text-sm flex flex-col items-center gap-2">
+              <span className="text-2xl">🔍</span>
+              No matches found
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

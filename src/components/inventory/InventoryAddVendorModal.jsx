@@ -197,15 +197,38 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
           onChange={handleBulkUpload}
         />
 
-        <button
-          type="button"
-          onClick={() =>
-            document.getElementById("vendorBulkUpload").click()
-          }
-          className="w-full bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition"
-        >
-          📤 Bulk Upload Vendors (Excel)
-        </button>
+
+        {/* OR Divider */}
+        <div className="relative my-4 px-6">
+          <div className="absolute inset-0 flex items-center px-6">
+            <div className="w-full border-t border-gray-300"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-white text-gray-500 font-semibold uppercase">OR</span>
+          </div>
+        </div>
+
+        {/* Bulk Upload Drop-zone */}
+        <div className="px-6 pb-2">
+          <div
+            onClick={() => document.getElementById("vendorBulkUpload").click()}
+            className="border-2 border-dashed border-green-500 rounded-xl p-6 text-center cursor-pointer hover:bg-green-50 transition-all group shadow-sm bg-green-50/30"
+          >
+            <div className="flex flex-col items-center">
+              <span className="text-3xl mb-2 group-hover:scale-110 transition-transform">📊</span>
+              <p className="text-green-700 font-bold text-lg">Bulk Upload Vendors</p>
+              <p className="text-xs text-gray-600 mt-1">
+                Click to select Excel file (.xlsx, .xls)
+              </p>
+              <div className="mt-3 flex flex-wrap justify-center gap-1">
+                {['Name', 'Phone', 'Email', 'Address', 'GSTIN', 'Credit', 'Debit'].map(tag => (
+                  <span key={tag} className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-semibold">{tag}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
           {/* BASIC DETAILS */}
