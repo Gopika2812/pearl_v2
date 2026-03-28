@@ -14,12 +14,12 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     name: "",
     hsn: "",
     qty: "",
-    sellingPrice: 0,
+    sellingPrice: "",
     gst: 0,
     cgst: 0,
     sgst: 0,
     igst: false,
-    discountAmount: 0,
+    discountPercent: "",
   });
 
   const [productSearch, setProductSearch] = useState("");
@@ -28,7 +28,19 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   // Initialize items from order
   useEffect(() => {
     if (order) {
-      setItems(order.items || []);
+      // Ensure all items have discountPercent calculated if they only have discountAmount
+      const initializedItems = (order.items || []).map(item => {
+        const subtotal = (item.qty || 0) * (item.sellingPrice || 0);
+        const percent = item.discountPercent || 
+          (subtotal > 0 ? (item.discountAmount / subtotal) * 100 : 0);
+        
+        return {
+          ...item,
+          discountPercent: parseFloat(percent.toFixed(2))
+        };
+      });
+
+      setItems(initializedItems);
       setSampleItems(order.sampleItems || []);
       fetchProducts();
     }
@@ -70,8 +82,12 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
 
   // Calculate item total
   const calculateItemTotal = (item) => {
-    const subtotal = item.qty * item.sellingPrice;
-    const discounted = subtotal - (item.discountAmount || 0);
+    const qty = parseFloat(item.qty) || 0;
+    const price = parseFloat(item.sellingPrice) || 0;
+    const subtotal = qty * price;
+    const discountPercent = parseFloat(item.discountPercent) || 0;
+    const discountAmount = subtotal * (discountPercent / 100);
+    const discounted = subtotal - discountAmount;
     const taxAmount = item.igst
       ? discounted * (item.gst || 0) / 100
       : discounted * ((item.cgst || 0) + (item.sgst || 0)) / 100;
@@ -98,15 +114,19 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   // Handle price change
   const handlePriceChange = (index, price) => {
     const updated = [...items];
-    updated[index].sellingPrice = parseFloat(price) || 0;
+    updated[index].sellingPrice = price === "" ? "" : parseFloat(price);
     updated[index].total = calculateItemTotal(updated[index]);
     setItems(updated);
   };
 
-  // Handle discount change
+  // Handle discount change (now in percentage)
   const handleDiscountChange = (index, discount) => {
     const updated = [...items];
-    updated[index].discountAmount = parseFloat(discount) || 0;
+    updated[index].discountPercent = discount === "" ? "" : parseFloat(discount);
+    const qty = parseFloat(updated[index].qty) || 0;
+    const price = parseFloat(updated[index].sellingPrice) || 0;
+    const dPercent = parseFloat(updated[index].discountPercent) || 0;
+    updated[index].discountAmount = (qty * price) * (dPercent / 100);
     updated[index].total = calculateItemTotal(updated[index]);
     setItems(updated);
   };
@@ -152,12 +172,12 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       name: "",
       hsn: "",
       qty: "",
-      sellingPrice: 0,
+      sellingPrice: "",
       gst: 0,
       cgst: 0,
       sgst: 0,
       igst: false,
-      discountAmount: 0,
+      discountPercent: "",
     });
     setProductSearch("");
     setShowAddItemForm(false);
@@ -165,14 +185,42 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   };
 
   // Handle product selection for new item
-  const handleProductSelect = (productId) => {
+  const handleProductSelect = async (productId) => {
     const product = products.find((p) => p._id === productId);
     console.log("🔍 Selected product for new item:", product);
     
     if (product) {
       const gstRate = product.gst || 0;
       const isIgst = Boolean(product.igst || false);
-      const price = product.sellingPrice || product.mrp || 0;
+      let price = product.sellingPrice || product.mrp || 0;
+
+      // FETCH LOCKED PRICE FOR CUSTOMER
+      try {
+        const customerId = order?.customer?.customerId || order?.customer?._id || order?.customer?.id;
+        const branch = order?.branchId || branchId;
+        
+        console.log(`🔍 Checking locked price: Customer=${customerId}, Product=${productId}, Branch=${branch}`);
+
+        if (customerId && branch) {
+          const res = await fetch(`${API_BASE}/customer-locked-prices/${customerId}/${productId}?branchId=${branch}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.data?.lockedPrice) {
+              price = data.data.lockedPrice;
+              console.log(`✅ Using LOCKED PRICE for customer: ₹${price}`);
+              toast.info(`Using allocated selling price: ₹${price}`);
+            } else {
+              console.log("ℹ️ No locked price entry found for this combination");
+            }
+          } else {
+            console.log(`ℹ️ Locked price fetch status: ${res.status}`);
+          }
+        } else {
+          console.warn("⚠️ Missing customerId or branchId for locked price check");
+        }
+      } catch (err) {
+        console.warn("⚠️ Failed to fetch locked price (non-blocking):", err);
+      }
       
       setNewItem({
         ...newItem,
@@ -202,16 +250,33 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       const newItemsTotal = calculateGrandTotal();
       const updatedOrder = {
         ...order,
-        items,
+        items: items.map(item => {
+          const qty = parseFloat(item.qty) || 0;
+          const price = parseFloat(item.sellingPrice) || 0;
+          const dPercent = parseFloat(item.discountPercent) || 0;
+          return {
+            ...item,
+            discountAmount: (qty * price) * (dPercent / 100),
+            discountType: "PERCENT"
+          };
+        }),
         sampleItems,
-        subtotal: items.reduce((sum, item) => sum + (item.qty * item.sellingPrice), 0),
+        subtotal: items.reduce((sum, item) => sum + ((parseFloat(item.qty) || 0) * (parseFloat(item.sellingPrice) || 0)), 0),
         totalTax: items.reduce((sum, item) => {
-          const sub = item.qty * item.sellingPrice;
-          const discounted = sub - (item.discountAmount || 0);
+          const qty = parseFloat(item.qty) || 0;
+          const price = parseFloat(item.sellingPrice) || 0;
+          const dPercent = parseFloat(item.discountPercent) || 0;
+          const sub = qty * price;
+          const discounted = sub - (sub * (dPercent / 100));
           const tax = item.igst ? discounted * (item.gst || 0) / 100 : discounted * ((item.cgst || 0) + (item.sgst || 0)) / 100;
           return sum + tax;
         }, 0),
-        totalDiscount: items.reduce((sum, item) => sum + (item.discountAmount || 0), 0),
+        totalDiscount: items.reduce((sum, item) => {
+          const qty = parseFloat(item.qty) || 0;
+          const price = parseFloat(item.sellingPrice) || 0;
+          const dPercent = parseFloat(item.discountPercent) || 0;
+          return sum + (qty * price * (dPercent / 100));
+        }, 0),
         commonDiscount: order?.commonDiscount || 0,
         grandTotal: Math.round(newItemsTotal),
       };
@@ -267,7 +332,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       Rate
                     </th>
                     <th className="px-4 py-3 text-right font-bold text-gray-700">
-                      Discount
+                      Discount (%)
                     </th>
                     <th className="px-4 py-3 text-center font-bold text-gray-700">
                       Tax
@@ -311,15 +376,17 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <span className="text-gray-500">₹</span>
                           <input
                             type="number"
-                            value={item.discountAmount || 0}
+                            value={item.discountPercent}
                             onChange={(e) => handleDiscountChange(idx, e.target.value)}
                             className="w-20 border border-gray-300 rounded px-2 py-1 text-right focus:ring-2 focus:ring-[#319bab] outline-none"
                             step="0.01"
                             min="0"
+                            max="100"
+                            placeholder="0"
                           />
+                          <span className="text-gray-500">%</span>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center text-sm">
@@ -493,31 +560,37 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       onChange={(e) =>
                         setNewItem({
                           ...newItem,
-                          sellingPrice: parseFloat(e.target.value) || 0,
+                          sellingPrice: e.target.value === "" ? "" : parseFloat(e.target.value),
                         })
                       }
                       className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none"
                       step="0.01"
                       min="0"
+                      placeholder="Enter rate..."
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-2">
-                      Discount
+                      Discount (%)
                     </label>
-                    <input
-                      type="number"
-                      value={newItem.discountAmount}
-                      onChange={(e) =>
-                        setNewItem({
-                          ...newItem,
-                          discountAmount: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none"
-                      step="0.01"
-                      min="0"
-                    />
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={newItem.discountPercent}
+                        onChange={(e) =>
+                          setNewItem({
+                            ...newItem,
+                            discountPercent: e.target.value === "" ? "" : parseFloat(e.target.value),
+                          })
+                        }
+                        className="w-full border border-gray-300 rounded px-3 py-2 pr-8 focus:ring-2 focus:ring-green-500 outline-none"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                        placeholder="0"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -559,7 +632,12 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                   <span className="text-red-500 font-semibold">
                     -₹
                     {items
-                      .reduce((sum, item) => sum + (item.discountAmount || 0), 0)
+                      .reduce((sum, item) => {
+                        const qty = parseFloat(item.qty) || 0;
+                        const price = parseFloat(item.sellingPrice) || 0;
+                        const dPercent = parseFloat(item.discountPercent) || 0;
+                        return sum + (qty * price * (dPercent / 100));
+                      }, 0)
                       .toLocaleString("en-IN", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,

@@ -1674,13 +1674,16 @@ export default function InventorySalesOrderEntry({
             {extraExpenses.length > 0 && (
               <div className="space-y-2 mt-4">
                 {extraExpenses.map((exp) => (
-                  <div key={exp.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-orange-100">
-                    <div>
-                      <p className="font-semibold text-gray-800 text-sm">{exp.expenseName}</p>
+                  <div key={exp.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-orange-100 shadow-sm">
+                    <div className="flex flex-col">
+                      <span className="font-bold text-gray-800 text-sm tracking-tight">{exp.expenseName}</span>
+                      <span className="text-[10px] text-gray-500 font-medium">
+                        ₹{exp.basePrice.toFixed(2)} + {exp.gstPercent}% GST (₹{exp.gstAmount.toFixed(2)})
+                      </span>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <p className="font-bold text-orange-600">₹{(exp.totalPrice || 0).toFixed(2)}</p>
-                      <button onClick={() => handleRemoveExtraExpense(exp.id)} className="text-red-500 hover:bg-red-50 p-2 rounded-full transition"><FaTrash /></button>
+                    <div className="flex items-center gap-3">
+                      <p className="font-black text-orange-600 text-sm">₹{(exp.totalPrice || 0).toFixed(2)}</p>
+                      <button onClick={() => handleRemoveExtraExpense(exp.id)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-full transition-all duration-200"><FaTrash size={12} /></button>
                     </div>
                   </div>
                 ))}

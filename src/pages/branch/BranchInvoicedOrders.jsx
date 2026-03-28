@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaEdit, FaFileInvoice, FaSync, FaTrash } from "react-icons/fa";
+import { FaChevronDown, FaEdit, FaFileInvoice, FaSync, FaTrash, FaFilePdf } from "react-icons/fa";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE } from "../../api";
 import EditBillModal from "../../components/EditBillModal";
@@ -206,6 +208,43 @@ const BranchInvoicedOrders = () => {
     return matchesVoucherType && matchesInvoiceId && matchesCustomerName && matchesFromDate && matchesToDate && matchesFromTime && matchesToTime;
   });
 
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    
+    const tableColumn = ["Invoice ID", "Customer", "Grand Total"];
+    const tableRows = [];
+
+    filteredSalesOrders.forEach((order) => {
+      const orderData = [
+        order.invoiceId,
+        order.customer?.name || "N/A",
+        `Rs. ${(order.grandTotal || 0).toLocaleString()}`
+      ];
+      tableRows.push(orderData);
+    });
+
+    // Add a title
+    doc.setFontSize(18);
+    doc.text("Invoiced Orders Report", 14, 15);
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 22);
+
+    // Generate table using the autoTable function directly
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 25,
+      theme: 'grid',
+      headStyles: { fillColor: [49, 155, 171] }, // Matches #319bab
+      alternateRowStyles: { fillColor: [240, 240, 240] },
+      margin: { top: 25 }
+    });
+
+    doc.save(`Invoiced_Orders_${new Date().toISOString().split('T')[0]}.pdf`);
+    toast.success("PDF report generated successfully");
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <ToastContainer
@@ -236,6 +275,13 @@ const BranchInvoicedOrders = () => {
             </div>
             
             <div className="flex items-center gap-3">
+              <button
+                onClick={handleExportPDF}
+                disabled={filteredSalesOrders.length === 0}
+                className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition disabled:opacity-50 shadow-sm"
+              >
+                <FaFilePdf /> Export PDF
+              </button>
               <button
                 onClick={() => setShowSlipModal(true)}
                 disabled={filteredSalesOrders.length === 0}
