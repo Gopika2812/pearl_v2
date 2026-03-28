@@ -458,6 +458,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   <div>Subtotal: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
                   <div>CGST (${previewData?.items?.[0]?.cgst || 0}%): <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
                   <div>SGST (${previewData?.items?.[0]?.sgst || 0}%): <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>
+                  ${previewData?.commonDiscount > 0 ? `<div>Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
                   ${previewData?.transportCharge > 0 ? `<div>Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
                   ${previewData?.extraExpenseAmount > 0 ? `<div>Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
                   <div class="grand-total">Grand Total: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
@@ -539,6 +540,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 <div>Taxable Value: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
                 <div>CGST (${previewData?.items?.[0]?.cgst || 0}%): <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
                 <div>SGST (${previewData?.items?.[0]?.sgst || 0}%): <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>
+                ${previewData?.commonDiscount > 0 ? `<div>Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
                 <div class="grand-total">TOTAL AMOUNT: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
               </div>
 
@@ -747,12 +749,21 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                     ₹{(previewData.totalTax?.total || 0).toFixed(2)}
                   </div>
                 </div>
-                <div className="p-4 bg-purple-50 rounded-lg">
-                  <div className="text-sm text-gray-600">Extra Charges</div>
-                  <div className="text-xl font-bold text-purple-600">
-                    ₹{previewData.extraExpenseAmount?.toFixed(2)}
+                {previewData.commonDiscount > 0 ? (
+                  <div className="p-4 bg-orange-50 rounded-lg">
+                    <div className="text-sm text-gray-600">Special Discount</div>
+                    <div className="text-xl font-bold text-orange-600">
+                      -₹{previewData.commonDiscount?.toFixed(2)}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="p-4 bg-purple-50 rounded-lg">
+                    <div className="text-sm text-gray-600">Extra Charges</div>
+                    <div className="text-xl font-bold text-purple-600">
+                      ₹{previewData.extraExpenseAmount?.toFixed(2)}
+                    </div>
+                  </div>
+                )}
                 <div className="p-4 bg-red-50 rounded-lg">
                   <div className="text-sm text-gray-600">Grand Total</div>
                   <div className="text-2xl font-bold text-red-600">

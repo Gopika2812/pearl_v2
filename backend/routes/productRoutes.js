@@ -400,8 +400,9 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const hsnCode = normalized.hsncode || "N/A"; // Default to N/A
       
       let gst = 0;
-      if (normalized.gst) {
-        const parsed = parseFloat(normalized.gst.toString().replace(/[^\d.-]/g, ''));
+      const gstRaw = normalized['gst%'] || normalized.gst || normalized.gstpercent || normalized['tax%'] || normalized.tax;
+      if (gstRaw) {
+        const parsed = parseFloat(gstRaw.toString().replace(/[^\d.-]/g, ''));
         gst = isNaN(parsed) ? 0 : parsed;
       }
 

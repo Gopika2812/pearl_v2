@@ -489,6 +489,14 @@ const InvoicePreviewModal = ({ order, onClose }) => {
                       -₹{(order.totalDiscount || 0).toLocaleString()}
                     </span>
                   </div>
+                  {order.commonDiscount > 0 && (
+                    <div className="flex justify-between">
+                      <span className="font-semibold text-gray-700">Special Discount:</span>
+                      <span className="font-bold text-red-600">
+                        -₹{(order.commonDiscount || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span>Tax:</span>
                     <span>₹{(order.totalTax || 0).toLocaleString()}</span>

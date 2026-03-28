@@ -33,6 +33,9 @@ export default function InventorySalesOrderEntry({
   branchId = ""
 }) {
   const { user } = useBranch();
+  // Check if the user has this new feature explicitly disabled by Super Admin. (Defaults to true)
+  const canUseQuickLinks = user?.role === "SUPER_ADMIN" || user?.actionPermissions?.create_shortcuts !== false;
+
   const [voucherType, setVoucherType] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [warehouse, setWarehouse] = useState("");
@@ -100,6 +103,7 @@ export default function InventorySalesOrderEntry({
   const [deliveryMan, setDeliveryMan] = useState("");
   const [billingPerson, setBillingPerson] = useState("");
   const [customerMargin, setCustomerMargin] = useState(0);
+  const [commonDiscount, setCommonDiscount] = useState("");
 
   // EXTRA EXPENSES STATES
   const [extraExpenses, setExtraExpenses] = useState([]);
@@ -809,7 +813,7 @@ export default function InventorySalesOrderEntry({
   );
 
   const grandTotal =
-    subtotal - totalDiscount + totalTax + extraExpenseAmount;
+    subtotal - totalDiscount - (Number(commonDiscount) || 0) + totalTax + extraExpenseAmount;
 
 
   // Round up all item totals and financial values
@@ -859,6 +863,7 @@ export default function InventorySalesOrderEntry({
     sampleItems: sampleItems,
     subtotal: roundedSubtotal,
     totalDiscount: roundedTotalDiscount,
+    commonDiscount: Number(commonDiscount) || 0,
     totalTax: roundedTotalTax,
     grandTotal: roundedGrandTotal,
     customerMargin,
@@ -927,6 +932,7 @@ export default function InventorySalesOrderEntry({
     setDiscountType("PERCENT");
     setDiscountPercent("");
     setDiscountAmountInput("");
+    setCommonDiscount("");
     setGst(0);
     setCgst(0);
     setSgst(0);
@@ -1060,14 +1066,15 @@ export default function InventorySalesOrderEntry({
         <div className="lg:col-span-3 bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-3 h-fit">
           <div>
             <div className="flex justify-between items-center mb-1">
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Voucher Type</label>
-              <button 
-                onClick={() => setShowVoucherModal(true)}
-                className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-                title="Create New Voucher Type"
-              >
-                <FaPlus size={12} />
-              </button>
+              {canUseQuickLinks && (
+                <button 
+                  onClick={() => setShowVoucherModal(true)}
+                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                  title="Create New Voucher Type"
+                >
+                  <FaPlus size={12} />
+                </button>
+              )}
             </div>
             <select className={selectClass} value={voucherType} onChange={(e) => setVoucherType(e.target.value)}>
               <option value="">-- Select --</option>
@@ -1084,14 +1091,15 @@ export default function InventorySalesOrderEntry({
 
           <div>
             <div className="flex justify-between items-center mb-1">
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Warehouse</label>
-              <button 
-                onClick={() => setShowWarehouseModal(true)}
-                className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-                title="Create New Warehouse"
-              >
-                <FaPlus size={12} />
-              </button>
+              {canUseQuickLinks && (
+                <button 
+                  onClick={() => setShowWarehouseModal(true)}
+                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                  title="Create New Warehouse"
+                >
+                  <FaPlus size={12} />
+                </button>
+              )}
             </div>
             <select className={selectClass} value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
               <option value="">-- Select --</option>
@@ -1124,14 +1132,15 @@ export default function InventorySalesOrderEntry({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 relative" ref={customerDropdownRef}>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Customer</label>
-                <button 
-                  onClick={() => setShowCustomerModal(true)}
-                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-                  title="Create New Customer"
-                >
-                  <FaPlus size={12} />
-                </button>
+                {canUseQuickLinks && (
+                  <button 
+                    onClick={() => setShowCustomerModal(true)}
+                    className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                    title="Create New Customer"
+                  >
+                    <FaPlus size={12} />
+                  </button>
+                )}
               </div>
               <input
                 type="text"
@@ -1264,14 +1273,15 @@ export default function InventorySalesOrderEntry({
           <div className="grid grid-cols-1 gap-3">
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Sales Man</label>
-                <button 
-                  onClick={() => setShowSalesManModal(true)}
-                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-                  title="Register New Sales Man"
-                >
-                  <FaPlus size={12} />
-                </button>
+                {canUseQuickLinks && (
+                  <button 
+                    onClick={() => setShowSalesManModal(true)}
+                    className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                    title="Register New Sales Man"
+                  >
+                    <FaPlus size={12} />
+                  </button>
+                )}
               </div>
               <select className={selectClass} value={salesMan} onChange={(e) => setSalesMan(e.target.value)}>
                 <option value="">-- Select Sales Man --</option>
@@ -1280,14 +1290,15 @@ export default function InventorySalesOrderEntry({
             </div>
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Delivery Man</label>
-                <button 
-                  onClick={() => setShowDeliveryManModal(true)}
-                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-                  title="Register New Delivery Man"
-                >
-                  <FaPlus size={12} />
-                </button>
+                {canUseQuickLinks && (
+                  <button 
+                    onClick={() => setShowDeliveryManModal(true)}
+                    className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                    title="Register New Delivery Man"
+                  >
+                    <FaPlus size={12} />
+                  </button>
+                )}
               </div>
               <select className={selectClass} value={deliveryMan} onChange={(e) => setDeliveryMan(e.target.value)}>
                 <option value="">-- Select Delivery Man --</option>
@@ -1352,14 +1363,15 @@ export default function InventorySalesOrderEntry({
               {/* PRODUCT GROUP */}
           <div className="relative" ref={productGroupDropdownRef}>
             <div className="flex justify-between items-center mb-1">
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Product Group</label>
-              <button 
-                onClick={() => setShowProductGroupModal(true)}
-                className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-                title="Create New Product Group"
-              >
-                <FaPlus size={12} />
-              </button>
+              {canUseQuickLinks && (
+                <button 
+                  onClick={() => setShowProductGroupModal(true)}
+                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                  title="Create New Product Group"
+                >
+                  <FaPlus size={12} />
+                </button>
+              )}
             </div>
             <input
               type="text"
@@ -1406,14 +1418,15 @@ export default function InventorySalesOrderEntry({
             {/* ITEM NAME */}
             <div className="relative" ref={itemDropdownRef}>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">Select Item</label>
-                <button
-                  onClick={() => setShowProductModal(true)}
-                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-                  title="Create New Item"
-                >
-                  <FaPlus size={12} />
-                </button>
+                {canUseQuickLinks && (
+                  <button
+                    onClick={() => setShowProductModal(true)}
+                    className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                    title="Create New Item"
+                  >
+                    <FaPlus size={12} />
+                  </button>
+                )}
               </div>
               <input
                 type="text"
@@ -1735,10 +1748,24 @@ export default function InventorySalesOrderEntry({
                   <span className="font-bold">₹{subtotal.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Discount</span>
+                  <span className="text-gray-500">Discount (Items)</span>
                   <span className="font-bold text-red-500">-₹{totalDiscount.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between items-center text-sm border-b pb-2">
+                  <span className="text-gray-700 font-semibold tracking-wide">Common Discount</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-gray-400 font-bold">₹</span>
+                    <input 
+                      type="number" 
+                      min="0"
+                      className="w-24 border border-gray-300 rounded px-2 py-1 text-right focus:ring-1 focus:ring-primary outline-none font-bold text-red-600 bg-red-50/30"
+                      value={commonDiscount} 
+                      onChange={(e) => setCommonDiscount(e.target.value === "" ? "" : +e.target.value)} 
+                      placeholder="0.00" 
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-between text-sm pt-2">
                   <span className="text-gray-500">Tax Amount</span>
                   <span className="font-bold">₹{totalTax.toFixed(2)}</span>
                 </div>

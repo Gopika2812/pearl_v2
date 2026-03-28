@@ -124,7 +124,8 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     };
     totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
-    const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0));
+    const commonDiscount = salesOrder.commonDiscount || 0;
+    const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) - commonDiscount);
 
     // Fetch billing person name
     let billingPersonName = "-";
@@ -162,6 +163,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       transportCharge: salesOrder.transportCharge || 0,
       extraExpenses: salesOrder.extraExpenses || [],
       extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
+      commonDiscount: commonDiscount,
       grandTotal,
       openingBalance: salesOrder.openingBalance || 0,
       closingBalance: (salesOrder.openingBalance || 0) + grandTotal,
@@ -271,7 +273,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       };
       totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
-      const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0));
+      const commonDiscount = salesOrder.commonDiscount || 0;
+      const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) - commonDiscount);
 
       // 🏁 Check if invoice already exists (common during re-edit/re-generation)
       let invoice = await Invoice.findOne({ invoiceNumber }).session(session);
@@ -287,6 +290,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         invoice.transportCharge = salesOrder.transportCharge || 0;
         invoice.extraExpenses = salesOrder.extraExpenses || [];
         invoice.extraExpenseAmount = salesOrder.extraExpenseAmount || 0;
+        invoice.commonDiscount = commonDiscount;
         invoice.grandTotal = grandTotal;
         invoice.openingBalance = salesOrder.openingBalance || 0;
         invoice.closingBalance = (salesOrder.openingBalance || 0) + grandTotal;
@@ -333,6 +337,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           transportCharge: salesOrder.transportCharge || 0,
           extraExpenses: salesOrder.extraExpenses || [],
           extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
+          commonDiscount,
           grandTotal,
           openingBalance: salesOrder.openingBalance || 0,
           closingBalance: (salesOrder.openingBalance || 0) + grandTotal,

@@ -9,10 +9,93 @@ import { getFinancialYear } from "../utils/financialYear.js";
 import GLService from "../utils/glService.js";
 import Product from "../models/Product.js";
 import ProductGroup from "../models/ProductGroup.js";
-
-
+import Receipt from "../models/Receipt.js";
 
 const router = express.Router();
+
+// RECORD PAYMENT for sales order
+router.post("/:id/record-payment", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { amount, paymentMethod, paymentDate, referenceNo, remarks } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ success: false, message: "Valid amount is required" });
+    }
+
+    const order = await SalesOrder.findById(id);
+    if (!order) return res.status(404).json({ success: false, message: "Sales order not found" });
+
+    // Allow slightly larger due to float rounding, but normally amount <= closingBalance
+    if (amount > (order.closingBalance || 0) + 1) {
+      return res.status(400).json({ success: false, message: "Amount exceeds closing balance" });
+    }
+
+    // 1. Generate Receipt ID and Create Receipt
+    const financialYear = getFinancialYear();
+    const receiptDoc = await Receipt.findOne({ financialYear }).sort({ receiptId: -1 });
+    const nextNumber = receiptDoc ? parseInt(receiptDoc.receiptId.split("/")[1]) + 1 : 1;
+    const receiptId = `RCP/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
+
+    const receipt = new Receipt({
+      receiptId,
+      originalSalesOrderId: id,
+      originalInvoiceId: order.invoiceId,
+      customer: {
+        customerId: order.customer.customerId,
+        name: order.customer.name,
+      },
+      amount,
+      paymentMethod: (paymentMethod || "CASH").toUpperCase(),
+      reference: referenceNo || null,
+      notes: remarks || null,
+      financialYear,
+      status: "confirmed",
+      createdAt: paymentDate ? new Date(paymentDate) : new Date()
+    });
+    
+    await receipt.save();
+
+    // 2. Reduce Order Closing Balance
+    order.closingBalance -= amount;
+    // ensure closingbalance doesn't go below 0 due to flaots
+    if (order.closingBalance < 0.01) order.closingBalance = 0;
+    await order.save();
+
+    // 3. Update Customer Balance
+    const customer = await Customer.findById(order.customer.customerId);
+    if (customer) {
+      let remainingAmount = amount;
+      let currentDebit = customer.debit || 0;
+      let currentCredit = customer.credit || 0;
+
+      if (currentDebit >= remainingAmount) {
+        currentDebit -= remainingAmount;
+        remainingAmount = 0;
+      } else {
+        remainingAmount -= currentDebit;
+        currentDebit = 0;
+        currentCredit += remainingAmount;
+      }
+
+      customer.debit = currentDebit;
+      customer.credit = currentCredit;
+      customer.closingBalance = (customer.closingBalance || 0) - amount;
+      customer.totalBalance = customer.closingBalance;
+      await customer.save();
+    }
+
+    res.json({
+      success: true,
+      message: "Payment recorded successfully",
+      newClosingBalance: order.closingBalance,
+      data: receipt
+    });
+  } catch (err) {
+    console.error("Error recording payment:", err);
+    res.status(500).json({ success: false, message: err.message || "Server Error" });
+  }
+});
 
 // GET all sales orders (for OthersSummary)
 router.get("/", async (req, res) => {

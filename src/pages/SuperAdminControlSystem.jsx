@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaBuilding, FaCheck, FaShieldAlt, FaUser, FaUsers, FaUsersCog, FaLock, FaGlobe, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign, FaTruck, FaHandshake, FaChartLine, FaLink, FaBook, FaChartBar, FaChevronRight, FaEdit, FaTrash, FaCheckCircle } from "react-icons/fa";
+import { FaBuilding, FaCheck, FaShieldAlt, FaUser, FaUsers, FaUsersCog, FaLock, FaGlobe, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign, FaTruck, FaHandshake, FaChartLine, FaLink, FaBook, FaChartBar, FaChevronRight, FaEdit, FaTrash, FaCheckCircle, FaPlus } from "react-icons/fa";
 import { QUICK_LINKS_CONFIG, QUICK_LINKS_CATEGORIES } from "../utils/quickLinksConfig";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -215,6 +215,61 @@ export default function SuperAdminControlSystem() {
   const allPages = getUnifiedPageDefinitions();
   const categories = [...new Set(allPages.map(p => p.category))];
 
+  // Helper for Global Select All
+  const handleSelectAll = (isSelecting) => {
+    if (isSelecting) {
+      // 1. Pages
+      setUserPermissions(allPages.map(p => p.id));
+      
+      // 2. Actions
+      const newActionPerms = {};
+      ["edit", "delete", "restock", "create_shortcuts"].forEach(a => newActionPerms[a] = true);
+      setActionPermissions(newActionPerms);
+      
+      // 3. Field Visibility
+      const newFieldPerms = {};
+      Object.keys(QUICK_LINKS_CONFIG).forEach(type => {
+        const config = QUICK_LINKS_CONFIG[type];
+        if (config.permissionFields) {
+          config.permissionFields.forEach(f => {
+            newFieldPerms[`${type}_${f}`] = true;
+          });
+        }
+      });
+      setFieldPermissions(newFieldPerms);
+      
+      // 4. Hubs & Vouchers
+      setAllowedQuickLinks(Object.keys(QUICK_LINKS_CONFIG));
+      setAllowedVoucherTypes(voucherTypes.map(vt => vt._id));
+    } else {
+      setUserPermissions([]);
+      
+      const newActionPerms = {};
+      ["edit", "delete", "restock", "create_shortcuts"].forEach(a => newActionPerms[a] = false);
+      setActionPermissions(newActionPerms);
+      
+      const newFieldPerms = {};
+      Object.keys(QUICK_LINKS_CONFIG).forEach(type => {
+        const config = QUICK_LINKS_CONFIG[type];
+        if (config.permissionFields) {
+          config.permissionFields.forEach(f => {
+            newFieldPerms[`${type}_${f}`] = false;
+          });
+        }
+      });
+      setFieldPermissions(newFieldPerms);
+      
+      setAllowedQuickLinks([]);
+      setAllowedVoucherTypes([]);
+    }
+  };
+
+  const isAllSelected = 
+    selectedUser && 
+    userPermissions.length === allPages.length && 
+    allowedQuickLinks.length === Object.keys(QUICK_LINKS_CONFIG).length && 
+    (voucherTypes.length === 0 || allowedVoucherTypes.length === voucherTypes.length);
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20 px-4 md:px-6 pb-12">
       <div className="max-w-7xl mx-auto">
@@ -306,7 +361,7 @@ export default function SuperAdminControlSystem() {
           <div className="lg:col-span-3">
             {selectedUser ? (
               <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden animate-in fade-in duration-500">
-                <div className="bg-gray-900 p-6 flex items-center justify-between">
+                <div className="bg-gray-900 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-white">
                       <FaLock size={20} />
@@ -318,18 +373,34 @@ export default function SuperAdminControlSystem() {
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={handleSavePermissions}
-                    disabled={saving}
-                    className="bg-green-500 hover:bg-green-600 disabled:bg-gray-700 text-white px-8 py-3 rounded-2xl font-black text-sm transition-all shadow-lg shadow-green-500/20 flex items-center gap-2"
-                  >
-                    {saving ? "Saving..." : (
-                      <>
-                        <FaCheck />
-                        Save Access
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-2 text-white/90 font-bold tracking-wide text-sm cursor-pointer hover:text-white transition group">
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                        isAllSelected ? "bg-green-500 border-green-500 text-white" : "border-gray-500 bg-gray-800 group-hover:border-gray-400"
+                      }`}>
+                        {isAllSelected && <FaCheck size={10} />}
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        className="hidden"
+                        checked={isAllSelected}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                      />
+                      SELECT ALL
+                    </label>
+                    <button
+                      onClick={handleSavePermissions}
+                      disabled={saving}
+                      className="bg-green-500 hover:bg-green-600 disabled:bg-gray-700 text-white px-8 py-3 rounded-2xl font-black text-sm transition-all shadow-lg shadow-green-500/20 flex items-center gap-2"
+                    >
+                      {saving ? "Saving..." : (
+                        <>
+                          <FaCheck />
+                          Save Access
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -384,7 +455,8 @@ export default function SuperAdminControlSystem() {
                         {[
                           { id: "edit", name: "Allow Edit Records", icon: <FaEdit /> },
                           { id: "delete", name: "Allow Delete Records", icon: <FaTrash /> },
-                          { id: "restock", name: "Allow Restocking Logic", icon: <FaBox /> }
+                          { id: "restock", name: "Allow Restocking Logic", icon: <FaBox /> },
+                          { id: "create_shortcuts", name: "Allow Form Shortcuts (+)", icon: <FaPlus /> }
                         ].map(action => {
                           const isAllowed = actionPermissions[action.id] !== false; // Default to true if not set
                           return (

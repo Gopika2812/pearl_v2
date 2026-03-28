@@ -78,10 +78,13 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     return discounted + taxAmount;
   };
 
-  // Calculate grand total
+  // Calculate grand total accounting for expenses, transport and common discount
   const calculateGrandTotal = () => {
     const itemsTotal = items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
-    return itemsTotal;
+    const transport = order?.transportCharge || 0;
+    const extra = order?.extraExpenseAmount || 0;
+    const commDiscount = order?.commonDiscount || 0;
+    return itemsTotal + transport + extra - commDiscount;
   };
 
   // Handle quantity change
@@ -209,6 +212,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
           return sum + tax;
         }, 0),
         totalDiscount: items.reduce((sum, item) => sum + (item.discountAmount || 0), 0),
+        commonDiscount: order?.commonDiscount || 0,
         grandTotal: Math.round(newItemsTotal),
       };
 
@@ -562,6 +566,30 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       })}
                   </span>
                 </div>
+                {order?.commonDiscount > 0 && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600">Special Discount:</span>
+                    <span className="text-red-500 font-semibold">
+                      -₹{order.commonDiscount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+                {order?.transportCharge > 0 && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600">Transport:</span>
+                    <span className="text-gray-800 font-semibold">
+                      ₹{order.transportCharge.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+                {order?.extraExpenseAmount > 0 && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600">Extra Charges:</span>
+                    <span className="text-gray-800 font-semibold">
+                      ₹{order.extraExpenseAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
                 <div className="border-t pt-3 flex justify-between items-center text-lg font-bold">
                   <span className="text-[#319bab]">Grand Total:</span>
                   <span className="text-[#319bab]">

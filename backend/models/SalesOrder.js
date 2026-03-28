@@ -139,7 +139,8 @@ const salesOrderSchema = new mongoose.Schema(
     invoiceClosingBalance: Number,
 
     subtotal: Number,
-    totalDiscount: Number,
+    totalDiscount: Number, // Deprecated or kept for sum of item discounts
+    commonDiscount: { type: Number, default: 0 },
     totalTax: Number,
     transportCharge: Number,
     grandTotal: Number,

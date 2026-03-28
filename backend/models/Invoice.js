@@ -103,7 +103,8 @@ const invoiceSchema = new mongoose.Schema(
 
     // Totals
     subtotal: Number,
-    totalDiscount: Number,
+    totalDiscount: Number, // Sum of item discounts
+    commonDiscount: { type: Number, default: 0 }, // Bill level discount
     totalTax: {
       cgst: Number,
       sgst: Number,
