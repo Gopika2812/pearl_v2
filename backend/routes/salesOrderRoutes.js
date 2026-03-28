@@ -335,22 +335,7 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ message: "Sales voucher not found" });
     }
 
-    // 💳 CREDIT LIMIT CHECK
-    const customerDoc = await Customer.findById(customer.id || customer.customerId || customer._id);
-    if (customerDoc) {
-      const netBalance = (customerDoc.debit || 0) - (customerDoc.credit || 0);
-      const orderTotal = grandTotalWithMargin || grandTotal || 0;
-      const totalAfterOrder = netBalance + orderTotal;
-      
-      if (totalAfterOrder > customerDoc.creditLimit && !customerDoc.isCreditBypassed) {
-        return res.status(403).json({ 
-          success: false, 
-          isCreditLimitExceeded: true,
-          message: `Credit Limit Exceeded! Customer net balance (₹${netBalance.toLocaleString()}) plus this order (₹${orderTotal.toLocaleString()}) exceeds the limit of ₹${customerDoc.creditLimit.toLocaleString()}. Admin permission required to proceed.` 
-        });
-      }
-    }
-    
+    // Credit limit check removed as requested
     console.log("✅ Voucher found:", { prefix: voucher.prefix, counter: voucher.counter });
 
     // 🔁 Reset counter if FY changed

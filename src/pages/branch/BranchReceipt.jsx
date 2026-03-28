@@ -178,11 +178,11 @@ export default function BranchReceipt() {
                 <thead className="bg-gradient-to-r from-cyan-50 to-cyan-100 border-b">
                   <tr>
                     <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Expand</th>
-                    <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Invoice ID</th>
+                    <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Order/Invoice ID</th>
                     <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Customer</th>
                     <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Warehouse</th>
                     <th className="px-4 py-4 text-center text-xs font-bold text-gray-700 uppercase">Items</th>
-                    <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Invoice Amount</th>
+                    <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Total Amount</th>
                     <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Received</th>
                     <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Pending</th>
                     <th className="px-4 py-4 text-center text-xs font-bold text-gray-700 uppercase">Status</th>

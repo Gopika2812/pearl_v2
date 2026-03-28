@@ -129,13 +129,7 @@ export default function InventorySalesOrderEntry({
     return user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   }, [user]);
   
-  const isCreditLimitExceeded = useMemo(() => {
-    if (!selectedCustomer) return false;
-    const netBalance = (selectedCustomer.debit || 0) - (selectedCustomer.credit || 0);
-    const currentLimit = selectedCustomer.creditLimit || 200000;
-    // Strictly block if net balance is already over limit and no bypass is active
-    return netBalance > currentLimit && !selectedCustomer.isCreditBypassed;
-  }, [selectedCustomer]);
+  const isCreditLimitExceeded = false;
 
   // REFS FOR CLICK OUTSIDE
   const itemDropdownRef = useRef(null);
@@ -1206,42 +1200,7 @@ export default function InventorySalesOrderEntry({
                 }
                 readOnly
               />
-              {selectedCustomer && (selectedCustomer.debit + grandTotalWithMargin) > (selectedCustomer.creditLimit || 200000) && !selectedCustomer.isCreditBypassed && (
-                <div className="mt-1 flex flex-col gap-1">
-                  <div className="text-[9px] text-red-600 font-black uppercase bg-red-50 p-1 rounded border border-red-100 flex items-center justify-between">
-                    <span>Credit Limit Reached! (Max: ₹{(selectedCustomer.creditLimit || 200000).toLocaleString()})</span>
-                  </div>
-                  {selectedCustomer.creditLimitRequestStatus === "PENDING" ? (
-                    <div className="text-[10px] text-orange-600 font-bold italic bg-orange-50 p-1 rounded border border-orange-100 text-center">
-                      Permission Request Pending...
-                    </div>
-                  ) : selectedCustomer.creditLimitRequestStatus === "REJECTED" ? (
-                    <div className="flex flex-col gap-1">
-                      <div className="text-[10px] text-red-600 font-bold italic bg-red-50 p-1 rounded border border-red-200 text-center">
-                        Permission Rejected
-                      </div>
-                      <button 
-                        onClick={requestCreditLimitBypass}
-                        className="text-[10px] bg-secondary text-white font-bold py-1 px-2 rounded-md hover:bg-secondary/90 transition shadow-sm"
-                      >
-                        Request Again
-                      </button>
-                    </div>
-                  ) : (
-                    <button 
-                      onClick={requestCreditLimitBypass}
-                      className="text-[10px] bg-secondary text-white font-bold py-1 px-2 rounded-md hover:bg-secondary/90 transition shadow-sm"
-                    >
-                      Request Billing Permission
-                    </button>
-                  )}
-                </div>
-              )}
-              {selectedCustomer?.isCreditBypassed && (
-                <div className="mt-1 text-[10px] text-green-700 font-black uppercase bg-green-50 p-1 rounded border border-green-200 text-center">
-                  Bypass Permission Granted
-                </div>
-              )}
+              {/* Credit Limit UI removed */}
             </div>
 
             <div className="lg:col-span-2">
@@ -1327,39 +1286,7 @@ export default function InventorySalesOrderEntry({
             Add Item
           </h3>
 
-          {isCreditLimitExceeded ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-4 bg-white/50 backdrop-blur-sm rounded-lg border-2 border-dashed border-red-200">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <div>
-                <h4 className="text-red-700 font-black text-sm uppercase">Credit Limit Exceeded</h4>
-                <p className="text-[10px] text-gray-500 font-bold mt-1">
-                  Customer's debit balance (₹{selectedCustomer?.debit?.toLocaleString()}) exceeds the limit (₹{(selectedCustomer?.creditLimit || 200000).toLocaleString()}).
-                </p>
-              </div>
-              
-              {selectedCustomer?.creditLimitRequestStatus === "PENDING" ? (
-                <div className="w-full py-3 px-4 bg-orange-100 text-orange-700 rounded-xl font-bold text-[11px] border border-orange-200 animate-pulse">
-                  PERMISSION REQUEST PENDING...
-                </div>
-              ) : (
-                <button 
-                  onClick={requestCreditLimitBypass}
-                  className="w-full bg-secondary text-white py-3 px-4 rounded-xl font-black text-xs hover:bg-secondary/90 transition shadow-lg shadow-secondary/20 flex items-center justify-center gap-2"
-                >
-                  REQUEST BILLING PERMISSION
-                </button>
-              )}
-              
-              <p className="text-[9px] text-gray-400 italic">
-                * Item selection is disabled until Admin grants bypass permission.
-              </p>
-            </div>
-          ) : (
-            <>
+          <>
               {/* PRODUCT GROUP */}
           <div className="relative" ref={productGroupDropdownRef}>
             <div className="flex justify-between items-center mb-1">
@@ -1447,16 +1374,15 @@ export default function InventorySalesOrderEntry({
                     .filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase()))
                     .map((p) => {
                       const availableQty = availableQtyCache[p._id] ?? p.availableQty ?? 0;
-                      const isOutOfStock = availableQty === 0;
                       return (
                         <div
                           key={p._id}
-                          onClick={() => !isOutOfStock && handleItemSelection(p._id)}
-                          className={`px-3 py-2 border-b text-sm ${isOutOfStock ? 'bg-gray-50 cursor-not-allowed opacity-60' : 'hover:bg-blue-50 cursor-pointer'}`}
+                          onClick={() => handleItemSelection(p._id)}
+                          className={`px-3 py-2 border-b text-sm hover:bg-blue-50 cursor-pointer`}
                         >
                           <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
-                          <div className={`text-xs ${isOutOfStock ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
-                            Available: {availableQty} {isOutOfStock && '(Out of Stock)'}
+                          <div className={`text-xs ${availableQty <= 0 ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
+                            Available: {availableQty} {availableQty <= 0 && '(Negative/Zero Stock Allowed)'}
                           </div>
                         </div>
                       );
@@ -1559,7 +1485,6 @@ export default function InventorySalesOrderEntry({
             </button>
           </div>
         </>
-      )}
     </div>
 
         {/* RIGHT: ITEMS TABLE */}
@@ -1653,16 +1578,15 @@ export default function InventorySalesOrderEntry({
                       .filter(p => p.name.toLowerCase().includes(sampleItemSearch.toLowerCase()))
                       .map((p) => {
                         const availableQty = p.totalQty || 0;
-                        const isOutOfStock = availableQty === 0;
                         return (
                           <div
                             key={p._id}
-                            onClick={() => !isOutOfStock && handleSampleItemSelection(p._id)}
-                            className={`px-3 py-2 border-b text-sm ${isOutOfStock ? 'bg-gray-50 cursor-not-allowed opacity-60' : 'hover:bg-yellow-50 cursor-pointer'}`}
+                            onClick={() => handleSampleItemSelection(p._id)}
+                            className={`px-3 py-2 border-b text-sm hover:bg-yellow-50 cursor-pointer`}
                           >
                             <div className="font-semibold">{p.name}</div>
-                            <div className={`text-xs ${isOutOfStock ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
-                              Available: {availableQty} {isOutOfStock && '(Out of Stock)'}
+                            <div className={`text-xs ${availableQty <= 0 ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
+                              Available: {availableQty} {availableQty <= 0 && '(Negative/Zero Stock Allowed)'}
                             </div>
                           </div>
                         );

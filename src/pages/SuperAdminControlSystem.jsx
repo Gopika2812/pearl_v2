@@ -21,6 +21,8 @@ const PAGE_DEFINITIONS = [
   { id: "suppliers", name: "Suppliers (Creditors)", icon: <FaHandshake />, category: "Directory" },
   { id: "customers", name: "Customers (Debtors)", icon: <FaUsers />, category: "Directory" },
   { id: "journals", name: "Journal Master", icon: <FaBook />, category: "Accounts" },
+  { id: "other-payment", name: "Other Payment", icon: <FaDollarSign />, category: "Accounts" },
+  { id: "other-receipt", name: "Other Receipt", icon: <FaDollarSign />, category: "Accounts" },
   { id: "insights", name: "Insights & Analysis", icon: <FaChartLine />, category: "Reports" },
   { id: "quick-links", name: "Quick Links", icon: <FaLink />, category: "General" },
 ];
