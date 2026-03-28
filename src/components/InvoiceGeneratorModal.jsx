@@ -102,7 +102,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             notes,
             invoiceType,
             finalizedBy: user?.id || user?._id,
-            finalizedByUsername: user?.username || user?.billingPerson,
+            finalizedByUsername: user?.username || user?.fullName || user?.name || "System",
           }),
         }
       );

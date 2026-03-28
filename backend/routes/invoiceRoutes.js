@@ -351,8 +351,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
 
       // Log Invoice Finalization
       await createAuditLog({
-        userId: req.body.finalizedBy || invoice.billingPerson || "System",
-        username: req.body.finalizedByUsername || invoice.billingPerson || "System",
+        userId: req.body.finalizedBy || req.body.userId || invoice.billingPerson || "System",
+        username: req.body.finalizedByUsername || req.body.username || "System",
         branchId: invoice.branchId,
         action: "FINALIZE_INVOICE",
         description: `Finalized Invoice: ${invoice.invoiceNumber}. Amount: ₹${invoice.grandTotal}`,

@@ -438,26 +438,18 @@ export default function InventorySalesOrderEntry({
 
   const productsWithStock = useMemo(() => {
     return filteredProducts.map((p) => {
-      // 1️⃣ Get HSN from product database first
+      // 1️⃣ Get HSN and Prices from product database first
       let hsn = p.hsnCode || "";
-
-      // 2️⃣ Fallback to purchase order HSN if product doesn't have it
-      if (!hsn) {
-        const poItem = poItems.find(
-          (item) => String(item.productId || item.productId?._id) === String(p._id)
-        );
-        hsn = poItem?.hsn || "";
-      }
-
-      // 3️⃣ Fallback to purchase order Prices if product doesn't have them
       let sPrice = p.sellingPrice || 0;
       let pPrice = p.purchasingPrice || 0;
 
-      if (!sPrice || !pPrice) {
+      // 2️⃣ Find last purchase order info for fallbacks if needed
+      if (!hsn || !sPrice || !pPrice) {
         const poItem = poItems.find(
           (item) => String(item.productId || item.productId?._id) === String(p._id)
         );
         if (poItem) {
+          if (!hsn) hsn = poItem.hsn || "";
           if (!sPrice) sPrice = poItem.sellingPrice || 0;
           if (!pPrice) pPrice = poItem.purchasingPrice || poItem.unitPrice || poItem.rate || 0;
         }
@@ -856,7 +848,7 @@ export default function InventorySalesOrderEntry({
   const payload = {
     branchId,
     createdBy: user?.id || user?._id,
-    createdByUsername: user?.username || user?.fullName || user?.billingPerson,
+    createdByUsername: user?.username || user?.fullName || user?.name || "System",
     voucherType,
     customer: selectedCustomer
       ? {

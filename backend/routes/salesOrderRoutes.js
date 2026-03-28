@@ -441,8 +441,8 @@ router.post("/", async (req, res) => {
     await voucher.save();
     // Log Sales Order creation
     await createAuditLog({
-      userId: req.body.userId || salesOrder.billingPerson || salesOrder.salesOwner, // Fallback if no explicit userId
-      username: salesOrder.billingPerson || "System", 
+      userId: req.body.createdBy || req.body.userId || salesOrder.billingPerson || salesOrder.salesOwner,
+      username: req.body.createdByUsername || req.body.username || salesOrder.billingPerson || "System", 
       branchId: salesOrder.branchId,
       action: "CREATE_SO",
       description: `Created Sales Order: ${salesOrder.invoiceId} for ${salesOrder.customer.name}. Total: ₹${salesOrder.grandTotal}`,
@@ -577,8 +577,8 @@ router.delete("/:id", async (req, res) => {
 
     // Log Sales Order deletion
     await createAuditLog({
-      userId: req.query.userId || "System", // Ideally passed from frontend
-      username: req.query.username || "System",
+      userId: req.body.userId || req.query.userId || "System",
+      username: req.body.username || req.query.username || "System",
       branchId: salesOrder.branchId,
       action: "DELETE_SO",
       description: `Deleted Sales Order: ${salesOrder.invoiceId} for ${salesOrder.customer.name}`,

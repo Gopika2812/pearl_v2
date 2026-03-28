@@ -137,7 +137,7 @@ const BranchInvoicedOrders = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           userId: user?.id || user?._id, 
-          username: user?.username || user?.billingPerson 
+          username: user?.username || user?.fullName || user?.name || "System" 
         })
       });
 
