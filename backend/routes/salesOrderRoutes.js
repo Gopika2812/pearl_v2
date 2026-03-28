@@ -103,9 +103,9 @@ router.get("/", async (req, res) => {
     const { branchId } = req.query;
     const query = {};
     
-    // Filter by branchId if provided
+    // Filter by branchId if provided (Inclusive of missing branch IDs for test data)
     if (branchId) {
-      query.branchId = branchId;
+      query.$or = [{ branchId }, { branchId: { $exists: false } }];
     }
 
     if (req.query.isClaim !== undefined) {
@@ -400,10 +400,10 @@ router.post("/", async (req, res) => {
       marginAmount: Math.round(Number(marginAmount) || 0),
       grandTotalWithMargin: Math.round(Number(grandTotalWithMargin) || 0),
       extraExpenses: (extraExpenses || []).map((exp) => ({
-        expenseId: exp.expenseId,
         expenseName: exp.expenseName,
         basePrice: Math.round(Number(exp.basePrice) || 0),
-        days: exp.days,
+        gstPercent: Math.round(Number(exp.gstPercent) || 0),
+        gstAmount: Math.round(Number(exp.gstAmount) || 0),
         totalPrice: Math.round(Number(exp.totalPrice) || 0),
       })),
       extraExpenseAmount: Math.round(Number(extraExpenseAmount) || 0),
@@ -710,7 +710,7 @@ router.get("/:id", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount } = req.body;
+    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, extraExpenses, extraExpenseAmount } = req.body;
 
     // 1. Find the order first
     const salesOrder = await SalesOrder.findById(id);
@@ -730,6 +730,7 @@ router.put("/:id", async (req, res) => {
     // Capture 'before' state for audit log
     const beforeState = {
       items: JSON.parse(JSON.stringify(salesOrder.items || [])),
+      extraExpenses: JSON.parse(JSON.stringify(salesOrder.extraExpenses || [])),
       grandTotal: salesOrder.grandTotal,
       subtotal: salesOrder.subtotal,
     };
@@ -737,6 +738,15 @@ router.put("/:id", async (req, res) => {
     // 3. Update the fields
     salesOrder.items = items || [];
     salesOrder.sampleItems = sampleItems || [];
+    salesOrder.extraExpenses = (extraExpenses || []).map((exp) => ({
+      expenseName: exp.expenseName,
+      basePrice: Math.round(Number(exp.basePrice) || 0),
+      gstPercent: Math.round(Number(exp.gstPercent) || 0),
+      gstAmount: Math.round(Number(exp.gstAmount) || 0),
+      totalPrice: Math.round(Number(exp.totalPrice) || 0),
+    }));
+    salesOrder.extraExpenseAmount = Math.round(Number(extraExpenseAmount) || 0);
+    
     salesOrder.subtotal = Math.round(Number(subtotal) || 0);
     salesOrder.totalTax = Math.round(Number(totalTax) || 0);
     salesOrder.totalDiscount = Math.round(Number(totalDiscount) || 0);

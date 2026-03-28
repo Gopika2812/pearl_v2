@@ -2,19 +2,119 @@ import express from "express";
 import Customer from "../models/Customer.js";
 import Receipt from "../models/Receipt.js";
 import SalesOrder from "../models/SalesOrder.js";
+import { createAuditLog } from "../utils/logUtil.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 
 const router = express.Router();
 
-// GET all receipts
+// GET all receipts (optional branch filtering)
 router.get("/", async (req, res) => {
   try {
-    const receipts = await Receipt.find()
+    const { branchId } = req.query;
+    // Inclusive query: matching branch OR no branch (legacy/test data)
+    const query = branchId ? { $or: [{ branchId }, { branchId: { $exists: false } }] } : {};
+    
+    const receipts = await Receipt.find(query)
       .sort({ createdAt: -1 });
     
     res.json({ success: true, data: receipts });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to fetch receipts" });
+  }
+});
+
+// CREATE GENERAL receipt (standalone payment)
+router.post("/general", async (req, res) => {
+  try {
+    const {
+      customerId,
+      amount,
+      paymentMethod,
+      reference,
+      notes,
+      branchId,
+    } = req.body;
+
+    if (!customerId || !amount || amount <= 0) {
+      return res.status(400).json({ success: false, message: "Missing or invalid required fields" });
+    }
+
+    const customer = await Customer.findById(customerId);
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    // Generate Standalone Receipt ID (REC/001/FY...)
+    const financialYear = getFinancialYear();
+    const prefix = "REC";
+    const lastGeneralReceipt = await Receipt.findOne({ 
+      receiptId: new RegExp(`^${prefix}/`),
+      financialYear 
+    }).sort({ receiptId: -1 });
+    
+    const nextNumber = lastGeneralReceipt ? parseInt(lastGeneralReceipt.receiptId.split("/")[1]) + 1 : 1;
+    const receiptId = `${prefix}/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
+
+    // Create receipt
+    const receipt = new Receipt({
+      receiptId,
+      branchId, // Assuming model needs it, otherwise optional
+      customer: {
+        customerId,
+        name: customer.name,
+      },
+      amount,
+      paymentMethod: paymentMethod || "CASH",
+      reference: reference || null,
+      notes: notes || null,
+      financialYear,
+      status: "confirmed",
+    });
+
+    await receipt.save();
+
+    // UPDATE CUSTOMER BALANCE
+    let remainingAmount = amount;
+    let currentDebit = customer.debit || 0;
+    let currentCredit = customer.credit || 0;
+
+    if (currentDebit >= remainingAmount) {
+      currentDebit -= remainingAmount;
+      remainingAmount = 0;
+    } else {
+      remainingAmount -= currentDebit;
+      currentDebit = 0;
+      currentCredit += remainingAmount;
+    }
+
+    const newClosingBalance = (customer.closingBalance || 0) - amount;
+    
+    await Customer.findByIdAndUpdate(customerId, {
+      debit: currentDebit,
+      credit: currentCredit,
+      closingBalance: newClosingBalance,
+      totalBalance: newClosingBalance,
+    });
+
+    // CREATE AUDIT LOG
+    await createAuditLog({
+      userId: req.body.userId || "System",
+      username: req.body.username || "System",
+      branchId: branchId,
+      action: "GENERAL_RECEIPT",
+      description: `Created standalone receipt ${receiptId} for ${customer.name} - ₹${amount}`,
+      targetId: receipt._id,
+      targetModel: "Receipt",
+    });
+
+    res.json({
+      success: true,
+      message: "Debit Receipt recorded successfully",
+      data: receipt,
+    });
+  } catch (error) {
+    console.error("Error creating general receipt:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to create receipt" });
   }
 });
 

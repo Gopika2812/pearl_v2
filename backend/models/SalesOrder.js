@@ -153,7 +153,10 @@ const salesOrderSchema = new mongoose.Schema(
     extraExpenses: [
       {
         expenseName: String,
-        totalPrice: Number, // Flat amount
+        basePrice: Number,
+        gstPercent: { type: Number, default: 0 },
+        gstAmount: { type: Number, default: 0 },
+        totalPrice: Number, // Inclusive of GST
       },
     ],
     extraExpenseAmount: {

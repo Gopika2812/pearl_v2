@@ -108,8 +108,9 @@ export default function InventorySalesOrderEntry({
   // EXTRA EXPENSES STATES
   const [extraExpenses, setExtraExpenses] = useState([]);
   const [showExtraExpensesModal, setShowExtraExpensesModal] = useState(false);
-  const [expenseName, setExpenseName] = useState("");
+  const [expenseName, setExpenseName] = useState("Transport");
   const [expensePrice, setExpensePrice] = useState("");
+  const [expenseGstPercent, setExpenseGstPercent] = useState(18);
 
   // SEARCH STATES FOR TYPING
   const [customerSearch, setCustomerSearch] = useState("");
@@ -814,7 +815,7 @@ export default function InventorySalesOrderEntry({
     const base = i.qty * i.sellingPrice;
     const taxable = base - (i.discountAmount || 0);
     return s + (taxable * i.gst) / 100;
-  }, 0);
+  }, 0) + extraExpenses.reduce((s, e) => s + (e.gstAmount || 0), 0);
 
   // Calculate extra expenses total
   const extraExpenseAmount = extraExpenses.reduce(
@@ -823,7 +824,7 @@ export default function InventorySalesOrderEntry({
   );
 
   const grandTotal =
-    subtotal - totalDiscount - (Number(commonDiscount) || 0) + totalTax + extraExpenseAmount;
+    subtotal - totalDiscount - (Number(commonDiscount) || 0) + totalTax;
 
 
   // Round up all item totals and financial values
@@ -881,6 +882,9 @@ export default function InventorySalesOrderEntry({
     grandTotalWithMargin,
     extraExpenses: extraExpenses.map((exp) => ({
       expenseName: exp.expenseName,
+      basePrice: Math.ceil(exp.basePrice * 100) / 100,
+      gstPercent: exp.gstPercent,
+      gstAmount: Math.ceil(exp.gstAmount * 100) / 100,
       totalPrice: Math.ceil(exp.totalPrice * 100) / 100,
     })),
     extraExpenseAmount: roundedExtraExpenseAmount,
@@ -897,15 +901,24 @@ export default function InventorySalesOrderEntry({
       return;
     }
 
+    const baseAmount = parseFloat(expensePrice) || 0;
+    const gstPercent = parseFloat(expenseGstPercent) || 0;
+    const gstAmount = (baseAmount * gstPercent) / 100;
+    const totalPrice = baseAmount + gstAmount;
+
     const newExpense = {
       id: Date.now(),
       expenseName: expenseName.trim(),
-      totalPrice: parseFloat(expensePrice) || 0,
+      basePrice: baseAmount,
+      gstPercent,
+      gstAmount,
+      totalPrice: totalPrice,
     };
 
     setExtraExpenses((prev) => [...prev, newExpense]);
-    setExpenseName("");
+    setExpenseName("Transport");
     setExpensePrice("");
+    setExpenseGstPercent(18);
     setShowExtraExpensesModal(false);
     toast.success("Expense added!");
   };
@@ -1819,26 +1832,64 @@ export default function InventorySalesOrderEntry({
                   <label className={labelClass}>Expense Name</label>
                   <input
                     type="text"
+                    list="expense-types"
                     className={inputClass}
                     value={expenseName}
-                    onChange={(e) => setExpenseName(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setExpenseName(val);
+                      if (val.toLowerCase() === "transport") {
+                        setExpenseGstPercent(18);
+                      }
+                    }}
                     placeholder="e.g., Loading Charge, Packing Charge"
                   />
+                  <datalist id="expense-types">
+                    <option value="Transport" />
+                    <option value="Loading Charges" />
+                    <option value="Packing Charges" />
+                    <option value="Courier Charges" />
+                  </datalist>
                 </div>
 
-                {/* Price */}
-                <div>
-                  <label className={labelClass}>Amount (₹)</label>
-                  <input
-                    type="number"
-                    className={inputClass}
-                    value={expensePrice}
-                    onChange={(e) => setExpensePrice(e.target.value)}
-                    placeholder="0.00"
-                    min="0"
-                    step="0.01"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Price */}
+                  <div>
+                    <label className={labelClass}>Amount (₹)</label>
+                    <input
+                      type="number"
+                      className={inputClass}
+                      value={expensePrice}
+                      onChange={(e) => setExpensePrice(e.target.value)}
+                      placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+
+                  {/* GST % */}
+                  <div>
+                    <label className={labelClass}>GST (%)</label>
+                    <input
+                      type="number"
+                      className={inputClass}
+                      value={expenseGstPercent}
+                      onChange={(e) => setExpenseGstPercent(e.target.value)}
+                      placeholder="18"
+                      min="0"
+                    />
+                  </div>
                 </div>
+
+                {/* Total Preview */}
+                {expensePrice > 0 && (
+                  <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 flex justify-between items-center text-xs">
+                    <span className="text-orange-700 font-semibold">Total with GST:</span>
+                    <span className="text-orange-800 font-black">
+                      ₹{(parseFloat(expensePrice) + (parseFloat(expensePrice) * parseFloat(expenseGstPercent) / 100)).toFixed(2)}
+                    </span>
+                  </div>
+                )}
 
                 {/* Buttons */}
                 <div className="grid grid-cols-2 gap-3 pt-4">

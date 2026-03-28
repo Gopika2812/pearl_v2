@@ -580,7 +580,9 @@ router.get("", async (req, res) => {
     const { branchId, page = 1, limit = 100, search } = req.query;
 
     const query = {};
-    if (branchId) query.branchId = branchId;
+    if (branchId) {
+      query.$or = [{ branchId }, { branchId: { $exists: false } }];
+    }
 
     // Search by customer name or invoice number
     if (search) {

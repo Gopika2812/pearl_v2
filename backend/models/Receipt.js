@@ -3,14 +3,15 @@ import mongoose from "mongoose";
 const receiptSchema = new mongoose.Schema(
   {
     receiptId: { type: String, required: true, unique: true },
+    branchId: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", required: false },
     
-    // Reference to original sales order
+    // Reference to original sales order (Optional for general debit receipts)
     originalSalesOrderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "SalesOrder",
-      required: true,
+      required: false,
     },
-    originalInvoiceId: String,
+    originalInvoiceId: { type: String, required: false },
     
     // Customer Info
     customer: {

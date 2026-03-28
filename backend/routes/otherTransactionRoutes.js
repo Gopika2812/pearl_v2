@@ -1,5 +1,6 @@
 import express from "express";
 import OtherTransaction from "../models/OtherTransaction.js";
+import { createAuditLog } from "../utils/logUtil.js";
 import mongoose from "mongoose";
 
 const router = express.Router();
@@ -48,10 +49,23 @@ router.post("/", async (req, res) => {
 
     const currentFY = getFinancialYear();
     
-    // Generate a simple unique ID
-    const count = await OtherTransaction.countDocuments({ branchId, type: type.toUpperCase() });
+    // Generate a robust unique ID by finding the max existing number
     const prefix = type.toUpperCase() === "PAYMENT" ? "OTH-PAY" : "OTH-REC";
-    const transactionId = `${prefix}/${String(count + 1).padStart(4, "0")}/${currentFY}`;
+    const lastTransaction = await OtherTransaction.findOne({ 
+      branchId, 
+      type: type.toUpperCase(),
+      transactionId: new RegExp(`^${prefix}/`)
+    }).sort({ transactionId: -1 });
+
+    let nextNumber = 1;
+    if (lastTransaction && lastTransaction.transactionId) {
+      const parts = lastTransaction.transactionId.split('/');
+      if (parts.length >= 2) {
+        const lastNum = parseInt(parts[1]);
+        if (!isNaN(lastNum)) nextNumber = lastNum + 1;
+      }
+    }
+    const transactionId = `${prefix}/${String(nextNumber).padStart(4, "0")}/${currentFY}`;
 
     const newTransaction = new OtherTransaction({
       branchId,
@@ -66,6 +80,17 @@ router.post("/", async (req, res) => {
     });
 
     await newTransaction.save();
+
+    // CREATE AUDIT LOG
+    await createAuditLog({
+      userId: req.body.userId || "System",
+      username: req.body.username || req.body.recordedBy || "System",
+      branchId: branchId,
+      action: `OTHER_${type.toUpperCase()}`,
+      description: `${type} of ₹${amount} recorded for ${ledgerName} (${ledgerGroup})`,
+      targetId: newTransaction._id,
+      targetModel: "OtherTransaction",
+    });
 
     res.status(201).json({
       message: `${type} recorded successfully`,

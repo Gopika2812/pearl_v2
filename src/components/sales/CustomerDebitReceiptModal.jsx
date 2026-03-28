@@ -94,43 +94,29 @@ export default function CustomerDebitReceiptModal({ isOpen, onClose, onReceiptSu
       return;
     }
 
-
-
     setSaving(true);
     try {
-      let remainingAmount = amount;
-      let currentDebit = selectedCustomer.debit || 0;
-      let currentCredit = selectedCustomer.credit || 0;
-
-      if (currentDebit >= remainingAmount) {
-        currentDebit -= remainingAmount;
-        remainingAmount = 0;
-      } else {
-        remainingAmount -= currentDebit;
-        currentDebit = 0;
-        currentCredit += remainingAmount;
-      }
-
-      const newClosingBalance = (selectedCustomer.closingBalance || 0) - amount;
-
-      // Update customer debit balance
-      const updateResponse = await fetch(`${API_BASE}/customers/${selectedCustomerId}`, {
-        method: "PUT",
+      const response = await fetch(`${API_BASE}/receipts/general`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...selectedCustomer,
-          debit: currentDebit,
-          credit: currentCredit,
-          closingBalance: newClosingBalance,
+          customerId: selectedCustomerId,
+          amount,
+          paymentMethod,
+          reference,
+          notes,
+          branchId: currentBranch?._id,
         }),
       });
 
-      if (!updateResponse.ok) {
-        throw new Error("Failed to update customer debit balance");
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to process debit receipt");
       }
 
       toast.success(
-        `Receipt created successfully! Debit amount reduced by ₹${amount.toLocaleString()}`
+        `Debit Receipt ${data.data.receiptId} created successfully! Amount: ₹${amount.toLocaleString()}`
       );
 
       // Refresh and close

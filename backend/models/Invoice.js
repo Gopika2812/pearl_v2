@@ -115,7 +115,10 @@ const invoiceSchema = new mongoose.Schema(
     extraExpenses: [
       {
         expenseName: String,
-        totalPrice: Number,
+        basePrice: Number,
+        gstPercent: { type: Number, default: 0 },
+        gstAmount: { type: Number, default: 0 },
+        totalPrice: Number, // Inclusive of GST
       },
     ],
     extraExpenseAmount: { type: Number, default: 0 },
