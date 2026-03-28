@@ -64,6 +64,7 @@ const InventoryPurchaseOrderEntry = ({
   const [qty, setQty] = useState("");
   const [purchasePrice, setPurchasePrice] = useState(0);
   const [sellingPrice, setSellingPrice] = useState(0);
+  const [discountPercent, setDiscountPercent] = useState("");
   const [displayPrice, setDisplayPrice] = useState(0);
   const [hsn, setHsn] = useState("");
   const [gst, setGst] = useState(0);
@@ -77,6 +78,7 @@ const InventoryPurchaseOrderEntry = ({
   const [showExtraExpensesModal, setShowExtraExpensesModal] = useState(false);
   const [expenseName, setExpenseName] = useState("");
   const [expensePrice, setExpensePrice] = useState("");
+  const [expenseGst, setExpenseGst] = useState("");
   
   // Filter products by fetching from API when group changes
   const [filteredProducts, setFilteredProducts] = useState([]);
@@ -183,6 +185,7 @@ const InventoryPurchaseOrderEntry = ({
     setQty("");
     setPurchasePrice(product.purchasingPrice || product.rate || 0);
     setSellingPrice(product.sellingPrice || product.rate || 0);
+    setDiscountPercent("");
     setHsn(product.hsnCode || product.hsncode || "");
     setGst(product.gst || product.tax || 0);
     if (!igst) {
@@ -220,6 +223,7 @@ const InventoryPurchaseOrderEntry = ({
         totalQty: product.totalQty || 0,
         purchasePrice,
         sellingPrice,
+        discountPercent: parseFloat(discountPercent) || 0,
         rowPrice: displayPrice,
         hsn,
         gst,
@@ -238,6 +242,7 @@ const InventoryPurchaseOrderEntry = ({
     setQty("");
     setPurchasePrice(0);
     setSellingPrice(0);
+    setDiscountPercent("");
     setDisplayPrice(0);
     setHsn("");
     setGst(0);
@@ -270,15 +275,23 @@ const InventoryPurchaseOrderEntry = ({
       return;
     }
 
+    const baseAmount = parseFloat(expensePrice) || 0;
+    const gstPct = parseFloat(expenseGst) || 0;
+    const gstAmount = (baseAmount * gstPct) / 100;
+    const finalPrice = baseAmount + gstAmount;
+
     const newExpense = {
       id: Date.now(),
       expenseName: expenseName.trim(),
-      totalPrice: parseFloat(expensePrice) || 0,
+      amount: baseAmount,
+      gst: gstPct,
+      totalPrice: finalPrice,
     };
 
     setExtraExpenses((prev) => [...prev, newExpense]);
     setExpenseName("");
     setExpensePrice("");
+    setExpenseGst("");
     setShowExtraExpensesModal(false);
     toast.success("Expense added!");
   };
@@ -321,6 +334,7 @@ const InventoryPurchaseOrderEntry = ({
     setQty("");
     setPurchasePrice(0);
     setSellingPrice(0);
+    setDiscountPercent("");
     setDisplayPrice(0);
     setHsn("");
     setGst(0);
@@ -351,6 +365,8 @@ const InventoryPurchaseOrderEntry = ({
       totalTax,
       extraExpenses: extraExpenses.map((exp) => ({
         expenseName: exp.expenseName,
+        amount: exp.amount,
+        gst: exp.gst,
         totalPrice: Math.ceil(exp.totalPrice * 100) / 100,
       })),
       extraExpenseAmount,
@@ -640,6 +656,17 @@ const InventoryPurchaseOrderEntry = ({
           </div>
 
           <div>
+            <label className={labelClass}>Discount %</label>
+            <input
+              type="number"
+              className={inputClass}
+              value={discountPercent}
+              onChange={(e) => setDiscountPercent(e.target.value)}
+              placeholder="0"
+            />
+          </div>
+
+          <div>
             <label className={labelClass}>Qty</label>
             <input
               type="number"
@@ -744,7 +771,9 @@ const InventoryPurchaseOrderEntry = ({
               <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] font-bold">
                 <tr>
                   <th className="px-3 py-2 text-left">Expense Name</th>
-                  <th className="px-3 py-2 text-right">Amount</th>
+                  <th className="px-3 py-2 text-right">Base Amount</th>
+                  <th className="px-3 py-2 text-right">GST %</th>
+                  <th className="px-3 py-2 text-right">Total</th>
                   <th className="px-3 py-2 text-center">Remove</th>
                 </tr>
               </thead>
@@ -753,6 +782,12 @@ const InventoryPurchaseOrderEntry = ({
                   <tr key={exp.id} className="border-b transition hover:bg-gray-50">
                     <td className="px-3 py-2 font-semibold text-gray-800">
                       {exp.expenseName}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-700">
+                      ₹{(exp.amount || 0).toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2 text-right text-blue-600">
+                      {(exp.gst || 0)}%
                     </td>
                     <td className="px-3 py-2 text-right font-bold text-orange-600">
                       ₹{(exp.totalPrice || 0).toFixed(2)}
@@ -980,7 +1015,7 @@ const InventoryPurchaseOrderEntry = ({
 
             {/* Price */}
             <div>
-              <label className={labelClass}>Amount (₹)</label>
+              <label className={labelClass}>Base Amount (₹)</label>
               <input
                 type="number"
                 className={inputClass}
@@ -989,6 +1024,20 @@ const InventoryPurchaseOrderEntry = ({
                 placeholder="0.00"
                 min="0"
                 step="0.01"
+              />
+            </div>
+
+            {/* GST */}
+            <div>
+              <label className={labelClass}>GST (%)</label>
+              <input
+                type="number"
+                className={inputClass}
+                value={expenseGst}
+                onChange={(e) => setExpenseGst(e.target.value)}
+                placeholder="0"
+                min="0"
+                max="100"
               />
             </div>
 

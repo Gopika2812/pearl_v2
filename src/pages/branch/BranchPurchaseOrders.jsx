@@ -246,6 +246,9 @@ const BranchPurchaseOrders = () => {
                                             Selling Price
                                           </th>
                                           <th className="text-right py-2 px-3">
+                                            Discount (%)
+                                          </th>
+                                          <th className="text-right py-2 px-3">
                                             Tax
                                           </th>
                                           <th className="text-right py-2 px-3">
@@ -270,6 +273,9 @@ const BranchPurchaseOrders = () => {
                                             </td>
                                             <td className="py-2 px-3 text-right">
                                               ₹{item.sellingPrice?.toFixed(2)}
+                                            </td>
+                                            <td className="py-2 px-3 text-right text-red-500 font-bold">
+                                              {item.discountPercent || 0}%
                                             </td>
                                             <td className="py-2 px-3 text-right text-blue-600">
                                               {item.igst
@@ -300,12 +306,6 @@ const BranchPurchaseOrders = () => {
                                     <span className="text-gray-600">Tax</span>
                                     <p className="font-bold text-gray-900">
                                       ₹{(order.totalTax || 0).toLocaleString()}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <span className="text-gray-600">Transport</span>
-                                    <p className="font-bold text-gray-900">
-                                      ₹{(order.transportCharge || 0).toLocaleString()}
                                     </p>
                                   </div>
                                   <div>

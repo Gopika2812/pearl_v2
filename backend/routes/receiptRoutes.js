@@ -47,31 +47,52 @@ router.post("/general", async (req, res) => {
     // Generate Standalone Receipt ID (REC/001/FY...)
     const financialYear = getFinancialYear();
     const prefix = "REC";
-    const lastGeneralReceipt = await Receipt.findOne({ 
-      receiptId: new RegExp(`^${prefix}/`),
-      financialYear 
-    }).sort({ receiptId: -1 });
     
-    const nextNumber = lastGeneralReceipt ? parseInt(lastGeneralReceipt.receiptId.split("/")[1]) + 1 : 1;
-    const receiptId = `${prefix}/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
+    let receipt;
+    let receiptId;
+    let saved = false;
+    let retries = 0;
 
-    // Create receipt
-    const receipt = new Receipt({
-      receiptId,
-      branchId, // Assuming model needs it, otherwise optional
-      customer: {
-        customerId,
-        name: customer.name,
-      },
-      amount,
-      paymentMethod: paymentMethod || "CASH",
-      reference: reference || null,
-      notes: notes || null,
-      financialYear,
-      status: "confirmed",
-    });
+    while (!saved && retries < 5) {
+      try {
+        const lastGeneralReceipt = await Receipt.findOne({ 
+          receiptId: new RegExp(`^${prefix}/`),
+          financialYear 
+        }).sort({ receiptId: -1 });
+        
+        const nextNumber = lastGeneralReceipt ? parseInt(lastGeneralReceipt.receiptId.split("/")[1]) + 1 : 1;
+        receiptId = `${prefix}/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
 
-    await receipt.save();
+        // Create receipt
+        receipt = new Receipt({
+          receiptId,
+          branchId,
+          customer: {
+            customerId,
+            name: customer.name,
+          },
+          amount,
+          paymentMethod: paymentMethod || "CASH",
+          reference: reference || null,
+          notes: notes || null,
+          financialYear,
+          status: "confirmed",
+        });
+
+        await receipt.save();
+        saved = true;
+      } catch (err) {
+        if (err.code === 11000 && err.keyPattern && err.keyPattern.receiptId) {
+          retries++;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!saved) {
+      return res.status(500).json({ success: false, message: "System busy. Could not generate a unique receipt ID. Please try again." });
+    }
 
     // UPDATE CUSTOMER BALANCE
     let remainingAmount = amount;
@@ -161,28 +182,53 @@ router.post("/", async (req, res) => {
 
     // Generate Receipt ID
     const financialYear = getFinancialYear();
-    const receiptDoc = await Receipt.findOne({ financialYear }).sort({ receiptId: -1 });
-    const nextNumber = receiptDoc ? parseInt(receiptDoc.receiptId.split("/")[1]) + 1 : 1;
-    const receiptId = `RCP/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
+    const prefix = "RCP";
+    
+    let receipt;
+    let receiptId;
+    let saved = false;
+    let retries = 0;
 
-    // Create receipt
-    const receipt = new Receipt({
-      receiptId,
-      originalSalesOrderId,
-      originalInvoiceId: originalOrder.invoiceId,
-      customer: {
-        customerId: originalOrder.customer.customerId,
-        name: originalOrder.customer.name,
-      },
-      amount,
-      paymentMethod: paymentMethod || "CASH",
-      reference: reference || null,
-      notes: notes || null,
-      financialYear,
-      status: "confirmed",
-    });
+    while (!saved && retries < 5) {
+      try {
+        const receiptDoc = await Receipt.findOne({ 
+          receiptId: new RegExp(`^${prefix}/`),
+          financialYear 
+        }).sort({ receiptId: -1 });
+        const nextNumber = receiptDoc ? parseInt(receiptDoc.receiptId.split("/")[1]) + 1 : 1;
+        receiptId = `${prefix}/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
 
-    await receipt.save();
+        // Create receipt
+        receipt = new Receipt({
+          receiptId,
+          originalSalesOrderId,
+          originalInvoiceId: originalOrder.invoiceId,
+          customer: {
+            customerId: originalOrder.customer.customerId,
+            name: originalOrder.customer.name,
+          },
+          amount,
+          paymentMethod: paymentMethod || "CASH",
+          reference: reference || null,
+          notes: notes || null,
+          financialYear,
+          status: "confirmed",
+        });
+
+        await receipt.save();
+        saved = true;
+      } catch (err) {
+        if (err.code === 11000 && err.keyPattern && err.keyPattern.receiptId) {
+          retries++;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!saved) {
+      return res.status(500).json({ success: false, message: "System busy. Could not generate a unique receipt ID. Please try again." });
+    }
 
     // UPDATE CUSTOMER DEBIT (DECREASE for payment) AND CREDIT
     const customerId = originalOrder.customer.customerId;
@@ -241,27 +287,52 @@ router.post("/bounce", async (req, res) => {
     }
 
     const financialYear = getFinancialYear();
-    const receiptDoc = await Receipt.findOne({ financialYear }).sort({ receiptId: -1 });
-    const nextNumber = receiptDoc ? parseInt(receiptDoc.receiptId.split("/")[1]) + 1 : 1;
-    const receiptId = `BNC/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
+    const prefix = "BNC";
+    
+    let bounceReceipt;
+    let receiptId;
+    let saved = false;
+    let retries = 0;
 
-    const bounceReceipt = new Receipt({
-      receiptId,
-      originalSalesOrderId,
-      originalInvoiceId: originalOrder.invoiceId,
-      customer: {
-        customerId: originalOrder.customer.customerId,
-        name: originalOrder.customer.name,
-      },
-      amount,
-      paymentMethod: "BOUNCED",
-      reference: "Cheque Bounced",
-      notes: notes || "Bounced Penalty/Return",
-      financialYear,
-      status: "bounced",
-    });
+    while (!saved && retries < 5) {
+      try {
+        const receiptDoc = await Receipt.findOne({ 
+          receiptId: new RegExp(`^${prefix}/`),
+          financialYear 
+        }).sort({ receiptId: -1 });
+        const nextNumber = receiptDoc ? parseInt(receiptDoc.receiptId.split("/")[1]) + 1 : 1;
+        receiptId = `${prefix}/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
 
-    await bounceReceipt.save();
+        bounceReceipt = new Receipt({
+          receiptId,
+          originalSalesOrderId,
+          originalInvoiceId: originalOrder.invoiceId,
+          customer: {
+            customerId: originalOrder.customer.customerId,
+            name: originalOrder.customer.name,
+          },
+          amount,
+          paymentMethod: "BOUNCED",
+          reference: "Cheque Bounced",
+          notes: notes || "Bounced Penalty/Return",
+          financialYear,
+          status: "bounced",
+        });
+
+        await bounceReceipt.save();
+        saved = true;
+      } catch (err) {
+        if (err.code === 11000 && err.keyPattern && err.keyPattern.receiptId) {
+          retries++;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!saved) {
+      return res.status(500).json({ success: false, message: "System busy. Could not generate a unique receipt ID. Please try again." });
+    }
 
     // INCREASE CUSTOMER DEBIT (Customer owes the bounced amount again)
     const customerId = originalOrder.customer.customerId;

@@ -13,6 +13,7 @@ const PurchaseItemSchema = new mongoose.Schema({
   purchasePrice: Number,
   sellingPrice: Number,
   rowPrice: Number,
+  discountPercent: { type: Number, default: 0 },
 
   hsn: String,
 
@@ -51,6 +52,8 @@ const PurchaseOrderSchema = new mongoose.Schema(
     extraExpenses: [
       {
         expenseName: String,
+        amount: Number,
+        gst: Number,
         totalPrice: Number,
       },
     ],
