@@ -33,28 +33,53 @@ router.post("/:id/record-payment", async (req, res) => {
 
     // 1. Generate Receipt ID and Create Receipt
     const financialYear = getFinancialYear();
-    const receiptDoc = await Receipt.findOne({ financialYear }).sort({ receiptId: -1 });
-    const nextNumber = receiptDoc ? parseInt(receiptDoc.receiptId.split("/")[1]) + 1 : 1;
-    const receiptId = `RCP/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
-
-    const receipt = new Receipt({
-      receiptId,
-      originalSalesOrderId: id,
-      originalInvoiceId: order.invoiceId,
-      customer: {
-        customerId: order.customer.customerId,
-        name: order.customer.name,
-      },
-      amount,
-      paymentMethod: (paymentMethod || "CASH").toUpperCase(),
-      reference: referenceNo || null,
-      notes: remarks || null,
-      financialYear,
-      status: "confirmed",
-      createdAt: paymentDate ? new Date(paymentDate) : new Date()
-    });
+    const prefix = "RCP";
     
-    await receipt.save();
+    let receipt;
+    let receiptId;
+    let saved = false;
+    let retries = 0;
+
+    while (!saved && retries < 5) {
+      try {
+        const receiptDoc = await Receipt.findOne({ 
+          receiptId: new RegExp(`^${prefix}/`),
+          financialYear 
+        }).sort({ receiptId: -1 });
+        const nextNumber = receiptDoc ? parseInt(receiptDoc.receiptId.split("/")[1]) + 1 : 1;
+        receiptId = `${prefix}/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
+
+        receipt = new Receipt({
+          receiptId,
+          originalSalesOrderId: id,
+          originalInvoiceId: order.invoiceId,
+          customer: {
+            customerId: order.customer.customerId,
+            name: order.customer.name,
+          },
+          amount,
+          paymentMethod: (paymentMethod || "CASH").toUpperCase(),
+          reference: referenceNo || null,
+          notes: remarks || null,
+          financialYear,
+          status: "confirmed",
+          createdAt: paymentDate ? new Date(paymentDate) : new Date()
+        });
+        
+        await receipt.save();
+        saved = true;
+      } catch (err) {
+        if (err.code === 11000 || (err.message && err.message.includes('E11000'))) {
+          retries++;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!saved) {
+      return res.status(500).json({ success: false, message: "System busy. Could not generate a unique receipt ID. Please try again." });
+    }
 
     // 2. Reduce Order Closing Balance
     order.closingBalance -= amount;

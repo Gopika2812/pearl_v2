@@ -82,7 +82,7 @@ router.post("/general", async (req, res) => {
         await receipt.save();
         saved = true;
       } catch (err) {
-        if (err.code === 11000 && err.keyPattern && err.keyPattern.receiptId) {
+        if (err.code === 11000 || (err.message && err.message.includes('E11000'))) {
           retries++;
         } else {
           throw err;
@@ -218,7 +218,7 @@ router.post("/", async (req, res) => {
         await receipt.save();
         saved = true;
       } catch (err) {
-        if (err.code === 11000 && err.keyPattern && err.keyPattern.receiptId) {
+        if (err.code === 11000 || (err.message && err.message.includes('E11000'))) {
           retries++;
         } else {
           throw err;
@@ -322,7 +322,7 @@ router.post("/bounce", async (req, res) => {
         await bounceReceipt.save();
         saved = true;
       } catch (err) {
-        if (err.code === 11000 && err.keyPattern && err.keyPattern.receiptId) {
+        if (err.code === 11000 || (err.message && err.message.includes('E11000'))) {
           retries++;
         } else {
           throw err;
