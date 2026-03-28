@@ -10,7 +10,6 @@ const BranchPurchaseOrders = () => {
   const [loading, setLoading] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState({});
 
-  // Fetch purchase orders for current branch
   const fetchPurchaseOrders = async () => {
     // Get branch ID from context
     if (!currentBranch?._id) {
@@ -137,11 +136,10 @@ const BranchPurchaseOrders = () => {
                               className="text-[#319bab] hover:bg-gray-200 p-1 rounded transition"
                             >
                               <FaChevronDown
-                                className={`text-xs transition-transform ${
-                                  expandedOrders[order._id]
+                                className={`text-xs transition-transform ${expandedOrders[order._id]
                                     ? "rotate-180"
                                     : ""
-                                }`}
+                                  }`}
                               />
                             </button>
                             <span className="font-bold text-[#319bab]">
