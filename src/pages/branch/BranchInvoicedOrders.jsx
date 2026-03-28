@@ -528,8 +528,8 @@ const BranchInvoicedOrders = () => {
                                             <td className="py-2 px-3 text-center text-gray-600">
                                               {item.hsn}
                                             </td>
-                                            <td className="py-2 px-3 text-center font-semibold">
-                                              {item.qty}
+                                            <td className={`py-2 px-3 text-center font-bold ${item.isNegativeStockBilled ? 'text-red-600 bg-red-50 rounded shadow-sm border border-red-100 flex items-center justify-center gap-1' : ''}`}>
+                                              {item.qty} {item.isNegativeStockBilled && <span title="Billed with negative stock">⚠️</span>}
                                             </td>
                                             <td className="py-2 px-3 text-right">
                                               ₹{item.sellingPrice?.toFixed(2)}
@@ -593,8 +593,8 @@ const BranchInvoicedOrders = () => {
                                               <td className="py-2 px-3 text-center text-gray-600">
                                                 {item.hsn}
                                               </td>
-                                              <td className="py-2 px-3 text-center font-semibold">
-                                                {item.qty}
+                                              <td className={`py-2 px-3 text-center font-bold ${item.isNegativeStockBilled ? 'text-red-600 bg-red-50 rounded shadow-sm border border-red-100 flex items-center justify-center gap-1' : ''}`}>
+                                                {item.qty} {item.isNegativeStockBilled && <span title="Billed with negative stock">⚠️</span>}
                                               </td>
                                               <td className="py-2 px-3 text-right">
                                                 ₹{item.sellingPrice?.toFixed(2)}
@@ -689,8 +689,8 @@ const BranchInvoicedOrders = () => {
                                                   <td className="py-2 px-3 font-semibold">
                                                     {invoiceItem.name}
                                                   </td>
-                                                  <td className="py-2 px-3 text-center font-semibold">
-                                                    {originalItem?.qty || "-"}
+                                                  <td className={`py-2 px-3 text-center font-bold ${originalItem?.isNegativeStockBilled ? 'text-red-600 bg-red-50 rounded shadow-sm border border-red-100 flex items-center justify-center gap-1' : ''}`}>
+                                                    {originalItem?.qty || "-"} {originalItem?.isNegativeStockBilled && <span title="Billed with negative stock">⚠️</span>}
                                                   </td>
                                                   <td className="py-2 px-3 text-center font-semibold text-green-600">
                                                     {invoiceItem.qty}

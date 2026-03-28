@@ -58,6 +58,7 @@ const salesOrderSchema = new mongoose.Schema(
         igst: Number,
 
         total: Number,
+        isNegativeStockBilled: { type: Boolean, default: false }
       },
     ],
 

@@ -449,11 +449,26 @@ export default function InventorySalesOrderEntry({
         hsn = poItem?.hsn || "";
       }
 
+      // 3️⃣ Fallback to purchase order Prices if product doesn't have them
+      let sPrice = p.sellingPrice || 0;
+      let pPrice = p.purchasingPrice || 0;
+
+      if (!sPrice || !pPrice) {
+        const poItem = poItems.find(
+          (item) => String(item.productId || item.productId?._id) === String(p._id)
+        );
+        if (poItem) {
+          if (!sPrice) sPrice = poItem.sellingPrice || 0;
+          if (!pPrice) pPrice = poItem.purchasingPrice || poItem.unitPrice || poItem.rate || 0;
+        }
+      }
+
       return {
         ...p,
-        // Use product database fields directly
+        // Use product database fields directly or fallbacks
         availableQty: p.totalQty || 0,
-        sellingPrice: p.sellingPrice || 0,
+        sellingPrice: sPrice,
+        purchasingPrice: pPrice,
         gst: p.gst || 0,
         hsn,
       };
@@ -664,7 +679,11 @@ export default function InventorySalesOrderEntry({
     // 6️⃣ FINAL TOTAL (ITEM LEVEL)
     const totalAmount = taxableAmount + taxAmount;
 
-    // 7️⃣ PUSH ITEM (using adjusted selling price with customer margin)
+    // 7️⃣ Check if billed negatively
+    const availableQty = availableQtyCache[p._id] ?? p.availableQty ?? 0;
+    const isNegativeStockBilled = Number(qty) > availableQty;
+
+    // 8️⃣ PUSH ITEM (using adjusted selling price with customer margin)
     setItems((prev) => [
       ...prev,
       {
@@ -686,6 +705,7 @@ export default function InventorySalesOrderEntry({
 
         total: totalAmount,
         lockedPrice: isLocked ? Number(sellingPrice) : (p.lockedPrice || 0),
+        isNegativeStockBilled,
       },
     ]);
 
@@ -760,6 +780,9 @@ export default function InventorySalesOrderEntry({
       return;
     }
 
+    const availableQty = p.totalQty || 0;
+    const isNegativeStockBilled = Number(sampleQty) > availableQty;
+
     setSampleItems((prev) => [
       ...prev,
       {
@@ -769,6 +792,7 @@ export default function InventorySalesOrderEntry({
         qty: Number(sampleQty),
         sellingPrice: Number(sampleSellingPrice),
         isSample: true,
+        isNegativeStockBilled,
       },
     ]);
 
@@ -1415,10 +1439,10 @@ export default function InventorySalesOrderEntry({
                 </label>
                 <input 
                   type="number" 
-                  className={`${inputClass} ${!isAdmin ? 'bg-gray-100 cursor-not-allowed' : ''}`} 
-                  value={sellingPrice} 
-                  onChange={(e) => setSellingPrice(+e.target.value)} 
-                  readOnly={!isAdmin}
+                  className={inputClass} 
+                  value={sellingPrice === 0 ? "" : sellingPrice} 
+                  onChange={(e) => setSellingPrice(e.target.value === "" ? "" : Number(e.target.value))} 
+                  placeholder="Price"
                 />
               </div>
             </div>
