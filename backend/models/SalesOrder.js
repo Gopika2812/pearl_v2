@@ -252,10 +252,22 @@ const salesOrderSchema = new mongoose.Schema(
     },
     reEditRequestBy: String,
     reEditRequestAt: Date,
+
+    // CANCEL REQUEST FIELDS
+    cancelRequestStatus: {
+      type: String,
+      enum: ["NONE", "PENDING", "APPROVED", "REJECTED"],
+      default: "NONE",
+    },
+    cancelRequestBy: String,
+    cancelRequestAt: Date,
+
     isReEdited: {
       type: Boolean,
       default: false, // Flag for labeling as "RE-EDIT ORIGINAL"
     },
+    
+    salesInvoiceId: { type: String }, // Links to separate Invoice document (SI/xxx)
 
   },
   { timestamps: true }

@@ -26,6 +26,7 @@ import BranchHome from "./pages/branch/BranchHome";
 import BranchDayBook from "./pages/branch/BranchDayBook";
 import BranchInsights from "./pages/branch/BranchInsights";
 import BranchInvoicedOrders from "./pages/branch/BranchInvoicedOrders";
+import BranchSalesInvoices from "./pages/branch/BranchSalesInvoices";
 import BranchJournalEntries from "./pages/branch/BranchJournalEntries";
 import BranchStockJournal from "./pages/branch/BranchStockJournal";
 import BranchPO from "./pages/branch/BranchPO";
@@ -43,6 +44,7 @@ import BranchOtherReceipt from "./pages/branch/BranchOtherReceipt";
 import BranchProductRecords from "./pages/branch/BranchProductRecords";
 import BranchLockedPrices from "./pages/branch/BranchLockedPrices";
 import BranchAdminRequests from "./pages/branch/BranchAdminRequests";
+import BranchStockSummary from "./pages/branch/BranchStockSummary";
 import BranchLoginPage from "./pages/BranchLoginPage";
 import BranchRegisterPage from "./pages/BranchRegisterPage";
 import UserRegistrationPage from "./pages/UserRegistrationPage";
@@ -115,7 +117,8 @@ function AppContent() {
         "/branch/debit-note": "debit-note",
         "/branch/po-payment": "payment-po",
         "/branch/sales-order": "create-so",
-        "/branch/invoiced-order": "invoiced-order",
+        "/branch/sales-orders": "sales-order-list",
+        "/branch/sales-invoices": "sales-invoice-list",
         "/branch/credit-note": "credit-note",
         "/branch/claims": "claims",
         "/branch/receipt": "receipt",
@@ -222,7 +225,8 @@ function AppContent() {
                   <Route path="/branch/debit-note" element={<ProtectedRoute element={<BranchDebitNote />} />} />
                   <Route path="/branch/po-payment" element={<ProtectedRoute element={<BranchPOPayment />} />} />
                   <Route path="/branch/sales-order" element={<ProtectedRoute element={<BranchSalesOrder />} />} />
-                  <Route path="/branch/invoiced-order" element={<ProtectedRoute element={<BranchInvoicedOrders />} />} />
+                  <Route path="/branch/sales-orders" element={<ProtectedRoute element={<BranchInvoicedOrders />} />} />
+                  <Route path="/branch/sales-invoices" element={<ProtectedRoute element={<BranchSalesInvoices />} />} />
                   <Route path="/branch/credit-note" element={<ProtectedRoute element={<BranchCreditNote />} />} />
                   <Route path="/branch/claims" element={<ProtectedRoute element={<BranchClaims />} />} />
                   <Route path="/branch/dispatch" element={<ProtectedRoute element={<BranchDispatch />} />} />
@@ -234,6 +238,7 @@ function AppContent() {
                   <Route path="/branch/receipt" element={<ProtectedRoute element={<BranchReceipt />} />} />
                   <Route path="/branch/summary" element={<ProtectedRoute element={<BranchSummary />} />} />
                   <Route path="/branch/product-records" element={<ProtectedRoute element={<BranchProductRecords />} />} />
+                  <Route path="/branch/stock-summary" element={<ProtectedRoute element={<BranchStockSummary />} />} />
                   <Route path="/branch/locked-prices" element={<ProtectedRoute element={<BranchLockedPrices />} />} />
                   <Route path="/branch/day-book" element={<ProtectedRoute element={<BranchDayBook />} />} />
                   <Route path="/branch/admin-requests" element={<ProtectedRoute element={<BranchAdminRequests />} role={["ADMIN"]} />} />

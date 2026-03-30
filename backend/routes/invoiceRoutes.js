@@ -10,6 +10,7 @@ import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
 import SalesMan from "../models/SalesMan.js";
 import DeliveryMan from "../models/DeliveryMan.js";
+import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
 
@@ -130,14 +131,19 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     // Fetch billing person name
     let billingPersonName = "-";
     if (salesOrder.billingPerson) {
-      let billingPerson = await SalesOwner.findById(salesOrder.billingPerson).select('name').lean();
-      if (!billingPerson) {
-        billingPerson = await SalesMan.findById(salesOrder.billingPerson).select('name').lean();
+      if (mongoose.Types.ObjectId.isValid(salesOrder.billingPerson)) {
+        let billingPerson = await SalesOwner.findById(salesOrder.billingPerson).select('name').lean();
+        if (!billingPerson) {
+          billingPerson = await SalesMan.findById(salesOrder.billingPerson).select('name').lean();
+        }
+        if (!billingPerson) {
+          billingPerson = await DeliveryMan.findById(salesOrder.billingPerson).select('name').lean();
+        }
+        billingPersonName = billingPerson?.name || "-";
+      } else {
+        // If it's not a valid ObjectId, it's likely already a name string (e.g., "System Administrator")
+        billingPersonName = salesOrder.billingPerson;
       }
-      if (!billingPerson) {
-        billingPerson = await DeliveryMan.findById(salesOrder.billingPerson).select('name').lean();
-      }
-      billingPersonName = billingPerson?.name || "-";
     }
 
     const previewData = {
@@ -468,6 +474,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       salesOrder.invoiceGenerated = true;
       salesOrder.status = "INVOICED";
       salesOrder.invoiceNotes = notes;
+      salesOrder.salesInvoiceId = invoiceNumber; // Store the SI link
+      salesOrder.recordType = "SALES INVOICE";
       
       // Save snapshot in history
       salesOrder.editHistory.push({

@@ -992,13 +992,23 @@ const InventoryPurchaseOrderEntry = ({
               {/* Expense Name */}
               <div>
                 <label className={labelClass}>Expense Name</label>
-                <input
-                  type="text"
-                  className={inputClass}
+                <select
+                  className={selectClass}
                   value={expenseName}
-                  onChange={(e) => setExpenseName(e.target.value)}
-                  placeholder="e.g., Loading Charge, Packing Charge"
-                />
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setExpenseName(val);
+                    if (val === "Transport") {
+                      setExpenseGst(18);
+                    }
+                  }}
+                >
+                  <option value="Transport">Transport</option>
+                  <option value="Discount">Discount</option>
+                  <option value="Offloading">Offloading</option>
+                  <option value="Unloading">Unloading</option>
+                  <option value="Freezer">Freezer</option>
+                </select>
               </div>
 
               {/* Price */}

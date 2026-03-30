@@ -129,14 +129,17 @@ const ExtraExpensesOrderModal = ({ isOpen, onClose, onSuccess }) => {
               <label className="block text-xs font-bold text-gray-600 mb-2 uppercase">
                 Expense Name
               </label>
-              <input
-                type="text"
+              <select
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#319bab] outline-none text-sm bg-white"
                 value={expenseName}
                 onChange={(e) => setExpenseName(e.target.value)}
-                placeholder="e.g., Freezer, Cooler, Installation, etc."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#319bab] outline-none text-sm"
-                onKeyPress={(e) => e.key === "Enter" && handleAddExpense()}
-              />
+              >
+                <option value="Transport">Transport</option>
+                <option value="Discount">Discount</option>
+                <option value="Offloading">Offloading</option>
+                <option value="Unloading">Unloading</option>
+                <option value="Freezer">Freezer</option>
+              </select>
             </div>
 
             <div>

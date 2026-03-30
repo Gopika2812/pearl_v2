@@ -204,6 +204,8 @@ const BranchInvoicedOrders = () => {
 
   // Filter sales orders based on criteria
   const filteredSalesOrders = salesOrders.filter((order) => {
+    // 🚩 REMOVED FILTER - ALL ORDERS SHOULD BE VISIBLE AS RECORDS
+    
     const matchesVoucherType = filterVoucherType === "" || 
       (order.voucherType && order.voucherType.toLowerCase().includes(filterVoucherType.toLowerCase()));
     
@@ -312,10 +314,10 @@ const BranchInvoicedOrders = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-black text-gray-800">
-                  Sales Orders to Invoice
+                  Sales Order List
                 </h1>
                 <p className="text-xs text-gray-500 uppercase tracking-wide">
-                  {currentBranch?.name || "Select a branch"}
+                  Pending Orders (SO)
                 </p>
               </div>
             </div>
@@ -466,9 +468,16 @@ const BranchInvoicedOrders = () => {
                                 }`}
                               />
                             </button>
-                            <span className="font-bold text-[#319bab]">
-                              {order.invoiceId}
-                            </span>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-[#319bab] text-xs">
+                                SO: {order.invoiceId}
+                              </span>
+                              {order.salesInvoiceId && (
+                                <span className="font-black text-blue-600 text-[10px]">
+                                  SI: {order.salesInvoiceId}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -494,16 +503,28 @@ const BranchInvoicedOrders = () => {
                         )}
                         <td className="px-6 py-4 text-center">
                           {order.status === "CANCELLED" ? (
-                             <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold line-through">
+                             <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-bold line-through uppercase tracking-wider">
                                 Cancelled
                              </span>
-                          ) : order.status === "INVOICED" || order.invoiceGenerated ? (
-                             <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
-                               ✓ Invoiced
+                          ) : order.reEditRequestStatus === "APPROVED" ? (
+                             <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider animate-pulse border border-orange-200">
+                                ✎ Editable (Unlocked)
+                             </span>
+                          ) : order.reEditRequestStatus === "PENDING" ? (
+                             <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                                ⌛ Edit Requested
+                             </span>
+                          ) : order.editHistory?.some(h => h.editType === 'RE_INVOICED') ? (
+                             <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-indigo-200">
+                                ✓ Re-Invoiced (V2)
+                             </span>
+                          ) : order.invoiceGenerated ? (
+                             <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                                ✓ Invoiced (V1)
                              </span>
                           ) : (
-                            <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold">
-                              Pending
+                            <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                              Pending Order
                             </span>
                           )}
                         </td>
@@ -519,27 +540,17 @@ const BranchInvoicedOrders = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center gap-2 justify-center flex-wrap">
-                            {(order.status === "INVOICED" || order.invoiceGenerated) && order.status !== "CANCELLED" && (
-                                <button
-                                    onClick={() => handleDirectReEdit(order._id)}
-                                    disabled={requestingReEdit === order._id}
-                                    className="bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-2 rounded-lg transition text-xs font-bold flex items-center gap-2 shadow-md shadow-indigo-200 whitespace-nowrap"
-                                    title="Unlock this bill for editing. Changes will be calculated as a Delta on re-invoice."
-                                >
-                                    <FaSync className={requestingReEdit === order._id ? "animate-spin" : ""} />
-                                    Re-Edit
-                                </button>
-                            )}
+                            {/* REMOVED RE-EDIT FROM SO LIST */}
 
                             <button
                               onClick={() => handleEditBill(order)}
-                              disabled={order.status === "INVOICED" || (order.invoiceGenerated && order.status !== "PLACED")}
+                              disabled={(order.invoiceGenerated || order.status === "INVOICED") && order.reEditRequestStatus !== "APPROVED"}
                               className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
-                                order.status === "INVOICED" || (order.invoiceGenerated && order.status !== "PLACED")
+                                (order.invoiceGenerated || order.status === "INVOICED") && order.reEditRequestStatus !== "APPROVED"
                                   ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-50"
                                   : "bg-orange-500 text-white hover:bg-orange-600 shadow-md shadow-orange-500/20"
                               }`}
-                              title={order.status === "INVOICED" || (order.invoiceGenerated && order.status !== "PLACED") ? "Requires Re-Edit to modify invoiced bill" : "Edit bill items"}
+                              title={(order.invoiceGenerated || order.status === "INVOICED") && order.reEditRequestStatus !== "APPROVED" ? "Requires Re-Edit approval from Invoice Record" : "Edit bill items"}
                             >
                               <FaEdit />
                               Edit Bill

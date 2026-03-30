@@ -53,7 +53,8 @@ export const PAGE_CONFIG = [
     items: [
       { id: "sales-dropdown", name: "Sales Order", icon: "sales", isDropdown: true, subItems: [
         { id: "create-so", name: "Create SO", path: "/branch/sales-order", icon: "purchase" },
-        { id: "invoiced-order", name: "Invoiced Order", path: "/branch/invoiced-order", icon: "file", permissionFields: ["grandTotal", "invoiceGenerated", "totalPaid"] },
+        { id: "sales-order-list", name: "Sales Order List", path: "/branch/sales-orders", icon: "box" },
+        { id: "sales-invoice-list", name: "Sales Invoice List", path: "/branch/sales-invoices", icon: "file" },
         { id: "credit-note", name: "Credit Note", path: "/branch/credit-note", icon: "file" },
         { id: "claims", name: "Claims", path: "/branch/claims", icon: "file" },
         { id: "receipt", name: "Receipt", path: "/branch/receipt", icon: "dollar", permissionFields: ["amount", "paymentMethod"] },
@@ -92,6 +93,7 @@ export const PAGE_CONFIG = [
     items: [
       { id: "insights", name: "Insights & Analysis", path: "/branch/insights", icon: "chart" },
       { id: "summary", name: "Summary", path: "/branch/summary", icon: "chart" },
+      { id: "stock-summary", name: "Stock Summary (Tally)", path: "/branch/stock-summary", icon: "bookOpen" },
     ]
   },
   {

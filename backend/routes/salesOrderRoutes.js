@@ -684,70 +684,194 @@ router.patch("/:id/generate-invoice", async (req, res) => {
       invoiceClosingBalance,
     } = req.body;
 
-    console.log("📋 Generating invoice for SO:", id);
+    console.log("📋 Generating invoice flow for SO:", id);
 
     // 🔍 FIND SALES ORDER
     const salesOrder = await SalesOrder.findById(id);
-    if (!salesOrder) {
-      return res.status(404).json({ message: "Sales order not found" });
+    if (!salesOrder) return res.status(404).json({ message: "Sales order not found" });
+
+    if (salesOrder.status === "INVOICED" && salesOrder.reEditRequestStatus !== "APPROVED") {
+      return res.status(400).json({ message: "Invoice already generated. Request re-edit to modify." });
     }
 
-    if (salesOrder.invoiceGenerated && salesOrder.reEditRequestStatus !== "APPROVED") {
-      return res.status(400).json({ message: "Invoice already generated for this order. Request re-edit permission from admin to modify." });
+    const currentFY = getFinancialYear();
+    const Invoice = mongoose.model("Invoice");
+    const isReInvoice = !!(salesOrder.salesInvoiceId && salesOrder.lastInvoicedItems?.length > 0);
+
+    // ─── BRANCH A: RE-INVOICE (DeltaRecalculation) ───────────────────────
+    if (isReInvoice) {
+      console.log(`🔄 Re-Invoicing ${salesOrder.invoiceId} → updating ${salesOrder.salesInvoiceId}`);
+
+      // 1. Calculate Deltas
+      const oldQtyMap = {};
+      (salesOrder.lastInvoicedItems || []).forEach(item => {
+        oldQtyMap[item.productId.toString()] = item.qty || 0;
+      });
+
+      const itemsToInvoice = invoiceItems || salesOrder.items;
+      const samplesToInvoice = invoiceSampleItems || salesOrder.sampleItems;
+      const allNewItems = [...itemsToInvoice, ...samplesToInvoice];
+
+      // Stock Deltas
+      for (const item of allNewItems) {
+        const pid = item.productId.toString();
+        const oldQty = oldQtyMap[pid] || 0;
+        const deltaQty = item.qty - oldQty;
+        if (deltaQty !== 0) {
+          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -deltaQty } });
+          console.log(`📦 Stock delta for ${item.name}: ${deltaQty > 0 ? '-' : '+'}${Math.abs(deltaQty)}`);
+        }
+      }
+
+      // Handle removed items (not provided in the current invoiceItems but existed in lastInvoicedItems)
+      const newPidSet = new Set(allNewItems.map(i => i.productId.toString()));
+      for (const oldItem of salesOrder.lastInvoicedItems) {
+        const pid = oldItem.productId.toString();
+        if (!newPidSet.has(pid)) {
+          await Product.findByIdAndUpdate(pid, { $inc: { totalQty: oldItem.qty } });
+          console.log(`📦 Removed item from invoice ${oldItem.name}: +${oldItem.qty} stock restored`);
+        }
+      }
+
+      // 2. Customer Balance Delta
+      const oldTotal = salesOrder.lastInvoicedGrandTotal || 0;
+      const newTotal = Math.round(Number(invoiceGrandTotal) || salesOrder.grandTotal || 0);
+      const balanceDelta = newTotal - oldTotal;
+
+      if (balanceDelta !== 0 && salesOrder.customer?.customerId) {
+        await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
+          $inc: { debit: balanceDelta, closingBalance: balanceDelta, totalBalance: balanceDelta }
+        });
+        console.log(`💰 Customer balance delta applied: ${balanceDelta > 0 ? '+' : ''}₹${balanceDelta}`);
+      }
+
+      // 3. Update separate Invoice document
+      await Invoice.findOneAndUpdate(
+        { invoiceNumber: salesOrder.salesInvoiceId, branchId: salesOrder.branchId },
+        {
+          items: itemsToInvoice,
+          sampleItems: samplesToInvoice,
+          subtotal: Math.round(Number(invoiceSubtotal) || 0),
+          totalDiscount: Math.round(Number(invoiceTotalDiscount) || 0),
+          totalTax: { total: Math.round(Number(invoiceTotalTax) || 0) },
+          transportCharge: Math.round(Number(invoiceTransportCharge) || 0),
+          grandTotal: newTotal,
+          closingBalance: Math.round(Number(invoiceClosingBalance) || 0),
+        }
+      );
+
+      // 4. Snapshot & Save SO
+      salesOrder.editHistory.push({
+        version: (salesOrder.editHistory.length || 0) + 1,
+        editType: 'RE_INVOICED',
+        items: allNewItems,
+        grandTotal: newTotal,
+        editedAt: new Date(),
+        note: `Sales Invoice ${salesOrder.salesInvoiceId} updated with delta corrections.`
+      });
+
+      salesOrder.lastInvoicedItems = allNewItems;
+      salesOrder.lastInvoicedGrandTotal = newTotal;
+      salesOrder.status = "INVOICED";
+      salesOrder.reEditRequestStatus = "NONE";
+      await salesOrder.save();
+
+      return res.json({
+        success: true,
+        message: `Re-Invoice complete. ${salesOrder.salesInvoiceId} updated.`,
+        siNumber: salesOrder.salesInvoiceId
+      });
     }
 
-    console.log("✅ SO found:", salesOrder.invoiceId);
+    // ─── BRANCH B: FIRST-TIME INVOICE ─────────────────────────────────────
+    const siVoucher = await VoucherType.findOne({ 
+      branchId: salesOrder.branchId, 
+      orderType: "SI", 
+      financialYear: currentFY 
+    });
 
-    // 📝 UPDATE WITH INVOICE DETAILS
-    salesOrder.invoiceItems = invoiceItems || [];
-    salesOrder.invoiceSampleItems = invoiceSampleItems || [];
-    salesOrder.invoiceSubtotal = Math.round(Number(invoiceSubtotal) || 0);
-    salesOrder.invoiceTotalDiscount = Math.round(Number(invoiceTotalDiscount) || 0);
-    salesOrder.invoiceTotalTax = Math.round(Number(invoiceTotalTax) || 0);
-    salesOrder.invoiceTransportCharge = Math.round(Number(invoiceTransportCharge) || 0);
-    salesOrder.invoiceGrandTotal = Math.round(Number(invoiceGrandTotal) || 0);
-    salesOrder.invoiceOpeningBalance = Math.round(Number(invoiceOpeningBalance) || 0);
-    salesOrder.invoiceClosingBalance = Math.round(Number(invoiceClosingBalance) || 0);
+    if (!siVoucher) {
+      return res.status(404).json({ message: "Sales Invoice (SI) voucher type not found for this branch." });
+    }
 
-    // 🔄 CONVERT TO SALES INVOICE
+    const siNumber = `${siVoucher.prefix}/${String(siVoucher.counter).padStart(3, "0")}/${currentFY}`;
+    
+    // Create separate Invoice document
+    const itemsToInvoice = invoiceItems || salesOrder.items;
+    const samplesToInvoice = invoiceSampleItems || salesOrder.sampleItems;
+    const grandTotalToUse = Math.round(Number(invoiceGrandTotal) || salesOrder.grandTotal || 0);
+
+    const invoiceDoc = new Invoice({
+      invoiceNumber: siNumber,
+      salesOrderId: salesOrder._id,
+      branchId: salesOrder.branchId,
+      warehouse: salesOrder.warehouse,
+      billingPerson: salesOrder.billingPerson,
+      customer: salesOrder.customer,
+      items: itemsToInvoice,
+      sampleItems: samplesToInvoice,
+      subtotal: Math.round(Number(invoiceSubtotal) || 0),
+      totalDiscount: Math.round(Number(invoiceTotalDiscount) || 0),
+      totalTax: { total: Math.round(Number(invoiceTotalTax) || 0) },
+      transportCharge: Math.round(Number(invoiceTransportCharge) || 0),
+      grandTotal: grandTotalToUse,
+      openingBalance: Math.round(Number(invoiceOpeningBalance) || 0),
+      closingBalance: Math.round(Number(invoiceClosingBalance) || 0),
+      financialYear: currentFY,
+      invoiceDate: new Date(),
+      status: "FINALIZED"
+    });
+    await invoiceDoc.save();
+
+    // Increment SI Counter
+    siVoucher.counter += 1;
+    await siVoucher.save();
+
+    // 2. Reduce Stock
+    const allItems = [...itemsToInvoice, ...samplesToInvoice];
+    for (const item of allItems) {
+      if (item.productId && item.qty > 0) {
+        await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -item.qty } });
+      }
+    }
+
+    // 3. Increase Customer Balance
+    if (salesOrder.customer?.customerId && grandTotalToUse > 0) {
+      await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
+        $inc: { debit: grandTotalToUse, closingBalance: grandTotalToUse, totalBalance: grandTotalToUse }
+      });
+    }
+
+    // 4. Record on SalesOrder
+    const invoiceSnapshot = {
+      version: (salesOrder.editHistory.length || 0) + 1,
+      editType: 'INVOICED',
+      items: allItems,
+      grandTotal: grandTotalToUse,
+      editedAt: new Date(),
+      note: `${siNumber} created | Stock -${allItems.reduce((s, i) => s + (i.qty || 0), 0)} units | Balance +₹${grandTotalToUse}`
+    };
+
+    salesOrder.editHistory.push(invoiceSnapshot);
+    salesOrder.lastInvoicedItems = allItems;
+    salesOrder.lastInvoicedGrandTotal = grandTotalToUse;
+    salesOrder.status = "INVOICED";
+    salesOrder.salesInvoiceId = siNumber;
     salesOrder.recordType = "SALES INVOICE";
     salesOrder.invoiceGenerated = true;
 
-    // If this was a re-edit, mark it and reset request status
-    if (salesOrder.reEditRequestStatus === "APPROVED") {
-      salesOrder.isReEdited = true;
-      salesOrder.reEditRequestStatus = "NONE";
-    }
-
     await salesOrder.save();
-    console.log("✅ Invoice generated:", salesOrder.invoiceId);
-
-    // 💳 RESET CREDIT BYPASS FOR CUSTOMER
-    if (salesOrder.customer?.customerId) {
-      await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
-        isCreditBypassed: false,
-        creditLimitRequestStatus: "NONE"
-      });
-      console.log("🔄 Credit bypass reset for customer");
-    }
-
-    // 🏦 POST INVOICE JOURNAL ENTRY to GL
-    try {
-      const journalEntry = await GLService.postSalesInvoiceJE(salesOrder);
-      console.log(`✅ Invoice GL Entry posted: ${journalEntry.jeId}`);
-    } catch (glError) {
-      console.warn("⚠️ Invoice GL posting failed (non-blocking):", glError.message);
-    }
 
     res.json({
       success: true,
-      message: "Invoice generated successfully",
-      invoiceId: salesOrder.invoiceId,
-      data: salesOrder,
+      message: `Sales Invoice ${siNumber} generated successfully.`,
+      siNumber,
+      invoiceId: invoiceDoc._id
     });
+
   } catch (error) {
-    console.error("❌ Invoice generation error:", error.message);
-    res.status(500).json({ message: error.message || "Failed to generate invoice" });
+    console.error("❌ Sales Invoice generation error:", error.message);
+    res.status(500).json({ message: error.message || "Failed to generate sales invoice" });
   }
 });
 
@@ -981,6 +1105,70 @@ router.patch("/:id/reject-re-edit", async (req, res) => {
     await salesOrder.save();
 
     res.json({ success: true, message: "Re-edit request rejected" });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to reject request" });
+  }
+});
+
+// 📨 REQUEST CANCEL PERMISSION
+router.patch("/:id/request-cancel", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username, requestedBy } = req.body;
+    const staffName = username || requestedBy || "Unknown Staff";
+
+    const salesOrder = await SalesOrder.findById(id);
+    if (!salesOrder) return res.status(404).json({ message: "Sales order not found" });
+
+    salesOrder.cancelRequestStatus = "PENDING";
+    salesOrder.cancelRequestBy = staffName;
+    salesOrder.cancelRequestAt = new Date();
+
+    await salesOrder.save();
+
+    await createAuditLog({
+      userId: req.body.userId || "System",
+      username: username || "System",
+      branchId: salesOrder.branchId,
+      action: "REQUEST_CANCEL",
+      description: `Requested cancellation permission for Invoice: ${salesOrder.invoiceId}`,
+      targetId: salesOrder._id,
+      targetModel: "SalesOrder",
+    });
+
+    res.json({ success: true, message: "Cancellation request submitted", data: salesOrder });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to submit cancel request" });
+  }
+});
+
+// ✅ APPROVE CANCEL REQUEST
+router.patch("/:id/approve-cancel", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const salesOrder = await SalesOrder.findById(id);
+    if (!salesOrder) return res.status(404).json({ message: "Order not found" });
+
+    salesOrder.cancelRequestStatus = "APPROVED";
+    await salesOrder.save();
+
+    res.json({ success: true, message: "Cancellation request approved" });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to approve request" });
+  }
+});
+
+// ❌ REJECT CANCEL REQUEST
+router.patch("/:id/reject-cancel", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const salesOrder = await SalesOrder.findById(id);
+    if (!salesOrder) return res.status(404).json({ message: "Order not found" });
+
+    salesOrder.cancelRequestStatus = "REJECTED";
+    await salesOrder.save();
+
+    res.json({ success: true, message: "Cancellation request rejected" });
   } catch (err) {
     res.status(500).json({ message: "Failed to reject request" });
   }

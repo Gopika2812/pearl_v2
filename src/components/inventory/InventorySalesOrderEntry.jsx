@@ -1115,7 +1115,7 @@ export default function InventorySalesOrderEntry({
           </div>
 
           <div>
-            <label className={labelClass}>Invoice ID</label>
+            <label className={labelClass}>Sales Order ID</label>
             <input className={`${inputClass} bg-gray-50 font-bold text-[#319bab]`} value={invoiceId} readOnly />
           </div>
 
@@ -1836,26 +1836,23 @@ export default function InventorySalesOrderEntry({
               {/* Expense Name */}
               <div>
                 <label className={labelClass}>Expense Name</label>
-                <input
-                  type="text"
-                  list="expense-types"
-                  className={inputClass}
+                <select
+                  className={selectClass}
                   value={expenseName}
                   onChange={(e) => {
                     const val = e.target.value;
                     setExpenseName(val);
-                    if (val.toLowerCase() === "transport") {
+                    if (val === "Transport") {
                       setExpenseGstPercent(18);
                     }
                   }}
-                  placeholder="e.g., Loading Charge, Packing Charge"
-                />
-                <datalist id="expense-types">
-                  <option value="Transport" />
-                  <option value="Loading Charges" />
-                  <option value="Packing Charges" />
-                  <option value="Courier Charges" />
-                </datalist>
+                >
+                  <option value="Transport">Transport</option>
+                  <option value="Discount">Discount</option>
+                  <option value="Offloading">Offloading</option>
+                  <option value="Unloading">Unloading</option>
+                  <option value="Freezer">Freezer</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
