@@ -71,33 +71,30 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // Create new BranchUser directly
-    const newUser = new BranchUser({
+    // Create NEW PendingRegistration (this is where we now start the workflow)
+    const newPending = new PendingRegistration({
       name,
       username,
       email,
-      password, // Password will be hashed by pre-save hook
-      role,
-      branch: branch._id,
-      status: "ACTIVE", // Auto-approve
+      password, // Password will be hashed by pre-save hook on BranchUser later, or we can hash it here
+      branchCode: branchCode.toUpperCase(),
+      role: role,
+      status: "PENDING",
+      otp: generateOTP(), // Required by schema
+      otpExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours for admin
     });
 
-    await newUser.save();
+    await newPending.save();
 
-    console.log(`✅ User "${username}" registered and auto-approved`);
+    console.log(`⏳ User "${username}" registration requested (PENDING APPROVAL)`);
 
     res.status(201).json({
       success: true,
-      message: "Registration successful! You can now login.",
+      message: "Registration request sent! Please wait for Super Admin approval before you can login.",
       data: {
-        userId: newUser._id,
-        username: newUser.username,
-        email: newUser.email,
-        role: newUser.role,
-        allowedPages: newUser.allowedPages || [],
-        fieldPermissions: newUser.fieldPermissions || {},
-        actionPermissions: newUser.actionPermissions || {},
-        allowedVoucherTypes: newUser.allowedVoucherTypes || [],
+        registrationId: newPending._id,
+        username: newPending.username,
+        status: "PENDING",
       },
     });
   } catch (error) {
@@ -149,46 +146,19 @@ router.post("/verify-otp", async (req, res) => {
       });
     }
 
-    // Find branch
-    const branch = await Branch.findOne({ code: pendingReg.branchCode });
-    if (!branch) {
-      return res.status(404).json({
-        success: false,
-        message: "Branch not found",
-      });
-    }
+    // Update pending registration as "VERIFIED" (but still not active user)
+    pendingReg.status = "PENDING"; // Keep it pending for admin approval
+    await pendingReg.save();
 
-    // Create new BranchUser
-    const newUser = new BranchUser({
-      name: pendingReg.name,
-      username: pendingReg.username,
-      email: pendingReg.email,
-      password: pendingReg.password,
-      role: pendingReg.role,
-      branch: branch._id,
-      status: "ACTIVE",
-    });
+    console.log(`✅ OTP Verified for "${pendingReg.username}". Awaiting Admin Approval.`);
 
-    // Save user (password will be hashed by pre-save hook)
-    await newUser.save();
-
-    // Delete pending registration
-    await PendingRegistration.deleteOne({ _id: registrationId });
-
-    console.log(`✅ User "${pendingReg.username}" created successfully from registration`);
-
-    res.status(201).json({
+    res.status(200).json({
       success: true,
-      message: "Registration confirmed! You can now login.",
+      message: "OTP verified successfully! Your account is now awaiting Super Admin approval.",
       data: {
-        userId: newUser._id,
-        username: newUser.username,
-        email: newUser.email,
-        role: newUser.role,
-        allowedPages: newUser.allowedPages || [],
-        fieldPermissions: newUser.fieldPermissions || {},
-        actionPermissions: newUser.actionPermissions || {},
-        allowedVoucherTypes: newUser.allowedVoucherTypes || [],
+        registrationId: pendingReg._id,
+        username: pendingReg.username,
+        status: "PENDING",
       },
     });
   } catch (error) {

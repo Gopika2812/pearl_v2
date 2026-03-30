@@ -1,6 +1,7 @@
 import axios from "axios";
 import React, { useEffect, useState, Fragment } from "react";
-import { FaEdit, FaTrash, FaCheck, FaTimes, FaPlus, FaPlusCircle, FaSync, FaSave, FaExclamationTriangle, FaBox, FaArrowLeft, FaEye, FaArrowRight, FaLink, FaExternalLinkAlt, FaImage, FaChevronDown, FaChevronLeft, FaChevronRight, FaChevronUp, FaSearch } from "react-icons/fa";
+import { FaEdit, FaTrash, FaCheck, FaTimes, FaPlus, FaPlusCircle, FaSync, FaSave, FaExclamationTriangle, FaBox, FaArrowLeft, FaEye, FaArrowRight, FaLink, FaExternalLinkAlt, FaImage, FaChevronDown, FaChevronLeft, FaChevronRight, FaChevronUp, FaSearch, FaFileExport } from "react-icons/fa";
+import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
 import { QUICK_LINKS_CONFIG } from "../utils/quickLinksConfig";
@@ -245,6 +246,62 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     }
   };
 
+  const handleExportExcel = () => {
+    try {
+      if (!sortedData || sortedData.length === 0) {
+        toast.info("No records to export.");
+        return;
+      }
+
+      const exportData = sortedData.map(item => {
+        const row = {};
+        // Use displayFields for basic columns
+        config.displayFields.forEach(field => {
+          let value = item[field];
+          let label = field.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase());
+          
+          if (field === "margin" || field === "marginPercentage" || field === "adminMargin") {
+            row[label] = formatMarginDisplay(item, field);
+          } else if (typeof value === "object" && value !== null) {
+            if (Array.isArray(value)) {
+              row[label] = value.map(v => v.name || v._id || "").filter(Boolean).join(", ");
+            } else {
+              row[label] = value.name || value._id || "-";
+            }
+          } else {
+            row[label] = value || "-";
+          }
+        });
+
+        // Also add detailedFields if they aren't already in displayFields
+        if (config.detailedFields) {
+           config.detailedFields.forEach(field => {
+             let label = field.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase());
+             if (row[label] === undefined) {
+                let value = item[field];
+                if (typeof value === "object" && value !== null) {
+                  row[label] = Array.isArray(value) ? value.map(v => v.name || v._id || "").filter(Boolean).join(", ") : (value.name || value._id || "-");
+                } else {
+                  row[label] = value || "-";
+                }
+             }
+           });
+        }
+        return row;
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, config.label);
+
+      XLSX.writeFile(workbook, `${config.label}_Records_${new Date().toLocaleDateString()}.xlsx`);
+      toast.success(`${config.label} records exported successfully!`);
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export Excel");
+    }
+  };
+
   // Filter data based on search query
   const filteredData = data.filter(item => {
     if (!searchQuery.trim()) return true;
@@ -333,14 +390,22 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
           <FaArrowLeft /> Back
         </button>
         <h2 className="text-3xl font-bold text-gray-900">{config.label} Records</h2>
-        {type === "product" && (
+        <div className="ml-auto flex items-center gap-2">
           <button
-            onClick={() => setShowGroupMargin(true)}
-            className="ml-auto flex items-center gap-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-5 py-2 rounded-lg transition font-semibold shadow-md"
+            onClick={handleExportExcel}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg transition font-semibold shadow-md active:scale-95"
           >
-            💰 Group Margin
+            <FaFileExport /> Export Excel
           </button>
-        )}
+          {type === "product" && (
+            <button
+              onClick={() => setShowGroupMargin(true)}
+              className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-5 py-2 rounded-lg transition font-semibold shadow-md"
+            >
+              💰 Group Margin
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Search Filter */}
@@ -454,6 +519,11 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                             displayValue = Math.round(num * 100) / 100;
                             if (field === "debit" || field === "credit" || field === "sellingPrice" || field === "purchasingPrice") {
                               displayValue = `₹${displayValue.toFixed(2)}`;
+                            }
+                          } else if (field === "totalQty") {
+                            displayValue = value !== undefined && value !== null ? value : "-";
+                            if (item.totalQtyUnit) {
+                              displayValue = `${displayValue} ${item.totalQtyUnit}`;
                             }
                           } else {
                             displayValue = value || "-";

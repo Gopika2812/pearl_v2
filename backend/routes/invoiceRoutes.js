@@ -200,9 +200,37 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         salesOrder.customer.customerId
       ).session(session);
 
-      // Use Sales Order's invoiceId as invoice number
-      const invoiceNumber = salesOrder.invoiceId;
+      let oldCustomerId = null;
+      let needsOldCustomerRecalculation = false;
+
       const financialYear = getFinancialYear();
+
+      // 🏁 Check if invoice already exists for this ORDER (to preserve numbering on re-edit)
+      let invoice = await Invoice.findOne({ salesOrderId: salesOrder._id }).session(session);
+      let invoiceNumber;
+
+      if (invoice) {
+        invoiceNumber = invoice.invoiceNumber;
+        console.log(`♻️ Reusing existing Invoice Number: ${invoiceNumber} for SO: ${salesOrder.invoiceId}`);
+      } else {
+        // Generate NEW sequential SI number
+        const siVoucher = await VoucherType.findOne({
+          branchId: salesOrder.branchId,
+          orderType: "SI",
+          financialYear
+        }).session(session);
+
+        if (!siVoucher) {
+           throw new Error(`Sales Invoice (SI) voucher type not found for branch ${salesOrder.branchId}.`);
+        }
+
+        invoiceNumber = `${siVoucher.prefix}/${String(siVoucher.counter).padStart(3, "0")}/${financialYear}`;
+        
+        // Increment SI counter
+        siVoucher.counter += 1;
+        await siVoucher.save({ session });
+        console.log(`✨ Generated NEW Independent Invoice Number: ${invoiceNumber} for SO: ${salesOrder.invoiceId}`);
+      }
 
       // Process items
       const processedItems = items.map((item) => {
@@ -276,12 +304,28 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       const commonDiscount = salesOrder.commonDiscount || 0;
       const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) - commonDiscount);
 
-      // 🏁 Check if invoice already exists (common during re-edit/re-generation)
-      let invoice = await Invoice.findOne({ invoiceNumber }).session(session);
+      // Note: We already found the invoice object above if it exists
 
       if (invoice) {
+        // 🏁 Detect if customer is being changed on an existing invoice
+        if (invoice.customer?.customerId && invoice.customer.customerId.toString() !== customer._id.toString()) {
+          oldCustomerId = invoice.customer.customerId;
+          needsOldCustomerRecalculation = true;
+          console.log(`⚠️ Invoice customer change detected: ${invoice.customer.name} -> ${customer.name}`);
+        }
+
         // 🔄 Update existing invoice instead of creating new one to avoid duplicate key error
         invoice.invoiceDate = new Date();
+        // Update customer details on the invoice itself
+        invoice.customer = {
+          customerId: customer._id,
+          name: customer.name,
+          whatsapp: customer.whatsapp,
+          address: customer.address,
+          district: customer.district,
+          state: customer.state,
+          pincode: customer.pincode,
+        };
         invoice.items = processedItems;
         invoice.backOrderItems = backOrderItems;
         invoice.sampleItems = salesOrder.sampleItems || [];
@@ -360,76 +404,107 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         targetModel: "Invoice",
       });
 
-      // Update product totalQty for each invoiced item
-      for (const item of processedItems) {
-        if (item.productId) {
-          const product = await Product.findById(item.productId).session(session);
+      // 🔄 DELTA-BASED STOCK UPDATE 🔄
+      // We calculate the difference between NEW items and LAST INVOICED items
+      const lastItems = salesOrder.lastInvoicedItems || [];
+      const allProductIds = new Set([
+        ...processedItems.map(i => i.productId.toString()),
+        ...lastItems.map(i => i.productId.toString())
+      ]);
+
+      for (const pId of allProductIds) {
+        const newItem = processedItems.find(i => i.productId.toString() === pId);
+        const oldItem = lastItems.find(i => i.productId.toString() === pId);
+
+        const newQty = newItem?.qty || 0;
+        const oldQty = oldItem?.qty || 0;
+        const deltaQty = newQty - oldQty;
+
+        if (deltaQty !== 0) {
+          const product = await Product.findById(pId).session(session);
           if (product) {
-            product.totalQty = (product.totalQty || 0) - (item.qty || 0);
+            product.totalQty = (product.totalQty || 0) - deltaQty;
             
-            // ✅ RECALCULATE selling qty based on configured period
+            // ✅ RECALCULATE selling qty based on configured period (Optional but kept for compatibility)
             if (product.restockingConfig?.salesPeriodDays) {
               const days = product.restockingConfig.salesPeriodDays;
               const endDate = new Date();
               const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
-
-              // Query all invoices for this product in the period (including the one just created)
               const recentInvoices = await Invoice.find({
                 branchId: salesOrder.branchId,
                 invoiceDate: { $gte: startDate, $lte: endDate },
-                "items.productId": item.productId,
+                "items.productId": pId,
               }).session(session).lean();
 
-              // Sum total qty sold in period
               let totalSellingQty = 0;
               recentInvoices.forEach((inv) => {
-                if (Array.isArray(inv.items)) {
-                  inv.items.forEach((invItem) => {
-                    const invItemProductId = invItem.productId?._id || invItem.productId;
-                    if (invItemProductId && invItemProductId.toString() === item.productId.toString()) {
-                      totalSellingQty += invItem.qty || 0;
-                    }
-                  });
-                }
+                inv.items.forEach((invItem) => {
+                  if (invItem.productId?.toString() === pId.toString()) {
+                    totalSellingQty += invItem.qty || 0;
+                  }
+                });
               });
-
-              // Update restockingConfig with latest selling qty
               product.restockingConfig.sellingQtyInPeriod = totalSellingQty;
-              
-              // Also sync restockingQty to match for display
               product.restockingConfig.restockingQty = totalSellingQty;
-              
-              console.log(`✅ Updated product ${product.name}: selling qty in ${days} days = ${totalSellingQty}`);
             }
-            
             await product.save({ session });
+            console.log(`📦 Stock Delta for ${product.name}: ${-deltaQty} (New: ${newQty}, Old: ${oldQty})`);
           }
         }
       }
 
+      // 💰 DELTA-BASED CUSTOMER BALANCE UPDATE 💰
+      const lastGrandTotal = salesOrder.lastInvoicedGrandTotal || 0;
+      const totalDelta = grandTotal - lastGrandTotal;
+
+      if (totalDelta !== 0 && customer) {
+        customer.debit = Math.round((customer.debit || 0) + totalDelta);
+        customer.closingBalance = Math.round((customer.closingBalance || 0) + totalDelta);
+        await customer.save({ session });
+        console.log(`💰 Balance Delta for ${customer.name}: ₹${totalDelta} (New: ₹${grandTotal}, Old: ₹${lastGrandTotal})`);
+      }
+
       // Update sales order
       salesOrder.invoiceGenerated = true;
+      salesOrder.status = "INVOICED";
       salesOrder.invoiceNotes = notes;
+      
+      // Save snapshot in history
+      salesOrder.editHistory.push({
+        version: (salesOrder.editHistory.length || 0) + 1,
+        editType: (salesOrder.editHistory.length === 0) ? 'INVOICED' : 'RE_INVOICED',
+        items: processedItems,
+        subtotal: subtotal,
+        totalTax: totalTax,
+        grandTotal: grandTotal,
+        editedAt: new Date(),
+        note: `Sales Invoice ${invoiceNumber} ${salesOrder.editHistory.length === 0 ? 'generated' : 'updated'}. Stock Delta applied. Customer Delta: ₹${totalDelta}`
+      });
+
+      // Update delta references for next time
+      salesOrder.lastInvoicedItems = processedItems;
+      salesOrder.lastInvoicedGrandTotal = grandTotal;
+
       await salesOrder.save({ session });
 
-      // ✅ Update customer's debit and closingBalance on INVOICE GENERATION ONLY
-      // debit = closingBalance (they must always be equal)
-      // Calculate total invoiced amount for this customer
-      if (customer) {
-        const allInvoices = await Invoice.find({
-          "customer.customerId": customer._id,
-          status: "FINALIZED"
-        }).session(session);
-
-        // Sum all invoice grand totals
-        const totalInvoiced = allInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
-        const newDebit = Math.round(totalInvoiced);
-
-        customer.debit = newDebit;
-        customer.closingBalance = newDebit; // ✅ Keep them EQUAL
-        await customer.save({ session });
-
-        console.log(`✅ Customer ${customer.name} debit updated: ₹${newDebit}`);
+      // ♻️ Handle OLD Customer Redistribution
+      if (needsOldCustomerRecalculation && oldCustomerId) {
+        const oldCustomer = await Customer.findById(oldCustomerId).session(session);
+        if (oldCustomer) {
+          const oldCustomerInvoices = await Invoice.find({
+            "customer.customerId": oldCustomerId,
+            status: "FINALIZED"
+          }).session(session);
+          
+          const oldCustomerTotalInvoiced = oldCustomerInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
+          const oldCustomerNewDebit = Math.round(oldCustomerTotalInvoiced);
+          
+          oldCustomer.debit = oldCustomerNewDebit;
+          oldCustomer.closingBalance = oldCustomerNewDebit;
+          await oldCustomer.save({ session });
+          
+          console.log(`♻️ Old customer ${oldCustomer.name} balance recalculated after transfer: ₹${oldCustomerNewDebit}`);
+        }
       }
 
       await session.commitTransaction();

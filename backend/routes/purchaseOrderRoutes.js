@@ -1,6 +1,7 @@
 import express from "express";
 import Product from "../models/Product.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
+import PurchaseInvoice from "../models/PurchaseInvoice.js";
 import Vendor from "../models/Vendor.js";
 import VoucherType from "../models/VoucherType.js";
 
@@ -63,15 +64,25 @@ router.get("/next-invoice/:voucherType", async (req, res) => {
 // GET ALL PURCHASE ORDERS
 router.get("/", async (req, res) => {
   try {
-    const { branchId } = req.query;
+    const { branchId, search } = req.query;
     const query = {};
     
     // Filter by branchId if provided
     if (branchId) {
       query.branchId = branchId;
     }
+
+    // 🔍 SERVER-SIDE SEARCH: invoiceId, Vendor, and Item Name
+    if (search) {
+      query.$or = [
+        { invoiceId: { $regex: search, $options: "i" } },
+        { purchaseInvoiceId: { $regex: search, $options: "i" } },
+        { vendor: { $regex: search, $options: "i" } },
+        { "items.name": { $regex: search, $options: "i" } },
+      ];
+    }
     
-    console.log("🔍 GET /api/purchase-orders - Fetching POs with query:", query);
+    console.log("🔍 GET /api/purchase-orders - Fetching POs with query:", JSON.stringify(query));
     const orders = await PurchaseOrder.find(query).sort({ createdAt: -1 });
     console.log(`✅ Found ${orders.length} purchase orders`);
     
@@ -84,6 +95,7 @@ router.get("/", async (req, res) => {
   }
 });
 
+
 router.post('/:id/generate-invoice', async (req, res) => {
   try {
     const { id } = req.params;
@@ -91,30 +103,171 @@ router.post('/:id/generate-invoice', async (req, res) => {
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (order.status === 'INVOICED') return res.status(400).json({ message: 'Order already invoiced' });
 
-    // 1. Mark as invoiced
-    order.status = 'INVOICED';
-    await order.save();
+    const currentFY = getFinancialYear();
+    const isReInvoice = !!(order.purchaseInvoiceId && order.lastInvoicedItems?.length > 0);
 
-    // 2. Increase product qty
+    // ─── BRANCH A: RE-INVOICE (delta recalculation) ───────────────────────
+    if (isReInvoice) {
+      console.log(`🔄 Re-Invoicing ${order.invoiceId} → updating ${order.purchaseInvoiceId}`);
+
+      // Build a map of OLD invoiced quantities
+      const oldQtyMap = {};
+      const oldTotalMap = {};
+      for (const item of order.lastInvoicedItems) {
+        oldQtyMap[item.productId.toString()] = item.qty;
+        oldTotalMap[item.productId.toString()] = item.total || 0;
+      }
+
+      // Apply DELTA to stock and vendor
+      let oldGrandTotal = order.lastInvoicedGrandTotal || 0;
+      let newGrandTotal = order.grandTotal || 0;
+
+      for (const item of order.items) {
+        const pid = item.productId.toString();
+        const oldQty = oldQtyMap[pid] || 0;
+        const deltaQty = item.qty - oldQty;
+        if (deltaQty !== 0) {
+          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: deltaQty } });
+          console.log(`📦 Stock delta for ${item.name}: ${deltaQty > 0 ? '+' : ''}${deltaQty}`);
+        }
+      }
+
+      // Handle removed items (items in old but not in new)
+      for (const oldItem of order.lastInvoicedItems) {
+        const stillExists = order.items.some(i => i.productId.toString() === oldItem.productId.toString());
+        if (!stillExists) {
+          await Product.findByIdAndUpdate(oldItem.productId, { $inc: { totalQty: -oldItem.qty } });
+          console.log(`📦 Removed item ${oldItem.name}: -${oldItem.qty}`);
+        }
+      }
+
+      // Vendor delta
+      const vendorDelta = newGrandTotal - oldGrandTotal;
+      if (vendorDelta !== 0 && order.vendor) {
+        await Vendor.findOneAndUpdate(
+          { branchId: order.branchId, name: order.vendor },
+          { $inc: { credit: vendorDelta } }
+        );
+        console.log(`💰 Vendor credit delta: ${vendorDelta > 0 ? '+' : ''}₹${vendorDelta}`);
+      }
+
+      // Update the existing PI record (same ID)
+      await PurchaseInvoice.findOneAndUpdate(
+        { purchaseInvoiceId: order.purchaseInvoiceId },
+        {
+          items: order.items,
+          subtotal: order.subtotal,
+          totalTax: order.totalTax,
+          grandTotal: order.grandTotal,
+          extraExpenses: order.extraExpenses,
+          extraExpenseAmount: order.extraExpenseAmount,
+        }
+      );
+
+      // Snapshot to editHistory
+      order.editHistory.push({
+        version: (order.editHistory.length || 0) + 1,
+        editType: 'RE_INVOICED',
+        items: order.items.map(i => i.toObject()),
+        subtotal: order.subtotal,
+        totalTax: order.totalTax,
+        grandTotal: order.grandTotal,
+        editedAt: new Date(),
+        note: `${order.purchaseInvoiceId} updated | Stock delta applied | Vendor delta: ₹${vendorDelta}`
+      });
+
+      // Update lastInvoicedItems for next possible re-edit
+      order.lastInvoicedItems = order.items.map(i => i.toObject());
+      order.lastInvoicedGrandTotal = order.grandTotal;
+      order.status = 'INVOICED';
+      order.editRequestStatus = 'NONE';
+      await order.save();
+
+      return res.json({
+        success: true,
+        message: `Re-Invoice complete. ${order.purchaseInvoiceId} updated with delta changes.`,
+        piNumber: order.purchaseInvoiceId,
+        vendorDelta
+      });
+    }
+
+    // ─── BRANCH B: FIRST-TIME INVOICE ─────────────────────────────────────
+    // 1. Fetch independent PI counter
+    let piVoucher = await VoucherType.findOne({
+      branchId: order.branchId,
+      orderType: "PI",
+      financialYear: currentFY,
+    });
+
+    if (!piVoucher) {
+      // Fallback: This should have been created by fixVoucherTypes, but let's be safe
+      return res.status(404).json({ message: "Purchase Invoice (PI) voucher type not found for this branch." });
+    }
+
+    // PI number = sequential based on PI counter
+    const piNumber = `${piVoucher.prefix}/${String(piVoucher.counter).padStart(3, "0")}/${currentFY}`;
+    console.log(`🔗 PO: ${order.invoiceId}  →  Generated Independent PI: ${piNumber}`);
+
+    // Increment PI counter
+    piVoucher.counter += 1;
+    await piVoucher.save();
+
+    // 2. Create PI record
+    const purchaseInvoice = new PurchaseInvoice({
+      purchaseInvoiceId: piNumber,
+      purchaseOrderId: order._id,
+      branchId: order.branchId,
+      warehouse: order.warehouse,
+      vendor: order.vendor,
+      items: order.items,
+      subtotal: order.subtotal,
+      totalTax: order.totalTax,
+      extraExpenses: order.extraExpenses,
+      extraExpenseAmount: order.extraExpenseAmount,
+      grandTotal: order.grandTotal,
+      voucherType: order.voucherType,
+      financialYear: currentFY,
+      createdBy: "System"
+    });
+    await purchaseInvoice.save();
+
+    // 3. Full stock increase
     for (const item of order.items) {
       await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty } });
     }
 
-    // 3. Update vendor credit balance (add PO grandTotal to credit)
+    // 4. Full vendor credit increase
     if (order.vendor && order.grandTotal) {
-      const vendorName = typeof order.vendor === 'string' ? order.vendor : order.vendor?.name;
-      const vendorId = typeof order.vendor === 'object' ? (order.vendor?._id || order.vendor?.id) : null;
-      if (vendorId) {
-        await Vendor.findByIdAndUpdate(vendorId, { $inc: { credit: order.grandTotal } });
-      } else if (vendorName) {
-        await Vendor.findOneAndUpdate(
-          { branchId: order.branchId, name: vendorName },
-          { $inc: { credit: order.grandTotal } }
-        );
-      }
+      await Vendor.findOneAndUpdate(
+        { branchId: order.branchId, name: order.vendor },
+        { $inc: { credit: order.grandTotal } }
+      );
     }
 
-    res.json({ message: 'Invoice generated, inventory updated.' });
+    // 5. Snapshot to editHistory + save lastInvoicedItems
+    order.editHistory.push({
+      version: (order.editHistory.length || 0) + 1,
+      editType: 'INVOICED',
+      items: order.items.map(i => i.toObject()),
+      subtotal: order.subtotal,
+      totalTax: order.totalTax,
+      grandTotal: order.grandTotal,
+      editedAt: new Date(),
+      note: `${piNumber} created | Stock +${order.items.reduce((s, i) => s + i.qty, 0)} units | Vendor +₹${order.grandTotal}`
+    });
+
+    order.lastInvoicedItems = order.items.map(i => i.toObject());
+    order.lastInvoicedGrandTotal = order.grandTotal;
+    order.status = 'INVOICED';
+    order.purchaseInvoiceId = piNumber;
+    await order.save();
+
+    res.json({
+      success: true,
+      message: `Purchase Invoice ${piNumber} generated successfully.`,
+      piNumber,
+      piId: purchaseInvoice._id
+    });
   } catch (err) {
     console.error('Generate invoice error:', err);
     res.status(500).json({ message: err.message });
@@ -135,23 +288,16 @@ router.post("/", async (req, res) => {
     }
 
     // Round numeric fields if provided
-    if (rest.grandTotal !== undefined) {
-      rest.grandTotal = Math.round(Number(rest.grandTotal));
-    }
-    if (rest.subtotal !== undefined) {
-      rest.subtotal = Math.round(Number(rest.subtotal));
-    }
-    if (rest.totalTax !== undefined) {
-      rest.totalTax = Math.round(Number(rest.totalTax));
-    }
-    if (rest.totalDiscount !== undefined) {
-      rest.totalDiscount = Math.round(Number(rest.totalDiscount));
-    }
-    if (rest.transportCharge !== undefined) {
-      rest.transportCharge = Math.round(Number(rest.transportCharge));
-    }
+    if (rest.grandTotal !== undefined) rest.grandTotal = Math.round(Number(rest.grandTotal));
+    if (rest.subtotal !== undefined) rest.subtotal = Math.round(Number(rest.subtotal));
+    if (rest.totalTax !== undefined) rest.totalTax = Math.round(Number(rest.totalTax));
+    if (rest.totalDiscount !== undefined) rest.totalDiscount = Math.round(Number(rest.totalDiscount));
+    if (rest.transportCharge !== undefined) rest.transportCharge = Math.round(Number(rest.transportCharge));
 
-    const voucher = await VoucherType.findOne({ branchId, name: voucherType });
+    // IMPORTANT: Must filter by orderType "PO" to get the correct counter
+    const voucher = await VoucherType.findOne({ branchId, name: voucherType.toLowerCase(), orderType: "PO" })
+      || await VoucherType.findOne({ branchId, name: voucherType });
+
     if (!voucher) {
       return res.status(404).json({ message: "Voucher not found" });
     }
@@ -163,11 +309,21 @@ router.post("/", async (req, res) => {
       voucher.financialYear = currentFY;
     }
 
-    // ✅ ONLY prefix here
-    const invoiceId = `${voucher.prefix}/${String(voucher.counter).padStart(
-      3,
-      "0"
-    )}/${currentFY}`;
+    // AUTO-HEAL: Find the actual highest existing PO number for this prefix
+    // to fix any counter mismatch (e.g. after swaps or manual changes)
+    const regex = new RegExp(`^${voucher.prefix}/\\d+/${currentFY}$`);
+    const highestPO = await PurchaseOrder.findOne({ invoiceId: regex }).sort({ invoiceId: -1 }).lean();
+    if (highestPO) {
+      const parts = highestPO.invoiceId.split('/');
+      const highestNum = parseInt(parts[1], 10);
+      if (!isNaN(highestNum) && voucher.counter <= highestNum) {
+        console.log(`⚠️ Counter mismatch detected! Counter: ${voucher.counter}, Highest existing: ${highestNum}. Auto-correcting to ${highestNum + 1}`);
+        voucher.counter = highestNum + 1;
+        await voucher.save();
+      }
+    }
+
+    const invoiceId = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
 
     const order = new PurchaseOrder({
       invoiceId,
@@ -180,8 +336,7 @@ router.post("/", async (req, res) => {
 
     await order.save();
 
-
-    // Only increment voucher counter and save voucher
+    // Only increment voucher counter after successful save
     voucher.counter += 1;
     await voucher.save();
 
@@ -227,61 +382,284 @@ router.get("/items", async (req, res) => {
   }
 });
 
-// DELETE PURCHASE ORDER
-router.delete("/:id", async (req, res) => {
+// UPDATE PURCHASE ORDER
+router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    const { items, warehouse, subtotal, totalTax, totalDiscount, grandTotal, transportCharge } = req.body;
 
-    const purchaseOrder = await PurchaseOrder.findByIdAndDelete(id);
+    const order = await PurchaseOrder.findById(id);
+    if (!order) return res.status(404).json({ message: "Purchase Order not found" });
 
-    if (!purchaseOrder) {
-      return res.status(404).json({ message: "Purchase Order not found" });
+    if (order.status === "INVOICED") {
+      return res.status(400).json({ message: "Cannot edit an order that has already been invoiced" });
     }
 
-    // Reverse inventory updates if PO was PLACED
-    if (purchaseOrder.status === "PLACED") {
-      for (const item of purchaseOrder.items) {
-        try {
-          const product = await Product.findByIdAndUpdate(
-            item.productId,
-            { $inc: { totalQty: -item.qty } },
-            { new: true }
-          );
-          if (product) {
-            console.log(
-              `✅ Product "${product.name}" inventory reversed: -${item.qty} units`
-            );
-          }
-        } catch (err) {
-          console.error(`⚠️ Failed to reverse product ${item.productId}:`, err.message);
-        }
-      }
+    // Update fields
+    if (items) order.items = items;
+    if (warehouse) order.warehouse = warehouse;
+    if (subtotal !== undefined) order.subtotal = Math.round(Number(subtotal));
+    if (totalTax !== undefined) order.totalTax = Math.round(Number(totalTax));
+    if (totalDiscount !== undefined) order.totalDiscount = Math.round(Number(totalDiscount));
+    if (grandTotal !== undefined) order.grandTotal = Math.round(Number(grandTotal));
+    if (transportCharge !== undefined) order.transportCharge = Math.round(Number(transportCharge));
 
-      // Reverse vendor AP balance update
-      if (purchaseOrder.vendor) {
-        try {
-          const vendorId = purchaseOrder.vendor.id || purchaseOrder.vendor;
-          const grandTotal = purchaseOrder.grandTotal || 0;
-          await Vendor.findByIdAndUpdate(
-            vendorId,
-            { $inc: { closingBalance: -grandTotal } },
-            { new: true }
-          );
-          console.log(
-            `✅ Vendor AP balance reversed: -₹${grandTotal}`
-          );
-        } catch (err) {
-          console.warn(`⚠️ Failed to reverse vendor balance:`, err.message);
-        }
-      }
-    }
+    await order.save();
 
     res.json({
       success: true,
-      message: "Purchase Order deleted successfully",
+      message: "Purchase Order updated successfully",
+      order,
     });
   } catch (err) {
-    console.error("Delete PO error:", err);
+    console.error("Update PO error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/**
+ * REVERSION HELPER: Undoes stock and vendor credit impacts of an invoiced PO
+ */
+const revertPOEffects = async (order) => {
+  console.log(`🔄 Reverting PO Effects: ${order.invoiceId}`);
+  
+  // 1. Decrease product qty
+  for (const item of order.items) {
+    await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -item.qty } });
+    console.log(`📉 Reverted stock for ${item.name}: -${item.qty}`);
+  }
+
+  // 2. Decrease vendor credit balance
+  if (order.vendor && order.grandTotal) {
+    const vendorName = typeof order.vendor === 'string' ? order.vendor : order.vendor?.name;
+    const vendorId = typeof order.vendor === 'object' ? (order.vendor?._id || order.vendor?.id) : null;
+    
+    if (vendorId) {
+      await Vendor.findByIdAndUpdate(vendorId, { $inc: { credit: -order.grandTotal } });
+    } else if (vendorName) {
+      await Vendor.findOneAndUpdate(
+        { branchId: order.branchId, name: vendorName },
+        { $inc: { credit: -order.grandTotal } }
+      );
+    }
+    console.log(`📉 Reverted vendor credit: -₹${order.grandTotal}`);
+  }
+};
+
+// 📨 REQUEST EDIT PERMISSION
+router.patch("/:id/request-edit", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { requestedBy } = req.body;
+    const order = await PurchaseOrder.findById(id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    order.editRequestStatus = "PENDING";
+    order.editRequestBy = requestedBy || "Unknown Staff";
+    order.editRequestAt = new Date();
+    await order.save();
+
+    res.json({ success: true, message: "Edit request submitted to admin" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 📨 REQUEST CANCEL PERMISSION
+router.patch("/:id/request-cancel", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { requestedBy } = req.body;
+    const order = await PurchaseOrder.findById(id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    order.cancelRequestStatus = "PENDING";
+    order.cancelRequestBy = requestedBy || "Unknown Staff";
+    order.cancelRequestAt = new Date();
+    await order.save();
+
+    res.json({ success: true, message: "Cancel request submitted to admin" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 📋 GET PENDING REQUESTS FOR BRANCH
+router.get("/requests/branch/:branchId", async (req, res) => {
+  try {
+    const { branchId } = req.params;
+    const requests = await PurchaseOrder.find({
+      branchId,
+      $or: [
+        { editRequestStatus: "PENDING" },
+        { cancelRequestStatus: "PENDING" }
+      ]
+    }).sort({ updatedAt: -1 });
+
+    res.json({ success: true, data: requests });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ✅ APPROVE EDIT REQUEST (Delta-based: stock NOT reverted, delta applied on re-invoice)
+router.patch("/:id/approve-edit", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await PurchaseOrder.findById(id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    if (order.status === "INVOICED") {
+      // DO NOT revert stock or vendor — delta will handle it on re-invoice
+      // Snapshot the RE_EDIT_STARTED state into history
+      order.editHistory.push({
+        version: (order.editHistory.length || 0) + 1,
+        editType: 'RE_EDIT_STARTED',
+        items: order.items.map(i => i.toObject ? i.toObject() : i),
+        subtotal: order.subtotal,
+        totalTax: order.totalTax,
+        grandTotal: order.grandTotal,
+        editedAt: new Date(),
+        note: `Admin approved re-edit. Stock and vendor untouched. Delta will apply on re-invoice.`
+      });
+
+      order.status = "PLACED"; // Back to editable
+      // Keep purchaseInvoiceId so we know to RE-INVOICE (not create new PI)
+      // Keep lastInvoicedItems for delta reference
+    }
+
+    order.editRequestStatus = "APPROVED";
+    await order.save();
+
+    res.json({ success: true, message: "Edit approved. You can now modify the Purchase Order. Stock will be adjusted on re-invoice." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ❌ REJECT EDIT REQUEST
+router.patch("/:id/reject-edit", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await PurchaseOrder.findById(id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    order.editRequestStatus = "REJECTED";
+    await order.save();
+
+    res.json({ success: true, message: "Edit request rejected" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ✅ APPROVE CANCEL REQUEST (Soft-cancel: revert effects, mark CANCELLED, keep in records)
+router.patch("/:id/approve-cancel", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await PurchaseOrder.findById(id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    if (order.status === "INVOICED") {
+      // Revert using lastInvoicedItems (accurate snapshot of what was actually applied)
+      const itemsToRevert = order.lastInvoicedItems?.length > 0 ? order.lastInvoicedItems : order.items;
+      const totalToRevert = order.lastInvoicedGrandTotal || order.grandTotal;
+
+      for (const item of itemsToRevert) {
+        await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -item.qty } });
+        console.log(`📉 Cancel revert stock: ${item.name} -${item.qty}`);
+      }
+
+      if (order.vendor && totalToRevert) {
+        await Vendor.findOneAndUpdate(
+          { branchId: order.branchId, name: order.vendor },
+          { $inc: { credit: -totalToRevert } }
+        );
+        console.log(`📉 Cancel revert vendor credit: -₹${totalToRevert}`);
+      }
+
+      // Also mark the linked PI as CANCELLED if it exists
+      if (order.purchaseInvoiceId) {
+        await PurchaseInvoice.findOneAndUpdate(
+          { purchaseInvoiceId: order.purchaseInvoiceId, branchId: order.branchId },
+          { cancelRequestStatus: "APPROVED" }
+        );
+      }
+    }
+
+    // Snapshot into editHistory
+    order.editHistory.push({
+      version: (order.editHistory.length || 0) + 1,
+      editType: 'RE_EDIT_STARTED', // closest type; can be extended
+      items: order.items.map(i => i.toObject ? i.toObject() : i),
+      grandTotal: order.grandTotal,
+      editedAt: new Date(),
+      note: `Order CANCELLED by admin approval. Stock and vendor credit reverted.`
+    });
+
+    // Soft cancel — keep in records
+    order.status = "CANCELLED";
+    order.cancelRequestStatus = "APPROVED";
+    await order.save();
+
+    res.json({ success: true, message: "Order cancelled. Records kept for audit trail. Stock and vendor balance reverted." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ❌ REJECT CANCEL REQUEST
+router.patch("/:id/reject-cancel", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await PurchaseOrder.findById(id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    order.cancelRequestStatus = "REJECTED";
+    await order.save();
+
+    res.json({ success: true, message: "Cancel request rejected" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// CANCEL PURCHASE ORDER (Soft cancel — never physically delete)
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await PurchaseOrder.findById(id);
+
+    if (!order) {
+      return res.status(404).json({ message: "Purchase Order not found" });
+    }
+
+    if (order.status === "INVOICED") {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot cancel an invoiced PO directly. Please use the 'Request Cancel' option."
+      });
+    }
+
+    // Soft cancel — mark as CANCELLED, keep in DB
+    order.status = "CANCELLED";
+    order.cancelledAt = new Date();
+    order.editHistory.push({
+      version: (order.editHistory.length || 0) + 1,
+      editType: 'RE_EDIT_STARTED',
+      items: order.items.map(i => i.toObject ? i.toObject() : i),
+      grandTotal: order.grandTotal,
+      editedAt: new Date(),
+      note: `Order cancelled (PLACED stage). No stock or vendor effects to revert.`
+    });
+    await order.save();
+
+    res.json({
+      success: true,
+      message: "Purchase Order cancelled and kept in records.",
+    });
+  } catch (err) {
+    console.error("Cancel PO error:", err);
     res.status(500).json({
       success: false,
       message: err.message,

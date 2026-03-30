@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { FaSync, FaFilter, FaSearch, FaHistory } from "react-icons/fa";
+import { FaSync, FaFilter, FaSearch, FaHistory, FaFileExport } from "react-icons/fa";
+import * as XLSX from 'xlsx';
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -60,6 +61,48 @@ const BranchProductRecords = () => {
   const totalProfit = records.reduce((sum, r) => sum + (r.grossProfit * r.qty), 0);
   const totalQty = records.reduce((sum, r) => sum + (r.qty || 0), 0);
 
+  const handleExportExcel = () => {
+    try {
+      if (records.length === 0) {
+        toast.info("No records to export. Please adjust filters or select a product.");
+        return;
+      }
+
+      // Group records by product name and sum their quantities
+      const productSummary = records.reduce((acc, record) => {
+        const name = record.productName || "Unknown Product";
+        if (!acc[name]) {
+          acc[name] = { "Name": name, "Total Qty": 0 };
+        }
+        acc[name]["Total Qty"] += (record.qty || 0);
+        return acc;
+      }, {});
+
+      const exportData = Object.values(productSummary);
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Product Records");
+
+      // Auto-width adjustment
+      const wscols = [
+        { wch: 40 }, // Name
+        { wch: 15 }  // Total Qty
+      ];
+      worksheet['!cols'] = wscols;
+
+      const fileName = selectedProductId 
+        ? `ProductRecord_${records[0]?.productName || 'Export'}_${new Date().toLocaleDateString()}.xlsx`
+        : `All_ProductRecords_${new Date().toLocaleDateString()}.xlsx`;
+
+      XLSX.writeFile(workbook, fileName);
+      toast.success("Excel exported successfully!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export Excel");
+    }
+  };
+
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(productSearch.toLowerCase()) &&
     (!selectedProductGroupId || String(p.productGroup?._id || p.productGroup) === String(selectedProductGroupId))
@@ -83,6 +126,12 @@ const BranchProductRecords = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <button 
+              onClick={handleExportExcel}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold transition flex items-center gap-2 text-sm shadow-sm"
+            >
+              <FaFileExport /> Export Excel
+            </button>
             <button 
               onClick={fetchHistory}
               disabled={loading}

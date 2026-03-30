@@ -101,21 +101,6 @@ router.post("/login", async (req, res) => {
   }
 });
 
-/**
- * GET: Fetch single super admin by ID
- */
-router.get("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const admin = await SuperAdmin.findById(id).select("-password");
-    if (!admin) {
-      return res.status(404).json({ success: false, message: "Super Admin not found" });
-    }
-    res.json({ success: true, data: admin });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
 
 // ==================== SUPER ADMIN DASHBOARD ====================
 
@@ -138,7 +123,24 @@ router.get("/pending-registrations", auth, rbac(["SUPER_ADMIN"]), async (req, re
       success: false,
       message: "Failed to fetch pending registrations",
       error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
+  }
+});
+
+/**
+ * GET: Fetch single super admin by ID
+ */
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const admin = await SuperAdmin.findById(id).select("-password");
+    if (!admin) {
+      return res.status(404).json({ success: false, message: "Super Admin not found" });
+    }
+    res.json({ success: true, data: admin });
+  } catch (error) {
+    res.status(500).json({ success: false, message: `Server error: ${error.message}` });
   }
 });
 
@@ -169,6 +171,7 @@ router.get("/branches", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
 router.post("/approve-registration/:registrationId", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
   try {
     const { registrationId } = req.params;
+    const { role: roleOverride } = req.body;
     const superAdminId = req.user.id;
 
     // Find pending registration
@@ -206,14 +209,18 @@ router.post("/approve-registration/:registrationId", auth, rbac(["SUPER_ADMIN"])
       });
     }
 
+    // Determine the final role (use override if provided, else use requested role)
+    const finalRole = roleOverride || pendingReg.role;
+
     // Create new user
     const newUser = new BranchUser({
+      name: pendingReg.name,
       username: pendingReg.username,
       password: pendingReg.password,
       email: pendingReg.email,
       branch: branch._id,
       branchName: branch.name,
-      role: pendingReg.role,
+      role: finalRole,
       status: "ACTIVE",
     });
 

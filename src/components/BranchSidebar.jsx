@@ -22,7 +22,9 @@ import {
   FaMoneyBillWave,
   FaDownload,
   FaPlusCircle,
+  FaHistory,
 } from "react-icons/fa";
+
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useBranch } from "../context/BranchContext";
 
@@ -50,7 +52,8 @@ const BranchSidebar = ({ isOpen, onClose }) => {
 
   const purchaseItems = [
     { name: "Create PO", path: "/branch/po", icon: <FaShoppingCart /> },
-    { name: "Purchase List", path: "/branch/purchase-orders", icon: <FaBox /> },
+    { name: "Purchase Order List", path: "/branch/purchase-orders", icon: <FaBox /> },
+    { name: "Purchase Invoice List", path: "/branch/purchase-invoices", icon: <FaFileAlt /> },
     { name: "Restocking", path: "/branch/recycling", icon: <FaBox /> },
     { name: "Debit Note", path: "/branch/debit-note", icon: <FaFileAlt /> },
     { name: "Payment", path: "/branch/po-payment", icon: <FaDollarSign /> },
@@ -76,6 +79,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     { name: "Product Records", path: "/branch/product-records", icon: <FaBox /> },
     { name: "Locked Prices", path: "/branch/locked-prices", icon: <FaLock /> },
     { name: "Journal Master", path: "/branch/journals", icon: <FaBook /> },
+    { name: "Stock Journal", path: "/branch/stock-journal", icon: <FaHistory /> },
     { name: "Insights & Analysis", path: "/branch/insights", icon: <FaChartLine /> },
     { name: "Quick Links", path: "/branch/quick-links", icon: <FaLink /> },
     { name: "Admin Requests", path: "/branch/admin-requests", icon: <FaShieldAlt /> },
@@ -110,6 +114,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
       "/branch-home": "home",
       "/branch/po": "create-po",
       "/branch/purchase-orders": "purchase-list",
+      "/branch/purchase-invoices": "purchase-invoice-list",
       "/branch/recycling": "restocking",
       "/branch/debit-note": "debit-note",
       "/branch/po-payment": "payment-po",
@@ -125,6 +130,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
       "/branch/customers": "customers",
       "/branch/product-records": "product-records",
       "/branch/journals": "journals",
+      "/branch/stock-journal": "stock-journal",
       "/branch/insights": "insights",
       "/branch/quick-links": "quick-links",
       "/branch/summary": "summary",

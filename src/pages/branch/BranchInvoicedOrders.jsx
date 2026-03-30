@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaEdit, FaFileInvoice, FaSync, FaTrash, FaFilePdf } from "react-icons/fa";
+import { FaChevronDown, FaEdit, FaFileInvoice, FaSync, FaTrash, FaFilePdf, FaFileExcel } from "react-icons/fa";
+import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { toast, ToastContainer } from "react-toastify";
@@ -80,6 +81,8 @@ const BranchInvoicedOrders = () => {
         body: JSON.stringify({
           items: updatedOrder.items,
           sampleItems: updatedOrder.sampleItems,
+          customer: updatedOrder.customer,
+          transportCharge: updatedOrder.transportCharge,
           subtotal: updatedOrder.subtotal,
           totalTax: updatedOrder.totalTax,
           totalDiscount: updatedOrder.totalDiscount,
@@ -87,6 +90,8 @@ const BranchInvoicedOrders = () => {
           updatedBy: user?.id || user?._id,
           updatedByUsername: user?.username || user?.billingPerson,
         }),
+
+
       });
 
       const data = await res.json();
@@ -106,35 +111,38 @@ const BranchInvoicedOrders = () => {
     }
   };
 
-  const handleRequestReEdit = async (orderId) => {
+  const handleDirectReEdit = async (orderId) => {
+    if (!window.confirm("Re-Edit this bill? It will be unlocked for modification, and any quantity/balance changes will be calculated as a Delta on re-invoice.")) {
+      return;
+    }
     setRequestingReEdit(orderId);
     try {
-      const res = await fetch(`${API_BASE}/sales-orders/${orderId}/request-re-edit`, {
+      const res = await fetch(`${API_BASE}/sales-orders/${orderId}/approve-edit`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestedBy: user?.username || user?.billingPerson })
+        body: JSON.stringify({ editedBy: user?.username || user?.billingPerson })
       });
       const data = await res.json();
       if (data.success) {
-        toast.success("Re-edit request submitted to admin");
-        fetchSalesOrders(); // Refresh to show pending status
+        toast.success("Bill unlocked for editing");
+        fetchSalesOrders();
       } else {
-        toast.error(data.message || "Failed to submit request");
+        toast.error(data.message || "Failed to unlock bill");
       }
     } catch (err) {
-      toast.error("Error submitting re-edit request");
+      toast.error("Error unlocking bill");
     } finally {
       setRequestingReEdit(null);
     }
   };
 
   const handleCancelBill = async (order) => {
-    if (!window.confirm(`Are you sure you want to CANCEL and DELETE bill ${order.invoiceId}? This will revert all financial impacts (customer balance, commissions) and cannot be undone.`)) {
+    if (!window.confirm(`Cancel bill ${order.invoiceId}? This will revert all stock and customer balance effects but KEEP the record in the database for audit.`)) {
       return;
     }
 
     try {
-      const res = await fetch(`${API_BASE}/sales-orders/${order._id}/cancel`, {
+      const res = await fetch(`${API_BASE}/sales-orders/${order._id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -144,8 +152,8 @@ const BranchInvoicedOrders = () => {
       });
 
       const data = await res.json();
-      if (data.success) {
-        toast.success(data.message);
+      if (res.ok) {
+        toast.success(data.message || "Bill cancelled successfully");
         fetchSalesOrders(); // Refresh list
       } else {
         toast.error(data.message || "Failed to cancel bill");
@@ -245,6 +253,35 @@ const BranchInvoicedOrders = () => {
     toast.success("PDF report generated successfully");
   };
 
+  const handleExportExcel = () => {
+    try {
+      const invoicedOnly = filteredSalesOrders.filter(order => order.invoiceGenerated);
+
+      if (invoicedOnly.length === 0) {
+        toast.warn("No invoiced data to export");
+        return;
+      }
+
+      const exportData = invoicedOnly.map((order) => ({
+        "Invoice ID": order.invoiceId || "-",
+        "Customer Name": order.customer?.name || "-",
+        "Customer WhatsApp": order.customer?.whatsapp || "-",
+        "Items Count": (order.items || []).length + (order.sampleItems || []).length,
+        "Grand Total": order.grandTotal || 0,
+        "Date": new Date(order.createdAt).toLocaleDateString("en-IN"),
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Invoiced Orders");
+      XLSX.writeFile(workbook, `Invoiced_Orders_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success("Excel exported successfully!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export Excel");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <ToastContainer
@@ -278,9 +315,16 @@ const BranchInvoicedOrders = () => {
               <button
                 onClick={handleExportPDF}
                 disabled={filteredSalesOrders.length === 0}
-                className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition disabled:opacity-50 shadow-sm"
+                className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition disabled:opacity-50 shadow-sm text-sm font-bold"
               >
-                <FaFilePdf /> Export PDF
+                <FaFilePdf /> PDF
+              </button>
+              <button
+                onClick={handleExportExcel}
+                disabled={filteredSalesOrders.length === 0}
+                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition disabled:opacity-50 shadow-sm text-sm font-bold"
+              >
+                <FaFileExcel /> Excel
               </button>
               <button
                 onClick={() => setShowSlipModal(true)}
@@ -397,7 +441,7 @@ const BranchInvoicedOrders = () => {
                 <tbody className="divide-y">
                   {filteredSalesOrders.map((order) => (
                     <React.Fragment key={order._id}>
-                      <tr className="hover:bg-gray-50 transition">
+                      <tr className={`hover:bg-gray-50 transition ${order.status === "CANCELLED" ? "opacity-60 bg-red-50/50" : ""}`}>
                        
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
@@ -436,29 +480,16 @@ const BranchInvoicedOrders = () => {
                           ₹{(order.grandTotal || 0).toLocaleString()}
                         </td>
                         <td className="px-6 py-4 text-center">
-                          {order.invoiceGenerated ? (
-                            <div className="flex flex-col items-center gap-1">
-                              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
-                                ✓ Invoiced
-                              </span>
-                              {order.reEditRequestStatus === "PENDING" && (
-                                <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                                  Re-edit Pending
-                                </span>
-                              )}
-                              {order.reEditRequestStatus === "APPROVED" && (
-                                <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                                  Re-edit Approved
-                                </span>
-                              )}
-                              {order.reEditRequestStatus === "REJECTED" && (
-                                <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                                  Re-edit Rejected
-                                </span>
-                              )}
-                            </div>
+                          {order.status === "CANCELLED" ? (
+                             <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold line-through">
+                                Cancelled
+                             </span>
+                          ) : order.status === "INVOICED" || order.invoiceGenerated ? (
+                             <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
+                               ✓ Invoiced
+                             </span>
                           ) : (
-                            <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs font-semibold">
+                            <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold">
                               Pending
                             </span>
                           )}
@@ -475,27 +506,27 @@ const BranchInvoicedOrders = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center gap-2 justify-center flex-wrap">
-                            {order.invoiceGenerated && (!order.reEditRequestStatus || order.reEditRequestStatus === "NONE" || order.reEditRequestStatus === "REJECTED") && (
+                            {(order.status === "INVOICED" || order.invoiceGenerated) && order.status !== "CANCELLED" && (
                                 <button
-                                    onClick={() => handleRequestReEdit(order._id)}
+                                    onClick={() => handleDirectReEdit(order._id)}
                                     disabled={requestingReEdit === order._id}
                                     className="bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-2 rounded-lg transition text-xs font-bold flex items-center gap-2 shadow-md shadow-indigo-200 whitespace-nowrap"
-                                    title="Click to request permission from admin to re-edit this invoiced bill"
+                                    title="Unlock this bill for editing. Changes will be calculated as a Delta on re-invoice."
                                 >
                                     <FaSync className={requestingReEdit === order._id ? "animate-spin" : ""} />
-                                    {order.reEditRequestStatus === "REJECTED" ? "Re-request Edit" : "Request Re-edit"}
+                                    Re-Edit
                                 </button>
                             )}
 
                             <button
                               onClick={() => handleEditBill(order)}
-                              disabled={order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED"}
+                              disabled={order.status === "INVOICED" || (order.invoiceGenerated && order.status !== "PLACED")}
                               className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
-                                order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED"
+                                order.status === "INVOICED" || (order.invoiceGenerated && order.status !== "PLACED")
                                   ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-50"
                                   : "bg-orange-500 text-white hover:bg-orange-600 shadow-md shadow-orange-500/20"
                               }`}
-                              title={order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED" ? "Requires Admin approval to edit invoiced bill" : "Edit bill items"}
+                              title={order.status === "INVOICED" || (order.invoiceGenerated && order.status !== "PLACED") ? "Requires Re-Edit to modify invoiced bill" : "Edit bill items"}
                             >
                               <FaEdit />
                               Edit Bill
@@ -653,6 +684,55 @@ const BranchInvoicedOrders = () => {
                                   </div>
                                 </div>
                               )}
+
+                              {/* 🕓 EDIT HISTORY (Audit Trail) */}
+                               <div className="mt-4 pt-4 border-t border-gray-200">
+                                  <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                                    <FaSync className="text-gray-400 text-xs" />
+                                    Edit History (Audit Trail)
+                                  </h4>
+                                  <div className="space-y-3">
+                                    {order.editHistory && order.editHistory.length > 0 ? (
+                                      order.editHistory.map((history, idx) => (
+                                        <div key={idx} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm relative overflow-hidden">
+                                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500"></div>
+                                          <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                              <span className="text-[10px] font-bold uppercase bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded mr-2">
+                                                Version {history.version}
+                                              </span>
+                                              <span className="text-[10px] font-bold text-gray-500 uppercase">
+                                                {history.editType?.replace(/_/g, ' ')}
+                                              </span>
+                                            </div>
+                                            <span className="text-[10px] text-gray-400 font-mono">
+                                              {new Date(history.editedAt).toLocaleString()}
+                                            </span>
+                                          </div>
+                                          <div className="flex flex-wrap gap-x-6 gap-y-2 text-[11px]">
+                                            <div className="flex gap-2">
+                                              <span className="text-gray-500 text-right">Items:</span>
+                                              <span className="font-bold text-gray-800">{(history.items || []).length} items</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                              <span className="text-gray-500">Grand Total:</span>
+                                              <span className="font-bold text-indigo-600">₹{(history.grandTotal || 0).toLocaleString()}</span>
+                                            </div>
+                                            {history.note && (
+                                              <div className="w-full mt-1 italic text-gray-600 border-t border-gray-50 pt-1">
+                                                Note: {history.note}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))
+                                    ) : (
+                                       <div className="bg-gray-50 p-4 rounded-lg border border-dashed border-gray-300 text-center text-gray-500 text-xs italic">
+                                          No previous edits recorded for this order. History starts after the first modification or re-invoice.
+                                       </div>
+                                    )}
+                                  </div>
+                                </div>
                             </div>
                           </td>
                         </tr>

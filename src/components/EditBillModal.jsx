@@ -24,6 +24,12 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
 
   const [productSearch, setProductSearch] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [customers, setCustomers] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [transportCharge, setTransportCharge] = useState(0);
+
 
   // Initialize items from order
   useEffect(() => {
@@ -42,9 +48,28 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
 
       setItems(initializedItems);
       setSampleItems(order.sampleItems || []);
+      setTransportCharge(order.transportCharge || 0);
+      setSelectedCustomer(order.customer);
+      setCustomerSearch(order.customer?.name || "");
       fetchProducts();
+      fetchCustomers();
     }
   }, [order]);
+
+  // Fetch all customers for the branch
+  const fetchCustomers = async () => {
+    try {
+      const branchIdToUse = order?.branchId || branchId;
+      if (!branchIdToUse) return;
+
+      const res = await fetch(`${API_BASE}/customers?branchId=${branchIdToUse}&limit=10000`);
+      const data = await res.json();
+      setCustomers(data.data || []);
+    } catch (err) {
+      console.error("Error fetching customers:", err);
+    }
+  };
+
 
   // Fetch available products
   const fetchProducts = async () => {
@@ -97,7 +122,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   // Calculate grand total accounting for expenses, transport and common discount
   const calculateGrandTotal = () => {
     const itemsTotal = items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
-    const transport = order?.transportCharge || 0;
+    const transport = Number(transportCharge) || 0;
     const extra = order?.extraExpenseAmount || 0;
     const commDiscount = order?.commonDiscount || 0;
     return itemsTotal + transport + extra - commDiscount;
@@ -262,7 +287,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
         }),
         sampleItems,
         subtotal: items.reduce((sum, item) => sum + ((parseFloat(item.qty) || 0) * (parseFloat(item.sellingPrice) || 0)), 0),
-        totalTax: items.reduce((sum, item) => {
+        totalTax: Math.round(items.reduce((sum, item) => {
           const qty = parseFloat(item.qty) || 0;
           const price = parseFloat(item.sellingPrice) || 0;
           const dPercent = parseFloat(item.discountPercent) || 0;
@@ -270,16 +295,27 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
           const discounted = sub - (sub * (dPercent / 100));
           const tax = item.igst ? discounted * (item.gst || 0) / 100 : discounted * ((item.cgst || 0) + (item.sgst || 0)) / 100;
           return sum + tax;
-        }, 0),
-        totalDiscount: items.reduce((sum, item) => {
+        }, 0)),
+        totalDiscount: Math.round(items.reduce((sum, item) => {
           const qty = parseFloat(item.qty) || 0;
           const price = parseFloat(item.sellingPrice) || 0;
           const dPercent = parseFloat(item.discountPercent) || 0;
           return sum + (qty * price * (dPercent / 100));
-        }, 0),
+        }, 0)),
         commonDiscount: order?.commonDiscount || 0,
+        transportCharge: Math.round(Number(transportCharge) || 0),
         grandTotal: Math.round(newItemsTotal),
+        customer: selectedCustomer ? {
+          id: selectedCustomer.customerId || selectedCustomer._id,
+          name: selectedCustomer.name,
+          whatsapp: selectedCustomer.whatsapp,
+          address: selectedCustomer.address,
+          district: selectedCustomer.district,
+          state: selectedCustomer.state,
+          pincode: selectedCustomer.pincode,
+        } : order.customer
       };
+
 
       // Call onSave callback with updated order
       await onSave(updatedOrder);
@@ -312,6 +348,78 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
 
         {/* CONTENT */}
         <div className="p-6 space-y-6">
+          {/* CUSTOMER SELECTION */}
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-tight mb-3">👤 Customer Information</h3>
+            <div className="relative">
+              <label className="block text-xs font-bold text-gray-600 mb-1">Select Customer</label>
+              <input
+                type="text"
+                placeholder="Search and change customer..."
+                value={customerSearch}
+                onChange={(e) => {
+                  setCustomerSearch(e.target.value);
+                  setShowCustomerDropdown(true);
+                }}
+                onFocus={() => setShowCustomerDropdown(true)}
+                onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                className="w-full md:w-1/2 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#319bab] outline-none font-semibold text-gray-800"
+              />
+              {showCustomerDropdown && (
+                <ul className="absolute z-20 w-full md:w-1/2 bg-white border border-gray-300 rounded-lg mt-1 max-h-60 overflow-y-auto shadow-xl">
+                  {customers
+                    .filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase()))
+                    .map((c) => (
+                      <li
+                        key={c._id}
+                        className="px-4 py-3 hover:bg-[#319bab]/10 cursor-pointer border-b last:border-0 flex justify-between items-center"
+                        onMouseDown={() => {
+                          setSelectedCustomer({
+                            ...c,
+                            customerId: c._id // Harmonize ID field names
+                          });
+                          setCustomerSearch(c.name);
+                          setShowCustomerDropdown(false);
+                          toast.info(`Customer changed to: ${c.name}`);
+                        }}
+                      >
+                        <div>
+                          <p className="font-bold text-gray-800">{c.name}</p>
+                          <p className="text-xs text-gray-500">{c.whatsapp || "No phone"}</p>
+                        </div>
+                        <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded font-bold text-gray-400">SELECT</span>
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+            {selectedCustomer && (
+              <div className="mt-3 flex gap-4 text-xs text-gray-600 italic">
+                <span>📍 {selectedCustomer.address || "No address"}</span>
+                <span>📱 {selectedCustomer.whatsapp || "No phone"}</span>
+              </div>
+            )}
+          </div>
+
+          {/* TRANSPORT CHARGE */}
+          <div className="bg-[#319bab]/5 p-4 rounded-xl border border-[#319bab]/20">
+            <h3 className="text-sm font-bold text-[#319bab] uppercase tracking-tight mb-3">🚚 Transport & Logistics</h3>
+            <div className="w-full md:w-1/3">
+              <label className="block text-xs font-bold text-gray-600 mb-1">Transport Charge (₹)</label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-gray-400 font-bold">₹</span>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={transportCharge}
+                  onChange={(e) => setTransportCharge(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-2 focus:ring-2 focus:ring-[#319bab] outline-none font-bold text-gray-800"
+                />
+              </div>
+            </div>
+          </div>
+
+
           {/* REGULAR ITEMS */}
           <div>
             <h3 className="text-lg font-bold text-gray-800 mb-4">📦 Order Items</h3>

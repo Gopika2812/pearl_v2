@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const salesOrderSchema = new mongoose.Schema(
   {
-    invoiceId: { type: String, required: true, unique: true },
+    invoiceId: { type: String, required: true }, // unique index handled per-branch
 
     voucherType: { type: String, required: true }, // zone1
     orderType: { type: String, default: "SO" },
@@ -205,6 +205,40 @@ const salesOrderSchema = new mongoose.Schema(
       default: "SALES ORDER",
     },
 
+    status: {
+      type: String,
+      enum: ["DRAFT", "PLACED", "INVOICED", "CANCELLED"],
+      default: "PLACED",
+    },
+
+    // DELTA & HISTORY TRACKING
+    lastInvoicedItems: [
+      {
+        productId: mongoose.Schema.Types.ObjectId,
+        name: String,
+        qty: Number,
+        sellingPrice: Number,
+        total: Number,
+      },
+    ],
+    lastInvoicedGrandTotal: Number,
+
+    editHistory: [
+      {
+        version: Number,
+        editType: {
+          type: String,
+          enum: ["CREATED", "PRE_INVOICE_EDIT", "INVOICED", "RE_EDIT_STARTED", "RE_INVOICED"],
+        },
+        items: Array,
+        subtotal: Number,
+        totalTax: Object,
+        grandTotal: Number,
+        editedAt: { type: Date, default: Date.now },
+        note: String,
+      },
+    ],
+
     isClaim: {
       type: Boolean,
       default: false,
@@ -331,5 +365,8 @@ salesOrderSchema.post("findOneAndDelete", async function(doc) {
 salesOrderSchema.post("findByIdAndDelete", async function(doc) {
   await revertOrderEffects(doc);
 });
+
+// Compound unique index: same Invoice number allowed across branches, not within the same branch
+salesOrderSchema.index({ branchId: 1, invoiceId: 1 }, { unique: true });
 
 export default mongoose.model("SalesOrder", salesOrderSchema);

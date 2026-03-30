@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const invoiceSchema = new mongoose.Schema(
   {
     // Basic Info
-    invoiceNumber: { type: String, required: true, unique: true },
+    invoiceNumber: { type: String, required: true }, // unique index handled per-branch
     invoiceDate: { type: Date, default: Date.now },
     financialYear: String,
 
@@ -170,5 +170,8 @@ const invoiceSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Compound unique index: same Invoice number allowed across branches, not within the same branch
+invoiceSchema.index({ branchId: 1, invoiceNumber: 1 }, { unique: true });
 
 export default mongoose.model("Invoice", invoiceSchema);

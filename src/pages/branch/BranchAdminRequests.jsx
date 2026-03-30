@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaCheck, FaTimes, FaHistory, FaFileInvoice, FaUser, FaClock, FaCheckCircle, FaTimesCircle, FaCreditCard } from "react-icons/fa";
+import { FaCheck, FaTimes, FaHistory, FaFileInvoice, FaUser, FaClock, FaCheckCircle, FaTimesCircle, FaCreditCard, FaShoppingCart } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -8,6 +8,7 @@ export default function BranchAdminRequests() {
   const { branch, user } = useBranch();
   const [reEditRequests, setReEditRequests] = useState([]);
   const [creditRequests, setCreditRequests] = useState([]);
+  const [poRequests, setPoRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,7 +20,7 @@ export default function BranchAdminRequests() {
   const fetchAllRequests = async () => {
     setLoading(true);
     try {
-      // Fetch Re-edit requests
+      // Fetch Re-edit requests (SO)
       const reEditRes = await fetch(`${API_BASE}/sales-orders/re-edit-requests/branch/${branch?._id}`);
       const reEditData = await reEditRes.json();
       if (reEditData.success) setReEditRequests(reEditData.data);
@@ -28,6 +29,11 @@ export default function BranchAdminRequests() {
       const creditRes = await fetch(`${API_BASE}/customers/credit-requests/branch/${branch?._id}`);
       const creditData = await creditRes.json();
       if (creditData.success) setCreditRequests(creditData.data);
+
+      // Fetch PO Requests
+      const poRes = await fetch(`${API_BASE}/purchase-orders/requests/branch/${branch?._id}`);
+      const poData = await poRes.json();
+      if (poData.success) setPoRequests(poData.data);
 
     } catch (err) {
       toast.error("Error connecting to server");
@@ -45,6 +51,24 @@ export default function BranchAdminRequests() {
       const data = await res.json();
       if (data.success) {
         toast.success(`Re-edit ${action === 'approve' ? 'Approved' : 'Rejected'}`);
+        fetchAllRequests();
+      } else {
+        toast.error(data.message || `Failed to ${action} request`);
+      }
+    } catch (err) {
+      toast.error("Error updating request");
+    }
+  };
+
+  const handlePOAction = async (id, action, type) => {
+    try {
+      const res = await fetch(`${API_BASE}/purchase-orders/${id}/${action}-${type}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`PO ${type} ${action === 'approve' ? 'Approved' : 'Rejected'}`);
         fetchAllRequests();
       } else {
         toast.error(data.message || `Failed to ${action} request`);
@@ -204,6 +228,69 @@ export default function BranchAdminRequests() {
                         </td>
                       </tr>
                     ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Section 3: Purchase Order Requests */}
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-indigo-900 p-6 flex items-center justify-between">
+              <h3 className="text-white font-bold flex items-center gap-2">
+                <FaShoppingCart className="text-secondary" />
+                Purchase Order Admin Requests ({poRequests.length})
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Invoice ID</th>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Vendor</th>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Type</th>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Requested By</th>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Total Amount</th>
+                    <th className="px-6 py-4 text-center font-black text-gray-400 uppercase tracking-widest text-[10px]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {loading ? (
+                    <tr><td colSpan="6" className="px-6 py-8 text-center text-gray-400 italic">Loading...</td></tr>
+                  ) : poRequests.length === 0 ? (
+                    <tr><td colSpan="6" className="px-6 py-8 text-center text-gray-400 italic font-bold">No pending purchase order requests</td></tr>
+                  ) : (
+                    poRequests.map((req) => {
+                      const isEdit = req.editRequestStatus === "PENDING";
+                      const type = isEdit ? "edit" : "cancel";
+                      const requestedBy = isEdit ? req.editRequestBy : req.cancelRequestBy;
+                      const requestedAt = isEdit ? req.editRequestAt : req.cancelRequestAt;
+
+                      return (
+                        <tr key={req._id} className="hover:bg-gray-50/50 transition-colors group">
+                          <td className="px-6 py-4 font-black text-gray-900">{req.invoiceId || "N/A"}</td>
+                          <td className="px-6 py-4 font-bold text-gray-700">{req.vendor}</td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${isEdit ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
+                              {type}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col text-[10px]">
+                              <span className="font-bold text-gray-600 flex items-center gap-1"><FaUser size={8} /> {requestedBy}</span>
+                              <span className="text-gray-400 flex items-center gap-1 mt-0.5"><FaClock size={8} /> {new Date(requestedAt).toLocaleString()}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 font-black text-gray-900">₹{req.grandTotal?.toLocaleString()}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <button onClick={() => handlePOAction(req._id, "approve", type)} className="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition uppercase text-[10px] font-bold"><FaCheck size={10} /> Approve</button>
+                              <button onClick={() => handlePOAction(req._id, "reject", type)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition uppercase text-[10px] font-bold"><FaTimes size={10} /> Reject</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

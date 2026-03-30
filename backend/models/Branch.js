@@ -52,6 +52,12 @@ const branchSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    gstin: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
   },
   { timestamps: true }
 );

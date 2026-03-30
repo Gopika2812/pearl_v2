@@ -40,7 +40,9 @@ export default function SuperAdminBranchManagement() {
     email: "",
     manager: "",
     isMainBranch: false,
+    gstin: "",
   });
+
 
   // Fetch branches
   useEffect(() => {
@@ -167,7 +169,9 @@ export default function SuperAdminBranchManagement() {
       email: "",
       manager: "",
       isMainBranch: false,
+      gstin: "",
     });
+
     setEditingBranch(null);
   };
 
@@ -182,7 +186,9 @@ export default function SuperAdminBranchManagement() {
       email: branch.email || "",
       manager: branch.manager || "",
       isMainBranch: branch.isMainBranch || false,
+      gstin: branch.gstin || "",
     });
+
     setShowBranchModal(true);
   };
 
@@ -371,6 +377,11 @@ export default function SuperAdminBranchManagement() {
                         {selectedBranch.email || "—"}
                       </p>
                     </div>
+                    <div>
+                      <p className="text-sm text-gray-600 font-semibold">GSTIN</p>
+                      <p className="text-gray-900 font-mono">{selectedBranch.gstin || "—"}</p>
+                    </div>
+
                     <div className="md:col-span-2">
                       <p className="text-sm text-gray-600 font-semibold">Address</p>
                       <p className="text-gray-900">{selectedBranch.address || "—"}</p>
@@ -579,6 +590,20 @@ export default function SuperAdminBranchManagement() {
                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    GSTIN Number
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 29ABCDE1234F1Z5"
+                    value={branchForm.gstin}
+                    onChange={(e) => setBranchForm({ ...branchForm, gstin: e.target.value.toUpperCase() })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  />
+                </div>
+
 
                 <div className="md:col-span-2">
                   <label className="block text-sm font-bold text-gray-700 mb-2">

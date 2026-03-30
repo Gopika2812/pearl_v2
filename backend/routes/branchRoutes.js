@@ -91,7 +91,9 @@ router.post("/", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
       logo,
       color,
       isMainBranch: isMainBranch || false,
+      gstin: req.body.gstin || "",
     });
+
 
     const savedBranch = await branch.save();
 

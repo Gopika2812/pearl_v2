@@ -26,9 +26,11 @@ import BranchHome from "./pages/branch/BranchHome";
 import BranchInsights from "./pages/branch/BranchInsights";
 import BranchInvoicedOrders from "./pages/branch/BranchInvoicedOrders";
 import BranchJournalEntries from "./pages/branch/BranchJournalEntries";
+import BranchStockJournal from "./pages/branch/BranchStockJournal";
 import BranchPO from "./pages/branch/BranchPO";
 import BranchPOPayment from "./pages/branch/BranchPOPayment";
 import BranchPurchaseOrders from "./pages/branch/BranchPurchaseOrders";
+import BranchPurchaseInvoices from "./pages/branch/BranchPurchaseInvoices";
 import BranchQuickLinks from "./pages/branch/BranchQuickLinks";
 import BranchReceipt from "./pages/branch/BranchReceipt";
 import BranchRecycling from "./pages/branch/BranchRecycling";
@@ -47,6 +49,7 @@ import SuperAdminLoginPage from "./pages/SuperAdminLoginPage";
 import SuperAdminBranchManagement from "./pages/SuperAdminBranchManagement";
 import SuperAdminControlSystem from "./pages/SuperAdminControlSystem";
 import SuperAdminAuditLogs from "./pages/SuperAdminAuditLogs";
+import SuperAdminUserApproval from "./pages/SuperAdminUserApproval";
 import CRMPage from "./pages/CRMPage";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerSummary from "./pages/CustomerSummary";
@@ -106,6 +109,7 @@ function AppContent() {
         "/branch-home": "home",
         "/branch/po": "create-po",
         "/branch/purchase-orders": "purchase-list",
+        "/branch/purchase-invoices": "purchase-invoice-list",
         "/branch/recycling": "restocking",
         "/branch/debit-note": "debit-note",
         "/branch/po-payment": "payment-po",
@@ -210,6 +214,7 @@ function AppContent() {
                   <Route path="/branch/insights" element={<ProtectedRoute element={<BranchInsights />} />} />
                   <Route path="/branch/po" element={<ProtectedRoute element={<BranchPO />} />} />
                   <Route path="/branch/purchase-orders" element={<ProtectedRoute element={<BranchPurchaseOrders />} />} />
+                  <Route path="/branch/purchase-invoices" element={<ProtectedRoute element={<BranchPurchaseInvoices />} />} />
                   <Route path="/branch/recycling" element={<ProtectedRoute element={<BranchRecycling />} />} />
                   <Route path="/branch/debit-note" element={<ProtectedRoute element={<BranchDebitNote />} />} />
                   <Route path="/branch/po-payment" element={<ProtectedRoute element={<BranchPOPayment />} />} />
@@ -221,6 +226,7 @@ function AppContent() {
                   <Route path="/branch/suppliers" element={<ProtectedRoute element={<BranchSuppliers />} />} />
                   <Route path="/branch/customers" element={<ProtectedRoute element={<BranchCustomers />} />} />
                   <Route path="/branch/journals" element={<ProtectedRoute element={<BranchJournalEntries />} />} />
+                  <Route path="/branch/stock-journal" element={<ProtectedRoute element={<BranchStockJournal />} />} />
                   <Route path="/branch/quick-links" element={<ProtectedRoute element={<BranchQuickLinks />} />} />
                   <Route path="/branch/receipt" element={<ProtectedRoute element={<BranchReceipt />} />} />
                   <Route path="/branch/summary" element={<ProtectedRoute element={<BranchSummary />} />} />
@@ -297,6 +303,10 @@ function AppContent() {
                   <Route
                     path="/super-admin/audit-logs"
                     element={<ProtectedRoute element={<SuperAdminAuditLogs />} role={["SUPER_ADMIN"]} />}
+                  />
+                  <Route
+                    path="/super-admin/user-approvals"
+                    element={<ProtectedRoute element={<SuperAdminUserApproval />} role={["SUPER_ADMIN"]} />}
                   />
                 </Routes>
             </div>

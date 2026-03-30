@@ -39,9 +39,9 @@ export const QUICK_LINKS_CONFIG = {
   product: {
     label: "Product",
     endpoint: "/products",
-    displayFields: ["name", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "productGroup", "productCategories", "warehouse"],
+    displayFields: ["name", "totalQty", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "productGroup", "productCategories", "warehouse"],
     editableFields: ["name", "purchasingPrice", "sellingPrice", "adminMargin", "productGroup", "productCategories", "warehouse"],
-    detailedFields: ["name", "perQty", "units", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "hsnCode", "gst"],
+    detailedFields: ["name", "totalQty", "totalQtyUnit", "perQty", "units", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "hsnCode", "gst"],
     permissionFields: ["purchasingPrice", "adminMargin", "sellingPrice", "marginPercentage", "gst", "totalQty"]
   },
   customer_category: {

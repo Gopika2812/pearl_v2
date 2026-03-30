@@ -138,7 +138,7 @@ router.get("/", async (req, res) => {
     }
     
     const salesOrders = await SalesOrder.find(query)
-      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited")
+      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal")
       .populate('salesOwner', 'name')
       .sort({ createdAt: -1 });
     
@@ -538,91 +538,133 @@ router.get("/commissions/order/:salesOrderId", async (req, res) => {
   }
 });
 
-// DELETE sales order and revert customer balance
+// 🗑️ SOFT-CANCEL SALES ORDER (Revert effects, mark CANCELLED, keep in records)
 router.delete("/:id", async (req, res) => {
   try {
-    const salesOrder = await SalesOrder.findById(req.params.id);
-    
+    const { id } = req.params;
+    const salesOrder = await SalesOrder.findById(id);
+
     if (!salesOrder) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Sales order not found" });
+      return res.status(404).json({ success: false, message: "Sales order not found" });
     }
 
-    const orderValue = salesOrder.grandTotalWithMargin || salesOrder.grandTotal || 0;
-    const customerId = salesOrder.customer?.customerId; // ✅ GET CUSTOMER ID CORRECTLY
+    if (salesOrder.status === "CANCELLED") {
+      return res.status(400).json({ success: false, message: "Order is already cancelled" });
+    }
 
-    // 🔄 REVERT CUSTOMER CLOSING BALANCE (ONLY IF INVOICE WAS GENERATED)
-    if (salesOrder.invoiceGenerated && customerId && mongoose.Types.ObjectId.isValid(customerId)) {
-      const customer = await Customer.findById(customerId);
-      if (customer) {
-        const revertedBalance = customer.closingBalance - orderValue;
-        await Customer.findByIdAndUpdate(customerId, {
-          closingBalance: revertedBalance,
-          totalBalance: revertedBalance,
+    // 🔄 REVERT EFFECTS IF INVOICED
+    if (salesOrder.status === "INVOICED") {
+      const Customer = mongoose.model("Customer");
+      const Product = mongoose.model("Product");
+      const Commission = mongoose.model("Commission");
+      const SalesOwner = mongoose.model("SalesOwner");
+      const SalesMan = mongoose.model("SalesMan");
+      const DeliveryMan = mongoose.model("DeliveryMan");
+
+      // 1. Revert Customer Balance using lastInvoicedGrandTotal
+      const amountToRevert = salesOrder.lastInvoicedGrandTotal || salesOrder.grandTotal || 0;
+      if (salesOrder.customer?.customerId && amountToRevert > 0) {
+        await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
+          $inc: { debit: -amountToRevert, closingBalance: -amountToRevert }
         });
-        console.log(`✅ Customer balance reverted from ₹${customer.closingBalance} to ₹${revertedBalance}`);
+        console.log(`✅ Customer balance reverted for cancellation: -₹${amountToRevert}`);
       }
-    } else if (!salesOrder.invoiceGenerated) {
-      console.log("ℹ️ Invoice was not generated, so no balance to revert");
-    }
 
-    // 🗑️ REVERT COMMISSIONS (ONLY IF INVOICE WAS GENERATED)
-    if (salesOrder.invoiceGenerated) {
-      const commission = await Commission.findOne({ salesOrderId: req.params.id });
+      // 2. Revert Product Stock using lastInvoicedItems
+      const itemsToRevert = (salesOrder.lastInvoicedItems && salesOrder.lastInvoicedItems.length > 0) 
+        ? salesOrder.lastInvoicedItems 
+        : salesOrder.items;
+      
+      for (const item of itemsToRevert) {
+        if (item.productId && item.qty > 0) {
+          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty } });
+          console.log(`✅ Stock restored for ${item.name}: +${item.qty}`);
+        }
+      }
+
+      // 3. Revert Commissions
+      const commission = await Commission.findOne({ salesOrderId: id });
       if (commission) {
-        // Revert Sales Owner Commission
-        if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
-          await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
-            $inc: { commissionAmount: -commission.salesOwnerCommissionAmount }
-          });
-          console.log(`✅ Sales Owner commission reverted: -₹${commission.salesOwnerCommissionAmount}`);
-        }
-
-        // Revert Sales Man Commission
-        if (commission.salesManId && commission.salesManCommissionAmount > 0) {
-          await SalesMan.findByIdAndUpdate(commission.salesManId, {
-            $inc: { commissionAmount: -commission.salesManCommissionAmount }
-          });
-          console.log(`✅ Sales Man commission reverted: -₹${commission.salesManCommissionAmount}`);
-        }
-
-        // Revert Delivery Man Commission
-        if (commission.deliveryManId && commission.deliveryManCommissionAmount > 0) {
-          await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, {
-            $inc: { commissionAmount: -commission.deliveryManCommissionAmount }
-          });
-          console.log(`✅ Delivery Man commission reverted: -₹${commission.deliveryManCommissionAmount}`);
-        }
+        if (commission.salesOwnerId) await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, { $inc: { commissionAmount: -commission.salesOwnerCommissionAmount } });
+        if (commission.salesManId) await SalesMan.findByIdAndUpdate(commission.salesManId, { $inc: { commissionAmount: -commission.salesManCommissionAmount } });
+        if (commission.deliveryManId) await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, { $inc: { commissionAmount: -commission.deliveryManCommissionAmount } });
+        await Commission.deleteOne({ salesOrderId: id });
+        console.log(`✅ Commissions reverted for cancellation.`);
       }
     }
 
-    // 🗑️ DELETE ASSOCIATED COMMISSION RECORD (if any)
-    await Commission.deleteOne({ salesOrderId: req.params.id });
-
-    // Log Sales Order deletion
-    await createAuditLog({
-      userId: req.body.userId || req.query.userId || "System",
-      username: req.body.username || req.query.username || "System",
-      branchId: salesOrder.branchId,
-      action: "DELETE_SO",
-      description: `Deleted Sales Order: ${salesOrder.invoiceId} for ${salesOrder.customer.name}`,
-      targetId: salesOrder._id,
-      targetModel: "SalesOrder",
+    // Snapshot into editHistory before cancelling
+    salesOrder.editHistory.push({
+      version: (salesOrder.editHistory.length || 0) + 1,
+      editType: 'RE_EDIT_STARTED', // reuse for cancel marker
+      items: salesOrder.items,
+      grandTotal: salesOrder.grandTotal,
+      editedAt: new Date(),
+      note: `Order CANCELLED. All stock and customer balance effects reverted.`
     });
 
-    // 🗑️ DELETE SALES ORDER
-    await SalesOrder.findByIdAndDelete(req.params.id);
+    salesOrder.status = "CANCELLED";
+    await salesOrder.save();
 
     res.json({
       success: true,
-      message: "Sales order deleted. Customer balance reverted if invoice was generated.",
+      message: "Sales Order cancelled. Records kept for audit trail. Stock and customer balance reverted.",
     });
-  } catch (error) {
-    console.error("Delete error:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to delete sales order" });
+  } catch (err) {
+    console.error("Cancel SO error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 📋 REQUEST RE-EDIT PERMISSION
+router.patch("/:id/request-reedit", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { requestedBy } = req.body;
+    const order = await SalesOrder.findById(id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    order.reEditRequestStatus = "PENDING";
+    order.reEditRequestBy = requestedBy || "Unknown Staff";
+    order.reEditRequestAt = new Date();
+    await order.save();
+
+    res.json({ success: true, message: "Re-edit request submitted to admin" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ✅ DIRECT RE-EDIT (Admin/Manager can immediately unlock an invoiced order)
+router.patch("/:id/approve-edit", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { editedBy } = req.body;
+    const order = await SalesOrder.findById(id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    // Switch status to PLACED even if it was INVOICED
+    if (order.status === "INVOICED" || order.invoiceGenerated) {
+      // Snapshot current state before edit starts
+      order.editHistory.push({
+        version: (order.editHistory.length || 0) + 1,
+        editType: 'RE_EDIT_STARTED',
+        items: order.items,
+        grandTotal: order.grandTotal,
+        editedAt: new Date(),
+        note: `Admin approved re-edit. Items can now be modified. Deltas will apply on re-invoice.`
+      });
+
+      order.status = "PLACED"; // Return to PLACED status for editing
+      order.isReEdited = true;
+    }
+
+    order.reEditRequestStatus = "APPROVED";
+    await order.save();
+
+    res.json({ success: true, message: "Re-edit approved. You can now modify the Sales Order." });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 
@@ -735,17 +777,39 @@ router.get("/:id", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, extraExpenses, extraExpenseAmount } = req.body;
-
+    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, extraExpenses, extraExpenseAmount, customer, transportCharge } = req.body;
+    
     // 1. Find the order first
     const salesOrder = await SalesOrder.findById(id);
     if (!salesOrder) {
       return res.status(404).json({ message: "Sales order not found" });
     }
-
+    
     if (salesOrder.invoiceGenerated && salesOrder.reEditRequestStatus !== "APPROVED") {
       return res.status(400).json({ message: "Cannot edit an order that has already been invoiced without admin approval" });
     }
+
+    // UPDATE CUSTOMER IF PROVIDED
+    if (customer && customer.id && customer.id !== salesOrder.customer?.customerId?.toString()) {
+      const dbCustomer = await Customer.findById(customer.id);
+      if (dbCustomer) {
+        console.log(`👤 Customer changed for order ${id}: ${salesOrder.customer?.name} -> ${dbCustomer.name}`);
+        salesOrder.customer = {
+          customerId: dbCustomer._id,
+          name: dbCustomer.name,
+          whatsapp: dbCustomer.whatsapp,
+          address: dbCustomer.address,
+          district: dbCustomer.district,
+          state: dbCustomer.state,
+          pincode: dbCustomer.pincode,
+        };
+        // Reset starting balances for new customer if not invoiced
+        if (!salesOrder.invoiceGenerated) {
+          salesOrder.openingBalance = Math.round(dbCustomer.closingBalance || dbCustomer.totalBalance || 0);
+        }
+      }
+    }
+
 
     // 2. Identify the difference in grandTotal so we adjust Customer Balance smoothly
     // EditBillModal strictly passes rounded grandTotals now but we'll safeguard it:
@@ -771,6 +835,7 @@ router.put("/:id", async (req, res) => {
       totalPrice: Math.round(Number(exp.totalPrice) || 0),
     }));
     salesOrder.extraExpenseAmount = Math.round(Number(extraExpenseAmount) || 0);
+    salesOrder.transportCharge = Math.round(Number(transportCharge) || 0);
     
     salesOrder.subtotal = Math.round(Number(subtotal) || 0);
     salesOrder.totalTax = Math.round(Number(totalTax) || 0);
@@ -787,9 +852,15 @@ router.put("/:id", async (req, res) => {
     }
 
     // Also shift closing balance for the exact SO receipt
-    salesOrder.closingBalance = (salesOrder.closingBalance || 0) + difference;
+    // If customer changed, we reset it completely; otherwise we adjust by the difference
+    if (customer && customer.id && customer.id !== salesOrder.customer?.customerId?.toString()) {
+      salesOrder.closingBalance = salesOrder.openingBalance + newGrandTotal;
+    } else {
+      salesOrder.closingBalance = (salesOrder.closingBalance || 0) + difference;
+    }
 
     await salesOrder.save();
+
 
     // Log Sales Order update
     await createAuditLog({

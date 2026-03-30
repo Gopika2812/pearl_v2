@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload } from "react-icons/fa";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport } from "react-icons/fa";
+import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -83,66 +84,14 @@ const BranchSuppliers = () => {
         console.warn("Failed to fetch Payments, status:", paymentResponse.status);
       }
 
-      // Calculate credit for each supplier based on unpaid/partially paid POs
+      // Calculate credit for each supplier
+      // The backend updates vendor.credit on every invoice/re-invoice (single source of truth)
+      // DO NOT add outstanding POs on top — that causes double-counting
       suppliers = suppliers.map((supplier) => {
-        const existingCredit = supplier.credit || 0; // Get existing credit from database
-        let outstandingFromPOs = 0; // Calculate outstanding from current POs
-        let totalDebit = 0;
-
-        // Normalize branchId for comparison (handle both string and ObjectId formats)
-        const normalizedBranchId = typeof branchId === 'string' ? branchId : branchId?.toString();
-
-        // Find POs for this supplier
-        const supplierPOs = purchaseOrders.filter(
-          (po) => {
-            const poBranchId = typeof po.branchId === 'string' ? po.branchId : po.branchId?.toString();
-            return (
-              po.vendor === supplier.name && 
-              poBranchId === normalizedBranchId &&
-              po.status === "INVOICED"
-            );
-          }
-        );
-        
-        console.log(`Supplier: ${supplier.name}, Total POs matched: ${supplierPOs.length}`);
-
-        supplierPOs.forEach((po) => {
-          if (po.status !== "INVOICED") return; // Only consider INVOICED POs
-          const poAmount = po.grandTotal || 0;
-          // Find payments for this PO
-          const poPayments = payments.filter(
-            (payment) => {
-              const rawId = payment.purchaseOrder?.poId;
-              const paymentPoId = rawId?._id ? rawId._id.toString() : rawId?.toString();
-              const poId = po._id ? po._id.toString() : null;
-              return paymentPoId === poId && payment.status === "completed";
-            }
-          );
-          const totalPaidForPO = poPayments.reduce(
-            (sum, payment) => sum + (payment.amount || 0),
-            0
-          );
-          // Outstanding amount = PO total - paid amount
-          const outstanding = poAmount - totalPaidForPO;
-          if (outstanding > 0) {
-            outstandingFromPOs += outstanding;
-          }
-        });
-
-        // Debit is the sum of completed payments (money received from supplier if any)
-        totalDebit = supplier.debit || 0;
-
-        // Total credit = Existing credit from DB + Outstanding from current POs
-        const totalCredit = existingCredit + outstandingFromPOs;
-
-        console.log(
-          `✅ ${supplier.name}: Credit=₹${totalCredit} (Existing: ₹${existingCredit}, Outstanding POs: ₹${outstandingFromPOs})`
-        );
-
         return {
           ...supplier,
-          credit: totalCredit,
-          debit: totalDebit,
+          credit: supplier.credit || 0,
+          debit: supplier.debit || 0,
         };
       });
 
@@ -259,6 +208,34 @@ const BranchSuppliers = () => {
       : suppliers
   );
 
+  const handleExportExcel = () => {
+    try {
+      const exportData = filteredSuppliers.map(s => ({
+        "Supplier Name": s.name || "-",
+        "Credit": s.credit || 0,
+        "Debit": s.debit || 0
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Suppliers");
+
+      // Auto-width adjustment
+      const wscols = [
+        { wch: 30 }, // Supplier Name
+        { wch: 15 }, // Credit
+        { wch: 15 }  // Debit
+      ];
+      worksheet['!cols'] = wscols;
+
+      XLSX.writeFile(workbook, `Suppliers_Report_${new Date().toLocaleDateString()}.xlsx`);
+      toast.success("Excel exported successfully!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export Excel");
+    }
+  };
+
   const totalCredit = filteredSuppliers.reduce(
     (sum, supplier) => sum + (supplier.credit || 0),
     0
@@ -302,6 +279,13 @@ const BranchSuppliers = () => {
             >
               <FaPlus /> Add Supplier
             </button>
+
+            <button
+              onClick={handleExportExcel}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+            >
+              <FaFileExport /> Export Excel
+            </button>
             
             <div className="flex bg-gray-100 p-1 rounded-xl items-center">
               <button
@@ -334,7 +318,7 @@ const BranchSuppliers = () => {
         {/* Information Banner */}
         <div className="bg-blue-50 border border-blue-300 rounded-lg p-4 md:p-5">
           <p className="text-xs md:text-sm text-blue-800">
-            <span className="font-semibold">💡 Credit Calculation:</span> Total Credit = Existing Credit from Database + Outstanding from Current POs. Outstanding POs are calculated as: (PO Amount - Paid Amount). Fully paid POs are excluded.
+            <span className="font-semibold">💡 Credit Calculation:</span> Vendor credit is updated automatically when a Purchase Invoice is generated or re-invoiced. Payments made to the vendor reduce the credit balance.
           </p>
         </div>
 

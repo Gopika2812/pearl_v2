@@ -10,6 +10,11 @@ import auth from "./middleware/auth.js";
 import rbac from "./middleware/rbac.js";
 import fixVoucherTypeIndex from "./utils/fixVoucherTypeIndex.js";
 import fixVendorIndex from "./utils/fixVendorIndex.js";
+import { fixPurchaseOrderIndex } from "./utils/fixPurchaseOrderIndex.js";
+import { fixPurchaseInvoiceIndex } from "./utils/fixPurchaseInvoiceIndex.js";
+import { fixSalesOrderIndex } from "./utils/fixSalesOrderIndex.js";
+import { fixInvoiceIndex } from "./utils/fixInvoiceIndex.js";
+import { fixVoucherTypes } from "./utils/fixVoucherTypes.js";
 
 import branchRoutes from "./routes/branchRoutes.js";
 import branchUserRoutes from "./routes/branchUserRoutes.js";
@@ -31,6 +36,7 @@ import productCategoryRoutes from "./routes/productCategoryRoutes.js";
 import productGroupRoutes from "./routes/productGroupRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import purchaseOrderRoutes from "./routes/purchaseOrderRoutes.js";
+import purchaseInvoiceRoutes from "./routes/purchaseInvoiceRoutes.js";
 import receiptRoutes from "./routes/receiptRoutes.js";
 import reorderingRoutes from "./routes/reorderingRoutes.js";
 import salesManRoutes from "./routes/salesManRoutes.js";
@@ -83,6 +89,7 @@ app.use("/api/customers", customerRoutes);
 app.use("/api/customer-categories", customerCategoryRoutes);
 app.use("/api/customer-groups", customerGroupRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
+app.use("/api/purchase-invoices", purchaseInvoiceRoutes);
 app.use("/api/debit-notes", debitNoteRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/expenses", extraExpenseRoutes);
@@ -114,6 +121,11 @@ mongoose
     // Fix VoucherType and Vendor indexes to allow same name in different branches
     await fixVoucherTypeIndex();
     await fixVendorIndex();
+    await fixPurchaseOrderIndex();
+    await fixPurchaseInvoiceIndex();
+    await fixSalesOrderIndex();
+    await fixInvoiceIndex();
+    await fixVoucherTypes();
   })
   .catch((err) => console.error("Mongo Error:", err));
 

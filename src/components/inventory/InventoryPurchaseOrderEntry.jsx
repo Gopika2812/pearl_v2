@@ -360,17 +360,20 @@ const InventoryPurchaseOrderEntry = ({
       voucherType,
       vendor,
       warehouse,
-      items,
-      subtotal,
-      totalTax,
+      items: items.map(item => ({
+        ...item,
+        total: Math.round(Number(item.total) || 0)
+      })),
+      subtotal: Math.round(subtotal),
+      totalTax: Math.round(totalTax),
       extraExpenses: extraExpenses.map((exp) => ({
         expenseName: exp.expenseName,
-        amount: exp.amount,
-        gst: exp.gst,
-        totalPrice: Math.ceil(exp.totalPrice * 100) / 100,
+        amount: Math.round(Number(exp.amount) || 0),
+        gst: Math.round(Number(exp.gst) || 0),
+        totalPrice: Math.round(Number(exp.totalPrice) || 0),
       })),
-      extraExpenseAmount,
-      grandTotal,
+      extraExpenseAmount: Math.round(extraExpenseAmount),
+      grandTotal: Math.round(grandTotal),
       billingPerson,
       invoiceId,
       status: "PLACED",
@@ -877,30 +880,31 @@ const InventoryPurchaseOrderEntry = ({
             Order Summary
           </h3>
           <div className="space-y-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Subtotal</span>
-              <span className="font-bold">₹{subtotal.toFixed(2)}</span>
+            <div className="flex justify-between text-sm uppercase tracking-tighter">
+              <span className="text-gray-500 font-bold">Subtotal</span>
+              <span className="font-bold text-gray-800">₹{Math.round(subtotal)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Tax Amount</span>
-              <span className="font-bold">₹{totalTax.toFixed(2)}</span>
+            <div className="flex justify-between text-sm uppercase tracking-tighter">
+              <span className="text-gray-500 font-bold">Tax Amount</span>
+              <span className="font-bold text-gray-800">₹{Math.round(totalTax)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Extra Expenses</span>
+            <div className="flex justify-between text-sm uppercase tracking-tighter">
+              <span className="text-gray-500 font-bold">Extra Expenses</span>
               <span className="font-bold text-orange-500">
-                ₹{extraExpenseAmount.toFixed(2)}
+                ₹{Math.round(extraExpenseAmount)}
               </span>
             </div>
-            <div className="pt-2">
+            <div className="pt-2 border-t border-gray-100 mt-2">
               <div className="flex justify-between items-center">
-                <span className="text-gray-800 font-black text-xs uppercase">
+                <span className="text-gray-800 font-black text-xs uppercase tracking-widest">
                   Grand Total
                 </span>
-                <span className="text-3xl font-black text-[#319bab] italic">
-                  ₹{grandTotal.toFixed(2)}
+                <span className="text-4xl font-black text-[#319bab] tracking-tight">
+                  ₹{Math.round(grandTotal)}
                 </span>
               </div>
             </div>
+
             <div className="grid grid-cols-1 gap-3 mt-8">
               <button
                 onClick={handleFinalAction}

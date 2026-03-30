@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload } from "react-icons/fa";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport } from "react-icons/fa";
+import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -202,6 +203,72 @@ const BranchCustomers = () => {
 
   const sortedCustomers = getSortedCustomers(customers);
 
+  const handleExportExcel = async () => {
+    try {
+      setLoading(true);
+      // Fetch all customers (up to 10000) for export
+      const url = `${API_BASE}/customers?branchId=${branchId}&limit=10000`;
+      const response = await fetch(url);
+      const result = await response.json();
+
+      if (!response.ok) throw new Error(result.message || "Failed to fetch all customers");
+
+      const allCustomers = result.data || [];
+
+      const exportData = allCustomers.map(c => ({
+        "Customer Name": c.name || "-",
+        "Email": c.email || "-",
+        "WhatsApp": c.whatsapp || "-",
+        "GSTIN": c.gstin || "-",
+        "Address": c.address || "-",
+        "District": c.district || "-",
+        "State": c.state || "-",
+        "Pincode": c.pincode || "-",
+        "Registration Type": c.registrationType || "-",
+        "Margin (%)": c.margin || 0,
+        "Debit (₹)": c.debit || 0,
+        "Credit (₹)": c.credit || 0,
+        "Credit Limit (₹)": c.creditLimit || 0,
+        "Sales Owner": c.salesOwner?.name || "-",
+        "Category": c.customerCategory?.name || "-",
+        "Group": c.customerGroup?.name || "-"
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Customers");
+
+      // Auto-width adjustment
+      const wscols = [
+        { wch: 30 }, // Customer Name
+        { wch: 25 }, // Email
+        { wch: 15 }, // WhatsApp
+        { wch: 20 }, // GSTIN
+        { wch: 40 }, // Address
+        { wch: 15 }, // District
+        { wch: 15 }, // State
+        { wch: 10 }, // Pincode
+        { wch: 18 }, // Registration Type
+        { wch: 12 }, // Margin
+        { wch: 12 }, // Debit
+        { wch: 12 }, // Credit
+        { wch: 15 }, // Credit Limit
+        { wch: 20 }, // Sales Owner
+        { wch: 20 }, // Category
+        { wch: 20 }  // Group
+      ];
+      worksheet['!cols'] = wscols;
+
+      XLSX.writeFile(workbook, `Customers_Report_${new Date().toLocaleDateString()}.xlsx`);
+      toast.success("All customer data exported successfully!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error(`Failed to export Excel: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 md:pl-20 pt-20 md:pt-6">
       {/* Header & Controls */}
@@ -227,6 +294,13 @@ const BranchCustomers = () => {
               className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
             >
               <FaPlus /> Add Customer
+            </button>
+
+            <button
+              onClick={handleExportExcel}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+            >
+              <FaFileExport /> Export Excel
             </button>
             
             <div className="flex bg-gray-100 p-1 rounded-xl items-center">

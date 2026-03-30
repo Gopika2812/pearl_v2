@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaChevronUp, FaFileAlt, FaPlus } from "react-icons/fa";
+import { FaChevronDown, FaChevronUp, FaFileAlt, FaPlus, FaSearch } from "react-icons/fa";
 import { toast } from "react-toastify";
 import CustomerDebitReceiptModal from "../../components/sales/CustomerDebitReceiptModal";
 import ReceiptModal from "../../components/sales/ReceiptModal";
@@ -23,6 +23,8 @@ export default function BranchReceipt() {
   const [selectedBounceInvoice, setSelectedBounceInvoice] = useState(null);
   const [expandedInvoices, setExpandedInvoices] = useState({});
 
+  const [searchTerm, setSearchTerm] = useState("");
+  
   useEffect(() => {
     if (currentBranch?._id) fetchData();
   }, [currentBranch]);
@@ -141,6 +143,18 @@ export default function BranchReceipt() {
     fetchData();
   };
 
+  const filteredItems = allItems.filter(item => {
+    if (!searchTerm) return true;
+    
+    const searchLower = searchTerm.toLowerCase();
+    
+    const displayId = (item.invoiceNumber || item.invoiceId || item.receiptId || "").toString().toLowerCase();
+    const customerName = (typeof item.customer === "object" ? item.customer?.name : item.customer || "").toString().toLowerCase();
+    const totalAmount = (item.rowType === "ORDER" || item.rowType === "INVOICE" ? (item.grandTotal || 0) : (item.amount || 0)).toString().toLowerCase();
+
+    return displayId.includes(searchLower) || customerName.includes(searchLower) || totalAmount.includes(searchLower);
+  });
+
   const getReceiptsForInvoice = (invoiceId) => {
     return receiptData[invoiceId]?.receipts || [];
   };
@@ -202,15 +216,37 @@ export default function BranchReceipt() {
           </div>
         </div>
 
+        {/* SEARCH BAR */}
+        <div className="bg-white rounded-2xl shadow-md p-4 mb-8 flex items-center gap-4 border border-cyan-100">
+          <div className="relative flex-1">
+            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
+            <input
+              type="text"
+              placeholder="Search by Order / Invoice ID, Customer, or Amount..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-cyan-50/30 border border-cyan-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all font-medium text-gray-700"
+            />
+          </div>
+          {searchTerm && (
+            <button 
+              onClick={() => setSearchTerm("")}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg font-bold transition shadow-sm"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
         {/* MAIN CONTENT */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
           {loading ? (
             <div className="p-8 text-center">
               <p className="text-gray-600">Loading sales invoices...</p>
             </div>
-          ) : allItems.length === 0 ? (
+          ) : filteredItems.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="text-gray-500">No sales invoices or receipts available</p>
+              <p className="text-gray-500">No matching sales invoices or receipts available</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -231,7 +267,7 @@ export default function BranchReceipt() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {allItems.map((item) => {
+                  {filteredItems.map((item) => {
                     const isOrder = item.rowType === "ORDER" || item.rowType === "INVOICE";
                     const isExpanded = expandedInvoices[item._id] || false;
                     
@@ -367,19 +403,19 @@ export default function BranchReceipt() {
         </div>
 
         {/* RECEIPT SUMMARY */}
-        {allItems.length > 0 && (
+        {filteredItems.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
             <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-blue-500">
               <p className="text-gray-600 text-sm uppercase font-bold mb-2">Total Invoices</p>
               <p className="text-3xl font-black text-gray-800">
-                {allItems.filter(i => i.rowType === "ORDER" || i.rowType === "INVOICE").length}
+                {filteredItems.filter(i => i.rowType === "ORDER" || i.rowType === "INVOICE").length}
               </p>
             </div>
 
             <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-green-500">
               <p className="text-gray-600 text-sm uppercase font-bold mb-2">Total Received</p>
               <p className="text-3xl font-black text-green-600">
-                ₹{allItems.reduce((sum, item) => {
+                ₹{filteredItems.reduce((sum, item) => {
                   const isOrder = item.rowType === "ORDER" || item.rowType === "INVOICE";
                   return sum + (isOrder ? getTotalReceivedAmount(item) : (item.amount || 0));
                 }, 0).toLocaleString()}
@@ -389,7 +425,7 @@ export default function BranchReceipt() {
             <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-orange-500">
               <p className="text-gray-600 text-sm uppercase font-bold mb-2">Total Pending</p>
               <p className="text-3xl font-black text-orange-600">
-                ₹{allItems.reduce((sum, item) => {
+                ₹{filteredItems.reduce((sum, item) => {
                   const isOrder = item.rowType === "ORDER" || item.rowType === "INVOICE";
                   if (!isOrder) return sum;
                   const total = item.grandTotal || 0;
@@ -402,7 +438,7 @@ export default function BranchReceipt() {
             <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-purple-500">
               <p className="text-gray-600 text-sm uppercase font-bold mb-2">Total Records</p>
               <p className="text-3xl font-black text-purple-600">
-                {allItems.length}
+                {filteredItems.length}
               </p>
             </div>
           </div>

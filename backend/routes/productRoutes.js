@@ -789,6 +789,148 @@ router.get("/available/:productId", async (req, res) => {
 });
 
 // POST: Apply group margin percentage to all products in a group or category
+
+// GET: Stock Journal Report (Opening vs Closing)
+router.get("/stock-journal", async (req, res) => {
+  try {
+    const { branchId, startDate, endDate } = req.query;
+
+    if (!branchId || !startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        message: "branchId, startDate, and endDate are required",
+      });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999); // End of the day
+
+    console.log(`📊 Generating Stock Journal: ${branchId} | ${start.toDateString()} - ${end.toDateString()}`);
+
+    // 1️⃣ Fetch All Products for the Branch
+    const products = await Product.find({ branchId }).lean();
+    if (!products.length) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const productIds = products.map((p) => p._id);
+
+    // 2️⃣ Aggregate Purchase Orders (Inbound)
+    // We need both before-period (for opening) and during-period (for closing)
+    const purchases = await PurchaseOrder.aggregate([
+      {
+        $match: {
+          branchId: new mongoose.Types.ObjectId(branchId),
+          status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] },
+          createdAt: { $lt: end },
+        },
+      },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: "$items.productId",
+          beforePeriod: {
+            $sum: {
+              $cond: [{ $lt: ["$createdAt", start] }, "$items.qty", 0],
+            },
+          },
+          duringPeriod: {
+            $sum: {
+              $cond: [
+                { $and: [{ $gte: ["$createdAt", start] }, { $lt: ["$createdAt", end] }] },
+                "$items.qty",
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    // 3️⃣ Aggregate Sales Orders (Outbound)
+    // We need both before-period (for opening) and during-period (for closing)
+    const sales = await SalesOrder.aggregate([
+      {
+        $match: {
+          branchId: new mongoose.Types.ObjectId(branchId),
+          invoiceGenerated: true,
+          createdAt: { $lt: end },
+        },
+      },
+      { $unwind: "$invoiceItems" },
+      {
+        $group: {
+          _id: "$invoiceItems.productId",
+          beforePeriod: {
+            $sum: {
+              $cond: [{ $lt: ["$createdAt", start] }, "$invoiceItems.qty", 0],
+            },
+          },
+          duringPeriod: {
+            $sum: {
+              $cond: [
+                { $and: [{ $gte: ["$createdAt", start] }, { $lt: ["$createdAt", end] }] },
+                "$invoiceItems.qty",
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    // Maps for O(1) lookup
+    const purchaseMap = new Map();
+    purchases.forEach((p) => purchaseMap.set(p._id.toString(), p));
+
+    const salesMap = new Map();
+    sales.forEach((s) => salesMap.set(s._id.toString(), s));
+
+    // 4️⃣ Calculate Journal for each Product
+    const journalData = products.map((product) => {
+      const pid = product._id.toString();
+      const pData = purchaseMap.get(pid) || { beforePeriod: 0, duringPeriod: 0 };
+      const sData = salesMap.get(pid) || { beforePeriod: 0, duringPeriod: 0 };
+
+      // Formula: Opening At S = Initial + (Purchases < S) - (Sales < S)
+      const openingQty = (product.totalQty || 0) + pData.beforePeriod - sData.beforePeriod;
+      
+      // Formula: Closing At E = Opening + (Purchases S to E) - (Sales S to E)
+      const closingQty = openingQty + pData.duringPeriod - sData.duringPeriod;
+
+      return {
+        productId: pid,
+        productName: product.name,
+        opening: {
+          qty: Math.max(0, openingQty),
+          rate: product.purchasingPrice || 0,
+          amount: Math.round(Math.max(0, openingQty) * (product.purchasingPrice || 0) * 100) / 100,
+        },
+        closing: {
+          qty: Math.max(0, closingQty),
+          rate: product.sellingPrice || 0,
+          amount: Math.round(Math.max(0, closingQty) * (product.sellingPrice || 0) * 100) / 100,
+        },
+        purchasesInPeriod: pData.duringPeriod,
+        salesInPeriod: sData.duringPeriod,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: journalData,
+    });
+  } catch (error) {
+    console.error("Stock Journal API Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate stock journal",
+      error: error.message,
+    });
+  }
+});
+
 router.post("/apply-group-margin", async (req, res) => {
   try {
     const { branchId, productGroupId, productCategoryId, marginPercentage } = req.body;

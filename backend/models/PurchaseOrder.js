@@ -36,8 +36,9 @@ const PurchaseOrderSchema = new mongoose.Schema(
     invoiceId: {
       type: String,
       required: true,
-      unique: true,
+      // NOTE: uniqueness enforced per-branch via compound index below
     },
+    purchaseInvoiceId: { type: String },
 
     voucherType: String,
     financialYear: String,
@@ -65,7 +66,7 @@ const PurchaseOrderSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["DRAFT", "PLACED", "INVOICED"],
+      enum: ["DRAFT", "PLACED", "INVOICED", "CANCELLED"],
       default: "PLACED",
     },
 
@@ -73,7 +74,51 @@ const PurchaseOrderSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+
+    // EDIT HISTORY - stores a snapshot at each stage
+    editHistory: [
+      {
+        version: Number,
+        editType: {
+          type: String,
+          enum: ["CREATED", "PRE_INVOICE_EDIT", "INVOICED", "RE_EDIT_STARTED", "RE_INVOICED"],
+        },
+        items: [PurchaseItemSchema],
+        subtotal: Number,
+        totalTax: Number,
+        grandTotal: Number,
+        editedAt: { type: Date, default: Date.now },
+        editedBy: String,
+        note: String, // e.g. "PI/001 updated", "Stock delta: +5"
+      },
+    ],
+
+    // Snapshot of the items AT THE TIME OF LAST INVOICING
+    // Used for delta calculation on re-invoice
+    lastInvoicedItems: [PurchaseItemSchema],
+    lastInvoicedGrandTotal: Number,
+
+    // ADMIN REQUEST FIELDS (FOR INVOICED ORDERS)
+    editRequestStatus: {
+      type: String,
+      enum: ["NONE", "PENDING", "APPROVED", "REJECTED"],
+      default: "NONE",
+    },
+    editRequestBy: String,
+    editRequestAt: Date,
+
+    cancelRequestStatus: {
+      type: String,
+      enum: ["NONE", "PENDING", "APPROVED", "REJECTED"],
+      default: "NONE",
+    },
+    cancelRequestBy: String,
+    cancelRequestAt: Date,
   },
   { timestamps: true }
 );
+
+// Compound unique index: same invoiceId is allowed across branches, but not within the same branch
+PurchaseOrderSchema.index({ branchId: 1, invoiceId: 1 }, { unique: true });
+
 export default mongoose.model("PurchaseOrder", PurchaseOrderSchema);

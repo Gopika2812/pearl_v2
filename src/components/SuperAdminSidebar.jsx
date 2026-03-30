@@ -8,6 +8,7 @@ import {
   FaShieldAlt,
   FaUsersCog,
   FaClipboardList,
+  FaUserCheck,
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
@@ -30,6 +31,7 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
 
   const menu = [
     { name: "Branch Management", path: "/super-admin/branch-management", icon: <FaHome /> },
+    { name: "User Approvals", path: "/super-admin/user-approvals", icon: <FaUserCheck /> },
     { name: "Control System", path: "/super-admin/control-system", icon: <FaUsersCog /> },
     { name: "Audit Logs", path: "/super-admin/audit-logs", icon: <FaClipboardList /> },
   ];

@@ -1,16 +1,30 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaShoppingCart, FaSync } from "react-icons/fa";
+import { FaChevronDown, FaShoppingCart, FaSync, FaSearch, FaEdit, FaTrash } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
+import * as XLSX from "xlsx";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import EditPurchaseOrderModal from "../../components/branch/EditPurchaseOrderModal";
 
 const BranchPurchaseOrders = () => {
   const { currentBranch } = useBranch();
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const fetchPurchaseOrders = async () => {
+  // Search debounce logic
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
+  const fetchPurchaseOrders = async (searchOverride) => {
     // Get branch ID from context
     if (!currentBranch?._id) {
       toast.error("Branch not selected. Please select a branch from the sidebar.");
@@ -19,8 +33,9 @@ const BranchPurchaseOrders = () => {
 
     setLoading(true);
     try {
+      const search = searchOverride !== undefined ? searchOverride : debouncedSearch;
       const res = await fetch(
-        `${API_BASE}/purchase-orders?branchId=${currentBranch._id}`
+        `${API_BASE}/purchase-orders?branchId=${currentBranch._id}${search ? `&search=${search}` : ""}`
       );
       const data = await res.json();
 
@@ -38,7 +53,7 @@ const BranchPurchaseOrders = () => {
 
   useEffect(() => {
     fetchPurchaseOrders();
-  }, [currentBranch?._id]);
+  }, [currentBranch?._id, debouncedSearch]);
 
   const toggleExpanded = (orderId) => {
     setExpandedOrders((prev) => ({
@@ -49,16 +64,109 @@ const BranchPurchaseOrders = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case "PLACED":
-        return "bg-blue-100 text-blue-700";
-      case "RECEIVED":
-        return "bg-green-100 text-green-700";
-      case "CANCELLED":
-        return "bg-red-100 text-red-700";
-      case "PENDING":
-        return "bg-yellow-100 text-yellow-700";
-      default:
-        return "bg-gray-100 text-gray-700";
+      case "PLACED":    return "bg-blue-100 text-blue-700";
+      case "INVOICED":  return "bg-green-100 text-green-700";
+      case "CANCELLED": return "bg-red-100 text-red-600 line-through";
+      case "PENDING":   return "bg-yellow-100 text-yellow-700";
+      default:          return "bg-gray-100 text-gray-700";
+    }
+  };
+
+  // Now using server-side search:
+  const filteredOrders = purchaseOrders;
+
+
+  const handleDeleteOrder = async (orderId) => {
+    if (!window.confirm("Cancel this purchase order? It will be kept in records as CANCELLED.")) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/purchase-orders/${orderId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.message || "Failed to cancel order");
+
+      toast.success("Purchase order cancelled and kept in records.");
+      fetchPurchaseOrders();
+    } catch (err) {
+      console.error("Cancel error:", err);
+      toast.error(err.message || "Failed to cancel order");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditClick = (order) => {
+    setEditingOrder(order);
+    setShowEditModal(true);
+  };
+
+  const handleRequestEdit = async (orderId) => {
+    if (!window.confirm("Request admin permission to re-edit this invoiced Purchase Order?")) return;
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/purchase-orders/${orderId}/request-edit`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestedBy: "Current User" }) // In a real app, use actual user name
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to submit request");
+      toast.success("Edit request submitted to admin");
+      fetchPurchaseOrders();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestCancel = async (orderId) => {
+    if (!window.confirm("Request admin permission to CANCEL this invoiced Purchase Order? This will revert stock and vendor balance if approved.")) return;
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/purchase-orders/${orderId}/request-cancel`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestedBy: "Current User" })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to submit request");
+      toast.success("Cancel request submitted to admin");
+      fetchPurchaseOrders();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    try {
+      if (purchaseOrders.length === 0) {
+        toast.warn("No data to export");
+        return;
+      }
+      const exportData = purchaseOrders.map((order) => ({
+        "Vendor": order.vendor || "-",
+        "PO Number": order.invoiceId || "-",
+        "PI Number": order.purchaseInvoiceId || "-",
+        "Grand Total": order.grandTotal || 0,
+        "Status": order.status || "-",
+        "Date": new Date(order.createdAt).toLocaleDateString("en-IN"),
+      }));
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Purchase Orders");
+      XLSX.writeFile(workbook, `Purchase_Orders_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success("Excel exported successfully!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export Excel");
     }
   };
 
@@ -90,15 +198,45 @@ const BranchPurchaseOrders = () => {
                 </p>
               </div>
             </div>
-            <button
-              onClick={fetchPurchaseOrders}
-              disabled={loading}
-              className="flex items-center gap-2 bg-[#319bab] text-white px-4 py-2 rounded-lg hover:bg-[#257f87] transition disabled:opacity-50"
-            >
-              <FaSync className={loading ? "animate-spin" : ""} />
-              Refresh
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm font-bold text-sm"
+              >
+                Export Excel
+              </button>
+              <button
+                onClick={fetchPurchaseOrders}
+                disabled={loading}
+                className="flex items-center gap-2 bg-[#319bab] text-white px-4 py-2 rounded-lg hover:bg-[#257f87] transition disabled:opacity-50"
+              >
+                <FaSync className={loading ? "animate-spin" : ""} />
+                Refresh
+              </button>
+            </div>
           </div>
+        </div>
+
+        {/* SEARCH BAR */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 flex items-center gap-4">
+          <div className="relative flex-1">
+            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+            <input
+              type="text"
+              placeholder="Search by Invoice ID, Vendor, or Item Name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-[#319bab] transition-all text-sm font-medium text-gray-700"
+            />
+          </div>
+          {searchTerm && (
+            <button 
+              onClick={() => setSearchTerm("")}
+              className="text-gray-400 hover:text-red-500 font-bold transition-colors text-xs px-2"
+            >
+              CLEAR
+            </button>
+          )}
         </div>
 
         {/* PURCHASE ORDERS TABLE */}
@@ -106,9 +244,11 @@ const BranchPurchaseOrders = () => {
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
             <div className="animate-pulse">Loading purchase orders...</div>
           </div>
-        ) : purchaseOrders.length === 0 ? (
+        ) : filteredOrders.length === 0 ? (
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
-            <p className="text-gray-500">No purchase orders found</p>
+            <p className="text-gray-500">
+              {searchTerm ? `No purchase orders matching "${searchTerm}"` : "No purchase orders found"}
+            </p>
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -116,7 +256,7 @@ const BranchPurchaseOrders = () => {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold border-b">
                   <tr>
-                    <th className="px-6 py-4 text-left">Invoice ID</th>
+                    <th className="px-6 py-4 text-left">Order / Bill ID</th>
                     <th className="px-6 py-4 text-left">Vendor</th>
                     <th className="px-6 py-4 text-center">Items</th>
                     <th className="px-6 py-4 text-right">Grand Total</th>
@@ -126,14 +266,14 @@ const BranchPurchaseOrders = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {purchaseOrders.map((order) => (
+                  {filteredOrders.map((order) => (
                     <React.Fragment key={order._id}>
                       <tr className="hover:bg-gray-50 transition">
                         <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-start gap-2">
                             <button
                               onClick={() => toggleExpanded(order._id)}
-                              className="text-[#319bab] hover:bg-gray-200 p-1 rounded transition"
+                              className="text-[#319bab] hover:bg-gray-200 p-1 rounded transition mt-0.5"
                             >
                               <FaChevronDown
                                 className={`text-xs transition-transform ${expandedOrders[order._id]
@@ -142,9 +282,16 @@ const BranchPurchaseOrders = () => {
                                   }`}
                               />
                             </button>
-                            <span className="font-bold text-[#319bab]">
-                              {order.invoiceId}
-                            </span>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-[#319bab] text-xs">
+                                PO: {order.invoiceId}
+                              </span>
+                              {order.purchaseInvoiceId && (
+                                <span className="font-black text-green-700 text-[10px] mt-1 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">
+                                  PI: {order.purchaseInvoiceId}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -164,13 +311,37 @@ const BranchPurchaseOrders = () => {
                           ₹{(order.grandTotal || 0).toLocaleString()}
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(
-                              order.status
-                            )}`}
-                          >
-                            {order.status}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(
+                                order.status
+                              )}`}
+                            >
+                              {order.status}
+                            </span>
+                            
+                            {/* REQUEST STATUS LABELS */}
+                            {order.editRequestStatus === "PENDING" && (
+                              <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                Edit Pending
+                              </span>
+                            )}
+                            {order.editRequestStatus === "REJECTED" && (
+                              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                Edit Rejected
+                              </span>
+                            )}
+                            {order.cancelRequestStatus === "PENDING" && (
+                              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                Cancel Pending
+                              </span>
+                            )}
+                            {order.cancelRequestStatus === "REJECTED" && (
+                              <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                Cancel Rejected
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-center text-gray-600 text-xs">
                           {new Date(order.createdAt).toLocaleString("en-IN", {
@@ -183,33 +354,79 @@ const BranchPurchaseOrders = () => {
                           })}
                         </td>
                         <td className="px-6 py-4 text-center">
-                          {order.status !== 'INVOICED' ? (
-                            <button
-                              className="bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-3 rounded disabled:bg-gray-300 disabled:cursor-not-allowed"
-                              disabled={loading}
-                              onClick={async () => {
-                                try {
-                                  setLoading(true);
-                                  const res = await fetch(`${API_BASE}/purchase-orders/${order._id}/generate-invoice`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                  });
-                                  const data = await res.json();
-                                  if (!res.ok) throw new Error(data.message || 'Failed to generate invoice');
-                                  toast.success('Invoice generated and inventory/vendor updated!');
-                                  fetchPurchaseOrders();
-                                } catch (err) {
-                                  toast.error(err.message || 'Failed to generate invoice');
-                                } finally {
-                                  setLoading(false);
-                                }
-                              }}
-                            >
-                              Generate Invoice
-                            </button>
-                          ) : (
-                            <span className="text-green-600 font-bold">Invoiced</span>
-                          )}
+                          <div className="flex items-center justify-center gap-2">
+                            {order.status !== 'INVOICED' ? (
+                              <>
+                                <button
+                                  onClick={() => handleEditClick(order)}
+                                  className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-lg transition shadow-md shadow-orange-100"
+                                  title="Edit Order"
+                                >
+                                  <FaEdit size={14} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteOrder(order._id)}
+                                  className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition shadow-md shadow-red-100"
+                                  title="Delete Order"
+                                >
+                                  <FaTrash size={14} />
+                                </button>
+                                <button
+                                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 px-4 rounded-lg text-xs shadow-md shadow-green-100 transition disabled:bg-gray-300 disabled:cursor-not-allowed uppercase"
+                                  disabled={loading}
+                                  onClick={async () => {
+                                    try {
+                                      setLoading(true);
+                                      const res = await fetch(`${API_BASE}/purchase-orders/${order._id}/generate-invoice`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                      });
+                                      const data = await res.json();
+                                      if (!res.ok) throw new Error(data.message || 'Failed to generate invoice');
+                                      toast.success(`Purchase Invoice ${data.piNumber} generated successfully in the Invoice Table!`);
+                                      fetchPurchaseOrders();
+                                    } catch (err) {
+                                      toast.error(err.message || 'Failed to generate invoice');
+                                    } finally {
+                                      setLoading(false);
+                                    }
+                                  }}
+                                >
+                                  Invoiced
+                                </button>
+                              </>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                {/* IF APPROVED, ALLOW EDIT */}
+                                {order.editRequestStatus === "APPROVED" ? (
+                                  <button
+                                    onClick={() => handleEditClick(order)}
+                                    className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-lg transition shadow-md shadow-orange-100 flex items-center gap-1 text-xs font-bold"
+                                    title="Edit Approved - Click to modify"
+                                  >
+                                    <FaEdit size={12} /> RE-EDIT
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => handleRequestEdit(order._id)}
+                                      disabled={order.editRequestStatus === "PENDING" || order.cancelRequestStatus === "PENDING"}
+                                      className="bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg text-[10px] font-bold transition shadow-sm disabled:opacity-50"
+                                    >
+                                      REQUEST EDIT
+                                    </button>
+                                    <button
+                                      onClick={() => handleRequestCancel(order._id)}
+                                      disabled={order.cancelRequestStatus === "PENDING" || order.editRequestStatus === "PENDING"}
+                                      className="bg-red-600 text-white hover:bg-red-700 px-3 py-1.5 rounded-lg text-[10px] font-bold transition shadow-sm disabled:opacity-50"
+                                    >
+                                      REQUEST CANCEL
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
 
@@ -315,6 +532,72 @@ const BranchPurchaseOrders = () => {
                                 </div>
                               </div>
                             </div>
+
+                            {/* EDIT HISTORY */}
+                            {order.editHistory && order.editHistory.length > 0 && (
+                              <div className="mt-4 space-y-3">
+                                <h4 className="font-bold text-gray-700 text-sm flex items-center gap-2">
+                                  🕓 Edit History
+                                  <span className="bg-gray-100 text-gray-500 text-[10px] px-2 py-0.5 rounded-full font-normal">
+                                    {order.editHistory.length} version{order.editHistory.length > 1 ? "s" : ""}
+                                  </span>
+                                </h4>
+
+                                {order.editHistory.map((snap, idx) => {
+                                  const typeConfig = {
+                                    CREATED:         { icon: "📋", label: "Original",       color: "border-blue-200 bg-blue-50" },
+                                    PRE_INVOICE_EDIT:{ icon: "✏️", label: "Edited (Pre-Invoice)", color: "border-yellow-200 bg-yellow-50" },
+                                    INVOICED:        { icon: "✅", label: "Invoiced",        color: "border-green-200 bg-green-50" },
+                                    RE_EDIT_STARTED: { icon: "🔄", label: "Re-Edit Started", color: "border-orange-200 bg-orange-50" },
+                                    RE_INVOICED:     { icon: "🔁", label: "Re-Invoiced",     color: "border-purple-200 bg-purple-50" },
+                                  };
+                                  const cfg = typeConfig[snap.editType] || { icon: "📌", label: snap.editType, color: "border-gray-200 bg-gray-50" };
+
+                                  return (
+                                    <div key={idx} className={`rounded-xl border p-3 ${cfg.color}`}>
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs font-bold text-gray-700">
+                                          {cfg.icon} {cfg.label}
+                                        </span>
+                                        <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                                          <span>{new Date(snap.editedAt).toLocaleString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</span>
+                                          <span className="font-bold text-gray-700">₹{(snap.grandTotal || 0).toLocaleString()}</span>
+                                        </div>
+                                      </div>
+
+                                      {/* Items Table */}
+                                      {snap.items && snap.items.length > 0 && (
+                                        <table className="w-full text-[11px]">
+                                          <thead className="text-gray-500 border-b">
+                                            <tr>
+                                              <th className="text-left pb-1 font-semibold">Product</th>
+                                              <th className="text-center pb-1 font-semibold">Qty</th>
+                                              <th className="text-right pb-1 font-semibold">Price</th>
+                                              <th className="text-right pb-1 font-semibold">Total</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {snap.items.map((item, iIdx) => (
+                                              <tr key={iIdx} className="border-b border-dashed last:border-0">
+                                                <td className="py-1 text-gray-800">{item.name}</td>
+                                                <td className="py-1 text-center font-bold">{item.qty}</td>
+                                                <td className="py-1 text-right text-gray-600">₹{item.purchasePrice}</td>
+                                                <td className="py-1 text-right font-bold">₹{(item.total || 0).toLocaleString()}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      )}
+
+                                      {/* Note */}
+                                      {snap.note && (
+                                        <p className="text-[10px] text-gray-500 mt-2 italic border-t pt-1">{snap.note}</p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )}
@@ -326,6 +609,21 @@ const BranchPurchaseOrders = () => {
           </div>
         )}
       </div>
+
+      {/* EDIT MODAL */}
+      {showEditModal && editingOrder && (
+        <EditPurchaseOrderModal
+          order={editingOrder}
+          branchId={currentBranch?._id}
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingOrder(null);
+          }}
+          onSave={() => {
+            fetchPurchaseOrders();
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -26,7 +26,8 @@ const rbac = (allowedRoles = []) => {
     } catch (error) {
       res.status(500).json({
         success: false,
-        message: "RBAC check failed",
+        message: `RBAC check failed: ${error.message}`,
+        error: error.message
       });
     }
   };
