@@ -263,6 +263,7 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
                     <th className="px-4 py-3 text-center">HSN</th>
                     <th className="px-4 py-3 text-center w-24">Qty</th>
                     <th className="px-4 py-3 text-right w-32">Purchase Price</th>
+                    <th className="px-4 py-3 text-right w-24">Discount %</th>
                     <th className="px-4 py-3 text-center">Tax</th>
                     <th className="px-4 py-3 text-right">Total</th>
                     <th className="px-4 py-3 text-center">Action</th>
@@ -293,6 +294,19 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
                             step="0.01"
                           />
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <input
+                          type="number"
+                          value={item.discountPercent || 0}
+                          onChange={(e) => {
+                            const updated = [...items];
+                            updated[idx].discountPercent = e.target.value === "" ? 0 : parseFloat(e.target.value);
+                            updated[idx].total = calculateItemTotal(updated[idx]);
+                            setItems(updated);
+                          }}
+                          className="w-full border border-gray-200 rounded px-2 py-1 text-right font-bold text-red-500"
+                        />
                       </td>
                       <td className="px-4 py-3 text-center text-xs text-gray-600 font-semibold">
                         {item.gst}%
@@ -374,6 +388,16 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
                       value={newItem.purchasePrice}
                       onChange={(e) => setNewItem({ ...newItem, purchasePrice: e.target.value })}
                       className="w-full border border-gray-200 rounded-lg px-4 py-2 text-sm outline-none focus:border-green-500 font-bold text-[#319bab]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Discount %</label>
+                    <input
+                      type="number"
+                      value={newItem.discountPercent}
+                      onChange={(e) => setNewItem({ ...newItem, discountPercent: e.target.value })}
+                      className="w-full border border-gray-200 rounded-lg px-4 py-2 text-sm outline-none focus:border-green-500 font-bold text-red-500"
+                      placeholder="0"
                     />
                   </div>
                    <div>

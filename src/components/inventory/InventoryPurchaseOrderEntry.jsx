@@ -815,6 +815,7 @@ const InventoryPurchaseOrderEntry = ({
                     <th className="px-4 py-3 text-center">Package</th>
                     <th className="px-4 py-3 text-center">Qty Ordered</th>
                     <th className="px-4 py-3 text-right">Rate</th>
+                    <th className="px-4 py-3 text-right text-red-500">Discount</th>
                     <th className="px-4 py-3 text-right">Tax</th>
                     <th className="px-4 py-3 text-right">Total</th>
                     <th className="px-4 py-3 text-center">Action</th>
@@ -834,6 +835,9 @@ const InventoryPurchaseOrderEntry = ({
                       </td>
                       <td className="px-4 py-3 text-center">{item.qty}</td>
                       <td className="px-4 py-3 text-right">₹{item.purchasePrice}</td>
+                      <td className="px-4 py-3 text-right text-red-600 font-bold">
+                        {item.discountPercent || 0}%
+                      </td>
                       <td className="px-4 py-3 text-right">
                         {item.igst
                           ? `IGST ${item.gst}%`

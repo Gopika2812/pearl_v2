@@ -343,7 +343,7 @@ const BranchCustomers = () => {
       </div>
 
 
-      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 space-y-6">
+      <div className="w-full px-4 md:px-6 py-6 space-y-6">
         {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
           <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-blue-600">
