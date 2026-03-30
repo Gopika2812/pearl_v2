@@ -23,6 +23,7 @@ import BranchCustomers from "./pages/branch/BranchCustomers";
 import BranchDebitNote from "./pages/branch/BranchDebitNote";
 import BranchDispatch from "./pages/branch/BranchDispatch";
 import BranchHome from "./pages/branch/BranchHome";
+import BranchDayBook from "./pages/branch/BranchDayBook";
 import BranchInsights from "./pages/branch/BranchInsights";
 import BranchInvoicedOrders from "./pages/branch/BranchInvoicedOrders";
 import BranchJournalEntries from "./pages/branch/BranchJournalEntries";
@@ -132,14 +133,16 @@ function AppContent() {
       const allowedPages = user.allowedPages || [];
 
       // If page has a defined permission and user doesn't have it, redirect
-      if (requiredPermission && !allowedPages.includes(requiredPermission)) {
-        if (location.pathname !== "/branch-home") {
-          toast.error("You don't have permission to access that page");
-          navigate("/branch-home");
+          if (requiredPermission && !allowedPages.includes(requiredPermission)) {
+            if (location.pathname !== "/branch-home") {
+              toast.error("You don't have permission to access that page");
+              navigate("/branch-home");
+            }
+          }
         }
-      }
-    }
-  }, [location.pathname, isBranchRoute, superAdminViewBranch, navigate, user]);
+      }, [location.pathname, isBranchRoute, superAdminViewBranch, navigate, user]);
+    
+      const dayBookRoute = <Route path="/branch/day-book" element={<ProtectedRoute element={<BranchDayBook />} />} />;
 
   return (
     <>
@@ -232,6 +235,7 @@ function AppContent() {
                   <Route path="/branch/summary" element={<ProtectedRoute element={<BranchSummary />} />} />
                   <Route path="/branch/product-records" element={<ProtectedRoute element={<BranchProductRecords />} />} />
                   <Route path="/branch/locked-prices" element={<ProtectedRoute element={<BranchLockedPrices />} />} />
+                  <Route path="/branch/day-book" element={<ProtectedRoute element={<BranchDayBook />} />} />
                   <Route path="/branch/admin-requests" element={<ProtectedRoute element={<BranchAdminRequests />} role={["ADMIN"]} />} />
 
                   {/* LEGACY ROUTES */}

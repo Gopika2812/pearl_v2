@@ -5,6 +5,8 @@ import GeneralLedger from "../models/GeneralLedger.js";
 import JournalEntry from "../models/JournalEntry.js";
 import Vendor from "../models/Vendor.js";
 import GLService from "../utils/glService.js";
+import SalesOrder from "../models/SalesOrder.js";
+import PurchaseInvoice from "../models/PurchaseInvoice.js";
 
 const router = express.Router();
 
@@ -409,6 +411,77 @@ router.get("/debug/journal-entries", async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Error fetching journal entries"
+    });
+  }
+});
+
+/**
+ * Day Book Aggregation
+ * Shows all Sales (Debit) and Purchase (Credit) transactions in one place
+ */
+router.get("/day-book", async (req, res) => {
+  try {
+    const { branchId, fromDate, toDate } = req.query;
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: "Branch ID is required" });
+    }
+
+    const query = { branchId };
+    if (fromDate || toDate) {
+      query.createdAt = {};
+      if (fromDate) query.createdAt.$gte = new Date(fromDate);
+      if (toDate) {
+         const end = new Date(toDate);
+         end.setHours(23, 59, 59, 999);
+         query.createdAt.$lte = end;
+      }
+    }
+
+    // 1. Fetch Invoiced Sales Orders
+    const sales = await SalesOrder.find({
+      ...query,
+      status: "INVOICED"
+    }).select("invoiceId customer voucherType grandTotal createdAt");
+
+    // 2. Fetch Purchase Invoices
+    const purchases = await PurchaseInvoice.find(query)
+      .select("purchaseInvoiceId vendor voucherType grandTotal createdAt");
+
+    // 3. Combine and Transform
+    const dayBook = [
+      ...sales.map(s => ({
+        _id: s._id,
+        date: s.createdAt,
+        name: s.customer?.name || "Cash Customer",
+        voucherType: s.voucherType || "SI",
+        invoiceId: s.invoiceId,
+        debit: s.grandTotal || 0,
+        credit: 0,
+        type: "SALE"
+      })),
+      ...purchases.map(p => ({
+        _id: p._id,
+        date: p.createdAt,
+        name: p.vendor || "N/A",
+        voucherType: p.voucherType || "PI",
+        invoiceId: p.purchaseInvoiceId,
+        debit: 0,
+        credit: p.grandTotal || 0,
+        type: "PURCHASE"
+      }))
+    ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    res.json({
+      success: true,
+      data: dayBook,
+      count: dayBook.length
+    });
+  } catch (error) {
+    console.error("Day Book Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch Day Book data",
+      error: error.message 
     });
   }
 });

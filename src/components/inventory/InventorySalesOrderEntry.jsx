@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FaPlus, FaTrash } from "react-icons/fa";
 import { ToastContainer, toast } from "react-toastify";
 import { API_BASE } from "../../api";
+import { useBranch } from "../../context/BranchContext";
 import InventoryAddCustomerModal from "./InventoryAddCustomerModal";
 import InventoryAddDeliveryManModal from "./InventoryAddDeliveryManModal";
 import InventoryAddProductGroupModal from "./InventoryAddProductGroupModal";
@@ -9,7 +10,6 @@ import InventoryAddProductModal from "./InventoryAddProductModal";
 import InventoryAddSalesManModal from "./InventoryAddSalesManModal";
 import InventoryAddVoucherTypeModal from "./InventoryAddVoucherTypeModal";
 import InventoryAddWarehouseModal from "./InventoryAddWarehouseModal";
-import { useBranch } from "../../context/BranchContext";
 
 const inputClass =
   "w-full border border-gray-200 rounded-md px-3 py-1.5 focus:ring-1 focus:ring-[#319bab] outline-none text-xs";
@@ -129,7 +129,7 @@ export default function InventorySalesOrderEntry({
   const isAdmin = useMemo(() => {
     return user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   }, [user]);
-  
+
   const isCreditLimitExceeded = false;
 
   // REFS FOR CLICK OUTSIDE
@@ -156,6 +156,13 @@ export default function InventorySalesOrderEntry({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // AUTO-SET LOGGED IN USER AS BILLING PERSON
+  useEffect(() => {
+    if (user && !billingPerson) {
+      setBillingPerson(user.fullName || user.username || "");
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!voucherType) {
@@ -590,7 +597,7 @@ export default function InventorySalesOrderEntry({
     if (selectedItem) {
       fetchRecentOrders(id, selectedItem);
       fetchCustomerLockedPrice(id, selectedItem);
-      
+
       // Recalculate price based on new customer's margin
       const product = productsWithStock.find(p => p._id === selectedItem);
       if (product) {
@@ -1090,7 +1097,7 @@ export default function InventorySalesOrderEntry({
           <div>
             <div className="flex justify-between items-center mb-1">
               {canUseQuickLinks && (
-                <button 
+                <button
                   onClick={() => setShowVoucherModal(true)}
                   className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
                   title="Create New Voucher Type"
@@ -1115,7 +1122,7 @@ export default function InventorySalesOrderEntry({
           <div>
             <div className="flex justify-between items-center mb-1">
               {canUseQuickLinks && (
-                <button 
+                <button
                   onClick={() => setShowWarehouseModal(true)}
                   className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
                   title="Create New Warehouse"
@@ -1156,7 +1163,7 @@ export default function InventorySalesOrderEntry({
             <div className="lg:col-span-2 relative" ref={customerDropdownRef}>
               <div className="flex justify-between items-center mb-1">
                 {canUseQuickLinks && (
-                  <button 
+                  <button
                     onClick={() => setShowCustomerModal(true)}
                     className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
                     title="Create New Customer"
@@ -1216,12 +1223,11 @@ export default function InventorySalesOrderEntry({
             <div>
               <label className={labelClass}>Closing Balance</label>
               <input
-                className={`${inputClass} font-bold ${
-                  selectedCustomer &&
+                className={`${inputClass} font-bold ${selectedCustomer &&
                   ((selectedCustomer.debit || 0) - (selectedCustomer.credit || 0)) < 0
-                    ? "text-red-500"
-                    : "text-blue-600"
-                }`}
+                  ? "text-red-500"
+                  : "text-blue-600"
+                  }`}
                 value={
                   selectedCustomer
                     ? `₹${((selectedCustomer.debit || 0) - (selectedCustomer.credit || 0)).toFixed(2)}`
@@ -1262,7 +1268,7 @@ export default function InventorySalesOrderEntry({
             <div>
               <div className="flex justify-between items-center mb-1">
                 {canUseQuickLinks && (
-                  <button 
+                  <button
                     onClick={() => setShowSalesManModal(true)}
                     className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
                     title="Register New Sales Man"
@@ -1279,7 +1285,7 @@ export default function InventorySalesOrderEntry({
             <div>
               <div className="flex justify-between items-center mb-1">
                 {canUseQuickLinks && (
-                  <button 
+                  <button
                     onClick={() => setShowDeliveryManModal(true)}
                     className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
                     title="Register New Delivery Man"
@@ -1295,12 +1301,12 @@ export default function InventorySalesOrderEntry({
             </div>
             <div>
               <label className={labelClass}>Billing Person</label>
-              <select className={selectClass} value={billingPerson} onChange={(e) => setBillingPerson(e.target.value)}>
-                <option value="">-- Select --</option>
-                {salesOwners.length > 0 && (<><option disabled>--- Sales Owners ---</option>{salesOwners.map((so) => (<option key={`so-${so._id}`} value={so._id}>{so.name} (Owner)</option>))}</>)}
-                {salesMen.length > 0 && (<><option disabled>--- Sales Men ---</option>{salesMen.map((sm) => (<option key={`sm-${sm._id}`} value={sm._id}>{sm.name} (Sales Man)</option>))}</>)}
-                {deliveryMen.length > 0 && (<><option disabled>--- Delivery Men ---</option>{deliveryMen.map((dm) => (<option key={`dm-${dm._id}`} value={dm._id}>{dm.name} (Delivery Man)</option>))}</>)}
-              </select>
+              <input
+                className={`${inputClass} bg-gray-50 border-gray-100 font-semibold cursor-not-allowed`}
+                value={billingPerson}
+                readOnly
+                placeholder="Logging in person..."
+              />
             </div>
           </div>
         </div>
@@ -1316,69 +1322,14 @@ export default function InventorySalesOrderEntry({
           </h3>
 
           <>
-              {/* PRODUCT GROUP */}
-          <div className="relative" ref={productGroupDropdownRef}>
-            <div className="flex justify-between items-center mb-1">
-              {canUseQuickLinks && (
-                <button 
-                  onClick={() => setShowProductGroupModal(true)}
-                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-                  title="Create New Product Group"
-                >
-                  <FaPlus size={12} />
-                </button>
-              )}
-            </div>
-            <input
-              type="text"
-              placeholder="Type to search group..."
-              value={productGroupSearch}
-              onChange={(e) => {
-                setProductGroupSearch(e.target.value);
-                setShowProductGroupDropdown(true);
-              }}
-              onFocus={() => setShowProductGroupDropdown(true)}
-              className={inputClass}
-            />
-            {showProductGroupDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto w-full md:w-80">
-                {productGroups
-                  .filter((g) =>
-                    g.name.toLowerCase().includes(productGroupSearch.toLowerCase())
-                  )
-                  .map((g) => (
-                    <div
-                      key={g._id}
-                      onClick={() => {
-                        setProductGroup(g._id);
-                        setProductGroupSearch(g.name);
-                        setShowProductGroupDropdown(false);
-                      }}
-                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
-                    >
-                      {g.name}
-                    </div>
-                  ))}
-                {productGroups.filter((g) =>
-                  g.name.toLowerCase().includes(productGroupSearch.toLowerCase())
-                ).length === 0 && (
-                  <div className="px-3 py-2 text-gray-500 text-sm">
-                    No group found
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1">
-            {/* ITEM NAME */}
-            <div className="relative" ref={itemDropdownRef}>
+            {/* PRODUCT GROUP */}
+            <div className="relative" ref={productGroupDropdownRef}>
               <div className="flex justify-between items-center mb-1">
                 {canUseQuickLinks && (
                   <button
-                    onClick={() => setShowProductModal(true)}
+                    onClick={() => setShowProductGroupModal(true)}
                     className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-                    title="Create New Item"
+                    title="Create New Product Group"
                   >
                     <FaPlus size={12} />
                   </button>
@@ -1386,135 +1337,184 @@ export default function InventorySalesOrderEntry({
               </div>
               <input
                 type="text"
-                placeholder="Type item name..."
-                value={itemSearch}
+                placeholder="Type to search group..."
+                value={productGroupSearch}
                 onChange={(e) => {
-                  setItemSearch(e.target.value);
-                  setShowItemDropdown(true);
+                  setProductGroupSearch(e.target.value);
+                  setShowProductGroupDropdown(true);
                 }}
-                onFocus={() => setShowItemDropdown(true)}
-                disabled={!warehouse}
-                className={`${inputClass} ${(!warehouse) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                onFocus={() => setShowProductGroupDropdown(true)}
+                className={inputClass}
               />
-
-              {showItemDropdown && warehouse && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
-                  {productsWithStock
-                    .filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase()))
-                    .map((p) => {
-                      const availableQty = availableQtyCache[p._id] ?? p.availableQty ?? 0;
-                      return (
-                        <div
-                          key={p._id}
-                          onClick={() => handleItemSelection(p._id)}
-                          className={`px-3 py-2 border-b text-sm hover:bg-blue-50 cursor-pointer`}
-                        >
-                          <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
-                          <div className={`text-xs ${availableQty <= 0 ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
-                            Available: {availableQty} {availableQty <= 0 && '(Negative/Zero Stock Allowed)'}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  {productsWithStock.filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
-                    <div className="px-3 py-2 text-gray-500 text-sm">No items found</div>
-                  )}
+              {showProductGroupDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto w-full md:w-80">
+                  {productGroups
+                    .filter((g) =>
+                      g.name.toLowerCase().includes(productGroupSearch.toLowerCase())
+                    )
+                    .map((g) => (
+                      <div
+                        key={g._id}
+                        onClick={() => {
+                          setProductGroup(g._id);
+                          setProductGroupSearch(g.name);
+                          setShowProductGroupDropdown(false);
+                        }}
+                        className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
+                      >
+                        {g.name}
+                      </div>
+                    ))}
+                  {productGroups.filter((g) =>
+                    g.name.toLowerCase().includes(productGroupSearch.toLowerCase())
+                  ).length === 0 && (
+                      <div className="px-3 py-2 text-gray-500 text-sm">
+                        No group found
+                      </div>
+                    )}
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>HSN</label>
-                <input className={inputClass} value={hsn} readOnly />
-              </div>
-              <div>
-                <label className={labelClass}>
-                  Selling ₹ {isAdmin && (
-                    <span className="ml-2 inline-flex items-center gap-1 cursor-pointer" onClick={() => setIsLocked(!isLocked)}>
-                      <input 
-                        type="checkbox" 
-                        checked={isLocked} 
-                        onChange={(e) => setIsLocked(e.target.checked)}
-                        className="w-3 h-3 text-[#319bab] border-gray-300 rounded focus:ring-[#319bab]"
-                      />
-                      <span className="text-[9px] text-[#319bab]">LOCK</span>
-                    </span>
+            <div className="grid grid-cols-1">
+              {/* ITEM NAME */}
+              <div className="relative" ref={itemDropdownRef}>
+                <div className="flex justify-between items-center mb-1">
+                  {canUseQuickLinks && (
+                    <button
+                      onClick={() => setShowProductModal(true)}
+                      className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                      title="Create New Item"
+                    >
+                      <FaPlus size={12} />
+                    </button>
                   )}
-                </label>
-                <input 
-                  type="number" 
-                  className={inputClass} 
-                  value={sellingPrice === 0 ? "" : sellingPrice} 
-                  onChange={(e) => setSellingPrice(e.target.value === "" ? "" : Number(e.target.value))} 
-                  placeholder="Price"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>Quantity</label>
+                </div>
                 <input
-                  type="number"
-                  className={inputClass}
-                  value={qty}
-                  min={0}
-                  max={availableQtyCache[selectedItem] ?? productsWithStock.find(p => p._id === selectedItem)?.availableQty ?? 0}
-                  onChange={(e) => setQty(e.target.value === "" ? "" : +e.target.value)}
-                  placeholder="0"
+                  type="text"
+                  placeholder="Type item name..."
+                  value={itemSearch}
+                  onChange={(e) => {
+                    setItemSearch(e.target.value);
+                    setShowItemDropdown(true);
+                  }}
+                  onFocus={() => setShowItemDropdown(true)}
+                  disabled={!warehouse}
+                  className={`${inputClass} ${(!warehouse) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                 />
-              </div>
-              <div>
-                <label className={labelClass}>GST %</label>
-                <input type="number" className={inputClass} value={gst} onChange={(e) => setGst(+e.target.value)} />
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>Discount Type</label>
-                <select className={selectClass} value={discountType} onChange={(e) => setDiscountType(e.target.value)}>
-                  <option value="PERCENT">%</option>
-                  <option value="AMOUNT">₹</option>
-                </select>
+                {showItemDropdown && warehouse && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                    {productsWithStock
+                      .filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase()))
+                      .map((p) => {
+                        const availableQty = availableQtyCache[p._id] ?? p.availableQty ?? 0;
+                        return (
+                          <div
+                            key={p._id}
+                            onClick={() => handleItemSelection(p._id)}
+                            className={`px-3 py-2 border-b text-sm hover:bg-blue-50 cursor-pointer`}
+                          >
+                            <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
+                            <div className={`text-xs ${availableQty <= 0 ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
+                              Available: {availableQty} {availableQty <= 0 && '(Negative/Zero Stock Allowed)'}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    {productsWithStock.filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
+                      <div className="px-3 py-2 text-gray-500 text-sm">No items found</div>
+                    )}
+                  </div>
+                )}
               </div>
-              {discountType === "PERCENT" ? (
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>HSN</label>
+                  <input className={inputClass} value={hsn} readOnly />
+                </div>
+                <div>
+                  <label className={labelClass}>
+                    Selling ₹ {isAdmin && (
+                      <span className="ml-2 inline-flex items-center gap-1 cursor-pointer" onClick={() => setIsLocked(!isLocked)}>
+                        <input
+                          type="checkbox"
+                          checked={isLocked}
+                          onChange={(e) => setIsLocked(e.target.checked)}
+                          className="w-3 h-3 text-[#319bab] border-gray-300 rounded focus:ring-[#319bab]"
+                        />
+                        <span className="text-[9px] text-[#319bab]">LOCK</span>
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={sellingPrice === 0 ? "" : sellingPrice}
+                    onChange={(e) => setSellingPrice(e.target.value === "" ? "" : Number(e.target.value))}
+                    placeholder="Price"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Quantity</label>
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={qty}
+                    min={0}
+                    max={availableQtyCache[selectedItem] ?? productsWithStock.find(p => p._id === selectedItem)?.availableQty ?? 0}
+                    onChange={(e) => setQty(e.target.value === "" ? "" : +e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>GST %</label>
+                  <input type="number" className={inputClass} value={gst} onChange={(e) => setGst(+e.target.value)} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1">
                 <div>
                   <label className={labelClass}>Discount %</label>
-                  <input type="number" className={inputClass} value={discountPercent} min="0" max="100" onChange={(e) => setDiscountPercent(e.target.value === "" ? "" : +e.target.value)} placeholder="0" />
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={discountPercent}
+                    min="0"
+                    max="100"
+                    onChange={(e) => setDiscountPercent(e.target.value === "" ? "" : +e.target.value)}
+                    placeholder="Enter percentage..."
+                  />
                 </div>
-              ) : (
-                <div>
-                  <label className={labelClass}>Discount ₹</label>
-                  <input type="number" className={inputClass} value={discountAmountInput} min="0" onChange={(e) => setDiscountAmountInput(e.target.value === "" ? "" : +e.target.value)} placeholder="0" />
-                </div>
-              )}
-            </div>
+              </div>
 
-            <div className="flex items-center gap-4 py-1">
-              <label className="flex items-center gap-2 text-xs font-bold text-gray-600">
-                <input type="checkbox" checked={igst} onChange={(e) => setIgst(e.target.checked)} /> IGST
-              </label>
-              {!igst && (
-                <>
-                  <span className="text-xs font-bold text-gray-600">CGST {gst / 2}%</span>
-                  <span className="text-xs font-bold text-gray-600">SGST {gst / 2}%</span>
-                </>
-              )}
-            </div>
+              <div className="flex items-center gap-4 py-1">
+                <label className="flex items-center gap-2 text-xs font-bold text-gray-600">
+                  <input type="checkbox" checked={igst} onChange={(e) => setIgst(e.target.checked)} /> IGST
+                </label>
+                {!igst && (
+                  <>
+                    <span className="text-xs font-bold text-gray-600">CGST {gst / 2}%</span>
+                    <span className="text-xs font-bold text-gray-600">SGST {gst / 2}%</span>
+                  </>
+                )}
+              </div>
 
-            <div>
-              <label className={labelClass}>Total ₹</label>
-              <input className={`${inputClass} font-bold text-[#319bab] text-lg`} value={displayPrice.toFixed(2)} readOnly />
-            </div>
+              <div>
+                <label className={labelClass}>Total ₹</label>
+                <input className={`${inputClass} font-bold text-[#319bab] text-lg`} value={displayPrice.toFixed(2)} readOnly />
+              </div>
 
-            <button onClick={addItem} className="w-full bg-[#319bab] text-white h-[42px] rounded-xl font-bold flex items-center justify-center hover:bg-[#257f87] transition shadow-lg cursor-pointer active:scale-95">
-              <FaPlus className="mr-2" /> ADD ITEM
-            </button>
-          </div>
-        </>
-    </div>
+              <button onClick={addItem} className="w-full bg-[#319bab] text-white h-[42px] rounded-xl font-bold flex items-center justify-center hover:bg-[#257f87] transition shadow-lg cursor-pointer active:scale-95">
+                <FaPlus className="mr-2" /> ADD ITEM
+              </button>
+            </div>
+          </>
+        </div>
 
         {/* RIGHT: ITEMS TABLE */}
         <div className="lg:col-span-8 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden h-fit flex flex-col">
@@ -1544,7 +1544,10 @@ export default function InventorySalesOrderEntry({
                       </td>
                       <td className="px-4 py-3 text-center">{item.qty}</td>
                       <td className="px-4 py-3 text-right">₹{item.sellingPrice}</td>
-                      <td className="px-4 py-3 text-right text-red-500">₹{item.discountAmount.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="font-semibold text-gray-800">{item.discountPercent}%</div>
+                        <div className="text-[10px] text-red-500">-₹{item.discountAmount.toFixed(2)}</div>
+                      </td>
                       <td className="px-4 py-3 text-right">
                         {item.igst ? `IGST ${item.gst}%` : `CGST ${item.cgst}% + SGST ${item.sgst}%`}
                       </td>
@@ -1694,72 +1697,72 @@ export default function InventorySalesOrderEntry({
 
         <div className="lg:col-span-6 space-y-4">
           {/* ORDER SUMMARY */}
-            <div className="bg-white p-6 rounded-2xl shadow-lg border border-primary/5 h-fit">
-              <h3 className="text-[#319bab] font-black uppercase text-sm tracking-widest mb-4 border-b pb-2 border-[#319bab]/30">
-                Order Summary
-              </h3>
-              <div className="space-y-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Subtotal</span>
-                  <span className="font-bold">₹{subtotal.toFixed(2)}</span>
+          <div className="bg-white p-6 rounded-2xl shadow-lg border border-primary/5 h-fit">
+            <h3 className="text-[#319bab] font-black uppercase text-sm tracking-widest mb-4 border-b pb-2 border-[#319bab]/30">
+              Order Summary
+            </h3>
+            <div className="space-y-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Subtotal</span>
+                <span className="font-bold">₹{subtotal.toFixed(2)}</span>
+              </div>
+              {/* <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Discount (Items)</span>
+                <span className="font-bold text-red-500">-₹{totalDiscount.toFixed(2)}</span>
+              </div> */}
+              <div className="flex justify-between items-center text-sm border-b pb-2">
+                <span className="text-gray-700 font-semibold tracking-wide">Common Discount</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    className="w-24 border border-gray-300 rounded px-2 py-1 text-right focus:ring-1 focus:ring-primary outline-none font-bold text-red-600 bg-red-50/30"
+                    value={commonDiscount}
+                    onChange={(e) => setCommonDiscount(e.target.value === "" ? "" : +e.target.value)}
+                    placeholder="0.00"
+                  />
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Discount (Items)</span>
-                  <span className="font-bold text-red-500">-₹{totalDiscount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm pt-2">
+                <span className="text-gray-500">Tax Amount</span>
+                <span className="font-bold">₹{totalTax.toFixed(2)}</span>
+              </div>
+              {extraExpenses.length > 0 && (
+                <div className="flex justify-between text-sm bg-orange-50 px-3 py-2 rounded-lg">
+                  <span className="text-orange-700 font-semibold">Extra Expenses</span>
+                  <span className="font-bold text-orange-600">₹{roundedExtraExpenseAmount.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between items-center text-sm border-b pb-2">
-                  <span className="text-gray-700 font-semibold tracking-wide">Common Discount</span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-gray-400 font-bold">₹</span>
-                    <input 
-                      type="number" 
-                      min="0"
-                      className="w-24 border border-gray-300 rounded px-2 py-1 text-right focus:ring-1 focus:ring-primary outline-none font-bold text-red-600 bg-red-50/30"
-                      value={commonDiscount} 
-                      onChange={(e) => setCommonDiscount(e.target.value === "" ? "" : +e.target.value)} 
-                      placeholder="0.00" 
-                    />
+              )}
+              {sampleItems.length > 0 && (
+                <div className="pt-2 border-t border-yellow-200 mt-2">
+                  <div className="flex justify-between text-xs text-yellow-700 font-semibold">
+                    <span>📦 Sample Items: {sampleItems.reduce((s, i) => s + i.qty, 0)} units (Not in total)</span>
                   </div>
                 </div>
-                <div className="flex justify-between text-sm pt-2">
-                  <span className="text-gray-500">Tax Amount</span>
-                  <span className="font-bold">₹{totalTax.toFixed(2)}</span>
+              )}
+              <div className="pt-4 border-t border-gray-200 mt-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-800 font-black text-sm uppercase">Grand Total</span>
+                  <span className="text-4xl font-black text-[#319bab] italic">₹{roundedGrandTotal.toFixed(2)}</span>
                 </div>
-                {extraExpenses.length > 0 && (
-                  <div className="flex justify-between text-sm bg-orange-50 px-3 py-2 rounded-lg">
-                    <span className="text-orange-700 font-semibold">Extra Expenses</span>
-                    <span className="font-bold text-orange-600">₹{roundedExtraExpenseAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                {sampleItems.length > 0 && (
-                  <div className="pt-2 border-t border-yellow-200 mt-2">
-                    <div className="flex justify-between text-xs text-yellow-700 font-semibold">
-                      <span>📦 Sample Items: {sampleItems.reduce((s, i) => s + i.qty, 0)} units (Not in total)</span>
-                    </div>
-                  </div>
-                )}
-                <div className="pt-4 border-t border-gray-200 mt-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-800 font-black text-sm uppercase">Grand Total</span>
-                    <span className="text-4xl font-black text-[#319bab] italic">₹{roundedGrandTotal.toFixed(2)}</span>
-                  </div>
-                </div>
-                <div className="mt-8">
-                  <button 
-                    onClick={handleFinalAction} 
-                    disabled={isSubmitting}
-                    className={`w-full text-white py-4 rounded-2xl font-black uppercase tracking-widest text-sm transition shadow-2xl hover:shadow-primary/50 cursor-pointer active:scale-95 ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#319bab] hover:bg-[#257f87]'}`}>
-                    {isSubmitting ? 'Processing...' : 'Place Sales Order'}
-                  </button>
-                </div>
+              </div>
+              <div className="mt-8">
+                <button
+                  onClick={handleFinalAction}
+                  disabled={isSubmitting}
+                  className={`w-full text-white py-4 rounded-2xl font-black uppercase tracking-widest text-sm transition shadow-2xl hover:shadow-primary/50 cursor-pointer active:scale-95 ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#319bab] hover:bg-[#257f87]'}`}>
+                  {isSubmitting ? 'Processing...' : 'Place Sales Order'}
+                </button>
               </div>
             </div>
           </div>
         </div>
+      </div>
 
       {/* RIGHT SIDE RECENT ORDERS PANEL */}
-        {showRecentPanel && recentOrders.length > 0 && (
-          <div className="
+      {showRecentPanel && recentOrders.length > 0 && (
+        <div className="
     hidden lg:flex
     fixed top-24 right-4 z-40
     w-96 max-h-[70vh]
@@ -1767,244 +1770,244 @@ export default function InventorySalesOrderEntry({
     shadow-2xl border border-gray-200
     flex-col
   ">
-            {/* HEADER */}
-            <div className="flex items-center justify-between px-4 py-3 border-b">
-              <h4 className="text-[#319bab] font-black text-xs uppercase tracking-widest">
-                Recent Orders
-              </h4>
-              <button
-                onClick={() => setShowRecentPanel(false)}
-                className="text-gray-400 hover:text-red-500 text-lg font-bold"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* SCROLLABLE BODY */}
-            <div className="overflow-y-auto px-4 py-2">
-              <table className="w-full text-sm">
-                <thead className="text-gray-500 text-[10px] uppercase font-bold sticky top-0 bg-white">
-                  <tr>
-                    <th className="text-left py-1">Invoice</th>
-                    <th className="text-center">Selling price</th>
-                    <th className="text-center">Qty</th>
-                    <th className="text-right">Total</th>
-                    <th className="text-right">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentOrders.map((order) => {
-                    const item = order.items.find(
-                      i => String(i.productId) === String(selectedItem)
-                    );
-
-                    return (
-                      <tr key={order._id} className="border-t text-xs">
-                        <td className="py-1 font-semibold">
-                          {order.invoiceId}
-                        </td>
-                        <td className="text-center">
-                          {item?.sellingPrice}
-                        </td>
-                        <td className="text-center">
-                          {item?.qty}
-                        </td>
-                        <td className="text-right text-[#319bab] font-bold">
-                          ₹{item?.total.toFixed(2)}
-                        </td>
-                        <td className="text-right text-gray-700">
-                          {new Date(order.createdAt).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+          {/* HEADER */}
+          <div className="flex items-center justify-between px-4 py-3 border-b">
+            <h4 className="text-[#319bab] font-black text-xs uppercase tracking-widest">
+              Recent Orders
+            </h4>
+            <button
+              onClick={() => setShowRecentPanel(false)}
+              className="text-gray-400 hover:text-red-500 text-lg font-bold"
+            >
+              ×
+            </button>
           </div>
-        )}
 
-        {showExtraExpensesModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Add Extra Expense</h3>
+          {/* SCROLLABLE BODY */}
+          <div className="overflow-y-auto px-4 py-2">
+            <table className="w-full text-sm">
+              <thead className="text-gray-500 text-[10px] uppercase font-bold sticky top-0 bg-white">
+                <tr>
+                  <th className="text-left py-1">Invoice</th>
+                  <th className="text-center">Selling price</th>
+                  <th className="text-center">Qty</th>
+                  <th className="text-right">Total</th>
+                  <th className="text-right">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentOrders.map((order) => {
+                  const item = order.items.find(
+                    i => String(i.productId) === String(selectedItem)
+                  );
 
-              <div className="space-y-4">
-                {/* Expense Name */}
+                  return (
+                    <tr key={order._id} className="border-t text-xs">
+                      <td className="py-1 font-semibold">
+                        {order.invoiceId}
+                      </td>
+                      <td className="text-center">
+                        {item?.sellingPrice}
+                      </td>
+                      <td className="text-center">
+                        {item?.qty}
+                      </td>
+                      <td className="text-right text-[#319bab] font-bold">
+                        ₹{item?.total.toFixed(2)}
+                      </td>
+                      <td className="text-right text-gray-700">
+                        {new Date(order.createdAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {showExtraExpensesModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Add Extra Expense</h3>
+
+            <div className="space-y-4">
+              {/* Expense Name */}
+              <div>
+                <label className={labelClass}>Expense Name</label>
+                <input
+                  type="text"
+                  list="expense-types"
+                  className={inputClass}
+                  value={expenseName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setExpenseName(val);
+                    if (val.toLowerCase() === "transport") {
+                      setExpenseGstPercent(18);
+                    }
+                  }}
+                  placeholder="e.g., Loading Charge, Packing Charge"
+                />
+                <datalist id="expense-types">
+                  <option value="Transport" />
+                  <option value="Loading Charges" />
+                  <option value="Packing Charges" />
+                  <option value="Courier Charges" />
+                </datalist>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Price */}
                 <div>
-                  <label className={labelClass}>Expense Name</label>
+                  <label className={labelClass}>Amount (₹)</label>
                   <input
-                    type="text"
-                    list="expense-types"
+                    type="number"
                     className={inputClass}
-                    value={expenseName}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setExpenseName(val);
-                      if (val.toLowerCase() === "transport") {
-                        setExpenseGstPercent(18);
-                      }
-                    }}
-                    placeholder="e.g., Loading Charge, Packing Charge"
+                    value={expensePrice}
+                    onChange={(e) => setExpensePrice(e.target.value)}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
                   />
-                  <datalist id="expense-types">
-                    <option value="Transport" />
-                    <option value="Loading Charges" />
-                    <option value="Packing Charges" />
-                    <option value="Courier Charges" />
-                  </datalist>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Price */}
-                  <div>
-                    <label className={labelClass}>Amount (₹)</label>
-                    <input
-                      type="number"
-                      className={inputClass}
-                      value={expensePrice}
-                      onChange={(e) => setExpensePrice(e.target.value)}
-                      placeholder="0.00"
-                      min="0"
-                      step="0.01"
-                    />
-                  </div>
-
-                  {/* GST % */}
-                  <div>
-                    <label className={labelClass}>GST (%)</label>
-                    <input
-                      type="number"
-                      className={inputClass}
-                      value={expenseGstPercent}
-                      onChange={(e) => setExpenseGstPercent(e.target.value)}
-                      placeholder="18"
-                      min="0"
-                    />
-                  </div>
+                {/* GST % */}
+                <div>
+                  <label className={labelClass}>GST (%)</label>
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={expenseGstPercent}
+                    onChange={(e) => setExpenseGstPercent(e.target.value)}
+                    placeholder="18"
+                    min="0"
+                  />
                 </div>
+              </div>
 
-                {/* Total Preview */}
-                {expensePrice > 0 && (
-                  <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 flex justify-between items-center text-xs">
-                    <span className="text-orange-700 font-semibold">Total with GST:</span>
-                    <span className="text-orange-800 font-black">
-                      ₹{(parseFloat(expensePrice) + (parseFloat(expensePrice) * parseFloat(expenseGstPercent) / 100)).toFixed(2)}
-                    </span>
-                  </div>
-                )}
-
-                {/* Buttons */}
-                <div className="grid grid-cols-2 gap-3 pt-4">
-                  <button
-                    onClick={() => setShowExtraExpensesModal(false)}
-                    className="w-full border-2 border-gray-300 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-50 transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAddExtraExpense}
-                    disabled={!expenseName.trim() || !expensePrice}
-                    className="w-full bg-orange-500 text-white py-2 rounded-lg font-bold hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Add Expense
-                  </button>
+              {/* Total Preview */}
+              {expensePrice > 0 && (
+                <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 flex justify-between items-center text-xs">
+                  <span className="text-orange-700 font-semibold">Total with GST:</span>
+                  <span className="text-orange-800 font-black">
+                    ₹{(parseFloat(expensePrice) + (parseFloat(expensePrice) * parseFloat(expenseGstPercent) / 100)).toFixed(2)}
+                  </span>
                 </div>
+              )}
+
+              {/* Buttons */}
+              <div className="grid grid-cols-2 gap-3 pt-4">
+                <button
+                  onClick={() => setShowExtraExpensesModal(false)}
+                  className="w-full border-2 border-gray-300 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddExtraExpense}
+                  disabled={!expenseName.trim() || !expensePrice}
+                  className="w-full bg-orange-500 text-white py-2 rounded-lg font-bold hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Add Expense
+                </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        <InventoryAddVoucherTypeModal
-          isOpen={showVoucherModal}
-          onClose={() => setShowVoucherModal(false)}
-          branchId={branchId}
-          onSave={(newType) => {
-            const addedType = newType.voucher || newType; // Backend returns varying structures sometimes
-            setLocalVoucherTypes(prev => [...prev, addedType]);
-            setVoucherType(addedType.name);
-            setShowVoucherModal(false);
-          }}
-        />
+      <InventoryAddVoucherTypeModal
+        isOpen={showVoucherModal}
+        onClose={() => setShowVoucherModal(false)}
+        branchId={branchId}
+        onSave={(newType) => {
+          const addedType = newType.voucher || newType; // Backend returns varying structures sometimes
+          setLocalVoucherTypes(prev => [...prev, addedType]);
+          setVoucherType(addedType.name);
+          setShowVoucherModal(false);
+        }}
+      />
 
-        <InventoryAddWarehouseModal
-          isOpen={showWarehouseModal}
-          onClose={() => setShowWarehouseModal(false)}
-          branchId={branchId}
-          onSave={(newWarehouse) => {
-            setLocalWarehouses(prev => [...prev, newWarehouse]);
-            setWarehouse(newWarehouse.name);
-            setShowWarehouseModal(false);
-          }}
-        />
+      <InventoryAddWarehouseModal
+        isOpen={showWarehouseModal}
+        onClose={() => setShowWarehouseModal(false)}
+        branchId={branchId}
+        onSave={(newWarehouse) => {
+          setLocalWarehouses(prev => [...prev, newWarehouse]);
+          setWarehouse(newWarehouse.name);
+          setShowWarehouseModal(false);
+        }}
+      />
 
-        <InventoryAddCustomerModal
-          isOpen={showCustomerModal}
-          onClose={() => setShowCustomerModal(false)}
-          branchId={branchId}
-          salesOwners={salesOwners}
-          customerCategories={customerCategories}
-          customerGroups={customerGroups}
-          onSave={(newCustomer) => {
-            // Because the frontend expects the customer object to be in `customers` or `fetchedCustomers` for proper display
-            setLocalCustomers(prev => [...prev, newCustomer]);
-            setFetchedCustomers(prev => [...prev, newCustomer]);
-            setCustomerSearch(newCustomer.name);
-            handleCustomerSelect(newCustomer._id, [newCustomer]); 
-            setShowCustomerModal(false);
-          }}
-        />
+      <InventoryAddCustomerModal
+        isOpen={showCustomerModal}
+        onClose={() => setShowCustomerModal(false)}
+        branchId={branchId}
+        salesOwners={salesOwners}
+        customerCategories={customerCategories}
+        customerGroups={customerGroups}
+        onSave={(newCustomer) => {
+          // Because the frontend expects the customer object to be in `customers` or `fetchedCustomers` for proper display
+          setLocalCustomers(prev => [...prev, newCustomer]);
+          setFetchedCustomers(prev => [...prev, newCustomer]);
+          setCustomerSearch(newCustomer.name);
+          handleCustomerSelect(newCustomer._id, [newCustomer]);
+          setShowCustomerModal(false);
+        }}
+      />
 
-        <InventoryAddProductGroupModal
-          isOpen={showProductGroupModal}
-          onClose={() => setShowProductGroupModal(false)}
-          branchId={branchId}
-          onSave={(newGroup) => {
-            setLocalProductGroups(prev => [...prev, newGroup]);
-            setProductGroup(newGroup._id);
-            setProductGroupSearch(newGroup.name);
-            setShowProductGroupModal(false);
-            setShowProductGroupDropdown(false);
-          }}
-        />
+      <InventoryAddProductGroupModal
+        isOpen={showProductGroupModal}
+        onClose={() => setShowProductGroupModal(false)}
+        branchId={branchId}
+        onSave={(newGroup) => {
+          setLocalProductGroups(prev => [...prev, newGroup]);
+          setProductGroup(newGroup._id);
+          setProductGroupSearch(newGroup.name);
+          setShowProductGroupModal(false);
+          setShowProductGroupDropdown(false);
+        }}
+      />
 
-        <InventoryAddSalesManModal
-          isOpen={showSalesManModal}
-          onClose={() => setShowSalesManModal(false)}
-          branchId={branchId}
-          onSave={(newSalesMan) => {
-            setLocalSalesMen(prev => [...prev, newSalesMan.data || newSalesMan]);
-            setSalesMan((newSalesMan.data || newSalesMan)._id);
-            setShowSalesManModal(false);
-          }}
-        />
+      <InventoryAddSalesManModal
+        isOpen={showSalesManModal}
+        onClose={() => setShowSalesManModal(false)}
+        branchId={branchId}
+        onSave={(newSalesMan) => {
+          setLocalSalesMen(prev => [...prev, newSalesMan.data || newSalesMan]);
+          setSalesMan((newSalesMan.data || newSalesMan)._id);
+          setShowSalesManModal(false);
+        }}
+      />
 
-        <InventoryAddDeliveryManModal
-          isOpen={showDeliveryManModal}
-          onClose={() => setShowDeliveryManModal(false)}
-          branchId={branchId}
-          onSave={(newDeliveryMan) => {
-            setLocalDeliveryMen(prev => [...prev, newDeliveryMan.data || newDeliveryMan]);
-            setDeliveryMan((newDeliveryMan.data || newDeliveryMan)._id);
-            setShowDeliveryManModal(false);
-          }}
-        />
+      <InventoryAddDeliveryManModal
+        isOpen={showDeliveryManModal}
+        onClose={() => setShowDeliveryManModal(false)}
+        branchId={branchId}
+        onSave={(newDeliveryMan) => {
+          setLocalDeliveryMen(prev => [...prev, newDeliveryMan.data || newDeliveryMan]);
+          setDeliveryMan((newDeliveryMan.data || newDeliveryMan)._id);
+          setShowDeliveryManModal(false);
+        }}
+      />
 
-        <InventoryAddProductModal
-          isOpen={showProductModal}
-          onClose={() => setShowProductModal(false)}
-          branchId={branchId}
-          productGroups={localProductGroups}
-          warehouses={localWarehouses}
-          onSave={(newProduct) => {
-            setLocalProducts(prev => [...prev, newProduct.data || newProduct]);
-            setFilteredProducts(prev => [...prev, newProduct.data || newProduct]);
-            setSelectedItem((newProduct.data || newProduct)._id);
-            setItemSearch((newProduct.data || newProduct).name);
-            handleProductSelect(newProduct.data || newProduct);
-            setShowProductModal(false);
-          }}
-        />
-      </div>
-    );
+      <InventoryAddProductModal
+        isOpen={showProductModal}
+        onClose={() => setShowProductModal(false)}
+        branchId={branchId}
+        productGroups={localProductGroups}
+        warehouses={localWarehouses}
+        onSave={(newProduct) => {
+          setLocalProducts(prev => [...prev, newProduct.data || newProduct]);
+          setFilteredProducts(prev => [...prev, newProduct.data || newProduct]);
+          setSelectedItem((newProduct.data || newProduct)._id);
+          setItemSearch((newProduct.data || newProduct).name);
+          handleProductSelect(newProduct.data || newProduct);
+          setShowProductModal(false);
+        }}
+      />
+    </div>
+  );
 }

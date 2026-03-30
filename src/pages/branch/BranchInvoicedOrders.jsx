@@ -611,11 +611,13 @@ const BranchInvoicedOrders = () => {
                                             <td className="py-2 px-3 text-right">
                                               ₹{item.sellingPrice?.toFixed(2)}
                                             </td>
-                                            <td className="py-2 px-3 text-right text-red-500">
-                                              ₹
-                                              {(item.discountAmount || 0).toFixed(
-                                                2
-                                              )}
+                                            <td className="py-2 px-3 text-right">
+                                              <div className="font-semibold text-gray-800">
+                                                {item.discountPercent || 0}%
+                                              </div>
+                                              <div className="text-[10px] text-red-500">
+                                                -₹{(item.discountAmount || 0).toFixed(2)}
+                                              </div>
                                             </td>
                                             <td className="py-2 px-3 text-right text-blue-600">
                                               {item.igst

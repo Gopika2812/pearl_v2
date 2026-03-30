@@ -23,6 +23,7 @@ import {
   FaDownload,
   FaPlusCircle,
   FaHistory,
+  FaBookOpen,
 } from "react-icons/fa";
 
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -82,6 +83,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     { name: "Stock Journal", path: "/branch/stock-journal", icon: <FaHistory /> },
     { name: "Insights & Analysis", path: "/branch/insights", icon: <FaChartLine /> },
     { name: "Quick Links", path: "/branch/quick-links", icon: <FaLink /> },
+    { name: "Day Book", path: "/branch/day-book", icon: <FaBookOpen /> },
     { name: "Admin Requests", path: "/branch/admin-requests", icon: <FaShieldAlt /> },
   ];
 
@@ -136,6 +138,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
       "/branch/summary": "summary",
       "/branch/admin-requests": "admin-requests",
       "/branch/locked-prices": "locked-prices",
+      "/branch/day-book": "day-book",
     };
 
     const permissionId = pathPermissionMap[path];
