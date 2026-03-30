@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport } from "react-icons/fa";
+import React, { useEffect, useState } from "react";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaWhatsapp, FaMapMarkerAlt, FaEnvelope, FaUserTie, FaTags } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
@@ -35,6 +35,7 @@ const BranchCustomers = () => {
   const [selectedLedgerCustomer, setSelectedLedgerCustomer] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [expandedRows, setExpandedRows] = useState({});
 
 
   useEffect(() => {
@@ -207,6 +208,10 @@ const BranchCustomers = () => {
       
       return 0;
     });
+  };
+ 
+  const toggleRow = (id) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   const sortedCustomers = getSortedCustomers(customers);
@@ -558,6 +563,7 @@ const BranchCustomers = () => {
             <table className="w-full">
               <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                 <tr>
+                  <th className="w-10"></th>
                   <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("name")}>
                     Customer Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
@@ -566,21 +572,6 @@ const BranchCustomers = () => {
                       GSTIN
                     </th>
                   )}
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                    Email
-                  </th>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                    WhatsApp
-                  </th>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                    Address
-                  </th>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                    State
-                  </th>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                    Country
-                  </th>
                   {isFieldAllowed("margin") && (
                     <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("margin")}>
                       Margin (%) {sortConfig.key === "margin" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
@@ -602,61 +593,117 @@ const BranchCustomers = () => {
                 </tr>
               </thead>
               <tbody>
-                {sortedCustomers.map((customer, index) => (
-                  <tr
-                    key={customer._id}
-                    className={`${
-                      index % 2 === 0 ? "bg-white" : "bg-blue-50"
-                    } border-b border-gray-200 hover:bg-blue-100/50 transition`}
-                  >
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
-                      {customer.name}
-                    </td>
-                    {isFieldAllowed("gstin") && (
-                      <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                        {customer.gstin || "-"}
-                      </td>
-                    )}
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                      {customer.email || "-"}
-                    </td>
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                      {customer.whatsapp || "-"}
-                    </td>
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                      {customer.address || "-"}
-                    </td>
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                      {customer.state || "-"}
-                    </td>
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                      {customer.country || "-"}
-                    </td>
-                    {isFieldAllowed("margin") && (
-                      <td className={`px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-bold ${customer.margin < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                        {customer.margin || 0}%
-                      </td>
-                    )}
-                    {isFieldAllowed("debit") && (
-                      <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600">
-                        ₹{(customer.debit || 0).toFixed(2)}
-                      </td>
-                    )}
-                    {isFieldAllowed("credit") && (
-                      <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600">
-                        ₹{(customer.credit || 0).toFixed(2)}
-                      </td>
-                    )}
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-center">
-                      <button
-                        onClick={() => setSelectedLedgerCustomer(customer)}
-                        className="px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white rounded-md text-xs font-bold transition-colors"
+                {sortedCustomers.map((customer, index) => {
+                  const isExpanded = !!expandedRows[customer._id];
+                  return (
+                    <React.Fragment key={customer._id}>
+                      <tr
+                        className={`${
+                          index % 2 === 0 ? "bg-white" : "bg-blue-50"
+                        } border-b border-gray-200 hover:bg-blue-100/50 transition cursor-pointer`}
+                        onClick={() => toggleRow(customer._id)}
                       >
-                        Ledger
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                        <td className="px-4 py-3 text-center text-gray-400">
+                           {isExpanded ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
+                        </td>
+                        <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
+                          {customer.name}
+                        </td>
+                        {isFieldAllowed("gstin") && (
+                          <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
+                            {customer.gstin || "-"}
+                          </td>
+                        )}
+                        {isFieldAllowed("margin") && (
+                          <td className={`px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-bold ${customer.margin < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                            {customer.margin || 0}%
+                          </td>
+                        )}
+                        {isFieldAllowed("debit") && (
+                          <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600">
+                            ₹{(customer.debit || 0).toFixed(2)}
+                          </td>
+                        )}
+                        {isFieldAllowed("credit") && (
+                          <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600">
+                            ₹{(customer.credit || 0).toFixed(2)}
+                          </td>
+                        )}
+                        <td className="px-3 md:px-5 py-2 md:py-3 text-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedLedgerCustomer(customer);
+                            }}
+                            className="px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white rounded-md text-xs font-bold transition-colors shadow-sm"
+                          >
+                            Ledger
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <td colSpan={7} className="px-8 py-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fadeIn">
+                               {/* Contact and Social section */}
+                               <div className="space-y-1">
+                                 <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Contact & Social</p>
+                                 <div className="flex items-center gap-2 text-xs text-gray-600 mt-2">
+                                    <FaWhatsapp className="text-green-500 text-[10px]" />
+                                    <span>{customer.whatsapp || "No WhatsApp provided"}</span>
+                                 </div>
+                                 <div className="flex items-center gap-2 text-xs text-gray-600">
+                                    <FaEnvelope className="text-secondary text-[10px]" />
+                                    <span>{customer.email || "No email provided"}</span>
+                                 </div>
+                               </div>
+                               
+                               {/* Location Section */}
+                               <div className="space-y-1">
+                                 <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Location & Address</p>
+                                 <div className="flex items-start gap-2 text-xs text-gray-600 mt-2">
+                                    <FaMapMarkerAlt className="text-secondary text-[10px] mt-0.5" />
+                                    <span>
+                                      {customer.address ? `${customer.address}, ${customer.district || ""}, ${customer.state || ""}, ${customer.country || ""} - ${customer.pincode || ""}` : "No address provided"}
+                                    </span>
+                                 </div>
+                               </div>
+
+                               {/* Assignment Section */}
+                               <div className="space-y-1">
+                                 <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Assignment & Type</p>
+                                 <div className="flex items-center gap-2 text-xs text-gray-600 mt-2">
+                                    <FaUserTie className="text-secondary text-[10px]" />
+                                    <span className="font-semibold">{customer.salesOwner?.name || "No Sales Owner assigned"}</span>
+                                 </div>
+                                 <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
+                                    <FaTags className="text-secondary text-[10px]" />
+                                    <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                      {customer.customerCategory?.name || "No Category"}
+                                    </span>
+                                    <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                      {customer.customerGroup?.name || "No Group"}
+                                    </span>
+                                 </div>
+                                 <div className="mt-3">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedLedgerCustomer(customer);
+                                      }}
+                                      className="text-secondary hover:underline text-xs font-bold"
+                                    >
+                                      View Detailed Ledger →
+                                    </button>
+                                 </div>
+                               </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

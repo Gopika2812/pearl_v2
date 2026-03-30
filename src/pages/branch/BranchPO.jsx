@@ -29,18 +29,18 @@ const BranchPO = () => {
 
         <div className="mt-5">
           <InventoryPurchaseOrderEntry
-              items={items}
-              setItems={setItems}
-              voucherTypes={poVoucherTypes}
-              productGroups={productGroups}
-              products={products}
-              warehouses={warehouses}
-              vendors={vendors}
-              salesOwners={salesOwners}
-              salesMen={salesMen}
-              deliveryMen={deliveryMen}
-              customerGroups={customerGroups}
-            />
+            items={items}
+            setItems={setItems}
+            voucherTypes={poVoucherTypes}
+            productGroups={productGroups}
+            products={products}
+            warehouses={warehouses}
+            vendors={vendors}
+            salesOwners={salesOwners}
+            salesMen={salesMen}
+            deliveryMen={deliveryMen}
+            customerGroups={customerGroups}
+          />
         </div>
       </div>
     </div>

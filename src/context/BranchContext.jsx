@@ -55,6 +55,11 @@ export function BranchProvider({ children }) {
     setUser(userData);
     localStorage.setItem("currentBranch", JSON.stringify(branch));
     localStorage.setItem("user", JSON.stringify(userData));
+
+    // Sync full profile (permissions, name, etc.) immediately after login
+    if (userData?._id || userData?.id) {
+      refreshUser(userData._id || userData.id, userData.role);
+    }
   };
 
   const logout = () => {

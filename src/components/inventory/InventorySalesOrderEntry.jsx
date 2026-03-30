@@ -822,7 +822,7 @@ export default function InventorySalesOrderEntry({
     const base = i.qty * i.sellingPrice;
     const taxable = base - (i.discountAmount || 0);
     return s + (taxable * i.gst) / 100;
-  }, 0) + extraExpenses.reduce((s, e) => s + (e.gstAmount || 0), 0);
+  }, 0);
 
   // Calculate extra expenses total
   const extraExpenseAmount = extraExpenses.reduce(
@@ -831,7 +831,7 @@ export default function InventorySalesOrderEntry({
   );
 
   const grandTotal =
-    subtotal - totalDiscount - (Number(commonDiscount) || 0) + totalTax;
+    subtotal - totalDiscount - (Number(commonDiscount) || 0) + totalTax + extraExpenseAmount;
 
 
   // Round up all item totals and financial values

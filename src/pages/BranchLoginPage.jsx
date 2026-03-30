@@ -65,10 +65,8 @@ export default function BranchLoginPage() {
       
       // Store user data with their branch
       const userData = {
-        id: data.data.id,
-        username: data.data.username,
-        email: data.data.email,
-        role: data.data.role,
+        ...data.data, // Spread full user profile returned from API
+        id: data.data._id || data.data.id,
         branch: normalizedBranch,
         branchId: branchId,
         branchName: userBranch.name,

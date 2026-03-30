@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport } from "react-icons/fa";
+import React, { useEffect, useState } from "react";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaMapMarkerAlt, FaPhone, FaEnvelope } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
@@ -31,6 +31,7 @@ const BranchSuppliers = () => {
   const [selectedLedgerSupplier, setSelectedLedgerSupplier] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [expandedRows, setExpandedRows] = useState({});
 
 
   useEffect(() => {
@@ -204,6 +205,10 @@ const BranchSuppliers = () => {
       
       return 0;
     });
+  };
+ 
+  const toggleRow = (id) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   const filteredSuppliers = getSortedSuppliers(
@@ -527,6 +532,7 @@ const BranchSuppliers = () => {
           <table className="w-full">
             <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
               <tr>
+                <th className="w-10"></th>
                 <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("name")}>
                   Supplier Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                 </th>
@@ -535,20 +541,8 @@ const BranchSuppliers = () => {
                     GSTIN
                   </th>
                 )}
-                <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                  Email
-                </th>
-                <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                  Phone
-                </th>
-                <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                  Address
-                </th>
-                <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                  State
-                </th>
                 <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("outstandingPOs")}>
-                  Outstanding POs {sortConfig.key === "outstandingPOs" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  POs {sortConfig.key === "outstandingPOs" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                 </th>
                 {isFieldAllowed("credit") && (
                   <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("credit")}>
@@ -561,75 +555,114 @@ const BranchSuppliers = () => {
                   </th>
                 )}
                 <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
-                  Status
-                </th>
-                <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody>
-              {filteredSuppliers.map((supplier, index) => (
-                <tr
-                  key={supplier._id}
-                  className={`${
-                    index % 2 === 0 ? "bg-white" : "bg-blue-50"
-                  } border-b border-gray-200 hover:bg-blue-100/50 transition`}
-                >
-                  <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
-                    {supplier.name}
-                  </td>
-                  {isFieldAllowed("gstin") && (
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                      {supplier.gstin || "-"}
-                    </td>
-                  )}
-                  <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                    {supplier.email || "-"}
-                  </td>
-                  <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                    {supplier.phone || "-"}
-                  </td>
-                  <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                    {supplier.address || "-"}
-                  </td>
-                  <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                    {supplier.stateName || "-"}
-                  </td>
-                  <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-semibold text-orange-600">
-                    {getOutstandingPOCount(supplier.name)}
-                  </td>
-                  {isFieldAllowed("credit") && (
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600">
-                      ₹{(supplier.credit || 0).toFixed(2)}
-                    </td>
-                  )}
-                  {isFieldAllowed("debit") && (
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600">
-                      ₹{(supplier.debit || 0).toFixed(2)}
-                    </td>
-                  )}
-                  <td className="px-3 md:px-5 py-2 md:py-3 text-center">
-                    <span
-                      className={`inline-block px-2 py-1 rounded-full text-xs font-bold uppercase ${
-                        supplier.isActive
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-700"
-                      }`}
+              {filteredSuppliers.map((supplier, index) => {
+                const isExpanded = !!expandedRows[supplier._id];
+                return (
+                  <React.Fragment key={supplier._id}>
+                    <tr
+                      className={`${
+                        index % 2 === 0 ? "bg-white" : "bg-blue-50"
+                      } border-b border-gray-200 hover:bg-blue-100/50 transition cursor-pointer`}
+                      onClick={() => toggleRow(supplier._id)}
                     >
-                      {supplier.isActive ? "✓ Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="px-3 md:px-5 py-2 md:py-3 text-center">
-                    <button
-                      onClick={() => setSelectedLedgerSupplier(supplier)}
-                      className="bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 px-3 py-1 rounded-md text-xs font-bold transition-colors whitespace-nowrap shadow-sm"
-                    >
-                      Transactions
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                      <td className="px-4 py-3 text-center text-gray-400">
+                         {isExpanded ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
+                      </td>
+                      <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
+                        {supplier.name}
+                      </td>
+                      {isFieldAllowed("gstin") && (
+                        <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
+                          {supplier.gstin || "-"}
+                        </td>
+                      )}
+                      <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-semibold text-orange-600">
+                        {getOutstandingPOCount(supplier.name)}
+                      </td>
+                      {isFieldAllowed("credit") && (
+                        <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600">
+                          ₹{(supplier.credit || 0).toFixed(2)}
+                        </td>
+                      )}
+                      {isFieldAllowed("debit") && (
+                        <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600">
+                          ₹{(supplier.debit || 0).toFixed(2)}
+                        </td>
+                      )}
+                      <td className="px-3 md:px-5 py-2 md:py-3 text-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedLedgerSupplier(supplier);
+                          }}
+                          className="bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 px-3 py-1 rounded-md text-xs font-bold transition-colors whitespace-nowrap shadow-sm"
+                        >
+                          Transactions
+                        </button>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <td colSpan={7} className="px-8 py-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fadeIn">
+                             {/* Address section */}
+                             <div className="space-y-1">
+                               <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Contact Details</p>
+                               <div className="flex items-center gap-2 text-xs text-gray-600 mt-2">
+                                  <FaPhone className="text-primary text-[10px]" />
+                                  <span>{supplier.phone || "No phone provided"}</span>
+                               </div>
+                               <div className="flex items-center gap-2 text-xs text-gray-600">
+                                  <FaEnvelope className="text-primary text-[10px]" />
+                                  <span>{supplier.email || "No email provided"}</span>
+                               </div>
+                             </div>
+                             
+                             <div className="space-y-1">
+                               <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Location Info</p>
+                               <div className="flex items-start gap-2 text-xs text-gray-600 mt-2">
+                                  <FaMapMarkerAlt className="text-primary text-[10px] mt-0.5" />
+                                  <span>{supplier.address ? `${supplier.address}, ${supplier.stateName || ""}` : "No address provided"}</span>
+                               </div>
+                             </div>
+
+                             <div className="space-y-1">
+                               <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Account Status</p>
+                               <div className="mt-2 text-xs">
+                                  <span
+                                    className={`inline-block px-2 py-0.5 rounded-full font-bold uppercase text-[9px] ${
+                                      supplier.isActive
+                                        ? "bg-green-100 text-green-700"
+                                        : "bg-gray-100 text-gray-700"
+                                    }`}
+                                  >
+                                    {supplier.isActive ? "Active" : "Inactive"}
+                                  </span>
+                               </div>
+                               <div className="mt-3">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedLedgerSupplier(supplier);
+                                    }}
+                                    className="text-primary hover:underline text-xs font-bold"
+                                  >
+                                    Open Ledger View →
+                                  </button>
+                               </div>
+                             </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
