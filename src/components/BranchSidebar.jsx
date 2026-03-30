@@ -29,15 +29,22 @@ import {
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useBranch } from "../context/BranchContext";
 
+import { PAGE_CONFIG, ICON_MAP, getFlattenedPages } from "../utils/pageConfig";
+
 const BranchSidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { branch, logout, superAdminViewBranch, setSuperAdminViewBranch, user } = useBranch();
-  const [summaryOpen, setSummaryOpen] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
-  const [poOpen, setPoOpen] = useState(false);
-  const [soOpen, setSoOpen] = useState(false);
-  const [othersOpen, setOthersOpen] = useState(false);
+  
+  // Dropdown states managed dynamically by ID
+  const [openDropdowns, setOpenDropdowns] = useState({});
+
+  const toggleDropdown = (id) => {
+    setOpenDropdowns(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
 
   const isSuperAdminViewing = !!superAdminViewBranch;
 
@@ -47,57 +54,17 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     if (onClose) onClose();
   };
 
-  const menuItemsTop = [
-    { name: "Home", path: "/branch-home", icon: <FaHome /> },
-  ];
-
-  const purchaseItems = [
-    { name: "Create PO", path: "/branch/po", icon: <FaShoppingCart /> },
-    { name: "Purchase Order List", path: "/branch/purchase-orders", icon: <FaBox /> },
-    { name: "Purchase Invoice List", path: "/branch/purchase-invoices", icon: <FaFileAlt /> },
-    { name: "Restocking", path: "/branch/recycling", icon: <FaBox /> },
-    { name: "Debit Note", path: "/branch/debit-note", icon: <FaFileAlt /> },
-    { name: "Payment", path: "/branch/po-payment", icon: <FaDollarSign /> },
-  ];
-
-  const salesItems = [
-    { name: "Create SO", path: "/branch/sales-order", icon: <FaShoppingCart /> },
-    { name: "Invoiced Order", path: "/branch/invoiced-order", icon: <FaFileAlt /> },
-    { name: "Credit Note", path: "/branch/credit-note", icon: <FaFileAlt /> },
-    { name: "Claims", path: "/branch/claims", icon: <FaFileAlt /> },
-    { name: "Receipt", path: "/branch/receipt", icon: <FaDollarSign /> },
-  ];
-  
-  const otherTransactionsItems = [
-    { name: "Other Payment", path: "/branch/other-payment", icon: <FaMoneyBillWave /> },
-    { name: "Other Receipt", path: "/branch/other-receipt", icon: <FaDownload /> },
-  ];
-
-  const menuItemsBottom = [
-    { name: "Loading & Dispatch", path: "/branch/dispatch", icon: <FaTruck /> },
-    { name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: <FaHandshake /> },
-    { name: "Customers (Debtors)", path: "/branch/customers", icon: <FaUsers /> },
-    { name: "Product Records", path: "/branch/product-records", icon: <FaBox /> },
-    { name: "Locked Prices", path: "/branch/locked-prices", icon: <FaLock /> },
-    { name: "Journal Master", path: "/branch/journals", icon: <FaBook /> },
-    { name: "Stock Journal", path: "/branch/stock-journal", icon: <FaHistory /> },
-    { name: "Insights & Analysis", path: "/branch/insights", icon: <FaChartLine /> },
-    { name: "Quick Links", path: "/branch/quick-links", icon: <FaLink /> },
-    { name: "Day Book", path: "/branch/day-book", icon: <FaBookOpen /> },
-    { name: "Admin Requests", path: "/branch/admin-requests", icon: <FaShieldAlt /> },
-  ];
-
-  const summaryItems = [
-    { name: "Summary", path: "/branch/summary", icon: <FaChartBar /> },
-  ];
-
-
-
   useEffect(() => {
     // Auto-open dropdowns if current path is inside them
-    if (purchaseItems.some(i => i.path === location.pathname)) setPoOpen(true);
-    if (salesItems.some(i => i.path === location.pathname)) setSoOpen(true);
-    if (otherTransactionsItems.some(i => i.path === location.pathname)) setOthersOpen(true);
+    const newOpenDropdowns = {};
+    PAGE_CONFIG.forEach(cat => {
+      cat.items.forEach(item => {
+        if (item.isDropdown && item.subItems.some(sub => sub.path === location.pathname)) {
+          newOpenDropdowns[item.id] = true;
+        }
+      });
+    });
+    setOpenDropdowns(prev => ({ ...prev, ...newOpenDropdowns }));
   }, [location.pathname]);
 
   const handleLogout = () => {
@@ -106,55 +73,90 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   };
 
   // Permission check helper
-  const isAllowed = (path) => {
+  const isAllowed = (page) => {
     if (!user) return false;
     if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
     
     const allowedPages = user.allowedPages || [];
-    
-    const pathPermissionMap = {
-      "/branch-home": "home",
-      "/branch/po": "create-po",
-      "/branch/purchase-orders": "purchase-list",
-      "/branch/purchase-invoices": "purchase-invoice-list",
-      "/branch/recycling": "restocking",
-      "/branch/debit-note": "debit-note",
-      "/branch/po-payment": "payment-po",
-      "/branch/sales-order": "create-so",
-      "/branch/invoiced-order": "invoiced-order",
-      "/branch/credit-note": "credit-note",
-      "/branch/claims": "claims",
-      "/branch/receipt": "receipt",
-      "/branch/other-payment": "other-payment",
-      "/branch/other-receipt": "other-receipt",
-      "/branch/dispatch": "dispatch",
-      "/branch/suppliers": "suppliers",
-      "/branch/customers": "customers",
-      "/branch/product-records": "product-records",
-      "/branch/journals": "journals",
-      "/branch/stock-journal": "stock-journal",
-      "/branch/insights": "insights",
-      "/branch/quick-links": "quick-links",
-      "/branch/summary": "summary",
-      "/branch/admin-requests": "admin-requests",
-      "/branch/locked-prices": "locked-prices",
-      "/branch/day-book": "day-book",
-    };
-
-    const permissionId = pathPermissionMap[path];
-    if (!permissionId) return true; // Pages without specific permission ID are public within branch
-
-    const result = allowedPages.includes(permissionId);
-    // console.log(`Path: ${path}, ID: ${permissionId}, Allowed: ${result}, UserPages:`, allowedPages);
-    return result;
+    return allowedPages.includes(page.id);
   };
 
-  const filteredTop = menuItemsTop.filter(i => isAllowed(i.path));
-  const filteredPurchase = purchaseItems.filter(i => isAllowed(i.path));
-  const filteredSales = salesItems.filter(i => isAllowed(i.path));
-  const filteredOthers = otherTransactionsItems.filter(i => isAllowed(i.path));
-  const filteredBottom = menuItemsBottom.filter(i => isAllowed(i.path));
-  const filteredSummary = summaryItems.filter(i => isAllowed(i.path));
+  const renderMenuItem = (item, isMobile = false) => {
+    if (!isAllowed(item)) return null;
+    const active = location.pathname === item.path;
+    
+    return (
+      <Link
+        key={item.id}
+        to={item.path}
+        className={`mx-3 mb-1 flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${
+          active
+            ? "bg-white text-secondary shadow-md font-semibold"
+            : "hover:bg-white/10 text-white/90"
+        }`}
+        onClick={isMobile ? onClose : undefined}
+        title={item.name}
+      >
+        <div className="w-8 flex justify-center flex-shrink-0">
+          <span className="text-lg">{ICON_MAP[item.icon]}</span>
+        </div>
+        <span className={`text-sm whitespace-nowrap transition-opacity duration-300 ${!isMobile ? "opacity-0 group-hover:opacity-100" : ""}`}>
+          {item.name}
+        </span>
+      </Link>
+    );
+  };
+
+  const renderDropdown = (item, isMobile = false) => {
+    const allowedSubItems = item.subItems.filter(sub => isAllowed(sub));
+    if (allowedSubItems.length === 0) return null;
+
+    const isOpen = !!openDropdowns[item.id];
+
+    return (
+      <div key={item.id} className="mx-3 mb-1">
+        <button
+          onClick={() => toggleDropdown(item.id)}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
+          title={item.name}
+        >
+          <div className="w-8 flex justify-center flex-shrink-0">
+            <span className="text-lg">{ICON_MAP[item.icon]}</span>
+          </div>
+          <span className={`text-sm flex-1 text-left whitespace-nowrap transition-opacity duration-300 ${!isMobile ? "opacity-0 group-hover:opacity-100 w-0 group-hover:w-auto overflow-hidden" : ""}`}>
+            {item.name}
+          </span>
+          <div className={`w-4 overflow-hidden transition-opacity duration-300 ${!isMobile ? "opacity-0 group-hover:opacity-100" : ""}`}>
+            <FaChevronDown className={`text-xs transition-transform ${isOpen ? "rotate-180" : ""}`} />
+          </div>
+        </button>
+        {isOpen && (
+          <div className={`mt-1 ml-4 space-y-1 pl-3 overflow-hidden transition-opacity duration-300 ${!isMobile ? "opacity-0 group-hover:opacity-100 group-hover:border-l-2 group-hover:border-white/20" : "border-l-2 border-white/20"}`}>
+            {allowedSubItems.map((sub) => {
+              const active = location.pathname === sub.path;
+              return (
+                <Link
+                  key={sub.id}
+                  to={sub.path}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
+                  }`}
+                  onClick={isMobile ? onClose : undefined}
+                  title={sub.name}
+                >
+                  <div className="w-6 flex justify-center flex-shrink-0">
+                    <span className="text-sm">{ICON_MAP[sub.icon]}</span>
+                  </div>
+                  <span className="whitespace-nowrap">{sub.name}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
 
   return (
     <>
@@ -177,210 +179,15 @@ const BranchSidebar = ({ isOpen, onClose }) => {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar py-4">
-          {filteredTop.map((item, index) => {
-            const active = location.pathname === item.path;
-            return (
-              <Link
-                key={index}
-                to={item.path}
-                className={`mx-3 mb-1 flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
-                  active
-                    ? "bg-white text-secondary shadow-md font-semibold"
-                    : "hover:bg-white/10 text-white/90"
-                }`}
-                title={item.name}
-              >
-                <div className="w-8 flex justify-center flex-shrink-0">
-                  <span className="text-lg">{item.icon}</span>
-                </div>
-                <span className="text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300">{item.name}</span>
-              </Link>
-            );
-          })}
-
-          {/* PURCHASE ORDER DROPDOWN */}
-          {filteredPurchase.length > 0 && (
-            <div className="mx-3 mb-1 mt-2">
-              <button
-                onClick={() => setPoOpen(!poOpen)}
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
-                title="Purchase Order"
-              >
-                <div className="w-8 flex justify-center flex-shrink-0">
-                  <span className="text-lg"><FaShoppingCart /></span>
-                </div>
-                <span className="text-sm flex-1 text-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">Purchase Order</span>
-                <div className="w-4 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <FaChevronDown className={`text-xs transition-transform ${poOpen ? "rotate-180" : ""}`} />
-                </div>
-              </button>
-              {poOpen && (
-                <div className="mt-1 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
-                  {filteredPurchase.map((item, idx) => {
-                    const active = location.pathname === item.path;
-                    return (
-                      <Link
-                        key={idx}
-                        to={item.path}
-                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                          active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
-                        }`}
-                        title={item.name}
-                      >
-                        <div className="w-6 flex justify-center flex-shrink-0">
-                          <span className="text-sm">{item.icon}</span>
-                        </div>
-                        <span className="whitespace-nowrap">{item.name}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
+          {PAGE_CONFIG.map(category => (
+            <div key={category.category}>
+              {category.items.map(item => (
+                item.isDropdown 
+                  ? renderDropdown(item)
+                  : renderMenuItem(item)
+              ))}
             </div>
-          )}
-
-          {/* SALES ORDER DROPDOWN */}
-          {filteredSales.length > 0 && (
-            <div className="mx-3 mb-1">
-              <button
-                onClick={() => setSoOpen(!soOpen)}
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
-                title="Sales Order"
-              >
-                <div className="w-8 flex justify-center flex-shrink-0">
-                  <span className="text-lg"><FaShoppingCart /></span>
-                </div>
-                <span className="text-sm flex-1 text-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">Sales Order</span>
-                <div className="w-4 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <FaChevronDown className={`text-xs transition-transform ${soOpen ? "rotate-180" : ""}`} />
-                </div>
-              </button>
-              {soOpen && (
-                <div className="mt-1 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
-                  {filteredSales.map((item, idx) => {
-                    const active = location.pathname === item.path;
-                    return (
-                      <Link
-                        key={idx}
-                        to={item.path}
-                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                          active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
-                        }`}
-                        title={item.name}
-                      >
-                        <div className="w-6 flex justify-center flex-shrink-0">
-                          <span className="text-sm">{item.icon}</span>
-                        </div>
-                        <span className="whitespace-nowrap">{item.name}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* OTHER TRANSACTIONS DROPDOWN */}
-          {filteredOthers.length > 0 && (
-            <div className="mx-3 mb-1">
-              <button
-                onClick={() => setOthersOpen(!othersOpen)}
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
-                title="Other Transactions"
-              >
-                <div className="w-8 flex justify-center flex-shrink-0">
-                  <span className="text-lg"><FaPlusCircle /></span>
-                </div>
-                <span className="text-sm flex-1 text-left whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">Other Transactions</span>
-                <div className="w-4 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  <FaChevronDown className={`text-xs transition-transform ${othersOpen ? "rotate-180" : ""}`} />
-                </div>
-              </button>
-              {othersOpen && (
-                <div className="mt-1 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
-                  {filteredOthers.map((item, idx) => {
-                    const active = location.pathname === item.path;
-                    return (
-                      <Link
-                        key={idx}
-                        to={item.path}
-                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                          active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
-                        }`}
-                        title={item.name}
-                      >
-                        <div className="w-6 flex justify-center flex-shrink-0">
-                          <span className="text-sm">{item.icon}</span>
-                        </div>
-                        <span className="whitespace-nowrap">{item.name}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {filteredBottom.map((item, index) => {
-            const active = location.pathname === item.path;
-            return (
-              <Link
-                key={index + "bot"}
-                to={item.path}
-                className={`mx-3 mb-1 flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
-                  active
-                    ? "bg-white text-secondary shadow-md font-semibold"
-                    : "hover:bg-white/10 text-white/90"
-                }`}
-                title={item.name}
-              >
-                <div className="w-8 flex justify-center flex-shrink-0">
-                  <span className="text-lg">{item.icon}</span>
-                </div>
-                <span className="text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300">{item.name}</span>
-              </Link>
-            );
-          })}
-
-
-
-          {/* SUMMARY SECTION */}
-          {/* <div className="mx-3 mb-1 mt-4">
-            <button
-              onClick={() => setSummaryOpen(!summaryOpen)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-            >
-              <span className="text-lg"><FaChartBar /></span>
-              <span className="text-sm flex-1 text-left">Summary</span>
-              <FaChevronDown
-                className={`text-xs transition-transform ${
-                  summaryOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-
-            {summaryOpen && (
-              <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                {summaryItems.map((item, idx) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={idx}
-                      to={item.path}
-                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
-                        active
-                          ? "bg-white/20 text-white font-semibold"
-                          : "hover:bg-white/10 text-white/80"
-                      }`}
-                    >
-                      <span className="text-sm">{item.icon}</span>
-                      <span>{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div> */}
+          ))}
         </nav>
 
         {/* Viewing-branch indicator for Super Admin */}
@@ -460,186 +267,16 @@ const BranchSidebar = ({ isOpen, onClose }) => {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto no-scrollbar py-4 px-2">
-          {filteredTop.map((item, index) => {
-            const active = location.pathname === item.path;
-            return (
-              <Link
-                key={index}
-                to={item.path}
-                className={`mx-2 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${
-                  active
-                    ? "bg-white text-secondary shadow-md font-semibold"
-                    : "hover:bg-white/10 text-white/90"
-                }`}
-                onClick={onClose}
-              >
-                <span className="text-lg">{item.icon}</span>
-                <span className="text-sm">{item.name}</span>
-              </Link>
-            );
-          })}
-
-          {/* PURCHASE ORDER DROPDOWN MOBILE */}
-          <div className="mx-2 mb-1 mt-2">
-            <button
-              onClick={() => setPoOpen(!poOpen)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-            >
-              <span className="text-lg"><FaShoppingCart /></span>
-              <span className="text-sm flex-1 text-left">Purchase Order</span>
-              <FaChevronDown className={`text-xs transition-transform ${poOpen ? "rotate-180" : ""}`} />
-            </button>
-            {poOpen && (
-              <div className="mt-1 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                {filteredPurchase.map((item, idx) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={idx}
-                      to={item.path}
-                      onClick={onClose}
-                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
-                        active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
-                      }`}
-                    >
-                      <span className="text-sm">{item.icon}</span>
-                      <span>{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* SALES ORDER DROPDOWN MOBILE */}
-          <div className="mx-2 mb-1">
-            <button
-              onClick={() => setSoOpen(!soOpen)}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-            >
-              <span className="text-lg"><FaShoppingCart /></span>
-              <span className="text-sm flex-1 text-left">Sales Order</span>
-              <FaChevronDown className={`text-xs transition-transform ${soOpen ? "rotate-180" : ""}`} />
-            </button>
-            {soOpen && (
-              <div className="mt-1 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                {filteredSales.map((item, idx) => {
-                  const active = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={idx}
-                      to={item.path}
-                      onClick={onClose}
-                      className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
-                        active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
-                      }`}
-                    >
-                      <span className="text-sm">{item.icon}</span>
-                      <span>{item.name}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* OTHER TRANSACTIONS DROPDOWN MOBILE */}
-          {filteredOthers.length > 0 && (
-            <div className="mx-2 mb-1">
-              <button
-                onClick={() => setOthersOpen(!othersOpen)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-              >
-                <span className="text-lg"><FaPlusCircle /></span>
-                <span className="text-sm flex-1 text-left">Other Transactions</span>
-                <FaChevronDown className={`text-xs transition-transform ${othersOpen ? "rotate-180" : ""}`} />
-              </button>
-              {othersOpen && (
-                <div className="mt-1 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                  {filteredOthers.map((item, idx) => {
-                    const active = location.pathname === item.path;
-                    return (
-                      <Link
-                        key={idx}
-                        to={item.path}
-                        onClick={onClose}
-                        className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
-                          active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
-                        }`}
-                      >
-                        <div className="w-6 flex justify-center flex-shrink-0">
-                          <span className="text-sm">{item.icon}</span>
-                        </div>
-                        <span>{item.name}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
+          {PAGE_CONFIG.map(category => (
+            <div key={category.category}>
+              {category.items.map(item => (
+                item.isDropdown 
+                  ? renderDropdown(item, true)
+                  : renderMenuItem(item, true)
+              ))}
             </div>
-          )}
+          ))}
 
-          {filteredBottom.map((item, index) => {
-            const active = location.pathname === item.path;
-            return (
-              <Link
-                key={index + "bot"}
-                to={item.path}
-                className={`mx-2 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${
-                  active
-                    ? "bg-white text-secondary shadow-md font-semibold"
-                    : "hover:bg-white/10 text-white/90"
-                }`}
-                onClick={onClose}
-              >
-                <span className="text-lg">{item.icon}</span>
-                <span className="text-sm">{item.name}</span>
-              </Link>
-            );
-          })}
-
-
-
-          {/* MOBILE SUMMARY SECTION */}
-          {filteredSummary.length > 0 && (
-            <div className="mx-2 mb-1 mt-4">
-              <button
-                onClick={() => setSummaryOpen(!summaryOpen)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/10 text-white/90 transition"
-              >
-                <span className="text-lg"><FaChartBar /></span>
-                <span className="text-sm flex-1 text-left">Summary</span>
-                <FaChevronDown
-                  className={`text-xs transition-transform ${
-                    summaryOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              {summaryOpen && (
-                <div className="mt-2 ml-4 space-y-1 border-l-2 border-white/20 pl-3">
-                  {filteredSummary.map((item, idx) => {
-                    const active = location.pathname === item.path;
-                    return (
-                      <Link
-                        key={idx}
-                        to={item.path}
-                        onClick={onClose}
-                        className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition ${
-                          active
-                            ? "bg-white/20 text-white font-semibold"
-                            : "hover:bg-white/10 text-white/80"
-                        }`}
-                      >
-                        <span className="text-sm">{item.icon}</span>
-                        <span>{item.name}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
           {/* Super Admin Back Button - Mobile */}
           {isSuperAdminViewing && (
             <div className="mx-2 mb-2 px-4 py-3 bg-orange-500/20 border border-orange-400/40 rounded-xl">

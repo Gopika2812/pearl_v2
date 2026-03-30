@@ -7,7 +7,16 @@ import { useBranch } from "../../context/BranchContext";
 import EditPurchaseOrderModal from "../../components/branch/EditPurchaseOrderModal";
 
 const BranchPurchaseOrders = () => {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
+    const key = `branch-purchase-orders_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true
+  };
+
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState({});
@@ -258,8 +267,8 @@ const BranchPurchaseOrders = () => {
                   <tr>
                     <th className="px-6 py-4 text-left">Order / Bill ID</th>
                     <th className="px-6 py-4 text-left">Vendor</th>
-                    <th className="px-6 py-4 text-center">Items</th>
-                    <th className="px-6 py-4 text-right">Grand Total</th>
+                    {isFieldAllowed("itemsCount") && <th className="px-6 py-4 text-center">Items</th>}
+                    {isFieldAllowed("grandTotal") && <th className="px-6 py-4 text-right">Grand Total</th>}
                     <th className="px-6 py-4 text-center">Status</th>
                     <th className="px-6 py-4 text-center">Date</th>
                     <th className="px-6 py-4 text-center">Action</th>
@@ -302,14 +311,18 @@ const BranchPurchaseOrders = () => {
                             {order.warehouse}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold">
-                            {(order.items || []).length}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right font-bold text-[#319bab]">
-                          ₹{(order.grandTotal || 0).toLocaleString()}
-                        </td>
+                        {isFieldAllowed("itemsCount") && (
+                          <td className="px-6 py-4 text-center">
+                            <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold">
+                              {(order.items || []).length}
+                            </span>
+                          </td>
+                        )}
+                        {isFieldAllowed("grandTotal") && (
+                          <td className="px-6 py-4 text-right font-bold text-[#319bab]">
+                            ₹{(order.grandTotal || 0).toLocaleString()}
+                          </td>
+                        )}
                         <td className="px-6 py-4 text-center">
                           <div className="flex flex-col items-center gap-1">
                             <span
@@ -433,7 +446,7 @@ const BranchPurchaseOrders = () => {
                       {/* EXPANDED ITEMS ROW */}
                       {expandedOrders[order._id] && (
                         <tr className="bg-gray-50">
-                          <td colSpan="6" className="px-6 py-4">
+                          <td colSpan="10" className="px-6 py-4">
                             <div className="space-y-4">
                               {/* PURCHASE ITEMS */}
                               {(order.items || []).length > 0 && (

@@ -23,6 +23,14 @@ export default function BranchReceipt() {
   const [selectedBounceInvoice, setSelectedBounceInvoice] = useState(null);
   const [expandedInvoices, setExpandedInvoices] = useState({});
 
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
+    const key = `branch-receipt_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true
+  };
+
   const [searchTerm, setSearchTerm] = useState("");
   
   useEffect(() => {
@@ -255,12 +263,16 @@ export default function BranchReceipt() {
                   <tr>
                     <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Expand</th>
                     <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Order/Invoice ID</th>
-                    <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Customer</th>
+                    {isFieldAllowed("customerDetails") && <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Customer</th>}
                     <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Warehouse</th>
                     <th className="px-4 py-4 text-center text-xs font-bold text-gray-700 uppercase">Items</th>
-                    <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Total Amount</th>
-                    <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Received</th>
-                    <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Pending</th>
+                    {isFieldAllowed("amount") && (
+                      <>
+                        <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Total Amount</th>
+                        <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Received</th>
+                        <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Pending</th>
+                      </>
+                    )}
                     <th className="px-4 py-4 text-center text-xs font-bold text-gray-700 uppercase">Status</th>
                     <th className="px-4 py-4 text-center text-xs font-bold text-gray-700 uppercase">Date</th>
                     <th className="px-4 py-4 text-center text-xs font-bold text-gray-700 uppercase">Action</th>
@@ -297,9 +309,11 @@ export default function BranchReceipt() {
                           <td className="px-4 py-3 font-bold text-cyan-600">
                             {displayId}
                           </td>
-                          <td className="px-4 py-3 font-semibold text-gray-800">
-                            {customerName}
-                          </td>
+                          {isFieldAllowed("customerDetails") && (
+                            <td className="px-4 py-3 font-semibold text-gray-800">
+                              {customerName}
+                            </td>
+                          )}
                           <td className="px-4 py-3 text-gray-600 text-sm">
                             {WarehouseName}
                           </td>
@@ -308,15 +322,19 @@ export default function BranchReceipt() {
                               {isOrder ? (item.items?.length || 0) : 1}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right font-bold">
-                            ₹{totalAmount.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold text-green-600">
-                            ₹{received.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold text-orange-600">
-                            ₹{pending.toLocaleString()}
-                          </td>
+                          {isFieldAllowed("amount") && (
+                            <>
+                              <td className="px-4 py-3 text-right font-bold">
+                                ₹{totalAmount.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-green-600">
+                                ₹{received.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-orange-600">
+                                ₹{pending.toLocaleString()}
+                              </td>
+                            </>
+                          )}
                           <td className="px-4 py-3 text-center">
                             <span
                               className={`px-3 py-1 rounded-full text-xs font-bold ${
@@ -362,7 +380,7 @@ export default function BranchReceipt() {
                         {/* ORDER DETAILS (Only if Order and Expanded) */}
                         {isOrder && isExpanded && item.items && item.items.length > 0 && (
                           <tr>
-                            <td colSpan="11" className="px-4 py-4 bg-gray-50">
+                            <td colSpan="12" className="px-4 py-4 bg-gray-50">
                               <div className="ml-6">
                                 <h4 className="text-cyan-600 font-bold text-sm mb-3 uppercase flex items-center gap-2">
                                   📦 Order Items Summary
@@ -412,28 +430,32 @@ export default function BranchReceipt() {
               </p>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-green-500">
-              <p className="text-gray-600 text-sm uppercase font-bold mb-2">Total Received</p>
-              <p className="text-3xl font-black text-green-600">
-                ₹{filteredItems.reduce((sum, item) => {
-                  const isOrder = item.rowType === "ORDER" || item.rowType === "INVOICE";
-                  return sum + (isOrder ? getTotalReceivedAmount(item) : (item.amount || 0));
-                }, 0).toLocaleString()}
-              </p>
-            </div>
+            {isFieldAllowed("amount") && (
+              <>
+                <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-green-500">
+                  <p className="text-gray-600 text-sm uppercase font-bold mb-2">Total Received</p>
+                  <p className="text-3xl font-black text-green-600">
+                    ₹{filteredItems.reduce((sum, item) => {
+                      const isOrder = item.rowType === "ORDER" || item.rowType === "INVOICE";
+                      return sum + (isOrder ? getTotalReceivedAmount(item) : (item.amount || 0));
+                    }, 0).toLocaleString()}
+                  </p>
+                </div>
 
-            <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-orange-500">
-              <p className="text-gray-600 text-sm uppercase font-bold mb-2">Total Pending</p>
-              <p className="text-3xl font-black text-orange-600">
-                ₹{filteredItems.reduce((sum, item) => {
-                  const isOrder = item.rowType === "ORDER" || item.rowType === "INVOICE";
-                  if (!isOrder) return sum;
-                  const total = item.grandTotal || 0;
-                  const received = getTotalReceivedAmount(item);
-                  return sum + Math.max(0, total - received);
-                }, 0).toLocaleString()}
-              </p>
-            </div>
+                <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-orange-500">
+                  <p className="text-gray-600 text-sm uppercase font-bold mb-2">Total Pending</p>
+                  <p className="text-3xl font-black text-orange-600">
+                    ₹{filteredItems.reduce((sum, item) => {
+                      const isOrder = item.rowType === "ORDER" || item.rowType === "INVOICE";
+                      if (!isOrder) return sum;
+                      const total = item.grandTotal || 0;
+                      const received = getTotalReceivedAmount(item);
+                      return sum + Math.max(0, total - received);
+                    }, 0).toLocaleString()}
+                  </p>
+                </div>
+              </>
+            )}
 
             <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-purple-500">
               <p className="text-gray-600 text-sm uppercase font-bold mb-2">Total Records</p>

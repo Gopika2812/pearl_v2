@@ -25,7 +25,10 @@ const InventoryPurchaseOrderEntry = ({
   onPOSaved = () => {}
 }) => {
   const { warehouses } = useInventory();
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
+
+  // Check if the user has this new feature explicitly disabled by Super Admin. (Defaults to true)
+  const canUseQuickLinks = user?.role === "SUPER_ADMIN" || user?.actionPermissions?.create_shortcuts !== false;
 
   // Header State
   const [voucherType, setVoucherType] = useState("");
@@ -431,13 +434,15 @@ const InventoryPurchaseOrderEntry = ({
         <div>
           <div className="flex justify-between items-center mb-1">
             <label className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">Voucher Type</label>
-            <button 
-              onClick={() => setShowVoucherModal(true)}
-              className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-              title="Create New Voucher Type"
-            >
-              <FaPlus size={12} />
-            </button>
+            {canUseQuickLinks && user?.allowedQuickLinks?.includes("voucher_type") && (
+              <button 
+                onClick={() => setShowVoucherModal(true)}
+                className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                title="Create New Voucher Type"
+              >
+                <FaPlus size={12} />
+              </button>
+            )}
           </div>
           <select
             className={selectClass}
@@ -466,13 +471,15 @@ const InventoryPurchaseOrderEntry = ({
         <div>
           <div className="flex justify-between items-center mb-1">
             <label className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">Vendor</label>
-            <button 
-              onClick={() => setShowVendorModal(true)}
-              className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-              title="Create New Vendor"
-            >
-              <FaPlus size={12} />
-            </button>
+            {canUseQuickLinks && user?.allowedQuickLinks?.includes("vendor") && (
+              <button 
+                onClick={() => setShowVendorModal(true)}
+                className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                title="Create New Vendor"
+              >
+                <FaPlus size={12} />
+              </button>
+            )}
           </div>
           <select
             className={selectClass}
@@ -491,13 +498,15 @@ const InventoryPurchaseOrderEntry = ({
         <div>
           <div className="flex justify-between items-center mb-1">
             <label className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">Warehouse</label>
-            <button 
-              onClick={() => setShowWarehouseModal(true)}
-              className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-              title="Create New Warehouse"
-            >
-              <FaPlus size={12} />
-            </button>
+            {canUseQuickLinks && user?.allowedQuickLinks?.includes("warehouse") && (
+              <button 
+                onClick={() => setShowWarehouseModal(true)}
+                className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                title="Create New Warehouse"
+              >
+                <FaPlus size={12} />
+              </button>
+            )}
           </div>
           <select
             className={selectClass}
@@ -564,13 +573,15 @@ const InventoryPurchaseOrderEntry = ({
         <div>
           <div className="flex justify-between items-center mb-1">
             <label className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">Product Group</label>
-            <button 
-              onClick={() => setShowProductGroupModal(true)}
-              className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-              title="Create New Product Group"
-            >
-              <FaPlus size={12} />
-            </button>
+            {canUseQuickLinks && user?.allowedQuickLinks?.includes("product_group") && (
+              <button 
+                onClick={() => setShowProductGroupModal(true)}
+                className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                title="Create New Product Group"
+              >
+                <FaPlus size={12} />
+              </button>
+            )}
           </div>
           <select className={selectClass} value={productGroup} onChange={(e) => setProductGroup(e.target.value)}>
             <option value="">Select Product Group</option>
@@ -590,13 +601,15 @@ const InventoryPurchaseOrderEntry = ({
           <div className="relative">
             <div className="flex justify-between items-center mb-1">
               <label className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">Item Name</label>
-              <button 
-                onClick={() => setShowProductModal(true)}
-                className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-                title="Create New Item"
-              >
-                <FaPlus size={12} />
-              </button>
+              {canUseQuickLinks && user?.allowedQuickLinks?.includes("product") && (
+                <button 
+                  onClick={() => setShowProductModal(true)}
+                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                  title="Create New Item"
+                >
+                  <FaPlus size={12} />
+                </button>
+              )}
             </div>
             <input
               type="text"

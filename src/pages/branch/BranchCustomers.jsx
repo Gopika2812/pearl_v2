@@ -10,8 +10,16 @@ import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCu
 
 
 const BranchCustomers = () => {
-  const { branch, branchLoaded } = useBranch();
+  const { branch, branchLoaded, user } = useBranch();
   const branchId = branch?._id;
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
+    const key = `customers_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true
+  };
 
   const { 
     customerCategories, customerGroups, salesOwners, addData, updateData 
@@ -344,28 +352,32 @@ const BranchCustomers = () => {
               <div className="text-4xl md:text-5xl text-blue-200">👥</div>
             </div>
           </div>
-          <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-red-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-xs md:text-sm font-semibold uppercase">Total Debit</p>
-                <p className="text-2xl md:text-3xl font-bold text-red-500 mt-1">
-                  ₹{totalDebit.toFixed(2)}
-                </p>
+          {isFieldAllowed("debit") && (
+            <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-red-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500 text-xs md:text-sm font-semibold uppercase">Total Debit</p>
+                  <p className="text-2xl md:text-3xl font-bold text-red-500 mt-1">
+                    ₹{totalDebit.toFixed(2)}
+                  </p>
+                </div>
+                <div className="text-4xl md:text-5xl text-red-200">💰</div>
               </div>
-              <div className="text-4xl md:text-5xl text-red-200">💰</div>
             </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-green-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-xs md:text-sm font-semibold uppercase">Total Credit</p>
-                <p className="text-2xl md:text-3xl font-bold text-green-600 mt-1">
-                  ₹{totalCredit.toFixed(2)}
-                </p>
+          )}
+          {isFieldAllowed("credit") && (
+            <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-green-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500 text-xs md:text-sm font-semibold uppercase">Total Credit</p>
+                  <p className="text-2xl md:text-3xl font-bold text-green-600 mt-1">
+                    ₹{totalCredit.toFixed(2)}
+                  </p>
+                </div>
+                <div className="text-4xl md:text-5xl text-green-200">✓</div>
               </div>
-              <div className="text-4xl md:text-5xl text-green-200">✓</div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Controls */}
@@ -433,7 +445,7 @@ const BranchCustomers = () => {
 
                 {/* Details */}
                 <div className="space-y-2 mb-4 text-xs md:text-sm">
-                  {customer.gstin && (
+                  {isFieldAllowed("gstin") && customer.gstin && (
                     <p className="text-gray-600">
                       <span className="font-semibold text-gray-800">GSTIN:</span>{" "}
                       <span className="text-gray-700">{customer.gstin}</span>
@@ -469,12 +481,14 @@ const BranchCustomers = () => {
                       <span className="text-gray-700">{customer.state}</span>
                     </p>
                   )}
-                  <p className="text-gray-600">
-                    <span className="font-semibold text-gray-800">Margin:</span>{" "}
-                    <span className={`font-bold ${customer.margin < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                      {customer.margin || 0}%
-                    </span>
-                  </p>
+                  {isFieldAllowed("margin") && (
+                    <p className="text-gray-600">
+                      <span className="font-semibold text-gray-800">Margin:</span>{" "}
+                      <span className={`font-bold ${customer.margin < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                        {customer.margin || 0}%
+                      </span>
+                    </p>
+                  )}
                 </div>
 
                 {/* Divider */}
@@ -482,20 +496,24 @@ const BranchCustomers = () => {
 
                 {/* Debit & Credit */}
                 <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div className="bg-red-50 rounded-lg p-3 text-center border border-red-200">
-                    <p className="text-xs text-red-700 font-bold uppercase">Debit</p>
-                    <p className="text-sm md:text-base font-bold text-red-600 mt-1">
-                      ₹{(customer.debit || 0).toFixed(2)}
-                    </p>
-                  </div>
-                  <div className="bg-green-50 rounded-lg p-3 text-center border border-green-200">
-                    <p className="text-xs text-green-700 font-bold uppercase">
-                      Credit
-                    </p>
-                    <p className="text-sm md:text-base font-bold text-green-600 mt-1">
-                      ₹{(customer.credit || 0).toFixed(2)}
-                    </p>
-                  </div>
+                  {isFieldAllowed("debit") && (
+                    <div className="bg-red-50 rounded-lg p-3 text-center border border-red-200">
+                      <p className="text-xs text-red-700 font-bold uppercase">Debit</p>
+                      <p className="text-sm md:text-base font-bold text-red-600 mt-1">
+                        ₹{(customer.debit || 0).toFixed(2)}
+                      </p>
+                    </div>
+                  )}
+                  {isFieldAllowed("credit") && (
+                    <div className="bg-green-50 rounded-lg p-3 text-center border border-green-200">
+                      <p className="text-xs text-green-700 font-bold uppercase">
+                        Credit
+                      </p>
+                      <p className="text-sm md:text-base font-bold text-green-600 mt-1">
+                        ₹{(customer.credit || 0).toFixed(2)}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-2">
@@ -543,9 +561,11 @@ const BranchCustomers = () => {
                   <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("name")}>
                     Customer Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                    GSTIN
-                  </th>
+                  {isFieldAllowed("gstin") && (
+                    <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
+                      GSTIN
+                    </th>
+                  )}
                   <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
                     Email
                   </th>
@@ -561,15 +581,21 @@ const BranchCustomers = () => {
                   <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
                     Country
                   </th>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("margin")}>
-                    Margin (%) {sortConfig.key === "margin" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                  </th>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("debit")}>
-                    Debit {sortConfig.key === "debit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                  </th>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("credit")}>
-                    Credit {sortConfig.key === "credit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                  </th>
+                  {isFieldAllowed("margin") && (
+                    <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("margin")}>
+                      Margin (%) {sortConfig.key === "margin" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
+                  )}
+                  {isFieldAllowed("debit") && (
+                    <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("debit")}>
+                      Debit {sortConfig.key === "debit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
+                  )}
+                  {isFieldAllowed("credit") && (
+                    <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("credit")}>
+                      Credit {sortConfig.key === "credit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
+                  )}
                   <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
                     Action
                   </th>
@@ -586,9 +612,11 @@ const BranchCustomers = () => {
                     <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
                       {customer.name}
                     </td>
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                      {customer.gstin || "-"}
-                    </td>
+                    {isFieldAllowed("gstin") && (
+                      <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
+                        {customer.gstin || "-"}
+                      </td>
+                    )}
                     <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
                       {customer.email || "-"}
                     </td>
@@ -604,15 +632,21 @@ const BranchCustomers = () => {
                     <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
                       {customer.country || "-"}
                     </td>
-                    <td className={`px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-bold ${customer.margin < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                      {customer.margin || 0}%
-                    </td>
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600">
-                      ₹{(customer.debit || 0).toFixed(2)}
-                    </td>
-                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600">
-                      ₹{(customer.credit || 0).toFixed(2)}
-                    </td>
+                    {isFieldAllowed("margin") && (
+                      <td className={`px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-bold ${customer.margin < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                        {customer.margin || 0}%
+                      </td>
+                    )}
+                    {isFieldAllowed("debit") && (
+                      <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600">
+                        ₹{(customer.debit || 0).toFixed(2)}
+                      </td>
+                    )}
+                    {isFieldAllowed("credit") && (
+                      <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600">
+                        ₹{(customer.credit || 0).toFixed(2)}
+                      </td>
+                    )}
                     <td className="px-3 md:px-5 py-2 md:py-3 text-center">
                       <button
                         onClick={() => setSelectedLedgerCustomer(customer)}

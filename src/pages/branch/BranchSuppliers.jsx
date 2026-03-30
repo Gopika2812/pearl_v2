@@ -10,8 +10,16 @@ import InventoryAddVendorModal from "../../components/inventory/InventoryAddVend
 
 
 const BranchSuppliers = () => {
-  const { branch, branchLoaded } = useBranch();
+  const { branch, branchLoaded, user } = useBranch();
   const branchId = branch?._id;
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
+    const key = `suppliers_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true
+  };
 
   const { addData, updateData } = useInventory();
   const [suppliers, setSuppliers] = useState([]);
@@ -335,28 +343,32 @@ const BranchSuppliers = () => {
               <div className="text-4xl md:text-5xl text-blue-200">👥</div>
             </div>
           </div>
-          <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-red-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-xs md:text-sm font-semibold uppercase">Total Credit</p>
-                <p className="text-2xl md:text-3xl font-bold text-red-500 mt-1">
-                  ₹{totalCredit.toFixed(2)}
-                </p>
+          {isFieldAllowed("credit") && (
+            <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-red-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500 text-xs md:text-sm font-semibold uppercase">Total Credit</p>
+                  <p className="text-2xl md:text-3xl font-bold text-red-500 mt-1">
+                    ₹{totalCredit.toFixed(2)}
+                  </p>
+                </div>
+                <div className="text-4xl md:text-5xl text-red-200">💳</div>
               </div>
-              <div className="text-4xl md:text-5xl text-red-200">💳</div>
             </div>
-          </div>
-          <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-green-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-xs md:text-sm font-semibold uppercase">Total Debit</p>
-                <p className="text-2xl md:text-3xl font-bold text-green-600 mt-1">
-                  ₹{totalDebit.toFixed(2)}
-                </p>
+          )}
+          {isFieldAllowed("debit") && (
+            <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-green-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-500 text-xs md:text-sm font-semibold uppercase">Total Debit</p>
+                  <p className="text-2xl md:text-3xl font-bold text-green-600 mt-1">
+                    ₹{totalDebit.toFixed(2)}
+                  </p>
+                </div>
+                <div className="text-4xl md:text-5xl text-green-200">✓</div>
               </div>
-              <div className="text-4xl md:text-5xl text-green-200">✓</div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Controls */}
@@ -424,7 +436,7 @@ const BranchSuppliers = () => {
 
               {/* Details */}
               <div className="space-y-2 mb-4 text-xs md:text-sm">
-                {supplier.gstin && (
+                {isFieldAllowed("gstin") && supplier.gstin && (
                   <p className="text-gray-600">
                     <span className="font-semibold text-gray-800">GSTIN:</span>{" "}
                     <span className="text-gray-700">{supplier.gstin}</span>
@@ -463,21 +475,25 @@ const BranchSuppliers = () => {
 
               {/* Credit & Debit */}
               <div className="grid grid-cols-2 gap-2 mb-3">
-                <div className="bg-red-50 rounded-lg p-3 text-center border border-red-200">
-                  <p className="text-xs text-red-700 font-bold uppercase">Credit Pending</p>
-                  <p className="text-sm md:text-base font-bold text-red-600 mt-1">
-                    ₹{(supplier.credit || 0).toFixed(2)}
-                  </p>
-                  <p className="text-xs text-red-600 mt-1">
-                    {getOutstandingPOCount(supplier.name)} PO{getOutstandingPOCount(supplier.name) !== 1 ? 's' : ''}
-                  </p>
-                </div>
-                <div className="bg-green-50 rounded-lg p-3 text-center border border-green-200">
-                  <p className="text-xs text-green-700 font-bold uppercase">Debit</p>
-                  <p className="text-sm md:text-base font-bold text-green-600 mt-1">
-                    ₹{(supplier.debit || 0).toFixed(2)}
-                  </p>
-                </div>
+                {isFieldAllowed("credit") && (
+                  <div className="bg-red-50 rounded-lg p-3 text-center border border-red-200">
+                    <p className="text-xs text-red-700 font-bold uppercase">Credit Pending</p>
+                    <p className="text-sm md:text-base font-bold text-red-600 mt-1">
+                      ₹{(supplier.credit || 0).toFixed(2)}
+                    </p>
+                    <p className="text-xs text-red-600 mt-1">
+                      {getOutstandingPOCount(supplier.name)} PO{getOutstandingPOCount(supplier.name) !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                )}
+                {isFieldAllowed("debit") && (
+                  <div className="bg-green-50 rounded-lg p-3 text-center border border-green-200">
+                    <p className="text-xs text-green-700 font-bold uppercase">Debit</p>
+                    <p className="text-sm md:text-base font-bold text-green-600 mt-1">
+                      ₹{(supplier.debit || 0).toFixed(2)}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Status */}
@@ -514,9 +530,11 @@ const BranchSuppliers = () => {
                 <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("name")}>
                   Supplier Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                 </th>
-                <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                  GSTIN
-                </th>
+                {isFieldAllowed("gstin") && (
+                  <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
+                    GSTIN
+                  </th>
+                )}
                 <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
                   Email
                 </th>
@@ -532,12 +550,16 @@ const BranchSuppliers = () => {
                 <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("outstandingPOs")}>
                   Outstanding POs {sortConfig.key === "outstandingPOs" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                 </th>
-                <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("credit")}>
-                  Credit {sortConfig.key === "credit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                </th>
-                <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("debit")}>
-                  Debit {sortConfig.key === "debit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                </th>
+                {isFieldAllowed("credit") && (
+                  <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("credit")}>
+                    Credit {sortConfig.key === "credit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  </th>
+                )}
+                {isFieldAllowed("debit") && (
+                  <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("debit")}>
+                    Debit {sortConfig.key === "debit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  </th>
+                )}
                 <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
                   Status
                 </th>
@@ -557,9 +579,11 @@ const BranchSuppliers = () => {
                   <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
                     {supplier.name}
                   </td>
-                  <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                    {supplier.gstin || "-"}
-                  </td>
+                  {isFieldAllowed("gstin") && (
+                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
+                      {supplier.gstin || "-"}
+                    </td>
+                  )}
                   <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
                     {supplier.email || "-"}
                   </td>
@@ -575,12 +599,16 @@ const BranchSuppliers = () => {
                   <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-semibold text-orange-600">
                     {getOutstandingPOCount(supplier.name)}
                   </td>
-                  <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600">
-                    ₹{(supplier.credit || 0).toFixed(2)}
-                  </td>
-                  <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600">
-                    ₹{(supplier.debit || 0).toFixed(2)}
-                  </td>
+                  {isFieldAllowed("credit") && (
+                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600">
+                      ₹{(supplier.credit || 0).toFixed(2)}
+                    </td>
+                  )}
+                  {isFieldAllowed("debit") && (
+                    <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600">
+                      ₹{(supplier.debit || 0).toFixed(2)}
+                    </td>
+                  )}
                   <td className="px-3 md:px-5 py-2 md:py-3 text-center">
                     <span
                       className={`inline-block px-2 py-1 rounded-full text-xs font-bold uppercase ${

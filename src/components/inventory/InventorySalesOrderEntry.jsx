@@ -1096,15 +1096,15 @@ export default function InventorySalesOrderEntry({
         <div className="lg:col-span-3 bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-3 h-fit">
           <div>
             <div className="flex justify-between items-center mb-1">
-              {canUseQuickLinks && (
-                <button
-                  onClick={() => setShowVoucherModal(true)}
-                  className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-                  title="Create New Voucher Type"
-                >
-                  <FaPlus size={12} />
-                </button>
-              )}
+                {canUseQuickLinks && user?.allowedQuickLinks?.includes("voucher_type") && (
+                  <button
+                    onClick={() => setShowVoucherModal(true)}
+                    className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                    title="Create New Voucher Type"
+                  >
+                    <FaPlus size={12} />
+                  </button>
+                )}
             </div>
             <select className={selectClass} value={voucherType} onChange={(e) => setVoucherType(e.target.value)}>
               <option value="">-- Select --</option>
@@ -1121,7 +1121,7 @@ export default function InventorySalesOrderEntry({
 
           <div>
             <div className="flex justify-between items-center mb-1">
-              {canUseQuickLinks && (
+              {canUseQuickLinks && user?.allowedQuickLinks?.includes("warehouse") && (
                 <button
                   onClick={() => setShowWarehouseModal(true)}
                   className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
@@ -1162,7 +1162,7 @@ export default function InventorySalesOrderEntry({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 relative" ref={customerDropdownRef}>
               <div className="flex justify-between items-center mb-1">
-                {canUseQuickLinks && (
+                {canUseQuickLinks && user?.allowedQuickLinks?.includes("customer") && (
                   <button
                     onClick={() => setShowCustomerModal(true)}
                     className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
@@ -1267,7 +1267,7 @@ export default function InventorySalesOrderEntry({
           <div className="grid grid-cols-1 gap-3">
             <div>
               <div className="flex justify-between items-center mb-1">
-                {canUseQuickLinks && (
+                {canUseQuickLinks && user?.allowedQuickLinks?.includes("sales_man") && (
                   <button
                     onClick={() => setShowSalesManModal(true)}
                     className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
@@ -1284,7 +1284,7 @@ export default function InventorySalesOrderEntry({
             </div>
             <div>
               <div className="flex justify-between items-center mb-1">
-                {canUseQuickLinks && (
+                {canUseQuickLinks && user?.allowedQuickLinks?.includes("delivery_man") && (
                   <button
                     onClick={() => setShowDeliveryManModal(true)}
                     className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
@@ -1325,7 +1325,7 @@ export default function InventorySalesOrderEntry({
             {/* PRODUCT GROUP */}
             <div className="relative" ref={productGroupDropdownRef}>
               <div className="flex justify-between items-center mb-1">
-                {canUseQuickLinks && (
+                {canUseQuickLinks && user?.allowedQuickLinks?.includes("product_group") && (
                   <button
                     onClick={() => setShowProductGroupModal(true)}
                     className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
@@ -1380,7 +1380,7 @@ export default function InventorySalesOrderEntry({
               {/* ITEM NAME */}
               <div className="relative" ref={itemDropdownRef}>
                 <div className="flex justify-between items-center mb-1">
-                  {canUseQuickLinks && (
+                  {canUseQuickLinks && user?.allowedQuickLinks?.includes("product") && (
                     <button
                       onClick={() => setShowProductModal(true)}
                       className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"

@@ -12,6 +12,15 @@ import { useBranch } from "../../context/BranchContext";
 
 const BranchInvoicedOrders = () => {
   const { currentBranch, user } = useBranch();
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
+    const key = `invoiced-orders_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true
+  };
+
   const [salesOrders, setSalesOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -431,8 +440,8 @@ const BranchInvoicedOrders = () => {
                   <tr>
                     <th className="px-6 py-4 text-left">Invoice ID</th>
                     <th className="px-6 py-4 text-left">Customer</th>
-                    <th className="px-6 py-4 text-center">Items</th>
-                    <th className="px-6 py-4 text-right">Grand Total</th>
+                    {isFieldAllowed("itemsCount") && <th className="px-6 py-4 text-center">Items</th>}
+                    {isFieldAllowed("grandTotal") && <th className="px-6 py-4 text-right">Grand Total</th>}
                     <th className="px-6 py-4 text-center">Status</th>
                     <th className="px-6 py-4 text-center">Date</th>
                     <th className="px-6 py-4 text-center">Action</th>
@@ -470,15 +479,19 @@ const BranchInvoicedOrders = () => {
                             {order.customer?.whatsapp}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold">
-                            {(order.items || []).length +
-                              (order.sampleItems || []).length}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right font-bold text-[#319bab]">
-                          ₹{(order.grandTotal || 0).toLocaleString()}
-                        </td>
+                        {isFieldAllowed("itemsCount") && (
+                          <td className="px-6 py-4 text-center">
+                            <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold">
+                              {(order.items || []).length +
+                                (order.sampleItems || []).length}
+                            </span>
+                          </td>
+                        )}
+                        {isFieldAllowed("grandTotal") && (
+                          <td className="px-6 py-4 text-right font-bold text-[#319bab]">
+                            ₹{(order.grandTotal || 0).toLocaleString()}
+                          </td>
+                        )}
                         <td className="px-6 py-4 text-center">
                           {order.status === "CANCELLED" ? (
                              <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold line-through">
@@ -561,7 +574,7 @@ const BranchInvoicedOrders = () => {
                       {/* EXPANDED ITEMS ROW */}
                       {expandedOrders[order._id] && (
                         <tr className="bg-gray-50">
-                          <td colSpan="7" className="px-6 py-4">
+                          <td colSpan="10" className="px-6 py-4">
                             <div className="space-y-4">
                               {/* REGULAR ITEMS */}
                               {(order.items || []).length > 0 && (
@@ -744,7 +757,7 @@ const BranchInvoicedOrders = () => {
                       {expandedOrders[order._id] &&
                         (invoicesByOrder[order._id] || []).length > 0 && (
                           <tr className="bg-green-50">
-                            <td colSpan="7" className="px-6 py-4">
+                            <td colSpan="10" className="px-6 py-4">
                               <div className="space-y-4">
                                 <h4 className="font-bold text-gray-800">
                                   📄 Sales Invoices Generated

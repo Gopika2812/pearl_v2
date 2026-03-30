@@ -7,8 +7,16 @@ import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 
 const BranchProductRecords = () => {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const { productGroups, products } = useInventory();
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
+    const key = `branch-product-records_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true
+  };
   
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -244,20 +252,24 @@ const BranchProductRecords = () => {
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Qty</span>
                     <span className="text-xl font-black text-gray-800">{totalQty}</span>
                   </div>
-                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Gross Profit</span>
-                    <span className={`text-xl font-black ${totalProfit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      ₹{totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avg. Profit %</span>
-                    <span className="text-xl font-black text-[#319bab]">
-                      {records.length > 0 
-                        ? (records.reduce((s, r) => s + ((r.grossProfit / (r.purchasingPrice || 1)) * 100), 0) / records.length).toFixed(1)
-                        : "0.0"}%
-                    </span>
-                  </div>
+                  {isFieldAllowed("grossProfit") && (
+                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Gross Profit</span>
+                      <span className={`text-xl font-black ${totalProfit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        ₹{totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )}
+                  {isFieldAllowed("marginPercentage") && (
+                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avg. Profit %</span>
+                      <span className="text-xl font-black text-[#319bab]">
+                        {records.length > 0 
+                          ? (records.reduce((s, r) => s + ((r.grossProfit / (r.purchasingPrice || 1)) * 100), 0) / records.length).toFixed(1)
+                          : "0.0"}%
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* DATA TABLE */}
@@ -272,20 +284,20 @@ const BranchProductRecords = () => {
                         <tr className="bg-gray-50/50 text-gray-500 font-black uppercase text-[9px] tracking-widest border-b border-gray-100">
                           <th className="px-4 py-3">Voucher / Time</th>
                           <th className="px-4 py-3">Customer</th>
-                          <th className="px-4 py-3 text-right">Purchase ₹</th>
-                          <th className="px-4 py-3 text-right">Selling ₹</th>
-                          <th className="px-4 py-3 text-right">Margin (%)</th>
+                          {isFieldAllowed("purchasingPrice") && <th className="px-4 py-3 text-right">Purchase ₹</th>}
+                          {isFieldAllowed("sellingPrice") && <th className="px-4 py-3 text-right">Selling ₹</th>}
+                          {isFieldAllowed("marginPercentage") && <th className="px-4 py-3 text-right">Margin (%)</th>}
                           <th className="px-4 py-3 text-center">Qty</th>
-                          <th className="px-4 py-3 text-center">GST %</th>
+                          {isFieldAllowed("gst") && <th className="px-4 py-3 text-center">GST %</th>}
                           <th className="px-4 py-3 text-right">Discount</th>
-                          <th className="px-4 py-3 text-right font-black">Profit (%)</th>
-                          <th className="px-4 py-3 text-right font-black">Profit (₹)</th>
+                          {isFieldAllowed("marginPercentage") && <th className="px-4 py-3 text-right font-black">Profit (%)</th>}
+                          {isFieldAllowed("grossProfit") && <th className="px-4 py-3 text-right font-black">Profit (₹)</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
                         {loading ? (
                           <tr>
-                            <td colSpan="9" className="px-6 py-20 text-center">
+                            <td colSpan="10" className="px-6 py-20 text-center">
                               <div className="flex flex-col items-center gap-2">
                                 <FaSync className="animate-spin text-[#319bab]" size={24} />
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Fetching Transaction Data...</span>
@@ -308,36 +320,48 @@ const BranchProductRecords = () => {
                                 <td className="px-4 py-3">
                                   <div className="font-bold text-gray-700 text-xs">{r.customerName || "Walk-in"}</div>
                                 </td>
-                                <td className="px-4 py-3 text-right text-gray-500 text-xs">
-                                  ₹{r.purchasingPrice?.toFixed(2)}
-                                </td>
-                                <td className="px-4 py-3 text-right font-bold text-gray-800 text-xs">
-                                  ₹{r.sellingPrice?.toFixed(2)}
-                                </td>
-                                <td className={`px-4 py-3 text-right text-xs font-black ${profitPercent >= 0 ? 'text-[#319bab]' : 'text-red-500'}`}>
-                                  {profitPercent.toFixed(1)}%
-                                </td>
+                                {isFieldAllowed("purchasingPrice") && (
+                                  <td className="px-4 py-3 text-right text-gray-500 text-xs">
+                                    ₹{r.purchasingPrice?.toFixed(2)}
+                                  </td>
+                                )}
+                                {isFieldAllowed("sellingPrice") && (
+                                  <td className="px-4 py-3 text-right font-bold text-gray-800 text-xs">
+                                    ₹{r.sellingPrice?.toFixed(2)}
+                                  </td>
+                                )}
+                                {isFieldAllowed("marginPercentage") && (
+                                  <td className={`px-4 py-3 text-right text-xs font-black ${profitPercent >= 0 ? 'text-[#319bab]' : 'text-red-500'}`}>
+                                    {profitPercent.toFixed(1)}%
+                                  </td>
+                                )}
                                 <td className="px-4 py-3 text-center font-black text-gray-700 text-xs">
                                   {r.qty}
                                 </td>
-                                <td className="px-4 py-3 text-center text-gray-500 text-xs">
-                                  {r.gst}%
-                                </td>
+                                {isFieldAllowed("gst") && (
+                                  <td className="px-4 py-3 text-center text-gray-500 text-xs">
+                                    {r.gst}%
+                                  </td>
+                                )}
                                 <td className="px-4 py-3 text-right text-red-500 font-bold text-xs">
                                   -₹{r.discountPerUnit?.toFixed(2)}
                                 </td>
-                                <td className={`px-4 py-3 text-right text-xs font-black ${profitPercent >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                  {profitPercent.toFixed(1)}%
-                                </td>
-                                <td className={`px-4 py-3 text-right font-black text-xs ${r.grossProfit * r.qty >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                                  ₹{(r.grossProfit * r.qty).toFixed(2)}
-                                </td>
+                                {isFieldAllowed("marginPercentage") && (
+                                  <td className={`px-4 py-3 text-right text-xs font-black ${profitPercent >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                    {profitPercent.toFixed(1)}%
+                                  </td>
+                                )}
+                                {isFieldAllowed("grossProfit") && (
+                                  <td className={`px-4 py-3 text-right font-black text-xs ${r.grossProfit * r.qty >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                                    ₹{(r.grossProfit * r.qty).toFixed(2)}
+                                  </td>
+                                )}
                               </tr>
                             );
                           })
                         ) : (
                           <tr>
-                            <td colSpan="9" className="px-6 py-20 text-center text-gray-400">
+                            <td colSpan="10" className="px-6 py-20 text-center text-gray-400">
                               <FaHistory size={32} className="mx-auto mb-2 opacity-20" />
                               <p className="text-[10px] font-black uppercase tracking-widest">No transactions found for selected period</p>
                             </td>

@@ -5,48 +5,14 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
 
-const PAGE_DEFINITIONS = [
-  { id: "home", name: "Home Dashboard", icon: <FaGlobe />, category: "General" },
-  { id: "create-po", name: "Create Purchase Order", icon: <FaShoppingCart />, category: "Purchase" },
-  { id: "purchase-list", name: "Purchase Order List", icon: <FaBox />, category: "Purchase" },
-  { id: "restocking", name: "Restocking / Recycling", icon: <FaBox />, category: "Purchase" },
-  { id: "debit-note", name: "Debit Note", icon: <FaFileAlt />, category: "Purchase" },
-  { id: "payment-po", name: "Purchase Payment", icon: <FaDollarSign />, category: "Purchase" },
-  { id: "create-so", name: "Create Sales Order", icon: <FaShoppingCart />, category: "Sales" },
-  { id: "invoiced-order", name: "Invoiced Order List", icon: <FaFileAlt />, category: "Sales" },
-  { id: "credit-note", name: "Credit Note", icon: <FaFileAlt />, category: "Sales" },
-  { id: "claims", name: "Claims Orders", icon: <FaFileAlt />, category: "Sales" },
-  { id: "receipt", name: "Sales Receipt", icon: <FaDollarSign />, category: "Sales" },
-  { id: "dispatch", name: "Loading & Dispatch", icon: <FaTruck />, category: "Logistics" },
-  { id: "suppliers", name: "Suppliers (Creditors)", icon: <FaHandshake />, category: "Directory" },
-  { id: "customers", name: "Customers (Debtors)", icon: <FaUsers />, category: "Directory" },
-  { id: "journals", name: "Journal Master", icon: <FaBook />, category: "Accounts" },
-  { id: "other-payment", name: "Other Payment", icon: <FaDollarSign />, category: "Accounts" },
-  { id: "other-receipt", name: "Other Receipt", icon: <FaDollarSign />, category: "Accounts" },
-  { id: "insights", name: "Insights & Analysis", icon: <FaChartLine />, category: "Reports" },
-  { id: "quick-links", name: "Quick Links", icon: <FaLink />, category: "General" },
-];
+import { PAGE_CONFIG, ICON_MAP, getFlattenedPages } from "../utils/pageConfig";
 
 /**
- * Dynamically merge Quick Link resources into PAGE_DEFINITIONS 
- * to ensure they show up in "Module Access" automatically.
+ * Dynamically merge all configured pages from PAGE_CONFIG
+ * into a unified list for permission management.
  */
 const getUnifiedPageDefinitions = () => {
-  const definitions = [...PAGE_DEFINITIONS];
-  const existingIds = new Set(definitions.map(p => p.id));
-
-  Object.keys(QUICK_LINKS_CONFIG).forEach(key => {
-    if (!existingIds.has(key)) {
-      definitions.push({
-        id: key,
-        name: QUICK_LINKS_CONFIG[key].label,
-        icon: <FaLink />, // Default icon
-        category: "Master Data"
-      });
-    }
-  });
-
-  return definitions;
+  return getFlattenedPages();
 };
 
 export default function SuperAdminControlSystem() {
@@ -230,11 +196,10 @@ export default function SuperAdminControlSystem() {
       
       // 3. Field Visibility
       const newFieldPerms = {};
-      Object.keys(QUICK_LINKS_CONFIG).forEach(type => {
-        const config = QUICK_LINKS_CONFIG[type];
-        if (config.permissionFields) {
-          config.permissionFields.forEach(f => {
-            newFieldPerms[`${type}_${f}`] = true;
+      getFlattenedPages().forEach(page => {
+        if (page.permissionFields) {
+          page.permissionFields.forEach(f => {
+            newFieldPerms[`${page.id}_${f}`] = true;
           });
         }
       });
@@ -251,11 +216,10 @@ export default function SuperAdminControlSystem() {
       setActionPermissions(newActionPerms);
       
       const newFieldPerms = {};
-      Object.keys(QUICK_LINKS_CONFIG).forEach(type => {
-        const config = QUICK_LINKS_CONFIG[type];
-        if (config.permissionFields) {
-          config.permissionFields.forEach(f => {
-            newFieldPerms[`${type}_${f}`] = false;
+      getFlattenedPages().forEach(page => {
+        if (page.permissionFields) {
+          page.permissionFields.forEach(f => {
+            newFieldPerms[`${page.id}_${f}`] = false;
           });
         }
       });
@@ -428,7 +392,7 @@ export default function SuperAdminControlSystem() {
                               <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
                                 isAllowed ? "bg-secondary text-white" : "bg-gray-100 text-gray-400"
                               }`}>
-                                {page.icon}
+                                {ICON_MAP[page.icon]}
                               </div>
                               <div className="flex-1">
                                 <p className={`text-sm font-bold ${isAllowed ? "text-gray-900" : "text-gray-500"}`}>{page.name}</p>
@@ -490,50 +454,46 @@ export default function SuperAdminControlSystem() {
                       </div>
                     </div>
 
-                    {/* Field Visibility Permissions - NOW GRANULAR PER PAGE */}
+                    {/* Field Visibility Permissions - NOW DYNAMIC PER PAGE */}
                     <div className="md:col-span-2 mt-8 pt-8 border-t border-gray-100 space-y-4">
                       <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-500 flex items-center gap-2">
                         <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
-                        Quick Links: Column Visibility (Per Page)
+                        Column Visibility (Per Page)
                       </h4>
                       <p className="text-gray-400 text-[10px] font-bold uppercase mb-4 italic">
-                        Select which columns are visible on each specific page. Settings are saved per-user.
+                        Select which columns are visible on each specific page. Settings are saved per-p-user.
                       </p>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {Object.keys(QUICK_LINKS_CONFIG).map(type => {
-                          const config = QUICK_LINKS_CONFIG[type];
-                          if (!config.permissionFields || config.permissionFields.length === 0) return null;
-                          
+                        {getFlattenedPages().filter(p => p.permissionFields && p.permissionFields.length > 0).map(page => {
                           return (
-                            <div key={type} className="bg-gray-50/50 rounded-2xl p-4 border border-gray-100">
+                            <div key={page.id} className="bg-gray-50/50 rounded-2xl p-4 border border-gray-100">
                               <h5 className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                <FaLink size={8} /> {config.label} Columns
+                                {ICON_MAP[page.icon]} {page.name} Columns
                               </h5>
                               <div className="space-y-2">
-                                {config.permissionFields.map(fieldId => {
-                                  // Find a nice name for the field
-                                  const key = `${type}_${fieldId}`;
+                                {page.permissionFields.map(fieldId => {
+                                  const key = `${page.id}_${fieldId}`;
                                   const isAllowed = fieldPermissions[key] !== false;
                                   
-                                  // Simple titleize if name not found in config labels? 
-                                  // Actually let's just use the fieldId with some formatting or a small map
                                   const fieldLabels = {
                                     purchasingPrice: "Purchasing Price",
                                     adminMargin: "Admin Margin",
                                     sellingPrice: "Selling Price",
-                                    marginPercentage: "Normal Margin (%)",
-                                    margin: "Customer Margin",
-                                    gst: "GST / HSN Info",
-                                    totalQty: "Stock Levels",
+                                    marginPercentage: "Margin %",
+                                    margin: "Margin Area",
+                                    grossProfit: "Gross Profit",
+                                    gst: "GST Info",
+                                    gstin: "GSTIN",
+                                    totalQty: "Stock Qty",
                                     debit: "Debit Balance",
                                     credit: "Credit/Limit",
-                                    gstin: "GSTIN",
-                                    commissionPercentage: "Commission %",
-                                    phone: "Phone Number",
-                                    vehicleNumber: "Vehicle Number",
-                                    counter: "Current Counter",
-                                    prefix: "Prefix"
+                                    grandTotal: "Grand Total",
+                                    totalPaid: "Total Paid",
+                                    status: "Status Column",
+                                    invoiceGenerated: "Invoice Status",
+                                    amount: "Amount",
+                                    paymentMethod: "Payment Method"
                                   };
 
                                   return (

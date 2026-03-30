@@ -1,0 +1,120 @@
+import React from "react";
+import { 
+  FaHome, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign, 
+  FaTruck, FaHandshake, FaUsers, FaChartLine, FaLink, 
+  FaBook, FaHistory, FaCheckCircle, FaMoneyBillWave, 
+  FaDownload, FaLock, FaBookOpen, FaShieldAlt, FaPlusCircle 
+} from "react-icons/fa";
+
+export const ICON_MAP = {
+  home: <FaHome />,
+  purchase: <FaShoppingCart />,
+  sales: <FaShoppingCart />,
+  box: <FaBox />,
+  file: <FaFileAlt />,
+  dollar: <FaDollarSign />,
+  truck: <FaTruck />,
+  handshake: <FaHandshake />,
+  users: <FaUsers />,
+  chart: <FaChartLine />,
+  link: <FaLink />,
+  book: <FaBook />,
+  history: <FaHistory />,
+  money: <FaMoneyBillWave />,
+  download: <FaDownload />,
+  lock: <FaLock />,
+  bookOpen: <FaBookOpen />,
+  shield: <FaShieldAlt />,
+  plus: <FaPlusCircle />
+};
+
+export const PAGE_CONFIG = [
+  {
+    category: "General",
+    items: [
+      { id: "home", name: "Home Dashboard", path: "/branch-home", icon: "home" },
+    ]
+  },
+  {
+    category: "Purchase",
+    items: [
+      { id: "purchase-dropdown", name: "Purchase Order", icon: "purchase", isDropdown: true, subItems: [
+        { id: "create-po", name: "Create PO", path: "/branch/po", icon: "purchase" },
+        { id: "purchase-list", name: "Purchase Order List", path: "/branch/purchase-orders", icon: "box", permissionFields: ["grandTotal", "totalPaid", "status"] },
+        { id: "purchase-invoice-list", name: "Purchase Invoice List", path: "/branch/purchase-invoices", icon: "file" },
+        { id: "restocking", name: "Restocking", path: "/branch/recycling", icon: "box" },
+        { id: "debit-note", name: "Debit Note", path: "/branch/debit-note", icon: "file" },
+        { id: "payment-po", name: "Payment", path: "/branch/po-payment", icon: "dollar" },
+      ]}
+    ]
+  },
+  {
+    category: "Sales",
+    items: [
+      { id: "sales-dropdown", name: "Sales Order", icon: "sales", isDropdown: true, subItems: [
+        { id: "create-so", name: "Create SO", path: "/branch/sales-order", icon: "purchase" },
+        { id: "invoiced-order", name: "Invoiced Order", path: "/branch/invoiced-order", icon: "file", permissionFields: ["grandTotal", "invoiceGenerated", "totalPaid"] },
+        { id: "credit-note", name: "Credit Note", path: "/branch/credit-note", icon: "file" },
+        { id: "claims", name: "Claims", path: "/branch/claims", icon: "file" },
+        { id: "receipt", name: "Receipt", path: "/branch/receipt", icon: "dollar", permissionFields: ["amount", "paymentMethod"] },
+      ]}
+    ]
+  },
+  {
+    category: "Other Transactions",
+    items: [
+      { id: "others-dropdown", name: "Other Transactions", icon: "plus", isDropdown: true, subItems: [
+        { id: "other-payment", name: "Other Payment", path: "/branch/other-payment", icon: "money" },
+        { id: "other-receipt", name: "Other Receipt", path: "/branch/other-receipt", icon: "download" },
+      ]}
+    ]
+  },
+  {
+    category: "Directory",
+    items: [
+      { id: "dispatch", name: "Loading & Dispatch", path: "/branch/dispatch", icon: "truck" },
+      { id: "suppliers", name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: "handshake", permissionFields: ["credit", "debit", "gstin"] },
+      { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["margin", "debit", "credit", "gstin"] },
+      { id: "product-records", name: "Product Records", path: "/branch/product-records", icon: "box", permissionFields: ["purchasingPrice", "sellingPrice", "grossProfit"] },
+    ]
+  },
+  {
+    category: "Accounts",
+    items: [
+      { id: "locked-prices", name: "Locked Prices", path: "/branch/locked-prices", icon: "lock" },
+      { id: "journals", name: "Journal Master", path: "/branch/journals", icon: "book" },
+      { id: "stock-journal", name: "Stock Journal", path: "/branch/stock-journal", icon: "history" },
+      { id: "day-book", name: "Day Book", path: "/branch/day-book", icon: "bookOpen" },
+    ]
+  },
+  {
+    category: "Reports",
+    items: [
+      { id: "insights", name: "Insights & Analysis", path: "/branch/insights", icon: "chart" },
+      { id: "summary", name: "Summary", path: "/branch/summary", icon: "chart" },
+    ]
+  },
+  {
+    category: "Admin",
+    items: [
+      { id: "quick-links", name: "Quick Links Hub", path: "/branch/quick-links", icon: "link" },
+      { id: "admin-requests", name: "Admin Requests", path: "/branch/admin-requests", icon: "shield" },
+    ]
+  }
+];
+
+export const getFlattenedPages = () => {
+  const flattened = [];
+  PAGE_CONFIG.forEach(cat => {
+    cat.items.forEach(item => {
+      if (item.isDropdown) {
+        item.subItems.forEach(sub => {
+          flattened.push({ ...sub, category: cat.category });
+        });
+      } else {
+        flattened.push({ ...item, category: cat.category });
+      }
+    });
+  });
+  return flattened;
+};
