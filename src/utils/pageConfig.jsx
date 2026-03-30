@@ -3,7 +3,9 @@ import {
   FaHome, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign, 
   FaTruck, FaHandshake, FaUsers, FaChartLine, FaLink, 
   FaBook, FaHistory, FaCheckCircle, FaMoneyBillWave, 
-  FaDownload, FaLock, FaBookOpen, FaShieldAlt, FaPlusCircle 
+  FaDownload, FaLock, FaBookOpen, FaShieldAlt, FaPlusCircle,
+  FaFileInvoice, FaList, FaUndo, FaMoneyCheckAlt, FaReceipt,
+  FaBoxes, FaHandHoldingUsd, FaPlus
 } from "react-icons/fa";
 
 export const ICON_MAP = {
@@ -25,7 +27,15 @@ export const ICON_MAP = {
   lock: <FaLock />,
   bookOpen: <FaBookOpen />,
   shield: <FaShieldAlt />,
-  plus: <FaPlusCircle />
+  plus: <FaPlusCircle />,
+  add: <FaPlus />,
+  list: <FaList />,
+  invoice: <FaFileInvoice />,
+  return: <FaUndo />,
+  payment: <FaMoneyCheckAlt />,
+  receipt: <FaReceipt />,
+  inventory: <FaBoxes />,
+  claims: <FaHandHoldingUsd />
 };
 
 export const PAGE_CONFIG = [
@@ -39,12 +49,12 @@ export const PAGE_CONFIG = [
     category: "Purchase",
     items: [
       { id: "purchase-dropdown", name: "Purchase Order", icon: "purchase", isDropdown: true, subItems: [
-        { id: "create-po", name: "Create PO", path: "/branch/po", icon: "purchase" },
-        { id: "purchase-list", name: "Purchase Order List", path: "/branch/purchase-orders", icon: "box", permissionFields: ["grandTotal", "totalPaid", "status"] },
-        { id: "purchase-invoice-list", name: "Purchase Invoice List", path: "/branch/purchase-invoices", icon: "file" },
-        { id: "restocking", name: "Restocking", path: "/branch/recycling", icon: "box" },
-        { id: "debit-note", name: "Debit Note", path: "/branch/debit-note", icon: "file" },
-        { id: "payment-po", name: "Payment", path: "/branch/po-payment", icon: "dollar" },
+        { id: "create-po", name: "Create PO", path: "/branch/po", icon: "add" },
+        { id: "purchase-list", name: "Purchase Order List", path: "/branch/purchase-orders", icon: "list", permissionFields: ["grandTotal", "totalPaid", "status"] },
+        { id: "purchase-invoice-list", name: "Purchase Invoice List", path: "/branch/purchase-invoices", icon: "invoice" },
+        { id: "restocking", name: "Restocking", path: "/branch/recycling", icon: "inventory" },
+        { id: "debit-note", name: "Debit Note", path: "/branch/debit-note", icon: "return" },
+        { id: "payment-po", name: "Payment", path: "/branch/po-payment", icon: "payment" },
       ]}
     ]
   },
@@ -52,12 +62,12 @@ export const PAGE_CONFIG = [
     category: "Sales",
     items: [
       { id: "sales-dropdown", name: "Sales Order", icon: "sales", isDropdown: true, subItems: [
-        { id: "create-so", name: "Create SO", path: "/branch/sales-order", icon: "purchase" },
-        { id: "sales-order-list", name: "Sales Order List", path: "/branch/sales-orders", icon: "box" },
-        { id: "sales-invoice-list", name: "Sales Invoice List", path: "/branch/sales-invoices", icon: "file" },
-        { id: "credit-note", name: "Credit Note", path: "/branch/credit-note", icon: "file" },
-        { id: "claims", name: "Claims", path: "/branch/claims", icon: "file" },
-        { id: "receipt", name: "Receipt", path: "/branch/receipt", icon: "dollar", permissionFields: ["amount", "paymentMethod"] },
+        { id: "create-so", name: "Create SO", path: "/branch/sales-order", icon: "add" },
+        { id: "sales-order-list", name: "Sales Order List", path: "/branch/sales-orders", icon: "list" },
+        { id: "sales-invoice-list", name: "Sales Invoice List", path: "/branch/sales-invoices", icon: "invoice" },
+        { id: "credit-note", name: "Credit Note", path: "/branch/credit-note", icon: "return" },
+        { id: "claims", name: "Claims", path: "/branch/claims", icon: "claims" },
+        { id: "receipt", name: "Receipt", path: "/branch/receipt", icon: "receipt", permissionFields: ["amount", "paymentMethod"] },
       ]}
     ]
   },
@@ -92,7 +102,6 @@ export const PAGE_CONFIG = [
     category: "Reports",
     items: [
       { id: "insights", name: "Insights & Analysis", path: "/branch/insights", icon: "chart" },
-      { id: "summary", name: "Summary", path: "/branch/summary", icon: "chart" },
       { id: "stock-summary", name: "Stock Summary (Tally)", path: "/branch/stock-summary", icon: "bookOpen" },
     ]
   },
