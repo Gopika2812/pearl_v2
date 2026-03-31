@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaBuilding, FaCheck, FaEnvelope, FaPhone, FaPlus, FaTimes, FaTrash, FaEdit, FaUser, FaUsers } from "react-icons/fa";
+import { FaBuilding, FaCheck, FaEdit, FaEnvelope, FaPhone, FaPlus, FaTimes, FaTrash, FaUser, FaUsers } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -41,6 +41,10 @@ export default function SuperAdminBranchManagement() {
     manager: "",
     isMainBranch: false,
     gstin: "",
+    city: "",
+    state: "Tamil Nadu",
+    stateCode: "33",
+    pincode: "",
   });
 
 
@@ -604,6 +608,57 @@ export default function SuperAdminBranchManagement() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    City
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Tirunelveli"
+                    value={branchForm.city}
+                    onChange={(e) => setBranchForm({ ...branchForm, city: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    State
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Tamil Nadu"
+                    value={branchForm.state}
+                    onChange={(e) => setBranchForm({ ...branchForm, state: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    State Code *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 33 (TN), 32 (KA), 29 (MH), 27 (TG)"
+                    value={branchForm.stateCode}
+                    onChange={(e) => setBranchForm({ ...branchForm, stateCode: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Pincode
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 627003"
+                    value={branchForm.pincode}
+                    onChange={(e) => setBranchForm({ ...branchForm, pincode: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  />
+                </div>
 
                 <div className="md:col-span-2">
                   <label className="block text-sm font-bold text-gray-700 mb-2">

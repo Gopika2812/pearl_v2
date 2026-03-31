@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaFileAlt, FaSync, FaSearch, FaHistory, FaTrash, FaEdit } from "react-icons/fa";
+import { FaChevronDown, FaEdit, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -112,6 +112,45 @@ const BranchSalesInvoices = () => {
     }
   };
 
+  // ✅ GENERATE E-INVOICE FUNCTION
+  const handleGenerateEInvoice = async (invoice) => {
+    if (invoice.einvoiceStatus === "GENERATED") {
+      toast.info("E-Invoice already generated for this invoice");
+      return;
+    }
+
+    if (!window.confirm(`Generate E-Invoice for ${invoice.invoiceNumber}?\n\nThis will submit to GST Portal and generate IRN + E-Way Bill.`)) {
+      return;
+    }
+
+    setRequestingAction(invoice._id);
+    try {
+      const res = await fetch(`${API_BASE}/einvoice/generate/${invoice._id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user?.id || user?._id,
+          username: user?.username || user?.fullName || "Staff",
+          generateEWayBill: invoice.grandTotal > 50000
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        toast.success(`✅ E-Invoice Generated!\nIRN: ${data.data.irn}\nE-Way Bill: ${data.data.ewayBillNo || "Not Required"}`);
+        fetchInvoices();
+      } else {
+        toast.error(`❌ Error: ${data.message || "Failed to generate E-Invoice"}`);
+      }
+    } catch (err) {
+      console.error("Error:", err);
+      toast.error("Error generating E-Invoice: " + err.message);
+    } finally {
+      setRequestingAction(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <ToastContainer position="top-right" autoClose={2500} theme="colored" />
@@ -172,6 +211,7 @@ const BranchSalesInvoices = () => {
                     <th className="px-6 py-5 text-left">Order Ref (SO)</th>
                     <th className="px-6 py-5 text-left">Customer Details</th>
                     <th className="px-6 py-5 text-right">Grand Total</th>
+                    <th className="px-6 py-5 text-center">E-Invoice Status</th>
                     <th className="px-6 py-5 text-center">Status</th>
                     <th className="px-6 py-5 text-center">Actions</th>
                   </tr>
@@ -204,6 +244,24 @@ const BranchSalesInvoices = () => {
                            ₹{(inv.grandTotal || 0).toLocaleString()}
                         </td>
                         <td className="px-6 py-5 text-center">
+                           {inv.einvoiceStatus === "GENERATED" ? (
+                             <div className="flex flex-col items-center gap-1">
+                               <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                                  ✅ Validated
+                               </span>
+                               <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold">{inv.irn?.substring(0, 8)}...</code>
+                             </div>
+                           ) : inv.einvoiceStatus === "FAILED" ? (
+                             <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                                ❌ Failed
+                             </span>
+                           ) : (
+                             <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                                📄 Pending
+                             </span>
+                           )}
+                        </td>
+                        <td className="px-6 py-5 text-center">
                            {inv.salesOrderId?.reEditRequestStatus === "PENDING" ? (
                              <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
                                 Re-Edit Requested
@@ -219,7 +277,30 @@ const BranchSalesInvoices = () => {
                            )}
                         </td>
                         <td className="px-6 py-4 text-center">
-                           <div className="flex items-center gap-2 justify-center">
+                           <div className="flex items-center gap-2 justify-center flex-wrap">
+                              {/* ✅ GENERATE E-INVOICE BUTTON */}
+                              <button
+                                onClick={() => handleGenerateEInvoice(inv)}
+                                disabled={requestingAction === inv._id || inv.einvoiceStatus === "GENERATED"}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${
+                                  inv.einvoiceStatus === "GENERATED"
+                                    ? "bg-green-100 text-green-700 border-green-200 cursor-default"
+                                    : "bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white"
+                                }`}
+                                title={inv.einvoiceStatus === "GENERATED" ? `IRN: ${inv.irn}` : "Submit to GST Portal"}
+                              >
+                                {requestingAction === inv._id ? (
+                                  <FaSync className="animate-spin" />
+                                ) : inv.einvoiceStatus === "GENERATED" ? (
+                                  <>✅ E-INVOICE</>
+                                ) : (
+                                  <>
+                                    <FaFileContract />
+                                    E-INVOICE
+                                  </>
+                                )}
+                              </button>
+
                               <button
                                 onClick={() => handleRequestEdit(inv)}
                                 disabled={requestingAction === inv._id || inv.salesOrderId?.reEditRequestStatus === "PENDING"}

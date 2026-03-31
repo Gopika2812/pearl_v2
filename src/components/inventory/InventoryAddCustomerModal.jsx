@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaTimes, FaCloudUploadAlt, FaIdCard, FaMapMarkedAlt, FaPhoneAlt, FaBuilding, FaWallet, FaChevronRight } from "react-icons/fa";
+import { FaBuilding, FaChevronRight, FaCloudUploadAlt, FaIdCard, FaMapMarkedAlt, FaPhoneAlt, FaTimes, FaWallet } from "react-icons/fa";
 import { API_BASE } from "../../api";
 import FilterableCheckboxList from "../FilterableCheckboxList";
 import FilterableSelect from "../FilterableSelect";
@@ -17,6 +17,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     state: "",
     country: "",
     pincode: "",
+    stateCode: "33",
     registrationType: "regular",
     gstin: "",
     salesOwner: "",
@@ -48,6 +49,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         state: editingItem.state || "",
         country: editingItem.country || "",
         pincode: editingItem.pincode || "",
+        stateCode: editingItem.stateCode || "33",
         registrationType: editingItem.registrationType || "regular",
         gstin: editingItem.gstin || "",
         salesOwner: editingItem.salesOwner || "",
@@ -72,6 +74,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         state: "",
         country: "",
         pincode: "",
+        stateCode: "33",
         registrationType: "regular",
         gstin: "",
         salesOwner: "",
@@ -130,6 +133,14 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
       debit: Math.round(Number(customer.debit || 0)),
       margin: Math.round(Number(customer.margin || 0) * 100) / 100,
     };
+    
+    console.log("📝 CUSTOMER FORM DATA BEING SENT:");
+    console.log("Name:", roundedCustomer.name);
+    console.log("State:", roundedCustomer.state);
+    console.log("State Code:", roundedCustomer.stateCode);
+    console.log("Pincode:", roundedCustomer.pincode);
+    console.log("Full Data:", roundedCustomer);
+    console.log("");
     
     await onSave(roundedCustomer);
     onClose();
@@ -437,7 +448,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                 </div>
 
                 {/* ADDRESS METADATA */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div>
                     <label className={labelClass}>District</label>
                     <input type="text" className={inputClass} value={customer.district} onChange={(e) => setCustomer({ ...customer, district: e.target.value })} />
@@ -449,6 +460,10 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                   <div>
                     <label className={labelClass}>Pincode</label>
                     <input type="text" className={inputClass} value={customer.pincode} onChange={(e) => setCustomer({ ...customer, pincode: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>State Code *</label>
+                    <input type="text" className={inputClass} placeholder="e.g. 33, 32, 29, 27" value={customer.stateCode} onChange={(e) => setCustomer({ ...customer, stateCode: e.target.value })} />
                   </div>
                   <div>
                     <label className={labelClass}>Country</label>
