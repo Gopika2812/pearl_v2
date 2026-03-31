@@ -1,14 +1,14 @@
+import bcrypt from "bcryptjs";
 import express from "express";
 import jwt from "jsonwebtoken";
-import SuperAdmin from "../models/SuperAdmin.js";
-import PendingRegistration from "../models/PendingRegistration.js";
-import Branch from "../models/Branch.js";
-import BranchUser from "../models/BranchUser.js";
 import auth from "../middleware/auth.js";
 import rbac from "../middleware/rbac.js";
+import Branch from "../models/Branch.js";
+import BranchUser from "../models/BranchUser.js";
+import PendingRegistration from "../models/PendingRegistration.js";
+import SuperAdmin from "../models/SuperAdmin.js";
 import {
-  sendOTPEmail,
-  sendApprovalEmail,
+    sendApprovalEmail
 } from "../utils/emailService.js";
 
 const router = express.Router();
@@ -102,8 +102,6 @@ router.post("/login", async (req, res) => {
 });
 
 
-// ==================== SUPER ADMIN DASHBOARD ====================
-
 /**
  * GET: All pending registrations (Super Admin only)
  */
@@ -129,22 +127,6 @@ router.get("/pending-registrations", auth, rbac(["SUPER_ADMIN"]), async (req, re
 });
 
 /**
- * GET: Fetch single super admin by ID
- */
-router.get("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const admin = await SuperAdmin.findById(id).select("-password");
-    if (!admin) {
-      return res.status(404).json({ success: false, message: "Super Admin not found" });
-    }
-    res.json({ success: true, data: admin });
-  } catch (error) {
-    res.status(500).json({ success: false, message: `Server error: ${error.message}` });
-  }
-});
-
-/**
  * GET: All branches (Super Admin only)
  */
 router.get("/branches", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
@@ -162,6 +144,35 @@ router.get("/branches", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
       message: "Failed to fetch branches",
       error: error.message,
     });
+  }
+});
+
+/**
+ * GET: All registrations (pending + approved + rejected)
+ * Allows super admin to view all user registrations for approval and management
+ */
+router.get("/all-registrations", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const regs = await PendingRegistration.find({}).sort({ createdAt: -1 });
+    res.json({ success: true, data: regs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to fetch registrations", error: error.message });
+  }
+});
+
+/**
+ * GET: Fetch single super admin by ID
+ */
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const admin = await SuperAdmin.findById(id).select("-password");
+    if (!admin) {
+      return res.status(404).json({ success: false, message: "Super Admin not found" });
+    }
+    res.json({ success: true, data: admin });
+  } catch (error) {
+    res.status(500).json({ success: false, message: `Server error: ${error.message}` });
   }
 });
 
@@ -307,6 +318,29 @@ router.post("/reject-registration/:registrationId", auth, rbac(["SUPER_ADMIN"]),
       message: "Failed to reject registration",
       error: error.message,
     });
+  }
+});
+
+// ==================== SUPER ADMIN USER MANAGEMENT ====================
+
+/**
+ * PATCH: Update BranchUser role/credentials (Super Admin only)
+ * Allows super admin to change role, password, or other fields for any user
+ */
+router.patch("/update-user/:userId", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const update = req.body; // { role, password, ... }
+    // If password is present, hash it before update
+    if (update.password) {
+      const salt = await bcrypt.genSalt(10);
+      update.password = await bcrypt.hash(update.password, salt);
+    }
+    const user = await BranchUser.findByIdAndUpdate(userId, update, { new: true });
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    res.json({ success: true, data: user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to update user", error: error.message });
   }
 });
 
