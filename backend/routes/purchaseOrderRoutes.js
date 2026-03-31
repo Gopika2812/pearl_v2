@@ -4,6 +4,8 @@ import PurchaseOrder from "../models/PurchaseOrder.js";
 import PurchaseInvoice from "../models/PurchaseInvoice.js";
 import Vendor from "../models/Vendor.js";
 import VoucherType from "../models/VoucherType.js";
+import Payment from "../models/Payment.js";
+import { getFinancialYear as getGlobalFinancialYear } from "../utils/financialYear.js";
 
 const router = express.Router();
 
@@ -64,12 +66,33 @@ router.get("/next-invoice/:voucherType", async (req, res) => {
 // GET ALL PURCHASE ORDERS
 router.get("/", async (req, res) => {
   try {
-    const { branchId, search } = req.query;
+    const { branchId, search, status, statuses, excludeStatus } = req.query;
     const query = {};
     
     // Filter by branchId if provided
     if (branchId) {
       query.branchId = branchId;
+    }
+
+    // Filter by single status (e.g., ?status=INVOICED)
+    if (status) {
+      query.status = status;
+    }
+
+    // Filter by multiple statuses (e.g., ?statuses=INVOICED,PARTIALLY_RETURNED)
+    if (statuses) {
+      const statusArray = statuses.split(",").map(s => s.trim());
+      query.status = { $in: statusArray };
+    }
+
+    // Exclude specific statuses (e.g., ?excludeStatus=CANCELLED)
+    if (excludeStatus) {
+      const excludeArray = excludeStatus.split(",").map(s => s.trim());
+      if (query.status) {
+        // If already filtering by status, skip excludeStatus
+      } else {
+        query.status = { $nin: excludeArray };
+      }
     }
 
     // 🔍 SERVER-SIDE SEARCH: invoiceId, Vendor, and Item Name
@@ -82,7 +105,7 @@ router.get("/", async (req, res) => {
       ];
     }
     
-    console.log("🔍 GET /api/purchase-orders - Fetching POs with query:", JSON.stringify(query));
+    console.log("🔍 GET /api/purchase-orders - query:", JSON.stringify(query));
     const orders = await PurchaseOrder.find(query).sort({ createdAt: -1 });
     console.log(`✅ Found ${orders.length} purchase orders`);
     
@@ -141,14 +164,46 @@ router.post('/:id/generate-invoice', async (req, res) => {
         }
       }
 
-      // Vendor delta
+      // ─── VENDOR BALANCE UPDATE (with netting) ─────────────────────────
       const vendorDelta = newGrandTotal - oldGrandTotal;
+      let debitSubtracted = 0;
+      let creditAdded = 0;
+
       if (vendorDelta !== 0 && order.vendor) {
-        await Vendor.findOneAndUpdate(
-          { branchId: order.branchId, name: order.vendor },
-          { $inc: { credit: vendorDelta } }
-        );
-        console.log(`💰 Vendor credit delta: ${vendorDelta > 0 ? '+' : ''}₹${vendorDelta}`);
+        const vendorRecord = await Vendor.findOne({ branchId: order.branchId, name: order.vendor });
+        if (vendorRecord) {
+          if (vendorDelta > 0) {
+            // INCREASING DEBT: Subtract from debit balance first
+            const currentDebit = vendorRecord.debit || 0;
+            if (currentDebit > 0) {
+              if (vendorDelta <= currentDebit) {
+                debitSubtracted = vendorDelta;
+                vendorRecord.debit -= vendorDelta;
+              } else {
+                debitSubtracted = currentDebit;
+                creditAdded = vendorDelta - currentDebit;
+                vendorRecord.debit = 0;
+                vendorRecord.credit = (vendorRecord.credit || 0) + creditAdded;
+              }
+            } else {
+              creditAdded = vendorDelta;
+              vendorRecord.credit = (vendorRecord.credit || 0) + vendorDelta;
+            }
+          } else {
+            // DECREASING DEBT (vendorDelta is negative): Reduce credit balance first
+            const amountToReduce = Math.abs(vendorDelta);
+            const currentCredit = vendorRecord.credit || 0;
+            if (amountToReduce <= currentCredit) {
+              vendorRecord.credit -= amountToReduce;
+            } else {
+              const remainder = amountToReduce - currentCredit;
+              vendorRecord.credit = 0;
+              vendorRecord.debit = (vendorRecord.debit || 0) + remainder;
+            }
+          }
+          await vendorRecord.save();
+          console.log(`💰 Vendor balance updated (delta: ${vendorDelta}): DebitSub: ${debitSubtracted}, CreditAdd: ${creditAdded}`);
+        }
       }
 
       // Update the existing PI record (same ID)
@@ -183,11 +238,45 @@ router.post('/:id/generate-invoice', async (req, res) => {
       order.editRequestStatus = 'NONE';
       await order.save();
 
+      // ─── AUTOMATIC PAYMENT RECORD (for netting) ──────────────
+      if (debitSubtracted > 0 && order.vendor) {
+        // Generate a Pay ID
+        let payVoucher = await VoucherType.findOne({ branchId: order.branchId, name: "payment", orderType: "PM" });
+        if (!payVoucher) {
+          payVoucher = await VoucherType.create({ branchId: order.branchId, name: "payment", orderType: "PM", prefix: "PAY", counter: 1, financialYear: currentFY });
+        }
+        if (payVoucher.financialYear !== currentFY) {
+          payVoucher.counter = 1; payVoucher.financialYear = currentFY;
+        }
+        payVoucher.counter += 1;
+        await payVoucher.save();
+        const payId = `pay${String(payVoucher.counter).padStart(3, "0")}/${currentFY}`;
+
+        const vendorRecord = await Vendor.findOne({ branchId: order.branchId, name: order.vendor });
+        const autoPayment = new Payment({
+          paymentId: payId,
+          branchId: order.branchId,
+          paymentType: "vendor_payment",
+          amount: debitSubtracted,
+          paymentMethod: "other",
+          paymentDate: new Date(),
+          vendor: { vendorId: vendorRecord?._id, name: order.vendor },
+          purchaseOrder: { poId: order._id, invoiceId: order.invoiceId },
+          description: `System Netting Adjustment (Debit Balance used for PI: ${order.purchaseInvoiceId})`,
+          billingPerson: "System (Auto-Netting)",
+          status: "completed",
+        });
+        await autoPayment.save();
+        console.log(`✅ Automatic Payment Record created for netting: ${payId} (₹${debitSubtracted})`);
+      }
+
       return res.json({
         success: true,
         message: `Re-Invoice complete. ${order.purchaseInvoiceId} updated with delta changes.`,
         piNumber: order.purchaseInvoiceId,
-        vendorDelta
+        vendorDelta,
+        debitSubtracted,
+        creditAdded
       });
     }
 
@@ -222,7 +311,15 @@ router.post('/:id/generate-invoice', async (req, res) => {
       items: order.items,
       subtotal: order.subtotal,
       totalTax: order.totalTax,
-      extraExpenses: order.extraExpenses,
+      extraExpenses: (order.extraExpenses || []).map(exp => ({
+        expenseName: exp.expenseName,
+        amount: exp.amount || exp.basePrice,
+        basePrice: exp.basePrice || exp.amount,
+        gst: exp.gst || exp.gstPercent,
+        gstPercent: exp.gstPercent || exp.gst,
+        gstAmount: exp.gstAmount || 0,
+        totalPrice: exp.totalPrice,
+      })),
       extraExpenseAmount: order.extraExpenseAmount,
       grandTotal: order.grandTotal,
       voucherType: order.voucherType,
@@ -236,12 +333,32 @@ router.post('/:id/generate-invoice', async (req, res) => {
       await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty } });
     }
 
-    // 4. Full vendor credit increase
+    // 4. Vendor balance update with netting
+    let debitSubtracted = 0;
+    let creditAdded = 0;
     if (order.vendor && order.grandTotal) {
-      await Vendor.findOneAndUpdate(
-        { branchId: order.branchId, name: order.vendor },
-        { $inc: { credit: order.grandTotal } }
-      );
+      const vendorRecord = await Vendor.findOne({ branchId: order.branchId, name: order.vendor });
+      if (vendorRecord) {
+        const amountToApply = order.grandTotal;
+        const currentDebit = vendorRecord.debit || 0;
+
+        if (currentDebit > 0) {
+          if (amountToApply <= currentDebit) {
+            debitSubtracted = amountToApply;
+            vendorRecord.debit -= amountToApply;
+          } else {
+            debitSubtracted = currentDebit;
+            creditAdded = amountToApply - currentDebit;
+            vendorRecord.debit = 0;
+            vendorRecord.credit = (vendorRecord.credit || 0) + creditAdded;
+          }
+        } else {
+          creditAdded = amountToApply;
+          vendorRecord.credit = (vendorRecord.credit || 0) + amountToApply;
+        }
+        await vendorRecord.save();
+        console.log(`💰 Vendor Balance Auto-Netting: Subtracted ${debitSubtracted} from Debit, Added ${creditAdded} to Credit.`);
+      }
     }
 
     // 5. Snapshot to editHistory + save lastInvoicedItems
@@ -262,11 +379,45 @@ router.post('/:id/generate-invoice', async (req, res) => {
     order.purchaseInvoiceId = piNumber;
     await order.save();
 
+    // ─── AUTOMATIC PAYMENT RECORD (for netting) ──────────────
+    if (debitSubtracted > 0 && order.vendor) {
+      // Generate a Pay ID
+      let payVoucher = await VoucherType.findOne({ branchId: order.branchId, name: "payment", orderType: "PM" });
+      if (!payVoucher) {
+        payVoucher = await VoucherType.create({ branchId: order.branchId, name: "payment", orderType: "PM", prefix: "PAY", counter: 1, financialYear: currentFY });
+      }
+      if (payVoucher.financialYear !== currentFY) {
+        payVoucher.counter = 1; payVoucher.financialYear = currentFY;
+      }
+      payVoucher.counter += 1;
+      await payVoucher.save();
+      const payId = `pay${String(payVoucher.counter).padStart(3, "0")}/${currentFY}`;
+
+      const vendorRecord = await Vendor.findOne({ branchId: order.branchId, name: order.vendor });
+      const autoPayment = new Payment({
+        paymentId: payId,
+        branchId: order.branchId,
+        paymentType: "vendor_payment",
+        amount: debitSubtracted,
+        paymentMethod: "other",
+        paymentDate: new Date(),
+        vendor: { vendorId: vendorRecord?._id, name: order.vendor },
+        purchaseOrder: { poId: order._id, invoiceId: order.invoiceId },
+        description: `System Netting Adjustment (Debit Balance used for PI: ${piNumber})`,
+        billingPerson: "System (Auto-Netting)",
+        status: "completed",
+      });
+      await autoPayment.save();
+      console.log(`✅ Automatic Payment Record created for netting: ${payId} (₹${debitSubtracted})`);
+    }
+
     res.json({
       success: true,
       message: `Purchase Invoice ${piNumber} generated successfully.`,
       piNumber,
-      piId: purchaseInvoice._id
+      piId: purchaseInvoice._id,
+      debitSubtracted,
+      creditAdded
     });
   } catch (err) {
     console.error('Generate invoice error:', err);
@@ -561,24 +712,63 @@ router.patch("/:id/approve-cancel", async (req, res) => {
     if (!order) return res.status(404).json({ message: "Order not found" });
 
     if (order.status === "INVOICED") {
-      // Revert using lastInvoicedItems (accurate snapshot of what was actually applied)
-      const itemsToRevert = order.lastInvoicedItems?.length > 0 ? order.lastInvoicedItems : order.items;
+      console.log(`🕒 Starting cancellation reversion for PO: ${order.invoiceId}`);
+      
+      // 1. Determine items to revert (prioritize lastInvoicedItems snapshot)
+      const itemsToRevert = (order.lastInvoicedItems && order.lastInvoicedItems.length > 0) 
+        ? order.lastInvoicedItems 
+        : order.items;
+      
       const totalToRevert = order.lastInvoicedGrandTotal || order.grandTotal;
 
+      // 2. Revert Stock
+      console.log(`📦 Reverting stock for ${itemsToRevert.length} items...`);
       for (const item of itemsToRevert) {
-        await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -item.qty } });
-        console.log(`📉 Cancel revert stock: ${item.name} -${item.qty}`);
+        if (item.productId && item.qty) {
+          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -item.qty } });
+          console.log(`📉 Cancel revert stock: ${item.name || item.productId} -${item.qty}`);
+        }
       }
 
+      // 3. Revert Vendor Balance (Accounting for Netting)
       if (order.vendor && totalToRevert) {
-        await Vendor.findOneAndUpdate(
-          { branchId: order.branchId, name: order.vendor },
-          { $inc: { credit: -totalToRevert } }
-        );
-        console.log(`📉 Cancel revert vendor credit: -₹${totalToRevert}`);
+        const vendorRecord = await Vendor.findOne({ branchId: order.branchId, name: order.vendor });
+        if (vendorRecord) {
+          // Find if there was any automatic netting payment for this PO
+          const nettingPayments = await Payment.find({
+            "purchaseOrder.poId": order._id,
+            paymentMethod: "other",
+            description: /System Netting Adjustment/i,
+            status: "completed"
+          });
+
+          const totalNettingReversion = nettingPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+          const creditToRevert = totalToRevert - totalNettingReversion;
+
+          console.log(`💰 Netting Reversion: ₹${totalNettingReversion} back to Debit, ₹${creditToRevert} from Credit.`);
+
+          // Restore Debit balance
+          if (totalNettingReversion > 0) {
+            vendorRecord.debit = (vendorRecord.debit || 0) + totalNettingReversion;
+            // Void the netting payment records so they don't show up in totals anymore
+            for (const pay of nettingPayments) {
+              pay.status = "voided";
+              pay.description += " (CANCELLED - PO effects reverted)";
+              await pay.save();
+            }
+          }
+
+          // Reduce Credit balance
+          if (creditToRevert > 0) {
+            vendorRecord.credit = Math.max(0, (vendorRecord.credit || 0) - creditToRevert);
+          }
+
+          await vendorRecord.save();
+          console.log(`✅ Vendor ${order.vendor} balance reverted.`);
+        }
       }
 
-      // Also mark the linked PI as CANCELLED if it exists
+      // 4. Mark the linked PI as CANCELLED
       if (order.purchaseInvoiceId) {
         await PurchaseInvoice.findOneAndUpdate(
           { purchaseInvoiceId: order.purchaseInvoiceId, branchId: order.branchId },

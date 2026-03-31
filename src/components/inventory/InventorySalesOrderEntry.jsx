@@ -108,6 +108,7 @@ export default function InventorySalesOrderEntry({
   // EXTRA EXPENSES STATES
   const [extraExpenses, setExtraExpenses] = useState([]);
   const [showExtraExpensesModal, setShowExtraExpensesModal] = useState(false);
+  const [isCustomExpense, setIsCustomExpense] = useState(false);
   const [expenseName, setExpenseName] = useState("Transport");
   const [expensePrice, setExpensePrice] = useState("");
   const [expenseGstPercent, setExpenseGstPercent] = useState(18);
@@ -1835,24 +1836,47 @@ export default function InventorySalesOrderEntry({
             <div className="space-y-4">
               {/* Expense Name */}
               <div>
-                <label className={labelClass}>Expense Name</label>
-                <select
-                  className={selectClass}
-                  value={expenseName}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setExpenseName(val);
-                    if (val === "Transport") {
-                      setExpenseGstPercent(18);
-                    }
-                  }}
-                >
-                  <option value="Transport">Transport</option>
-                  <option value="Discount">Discount</option>
-                  <option value="Offloading">Offloading</option>
-                  <option value="Unloading">Unloading</option>
-                  <option value="Freezer">Freezer</option>
-                </select>
+                <div className="flex justify-between items-center mb-1">
+                  <label className={labelClass}>Expense Name</label>
+                  <button 
+                    onClick={() => {
+                      setIsCustomExpense(!isCustomExpense);
+                      setExpenseName("");
+                    }}
+                    className="text-orange-600 hover:orange-700 hover:underline text-[10px] font-bold uppercase flex items-center gap-1 transition-all active:scale-95"
+                  >
+                    {isCustomExpense ? "← Back to List" : "+ Add Custom Name"}
+                  </button>
+                </div>
+                
+                {isCustomExpense ? (
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={expenseName}
+                    onChange={(e) => setExpenseName(e.target.value)}
+                    placeholder="Enter Custom Expense (e.g. Offloading)"
+                    autoFocus
+                  />
+                ) : (
+                  <select
+                    className={selectClass}
+                    value={expenseName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setExpenseName(val);
+                      if (val === "Transport") {
+                        setExpenseGstPercent(18);
+                      }
+                    }}
+                  >
+                    <option value="Transport">Transport</option>
+                    <option value="Discount">Discount</option>
+                    <option value="Offloading">Offloading</option>
+                    <option value="Unloading">Unloading</option>
+                    <option value="Freezer">Freezer</option>
+                  </select>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">

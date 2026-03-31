@@ -16,7 +16,8 @@ import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 import { 
   FaBox, FaBuilding, FaChevronRight, FaFileAlt, FaHandshake, 
-  FaLink, FaPlus, FaShoppingCart, FaTruck, FaUsers, FaWarehouse, FaTags, FaStore, FaUserLock 
+  FaLink, FaPlus, FaShoppingCart, FaTruck, FaUsers, FaWarehouse, FaTags, FaStore, FaUserLock,
+  FaUserTie, FaUserTag, FaLayerGroup, FaMapMarkerAlt, FaFileInvoice, FaShieldAlt
 } from "react-icons/fa";
 import { QUICK_LINKS_CONFIG, QUICK_LINKS_CATEGORIES } from "../../utils/quickLinksConfig";
 
@@ -38,17 +39,17 @@ export default function BranchQuickLinks() {
     items: cat.items.map(itemId => {
       const config = QUICK_LINKS_CONFIG[itemId];
       const iconMap = {
-        voucher_type: <FaFileAlt />,
-        warehouse: <FaWarehouse />,
-        product_group: <FaTags />,
-        product_category: <FaBox />,
-        product: <FaStore />,
-        customer_category: <FaUsers />,
+        voucher_type: <FaFileInvoice />,
+        warehouse: <FaMapMarkerAlt />,
+        product_group: <FaLayerGroup />,
+        product_category: <FaTags />,
+        product: <FaBox />,
+        customer_category: <FaUserTag />,
         customer_group: <FaUsers />,
         customer: <FaBuilding />,
         vendor: <FaHandshake />,
         sales_owner: <FaUserLock />,
-        sales_man: <FaUsers />,
+        sales_man: <FaUserTie />,
         delivery_man: <FaTruck />
       };
       return {
@@ -86,23 +87,33 @@ export default function BranchQuickLinks() {
     <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20 px-4 md:px-8 pb-10">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="bg-primary/10 p-2.5 rounded-xl">
-              <FaLink className="text-xl text-primary" />
+        <div className="bg-white/70 backdrop-blur-md rounded-[2rem] shadow-sm border border-white/50 p-6 mb-10 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-6">
+            <div className="bg-gradient-to-tr from-primary to-blue-600 p-4 rounded-2xl shadow-lg shadow-primary/20">
+              <FaLink className="text-2xl text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-black text-gray-900 tracking-tight">Master Data Hub</h1>
-              <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">Streamline system configuration</p>
+              <h1 className="text-3xl font-black text-gray-900 tracking-tight">Master Data Hub</h1>
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-[0.3em] mt-1 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                System Configuration Center
+              </p>
             </div>
           </div>
-          {viewingData && (
-            <button
+          {viewingData ? (
+             <button
               onClick={() => setViewingData(null)}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold transition-all flex items-center gap-2 text-sm"
+              className="bg-gray-900 hover:bg-gray-800 text-white px-8 py-3 rounded-2xl font-black uppercase tracking-widest transition-all flex items-center gap-2 text-xs shadow-xl shadow-gray-200"
             >
-              <FaChevronRight className="rotate-180" /> Back to Hub
+              <FaChevronRight className="rotate-180" /> Back to Overview
             </button>
+          ) : (
+             <div className="flex items-center gap-3 bg-gray-50/50 p-2 rounded-2xl border border-gray-100">
+               <div className="px-4 py-2 bg-white rounded-xl shadow-sm border border-gray-100 flex items-center gap-2">
+                 <FaShieldAlt className="text-primary text-xs" />
+                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Admin Access Only</span>
+               </div>
+             </div>
           )}
         </div>
 
@@ -119,43 +130,57 @@ export default function BranchQuickLinks() {
             />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {filteredCategories.map((cat, idx) => (
               <div 
                 key={idx} 
-                className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow"
+                className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 group/card"
               >
-                <div className={`bg-gradient-to-r ${cat.color} p-6 text-white flex items-center gap-4`}>
-                  <span className="text-2xl opacity-90">{cat.icon}</span>
-                  <h2 className="text-xl font-bold tracking-wide uppercase">{cat.title}</h2>
+                <div className={`bg-gradient-to-br ${cat.color} p-8 text-white flex items-center justify-between relative overflow-hidden`}>
+                  <div className="relative z-10 flex items-center gap-5">
+                    <div className="bg-white/20 backdrop-blur-md p-4 rounded-2xl shadow-inner group-hover/card:scale-110 transition-transform duration-500">
+                      <span className="text-3xl">{cat.icon}</span>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black tracking-tight">{cat.title}</h2>
+                      <p className="text-white/70 text-[10px] font-bold uppercase tracking-[0.2em] mt-1">{cat.items.length} Master Modules</p>
+                    </div>
+                  </div>
+                  <div className="absolute -right-4 -bottom-4 text-white/10 text-8xl font-black rotate-12 pointer-events-none select-none">
+                    {cat.icon}
+                  </div>
                 </div>
                 
-                <div className="p-2">
-                  <div className="divide-y divide-gray-50">
+                <div className="p-4">
+                  <div className="grid grid-cols-1 gap-2">
                     {cat.items.map((item) => (
-                      <div key={item.id} className="p-4 hover:bg-gray-50/80 transition-colors flex items-center justify-between group">
-                        <div className="flex-1 min-w-0 mr-4">
-                          <h3 className="font-bold text-gray-800 group-hover:text-primary transition-colors">{item.label}</h3>
-                          <p className="text-xs text-gray-500 truncate mt-0.5">{item.desc}</p>
+                      <div 
+                        key={item.id} 
+                        className="p-4 rounded-2xl hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-all flex items-center justify-between group/item"
+                      >
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 group-hover/item:bg-primary/10 group-hover/item:text-primary transition-all shadow-sm">
+                            <span className="text-lg">{item.icon}</span>
+                          </div>
+                          <div className="flex-1 min-w-0 mr-4">
+                            <h3 className="font-bold text-gray-800 text-sm group-hover/item:text-primary transition-colors">{item.label}</h3>
+                            <p className="text-[10px] text-gray-400 truncate mt-0.5 font-medium">{QUICK_LINKS_CONFIG[item.id]?.desc || "Technical configuration"}</p>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 lg:group-hover:opacity-100 transition-opacity">
+                        
+                        <div className="flex items-center gap-2">
                           <button
                             onClick={() => setActiveModal(item.id)}
-                            className="bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                            className="bg-white border border-gray-200 hover:border-primary hover:text-primary text-gray-600 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-sm"
                           >
-                            <FaPlus size={10} /> Add
+                            <FaPlus size={8} /> Add
                           </button>
                           <button
                             onClick={() => setViewingData(item.id)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                            className="bg-primary hover:bg-primary/90 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-primary/20"
                           >
-                            View
+                            Manage
                           </button>
-                        </div>
-                        {/* Always show icons on mobile toggle */}
-                        <div className="flex md:hidden items-center gap-1">
-                          <button onClick={() => setActiveModal(item.id)} className="p-2 text-primary"><FaPlus size={14} /></button>
-                          <button onClick={() => setViewingData(item.id)} className="p-2 text-blue-600"><FaChevronRight size={14} /></button>
                         </div>
                       </div>
                     ))}

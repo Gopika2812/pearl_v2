@@ -80,7 +80,8 @@ const InventoryPurchaseOrderEntry = ({
   // Footer State
   const [extraExpenses, setExtraExpenses] = useState([]);
   const [showExtraExpensesModal, setShowExtraExpensesModal] = useState(false);
-  const [expenseName, setExpenseName] = useState("");
+  const [isCustomExpense, setIsCustomExpense] = useState(false);
+  const [expenseName, setExpenseName] = useState("Transport");
   const [expensePrice, setExpensePrice] = useState("");
   const [expenseGst, setExpenseGst] = useState("");
 
@@ -287,8 +288,11 @@ const InventoryPurchaseOrderEntry = ({
     const newExpense = {
       id: Date.now(),
       expenseName: expenseName.trim(),
-      amount: baseAmount,
-      gst: gstPct,
+      amount: baseAmount,       // Legacy
+      basePrice: baseAmount,    // New
+      gst: gstPct,              // Legacy
+      gstPercent: gstPct,       // New
+      gstAmount: gstAmount,     // New
       totalPrice: finalPrice,
     };
 
@@ -372,8 +376,11 @@ const InventoryPurchaseOrderEntry = ({
       totalTax: Math.round(totalTax),
       extraExpenses: extraExpenses.map((exp) => ({
         expenseName: exp.expenseName,
-        amount: Math.round(Number(exp.amount) || 0),
-        gst: Math.round(Number(exp.gst) || 0),
+        amount: Math.round(Number(exp.amount || exp.basePrice) || 0),
+        basePrice: Math.round(Number(exp.basePrice || exp.amount) || 0),
+        gst: Math.round(Number(exp.gst || exp.gstPercent) || 0),
+        gstPercent: Math.round(Number(exp.gstPercent || exp.gst) || 0),
+        gstAmount: Math.round(Number(exp.gstAmount) || 0),
         totalPrice: Math.round(Number(exp.totalPrice) || 0),
       })),
       extraExpenseAmount: Math.round(extraExpenseAmount),
@@ -995,24 +1002,47 @@ const InventoryPurchaseOrderEntry = ({
             <div className="space-y-4">
               {/* Expense Name */}
               <div>
-                <label className={labelClass}>Expense Name</label>
-                <select
-                  className={selectClass}
-                  value={expenseName}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setExpenseName(val);
-                    if (val === "Transport") {
-                      setExpenseGst(18);
-                    }
-                  }}
-                >
-                  <option value="Transport">Transport</option>
-                  <option value="Discount">Discount</option>
-                  <option value="Offloading">Offloading</option>
-                  <option value="Unloading">Unloading</option>
-                  <option value="Freezer">Freezer</option>
-                </select>
+                <div className="flex justify-between items-center mb-1">
+                  <label className={labelClass}>Expense Name</label>
+                  <button 
+                    onClick={() => {
+                      setIsCustomExpense(!isCustomExpense);
+                      setExpenseName("");
+                    }}
+                    className="text-[#319bab] hover:underline text-[10px] font-bold uppercase flex items-center gap-1 transition-all active:scale-95"
+                  >
+                    {isCustomExpense ? "← Back to List" : "+ Add Custom Name"}
+                  </button>
+                </div>
+                
+                {isCustomExpense ? (
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={expenseName}
+                    onChange={(e) => setExpenseName(e.target.value)}
+                    placeholder="Enter Custom Expense (e.g. Offloading)"
+                    autoFocus
+                  />
+                ) : (
+                  <select
+                    className={selectClass}
+                    value={expenseName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setExpenseName(val);
+                      if (val === "Transport") {
+                        setExpenseGst(18);
+                      }
+                    }}
+                  >
+                    <option value="Transport">Transport</option>
+                    <option value="Discount">Discount</option>
+                    <option value="Offloading">Offloading</option>
+                    <option value="Unloading">Unloading</option>
+                    <option value="Freezer">Freezer</option>
+                  </select>
+                )}
               </div>
 
               {/* Price */}

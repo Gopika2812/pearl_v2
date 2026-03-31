@@ -53,9 +53,8 @@ export const PAGE_CONFIG = [
         { id: "purchase-list", name: "Purchase Order List", path: "/branch/purchase-orders", icon: "list", permissionFields: ["grandTotal", "totalPaid", "status"] },
         { id: "purchase-invoice-list", name: "Purchase Invoice List", path: "/branch/purchase-invoices", icon: "invoice" },
         { id: "restocking", name: "Restocking", path: "/branch/recycling", icon: "inventory" },
-        { id: "debit-note", name: "Debit Note", path: "/branch/debit-note", icon: "return" },
-        { id: "payment-po", name: "Payment", path: "/branch/po-payment", icon: "payment" },
-      ]}
+      ]},
+      { id: "suppliers", name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: "handshake", permissionFields: ["credit", "debit", "gstin"] },
     ]
   },
   {
@@ -84,7 +83,6 @@ export const PAGE_CONFIG = [
     category: "Directory",
     items: [
       { id: "dispatch", name: "Loading & Dispatch", path: "/branch/dispatch", icon: "truck" },
-      { id: "suppliers", name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: "handshake", permissionFields: ["credit", "debit", "gstin"] },
       { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["margin", "debit", "credit", "gstin"] },
       { id: "product-records", name: "Product Records", path: "/branch/product-records", icon: "box", permissionFields: ["purchasingPrice", "sellingPrice", "grossProfit"] },
     ]
@@ -96,6 +94,7 @@ export const PAGE_CONFIG = [
       { id: "journals", name: "Journal Master", path: "/branch/journals", icon: "book" },
       { id: "stock-journal", name: "Stock Journal", path: "/branch/stock-journal", icon: "history" },
       { id: "day-book", name: "Day Book", path: "/branch/day-book", icon: "bookOpen" },
+      { id: "extra-expense-ledger", name: "Extra Expense Ledger", path: "/branch/extra-expense-ledger", icon: "list" },
     ]
   },
   {

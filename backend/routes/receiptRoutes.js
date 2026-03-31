@@ -182,7 +182,7 @@ router.post("/", async (req, res) => {
 
     // Generate Receipt ID
     const financialYear = getFinancialYear();
-    const prefix = "RCP";
+    const prefix = "REC";
     
     let receipt;
     let receiptId;

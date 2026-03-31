@@ -5,6 +5,9 @@ import XLSX from "xlsx";
 import Customer from "../models/Customer.js";
 import CustomerCategory from "../models/CustomerCategory.js";
 import CustomerGroup from "../models/CustomerGroup.js";
+import SalesOrder from "../models/SalesOrder.js";
+import Receipt from "../models/Receipt.js";
+import CreditNote from "../models/CreditNote.js";
 import SalesOwner from "../models/SalesOwner.js";
 
 const router = express.Router();
@@ -632,6 +635,123 @@ router.delete("/:id", async (req, res) => {
       message: "Failed to delete customer",
       error: error.message,
     });
+  }
+});
+
+/**
+ * GET: Customer Ledger (Historical Balance + Transactions)
+ */
+router.get("/:id/ledger", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid customer ID" });
+    }
+
+    const customer = await Customer.findById(id);
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    // Default dates: This month if not specified
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const start = startDate ? new Date(startDate) : firstDay;
+    const end = endDate ? new Date(endDate) : new Date();
+    end.setHours(23, 59, 59, 999);
+
+    // 1. Get current balance (This is the anchor for our backwards calculation)
+    // For a customer (debtor), Balance = Debit - Credit
+    const currentBalance = (customer.debit || 0) - (customer.credit || 0);
+
+    // 2. Fetch ALL transactions after startDate to determine the opening balance
+    
+    // Debits: Sales Invoices after startDate
+    const salesAfterStart = await SalesOrder.find({
+      branchId: customer.branchId,
+      "customer.customerId": id,
+      status: "INVOICED",
+      createdAt: { $gte: start }
+    }).select("grandTotal invoiceGrandTotal createdAt invoiceId");
+
+    // Credits: Receipts after startDate
+    const receiptsAfterStart = await Receipt.find({
+      branchId: customer.branchId,
+      "customer.customerId": id,
+      status: "confirmed",
+      createdAt: { $gte: start }
+    }).select("amount createdAt receiptId paymentMethod");
+
+    // Credits: Credit Notes after startDate
+    const cnAfterStart = await CreditNote.find({
+      branchId: customer.branchId,
+      "customer.customerId": id,
+      status: "Created",
+      createdAt: { $gte: start }
+    }).select("grandTotal createdAt creditNoteId reasonForReturn");
+
+    // Opening Balance = Current_Balance - (Debits after Start) + (Credits after Start)
+    const totalDebitsAfterStart = salesAfterStart.reduce((sum, s) => sum + (s.invoiceGrandTotal || s.grandTotal || 0), 0);
+    const totalCreditsAfterStart = 
+      receiptsAfterStart.reduce((sum, r) => sum + (r.amount || 0), 0) +
+      cnAfterStart.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
+
+    const openingBalance = currentBalance - totalDebitsAfterStart + totalCreditsAfterStart;
+
+    // 3. Filter transactions within the [start, end] range
+    const inRangeSales = salesAfterStart.filter(s => s.createdAt <= end);
+    const inRangeReceipts = receiptsAfterStart.filter(r => r.createdAt <= end);
+    const inRangeCNs = cnAfterStart.filter(cn => cn.createdAt <= end);
+
+    // Format all transactions
+    const txns = [
+      ...inRangeSales.map(s => ({
+        id: `si-${s._id}`,
+        date: s.createdAt,
+        type: "INVOICE",
+        particulars: `Sales Invoice: ${s.invoiceId}`,
+        debit: s.invoiceGrandTotal || s.grandTotal || 0,
+        credit: 0
+      })),
+      ...inRangeReceipts.map(r => ({
+        id: `rcp-${r._id}`,
+        date: r.createdAt,
+        type: "RECEIPT",
+        particulars: `Receipt: ${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})`,
+        debit: 0,
+        credit: r.amount || 0
+      })),
+      ...inRangeCNs.map(cn => ({
+        id: `cn-${cn._id}`,
+        date: cn.createdAt,
+        type: "CREDIT_NOTE",
+        particulars: `Credit Note: ${cn.creditNoteId} (${cn.reasonForReturn || "General"})`,
+        debit: 0,
+        credit: cn.grandTotal || 0
+      }))
+    ].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Calculate running balance for the range
+    let currentRunning = openingBalance;
+    const txnsWithBalance = txns.map(t => {
+      currentRunning = currentRunning + t.debit - t.credit;
+      return { ...t, balance: currentRunning };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        customerName: customer.name,
+        openingBalance,
+        closingBalance: currentRunning,
+        transactions: txnsWithBalance
+      }
+    });
+  } catch (error) {
+    console.error("Customer Ledger Error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

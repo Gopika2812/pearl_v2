@@ -51,6 +51,7 @@ import gstRoutes from "./routes/gstRoutes.js";
 import customerLockedPriceRoutes from "./routes/customerLockedPriceRoutes.js";
 import eInvoiceRoutes from "./routes/eInvoiceRoutes.js";
 import otherTransactionRoutes from "./routes/otherTransactionRoutes.js";
+import extraExpenseLedgerRoutes from "./routes/extraExpenseLedgerRoutes.js";
 
 
 const app = express();
@@ -111,6 +112,7 @@ app.use("/api/gst", gstRoutes);
 app.use("/api/customer-locked-prices", customerLockedPriceRoutes);
 app.use("/api/einvoice", eInvoiceRoutes);
 app.use("/api/other-transactions", otherTransactionRoutes);
+app.use("/api/extra-expense-ledger", extraExpenseLedgerRoutes);
 
 // MongoDB Connect
 dns.setServers(["8.8.8.8", "1.1.1.1"]);

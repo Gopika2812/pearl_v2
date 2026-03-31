@@ -1,17 +1,21 @@
 import React, { useEffect, useState } from "react";
-import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaMapMarkerAlt, FaPhone, FaEnvelope } from "react-icons/fa";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaFileExport, FaChevronDown, FaChevronUp, FaMapMarkerAlt, FaPhone, FaEnvelope, FaMoneyBillWave, FaExchangeAlt, FaUndoAlt } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 import VendorLedgerModal from "../../components/branch/VendorLedgerModal";
 import InventoryAddVendorModal from "../../components/inventory/InventoryAddVendorModal";
+import VendorCreditPaymentModal from "../../components/inventory/VendorCreditPaymentModal";
+import SupplierDebitNoteModal from "../../components/inventory/SupplierDebitNoteModal";
 
 
 const BranchSuppliers = () => {
   const { branch, branchLoaded, user } = useBranch();
   const branchId = branch?._id;
+  const navigate = useNavigate();
 
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -24,11 +28,13 @@ const BranchSuppliers = () => {
   const { addData, updateData } = useInventory();
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState("table"); // "table" or "card"
+  const [viewMode, setViewMode] = useState("table");
   const [searchTerm, setSearchTerm] = useState("");
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [payments, setPayments] = useState([]);
   const [selectedLedgerSupplier, setSelectedLedgerSupplier] = useState(null);
+  const [selectedPaySupplier, setSelectedPaySupplier] = useState(null);
+  const [selectedDnSupplier, setSelectedDnSupplier] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
@@ -287,6 +293,13 @@ const BranchSuppliers = () => {
 
           <div className="flex flex-wrap items-center gap-2">
             <button
+              onClick={() => navigate("/branch/supplier-transactions")}
+              className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+            >
+              <FaExchangeAlt /> All Transactions
+            </button>
+
+            <button
               onClick={() => setIsAddModalOpen(true)}
               className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
             >
@@ -514,13 +527,25 @@ const BranchSuppliers = () => {
                 </span>
               </div>
 
-              {/* View Ledger Button */}
-              <div className="mt-4 pt-3 border-t border-gray-100 flex justify-center">
+              {/* Pay, Debit Note & Ledger Buttons */}
+              <div className="mt-4 pt-3 border-t border-gray-100 flex gap-1.5">
+                <button
+                  onClick={() => setSelectedPaySupplier(supplier)}
+                  className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg border border-emerald-200 text-xs flex items-center justify-center gap-1 transition"
+                >
+                  <FaMoneyBillWave /> Pay
+                </button>
+                <button
+                  onClick={() => setSelectedDnSupplier(supplier)}
+                  className="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-lg border border-red-200 text-xs flex items-center justify-center gap-1 transition"
+                >
+                  <FaUndoAlt /> Return
+                </button>
                 <button
                   onClick={() => setSelectedLedgerSupplier(supplier)}
-                  className="w-full py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold rounded-lg transition-colors border border-teal-200 text-sm flex items-center justify-center gap-2"
+                  className="flex-1 py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold rounded-lg border border-teal-200 text-xs flex items-center justify-center gap-1 transition"
                 >
-                  <span className="text-base">📅</span> View Ledger
+                  <span>📅</span> Ledger
                 </button>
               </div>
             </div>
@@ -595,15 +620,26 @@ const BranchSuppliers = () => {
                         </td>
                       )}
                       <td className="px-3 md:px-5 py-2 md:py-3 text-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedLedgerSupplier(supplier);
-                          }}
-                          className="bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 px-3 py-1 rounded-md text-xs font-bold transition-colors whitespace-nowrap shadow-sm"
-                        >
-                          Transactions
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setSelectedPaySupplier(supplier); }}
+                            className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-md text-xs font-bold transition whitespace-nowrap flex items-center gap-1"
+                          >
+                            <FaMoneyBillWave className="text-[9px]" /> Pay
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setSelectedDnSupplier(supplier); }}
+                            className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-md text-xs font-bold transition whitespace-nowrap flex items-center gap-1"
+                          >
+                            <FaUndoAlt className="text-[9px]" /> Return
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setSelectedLedgerSupplier(supplier); }}
+                            className="bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 px-2.5 py-1 rounded-md text-xs font-bold transition whitespace-nowrap"
+                          >
+                            Ledger
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     {isExpanded && (
@@ -675,6 +711,22 @@ const BranchSuppliers = () => {
         supplier={selectedLedgerSupplier}
         purchaseOrders={purchaseOrders}
         payments={payments}
+      />
+
+      {/* SUPPLIER PAYMENT MODAL */}
+      <VendorCreditPaymentModal
+        isOpen={!!selectedPaySupplier}
+        onClose={() => setSelectedPaySupplier(null)}
+        preselectedVendor={selectedPaySupplier}
+        onPaymentSuccess={() => { setSelectedPaySupplier(null); fetchSuppliers(); }}
+      />
+
+      {/* DEBIT NOTE MODAL */}
+      <SupplierDebitNoteModal
+        isOpen={!!selectedDnSupplier}
+        onClose={() => setSelectedDnSupplier(null)}
+        preselectedVendor={selectedDnSupplier}
+        onSuccess={() => { setSelectedDnSupplier(null); fetchSuppliers(); }}
       />
 
       {isAddModalOpen && (

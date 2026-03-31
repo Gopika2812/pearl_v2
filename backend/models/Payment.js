@@ -8,6 +8,11 @@ const paymentSchema = new mongoose.Schema(
       unique: true,
     },
 
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+    },
+
     // Payment Type: vendor, expense, or loan
     paymentType: {
       type: String,
@@ -24,7 +29,7 @@ const paymentSchema = new mongoose.Schema(
       name: String,
     },
 
-    // Reference to PO (optional, for vendor payments)
+    // Reference to PO (optional, for PO-linked vendor payments)
     purchaseOrder: {
       poId: {
         type: mongoose.Schema.Types.ObjectId,

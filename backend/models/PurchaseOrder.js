@@ -53,8 +53,11 @@ const PurchaseOrderSchema = new mongoose.Schema(
     extraExpenses: [
       {
         expenseName: String,
-        amount: Number,
-        gst: Number,
+        amount: Number, // Legacy, kept for compatibility
+        basePrice: Number, // New, matching PI/SO
+        gst: Number, // Legacy
+        gstPercent: { type: Number, default: 0 }, // New
+        gstAmount: { type: Number, default: 0 }, // New
         totalPrice: Number,
       },
     ],

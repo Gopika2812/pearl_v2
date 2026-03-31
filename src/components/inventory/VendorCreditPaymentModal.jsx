@@ -1,141 +1,198 @@
 import { useEffect, useRef, useState } from "react";
-import { FaSearch, FaTimes } from "react-icons/fa";
+import {
+  FaTimes, FaMoneyBillWave, FaUniversity, FaCreditCard,
+  FaMobileAlt, FaEllipsisH, FaSearch, FaFileInvoiceDollar,
+  FaChevronRight, FaArrowLeft
+} from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+
+const PAYMENT_METHODS = [
+  { value: "cash", label: "Cash", icon: <FaMoneyBillWave /> },
+  { value: "bank_transfer", label: "Bank", icon: <FaUniversity /> },
+  { value: "check", label: "Cheque", icon: <FaCreditCard /> },
+  { value: "credit", label: "UPI", icon: <FaMobileAlt /> },
+  { value: "other", label: "Other", icon: <FaEllipsisH /> },
+];
 
 export default function VendorCreditPaymentModal({
   isOpen,
   onClose,
   onPaymentSuccess,
+  preselectedVendor = null,
 }) {
   const { currentBranch } = useBranch();
+
+  // Mode: "general" | "invoice"
+  const [mode, setMode] = useState("general");
+
+  // Shared state
   const [vendors, setVendors] = useState([]);
-  const [selectedVendorId, setSelectedVendorId] = useState("");
+  const [selectedVendor, setSelectedVendor] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
-  const [creditAmount, setCreditAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
+  const [nextPayId, setNextPayId] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const dropdownRef = useRef(null);
 
-  // Fetch vendors when modal opens
+  // General mode
+  const [paymentAmount, setPaymentAmount] = useState("");
+
+  // Invoice mode
+  const [invoices, setInvoices] = useState([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [invoicePayAmount, setInvoicePayAmount] = useState("");
+  const [invoicePayments, setInvoicePayments] = useState({}); // poId → paid total
+
+  // ─── Lifecycle ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (isOpen && currentBranch?._id) {
-      fetchVendors();
+      if (!preselectedVendor) fetchVendors();
+      else { setVendors([]); setSelectedVendor(preselectedVendor); setSearchQuery(preselectedVendor.name); }
+      fetchNextPayId();
     }
   }, [isOpen, currentBranch]);
 
-  // Reset form when modal opens
   useEffect(() => {
-    if (isOpen) {
-      setSelectedVendorId("");
-      setSearchQuery("");
-      setShowDropdown(false);
-      setCreditAmount("");
-      setPaymentMethod("CASH");
-      setReference("");
-      setNotes("");
-    }
+    if (!isOpen) return;
+    setMode("general");
+    setPaymentAmount("");
+    setPaymentMethod("cash");
+    setReference("");
+    setNotes("");
+    setSelectedInvoice(null);
+    setInvoicePayAmount("");
+    setInvoices([]);
+    if (!preselectedVendor) { setSelectedVendor(null); setSearchQuery(""); }
   }, [isOpen]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowDropdown(false);
-      }
-    };
+    if (selectedVendor && mode === "invoice") fetchInvoicesForVendor();
+  }, [selectedVendor, mode]);
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+  useEffect(() => {
+    const close = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setShowDropdown(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
   }, []);
 
+  // ─── Data Fetching ──────────────────────────────────────────────────────────
   const fetchVendors = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await fetch(
-        `${API_BASE}/vendors?branchId=${currentBranch._id}&limit=9999`,
-        {
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-      const result = await response.json();
-
-      // Show all vendors, sorted by name
-      const allVendors = (result?.data || result || [])
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-      console.log("Fetched vendors:", allVendors.length);
-      setVendors(allVendors);
-    } catch (error) {
-      console.error("Error fetching vendors:", error);
-      toast.error("Failed to load vendors");
-    } finally {
-      setLoading(false);
-    }
+      const res = await fetch(`${API_BASE}/vendors?branchId=${currentBranch._id}&limit=9999`);
+      const data = await res.json();
+      setVendors((data?.data || data || []).sort((a, b) => a.name.localeCompare(b.name)));
+    } catch { toast.error("Failed to load vendors"); }
+    finally { setLoading(false); }
   };
 
-  const handleSubmit = async () => {
-    if (!selectedVendorId) {
-      toast.warning("Please select a vendor");
-      return;
-    }
+  const fetchNextPayId = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/payments/next-id?branchId=${currentBranch._id}`);
+      const data = await res.json();
+      setNextPayId(data.nextId || "");
+    } catch { /* silent */ }
+  };
 
-    const amount = parseFloat(creditAmount);
-    if (!amount || amount <= 0) {
-      toast.warning("Please enter a valid amount");
-      return;
-    }
-
-    const selectedVendor = vendors.find((v) => v._id === selectedVendorId);
-    if (!selectedVendor) {
-      toast.error("Vendor not found");
-      return;
-    }
-
-    if (amount > (selectedVendor.credit || 0)) {
-      toast.warning(
-        `Amount cannot exceed vendor's credit balance of ₹${(selectedVendor.credit || 0).toLocaleString()}`
+  const fetchInvoicesForVendor = async () => {
+    if (!selectedVendor) return;
+    setInvoicesLoading(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/purchase-orders?branchId=${currentBranch._id}&statuses=INVOICED,PARTIALLY_RETURNED`
       );
-      return;
+      const data = await res.json();
+      const all = data.data || data || [];
+      const supplierInvoices = all.filter(po => {
+        const vendorName = po.vendor?.name || po.vendor;
+        // Exclude cancelled invoices
+        if (po.status === "CANCELLED") return false;
+        return vendorName === selectedVendor.name;
+      });
+      setInvoices(supplierInvoices);
+
+      // Fetch payment status for each invoice
+      const payMap = {};
+      await Promise.all(
+        supplierInvoices.map(async (po) => {
+          try {
+            const pRes = await fetch(`${API_BASE}/payments/po/${po._id}`);
+            const pData = await pRes.json();
+            const paid = (pData.data || []).reduce((s, p) => s + (p.amount || 0), 0);
+            payMap[po._id] = paid;
+          } catch { payMap[po._id] = 0; }
+        })
+      );
+      setInvoicePayments(payMap);
+    } catch { toast.error("Failed to load invoices"); }
+    finally { setInvoicesLoading(false); }
+  };
+
+  const getPendingAmount = (po) => Math.max(0, (po.grandTotal || 0) - (invoicePayments[po._id] || 0));
+
+  // ─── Submit ─────────────────────────────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (!selectedVendor) { toast.warning("Please select a supplier"); return; }
+
+    let amount, purchaseOrderPayload;
+
+    if (mode === "general") {
+      amount = parseFloat(paymentAmount);
+      if (!amount || amount <= 0) { toast.warning("Enter a valid amount"); return; }
+      purchaseOrderPayload = null;
+    } else {
+      if (!selectedInvoice) { toast.warning("Please select an invoice"); return; }
+      amount = parseFloat(invoicePayAmount);
+      if (!amount || amount <= 0) { toast.warning("Enter a valid amount"); return; }
+      const pending = getPendingAmount(selectedInvoice);
+      if (amount > pending + 0.01) {
+        toast.warning(`Amount cannot exceed pending balance of ₹${pending.toLocaleString()}`);
+        return;
+      }
+      purchaseOrderPayload = {
+        poId: selectedInvoice._id,
+        invoiceId: selectedInvoice.invoiceId,
+      };
     }
 
     setSaving(true);
     try {
-      // Calculate new credit balance
-      const newCredit = Math.max(0, (selectedVendor.credit || 0) - amount);
-
-      // Update vendor credit balance
-      const updateResponse = await fetch(
-        `${API_BASE}/vendors/${selectedVendorId}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...selectedVendor,
-            credit: newCredit,
-          }),
-        }
-      );
-
-      if (!updateResponse.ok) {
-        throw new Error("Failed to update vendor credit balance");
-      }
-
-      toast.success(
-        `Payment recorded successfully! Credit amount reduced by ₹${amount.toLocaleString()}`
-      );
-
-      // Refresh and close
-      onPaymentSuccess();
+      const res = await fetch(`${API_BASE}/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branchId: currentBranch._id,
+          paymentType: "vendor_payment",
+          amount,
+          paymentMethod,
+          paymentDate: new Date(),
+          vendor: { vendorId: selectedVendor._id, name: selectedVendor.name },
+          purchaseOrder: purchaseOrderPayload,
+          description: notes || (
+            mode === "invoice"
+              ? `Invoice payment: ${selectedInvoice?.invoiceId} — ${selectedVendor.name}`
+              : `General payment to ${selectedVendor.name}`
+          ),
+          referenceNo: reference,
+          status: "completed",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Payment failed");
+      toast.success(`✅ Payment recorded! ID: ${data.data?.paymentId || nextPayId}`);
+      onPaymentSuccess?.();
       onClose();
-    } catch (error) {
-      console.error("Error processing vendor payment:", error);
-      toast.error(error.message || "Failed to process vendor payment");
+    } catch (err) {
+      toast.error(err.message || "Failed to record payment");
     } finally {
       setSaving(false);
     }
@@ -143,252 +200,339 @@ export default function VendorCreditPaymentModal({
 
   if (!isOpen) return null;
 
-  const selectedVendor = vendors.find((v) => v._id === selectedVendorId);
   const currentCredit = selectedVendor?.credit || 0;
-  const amount = parseFloat(creditAmount) || 0;
-  const newCredit = Math.max(0, currentCredit - amount);
+  const filteredVendors = vendors.filter(v =>
+    v.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        {/* HEADER */}
-        <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-6 flex items-center justify-between sticky top-0 z-10">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto">
+
+        {/* Header */}
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-5 flex items-center justify-between sticky top-0 z-10 rounded-t-2xl">
           <div>
-            <h2 className="text-2xl font-bold">Vendor Payment</h2>
-            <p className="text-green-100 text-sm">
-              Record payment to reduce vendor credit
+            <h2 className="text-xl font-bold">Record Supplier Payment</h2>
+            <p className="text-emerald-100 text-xs mt-0.5">
+              {nextPayId
+                ? <span className="font-mono bg-white/15 px-2 py-0.5 rounded">{nextPayId}</span>
+                : "Auto-generating ID..."}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-white hover:bg-green-800 p-2 rounded-lg transition"
-          >
-            <FaTimes className="text-2xl" />
+          <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition">
+            <FaTimes />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* VENDOR SELECTION */}
-          <div>
-            <label className="block text-sm font-bold text-gray-800 mb-2">
-              Select Vendor <span className="text-red-600">*</span>
-            </label>
-            {loading ? (
-              <p className="text-gray-600 text-sm">Loading vendors...</p>
-            ) : vendors.length === 0 ? (
-              <p className="text-amber-600 text-sm">
-                No vendors found
-              </p>
-            ) : (
-              <div ref={dropdownRef} className="relative">
-                <div className="relative">
-                  <FaSearch className="absolute left-4 top-3 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search vendor by name..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setShowDropdown(true);
-                    }}
-                    onFocus={() => setShowDropdown(true)}
-                    className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  />
-                </div>
-
-                {/* DROPDOWN LIST */}
-                {showDropdown && (
-                  <div className="absolute top-full left-0 right-0 bg-white border-2 border-gray-300 border-t-0 rounded-b-lg shadow-lg max-h-64 overflow-y-auto z-50">
-                    {vendors
-                      .filter((v) =>
-                        v.name.toLowerCase().includes(searchQuery.toLowerCase())
-                      )
-                      .map((vendor) => (
-                        <div
-                          key={vendor._id}
-                          onClick={() => {
-                            setSelectedVendorId(vendor._id);
-                            setSearchQuery(vendor.name);
-                            setShowDropdown(false);
-                            setCreditAmount("");
-                          }}
-                          className="px-4 py-3 hover:bg-green-50 cursor-pointer border-b last:border-b-0 transition"
-                        >
-                          <div className="flex justify-between items-center">
-                            <span className="font-semibold text-gray-800">
-                              {vendor.name}
-                            </span>
-                            <span className="text-xs font-bold text-orange-600">
-                              Credit: ₹{(vendor.credit || 0).toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    {vendors.filter((v) =>
-                      v.name.toLowerCase().includes(searchQuery.toLowerCase())
-                    ).length === 0 && (
-                      <div className="px-4 py-3 text-center text-gray-500 text-sm">
-                        No vendors found
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+        <div className="p-5 space-y-4">
+          {/* Mode Selector */}
+          <div className="grid grid-cols-2 gap-2 bg-gray-100 rounded-xl p-1">
+            <button
+              onClick={() => { setMode("general"); setSelectedInvoice(null); setInvoicePayAmount(""); }}
+              className={`py-2.5 rounded-lg text-sm font-bold transition ${mode === "general"
+                ? "bg-white text-emerald-700 shadow-sm"
+                : "text-gray-400 hover:text-gray-600"}`}
+            >
+              🏦 General Payment
+            </button>
+            <button
+              onClick={() => { setMode("invoice"); setPaymentAmount(""); }}
+              className={`py-2.5 rounded-lg text-sm font-bold transition ${mode === "invoice"
+                ? "bg-white text-emerald-700 shadow-sm"
+                : "text-gray-400 hover:text-gray-600"}`}
+            >
+              📄 Pay Against Invoice
+            </button>
           </div>
 
-          {/* VENDOR DETAIL */}
+          {/* Vendor Selector (only if not preselected) */}
+          {!preselectedVendor && (
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                Supplier <span className="text-red-500">*</span>
+              </label>
+              {loading ? <p className="text-sm text-gray-400">Loading...</p> : (
+                <div ref={dropdownRef} className="relative">
+                  <div className="relative">
+                    <FaSearch className="absolute left-3 top-3 text-gray-400 text-xs" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={e => { setSearchQuery(e.target.value); setShowDropdown(true); }}
+                      onFocus={() => setShowDropdown(true)}
+                      placeholder="Search supplier..."
+                      className="w-full pl-8 pr-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 transition"
+                    />
+                  </div>
+                  {showDropdown && filteredVendors.length > 0 && (
+                    <div className="absolute z-50 top-full left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-xl mt-1 max-h-48 overflow-y-auto">
+                      {filteredVendors.map(v => (
+                        <div
+                          key={v._id}
+                          onClick={() => {
+                            setSelectedVendor(v);
+                            setSearchQuery(v.name);
+                            setShowDropdown(false);
+                            setSelectedInvoice(null);
+                          }}
+                          className="flex justify-between items-center px-4 py-2.5 hover:bg-emerald-50 cursor-pointer border-b last:border-0"
+                        >
+                          <span className="font-semibold text-sm">{v.name}</span>
+                          <span className="text-xs text-orange-600 font-bold">₹{(v.credit || 0).toLocaleString()} cr</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Vendor Summary */}
           {selectedVendor && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-600 uppercase text-xs font-bold">Vendor Name</p>
-                  <p className="font-bold text-gray-800">{selectedVendor.name}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 uppercase text-xs font-bold">Current Credit</p>
-                  <p className="font-bold text-orange-600">
-                    ₹{(selectedVendor.credit || 0).toLocaleString()}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-600 uppercase text-xs font-bold">Phone</p>
-                  <p className="font-bold text-gray-800">{selectedVendor.phone || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 uppercase text-xs font-bold">GST</p>
-                  <p className="font-bold text-gray-800">{selectedVendor.gstin || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 uppercase text-xs font-bold">Email</p>
-                  <p className="font-bold text-gray-800 text-xs">{selectedVendor.email || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 uppercase text-xs font-bold">Status</p>
-                  <p className="font-bold text-green-600">
-                    {selectedVendor.isActive ? "Active" : "Inactive"}
-                  </p>
-                </div>
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-4 flex justify-between items-center">
+              <div>
+                <p className="text-xs text-gray-400 font-bold uppercase">Supplier</p>
+                <p className="font-black text-gray-800">{selectedVendor.name}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-400 font-bold uppercase">Credit Balance</p>
+                <p className="text-xl font-black text-orange-600">₹{currentCredit.toLocaleString()}</p>
               </div>
             </div>
           )}
 
-          {/* PAYMENT FORM */}
-          {selectedVendor && (
+          {/* ── GENERAL MODE ── */}
+          {mode === "general" && selectedVendor && (
             <div className="space-y-4">
-              {/* CREDIT AMOUNT */}
               <div>
-                <label className="block text-sm font-bold text-gray-800 mb-2">
-                  Payment Amount <span className="text-red-600">*</span>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                  Payment Amount <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-3 text-gray-600 font-bold">₹</span>
+                  <span className="absolute left-4 top-3 text-gray-400 font-bold">₹</span>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max={currentCredit}
-                    value={creditAmount}
-                    onChange={(e) => setCreditAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full pl-8 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 font-bold text-lg"
+                    type="number" min="0" step="1" value={paymentAmount}
+                    onChange={e => setPaymentAmount(e.target.value)}
+                    placeholder="0"
+                    className="w-full pl-8 pr-4 py-2.5 border-2 border-gray-200 rounded-xl text-base font-bold focus:outline-none focus:border-emerald-500 transition"
                   />
                 </div>
-                {creditAmount && (
-                  <p className="text-xs text-gray-600 mt-1">
-                    Max Amount: ₹{(currentCredit).toLocaleString()}
+                <p className="text-xs text-gray-400 mt-1">Paying against total credit balance (migrated / general)</p>
+              </div>
+
+              {/* Preview */}
+              {parseFloat(paymentAmount) > 0 && (
+                <div className="bg-gray-50 border-2 border-emerald-400 rounded-xl p-3 text-sm space-y-1.5">
+                  <div className="flex justify-between text-gray-500">
+                    <span>Current Credit:</span>
+                    <span className="font-bold text-orange-600">₹{currentCredit.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500">
+                    <span>Payment:</span>
+                    <span className="font-bold text-emerald-600">-₹{parseFloat(paymentAmount).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between font-black border-t pt-1.5">
+                    <span>New Credit:</span>
+                    <span className="text-emerald-700">₹{Math.max(0, currentCredit - parseFloat(paymentAmount)).toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── INVOICE MODE ── */}
+          {mode === "invoice" && selectedVendor && (
+            <div className="space-y-3">
+              {!selectedInvoice ? (
+                // Invoice List
+                <div>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                    Select Purchase Invoice
                   </p>
-                )}
-              </div>
+                  {invoicesLoading ? (
+                    <div className="py-8 text-center text-gray-400 text-sm">Loading invoices...</div>
+                  ) : invoices.length === 0 ? (
+                    <div className="py-8 text-center text-gray-400 text-sm bg-gray-50 rounded-xl">
+                      <FaFileInvoiceDollar className="text-3xl mx-auto mb-2 opacity-30" />
+                      No invoiced purchase orders found for this supplier
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {invoices.map(po => {
+                        const pending = getPendingAmount(po);
+                        const isPaid = pending === 0;
+                        return (
+                          <button
+                            key={po._id}
+                            onClick={() => !isPaid && setSelectedInvoice(po)}
+                            disabled={isPaid}
+                            className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition ${
+                              isPaid
+                                ? "bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed"
+                                : "border-gray-200 hover:border-emerald-400 hover:bg-emerald-50"
+                            }`}
+                          >
+                            <div>
+                              <p className="font-bold text-sm text-gray-800">{po.invoiceId}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                Total: ₹{(po.grandTotal || 0).toLocaleString()} &middot;
+                                Paid: ₹{(invoicePayments[po._id] || 0).toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              {isPaid ? (
+                                <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                                  ✅ Paid
+                                </span>
+                              ) : (
+                                <>
+                                  <p className="text-sm font-black text-orange-600">₹{pending.toLocaleString()}</p>
+                                  <p className="text-xs text-gray-400">Pending</p>
+                                </>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Invoice Payment Form
+                <div className="space-y-3">
+                  <button
+                    onClick={() => { setSelectedInvoice(null); setInvoicePayAmount(""); }}
+                    className="flex items-center gap-1.5 text-xs font-bold text-gray-400 hover:text-gray-600 transition"
+                  >
+                    <FaArrowLeft /> Back to invoice list
+                  </button>
 
-              {/* PAYMENT METHOD */}
+                  {/* Selected Invoice Card */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-xs font-bold text-blue-400 uppercase">Invoice</p>
+                        <p className="font-black text-blue-800">{selectedInvoice.invoiceId}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {selectedInvoice.items?.length || 0} items &middot;
+                          ₹{(selectedInvoice.grandTotal || 0).toLocaleString()} total
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-orange-500 uppercase">Pending</p>
+                        <p className="font-black text-orange-600 text-xl">
+                          ₹{getPendingAmount(selectedInvoice).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Paid: ₹{(invoicePayments[selectedInvoice._id] || 0).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Amount */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                      Payment Amount <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-3 text-gray-400 font-bold">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max={getPendingAmount(selectedInvoice)}
+                        step="1"
+                        value={invoicePayAmount}
+                        onChange={e => setInvoicePayAmount(e.target.value)}
+                        placeholder="0"
+                        className="w-full pl-8 pr-4 py-2.5 border-2 border-gray-200 rounded-xl text-base font-bold focus:outline-none focus:border-emerald-500 transition"
+                      />
+                    </div>
+                    <div className="flex justify-between mt-1">
+                      <p className="text-xs text-gray-400">Max: ₹{getPendingAmount(selectedInvoice).toLocaleString()}</p>
+                      <button
+                        onClick={() => setInvoicePayAmount(String(getPendingAmount(selectedInvoice)))}
+                        className="text-xs font-bold text-emerald-600 hover:underline"
+                      >
+                        Pay Full Pending
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Payment Method */}
+          {selectedVendor && (mode === "general" || (mode === "invoice" && selectedInvoice)) && (
+            <>
               <div>
-                <label className="block text-sm font-bold text-gray-800 mb-2">
-                  Payment Method <span className="text-red-600">*</span>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                  Payment Method
                 </label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                >
-                  <option value="CASH">Cash</option>
-                  <option value="CHEQUE">Cheque</option>
-                  <option value="BANK_TRANSFER">Bank Transfer</option>
-                  <option value="UPI">UPI</option>
-                  <option value="CREDIT_CARD">Credit Card</option>
-                  <option value="DEBIT_CARD">Debit Card</option>
-                  <option value="OTHER">Other</option>
-                </select>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {PAYMENT_METHODS.map(m => (
+                    <button
+                      key={m.value}
+                      onClick={() => setPaymentMethod(m.value)}
+                      className={`flex flex-col items-center gap-1 py-2 rounded-xl border-2 text-xs font-bold transition ${
+                        paymentMethod === m.value
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                          : "border-gray-200 text-gray-500 hover:border-emerald-300"
+                      }`}
+                    >
+                      <span>{m.icon}</span> {m.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* REFERENCE */}
               <div>
-                <label className="block text-sm font-bold text-gray-800 mb-2">
-                  {paymentMethod === "CHEQUE"
-                    ? "Cheque Number"
-                    : "Reference / Transaction ID"}
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                  {paymentMethod === "check" ? "Cheque Number" : "Reference / Transaction ID (optional)"}
                 </label>
                 <input
                   type="text"
                   value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  placeholder={
-                    paymentMethod === "CHEQUE" ? "e.g., CHQ12345" : "e.g., TXN123456"
-                  }
-                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  onChange={e => setReference(e.target.value)}
+                  placeholder={paymentMethod === "check" ? "e.g. CHQ12345" : "e.g. TXN123456"}
+                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 transition"
                 />
               </div>
 
-              {/* NOTES */}
               <div>
-                <label className="block text-sm font-bold text-gray-800 mb-2">
-                  Notes / Remarks
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                  Notes (optional)
                 </label>
                 <textarea
                   value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add any additional notes about this payment..."
-                  rows="3"
-                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  onChange={e => setNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Additional remarks..."
+                  className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 transition resize-none"
                 />
               </div>
-            </div>
+            </>
           )}
 
-          {/* PAYMENT SUMMARY */}
-          {creditAmount && selectedVendor && (
-            <div className="bg-gray-50 p-4 rounded-lg border-2 border-green-500">
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Current Credit Balance:</span>
-                  <span className="font-bold">₹{(currentCredit).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Payment Amount:</span>
-                  <span className="font-bold text-green-600">-₹{(amount).toLocaleString()}</span>
-                </div>
-                <div className="border-t pt-2 flex justify-between">
-                  <span className="text-gray-800 font-bold">New Credit Balance:</span>
-                  <span className="font-black text-green-600">₹{(newCredit).toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ACTION BUTTONS */}
-          <div className="flex gap-3 justify-end pt-4 border-t">
+          {/* Actions */}
+          <div className="flex gap-3 pt-2 border-t">
             <button
               onClick={onClose}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg font-bold hover:bg-gray-50 transition"
+              className="flex-1 py-2.5 border-2 border-gray-200 text-gray-600 font-bold rounded-xl hover:bg-gray-50 transition text-sm"
             >
               Cancel
             </button>
             <button
               onClick={handleSubmit}
-              disabled={saving || !selectedVendorId || !creditAmount}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={saving || !selectedVendor ||
+                (mode === "general" && !paymentAmount) ||
+                (mode === "invoice" && (!selectedInvoice || !invoicePayAmount))}
+              className="flex-2 flex-grow py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed text-sm"
             >
-              {saving ? "Processing..." : "Record Payment"}
+              {saving ? "Processing..." : "✅ Record Payment"}
             </button>
           </div>
         </div>

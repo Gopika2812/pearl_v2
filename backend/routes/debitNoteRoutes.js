@@ -62,17 +62,20 @@ router.get("/next-id", async (req, res) => {
       );
     }
 
-    const nextId = `DN/${String(voucher.counter + 1).padStart(3, "0")}/${currentFY}`;
+    const nextId = `debitnote${String(voucher.counter + 1).padStart(3, "0")}/${currentFY}`;
     res.json({ nextId });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// GET ALL DEBIT NOTES
+// GET ALL DEBIT NOTES (optionally filtered by branchId)
 router.get("/", async (req, res) => {
   try {
-    const debitNotes = await DebitNote.find()
+    const { branchId } = req.query;
+    const filter = branchId ? { branchId } : {};
+
+    const debitNotes = await DebitNote.find(filter)
       .populate("vendor.vendorId", "name")
       .populate("originalPurchaseOrderId", "invoiceId")
       .sort({ createdAt: -1 });
@@ -112,16 +115,21 @@ router.post("/", async (req, res) => {
       vendor,
       items,
       reason,
+      isGeneralAdjustment, // true for general/migrated debit notes
+      manualGrandTotal,    // used when isGeneralAdjustment is true
     } = req.body;
 
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
     }
 
-    // Get the original PO
-    const originalPO = await PurchaseOrder.findById(originalPurchaseOrderId);
-    if (!originalPO) {
-      return res.status(404).json({ message: "Purchase Order not found" });
+    // Get the original PO only if ID is provided
+    let originalPO = null;
+    if (originalPurchaseOrderId) {
+      originalPO = await PurchaseOrder.findById(originalPurchaseOrderId);
+      if (!originalPO) {
+        return res.status(404).json({ message: "Purchase Order not found" });
+      }
     }
 
     // Get voucher for debit note ID (atomic counter increment)
@@ -163,119 +171,145 @@ router.post("/", async (req, res) => {
 
     // Use the incremented counter - 1 (since we just incremented)
     const counter = voucher.counter;
-    const debitNoteId = `DN/${String(counter).padStart(3, "0")}/${currentFY}`;
+    const debitNoteId = `debitnote${String(counter).padStart(3, "0")}/${currentFY}`;
 
-    // Calculate totals
+    // Calculate totals - support both general (manual) and invoice-based
     let subtotal = 0;
     let totalTax = 0;
 
-    for (const item of items) {
-      const product = await Product.findById(item.productId);
-      if (product) {
-        item.name = product.name;
-        item.total = item.returnedQty * item.purchasePrice;
-        subtotal += item.total;
-        totalTax += (item.total * product.gst) / 100 || 0;
+    if (isGeneralAdjustment && manualGrandTotal) {
+      // General debit note: use the manually specified amount
+      subtotal = manualGrandTotal;
+      totalTax = 0;
+    } else {
+      // Invoice-linked: calculate from items
+      for (const item of items) {
+        const itemTotal = (item.returnedQty || 1) * (item.purchasePrice || 0);
+        subtotal += itemTotal;
+        // Use gst from item directly if product lookup fails
+        let gstRate = 0;
+        try {
+          if (item.productId && item.productId !== "000000000000000000000000") {
+            const product = await Product.findById(item.productId);
+            if (product) {
+              item.name = product.name;
+              gstRate = product.gst || 0;
+            }
+          } else {
+            item.name = item.name || "General Return";
+          }
+        } catch (e) { /* ignore */ }
+        item.total = itemTotal;
+        totalTax += (itemTotal * gstRate) / 100;
       }
     }
+
+    const finalGrandTotal = Math.round(subtotal + totalTax);
 
     const debitNote = new DebitNote({
       debitNoteId,
       branchId,
-      originalPurchaseOrderId,
-      originalInvoiceId: originalPO.invoiceId,
+      originalPurchaseOrderId: originalPO?._id || null,
+      originalInvoiceId: originalPO?.invoiceId || null,
       vendor: {
-        name: vendor?.name || originalPO.vendor || "Unknown",
+        vendorId: vendor?.vendorId || null,
+        name: vendor?.name || originalPO?.vendor || "Unknown",
       },
-      items,
+      items: items || [],
       subtotal: Math.round(subtotal),
       totalTax: Math.round(totalTax),
-      grandTotal: Math.round(subtotal + totalTax),
-      reason,
+      grandTotal: finalGrandTotal,
+      reason: reason || "General Adjustment",
       status: "confirmed",
     });
 
     await debitNote.save();
 
-    // ✅ REDUCE PRODUCT INVENTORY BASED ON RETURNED QTY
-    for (const item of items) {
-      try {
-        const product = await Product.findByIdAndUpdate(
-          item.productId,
-          { $inc: { totalQty: -item.returnedQty } },
+    // ✅ SKIP INVENTORY & PO UPDATES for general adjustments
+    if (!isGeneralAdjustment && originalPO) {
+      // Reduce product inventory
+      for (const item of items) {
+        try {
+          if (item.productId && item.productId !== "000000000000000000000000") {
+            const product = await Product.findByIdAndUpdate(
+              item.productId,
+              { $inc: { totalQty: -item.returnedQty } },
+              { new: true }
+            );
+            if (product) console.log(`✅ Inventory reduced: ${product.name} -${item.returnedQty}`);
+          }
+        } catch (err) {
+          console.error(`⚠️ Failed to update product inventory:`, err.message);
+        }
+      }
+    }
+
+    // ✅ UPDATE ORIGINAL PO ITEMS QTY AND STATUS (only for invoice-linked debit notes)
+    if (originalPO) {
+      let poStatus = originalPO.status;
+      let totalOriginalQty = 0;
+      let totalReturnedQty = 0;
+
+      const poItems = Array.isArray(originalPO.items) ? originalPO.items : [];
+
+      for (const poItem of poItems) {
+        totalOriginalQty += poItem.qty || 0;
+      }
+
+      for (const returnedItem of items) {
+        totalReturnedQty += returnedItem.returnedQty;
+        const poItemIndex = poItems.findIndex(pi =>
+          pi.productId?.toString() === returnedItem.productId?.toString()
+        );
+        if (poItemIndex !== -1) {
+          poItems[poItemIndex].qty = Math.max(0, (poItems[poItemIndex].qty || 0) - returnedItem.returnedQty);
+          console.log(`📦 PO Item "${returnedItem.name}" qty updated: -${returnedItem.returnedQty}`);
+        }
+      }
+
+      if (totalReturnedQty >= totalOriginalQty) {
+        poStatus = "FULLY_RETURNED";
+      } else if (totalReturnedQty > 0) {
+        poStatus = "PARTIALLY_RETURNED";
+      }
+
+      await PurchaseOrder.findByIdAndUpdate(
+        originalPO._id,
+        { items: poItems, status: poStatus }
+      );
+      console.log(`✅ PO status updated to: ${poStatus}`);
+    }
+
+    // ✅ REDUCE VENDOR CREDIT / INCREASE VENDOR DEBIT
+    // Find the vendor to update balance
+    try {
+      let vendorRecord = null;
+      if (vendor?.vendorId) {
+        vendorRecord = await Vendor.findById(vendor.vendorId);
+      } else if (originalPO?.vendor) {
+        vendorRecord = await Vendor.findOneAndUpdate(
+          { name: originalPO.vendor, branchId },
+          {},
           { new: true }
         );
-        if (product) {
-          console.log(
-            `✅ Product "${product.name}" inventory reduced: -${item.returnedQty} units (New total: ${product.totalQty})`
-          );
+      }
+      if (vendorRecord) {
+        const returnAmount = debitNote.grandTotal || 0;
+        const currentCredit = vendorRecord.credit || 0;
+        if (returnAmount <= currentCredit) {
+          // Deduct from credit only
+          await Vendor.findByIdAndUpdate(vendorRecord._id, { credit: currentCredit - returnAmount });
+          console.log(`✅ Vendor credit reduced by ₹${returnAmount}: ₹${currentCredit} → ₹${currentCredit - returnAmount}`);
+        } else {
+          // Credit hits zero, remainder goes to debit
+          const remainder = returnAmount - currentCredit;
+          const currentDebit = vendorRecord.debit || 0;
+          await Vendor.findByIdAndUpdate(vendorRecord._id, { credit: 0, debit: currentDebit + remainder });
+          console.log(`✅ Vendor credit zeroed, debit increased by ₹${remainder}`);
         }
-      } catch (err) {
-        console.error(`⚠️ Failed to update product ${item.productId}:`, err.message);
       }
-    }
-
-    // ✅ UPDATE ORIGINAL PO ITEMS QTY AND STATUS
-    let poStatus = originalPO.status;
-    let totalOriginalQty = 0;
-    let totalReturnedQty = 0;
-
-    // Ensure items array exists and is iterable
-    const poItems = Array.isArray(originalPO.items) ? originalPO.items : [];
-
-    for (const poItem of poItems) {
-      totalOriginalQty += poItem.qty || 0;
-    }
-
-    // Update each PO item with returned qty
-    for (const returnedItem of items) {
-      totalReturnedQty += returnedItem.returnedQty;
-      
-      // Find matching item in PO and reduce its quantity
-      const poItemIndex = poItems.findIndex(pi => 
-        pi.productId?.toString() === returnedItem.productId?.toString()
-      );
-      
-      if (poItemIndex !== -1) {
-        poItems[poItemIndex].qty = Math.max(0, (poItems[poItemIndex].qty || 0) - returnedItem.returnedQty);
-        console.log(`📦 PO Item "${returnedItem.name}" quantity updated: -${returnedItem.returnedQty} (New qty: ${poItems[poItemIndex].qty})`);
-      }
-    }
-
-    if (totalReturnedQty >= totalOriginalQty) {
-      poStatus = "FULLY_RETURNED";
-    } else if (totalReturnedQty > 0) {
-      poStatus = "PARTIALLY_RETURNED";
-    }
-
-    // Update PO with new items and status
-    await PurchaseOrder.findByIdAndUpdate(
-      originalPurchaseOrderId,
-      { 
-        items: poItems,
-        status: poStatus 
-      }
-    );
-    
-    console.log(`✅ PO status updated to: ${poStatus}`);
-
-    // ✅ REDUCE VENDOR AP (ACCOUNTS PAYABLE) BALANCE
-    if (originalPO.vendor && originalPO.vendor.id) {
-      try {
-        const vendor = await Vendor.findById(originalPO.vendor.id);
-        if (vendor) {
-          const grandTotal = debitNote.grandTotal || 0;
-          const newClosingBalance = Math.max(0, (vendor.closingBalance || 0) - grandTotal);
-          await Vendor.findByIdAndUpdate(
-            originalPO.vendor.id,
-            { closingBalance: newClosingBalance },
-            { new: true }
-          );
-          console.log(`✅ Vendor AP balance reduced: -₹${grandTotal}, New balance: ₹${newClosingBalance}`);
-        }
-      } catch (err) {
-        console.warn(`⚠️ Failed to update vendor balance:`, err.message);
-      }
+    } catch (err) {
+      console.warn(`⚠️ Failed to update vendor balance after debit note:`, err.message);
     }
 
     // ✅ POST JOURNAL ENTRY to GL

@@ -3,6 +3,9 @@ import mongoose from "mongoose";
 import multer from "multer";
 import XLSX from "xlsx";
 import Vendor from "../models/Vendor.js";
+import PurchaseOrder from "../models/PurchaseOrder.js";
+import Payment from "../models/Payment.js";
+import DebitNote from "../models/DebitNote.js";
 
 const router = express.Router();
 
@@ -366,6 +369,120 @@ router.delete("/:id", async (req, res) => {
       message: "Failed to delete vendor",
       error: error.message,
     });
+  }
+});
+
+// ✅ GET vendor ledger (Historical Balance + Transactions)
+router.get("/:id/ledger", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid vendor ID" });
+    }
+
+    const vendor = await Vendor.findById(id);
+    if (!vendor) {
+      return res.status(404).json({ success: false, message: "Vendor not found" });
+    }
+
+    // Default dates: This month if not specified
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const start = startDate ? new Date(startDate) : firstDay;
+    const end = endDate ? new Date(endDate) : new Date();
+    end.setHours(23, 59, 59, 999);
+
+    // 1. Get current balance (This is the anchor for our backwards calculation)
+    const currentBalance = (vendor.credit || 0) - (vendor.debit || 0);
+
+    // 2. Fetch ALL transactions after startDate to determine the opening balance
+    
+    // Credits: Invoices after startDate
+    const posAfterStart = await PurchaseOrder.find({
+      branchId: vendor.branchId,
+      vendor: vendor.name,
+      status: "INVOICED",
+      date: { $gte: start }
+    }).select("grandTotal date invoiceId");
+
+    // Debits: Payments after startDate
+    const paymentsAfterStart = await Payment.find({
+      branchId: vendor.branchId,
+      "vendor.vendorId": id,
+      status: "completed",
+      paymentDate: { $gte: start }
+    }).select("amount paymentDate paymentId paymentMethod");
+
+    // Debits: Debit Notes after startDate
+    const dnAfterStart = await DebitNote.find({
+      branchId: vendor.branchId,
+      "vendor.vendorId": id,
+      status: "confirmed",
+      createdAt: { $gte: start }
+    }).select("grandTotal createdAt debitNoteId reason");
+
+    // Opening Balance = Current_Balance - (Credits after Start) + (Debits after Start)
+    const totalCreditsAfterStart = posAfterStart.reduce((sum, po) => sum + (po.grandTotal || 0), 0);
+    const totalDebitsAfterStart = 
+      paymentsAfterStart.reduce((sum, p) => sum + (p.amount || 0), 0) +
+      dnAfterStart.reduce((sum, dn) => sum + (dn.grandTotal || 0), 0);
+
+    const openingBalance = currentBalance - totalCreditsAfterStart + totalDebitsAfterStart;
+
+    // 3. Filter transactions within the [start, end] range
+    const inRangePOs = posAfterStart.filter(po => po.date <= end);
+    const inRangePayments = paymentsAfterStart.filter(p => p.paymentDate <= end);
+    const inRangeDNs = dnAfterStart.filter(dn => dn.createdAt <= end);
+
+    // Format all transactions
+    const txns = [
+      ...inRangePOs.map(po => ({
+        id: `po-${po._id}`,
+        date: po.date,
+        type: "INVOICE",
+        particulars: `Purchase Invoice: ${po.invoiceId}`,
+        debit: 0,
+        credit: po.grandTotal || 0
+      })),
+      ...inRangePayments.map(p => ({
+        id: `pay-${p._id}`,
+        date: p.paymentDate,
+        type: "PAYMENT",
+        particulars: `Payment: ${p.paymentId} (${(p.paymentMethod || "CASH").toUpperCase()})`,
+        debit: p.amount || 0,
+        credit: 0
+      })),
+      ...inRangeDNs.map(dn => ({
+        id: `dn-${dn._id}`,
+        date: dn.createdAt,
+        type: "DEBIT_NOTE",
+        particulars: `Debit Note: ${dn.debitNoteId} (${dn.reason || "General"})`,
+        debit: dn.grandTotal || 0,
+        credit: 0
+      }))
+    ].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Calculate running balance for the range
+    let currentRunning = openingBalance;
+    const txnsWithBalance = txns.map(t => {
+      currentRunning = currentRunning + t.credit - t.debit;
+      return { ...t, balance: currentRunning };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        vendorName: vendor.name,
+        openingBalance,
+        closingBalance: currentRunning,
+        transactions: txnsWithBalance
+      }
+    });
+  } catch (error) {
+    console.error("Vendor Ledger Error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

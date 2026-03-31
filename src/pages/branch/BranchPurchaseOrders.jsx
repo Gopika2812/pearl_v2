@@ -160,14 +160,24 @@ const BranchPurchaseOrders = () => {
         toast.warn("No data to export");
         return;
       }
-      const exportData = purchaseOrders.map((order) => ({
-        "Vendor": order.vendor || "-",
-        "PO Number": order.invoiceId || "-",
-        "PI Number": order.purchaseInvoiceId || "-",
-        "Grand Total": order.grandTotal || 0,
-        "Status": order.status || "-",
-        "Date": new Date(order.createdAt).toLocaleDateString("en-IN"),
-      }));
+      const exportData = purchaseOrders.map((order) => {
+        const extraExpensesStr = (order.extraExpenses || [])
+          .map(e => `${e.expenseName}: ₹${e.totalPrice}`)
+          .join(", ") || "-";
+
+        return {
+          "Vendor": order.vendor || "-",
+          "PO Number": order.invoiceId || "-",
+          "PI Number": order.purchaseInvoiceId || "-",
+          "Subtotal": order.subtotal || 0,
+          "Tax Amount": order.totalTax || 0,
+          "Extra Charges": order.extraExpenseAmount || 0,
+          "Extra Details": extraExpensesStr,
+          "Grand Total": order.grandTotal || 0,
+          "Status": order.status || "-",
+          "Date": new Date(order.createdAt).toLocaleDateString("en-IN"),
+        };
+      });
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Purchase Orders");
@@ -396,7 +406,14 @@ const BranchPurchaseOrders = () => {
                                       });
                                       const data = await res.json();
                                       if (!res.ok) throw new Error(data.message || 'Failed to generate invoice');
-                                      toast.success(`Purchase Invoice ${data.piNumber} generated successfully in the Invoice Table!`);
+                                      if (data.debitSubtracted > 0) {
+                                        toast.info(
+                                          `Netting Applied: ₹${data.debitSubtracted.toLocaleString()} subtracted from Vendor Debit. ` +
+                                          `Remaining ₹${data.creditAdded.toLocaleString()} added to Credit.`,
+                                          { autoClose: 5000 }
+                                        );
+                                      }
+                                      toast.success(`Purchase Invoice ${data.piNumber} generated successfully!`);
                                       fetchPurchaseOrders();
                                     } catch (err) {
                                       toast.error(err.message || 'Failed to generate invoice');
@@ -521,24 +538,62 @@ const BranchPurchaseOrders = () => {
                                 </div>
                               )}
 
+                              {/* EXTRA EXPENSES */}
+                              {(order.extraExpenses || []).length > 0 && (
+                                <div className="mt-4">
+                                  <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+                                    🚚 Extra Expenses
+                                  </h4>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                      <thead className="bg-orange-50 text-orange-700 border-b">
+                                        <tr>
+                                          <th className="text-left py-2 px-3">Expense Name</th>
+                                          <th className="text-right py-2 px-3">Base Amount</th>
+                                          <th className="text-right py-2 px-3">GST %</th>
+                                          <th className="text-right py-2 px-3">Total</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y">
+                                        {order.extraExpenses.map((exp, idx) => (
+                                          <tr key={idx} className="bg-white">
+                                            <td className="py-2 px-3 font-semibold text-gray-700">{exp.expenseName}</td>
+                                            <td className="py-2 px-3 text-right text-gray-600">₹{(exp.basePrice || exp.amount || 0).toLocaleString()}</td>
+                                            <td className="py-2 px-3 text-right text-blue-500">{exp.gstPercent || exp.gst || 0}%</td>
+                                            <td className="py-2 px-3 text-right font-bold text-orange-600">₹{(exp.totalPrice || 0).toLocaleString()}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+
                               {/* ORDER SUMMARY */}
-                              <div className="bg-white p-4 rounded-lg border border-gray-200 mt-4">
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                  <div>
-                                    <span className="text-gray-600">Subtotal</span>
-                                    <p className="font-bold text-gray-900">
+                              <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm mt-4">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                                  <div className="bg-gray-50/50 p-3 rounded-lg border border-gray-100">
+                                    <span className="text-[10px] uppercase font-black text-gray-400 tracking-widest block mb-1">Subtotal</span>
+                                    <p className="font-bold text-gray-900 text-base">
                                       ₹{(order.subtotal || 0).toLocaleString()}
                                     </p>
                                   </div>
-                                  <div>
-                                    <span className="text-gray-600">Tax</span>
-                                    <p className="font-bold text-gray-900">
+                                  <div className="bg-gray-50/50 p-3 rounded-lg border border-gray-100">
+                                    <span className="text-[10px] uppercase font-black text-gray-400 tracking-widest block mb-1">Tax Amount</span>
+                                    <p className="font-bold text-gray-900 text-base">
                                       ₹{(order.totalTax || 0).toLocaleString()}
                                     </p>
                                   </div>
-                                  <div>
-                                    <span className="text-gray-600">Grand Total</span>
-                                    <p className="font-bold text-[#319bab]">
+                                  <div className="bg-orange-50/50 p-3 rounded-lg border border-orange-100">
+                                    <span className="text-[10px] uppercase font-black text-orange-400 tracking-widest block mb-1">Extra Charges</span>
+                                    <p className="font-bold text-orange-600 text-base">
+                                      ₹{(order.extraExpenseAmount || 0).toLocaleString()}
+                                    </p>
+                                  </div>
+                                  <div className="bg-[#319bab]/5 p-3 rounded-lg border border-[#319bab]/10">
+                                    <span className="text-[10px] uppercase font-black text-[#319bab]/60 tracking-widest block mb-1">Grand Total</span>
+                                    <p className="font-bold text-[#319bab] text-xl">
                                       ₹{(order.grandTotal || 0).toLocaleString()}
                                     </p>
                                   </div>

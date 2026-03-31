@@ -20,11 +20,15 @@ const debitNoteSchema = new mongoose.Schema(
       unique: true,
     },
 
-    // Reference to original purchase order
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+    },
+
+    // Reference to original purchase order (optional)
     originalPurchaseOrderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "PurchaseOrder",
-      required: true,
     },
     originalInvoiceId: String,
 

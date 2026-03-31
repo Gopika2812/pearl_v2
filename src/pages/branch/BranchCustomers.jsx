@@ -7,6 +7,8 @@ import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 import CustomerLedgerModal from "../../components/branch/CustomerLedgerModal";
 import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCustomerModal";
+import CustomerReceiptModal from "../../components/inventory/CustomerReceiptModal";
+import CustomerCreditNoteModal from "../../components/inventory/CustomerCreditNoteModal";
 
 
 const BranchCustomers = () => {
@@ -33,6 +35,8 @@ const BranchCustomers = () => {
   const [salesOrders, setSalesOrders] = useState([]);
   const [customerPayments, setCustomerPayments] = useState([]);
   const [selectedLedgerCustomer, setSelectedLedgerCustomer] = useState(null);
+  const [selectedReceiptCustomer, setSelectedReceiptCustomer] = useState(null);
+  const [selectedCreditNoteCustomer, setSelectedCreditNoteCustomer] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
@@ -521,12 +525,24 @@ const BranchCustomers = () => {
                   )}
                 </div>
 
-                <div className="mt-2">
+                <div className="mt-4 pt-3 border-t border-gray-100 flex gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => setSelectedReceiptCustomer(customer)}
+                    className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg border border-emerald-200 text-xs flex items-center justify-center gap-1 transition"
+                  >
+                    <span>💰</span> Receipt
+                  </button>
+                  <button
+                    onClick={() => setSelectedCreditNoteCustomer(customer)}
+                    className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-lg border border-rose-200 text-xs flex items-center justify-center gap-1 transition"
+                  >
+                    <span>↩️</span> Return
+                  </button>
                   <button
                     onClick={() => setSelectedLedgerCustomer(customer)}
-                    className="w-full py-2 bg-blue-50 text-blue-600 font-semibold rounded-lg hover:bg-blue-600 hover:text-white transition-colors border border-blue-200 hover:border-blue-600 text-sm flex items-center justify-center gap-2"
+                    className="flex-1 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg border border-blue-200 text-xs flex items-center justify-center gap-1 transition"
                   >
-                    <FaList size={14} /> View Ledger
+                    <span>📅</span> Ledger
                   </button>
                 </div>
               </div>
@@ -630,15 +646,26 @@ const BranchCustomers = () => {
                           </td>
                         )}
                         <td className="px-3 md:px-5 py-2 md:py-3 text-center">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedLedgerCustomer(customer);
-                            }}
-                            className="px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white rounded-md text-xs font-bold transition-colors shadow-sm"
-                          >
-                            Ledger
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelectedReceiptCustomer(customer); }}
+                              className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                            >
+                              Receipt
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelectedCreditNoteCustomer(customer); }}
+                              className="bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                            >
+                              Return
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelectedLedgerCustomer(customer); }}
+                              className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                            >
+                              Ledger
+                            </button>
+                          </div>
                         </td>
                       </tr>
                       {isExpanded && (
@@ -741,6 +768,22 @@ const BranchCustomers = () => {
         customer={selectedLedgerCustomer}
         salesOrders={salesOrders}
         customerPayments={customerPayments}
+      />
+
+      {/* RECEIPT MODAL */}
+      <CustomerReceiptModal 
+        isOpen={!!selectedReceiptCustomer}
+        onClose={() => setSelectedReceiptCustomer(null)}
+        customer={selectedReceiptCustomer}
+        onPaymentSuccess={() => { setSelectedReceiptCustomer(null); fetchCustomers(currentPage); }}
+      />
+
+      {/* CREDIT NOTE MODAL */}
+      <CustomerCreditNoteModal
+        isOpen={!!selectedCreditNoteCustomer}
+        onClose={() => setSelectedCreditNoteCustomer(null)}
+        customer={selectedCreditNoteCustomer}
+        onCreditSuccess={() => { setSelectedCreditNoteCustomer(null); fetchCustomers(currentPage); }}
       />
 
       {isAddModalOpen && (

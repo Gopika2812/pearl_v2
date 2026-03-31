@@ -39,12 +39,14 @@ import BranchRecycling from "./pages/branch/BranchRecycling";
 import BranchSalesOrder from "./pages/branch/BranchSalesOrder";
 import BranchSummary from "./pages/branch/BranchSummary";
 import BranchSuppliers from "./pages/branch/BranchSuppliers";
+import BranchSupplierTransactions from "./pages/branch/BranchSupplierTransactions";
 import BranchOtherPayment from "./pages/branch/BranchOtherPayment";
 import BranchOtherReceipt from "./pages/branch/BranchOtherReceipt";
 import BranchProductRecords from "./pages/branch/BranchProductRecords";
 import BranchLockedPrices from "./pages/branch/BranchLockedPrices";
 import BranchAdminRequests from "./pages/branch/BranchAdminRequests";
 import BranchStockSummary from "./pages/branch/BranchStockSummary";
+import BranchExtraExpenseLedger from "./pages/branch/BranchExtraExpenseLedger";
 import BranchLoginPage from "./pages/BranchLoginPage";
 import BranchRegisterPage from "./pages/BranchRegisterPage";
 import UserRegistrationPage from "./pages/UserRegistrationPage";
@@ -231,6 +233,7 @@ function AppContent() {
                   <Route path="/branch/claims" element={<ProtectedRoute element={<BranchClaims />} />} />
                   <Route path="/branch/dispatch" element={<ProtectedRoute element={<BranchDispatch />} />} />
                   <Route path="/branch/suppliers" element={<ProtectedRoute element={<BranchSuppliers />} />} />
+                  <Route path="/branch/supplier-transactions" element={<ProtectedRoute element={<BranchSupplierTransactions />} />} />
                   <Route path="/branch/customers" element={<ProtectedRoute element={<BranchCustomers />} />} />
                   <Route path="/branch/journals" element={<ProtectedRoute element={<BranchJournalEntries />} />} />
                   <Route path="/branch/stock-journal" element={<ProtectedRoute element={<BranchStockJournal />} />} />
@@ -242,6 +245,7 @@ function AppContent() {
                   <Route path="/branch/locked-prices" element={<ProtectedRoute element={<BranchLockedPrices />} />} />
                   <Route path="/branch/day-book" element={<ProtectedRoute element={<BranchDayBook />} />} />
                   <Route path="/branch/admin-requests" element={<ProtectedRoute element={<BranchAdminRequests />} role={["ADMIN"]} />} />
+                  <Route path="/branch/extra-expense-ledger" element={<ProtectedRoute element={<BranchExtraExpenseLedger />} />} />
 
                   {/* LEGACY ROUTES */}
                   <Route

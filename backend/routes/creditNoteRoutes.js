@@ -11,6 +11,8 @@ import SalesOwner from "../models/SalesOwner.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import GLService from "../utils/glService.js";
 
+import { createAuditLog } from "../utils/logUtil.js";
+
 const router = express.Router();
 
 // GET all credit notes
@@ -18,7 +20,7 @@ router.get("/", async (req, res) => {
   try {
     const creditNotes = await CreditNote.find()
       .sort({ createdAt: -1 });
-    
+
     res.json({ success: true, data: creditNotes });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to fetch credit notes" });
@@ -32,7 +34,7 @@ router.get("/order/:salesOrderId", async (req, res) => {
       originalSalesOrderId: req.params.salesOrderId,
       status: "Created"
     });
-    
+
     res.json({ success: true, data: creditNotes });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to fetch credit notes" });
@@ -142,7 +144,7 @@ router.post("/", async (req, res) => {
     const customer = await Customer.findById(customerId);
     if (customer) {
       const newCredit = (customer.credit || 0) + Math.round(grandTotal);
-      const reducedBalance = Math.round(customer.closingBalance - Math.round(grandTotal));
+      const reducedBalance = Math.round((customer.closingBalance || 0) - Math.round(grandTotal));
       await Customer.findByIdAndUpdate(customerId, {
         credit: newCredit,  // INCREASE credit
         closingBalance: reducedBalance,
@@ -152,21 +154,32 @@ router.post("/", async (req, res) => {
       console.log(`✅ Customer credit increased: +₹${Math.round(grandTotal)} (new credit: ₹${newCredit})`);
     }
 
+    // CREATE AUDIT LOG
+    await createAuditLog({
+      userId: req.body.userId || "System",
+      username: req.body.username || "System",
+      branchId: originalOrder.branchId,
+      action: "CREDIT_NOTE",
+      description: `Created credit note ${creditNoteId} for ${originalOrder.customer.name} - ₹${grandTotal}`,
+      targetId: creditNote._id,
+      targetModel: "CreditNote",
+    });
+
     // 3️⃣ REDUCE COMMISSIONS (proportional to returned amount)
     console.log(`🔍 Looking for commission for sales order: ${originalSalesOrderId}`);
-    
+
     // Convert to ObjectId for proper matching
     const salesOrderObjectId = new mongoose.Types.ObjectId(originalSalesOrderId);
     let commission = await Commission.findOne({ salesOrderId: salesOrderObjectId });
     console.log(`📋 Commission found:`, commission ? "YES" : "NO");
-    
+
     // Fallback: try to find commission by invoice ID
     if (!commission && originalOrder.invoiceId) {
       console.log(`🔄 Fallback search by invoiceId: ${originalOrder.invoiceId}`);
       commission = await Commission.findOne({ invoiceId: originalOrder.invoiceId });
       console.log(`📋 Commission found (fallback):`, commission ? "YES" : "NO");
     }
-    
+
     if (commission) {
       console.log(`💾 Commission details:`, {
         salesOwnerId: commission.salesOwnerId,
@@ -176,10 +189,10 @@ router.post("/", async (req, res) => {
         deliveryManId: commission.deliveryManId,
         deliveryManAmount: commission.deliveryManCommissionAmount,
       });
-      
+
       const proportionReturned = grandTotal / (originalOrder.grandTotalWithMargin || originalOrder.grandTotal);
       console.log(`📊 Proportion returned: ${proportionReturned.toFixed(2)} (${grandTotal} / ${originalOrder.grandTotalWithMargin})`);
-      
+
       // Sales Owner Commission
       if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
         const commissionReduction = commission.salesOwnerCommissionAmount * proportionReturned;
@@ -262,11 +275,112 @@ router.post("/", async (req, res) => {
   }
 });
 
+// CREATE GENERAL CREDIT NOTE (standalone adjustment)
+router.post("/general", async (req, res) => {
+  try {
+    const {
+      customerId,
+      amount,
+      reasonForReturn,
+      branchId,
+    } = req.body;
+
+    if (!customerId || !amount || amount <= 0) {
+      return res.status(400).json({ success: false, message: "Missing or invalid required fields" });
+    }
+
+    const customer = await Customer.findById(customerId);
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    // Generate Credit Note ID
+    const financialYear = getFinancialYear();
+    const prefix = "CN";
+
+    let creditNote;
+    let creditNoteId;
+    let saved = false;
+    let retries = 0;
+
+    while (!saved && retries < 5) {
+      try {
+        const lastCN = await CreditNote.findOne({
+          creditNoteId: new RegExp(`^${prefix}/`),
+          financialYear
+        }).sort({ creditNoteId: -1 });
+
+        const nextNumber = lastCN ? parseInt(lastCN.creditNoteId.split("/")[1]) + 1 : 1;
+        creditNoteId = `${prefix}/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
+
+        creditNote = new CreditNote({
+          creditNoteId,
+          branchId,
+          customer: {
+            customerId,
+            name: customer.name,
+          },
+          subtotal: amount,
+          totalTax: 0,
+          grandTotal: amount,
+          reasonForReturn: reasonForReturn || "General Credit",
+          financialYear,
+          status: "Created",
+          items: [] // No items for general CN
+        });
+
+        await creditNote.save();
+        saved = true;
+      } catch (err) {
+        if (err.code === 11000 || (err.message && err.message.includes('E11000'))) {
+          retries++;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!saved) {
+      return res.status(500).json({ success: false, message: "Could not generate a unique ID. Please try again." });
+    }
+
+    // Update Customer Balance (Increase Credit)
+    const newCredit = (customer.credit || 0) + amount;
+    const newClosingBalance = (customer.closingBalance || 0) - amount;
+
+    await Customer.findByIdAndUpdate(customerId, {
+      credit: newCredit,
+      closingBalance: newClosingBalance,
+      totalBalance: newClosingBalance,
+    });
+
+    // Create Audit Log
+    await createAuditLog({
+      userId: req.body.userId || "System",
+      username: req.body.username || "System",
+      branchId: branchId,
+      action: "GENERAL_CREDIT_NOTE",
+      description: `Created general credit note ${creditNoteId} for ${customer.name} - ₹${amount}`,
+      targetId: creditNote._id,
+      targetModel: "CreditNote",
+    });
+
+    res.json({
+      success: true,
+      message: "General credit note recorded successfully",
+      data: creditNote,
+    });
+  } catch (error) {
+    console.error("General CN error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to create credit note" });
+  }
+});
+
 // DELETE credit note (cancel return)
 router.delete("/:id", async (req, res) => {
   try {
     const deletedCreditNote = await CreditNote.findByIdAndDelete(req.params.id);
-    
+
     if (!deletedCreditNote) {
       return res.status(404).json({ success: false, message: "Credit note not found" });
     }

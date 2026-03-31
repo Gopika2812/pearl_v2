@@ -59,17 +59,22 @@ router.get("/next-id", async (req, res) => {
       );
     }
 
-    const nextId = `PAY/${String(voucher.counter + 1).padStart(3, "0")}/${currentFY}`;
+    const nextId = `pay${String(voucher.counter + 1).padStart(3, "0")}/${currentFY}`;
     res.json({ nextId });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// GET ALL PAYMENTS
+// GET ALL PAYMENTS (optionally filtered by branchId and paymentType)
 router.get("/", async (req, res) => {
   try {
-    const payments = await Payment.find()
+    const { branchId, paymentType } = req.query;
+    const filter = {};
+    if (branchId) filter.branchId = branchId;
+    if (paymentType) filter.paymentType = paymentType;
+
+    const payments = await Payment.find(filter)
       .populate("vendor.vendorId", "name")
       .populate("purchaseOrder.poId", "invoiceId")
       .sort({ paymentDate: -1 });
@@ -183,7 +188,7 @@ router.post("/", async (req, res) => {
 
     // Use the incremented counter
     const counter = voucher.counter;
-    const paymentId = `PAY/${String(counter).padStart(3, "0")}/${currentFY}`;
+    const paymentId = `pay${String(counter).padStart(3, "0")}/${currentFY}`;
 
     // Build description based on payment type
     let finalDescription = description || "";
@@ -214,17 +219,19 @@ router.post("/", async (req, res) => {
 
     await payment.save();
 
-    // ✅ UPDATE VENDOR CREDIT (for vendor payments)
+    // ✅ REDUCE VENDOR CREDIT (for vendor payments — both PO-linked and general)
     if (paymentType === "vendor_payment" && vendor) {
       try {
         const vendorId = vendor.vendorId || null;
         if (vendorId) {
-          const vendorRecord = await Vendor.findByIdAndUpdate(
-            vendorId,
-            { $inc: { credit: Math.round(Number(amount) || 0) } },
-            { new: true }
-          );
-          console.log(`✅ Vendor "${vendorRecord?.name}" credit updated: +₹${amount}`);
+          const vendorRecord = await Vendor.findById(vendorId);
+          if (vendorRecord) {
+            const paidAmount = Math.round(Number(amount) || 0);
+            const currentCredit = vendorRecord.credit || 0;
+            const newCredit = Math.max(0, currentCredit - paidAmount);
+            await Vendor.findByIdAndUpdate(vendorId, { credit: newCredit }, { new: true });
+            console.log(`✅ Vendor "${vendorRecord.name}" credit reduced: ₹${currentCredit} → ₹${newCredit}`);
+          }
         }
       } catch (err) {
         console.warn(`⚠️ Failed to update vendor credit:`, err.message);

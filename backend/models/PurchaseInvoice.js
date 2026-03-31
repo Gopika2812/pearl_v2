@@ -58,7 +58,9 @@ const purchaseInvoiceSchema = new mongoose.Schema(
     extraExpenses: [
       {
         expenseName: String,
+        amount: Number, // Support incoming PO field
         basePrice: Number,
+        gst: Number, // Support incoming PO field
         gstPercent: { type: Number, default: 0 },
         gstAmount: { type: Number, default: 0 },
         totalPrice: Number,

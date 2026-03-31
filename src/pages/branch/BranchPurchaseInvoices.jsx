@@ -133,28 +133,80 @@ const BranchPurchaseInvoices = () => {
                       {expandedInvoices[inv._id] && (
                         <tr className="bg-gray-50">
                           <td colSpan="5" className="px-6 py-4">
-                            <div className="bg-white p-4 rounded-xl border">
-                              <h4 className="font-bold text-xs uppercase text-gray-400 mb-2">Invoice Items</h4>
-                              <table className="w-full text-xs">
-                                <thead className="border-b">
-                                  <tr>
-                                    <th className="text-left py-2">Product</th>
-                                    <th className="text-center py-2">Qty</th>
-                                    <th className="text-right py-2">Price</th>
-                                    <th className="text-right py-2">Total</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {inv.items.map((item, idx) => (
-                                    <tr key={idx} className="border-b last:border-0">
-                                      <td className="py-2">{item.name}</td>
-                                      <td className="py-2 text-center font-bold">{item.qty}</td>
-                                      <td className="py-2 text-right">₹{item.purchasePrice}</td>
-                                      <td className="py-2 text-right font-bold">₹{item.total?.toLocaleString()}</td>
+                            <div className="space-y-6">
+                              {/* INVOICE ITEMS */}
+                              <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                <h4 className="font-bold text-[10px] uppercase text-gray-400 mb-3 tracking-widest">Invoice Items</h4>
+                                <table className="w-full text-xs">
+                                  <thead className="border-b bg-gray-50/50">
+                                    <tr>
+                                      <th className="text-left py-2 px-2">Product</th>
+                                      <th className="text-center py-2 px-2">Qty</th>
+                                      <th className="text-right py-2 px-2">Price</th>
+                                      <th className="text-right py-2 px-2">Total</th>
                                     </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-50">
+                                    {inv.items.map((item, idx) => (
+                                      <tr key={idx} className="hover:bg-gray-50/50 transition">
+                                        <td className="py-2.5 px-2 font-medium text-gray-700">{item.name}</td>
+                                        <td className="py-2.5 px-2 text-center font-black text-gray-900">{item.qty}</td>
+                                        <td className="py-2.5 px-2 text-right text-gray-500">₹{item.purchasePrice?.toLocaleString()}</td>
+                                        <td className="py-2.5 px-2 text-right font-black text-green-700">₹{item.total?.toLocaleString()}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+
+                              {/* EXTRA EXPENSES */}
+                              {(inv.extraExpenses || []).length > 0 && (
+                                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                  <h4 className="font-bold text-[10px] uppercase text-gray-400 mb-3 tracking-widest">Extra Expenses</h4>
+                                  <table className="w-full text-xs">
+                                    <thead className="border-b bg-orange-50/50">
+                                      <tr className="text-orange-700">
+                                        <th className="text-left py-2 px-2">Expense Name</th>
+                                        <th className="text-right py-2 px-2">Base Price</th>
+                                        <th className="text-right py-2 px-2">GST %</th>
+                                        <th className="text-right py-2 px-2">Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                      {inv.extraExpenses.map((exp, idx) => (
+                                        <tr key={idx} className="hover:bg-gray-50/50 transition">
+                                          <td className="py-2.5 px-2 font-medium text-gray-700">{exp.expenseName}</td>
+                                          <td className="py-2.5 px-2 text-right text-gray-500">₹{(exp.basePrice || exp.amount || 0).toLocaleString()}</td>
+                                          <td className="py-2.5 px-2 text-right text-blue-500">{exp.gstPercent || exp.gst || 0}%</td>
+                                          <td className="py-2.5 px-2 text-right font-black text-orange-600">₹{(exp.totalPrice || 0).toLocaleString()}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+
+                              {/* SUMMARY */}
+                              <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                                  <div className="bg-gray-50/50 p-3 rounded-lg border border-gray-100">
+                                    <span className="text-[10px] uppercase font-black text-gray-400 tracking-widest block mb-1">Subtotal</span>
+                                    <p className="font-bold text-gray-900 text-lg">₹{(inv.subtotal || 0).toLocaleString()}</p>
+                                  </div>
+                                  <div className="bg-gray-50/50 p-3 rounded-lg border border-gray-100">
+                                    <span className="text-[10px] uppercase font-black text-gray-400 tracking-widest block mb-1">Tax Amount</span>
+                                    <p className="font-bold text-gray-900 text-lg">₹{(inv.totalTax || 0).toLocaleString()}</p>
+                                  </div>
+                                  <div className="bg-orange-50/50 p-3 rounded-lg border border-orange-100">
+                                    <span className="text-[10px] uppercase font-black text-orange-400 tracking-widest block mb-1">Extra Charges</span>
+                                    <p className="font-bold text-orange-600 text-lg">₹{(inv.extraExpenseAmount || 0).toLocaleString()}</p>
+                                  </div>
+                                  <div className="bg-green-50/50 p-3 rounded-lg border border-green-100">
+                                    <span className="text-[10px] uppercase font-black text-green-600/60 tracking-widest block mb-1">Grand Total</span>
+                                    <p className="font-bold text-green-700 text-2xl">₹{(inv.grandTotal || 0).toLocaleString()}</p>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </td>
                         </tr>

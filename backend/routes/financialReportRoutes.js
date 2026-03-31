@@ -7,6 +7,9 @@ import Vendor from "../models/Vendor.js";
 import GLService from "../utils/glService.js";
 import SalesOrder from "../models/SalesOrder.js";
 import PurchaseInvoice from "../models/PurchaseInvoice.js";
+import Payment from "../models/Payment.js";
+import DebitNote from "../models/DebitNote.js";
+import Receipt from "../models/Receipt.js";
 
 const router = express.Router();
 
@@ -447,7 +450,19 @@ router.get("/day-book", async (req, res) => {
     const purchases = await PurchaseInvoice.find(query)
       .select("purchaseInvoiceId vendor voucherType grandTotal createdAt");
 
-    // 3. Combine and Transform
+    // 3. Fetch Receipts (Inflow -> Debit)
+    const receipts = await Receipt.find(query)
+      .select("receiptId customer amount createdAt");
+
+    // 4. Fetch Payments (Outflow -> Credit)
+    const payments = await Payment.find(query)
+      .select("paymentId vendor expenseDetails amount createdAt");
+
+    // 5. Fetch Debit Notes (Purchase Return / Decrease AP -> Debit)
+    const debitNotes = await DebitNote.find(query)
+      .select("debitNoteId vendor grandTotal createdAt");
+
+    // Combine and Transform
     const dayBook = [
       ...sales.map(s => ({
         _id: s._id,
@@ -468,6 +483,36 @@ router.get("/day-book", async (req, res) => {
         debit: 0,
         credit: p.grandTotal || 0,
         type: "PURCHASE"
+      })),
+      ...receipts.map(r => ({
+        _id: r._id,
+        date: r.createdAt,
+        name: r.customer?.name || "Customer",
+        voucherType: "REC",
+        invoiceId: r.receiptId,
+        debit: r.amount || 0,
+        credit: 0,
+        type: "RECEIPT"
+      })),
+      ...payments.map(p => ({
+        _id: p._id,
+        date: p.createdAt,
+        name: p.vendor?.name || p.expenseDetails?.personName || "N/A",
+        voucherType: "PAY",
+        invoiceId: p.paymentId,
+        debit: 0,
+        credit: p.amount || 0,
+        type: "PAYMENT"
+      })),
+      ...debitNotes.map(dn => ({
+        _id: dn._id,
+        date: dn.createdAt,
+        name: dn.vendor?.name || "N/A",
+        voucherType: "DN",
+        invoiceId: dn.debitNoteId,
+        debit: dn.grandTotal || 0,
+        credit: 0,
+        type: "DEBIT_NOTE"
       }))
     ].sort((a, b) => new Date(b.date) - new Date(a.date));
 

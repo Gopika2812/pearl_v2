@@ -784,14 +784,50 @@ router.patch("/:id/generate-invoice", async (req, res) => {
     }
 
     // ─── BRANCH B: FIRST-TIME INVOICE ─────────────────────────────────────
-    const siVoucher = await VoucherType.findOne({ 
+    // 🆕 Derived SI Prefix directly from SO Prefix (e.g., COUNTERLESSSO -> COUNTERLESSSI)
+    const rawSoId = salesOrder.invoiceId; // e.g., "SO: COUNTERLESSSO/001/25-26"
+    const cleanSoId = rawSoId.replace(/^SO[:\s\-]*/i, ""); // "COUNTERLESSSO/001/25-26"
+    const soPrefix = cleanSoId.split('/')[0]; // "COUNTERLESSSO"
+    
+    // Replace trailing SO with SI, or just append SI if not present
+    let siPrefix = soPrefix.endsWith("SO") 
+      ? soPrefix.replace(/SO$/i, "SI")
+      : `${soPrefix}SI`;
+
+    console.log(`🔍 Direct Mapping: SO [${soPrefix}] -> SI [${siPrefix}]`);
+
+    let siVoucher = await VoucherType.findOne({ 
       branchId: salesOrder.branchId, 
+      prefix: siPrefix, 
       orderType: "SI", 
       financialYear: currentFY 
     });
 
+    // 🆕 FALLBACK: Lookup by name if prefix wasn't found (using the SO's voucherType handle)
     if (!siVoucher) {
-      return res.status(404).json({ message: "Sales Invoice (SI) voucher type not found for this branch." });
+      console.log(`🔄 Prefix lookup failed. Trying lookup by name: ${salesOrder.voucherType}`);
+      siVoucher = await VoucherType.findOne({
+        branchId: salesOrder.branchId,
+        name: salesOrder.voucherType,
+        orderType: "SI",
+        financialYear: currentFY
+      });
+    }
+
+    // 🆕 AUTO-CREATE SI VOUCHER IF STILL MISSING
+    if (!siVoucher) {
+      console.log(`⚠️ No SI voucher found for prefix '${siPrefix}' or name '${salesOrder.voucherType}'. Auto-creating...`);
+      
+      siVoucher = new VoucherType({
+        branchId: salesOrder.branchId,
+        name: salesOrder.voucherType || soPrefix.toLowerCase().replace(/so$/i, ""),
+        orderType: "SI",
+        prefix: siPrefix,
+        counter: 1,
+        financialYear: currentFY
+      });
+      await siVoucher.save();
+      console.log(`✅ Automated SI Voucher created with prefix: ${siPrefix} (Counter: 1)`);
     }
 
     const siNumber = `${siVoucher.prefix}/${String(siVoucher.counter).padStart(3, "0")}/${currentFY}`;
@@ -894,6 +930,25 @@ router.get("/:id", async (req, res) => {
   } catch (error) {
     console.error("Fetch error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch sales order" });
+  }
+});
+
+/**
+ * GET: All Unpaid Invoices for a specific Customer
+ */
+router.get("/unpaid/:customerId", async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const unpaidOrders = await SalesOrder.find({
+      "customer.customerId": customerId,
+      status: "INVOICED",
+      closingBalance: { $gt: 0 }
+    }).sort({ createdAt: 1 }); // Oldest first (FIFO payment logic)
+
+    res.json({ success: true, data: unpaidOrders });
+  } catch (error) {
+    console.error("Fetch Unpaid Orders Error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
