@@ -125,11 +125,122 @@ export default function InventorySalesOrderEntry({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClaim, setIsClaim] = useState(false);
   const [isLocked, setIsLocked] = useState(false); // New state for Lock Price checkbox
+  const [isPriceAuthorized, setIsPriceAuthorized] = useState(false);
+  const [activePriceRequest, setActivePriceRequest] = useState(null);
+  const pollingRef = useRef(null);
 
   // Check if current user is Admin or Super Admin
   const isAdmin = useMemo(() => {
     return user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   }, [user]);
+
+  // POLLING LOGIC FOR PRICE REQUESTS
+  const startStatusPolling = (reqId, pId) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/price-requests/my-status/${pId}`, {
+          headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+        });
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+          const { status } = data.data;
+          setActivePriceRequest(data.data);
+          
+          if (status === "APPROVED") {
+            setIsPriceAuthorized(true);
+            setActivePriceRequest(data.data); // Update with final status
+            clearInterval(pollingRef.current);
+            toast.success("Price change approved by admin!");
+          } else if (status === "REJECTED") {
+            clearInterval(pollingRef.current);
+            toast.error("Price change request rejected by admin.");
+            setActivePriceRequest(null);
+            setIsPriceAuthorized(false);
+          }
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+    }, 2000); // Poll every 2 seconds for almost instant updates
+  };
+
+  const checkPriceStatusOnSelect = async (pId) => {
+    if (!pId) return;
+    try {
+      const res = await fetch(`${API_BASE}/price-requests/my-status/${pId}`, {
+        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+      });
+      const data = await res.json();
+      
+      if (data.success && data.data) {
+        const { status } = data.data;
+        setActivePriceRequest(data.data);
+        
+        if (status === "APPROVED") {
+          setIsPriceAuthorized(true);
+        } else if (status === "PENDING") {
+          setIsPriceAuthorized(false);
+          startStatusPolling(data.data._id, pId);
+        } else {
+          setIsPriceAuthorized(false);
+        }
+      } else {
+        setActivePriceRequest(null);
+        setIsPriceAuthorized(false);
+        if (pollingRef.current) clearInterval(pollingRef.current);
+      }
+    } catch (err) {
+      console.error("Check status error:", err);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
+
+  const handlePriceUnlockRequest = async () => {
+    if (!selectedItem) {
+      toast.warning("Please select a product first.");
+      return;
+    }
+    
+    try {
+      const res = await fetch(`${API_BASE}/price-requests`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({
+          productId: selectedItem,
+          productName: itemSearch,
+          originalPrice: sellingPrice
+        })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setActivePriceRequest(data.data);
+        if (data.data.status === "APPROVED") {
+          setIsPriceAuthorized(true);
+          toast.success("Price field unlocked!");
+        } else {
+          startStatusPolling(data.data._id, selectedItem);
+          toast.info("Unlock request sent to admin. Please wait...");
+        }
+      } else {
+
+        toast.error(data.message || "Failed to send request.");
+      }
+    } catch (err) {
+      toast.error("Request failed.");
+    }
+  };
 
   const isCreditLimitExceeded = false;
 
@@ -520,6 +631,11 @@ export default function InventorySalesOrderEntry({
     setShowItemDropdown(false);
     setQty(1);
 
+    // 🛡️ CHECK IF PRICE IS ALREADY AUTHORIZED OR PENDING (Persistent logic)
+    if (!isAdmin) {
+      checkPriceStatusOnSelect(id);
+    }
+
     // Auto-select Product Group if not already selected or if different
     const pGroupId = product.productGroup?._id || product.productGroup || product.groupId?._id || product.groupId;
     if (pGroupId && pGroupId !== productGroup) {
@@ -741,6 +857,9 @@ export default function InventorySalesOrderEntry({
     setIgst(false);
     setHsn("");
     setShowItemDropdown(false);
+    setIsPriceAuthorized(false);
+    setActivePriceRequest(null);
+    if (pollingRef.current) clearInterval(pollingRef.current);
   };
 
   const removeItem = (i) => {
@@ -1437,7 +1556,7 @@ export default function InventorySalesOrderEntry({
                 </div>
                 <div>
                   <label className={labelClass}>
-                    Selling ₹ {isAdmin && (
+                    Selling ₹ {isAdmin ? (
                       <span className="ml-2 inline-flex items-center gap-1 cursor-pointer" onClick={() => setIsLocked(!isLocked)}>
                         <input
                           type="checkbox"
@@ -1447,15 +1566,35 @@ export default function InventorySalesOrderEntry({
                         />
                         <span className="text-[9px] text-[#319bab]">LOCK</span>
                       </span>
+                    ) : (
+                      <button 
+                        onClick={handlePriceUnlockRequest}
+                        disabled={isPriceAuthorized || activePriceRequest?.status === "PENDING"}
+                        className={`ml-2 text-[9px] px-1 rounded font-bold uppercase transition ${
+                          isPriceAuthorized 
+                            ? "bg-green-100 text-green-700" 
+                            : activePriceRequest?.status === "PENDING"
+                              ? "bg-orange-100 text-orange-700 animate-pulse"
+                              : "bg-[#319bab]/10 text-[#319bab] hover:bg-[#319bab]/20"
+                        }`}
+                      >
+                        {isPriceAuthorized ? "Unlocked" : activePriceRequest?.status === "PENDING" ? "Request Sent..." : "Unlock"}
+                      </button>
                     )}
                   </label>
                   <input
                     type="number"
-                    className={inputClass}
+                    className={`${inputClass} ${(isAdmin || isPriceAuthorized) ? "" : "bg-gray-100 cursor-not-allowed text-gray-500 font-bold"}`}
                     value={sellingPrice === 0 ? "" : sellingPrice}
                     onChange={(e) => setSellingPrice(e.target.value === "" ? "" : Number(e.target.value))}
+                    readOnly={!isAdmin && !isPriceAuthorized}
                     placeholder="Price"
                   />
+                  {activePriceRequest?.status === "PENDING" && (
+                    <p className="text-[9px] text-orange-600 font-bold mt-1 italic animate-pulse">
+                      Pending Admin approval...
+                    </p>
+                  )}
                 </div>
               </div>
 

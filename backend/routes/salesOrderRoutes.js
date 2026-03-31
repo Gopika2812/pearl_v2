@@ -784,18 +784,19 @@ router.patch("/:id/generate-invoice", async (req, res) => {
     }
 
     // ─── BRANCH B: FIRST-TIME INVOICE ─────────────────────────────────────
-    // 🆕 Derived SI Prefix directly from SO Prefix (e.g., COUNTERLESSSO -> COUNTERLESSSI)
-    const rawSoId = salesOrder.invoiceId; // e.g., "SO: COUNTERLESSSO/001/25-26"
-    const cleanSoId = rawSoId.replace(/^SO[:\s\-]*/i, ""); // "COUNTERLESSSO/001/25-26"
-    const soPrefix = cleanSoId.split('/')[0]; // "COUNTERLESSSO"
-    
+    // 🆕 ABSOLUTE PREFIX SYNC: Derive SI ID 100% from SO ID Prefix (e.g., LOCALLINESSO -> LOCALLINESSI)
+    const rawSoId = salesOrder.invoiceId; 
+    const cleanSoId = rawSoId.replace(/^SO[:\s\-]*/i, ""); 
+    const soPrefixPrefix = cleanSoId.split('/')[0]; 
+
     // Replace trailing SO with SI, or just append SI if not present
-    let siPrefix = soPrefix.endsWith("SO") 
-      ? soPrefix.replace(/SO$/i, "SI")
-      : `${soPrefix}SI`;
+    let siPrefix = soPrefixPrefix.endsWith("SO") 
+      ? soPrefixPrefix.replace(/SO$/i, "SI")
+      : `${soPrefixPrefix}SI`;
 
-    console.log(`🔍 Direct Mapping: SO [${soPrefix}] -> SI [${siPrefix}]`);
+    console.log(`🔍 Absolute Sync: SO [${soPrefixPrefix}] -> Target SI [${siPrefix}]`);
 
+    // 🔬 SEARCH ONLY BY EXACT PREFIX. DO NOT USE NAME FALLBACK.
     let siVoucher = await VoucherType.findOne({ 
       branchId: salesOrder.branchId, 
       prefix: siPrefix, 
@@ -803,31 +804,20 @@ router.patch("/:id/generate-invoice", async (req, res) => {
       financialYear: currentFY 
     });
 
-    // 🆕 FALLBACK: Lookup by name if prefix wasn't found (using the SO's voucherType handle)
+    // 🆕 AUTO-CREATE SI VOUCHER IF MISSING (EXACT PREFIX MATCH)
     if (!siVoucher) {
-      console.log(`🔄 Prefix lookup failed. Trying lookup by name: ${salesOrder.voucherType}`);
-      siVoucher = await VoucherType.findOne({
-        branchId: salesOrder.branchId,
-        name: salesOrder.voucherType,
-        orderType: "SI",
-        financialYear: currentFY
-      });
-    }
-
-    // 🆕 AUTO-CREATE SI VOUCHER IF STILL MISSING
-    if (!siVoucher) {
-      console.log(`⚠️ No SI voucher found for prefix '${siPrefix}' or name '${salesOrder.voucherType}'. Auto-creating...`);
+      console.log(`⚠️ No SI voucher found for prefix '${siPrefix}'. Auto-creating now...`);
       
       siVoucher = new VoucherType({
         branchId: salesOrder.branchId,
-        name: salesOrder.voucherType || soPrefix.toLowerCase().replace(/so$/i, ""),
+        name: soPrefixPrefix.toLowerCase().replace(/so$/i, ""), // Normalize name from its prefix
         orderType: "SI",
         prefix: siPrefix,
         counter: 1,
         financialYear: currentFY
       });
       await siVoucher.save();
-      console.log(`✅ Automated SI Voucher created with prefix: ${siPrefix} (Counter: 1)`);
+      console.log(`✅ Automated SI Voucher created with absolute prefix: ${siPrefix} (Counter: 1)`);
     }
 
     const siNumber = `${siVoucher.prefix}/${String(siVoucher.counter).padStart(3, "0")}/${currentFY}`;
@@ -884,8 +874,8 @@ router.patch("/:id/generate-invoice", async (req, res) => {
       editType: 'INVOICED',
       items: allItems,
       grandTotal: grandTotalToUse,
-      editedAt: new Date(),
-      note: `${siNumber} created | Stock -${allItems.reduce((s, i) => s + (i.qty || 0), 0)} units | Balance +₹${grandTotalToUse}`
+      invoicedAt: new Date(),
+      invoiceNumber: siNumber
     };
 
     salesOrder.editHistory.push(invoiceSnapshot);

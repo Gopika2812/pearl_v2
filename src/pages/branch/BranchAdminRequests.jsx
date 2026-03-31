@@ -9,6 +9,7 @@ export default function BranchAdminRequests() {
   const [reEditRequests, setReEditRequests] = useState([]);
   const [creditRequests, setCreditRequests] = useState([]);
   const [poRequests, setPoRequests] = useState([]);
+  const [priceRequests, setPriceRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -34,6 +35,13 @@ export default function BranchAdminRequests() {
       const poRes = await fetch(`${API_BASE}/purchase-orders/requests/branch/${branch?._id}`);
       const poData = await poRes.json();
       if (poData.success) setPoRequests(poData.data);
+
+      // Fetch Price Change Requests
+      const priceRes = await fetch(`${API_BASE}/price-requests/branch/${branch?._id}`, {
+        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+      });
+      const priceData = await priceRes.json();
+      if (priceData.success) setPriceRequests(priceData.data);
 
     } catch (err) {
       toast.error("Error connecting to server");
@@ -93,6 +101,28 @@ export default function BranchAdminRequests() {
       }
     } catch (err) {
       toast.error("Error updating request");
+    }
+  };
+
+  const handlePriceAction = async (id, status) => {
+    try {
+      const res = await fetch(`${API_BASE}/price-requests/${id}/status`, {
+        method: "PATCH",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({ status })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Price Request ${status === 'APPROVED' ? 'Approved' : 'Rejected'}`);
+        fetchAllRequests();
+      } else {
+        toast.error(data.message || "Failed to update request");
+      }
+    } catch (err) {
+      toast.error("Error updating price request");
     }
   };
 
@@ -291,6 +321,69 @@ export default function BranchAdminRequests() {
                         </tr>
                       );
                     })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Section 4: Price Change Requests */}
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-[#319bab] p-6 flex items-center justify-between">
+              <h3 className="text-white font-bold flex items-center gap-2">
+                <FaUser size={14} className="text-white" />
+                Price Change Requests ({priceRequests.length})
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Staff Name</th>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Product / Original Price</th>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Requested Date</th>
+                    <th className="px-6 py-4 text-center font-black text-gray-400 uppercase tracking-widest text-[10px]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {loading ? (
+                    <tr><td colSpan="4" className="px-6 py-8 text-center text-gray-400 italic">Loading...</td></tr>
+                  ) : priceRequests.length === 0 ? (
+                    <tr><td colSpan="4" className="px-6 py-8 text-center text-gray-400 italic font-bold">No pending price change requests</td></tr>
+                  ) : (
+                    priceRequests.map((req) => (
+                      <tr key={req._id} className="hover:bg-gray-50/50 transition-colors group">
+                        <td className="px-6 py-4 font-black text-gray-900 uppercase tracking-tighter">{req.staffName}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-gray-800">{req.productName}</span>
+                            <span className="text-[10px] text-gray-400">Original Price: ₹{req.originalPrice}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-[10px] text-gray-400 flex items-center gap-1 font-medium">
+                            <FaClock size={8} /> {new Date(req.createdAt).toLocaleString()}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button 
+                              onClick={() => handlePriceAction(req._id, "APPROVED")}
+                              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition uppercase text-[10px] font-bold"
+                            >
+                              <FaCheck size={10} /> Approve
+                            </button>
+                            <button 
+                              onClick={() => handlePriceAction(req._id, "REJECTED")}
+                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition uppercase text-[10px] font-bold"
+                            >
+                              <FaTimes size={10} /> Reject
+                            </button>
+                          </div>
+                        </td>
+
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
