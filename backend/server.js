@@ -6,53 +6,50 @@ import express from "express";
 import mongoose from "mongoose";
 import path from "path";
 import { fileURLToPath } from "url";
-import auth from "./middleware/auth.js";
-import rbac from "./middleware/rbac.js";
-import fixVoucherTypeIndex from "./utils/fixVoucherTypeIndex.js";
-import fixVendorIndex from "./utils/fixVendorIndex.js";
-import { fixPurchaseOrderIndex } from "./utils/fixPurchaseOrderIndex.js";
-import { fixPurchaseInvoiceIndex } from "./utils/fixPurchaseInvoiceIndex.js";
-import { fixSalesOrderIndex } from "./utils/fixSalesOrderIndex.js";
 import { fixInvoiceIndex } from "./utils/fixInvoiceIndex.js";
-import { fixVoucherTypes } from "./utils/fixVoucherTypes.js";
+import { fixPurchaseInvoiceIndex } from "./utils/fixPurchaseInvoiceIndex.js";
+import { fixPurchaseOrderIndex } from "./utils/fixPurchaseOrderIndex.js";
+import { fixSalesOrderIndex } from "./utils/fixSalesOrderIndex.js";
+import fixVendorIndex from "./utils/fixVendorIndex.js";
+import fixVoucherTypeIndex from "./utils/fixVoucherTypeIndex.js";
 
+import auditLogRoutes from "./routes/auditLogRoutes.js";
 import branchRoutes from "./routes/branchRoutes.js";
 import branchUserRoutes from "./routes/branchUserRoutes.js";
-import superAdminRoutes from "./routes/superAdminRoutes.js";
 import chartOfAccountsRoutes from "./routes/chartOfAccountsRoutes.js";
 import commissionRuleRoutes from "./routes/commissionRuleRoutes.js";
 import creditNoteRoutes from "./routes/creditNoteRoutes.js";
 import customerCategoryRoutes from "./routes/customerCategoryRoutes.js";
 import customerGroupRoutes from "./routes/customerGroupRoutes.js";
+import customerLockedPriceRoutes from "./routes/customerLockedPriceRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import debitNoteRoutes from "./routes/debitNoteRoutes.js";
 import deliveryManRoutes from "./routes/deliveryManRoutes.js";
+import eInvoiceRoutes from "./routes/eInvoiceRoutes.js";
+import extraExpenseLedgerRoutes from "./routes/extraExpenseLedgerRoutes.js";
 import extraExpenseRoutes from "./routes/extraExpenseRoutes.js";
 import financialReportRoutes from "./routes/financialReportRoutes.js";
+import gstRoutes from "./routes/gstRoutes.js";
 import invoiceRoutes from "./routes/invoiceRoutes.js";
+import otherTransactionRoutes from "./routes/otherTransactionRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import pearlsBookRoutes from "./routes/pearlsBookRoutes.js";
+import priceRequestRoutes from "./routes/priceRequestRoutes.js";
 import productCategoryRoutes from "./routes/productCategoryRoutes.js";
 import productGroupRoutes from "./routes/productGroupRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
-import purchaseOrderRoutes from "./routes/purchaseOrderRoutes.js";
 import purchaseInvoiceRoutes from "./routes/purchaseInvoiceRoutes.js";
+import purchaseOrderRoutes from "./routes/purchaseOrderRoutes.js";
 import receiptRoutes from "./routes/receiptRoutes.js";
 import reorderingRoutes from "./routes/reorderingRoutes.js";
 import salesManRoutes from "./routes/salesManRoutes.js";
 import salesOrderRoutes from "./routes/salesOrderRoutes.js";
 import salesOwnerRoutes from "./routes/salesOwnerRoutes.js";
+import superAdminRoutes from "./routes/superAdminRoutes.js";
+import tallyJournalRoutes from "./routes/tallyJournalRoutes.js";
 import vendorRoutes from "./routes/vendorRoutes.js";
 import voucherTypeRoutes from "./routes/voucherTypeRoutes.js";
 import warehouseRoutes from "./routes/warehouseRoutes.js";
-import tallyJournalRoutes from "./routes/tallyJournalRoutes.js";
-import auditLogRoutes from "./routes/auditLogRoutes.js";
-import gstRoutes from "./routes/gstRoutes.js";
-import customerLockedPriceRoutes from "./routes/customerLockedPriceRoutes.js";
-import eInvoiceRoutes from "./routes/eInvoiceRoutes.js";
-import otherTransactionRoutes from "./routes/otherTransactionRoutes.js";
-import extraExpenseLedgerRoutes from "./routes/extraExpenseLedgerRoutes.js";
-import priceRequestRoutes from "./routes/priceRequestRoutes.js";
 
 
 const app = express();
@@ -130,7 +127,7 @@ mongoose
     await fixPurchaseInvoiceIndex();
     await fixSalesOrderIndex();
     await fixInvoiceIndex();
-    await fixVoucherTypes();
+    // await fixVoucherTypes(); // Commented out to prevent auto-recreation
   })
   .catch((err) => console.error("Mongo Error:", err));
 

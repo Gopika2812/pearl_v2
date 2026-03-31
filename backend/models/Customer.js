@@ -14,6 +14,13 @@ const customerSchema = new mongoose.Schema(
     address: { type: String, default: "" },
     district: { type: String, default: "" },
     state: { type: String, default: "" },
+    stateCode: {
+      type: String,
+      default: "33", // 33 = Tamil Nadu, can be changed per state
+      trim: true,
+      index: true,
+      // Common: 33=TN, 32=Karnataka, 29=Maharashtra, 27=Telangana, 19=Goa, etc.
+    },
     country: { type: String, default: "India" },
     pincode: { type: String, default: "" },
     

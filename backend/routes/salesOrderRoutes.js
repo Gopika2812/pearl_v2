@@ -2,14 +2,13 @@ import express from "express";
 import mongoose from "mongoose";
 import Commission from "../models/Commission.js";
 import Customer from "../models/Customer.js";
+import Product from "../models/Product.js";
+import Receipt from "../models/Receipt.js";
 import SalesOrder from "../models/SalesOrder.js";
 import VoucherType from "../models/VoucherType.js";
-import { createAuditLog } from "../utils/logUtil.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import GLService from "../utils/glService.js";
-import Product from "../models/Product.js";
-import ProductGroup from "../models/ProductGroup.js";
-import Receipt from "../models/Receipt.js";
+import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
 
@@ -405,7 +404,9 @@ router.post("/", async (req, res) => {
         address: customer.address,
         district: customer.district,
         state: customer.state,
+        stateCode: customer.stateCode || "33",
         pincode: customer.pincode,
+        gstin: customer.gstin,
       },
 
       openingBalance: Math.round(openingBalance),
@@ -785,8 +786,9 @@ router.patch("/:id/generate-invoice", async (req, res) => {
 
     // ─── BRANCH B: FIRST-TIME INVOICE ─────────────────────────────────────
     // 🆕 ABSOLUTE PREFIX SYNC: Derive SI ID 100% from SO ID Prefix (e.g., LOCALLINESSO -> LOCALLINESSI)
-    const rawSoId = salesOrder.invoiceId; 
-    const cleanSoId = rawSoId.replace(/^SO[:\s\-]*/i, ""); 
+    const rawSoId = salesOrder.invoiceId || ""; 
+    // Stronger regex to strip "SO REF: ", "SO: ", "SO-", etc.
+    const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, ""); 
     const soPrefixPrefix = cleanSoId.split('/')[0]; 
 
     // Replace trailing SO with SI, or just append SI if not present
@@ -794,7 +796,8 @@ router.patch("/:id/generate-invoice", async (req, res) => {
       ? soPrefixPrefix.replace(/SO$/i, "SI")
       : `${soPrefixPrefix}SI`;
 
-    console.log(`🔍 Absolute Sync: SO [${soPrefixPrefix}] -> Target SI [${siPrefix}]`);
+    console.log(`🔍 Absolute Sync (Convert): SO [${soPrefixPrefix}] -> Target SI [${siPrefix}]`);
+
 
     // 🔬 SEARCH ONLY BY EXACT PREFIX. DO NOT USE NAME FALLBACK.
     let siVoucher = await VoucherType.findOne({ 
@@ -1125,19 +1128,67 @@ router.get("/re-edit-requests/branch/:branchId", async (req, res) => {
 
 // ✅ APPROVE RE-EDIT REQUEST
 router.patch("/:id/approve-re-edit", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const { id } = req.params;
-    const salesOrder = await SalesOrder.findById(id);
-    if (!salesOrder) return res.status(404).json({ message: "Order not found" });
+    const salesOrder = await SalesOrder.findById(id).session(session);
+    if (!salesOrder) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Order not found" });
+    }
 
+    // 🏁 ERADICATE GHOST INVOICE: If an invoice exists, delete it and revert everything
+    if (salesOrder.salesInvoiceId) {
+      const Invoice = mongoose.model("Invoice"); // Grab model
+      const Product = mongoose.model("Product");
+      const Customer = mongoose.model("Customer");
+
+      const invoice = await Invoice.findOne({ invoiceNumber: salesOrder.salesInvoiceId }).session(session);
+      
+      if (invoice) {
+        console.log(`🗑️ Eradicating ghost invoice ${invoice.invoiceNumber} for Re-Edit...`);
+        
+        // REVERT STOCK
+        for (const item of invoice.items) {
+          const product = await Product.findById(item.productId).session(session);
+          if (product) {
+            product.totalQty = (product.totalQty || 0) + (item.qty || 0);
+            await product.save({ session });
+          }
+        }
+
+        // REVERT CUSTOMER BALANCE
+        const customer = await Customer.findById(invoice.customer?.customerId).session(session);
+        if (customer && invoice.grandTotal > 0) {
+          customer.debit = Math.round((customer.debit || 0) - invoice.grandTotal);
+          customer.closingBalance = Math.round((customer.closingBalance || 0) - invoice.grandTotal);
+          await customer.save({ session });
+        }
+
+        // DELETE INVOICE
+        await Invoice.findByIdAndDelete(invoice._id).session(session);
+      }
+    }
+
+    salesOrder.status = "PENDING"; // Move back to pending for editing
+    salesOrder.invoiceGenerated = false;
+    salesOrder.salesInvoiceId = null; // IMPORTANT: Clear the bad ID link
     salesOrder.reEditRequestStatus = "APPROVED";
-    await salesOrder.save();
+    
+    await salesOrder.save({ session });
+    await session.commitTransaction();
 
-    res.json({ success: true, message: "Re-edit request approved" });
+    res.json({ success: true, message: "Re-edit request approved. Invoice deleted and status reset." });
   } catch (err) {
+    await session.abortTransaction();
+    console.error("Re-edit Approval Error:", err);
     res.status(500).json({ message: "Failed to approve request" });
+  } finally {
+    session.endSession();
   }
 });
+
 
 // ❌ REJECT RE-EDIT REQUEST
 router.patch("/:id/reject-re-edit", async (req, res) => {
@@ -1189,19 +1240,67 @@ router.patch("/:id/request-cancel", async (req, res) => {
 
 // ✅ APPROVE CANCEL REQUEST
 router.patch("/:id/approve-cancel", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const { id } = req.params;
-    const salesOrder = await SalesOrder.findById(id);
-    if (!salesOrder) return res.status(404).json({ message: "Order not found" });
+    const salesOrder = await SalesOrder.findById(id).session(session);
+    if (!salesOrder) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Order not found" });
+    }
 
+    // 🏁 ERADICATE GHOST INVOICE: If an invoice exists, delete it and revert everything
+    if (salesOrder.salesInvoiceId) {
+      const Invoice = mongoose.model("Invoice");
+      const Product = mongoose.model("Product");
+      const Customer = mongoose.model("Customer");
+
+      const invoice = await Invoice.findOne({ invoiceNumber: salesOrder.salesInvoiceId }).session(session);
+      
+      if (invoice) {
+        console.log(`🗑️ Eradicating ghost invoice ${invoice.invoiceNumber} for Cancellation...`);
+        
+        // REVERT STOCK
+        for (const item of invoice.items) {
+          const product = await Product.findById(item.productId).session(session);
+          if (product) {
+            product.totalQty = (product.totalQty || 0) + (item.qty || 0);
+            await product.save({ session });
+          }
+        }
+
+        // REVERT CUSTOMER BALANCE
+        const customer = await Customer.findById(invoice.customer?.customerId).session(session);
+        if (customer && invoice.grandTotal > 0) {
+          customer.debit = Math.round((customer.debit || 0) - invoice.grandTotal);
+          customer.closingBalance = Math.round((customer.closingBalance || 0) - invoice.grandTotal);
+          await customer.save({ session });
+        }
+
+        // DELETE INVOICE
+        await Invoice.findByIdAndDelete(invoice._id).session(session);
+      }
+    }
+
+    salesOrder.status = "CANCELLED";
+    salesOrder.invoiceGenerated = false;
+    salesOrder.salesInvoiceId = null;
     salesOrder.cancelRequestStatus = "APPROVED";
-    await salesOrder.save();
+    
+    await salesOrder.save({ session });
+    await session.commitTransaction();
 
-    res.json({ success: true, message: "Cancellation request approved" });
+    res.json({ success: true, message: "Cancellation request approved. Invoice deleted." });
   } catch (err) {
+    await session.abortTransaction();
+    console.error("Cancel Approval Error:", err);
     res.status(500).json({ message: "Failed to approve request" });
+  } finally {
+    session.endSession();
   }
 });
+
 
 // ❌ REJECT CANCEL REQUEST
 router.patch("/:id/reject-cancel", async (req, res) => {

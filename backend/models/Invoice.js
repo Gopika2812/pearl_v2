@@ -35,7 +35,9 @@ const invoiceSchema = new mongoose.Schema(
       address: String,
       district: String,
       state: String,
+      stateCode: String,
       pincode: String,
+      gstin: String,
     },
 
     // Seller Details

@@ -29,7 +29,9 @@ const salesOrderSchema = new mongoose.Schema(
       address: String,
       district: String,
       state: String,
+      stateCode: String, // ✨ NEW: State code for E-Invoice (33=TN, 32=KA, etc.)
       pincode: String,
+      gstin: String, // ✨ NEW: Customer GSTIN for E-Invoice
     },
 
 

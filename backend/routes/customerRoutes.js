@@ -2,12 +2,12 @@ import express from "express";
 import mongoose from "mongoose";
 import multer from "multer";
 import XLSX from "xlsx";
+import CreditNote from "../models/CreditNote.js";
 import Customer from "../models/Customer.js";
 import CustomerCategory from "../models/CustomerCategory.js";
 import CustomerGroup from "../models/CustomerGroup.js";
-import SalesOrder from "../models/SalesOrder.js";
 import Receipt from "../models/Receipt.js";
-import CreditNote from "../models/CreditNote.js";
+import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
 
 const router = express.Router();
@@ -83,6 +83,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const state = normalized.state || "";
       const country = normalized.country || "India";
       const pincode = normalized.pincode || "";
+      const stateCode = normalized.statecode || "";
       const registrationType = (normalized.registrationtype || "regular").toLowerCase();
       const gstin = normalized.gstin || "";
       const salesOwnerName = normalized.salesowner || "";
@@ -161,6 +162,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         address,
         district,
         state,
+        stateCode: stateCode || "33",
         country,
         pincode,
         registrationType: (registrationType === "unregistered" ? "unregistered" : "regular"),
@@ -446,6 +448,9 @@ router.put("/:id", async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
+    console.log(`\n📝 UPDATING CUSTOMER: ${id}`);
+    console.log(`Received Fields:`, Object.keys(updates));
+
     // Round numeric fields if provided
     if (updates.closingBalance !== undefined) {
       updates.closingBalance = Math.round(Number(updates.closingBalance));
@@ -469,6 +474,12 @@ router.put("/:id", async (req, res) => {
         success: false,
         message: "Invalid registrationType. Must be 'regular' or 'unregistered'",
       });
+    }
+
+    // Validate and normalize stateCode if provided
+    if (updates.stateCode !== undefined) {
+      updates.stateCode = String(updates.stateCode || "33").trim();
+      console.log(`✓ Setting stateCode to: ${updates.stateCode}`);
     }
 
     if (updates.salesOwner === "") {
@@ -496,6 +507,9 @@ router.put("/:id", async (req, res) => {
         message: "Customer not found",
       });
     }
+
+    console.log(`✅ Customer Updated! StateCode: ${customer.stateCode}`);
+    console.log(`✓ Complete Customer: ${JSON.stringify({ name: customer.name, stateCode: customer.stateCode })}\n`);
 
     res.json({
       success: true,

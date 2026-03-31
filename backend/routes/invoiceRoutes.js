@@ -4,12 +4,12 @@ import multer from "multer";
 import cloudinary from "../config/cloudinary.js";
 import Branch from "../models/Branch.js";
 import Customer from "../models/Customer.js";
+import DeliveryMan from "../models/DeliveryMan.js";
 import Invoice from "../models/Invoice.js";
 import Product from "../models/Product.js";
+import SalesMan from "../models/SalesMan.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
-import SalesMan from "../models/SalesMan.js";
-import DeliveryMan from "../models/DeliveryMan.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
@@ -219,15 +219,39 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         invoiceNumber = invoice.invoiceNumber;
         console.log(`♻️ Reusing existing Invoice Number: ${invoiceNumber} for SO: ${salesOrder.invoiceId}`);
       } else {
+        // 🆕 ABSOLUTE PREFIX SYNC: Derive SI ID 100% from SO ID Prefix (e.g., LOCALLINESSO -> LOCALLINESSI)
+        const rawSoId = salesOrder.invoiceId || "";
+        // Stronger regex to strip "SO REF: ", "SO: ", "SO-", etc.
+        const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, ""); 
+        const soPrefixPrefix = cleanSoId.split('/')[0]; 
+        
+        // Replace trailing SO with SI, or just append SI if not present
+        let siPrefix = soPrefixPrefix.endsWith("SO") 
+          ? soPrefixPrefix.replace(/SO$/i, "SI")
+          : `${soPrefixPrefix}SI`;
+
+        console.log(`🔍 Absolute Sync (Finalize): SO [${soPrefixPrefix}] -> Target SI [${siPrefix}]`);
+
         // Generate NEW sequential SI number
-        const siVoucher = await VoucherType.findOne({
+        let siVoucher = await VoucherType.findOne({
           branchId: salesOrder.branchId,
+          prefix: siPrefix,
           orderType: "SI",
           financialYear
         }).session(session);
 
+        // 🆕 AUTO-CREATE SI VOUCHER IF MISSING
         if (!siVoucher) {
-           throw new Error(`Sales Invoice (SI) voucher type not found for branch ${salesOrder.branchId}.`);
+          console.log(`⚠️ No SI voucher found for prefix '${siPrefix}'. Auto-creating now...`);
+          siVoucher = new VoucherType({
+            branchId: salesOrder.branchId,
+            name: soPrefixPrefix.toLowerCase().replace(/so$/i, ""),
+            orderType: "SI",
+            prefix: siPrefix,
+            counter: 1,
+            financialYear
+          });
+          await siVoucher.save({ session });
         }
 
         invoiceNumber = `${siVoucher.prefix}/${String(siVoucher.counter).padStart(3, "0")}/${financialYear}`;
@@ -237,6 +261,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         await siVoucher.save({ session });
         console.log(`✨ Generated NEW Independent Invoice Number: ${invoiceNumber} for SO: ${salesOrder.invoiceId}`);
       }
+
 
       // Process items
       const processedItems = items.map((item) => {
@@ -367,7 +392,9 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
             address: customer.address,
             district: customer.district,
             state: customer.state,
+            stateCode: customer.stateCode || "33", // ✨ NEW: Capture customer state code for E-Invoice
             pincode: customer.pincode,
+            gstin: customer.gstin, // ✨ NEW: Capture customer GSTIN for E-Invoice
           },
           seller: {
             name: branch.name || "PEARL AGENCY",
@@ -724,4 +751,84 @@ router.get("/legacy", async (req, res) => {
   }
 });
 
+// DELETE - Delete invoice and revert all changes (Stock & Balance)
+router.delete("/:invoiceId", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { invoiceId } = req.params;
+    const { deletedBy, deletedByUsername } = req.query;
+
+    const invoice = await Invoice.findById(invoiceId).session(session);
+    if (!invoice) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Invoice not found" });
+    }
+
+    const salesOrder = await SalesOrder.findById(invoice.salesOrderId).session(session);
+    const customer = await Customer.findById(invoice.customer?.customerId).session(session);
+
+    // 1. REVERT STOCK (Put back the items)
+    for (const item of invoice.items) {
+      const product = await Product.findById(item.productId).session(session);
+      if (product) {
+        product.totalQty = (product.totalQty || 0) + (item.qty || 0);
+        await product.save({ session });
+        console.log(`📦 Reverted Stock for ${product.name}: +${item.qty}`);
+      }
+    }
+
+    // 2. REVERT CUSTOMER BALANCE
+    if (customer && invoice.grandTotal > 0) {
+      customer.debit = Math.round((customer.debit || 0) - invoice.grandTotal);
+      customer.closingBalance = Math.round((customer.closingBalance || 0) - invoice.grandTotal);
+      await customer.save({ session });
+      console.log(`💰 Reverted Balance for ${customer.name}: -₹${invoice.grandTotal}`);
+    }
+
+    // 3. RESET SALES ORDER
+    if (salesOrder) {
+      salesOrder.status = "PENDING";
+      salesOrder.invoiceGenerated = false;
+      salesOrder.salesInvoiceId = null; // CLEAR THE SI LINK
+      salesOrder.lastInvoicedItems = []; // CLEAR DELTA REF
+      salesOrder.lastInvoicedGrandTotal = 0;
+      salesOrder.recordType = "SALES ORDER"; // Revert type
+      
+      salesOrder.editHistory.push({
+        version: (salesOrder.editHistory.length || 0) + 1,
+        editType: 'INVOICE_CANCELLED',
+        editedAt: new Date(),
+        note: `Invoice ${invoice.invoiceNumber} was deleted. Status reset to PENDING and balances reverted.`
+      });
+      await salesOrder.save({ session });
+    }
+
+    // 4. Audit Log
+    await createAuditLog({
+      userId: deletedBy || "System",
+      username: deletedByUsername || "System",
+      branchId: invoice.branchId,
+      action: "DELETE_INVOICE",
+      description: `Deleted Invoice: ${invoice.invoiceNumber}. Reverted Stock & Balance.`,
+      targetId: invoice._id,
+      targetModel: "Invoice"
+    });
+
+    // 5. DELETE INVOICE DOCUMENT
+    await Invoice.findByIdAndDelete(invoiceId).session(session);
+
+    await session.commitTransaction();
+    res.json({ success: true, message: "Invoice deleted and balances reverted successfully." });
+
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("Error deleting invoice:", error);
+    res.status(500).json({ message: "Failed to delete invoice" });
+  } finally {
+    session.endSession();
+  }
+});
+
 export default router;
+

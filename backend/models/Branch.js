@@ -23,6 +23,27 @@ const branchSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    city: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    state: {
+      type: String,
+      default: "Tamil Nadu",
+      trim: true,
+    },
+    stateCode: {
+      type: String,
+      default: "33", // 33 = Tamil Nadu
+      trim: true,
+      // Common state codes: 33=TN, 32=Karnataka, 29=Maharashtra, 27=Telangana, etc.
+    },
+    pincode: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     phone: {
       type: String,
       default: "",

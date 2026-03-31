@@ -289,9 +289,18 @@ router.post('/:id/generate-invoice', async (req, res) => {
     });
 
     if (!piVoucher) {
-      // Fallback: This should have been created by fixVoucherTypes, but let's be safe
-      return res.status(404).json({ message: "Purchase Invoice (PI) voucher type not found for this branch." });
+      console.log(`⚠️ No PI voucher found for branch ${order.branchId}. Auto-creating default PI...`);
+      piVoucher = new VoucherType({
+        branchId: order.branchId,
+        name: "purchase invoice",
+        orderType: "PI",
+        prefix: "PI",
+        counter: 1,
+        financialYear: currentFY
+      });
+      await piVoucher.save();
     }
+
 
     // PI number = sequential based on PI counter
     const piNumber = `${piVoucher.prefix}/${String(piVoucher.counter).padStart(3, "0")}/${currentFY}`;
