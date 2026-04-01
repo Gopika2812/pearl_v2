@@ -1055,9 +1055,8 @@ router.put("/:id", auth, async (req, res) => {
       customerName: salesOrder.customer?.name,
     };
 
-    if (salesOrder.invoiceGenerated && salesOrder.reEditRequestStatus !== "APPROVED") {
-      return res.status(400).json({ message: "Cannot edit an order that has already been invoiced without admin approval" });
-    }
+    // 🏁 PERMISSION GATE REMOVED: Allow editing even if already invoiced.
+    // Audit logs and re-invoicing logic will handle the deltas.
 
     // UPDATE CUSTOMER IF PROVIDED
     if (customer && customer.id && customer.id !== salesOrder.customer?.customerId?.toString()) {
@@ -1110,8 +1109,7 @@ router.put("/:id", auth, async (req, res) => {
     salesOrder.grandTotal = newGrandTotal;
     salesOrder.grandTotalWithMargin = newGrandTotal;
 
-    if (salesOrder.reEditRequestStatus === "APPROVED") {
-      salesOrder.reEditRequestStatus = "NONE";
+    if (salesOrder.invoiceGenerated) {
       salesOrder.isReEdited = true;
     }
 

@@ -506,14 +506,6 @@ const BranchInvoicedOrders = () => {
                              <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-bold line-through uppercase tracking-wider">
                                 Cancelled
                              </span>
-                          ) : order.reEditRequestStatus === "APPROVED" ? (
-                             <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider animate-pulse border border-orange-200">
-                                ✎ Editable (Unlocked)
-                             </span>
-                          ) : order.reEditRequestStatus === "PENDING" ? (
-                             <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                                ⌛ Edit Requested
-                             </span>
                           ) : order.editHistory?.some(h => h.editType === 'RE_INVOICED') ? (
                              <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-indigo-200">
                                 ✓ Re-Invoiced (V2)
@@ -544,28 +536,18 @@ const BranchInvoicedOrders = () => {
 
                             <button
                               onClick={() => handleEditBill(order)}
-                              disabled={(order.invoiceGenerated || order.status === "INVOICED") && order.reEditRequestStatus !== "APPROVED"}
-                              className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
-                                (order.invoiceGenerated || order.status === "INVOICED") && order.reEditRequestStatus !== "APPROVED"
-                                  ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-50"
-                                  : "bg-orange-500 text-white hover:bg-orange-600 shadow-md shadow-orange-500/20"
-                              }`}
-                              title={(order.invoiceGenerated || order.status === "INVOICED") && order.reEditRequestStatus !== "APPROVED" ? "Requires Re-Edit approval from Invoice Record" : "Edit bill items"}
+                              className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 shadow-md shadow-orange-500/20"
+                              title="Edit bill items"
                             >
                               <FaEdit />
                               Edit Bill
                             </button>
                             <button
                                onClick={() => handleGenerateInvoice(order)}
-                               disabled={order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED"}
-                               className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
-                                 order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED"
-                                   ? "bg-gray-400 text-gray-700 cursor-not-allowed opacity-50"
-                                   : "bg-[#319bab] text-white hover:bg-[#257f87] shadow-md shadow-[#319bab]/20"
-                               }`}
+                               className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-md shadow-[#319bab]/20"
                              >
                                <FaFileInvoice />
-                               {order.invoiceGenerated && order.reEditRequestStatus !== "APPROVED" ? "Invoice Generated" : order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
+                               {order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
                              </button>
 
                              {(user?.role === "ADMIN" || user?.role === "MANAGER" || user?.role === "SUPER_ADMIN") && (
