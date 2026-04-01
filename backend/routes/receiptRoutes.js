@@ -2,8 +2,8 @@ import express from "express";
 import Customer from "../models/Customer.js";
 import Receipt from "../models/Receipt.js";
 import SalesOrder from "../models/SalesOrder.js";
-import { createAuditLog } from "../utils/logUtil.js";
 import { getFinancialYear } from "../utils/financialYear.js";
+import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
 
@@ -13,10 +13,10 @@ router.get("/", async (req, res) => {
     const { branchId } = req.query;
     // Inclusive query: matching branch OR no branch (legacy/test data)
     const query = branchId ? { $or: [{ branchId }, { branchId: { $exists: false } }] } : {};
-    
+
     const receipts = await Receipt.find(query)
       .sort({ createdAt: -1 });
-    
+
     res.json({ success: true, data: receipts });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to fetch receipts" });
@@ -47,7 +47,7 @@ router.post("/general", async (req, res) => {
     // Generate Standalone Receipt ID (REC/001/FY...)
     const financialYear = getFinancialYear();
     const prefix = "REC";
-    
+
     let receipt;
     let receiptId;
     let saved = false;
@@ -55,11 +55,11 @@ router.post("/general", async (req, res) => {
 
     while (!saved && retries < 5) {
       try {
-        const lastGeneralReceipt = await Receipt.findOne({ 
+        const lastGeneralReceipt = await Receipt.findOne({
           receiptId: new RegExp(`^${prefix}/`),
-          financialYear 
+          financialYear
         }).sort({ receiptId: -1 });
-        
+
         const nextNumber = lastGeneralReceipt ? parseInt(lastGeneralReceipt.receiptId.split("/")[1]) + 1 : 1;
         receiptId = `${prefix}/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
 
@@ -109,7 +109,7 @@ router.post("/general", async (req, res) => {
     }
 
     const newClosingBalance = (customer.closingBalance || 0) - amount;
-    
+
     await Customer.findByIdAndUpdate(customerId, {
       debit: currentDebit,
       credit: currentCredit,
@@ -146,7 +146,7 @@ router.get("/order/:salesOrderId", async (req, res) => {
       originalSalesOrderId: req.params.salesOrderId,
       status: { $in: ["confirmed", "bounced"] }
     });
-    
+
     res.json({ success: true, data: receipts });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to fetch receipts" });
@@ -183,7 +183,7 @@ router.post("/", async (req, res) => {
     // Generate Receipt ID
     const financialYear = getFinancialYear();
     const prefix = "REC";
-    
+
     let receipt;
     let receiptId;
     let saved = false;
@@ -191,9 +191,9 @@ router.post("/", async (req, res) => {
 
     while (!saved && retries < 5) {
       try {
-        const receiptDoc = await Receipt.findOne({ 
+        const receiptDoc = await Receipt.findOne({
           receiptId: new RegExp(`^${prefix}/`),
-          financialYear 
+          financialYear
         }).sort({ receiptId: -1 });
         const nextNumber = receiptDoc ? parseInt(receiptDoc.receiptId.split("/")[1]) + 1 : 1;
         receiptId = `${prefix}/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
@@ -250,14 +250,14 @@ router.post("/", async (req, res) => {
       }
 
       const newClosingBalance = (customer.closingBalance || 0) - amount;
-      
+
       await Customer.findByIdAndUpdate(customerId, {
         debit: currentDebit,
         credit: currentCredit,
         closingBalance: newClosingBalance,
         totalBalance: newClosingBalance,
       });
-      
+
       console.log(`✅ Customer balance updated: debit: ₹${currentDebit}, credit: ₹${currentCredit}, closingBalance: ₹${newClosingBalance}`);
     }
 
@@ -288,7 +288,7 @@ router.post("/bounce", async (req, res) => {
 
     const financialYear = getFinancialYear();
     const prefix = "BNC";
-    
+
     let bounceReceipt;
     let receiptId;
     let saved = false;
@@ -296,9 +296,9 @@ router.post("/bounce", async (req, res) => {
 
     while (!saved && retries < 5) {
       try {
-        const receiptDoc = await Receipt.findOne({ 
+        const receiptDoc = await Receipt.findOne({
           receiptId: new RegExp(`^${prefix}/`),
-          financialYear 
+          financialYear
         }).sort({ receiptId: -1 });
         const nextNumber = receiptDoc ? parseInt(receiptDoc.receiptId.split("/")[1]) + 1 : 1;
         receiptId = `${prefix}/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
@@ -340,13 +340,13 @@ router.post("/bounce", async (req, res) => {
     if (customer) {
       const newDebit = (customer.debit || 0) + amount;
       const newClosingBalance = (customer.closingBalance || 0) + amount;
-      
+
       await Customer.findByIdAndUpdate(customerId, {
         debit: newDebit,
         closingBalance: newClosingBalance,
         totalBalance: newClosingBalance,
       });
-      
+
       console.log(`✅ Bounce processed - Customer debit increased to ₹${newDebit}`);
     }
 
@@ -388,14 +388,14 @@ router.delete("/:receiptId", async (req, res) => {
       }
 
       const reversedBalance = (customer.closingBalance || 0) + receipt.amount;
-      
+
       await Customer.findByIdAndUpdate(customerId, {
         debit: currentDebit,
         credit: currentCredit,
         closingBalance: reversedBalance,
         totalBalance: reversedBalance,
       });
-      
+
       console.log(`✅ Receipt cancelled - Customer balance reverted`);
     }
 

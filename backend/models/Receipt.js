@@ -4,7 +4,7 @@ const receiptSchema = new mongoose.Schema(
   {
     receiptId: { type: String, required: true, unique: true },
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", required: false },
-    
+
     // Reference to original sales order (Optional for general debit receipts)
     originalSalesOrderId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -12,7 +12,7 @@ const receiptSchema = new mongoose.Schema(
       required: false,
     },
     originalInvoiceId: { type: String, required: false },
-    
+
     // Customer Info
     customer: {
       customerId: {
@@ -22,7 +22,7 @@ const receiptSchema = new mongoose.Schema(
       },
       name: String,
     },
-    
+
     // Payment Details
     amount: {
       type: Number,
@@ -35,14 +35,14 @@ const receiptSchema = new mongoose.Schema(
     },
     reference: String, // Cheque number, transaction ID, etc.
     notes: String,
-    
+
     // Status
     status: {
       type: String,
       enum: ["confirmed", "cancelled", "bounced"],
       default: "confirmed",
     },
-    
+
     // Financial Year
     financialYear: String,
   },

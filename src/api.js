@@ -74,10 +74,20 @@ export const createApiClient = (axiosInstance) => {
 // Utility to fetch with Authorization header
 export const fetchWithAuth = async (url, options = {}) => {
   const token = localStorage.getItem("token");
-  const headers = {
-    "Content-Type": "application/json",
-    ...options.headers,
-  };
+  
+  // Create headers object
+  const headers = { ...options.headers };
+
+  // Default to application/json if not FormData and not already set
+  if (!(options.body instanceof FormData) && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  // If Content-Type is explicitly set to undefined or null, remove it
+  // This allows the browser to set it (e.g. for FormData)
+  if (headers["Content-Type"] === undefined || headers["Content-Type"] === null) {
+    delete headers["Content-Type"];
+  }
 
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;

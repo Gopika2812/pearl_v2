@@ -1,5 +1,6 @@
 import express from "express";
 import mongoose from "mongoose";
+import auth from "../middleware/auth.js";
 import Commission from "../models/Commission.js";
 import Customer from "../models/Customer.js";
 import Product from "../models/Product.js";
@@ -7,9 +8,7 @@ import Receipt from "../models/Receipt.js";
 import SalesOrder from "../models/SalesOrder.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
-import GLService from "../utils/glService.js";
 import { createAuditLog } from "../utils/logUtil.js";
-import auth from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -34,7 +33,7 @@ router.post("/:id/record-payment", async (req, res) => {
     // 1. Generate Receipt ID and Create Receipt
     const financialYear = getFinancialYear();
     const prefix = "RCP";
-    
+
     let receipt;
     let receiptId;
     let saved = false;
@@ -42,9 +41,9 @@ router.post("/:id/record-payment", async (req, res) => {
 
     while (!saved && retries < 5) {
       try {
-        const receiptDoc = await Receipt.findOne({ 
+        const receiptDoc = await Receipt.findOne({
           receiptId: new RegExp(`^${prefix}/`),
-          financialYear 
+          financialYear
         }).sort({ receiptId: -1 });
         const nextNumber = receiptDoc ? parseInt(receiptDoc.receiptId.split("/")[1]) + 1 : 1;
         receiptId = `${prefix}/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
@@ -65,7 +64,7 @@ router.post("/:id/record-payment", async (req, res) => {
           status: "confirmed",
           createdAt: paymentDate ? new Date(paymentDate) : new Date()
         });
-        
+
         await receipt.save();
         saved = true;
       } catch (err) {
@@ -127,7 +126,7 @@ router.get("/", async (req, res) => {
   try {
     const { branchId } = req.query;
     const query = {};
-    
+
     // Filter by branchId if provided (Inclusive of missing branch IDs for test data)
     if (branchId) {
       query.$or = [{ branchId }, { branchId: { $exists: false } }];
@@ -136,12 +135,12 @@ router.get("/", async (req, res) => {
     if (req.query.isClaim !== undefined) {
       query.isClaim = req.query.isClaim === "true";
     }
-    
+
     const salesOrders = await SalesOrder.find(query)
       .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal")
       .populate('salesOwner', 'name')
       .sort({ createdAt: -1 });
-    
+
     res.json(salesOrders);
   } catch (error) {
     console.error("Fetch error:", error);
@@ -340,7 +339,7 @@ router.post("/", auth, async (req, res) => {
     } = req.body;
 
     console.log("📤 POST /sales-orders received");
-    
+
     if (!voucherType || !items?.length || !branchId) {
       console.error("❌ Missing required fields:", { voucherType, itemsLength: items?.length, branchId });
       return res.status(400).json({ message: "Invalid sales order data - voucherType, items, and branchId are required" });
@@ -370,7 +369,7 @@ router.post("/", auth, async (req, res) => {
       3,
       "0"
     )}/${currentFY}`;
-    
+
     console.log("📝 Generated invoiceId:", invoiceId);
 
     // ✅ FETCH CUSTOMER INSIDE ROUTE
@@ -380,7 +379,7 @@ router.post("/", auth, async (req, res) => {
       console.error("❌ Customer not found:", customer.id);
       return res.status(404).json({ message: "Customer not found" });
     }
-    
+
     console.log("✅ Customer found:", dbCustomer.name);
 
     const openingBalance = dbCustomer.closingBalance || dbCustomer.totalBalance || 0;
@@ -542,17 +541,39 @@ router.delete("/:id", auth, async (req, res) => {
       // 1. Revert Customer Balance using lastInvoicedGrandTotal
       const amountToRevert = salesOrder.lastInvoicedGrandTotal || salesOrder.grandTotal || 0;
       if (salesOrder.customer?.customerId && amountToRevert > 0) {
-        await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
-          $inc: { debit: -amountToRevert, closingBalance: -amountToRevert }
-        });
-        console.log(`✅ Customer balance reverted for cancellation: -₹${amountToRevert}`);
+        const customer = await Customer.findById(salesOrder.customer.customerId);
+        if (customer) {
+          let remainingToRevert = amountToRevert;
+          let currentCredit = customer.credit || 0;
+          let currentDebit = customer.debit || 0;
+
+          // Reverting a Debit (Invoice): First reduce debit, then increase credit
+          if (currentDebit >= remainingToRevert) {
+            currentDebit -= remainingToRevert;
+            remainingToRevert = 0;
+          } else {
+            remainingToRevert -= currentDebit;
+            currentDebit = 0;
+            currentCredit += remainingToRevert;
+          }
+
+          const newClosingBalance = (customer.closingBalance || 0) - amountToRevert;
+
+          await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
+            debit: currentDebit,
+            credit: currentCredit,
+            closingBalance: newClosingBalance,
+            totalBalance: newClosingBalance
+          });
+          console.log(`✅ Customer balance reverted for cancellation (Netted): -₹${amountToRevert}`);
+        }
       }
 
       // 2. Revert Product Stock using lastInvoicedItems
-      const itemsToRevert = (salesOrder.lastInvoicedItems && salesOrder.lastInvoicedItems.length > 0) 
-        ? salesOrder.lastInvoicedItems 
+      const itemsToRevert = (salesOrder.lastInvoicedItems && salesOrder.lastInvoicedItems.length > 0)
+        ? salesOrder.lastInvoicedItems
         : salesOrder.items;
-      
+
       for (const item of itemsToRevert) {
         if (item.productId && item.qty > 0) {
           await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty } });
@@ -732,9 +753,40 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
       const balanceDelta = newTotal - oldTotal;
 
       if (balanceDelta !== 0 && salesOrder.customer?.customerId) {
-        await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
-          $inc: { debit: balanceDelta, closingBalance: balanceDelta, totalBalance: balanceDelta }
-        });
+        const customer = await Customer.findById(salesOrder.customer.customerId);
+        if (customer) {
+          let remainingDelta = balanceDelta;
+          let currentDebit = customer.debit || 0;
+          let currentCredit = customer.credit || 0;
+
+          if (balanceDelta > 0) {
+            // Increasing Balance (New Invoice/Addition): Consume credit first
+            if (currentCredit >= remainingDelta) {
+              currentCredit -= remainingDelta;
+              remainingDelta = 0;
+            } else {
+              remainingDelta -= currentCredit;
+              currentCredit = 0;
+              currentDebit += remainingDelta;
+            }
+          } else {
+            // Decreasing Balance (Reduction): Consume debit first
+            const absDelta = Math.abs(remainingDelta);
+            if (currentDebit >= absDelta) {
+              currentDebit -= absDelta;
+            } else {
+              const excess = absDelta - currentDebit;
+              currentDebit = 0;
+              currentCredit += excess;
+            }
+          }
+
+          await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
+            debit: currentDebit,
+            credit: currentCredit,
+            $inc: { closingBalance: balanceDelta, totalBalance: balanceDelta }
+          });
+        }
       }
 
       // 3. Update separate Invoice document
@@ -795,11 +847,11 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
     }
 
     // ─── BRANCH B: FIRST-TIME INVOICE ─────────────────────────────────────
-    const rawSoId = salesOrder.invoiceId || ""; 
-    const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, ""); 
-    const soPrefixPrefix = cleanSoId.split('/')[0]; 
+    const rawSoId = salesOrder.invoiceId || "";
+    const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
+    const soPrefixPrefix = cleanSoId.split('/')[0];
 
-    let siPrefix = soPrefixPrefix.endsWith("SO") 
+    let siPrefix = soPrefixPrefix.endsWith("SO")
       ? soPrefixPrefix.replace(/SO$/i, "SI")
       : `${soPrefixPrefix}SI`;
 
@@ -807,17 +859,17 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
 
 
     // 🔬 SEARCH ONLY BY EXACT PREFIX. DO NOT USE NAME FALLBACK.
-    let siVoucher = await VoucherType.findOne({ 
-      branchId: salesOrder.branchId, 
-      prefix: siPrefix, 
-      orderType: "SI", 
-      financialYear: currentFY 
+    let siVoucher = await VoucherType.findOne({
+      branchId: salesOrder.branchId,
+      prefix: siPrefix,
+      orderType: "SI",
+      financialYear: currentFY
     });
 
     // 🆕 AUTO-CREATE SI VOUCHER IF MISSING (EXACT PREFIX MATCH)
     if (!siVoucher) {
       console.log(`⚠️ No SI voucher found for prefix '${siPrefix}'. Auto-creating now...`);
-      
+
       siVoucher = new VoucherType({
         branchId: salesOrder.branchId,
         name: soPrefixPrefix.toLowerCase().replace(/so$/i, ""), // Normalize name from its prefix
@@ -831,7 +883,7 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
     }
 
     const siNumber = `${siVoucher.prefix}/${String(siVoucher.counter).padStart(3, "0")}/${currentFY}`;
-    
+
     // Create separate Invoice document
     const itemsToInvoice = invoiceItems || salesOrder.items;
     const samplesToInvoice = invoiceSampleItems || salesOrder.sampleItems;
@@ -871,11 +923,30 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
       }
     }
 
-    // 3. Increase Customer Balance
+    // 3. Increase Customer Balance (Netted)
     if (salesOrder.customer?.customerId && grandTotalToUse > 0) {
-      await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
-        $inc: { debit: grandTotalToUse, closingBalance: grandTotalToUse, totalBalance: grandTotalToUse }
-      });
+      const customer = await Customer.findById(salesOrder.customer.customerId);
+      if (customer) {
+        let remainingCharge = grandTotalToUse;
+        let currentDebit = customer.debit || 0;
+        let currentCredit = customer.credit || 0;
+
+        // Consume existing credit (advance) first
+        if (currentCredit >= remainingCharge) {
+          currentCredit -= remainingCharge;
+          remainingCharge = 0;
+        } else {
+          remainingCharge -= currentCredit;
+          currentCredit = 0;
+          currentDebit += remainingCharge;
+        }
+
+        await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
+          debit: currentDebit,
+          credit: currentCredit,
+          $inc: { closingBalance: grandTotalToUse, totalBalance: grandTotalToUse }
+        });
+      }
     }
 
     // 4. Record on SalesOrder
@@ -927,17 +998,17 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ success: false, message: "Invalid sales order ID" });
     }
 
     const salesOrder = await SalesOrder.findById(id);
-    
+
     if (!salesOrder) {
       return res.status(404).json({ success: false, message: "Sales order not found" });
     }
-    
+
     res.json({ success: true, data: salesOrder });
   } catch (error) {
     console.error("Fetch error:", error);
@@ -969,7 +1040,7 @@ router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, extraExpenses, extraExpenseAmount, customer, transportCharge } = req.body;
-    
+
     // 1. Find the order first
     const salesOrder = await SalesOrder.findById(id);
     if (!salesOrder) {
@@ -983,7 +1054,7 @@ router.put("/:id", auth, async (req, res) => {
       subtotal: salesOrder.subtotal,
       customerName: salesOrder.customer?.name,
     };
-    
+
     if (salesOrder.invoiceGenerated && salesOrder.reEditRequestStatus !== "APPROVED") {
       return res.status(400).json({ message: "Cannot edit an order that has already been invoiced without admin approval" });
     }
@@ -1012,11 +1083,11 @@ router.put("/:id", auth, async (req, res) => {
 
     // ─── PARTIAL BALANCE ADJUSTMENT (if already INVOICED) ───────────
     if (salesOrder.status === "INVOICED" || salesOrder.invoiceGenerated) {
-        if (difference !== 0 && salesOrder.customer?.customerId) {
-          await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
-            $inc: { debit: difference, closingBalance: difference, totalBalance: difference }
-          });
-        }
+      if (difference !== 0 && salesOrder.customer?.customerId) {
+        await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
+          $inc: { debit: difference, closingBalance: difference, totalBalance: difference }
+        });
+      }
     }
 
     // 3. Update the fields
@@ -1031,14 +1102,14 @@ router.put("/:id", auth, async (req, res) => {
     }));
     salesOrder.extraExpenseAmount = Math.round(Number(extraExpenseAmount) || 0);
     salesOrder.transportCharge = Math.round(Number(transportCharge) || 0);
-    
+
     salesOrder.subtotal = Math.round(Number(subtotal) || 0);
     salesOrder.totalTax = Math.round(Number(totalTax) || 0);
     salesOrder.totalDiscount = Math.round(Number(totalDiscount) || 0);
-    
+
     salesOrder.grandTotal = newGrandTotal;
     salesOrder.grandTotalWithMargin = newGrandTotal;
-    
+
     if (salesOrder.reEditRequestStatus === "APPROVED") {
       salesOrder.reEditRequestStatus = "NONE";
       salesOrder.isReEdited = true;
@@ -1164,7 +1235,7 @@ router.patch("/:id/approve-re-edit", auth, async (req, res) => {
       const Customer = mongoose.model("Customer");
 
       const invoice = await Invoice.findOne({ invoiceNumber: salesOrder.salesInvoiceId }).session(session);
-      
+
       if (invoice) {
         // REVERT STOCK
         for (const item of invoice.items) {
@@ -1187,7 +1258,7 @@ router.patch("/:id/approve-re-edit", auth, async (req, res) => {
     salesOrder.invoiceGenerated = false;
     salesOrder.salesInvoiceId = null;
     salesOrder.reEditRequestStatus = "APPROVED";
-    
+
     await salesOrder.save({ session });
 
     // Log approval
@@ -1279,7 +1350,7 @@ router.patch("/:id/approve-cancel", auth, async (req, res) => {
       const Customer = mongoose.model("Customer");
 
       const invoice = await Invoice.findOne({ invoiceNumber: salesOrder.salesInvoiceId }).session(session);
-      
+
       if (invoice) {
         // REVERT STOCK
         for (const item of invoice.items) {
@@ -1302,7 +1373,7 @@ router.patch("/:id/approve-cancel", auth, async (req, res) => {
     salesOrder.invoiceGenerated = false;
     salesOrder.salesInvoiceId = null;
     salesOrder.cancelRequestStatus = "APPROVED";
-    
+
     await salesOrder.save({ session });
 
     await createAuditLog({
@@ -1378,7 +1449,7 @@ router.delete("/:id/cancel", auth, async (req, res) => {
     }
 
     await SalesOrder.findByIdAndDelete(id);
-    
+
     await createAuditLog({
       userId: req.user.id,
       userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",

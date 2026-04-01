@@ -139,19 +139,33 @@ router.post("/", async (req, res) => {
       console.log(`✅ Product inventory restored: +${item.qty} units`);
     }
 
-    // 2️⃣ INCREASE CUSTOMER CREDIT (they get money back)
+    // 2️⃣ INCREASE CUSTOMER CREDIT (they get money back) - Netted
     const customerId = originalOrder.customer.customerId;
     const customer = await Customer.findById(customerId);
     if (customer) {
-      const newCredit = (customer.credit || 0) + Math.round(grandTotal);
+      let amountToReturn = Math.round(grandTotal);
+      let currentDebit = customer.debit || 0;
+      let currentCredit = customer.credit || 0;
+
+      // Reduce existing debt first
+      if (currentDebit >= amountToReturn) {
+        currentDebit -= amountToReturn;
+        amountToReturn = 0;
+      } else {
+        amountToReturn -= currentDebit;
+        currentDebit = 0;
+        currentCredit += amountToReturn;
+      }
+
       const reducedBalance = Math.round((customer.closingBalance || 0) - Math.round(grandTotal));
       await Customer.findByIdAndUpdate(customerId, {
-        credit: newCredit,  // INCREASE credit
+        debit: currentDebit,
+        credit: currentCredit,
         closingBalance: reducedBalance,
         totalBalance: reducedBalance,
       });
       creditNote.customer.closingBalance = reducedBalance;
-      console.log(`✅ Customer credit increased: +₹${Math.round(grandTotal)} (new credit: ₹${newCredit})`);
+      console.log(`✅ Customer credit adjusted (Netted): debit: ₹${currentDebit}, credit: ₹${currentCredit}`);
     }
 
     // CREATE AUDIT LOG
@@ -344,12 +358,25 @@ router.post("/general", async (req, res) => {
       return res.status(500).json({ success: false, message: "Could not generate a unique ID. Please try again." });
     }
 
-    // Update Customer Balance (Increase Credit)
-    const newCredit = (customer.credit || 0) + amount;
+    // Update Customer Balance (Increase Credit) - Netted
+    let amountToReturn = amount;
+    let currentDebit = customer.debit || 0;
+    let currentCredit = customer.credit || 0;
+
+    if (currentDebit >= amountToReturn) {
+      currentDebit -= amountToReturn;
+      amountToReturn = 0;
+    } else {
+      amountToReturn -= currentDebit;
+      currentDebit = 0;
+      currentCredit += amountToReturn;
+    }
+
     const newClosingBalance = (customer.closingBalance || 0) - amount;
 
     await Customer.findByIdAndUpdate(customerId, {
-      credit: newCredit,
+      debit: currentDebit,
+      credit: currentCredit,
       closingBalance: newClosingBalance,
       totalBalance: newClosingBalance,
     });

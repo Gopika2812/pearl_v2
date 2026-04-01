@@ -177,8 +177,6 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
       const res = await fetchWithAuth(`${API_BASE}/products/bulk-upload`, {
         method: "POST",
         body: formData,
-        // Remove Content-Type so the browser sets it with the boundary for FormData
-        headers: { "Content-Type": undefined }
       });
 
       const data = await res.json();

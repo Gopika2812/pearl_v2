@@ -51,8 +51,6 @@ const InventoryAddProductGroupModal = ({ isOpen, onClose, onSave, branchId, edit
         {
           method: "POST",
           body: formData,
-          // Remove Content-Type so the browser sets it with the boundary for FormData
-          headers: { "Content-Type": undefined }
         }
       );
 

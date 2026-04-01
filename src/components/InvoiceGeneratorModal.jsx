@@ -254,58 +254,58 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.5; color: #333; }
-        .page { width: 210mm; min-height: 297mm; padding: 10mm; margin: 0 auto; page-break-after: always; background: white; }
-        .page-content { max-width: 190mm; margin: 0 auto; }
+        .page { width: 148mm; min-height: 210mm; padding: 6mm; margin: 0 auto; page-break-after: always; background: white; }
+        .page-content { max-width: 136mm; margin: 0 auto; }
         
-        .top-header { display: flex; gap: 20px; margin-bottom: 20px; border-bottom: 3px solid #1e40af; padding-bottom: 15px; }
-        .logo-box { width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; border-radius: 8px; flex-shrink: 0; overflow: hidden; }
+        .top-header { display: flex; gap: 12px; margin-bottom: 12px; border-bottom: 2px solid #1e40af; padding-bottom: 8px; }
+        .logo-box { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 6px; flex-shrink: 0; overflow: hidden; }
         .logo-box img { width: 100%; height: 100%; object-fit: contain; }
         .company-header { flex: 1; }
-        .company-name { font-size: 22px; font-weight: bold; color: #1e40af; margin-bottom: 5px; text-transform: uppercase; }
-        .company-address { font-size: 13px; color: #333; line-height: 1.4; margin-bottom: 5px; }
-        .company-contact { font-size: 12px; color: #666; }
+        .company-name { font-size: 16px; font-weight: bold; color: #1e40af; margin-bottom: 3px; text-transform: uppercase; }
+        .company-address { font-size: 10px; color: #333; line-height: 1.3; margin-bottom: 3px; }
+        .company-contact { font-size: 9px; color: #666; }
         
-        .order-header { display: flex; justify-content: space-between; margin: 15px 0; font-size: 13px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 10px; }
+        .order-header { display: flex; justify-content: space-between; margin: 10px 0; font-size: 10px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px; }
         .order-header-col { flex: 1; }
         .section-title { 
-          font-size: 16px; 
+          font-size: 12px; 
           font-weight: bold; 
           color: #fff; 
           background: #1e40af; 
-          padding: 6px 12px; 
-          margin: 15px 0 10px 0;
+          padding: 4px 10px; 
+          margin: 10px 0 8px 0;
           border-radius: 4px;
         }
         
-        .row { display: flex; gap: 20px; margin: 10px 0; font-size: 13px; }
+        .row { display: flex; gap: 15px; margin: 8px 0; font-size: 10px; }
         .col { flex: 1; }
         .label { font-weight: bold; color: #1e40af; }
         
-        table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 12px; }
-        th { background: #1e40af; color: white; padding: 10px; text-align: left; border: 1px solid #1e3a8a; font-weight: 600; }
-        td { border: 1px solid #e5e7eb; padding: 8px 10px; color: #333; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 9px; }
+        th { background: #1e40af; color: white; padding: 6px; text-align: left; border: 1px solid #1e3a8a; font-weight: 600; }
+        td { border: 1px solid #e5e7eb; padding: 5px 6px; color: #333; }
         
-        .total-section { text-align: right; margin: 20px 0; font-size: 13px; line-height: 1.6; }
-        .grand-total { font-size: 18px; font-weight: bold; color: #1e40af; margin-top: 10px; border-top: 2px solid #1e40af; padding-top: 5px; }
+        .total-section { text-align: right; margin: 15px 0; font-size: 10px; line-height: 1.5; }
+        .grand-total { font-size: 14px; font-weight: bold; color: #1e40af; margin-top: 8px; border-top: 2px solid #1e40af; padding-top: 4px; }
         .footer { text-align: center; font-size: 10px; color: #94a3b8; margin-top: 20px; }
         .copy-label { 
           text-align: right; 
           font-weight: 800; 
           color: #dc2626; 
-          font-size: 18px; 
-          margin-top: 25px;
-          border-top: 2px solid #e5e7eb;
-          padding-top: 15px;
-          letter-spacing: 1.5px;
+          font-size: 12px; 
+          margin-top: 15px;
+          border-top: 1px solid #e5e7eb;
+          padding-top: 10px;
+          letter-spacing: 1.1px;
           text-transform: uppercase;
         }
         .balance-info { background: #f8fafc; padding: 10px; margin: 12px 0; font-size: 13px; border-left: 4px solid #1e40af; border-radius: 4px; }
         .sample-section { background: #fffbeb; padding: 12px; margin: 15px 0; border: 1px solid #fef3c7; border-radius: 6px; }
         .back-order-section { background: #fef2f2; padding: 12px; margin: 15px 0; border: 1px solid #fee2e2; border-radius: 6px; }
         
-        .sender-buyer { display: flex; gap: 20px; margin: 15px 0; border: 1px solid #e5e7eb; padding: 15px; border-radius: 6px; background: #f8fafc; }
-        .sender-buyer-col { flex: 1; font-size: 12px; line-height: 1.5; }
-        .sender-buyer-col strong { font-size: 13px; display: block; margin-bottom: 5px; color: #1e40af; }
+        .sender-buyer { display: flex; gap: 12px; margin: 10px 0; border: 1px solid #e5e7eb; padding: 10px; border-radius: 6px; background: #f8fafc; }
+        .sender-buyer-col { flex: 1; font-size: 9px; line-height: 1.4; }
+        .sender-buyer-col strong { font-size: 10px; display: block; margin-bottom: 3px; color: #1e40af; }
         
         .certification { 
           font-size: 11px; 

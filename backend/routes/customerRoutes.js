@@ -87,7 +87,15 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const registrationType = (normalized.registrationtype || "regular").toLowerCase();
       const gstin = normalized.gstin || "";
       const salesOwnerName = normalized.salesowner || "";
-      const margin = parseFloat(String(normalized.margin || "").replace(/[^0-9.-]+/g, "")) || 0;
+      let margin = parseFloat(String(normalized.margin || "").replace(/[^0-9.-]+/g, "")) || 0;
+      // 💡 Handle Excel Percentage Formatting (e.g. 1% -> 0.01)
+      // If the value is very small (between -1 and 1, but not 0), we multiply by 100 
+      // unless specifically intended as a tiny fraction. In this business context, 
+      // margins are usually whole percentages.
+      if (margin !== 0 && Math.abs(margin) < 1) {
+        margin = margin * 100;
+        console.log(`📊 Converted decimal margin ${margin/100} to percentage: ${margin}%`);
+      }
       
       const rawDebit = normalized.debit || normalized.debitbalance || normalized["debit(₹)"] || normalized.dr || "";
       const rawCredit = normalized.credit || normalized.creditbalance || normalized["credit(₹)"] || normalized.cr || "";
@@ -269,14 +277,23 @@ router.get("/", async (req, res) => {
     const total = await Customer.countDocuments(filter);
     console.log(`📊 Total customers matching filter: ${total}`);
 
-    // ⚡ Get global totals (ignores search filter, just branch totals)
+    // ⚡ Get global totals (Netted per customer, then summed)
     const totalsAggregation = await Customer.aggregate([
       { $match: { branchId: branchObjectId } },
       {
+        $project: {
+          netBalance: { $subtract: [{ $ifNull: ["$debit", 0] }, { $ifNull: ["$credit", 0] }] }
+        }
+      },
+      {
         $group: {
           _id: null,
-          totalGlobalDebit: { $sum: "$debit" },
-          totalGlobalCredit: { $sum: "$credit" }
+          totalGlobalDebit: { 
+            $sum: { $cond: [{ $gt: ["$netBalance", 0] }, "$netBalance", 0] } 
+          },
+          totalGlobalCredit: { 
+            $sum: { $cond: [{ $lt: ["$netBalance", 0] }, { $abs: "$netBalance" }, 0] } 
+          }
         }
       }
     ]);

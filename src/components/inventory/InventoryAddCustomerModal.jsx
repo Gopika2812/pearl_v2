@@ -104,8 +104,6 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
       const res = await fetchWithAuth(`${API_BASE}/customers/bulk-upload`, {
         method: "POST",
         body: formData,
-        // Remove Content-Type so the browser sets it with the boundary for FormData
-        headers: { "Content-Type": undefined }
       });
 
       const data = await res.json();
