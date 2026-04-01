@@ -2,7 +2,7 @@ import { useState } from "react";
 import { FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 
 const SalesReceiptModal = ({ isOpen, onClose, onSave, salesOrder }) => {
   const [formData, setFormData] = useState({
@@ -55,11 +55,8 @@ const SalesReceiptModal = ({ isOpen, onClose, onSave, salesOrder }) => {
       setIsSubmitting(true);
 
       // Create a payment record for this sales order
-      const response = await fetch(`${API_BASE}/sales-orders/${salesOrder._id}/record-payment`, {
+      const response = await fetchWithAuth(`${API_BASE}/sales-orders/${salesOrder._id}/record-payment`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           amount: parseFloat(formData.amount),
           paymentMethod: formData.paymentMethod,

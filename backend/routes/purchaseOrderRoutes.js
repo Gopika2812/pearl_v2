@@ -179,12 +179,14 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
 
       // Update separate Invoice document
       await PurchaseInvoice.findOneAndUpdate(
-        { invoiceNumber: order.purchaseInvoiceId, branchId: order.branchId },
+        { purchaseInvoiceId: order.purchaseInvoiceId, branchId: order.branchId },
         {
           items: order.items,
           subtotal: order.subtotal,
           totalTax: order.totalTax,
           grandTotal: order.grandTotal,
+          extraExpenses: order.extraExpenses || [],
+          extraExpenseAmount: order.extraExpenseAmount || 0,
         }
       );
 
@@ -229,10 +231,20 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     }
 
     // ─── BRANCH B: FIRST-TIME INVOICE ─────────────────────────────────────
-    const voucher = await VoucherType.findOne({ branchId: order.branchId, name: "purchase invoice", orderType: "PI" })
+    let voucher = await VoucherType.findOne({ branchId: order.branchId, name: "purchase invoice", orderType: "PI" })
       || await VoucherType.findOne({ branchId: order.branchId, name: "Purchase Invoice" });
 
-    if (!voucher) return res.status(404).json({ message: "PI Voucher type not found" });
+    if (!voucher) {
+      // Create if doesn't exist
+      voucher = await VoucherType.create({
+        branchId: order.branchId,
+        name: "purchase invoice",
+        orderType: "PI",
+        prefix: "PI",
+        counter: 1,
+        financialYear: currentFY,
+      });
+    }
 
     if (voucher.financialYear !== currentFY) {
       voucher.counter = 1;
@@ -242,13 +254,17 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     const piNumber = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
 
     const purchaseInvoice = new PurchaseInvoice({
-      invoiceNumber: piNumber,
+      purchaseInvoiceId: piNumber,
+      purchaseOrderId: order._id,
       poNumber: order.invoiceId,
       branchId: order.branchId,
-      vendor: order.vendor,
+      warehouse: order.warehouse,
+      vendor: order.vendor || "Unknown",
       items: order.items,
       subtotal: order.subtotal,
       totalTax: order.totalTax,
+      extraExpenses: order.extraExpenses || [],
+      extraExpenseAmount: order.extraExpenseAmount || 0,
       grandTotal: order.grandTotal,
       financialYear: currentFY,
     });
@@ -341,7 +357,7 @@ router.post("/", auth, async (req, res) => {
     // Round numeric fields if provided
     if (rest.grandTotal !== undefined) rest.grandTotal = Math.round(Number(rest.grandTotal));
     if (rest.subtotal !== undefined) rest.subtotal = Math.round(Number(rest.subtotal));
-    if (rest.totalTax !== undefined) rest.totalTax = Math.round(Number(totalTax));
+    if (rest.totalTax !== undefined) rest.totalTax = Math.round(Number(rest.totalTax));
     if (rest.totalDiscount !== undefined) rest.totalDiscount = Math.round(Number(rest.totalDiscount));
     if (rest.transportCharge !== undefined) rest.transportCharge = Math.round(Number(rest.transportCharge));
 

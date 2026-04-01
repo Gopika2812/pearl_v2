@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 
 const CustomerCategoryAddModal = ({ isOpen, onClose, onSave, branchId, editingItem }) => {
   const [categoryName, setCategoryName] = useState("");
@@ -51,11 +51,11 @@ const CustomerCategoryAddModal = ({ isOpen, onClose, onSave, branchId, editingIt
     formData.append("branchId", branchId);
 
     try {
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${API_BASE}/customer-categories/bulk-upload`,
         {
           method: "POST",
-          body: formData, // ❗ DO NOT set Content-Type
+          body: formData,
         }
       );
 

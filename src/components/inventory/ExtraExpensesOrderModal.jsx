@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { FaPlus, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 const ExtraExpensesOrderModal = ({ isOpen, onClose, onSuccess }) => {
@@ -68,9 +68,8 @@ const ExtraExpensesOrderModal = ({ isOpen, onClose, onSuccess }) => {
         status: "recorded",
       };
 
-      const response = await fetch(`${API_BASE}/expenses`, {
+      const response = await fetchWithAuth(`${API_BASE}/expenses`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 

@@ -5,7 +5,7 @@ import {
   FaChevronRight, FaArrowLeft
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 const PAYMENT_METHODS = [
@@ -88,7 +88,7 @@ export default function VendorCreditPaymentModal({
   const fetchVendors = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/vendors?branchId=${currentBranch._id}&limit=9999`);
+      const res = await fetchWithAuth(`${API_BASE}/vendors?branchId=${currentBranch._id}&limit=9999`);
       const data = await res.json();
       setVendors((data?.data || data || []).sort((a, b) => a.name.localeCompare(b.name)));
     } catch { toast.error("Failed to load vendors"); }
@@ -97,7 +97,7 @@ export default function VendorCreditPaymentModal({
 
   const fetchNextPayId = async () => {
     try {
-      const res = await fetch(`${API_BASE}/payments/next-id?branchId=${currentBranch._id}`);
+      const res = await fetchWithAuth(`${API_BASE}/payments/next-id?branchId=${currentBranch._id}`);
       const data = await res.json();
       setNextPayId(data.nextId || "");
     } catch { /* silent */ }
@@ -107,7 +107,7 @@ export default function VendorCreditPaymentModal({
     if (!selectedVendor) return;
     setInvoicesLoading(true);
     try {
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${API_BASE}/purchase-orders?branchId=${currentBranch._id}&statuses=INVOICED,PARTIALLY_RETURNED`
       );
       const data = await res.json();
@@ -125,7 +125,7 @@ export default function VendorCreditPaymentModal({
       await Promise.all(
         supplierInvoices.map(async (po) => {
           try {
-            const pRes = await fetch(`${API_BASE}/payments/po/${po._id}`);
+            const pRes = await fetchWithAuth(`${API_BASE}/payments/po/${po._id}`);
             const pData = await pRes.json();
             const paid = (pData.data || []).reduce((s, p) => s + (p.amount || 0), 0);
             payMap[po._id] = paid;
@@ -166,9 +166,8 @@ export default function VendorCreditPaymentModal({
 
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/payments`, {
+      const res = await fetchWithAuth(`${API_BASE}/payments`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           branchId: currentBranch._id,
           paymentType: "vendor_payment",

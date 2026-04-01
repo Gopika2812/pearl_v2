@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FaX } from "react-icons/fa6";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 
 export default function CreditNoteModal({ isOpen, onClose, salesOrder }) {
   const [selectedItems, setSelectedItems] = useState([]);
@@ -19,7 +19,7 @@ export default function CreditNoteModal({ isOpen, onClose, salesOrder }) {
 
   const fetchExistingCreditNotes = async () => {
     try {
-      const response = await fetch(`${API_BASE}/credit-notes/order/${salesOrder._id}`);
+      const response = await fetchWithAuth(`${API_BASE}/credit-notes/order/${salesOrder._id}`);
       const data = await response.json();
       if (data.success) {
         setExistingCreditNotes(data.data);
@@ -101,11 +101,8 @@ export default function CreditNoteModal({ isOpen, onClose, salesOrder }) {
 
     try {
       setIsCreating(true);
-      const response = await fetch(`${API_BASE}/credit-notes`, {
+      const response = await fetchWithAuth(`${API_BASE}/credit-notes`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           originalSalesOrderId: salesOrder._id,
           items: selectedItems,

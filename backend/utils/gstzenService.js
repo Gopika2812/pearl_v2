@@ -108,7 +108,7 @@ class GSTZenService {
           Nm: invoiceData.customer?.name || invoiceData.customer?.customerId?.name || "Buyer",
           Addr1: invoiceData.customer?.address || invoiceData.customer?.customerId?.address || "Address",
           Loc: invoiceData.customer?.city || invoiceData.customer?.customerId?.city || "CITY",
-          Pin: Number(invoiceData.customer?.pincode || invoiceData.customer?.customerId?.pincode || 0),
+          Pin: Number(invoiceData.customer?.pincode || invoiceData.customer?.customerId?.pincode || invoiceData.branchId?.pincode || 627003),
           Stcd: String(buyerStateCode)
         },
         ItemList: invoiceData.items.map((item, idx) => {
@@ -205,9 +205,14 @@ class GSTZenService {
         }
       };
 
-      const endpoint = "/api/v1/invoice";
+      // 💡 Determine endpoint - strictly respect empty string if provided in .env
+      const endpoint = (process.env.GSTZEN_EINVOICE_ENDPOINT !== undefined 
+        ? process.env.GSTZEN_EINVOICE_ENDPOINT 
+        : "api/v1/invoice").replace(/^\//, "");
+      
       console.log(`\n${'='.repeat(80)}`);
-      console.log(`🔗 Calling GSTZen API: ${this.baseUrl}${endpoint}`);
+      const finalUrl = `${this.baseUrl}${this.baseUrl.endsWith('/') ? '' : '/'}${endpoint}`;
+      console.log(`🔗 Calling GSTZen API: ${finalUrl}`);
       console.log(`🔑 API Key Status: ${this.apiKey ? '✓ SET' : '❌ NOT SET'}`);
       console.log(`🔑 API Key Info: ${this.apiKey ? this.apiKey.substring(0, 12) + "..." + this.apiKey.substring(this.apiKey.length - 4) : "NOT SET"}`);
       console.log(`🍪 Cookie Jar: ${this.cookieJar ? 'Enabled' : 'Disabled'}`);
@@ -218,14 +223,15 @@ class GSTZenService {
       // Log request config before sending
       console.log(`📋 Request Config:`);
       console.log(`   Method: POST`);
-      console.log(`   URL: ${this.baseUrl}${endpoint}`);
+      console.log(`   URL: ${finalUrl}`);
       console.log(`   Headers:`, JSON.stringify(
         { 'Content-Type': 'application/json', 'Token': 'TOKEN_REDACTED' },
         null,
         2
       ));
       
-      const response = await this.apiClient.post(endpoint, payload);
+      // 🚀 WRAP PAYLOAD IN ARRAY [payload] for einvoice-json endpoint
+      const response = await this.apiClient.post(endpoint, [payload]);
 
       console.log(`\n${'='.repeat(80)}`);
       console.log(`✅ API Response Status: ${response.status}`);

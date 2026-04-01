@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { FaPlus, FaTrash } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 import InventoryAddProductGroupModal from "./InventoryAddProductGroupModal";
@@ -67,7 +67,7 @@ const InventoryPurchaseOrderEntry = ({
     if (!branchId) return;
     const fetchMasterNames = async () => {
       try {
-        const res = await fetch(`${API_BASE}/extra-expense-master/${branchId}`);
+        const res = await fetchWithAuth(`${API_BASE}/extra-expense-master/${branchId}`);
         const data = await res.json();
         if (data.success) {
           setMasterExpenseNames(data.data.map(item => item.name));
@@ -124,7 +124,7 @@ const InventoryPurchaseOrderEntry = ({
       console.log(`📡 Fetching from: ${url}`);
 
       try {
-        const res = await fetch(url);
+        const res = await fetchWithAuth(url);
         const data = await res.json();
 
         console.log(`📊 API Response:`, data);
@@ -321,9 +321,8 @@ const InventoryPurchaseOrderEntry = ({
     if (isCustomExpense) {
       const branchId = currentBranch?._id || currentBranch?.id;
       try {
-        await fetch(`${API_BASE}/extra-expense-master`, {
+        await fetchWithAuth(`${API_BASE}/extra-expense-master`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ branchId, name: nameToSave }),
         });
         // Update local master list if not already present
@@ -353,7 +352,7 @@ const InventoryPurchaseOrderEntry = ({
     const fetchNextInvoice = async () => {
       try {
         const branchId = currentBranch?._id || currentBranch?.id;
-        const res = await fetch(
+        const res = await fetchWithAuth(
           `${API_BASE}/purchase-orders/next-invoice/${voucherType}?branchId=${branchId}`
         );
         const data = await res.json();
@@ -429,9 +428,8 @@ const InventoryPurchaseOrderEntry = ({
     };
 
     try {
-      const res = await fetch(`${API_BASE}/purchase-orders`, {
+      const res = await fetchWithAuth(`${API_BASE}/purchase-orders`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(orderData),
       });
       const data = await res.json();

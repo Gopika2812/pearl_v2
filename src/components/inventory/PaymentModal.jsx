@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { FaTimes } from "react-icons/fa";
-import { API_BASE } from "../../api";
+import { toast } from "react-toastify";
+import { API_BASE, fetchWithAuth } from "../../api";
+import { useBranch } from "../../context/BranchContext";
 
 const PaymentModal = ({ isOpen, onClose, onSave, vendors = [], purchaseOrders = [], salesOwners = [], salesMen = [] }) => {
+  const { selectedBranch } = useBranch();
   const [formData, setFormData] = useState({
     paymentType: "vendor_payment",
     amount: 0,
@@ -33,11 +36,12 @@ const PaymentModal = ({ isOpen, onClose, onSave, vendors = [], purchaseOrders = 
       return;
     }
 
+    const payload = { ...formData, branchId: selectedBranch?._id };
+
     try {
-      const response = await fetch(`${API_BASE}/payments`, {
+      const response = await fetchWithAuth(`${API_BASE}/payments`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();

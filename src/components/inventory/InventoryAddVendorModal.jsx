@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 
 const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranchId, editingItem }) => {
   // Get branchId from props or fallback to localStorage
@@ -97,7 +97,7 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
     formData.append("branchId", actualBranchId);
 
     try {
-      const res = await fetch(`${API_BASE}/vendors/bulk-upload`, {
+      const res = await fetchWithAuth(`${API_BASE}/vendors/bulk-upload`, {
         method: "POST",
         body: formData,
       });
@@ -159,7 +159,7 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
 
     setIsFetchingGst(true);
     try {
-      const res = await fetch(`${API_BASE}/gst/search/${vendor.gstin}`);
+      const res = await fetchWithAuth(`${API_BASE}/gst/search/${vendor.gstin}`);
       const result = await res.json();
 
       if (!res.ok) throw new Error(result.message || "Failed to fetch GST details");

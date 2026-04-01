@@ -4,7 +4,7 @@ import {
   FaBoxOpen, FaPlus, FaMinus
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 export default function SupplierDebitNoteModal({
@@ -74,7 +74,7 @@ export default function SupplierDebitNoteModal({
   const fetchVendors = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/vendors?branchId=${currentBranch._id}&limit=9999`);
+      const res = await fetchWithAuth(`${API_BASE}/vendors?branchId=${currentBranch._id}&limit=9999`);
       const data = await res.json();
       setVendors((data?.data || data || []).sort((a, b) => a.name.localeCompare(b.name)));
     } catch { toast.error("Failed to load vendors"); }
@@ -83,7 +83,7 @@ export default function SupplierDebitNoteModal({
 
   const fetchNextDnId = async () => {
     try {
-      const res = await fetch(`${API_BASE}/debit-notes/next-id?branchId=${currentBranch._id}`);
+      const res = await fetchWithAuth(`${API_BASE}/debit-notes/next-id?branchId=${currentBranch._id}`);
       const data = await res.json();
       setNextDnId(data.nextId || "");
     } catch { /* silent */ }
@@ -93,7 +93,7 @@ export default function SupplierDebitNoteModal({
     if (!selectedVendor) return;
     setInvoicesLoading(true);
     try {
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${API_BASE}/purchase-orders?branchId=${currentBranch._id}&statuses=INVOICED,PARTIALLY_RETURNED`
       );
       const data = await res.json();
@@ -153,26 +153,24 @@ export default function SupplierDebitNoteModal({
 
       setSaving(true);
       try {
-        // For general debit notes, we directly update the vendor balance
-        // and create a minimal debit note record
-        const res = await fetch(`${API_BASE}/debit-notes`, {
+        const payload = {
+          branchId: currentBranch._id,
+          originalPurchaseOrderId: null,
+          vendor: { vendorId: selectedVendor._id, name: selectedVendor.name },
+          items: [{
+            productId: "000000000000000000000000",
+            name: "General Return / Adjustment",
+            returnedQty: 1,
+            purchasePrice: amount,
+            total: amount,
+          }],
+          reason: reason || "General debit note / balance adjustment",
+          isGeneralAdjustment: true,
+          manualGrandTotal: amount,
+        };
+        const res = await fetchWithAuth(`${API_BASE}/debit-notes`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            branchId: currentBranch._id,
-            originalPurchaseOrderId: null,
-            vendor: { vendorId: selectedVendor._id, name: selectedVendor.name },
-            items: [{
-              productId: "000000000000000000000000",
-              name: "General Return / Adjustment",
-              returnedQty: 1,
-              purchasePrice: amount,
-              total: amount,
-            }],
-            reason: reason || "General debit note / balance adjustment",
-            isGeneralAdjustment: true,
-            manualGrandTotal: amount,
-          }),
+          body: JSON.stringify(payload),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Failed");
@@ -193,22 +191,22 @@ export default function SupplierDebitNoteModal({
 
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/debit-notes`, {
+      const payload = {
+        branchId: currentBranch._id,
+        originalPurchaseOrderId: selectedInvoice._id,
+        vendor: { vendorId: selectedVendor._id, name: selectedVendor.name },
+        items: returnLineItems.map(i => ({
+          productId: i.productId,
+          name: i.name,
+          returnedQty: i.returnQty,
+          purchasePrice: i.purchasePrice,
+          total: i.returnQty * i.purchasePrice,
+        })),
+        reason: reason || `Return against ${selectedInvoice.invoiceId}`,
+      };
+      const res = await fetchWithAuth(`${API_BASE}/debit-notes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          branchId: currentBranch._id,
-          originalPurchaseOrderId: selectedInvoice._id,
-          vendor: { vendorId: selectedVendor._id, name: selectedVendor.name },
-          items: returnLineItems.map(i => ({
-            productId: i.productId,
-            name: i.name,
-            returnedQty: i.returnQty,
-            purchasePrice: i.purchasePrice,
-            total: i.returnQty * i.purchasePrice,
-          })),
-          reason: reason || `Return against ${selectedInvoice.invoiceId}`,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed");

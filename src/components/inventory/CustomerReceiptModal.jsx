@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { FaTimes, FaMoneyBillWave, FaHistory, FaSpinner, FaCheckCircle } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 
 const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess }) => {
   const [loading, setLoading] = useState(false);
@@ -28,7 +28,7 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess }) =
   const fetchUnpaidInvoices = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/sales-orders/unpaid/${customer._id}`);
+      const response = await fetchWithAuth(`${API_BASE}/sales-orders/unpaid/${customer._id}`);
       const result = await response.json();
       if (result.success) {
         setUnpaidInvoices(result.data);
@@ -70,9 +70,8 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess }) =
         };
       }
 
-      const response = await fetch(endpoint, {
+      const response = await fetchWithAuth(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { FaCreditCard, FaEye, FaSyncAlt, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import POPaymentModal from "./POPaymentModal";
 
@@ -18,7 +18,7 @@ const InventoryPurchaseOrderRecords = ({ refreshTrigger }) => {
   const fetchRecords = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/purchase-orders`);
+      const response = await fetchWithAuth(`${API_BASE}/purchase-orders`);
       const data = await response.json();
 
       if (data.success || Array.isArray(data.data || data)) {
@@ -61,7 +61,7 @@ const InventoryPurchaseOrderRecords = ({ refreshTrigger }) => {
     if (!window.confirm("Are you sure you want to delete this PO?")) return;
 
     try {
-      const response = await fetch(`${API_BASE}/purchase-orders/${id}`, {
+      const response = await fetchWithAuth(`${API_BASE}/purchase-orders/${id}`, {
         method: "DELETE",
       });
 

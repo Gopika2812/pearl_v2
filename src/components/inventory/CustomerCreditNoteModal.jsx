@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { FaTimes, FaUndoAlt, FaHistory, FaSpinner, FaCheckCircle, FaTrashAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 
 const CustomerCreditNoteModal = ({ isOpen, onClose, customer, onCreditSuccess }) => {
   const [loading, setLoading] = useState(false);
@@ -28,7 +28,7 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer, onCreditSuccess })
     setLoading(true);
     try {
       // For returns, we can look at any invoiced order (not just unpaid)
-      const response = await fetch(`${API_BASE}/sales-orders?customerName=${customer.name}&status=INVOICED`);
+      const response = await fetchWithAuth(`${API_BASE}/sales-orders?customerName=${customer.name}&status=INVOICED`);
       const result = await response.json();
       if (result.success) {
         setInvoices(result.data || []);
@@ -106,10 +106,9 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer, onCreditSuccess })
         };
       }
 
-      const response = await fetch(endpoint, {
+      const response = await fetchWithAuth(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();

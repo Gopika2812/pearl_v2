@@ -29,9 +29,12 @@ router.post("/generate/:invoiceId", async (req, res) => {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
+    // 🚀 ALLOW RE-GENERATION (Removed blocking check as per user request)
+    /*
     if (invoice.einvoiceStatus === "GENERATED") {
       return res.status(400).json({ message: "E-Invoice already generated for this invoice" });
     }
+    */
 
     // ========== STEP 0: VALIDATE REQUIRED FIELDS ==========
     console.log(`\n🔄 Processing Invoice: ${invoice.invoiceNumber}`);

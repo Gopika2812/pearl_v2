@@ -628,20 +628,35 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
-// 📋 REQUEST RE-EDIT PERMISSION
-router.patch("/:id/request-reedit", async (req, res) => {
+// 📋 AUTO-APPROVING RE-EDIT (No Admin required as per user request)
+router.patch("/:id/request-reedit", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { requestedBy } = req.body;
     const order = await SalesOrder.findById(id);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    order.reEditRequestStatus = "PENDING";
-    order.reEditRequestBy = requestedBy || "Unknown Staff";
+    // Snapshot current state before edit starts
+    if (order.status === "INVOICED" || order.invoiceGenerated) {
+      order.editHistory.push({
+        version: (order.editHistory.length || 0) + 1,
+        editType: 'RE_EDIT_STARTED',
+        items: order.items,
+        grandTotal: order.grandTotal,
+        editedAt: new Date(),
+        note: `Direct re-edit initiated by ${requestedBy || "Staff"}.`
+      });
+
+      order.status = "PLACED"; 
+      order.isReEdited = true;
+    }
+
+    order.reEditRequestStatus = "APPROVED";
+    order.reEditRequestBy = requestedBy || "Staff";
     order.reEditRequestAt = new Date();
     await order.save();
 
-    res.json({ success: true, message: "Re-edit request submitted to admin" });
+    res.json({ success: true, message: "Re-edit enabled. You can now modify the Sales Order." });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1332,35 +1347,76 @@ router.patch("/:id/reject-re-edit", auth, async (req, res) => {
   }
 });
 
-// 📨 REQUEST CANCEL PERMISSION
+// 📨 AUTO-APPROVING CANCEL (No Admin required as per user request)
 router.patch("/:id/request-cancel", auth, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const { id } = req.params;
     const staffName = req.user.username;
 
-    const salesOrder = await SalesOrder.findById(id);
-    if (!salesOrder) return res.status(404).json({ message: "Sales order not found" });
+    const salesOrder = await SalesOrder.findById(id).session(session);
+    if (!salesOrder) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Sales order not found" });
+    }
 
-    salesOrder.cancelRequestStatus = "PENDING";
+    if (salesOrder.salesInvoiceId) {
+      const Invoice = mongoose.model("Invoice");
+      const Product = mongoose.model("Product");
+      const Customer = mongoose.model("Customer");
+
+      const invoice = await Invoice.findOne({ invoiceNumber: salesOrder.salesInvoiceId }).session(session);
+
+      if (invoice) {
+        // 1. REVERT STOCK
+        for (const item of invoice.items) {
+          if (item.productId) {
+            await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty || 0 } }).session(session);
+          }
+        }
+
+        // 2. REVERT CUSTOMER BALANCE
+        if (invoice.customer?.customerId && invoice.grandTotal > 0) {
+          await Customer.findByIdAndUpdate(invoice.customer.customerId, {
+            $inc: { debit: -invoice.grandTotal, closingBalance: -invoice.grandTotal }
+          }).session(session);
+        }
+
+        // 3. DELETE INVOICE DOCUMENT
+        await Invoice.findByIdAndDelete(invoice._id).session(session);
+      }
+    }
+
+    // 4. UPDATE SALES ORDER
+    salesOrder.status = "CANCELLED";
+    salesOrder.invoiceGenerated = false;
+    salesOrder.salesInvoiceId = null;
+    salesOrder.cancelRequestStatus = "APPROVED";
     salesOrder.cancelRequestBy = staffName;
     salesOrder.cancelRequestAt = new Date();
 
-    await salesOrder.save();
+    await salesOrder.save({ session });
 
     await createAuditLog({
       userId: req.user.id,
       userModel: "BranchUser",
       username: req.user.username,
       branchId: salesOrder.branchId,
-      action: "REQUEST_CANCEL",
-      description: `Requested cancellation permission for Invoice: ${salesOrder.invoiceId}`,
+      action: "AUTO_CANCEL_SI",
+      description: `Directly cancelled Invoice: ${salesOrder.invoiceId}. Stock and balance reverted.`,
       targetId: salesOrder._id,
       targetModel: "SalesOrder",
     });
 
-    res.json({ success: true, message: "Cancellation request submitted", data: salesOrder });
+    await session.commitTransaction();
+    res.json({ success: true, message: "Invoice cancelled successfully. Records reverted.", data: salesOrder });
   } catch (err) {
-    res.status(500).json({ message: "Failed to submit cancel request" });
+    await session.abortTransaction();
+    console.error("Auto-Cancel Error:", err);
+    res.status(500).json({ message: "Failed to cancel invoice: " + err.message });
+  } finally {
+    session.endSession();
   }
 });
 

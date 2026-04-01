@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { FaCreditCard, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 const POPaymentModal = ({ po, isOpen, onClose, onPaymentSuccess }) => {
@@ -24,7 +24,7 @@ const POPaymentModal = ({ po, isOpen, onClose, onPaymentSuccess }) => {
   const fetchExistingPayments = async () => {
     try {
       setLoadingPayments(true);
-      const response = await fetch(
+      const response = await fetchWithAuth(
         `${API_BASE}/payments/po/${po._id}`
       );
       const data = await response.json();
@@ -48,7 +48,7 @@ const POPaymentModal = ({ po, isOpen, onClose, onPaymentSuccess }) => {
   const updateVendorCredit = async (vendorName, paymentAmount, branchId) => {
     try {
       // Fetch all vendors for the branch
-      const vendorResponse = await fetch(
+      const vendorResponse = await fetchWithAuth(
         `${API_BASE}/vendors?branchId=${branchId}`
       );
       const vendorData = await vendorResponse.json();
@@ -65,7 +65,7 @@ const POPaymentModal = ({ po, isOpen, onClose, onPaymentSuccess }) => {
       const newCredit = Math.max(0, vendor.credit - paymentAmount);
 
       // Update vendor's credit in database
-      const updateResponse = await fetch(`${API_BASE}/vendors/${vendor._id}`, {
+      const updateResponse = await fetchWithAuth(`${API_BASE}/vendors/${vendor._id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -112,7 +112,7 @@ const POPaymentModal = ({ po, isOpen, onClose, onPaymentSuccess }) => {
     setSaving(true);
 
     try {
-      const response = await fetch(`${API_BASE}/payments`, {
+      const response = await fetchWithAuth(`${API_BASE}/payments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

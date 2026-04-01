@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { API_BASE } from "../api";
+import { API_BASE, fetchWithAuth } from "../api";
 
 const BranchContext = createContext();
 
@@ -34,7 +34,7 @@ export function BranchProvider({ children }) {
     if (!userId) return;
     const endpoint = role === "SUPER_ADMIN" ? "super-admin" : "branch-users";
     try {
-      const response = await fetch(`${API_BASE}/${endpoint}/${userId}`);
+      const response = await fetchWithAuth(`${API_BASE}/${endpoint}/${userId}`);
       const data = await response.json();
       if (data.success) {
         // Ensure role is preserved as SUPER_ADMIN might not have it in DB field but in JWT/logic

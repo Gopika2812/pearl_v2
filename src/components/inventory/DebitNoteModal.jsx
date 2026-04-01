@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { FaFileAlt, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 const DebitNoteModal = ({ po, isOpen, onClose, onDebitNoteSuccess }) => {
@@ -79,9 +79,8 @@ const DebitNoteModal = ({ po, isOpen, onClose, onDebitNoteSuccess }) => {
         total: item.returnedQty * item.purchasePrice,
       }));
 
-      const response = await fetch(`${API_BASE}/debit-notes`, {
+      const response = await fetchWithAuth(`${API_BASE}/debit-notes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           branchId: currentBranch?._id || currentBranch?.id,
           originalPurchaseOrderId: po._id,
@@ -121,7 +120,7 @@ const DebitNoteModal = ({ po, isOpen, onClose, onDebitNoteSuccess }) => {
   const updateVendorDebit = async (vendorName, debitAmount, branchId) => {
     try {
       // Fetch all vendors for the branch
-      const vendorResponse = await fetch(`${API_BASE}/vendors?branchId=${branchId}`);
+      const vendorResponse = await fetchWithAuth(`${API_BASE}/vendors?branchId=${branchId}`);
       const vendorData = await vendorResponse.json();
       const vendors = vendorData.data || [];
 
@@ -138,19 +137,11 @@ const DebitNoteModal = ({ po, isOpen, onClose, onDebitNoteSuccess }) => {
       const newCredit = Math.max(0, (vendor.credit || 0) - debitAmount);
 
       // Update vendor's debit and credit in database
-      const updateResponse = await fetch(`${API_BASE}/vendors/${vendor._id}`, {
+      const updateResponse = await fetchWithAuth(`${API_BASE}/vendors/${vendor._id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           debit: newDebit,
           credit: newCredit,
-          name: vendor.name,
-          phone: vendor.phone,
-          email: vendor.email,
-          address: vendor.address,
-          stateName: vendor.stateName,
-          gstRegistrationType: vendor.gstRegistrationType,
-          gstin: vendor.gstin,
           isActive: vendor.isActive,
         }),
       });

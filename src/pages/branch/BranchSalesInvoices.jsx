@@ -112,10 +112,13 @@ const BranchSalesInvoices = () => {
 
   // ✅ GENERATE E-INVOICE FUNCTION
   const handleGenerateEInvoice = async (invoice) => {
+    // 🚀 ALLOW RE-GENERATION (Removed blocking check as per user request)
+    /*
     if (invoice.einvoiceStatus === "GENERATED") {
       toast.info("E-Invoice already generated for this invoice");
       return;
     }
+    */
 
     if (!window.confirm(`Generate E-Invoice for ${invoice.invoiceNumber}?\n\nThis will submit to GST Portal and generate IRN + E-Way Bill.`)) {
       return;
@@ -135,7 +138,7 @@ const BranchSalesInvoices = () => {
       const data = await res.json();
 
       if (data.success) {
-        toast.success(`✅ E-Invoice Generated!\nIRN: ${data.data.irn}\nE-Way Bill: ${data.data.ewayBillNo || "Not Required"}`);
+        toast.success(`✅ E-Invoice Generated Successfully`);
         fetchInvoices();
       } else {
         toast.error(`❌ Error: ${data.message || "Failed to generate E-Invoice"}`);
@@ -278,18 +281,16 @@ const BranchSalesInvoices = () => {
                               {/* ✅ GENERATE E-INVOICE BUTTON */}
                               <button
                                 onClick={() => handleGenerateEInvoice(inv)}
-                                disabled={requestingAction === inv._id || inv.einvoiceStatus === "GENERATED"}
+                                disabled={requestingAction === inv._id}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${
                                   inv.einvoiceStatus === "GENERATED"
-                                    ? "bg-green-100 text-green-700 border-green-200 cursor-default"
+                                    ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
                                     : "bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white"
                                 }`}
                                 title={inv.einvoiceStatus === "GENERATED" ? `IRN: ${inv.irn}` : "Submit to GST Portal"}
                               >
                                 {requestingAction === inv._id ? (
                                   <FaSync className="animate-spin" />
-                                ) : inv.einvoiceStatus === "GENERATED" ? (
-                                  <>✅ E-INVOICE</>
                                 ) : (
                                   <>
                                     <FaFileContract />
@@ -300,24 +301,16 @@ const BranchSalesInvoices = () => {
 
                               <button
                                 onClick={() => handleRequestEdit(inv)}
-                                disabled={requestingAction === inv._id || inv.salesOrderId?.reEditRequestStatus === "PENDING"}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${
-                                  inv.salesOrderId?.reEditRequestStatus === "PENDING"
-                                    ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                                    : "bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-600 hover:text-white"
-                                }`}
+                                disabled={requestingAction === inv._id}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-600 hover:text-white"
                               >
                                 {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaEdit />}
                                 RE-EDIT
                               </button>
                               <button
                                 onClick={() => handleRequestCancel(inv)}
-                                disabled={requestingAction === inv._id || inv.salesOrderId?.cancelRequestStatus === "PENDING"}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${
-                                  inv.salesOrderId?.cancelRequestStatus === "PENDING"
-                                    ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                                    : "bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white"
-                                }`}
+                                disabled={requestingAction === inv._id}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white"
                               >
                                 {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash />}
                                 CANCEL
