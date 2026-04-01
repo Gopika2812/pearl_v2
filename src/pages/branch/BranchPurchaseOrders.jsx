@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaEdit, FaSearch, FaShoppingCart, FaSync, FaTrash } from "react-icons/fa";
+import { FaChevronDown, FaEdit, FaSearch, FaShoppingCart, FaSync, FaTrash, FaTruck } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import * as XLSX from "xlsx";
 import { API_BASE, fetchWithAuth } from "../../api";
@@ -8,6 +9,7 @@ import { useBranch } from "../../context/BranchContext";
 
 const BranchPurchaseOrders = () => {
   const { currentBranch, user } = useBranch();
+  const navigate = useNavigate();
 
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -560,6 +562,13 @@ const BranchPurchaseOrders = () => {
                                   title="Cancel Invoiced Order"
                                 >
                                   <FaTrash size={12} /> CANCEL
+                                </button>
+                                <button
+                                  onClick={() => navigate(`/branch/dispatch?type=PO&voucher=${encodeURIComponent(order.voucherType)}&orderId=${order._id}`)}
+                                  className="bg-indigo-500 hover:bg-indigo-600 text-white p-2 rounded-lg transition shadow-md shadow-indigo-100 flex items-center gap-1 text-xs font-bold"
+                                  title="Loading Slip"
+                                >
+                                  <FaTruck size={12} /> SLIP
                                 </button>
                               </>
                             )}

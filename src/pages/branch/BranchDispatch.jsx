@@ -2,6 +2,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { useEffect, useState } from "react";
 import { FaBox, FaDownload, FaLock, FaTruck, FaUsers } from "react-icons/fa";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
@@ -11,15 +12,23 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API
 export default function BranchDispatch() {
   const { currentBranch, user } = useBranch();
   const { voucherTypes } = useInventory();
+  const [searchParams] = useSearchParams();
 
   // State
-  const [orderType, setOrderType] = useState("SO"); // SO or PO
-  const [selectedVoucher, setSelectedVoucher] = useState("");
+  const [orderType, setOrderType] = useState(searchParams.get("type") || "SO"); // SO or PO
+  const [selectedVoucher, setSelectedVoucher] = useState(searchParams.get("voucher") || "");
   // Removed selectedOrder state
   const [orders, setOrders] = useState([]);
   // Removed orderDetails state
   const [filteredVouchers, setFilteredVouchers] = useState([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
+  
+  // Auto-detect voucher from name if only type and name provided
+  useEffect(() => {
+    if (voucherTypes.length > 0 && searchParams.get("voucher") && !selectedVoucher) {
+      setSelectedVoucher(searchParams.get("voucher"));
+    }
+  }, [voucherTypes, searchParams]);
   const [loadedProducts, setLoadedProducts] = useState(null);
   const [loadedParties, setLoadedParties] = useState(null);
     // Handle order selection (checkbox)
@@ -201,15 +210,24 @@ export default function BranchDispatch() {
       // Filter by voucher type and get only finalized/invoiced orders
       const filtered = (data || []).filter((order) => {
         if (orderType === "SO") {
-          // Sales Orders: Show only if invoiceGenerated is true
-          return order.voucherType === selectedVoucher && order.invoiceGenerated;
+          // Show both confirmed invoices and pending Sales Orders
+          return order.voucherType === selectedVoucher && (order.invoiceGenerated || order.status === "PLACED");
         } else {
-          // Purchase Orders: Show only if status is "INVOICED"
-          return order.voucherType === selectedVoucher && order.status === "INVOICED";
+          // Show both confirmed invoices and pending Purchase Orders
+          return order.voucherType === selectedVoucher && (order.status === "INVOICED" || order.status === "PLACED");
         }
       });
 
       setOrders(filtered);
+
+      // If initialOrderId provided, auto-select it
+      const initialOrderId = searchParams.get("orderId");
+      if (initialOrderId) {
+        const matched = filtered.find(o => o._id === initialOrderId || o.invoiceId === initialOrderId || o.poId === initialOrderId);
+        if (matched) {
+          setSelectedOrderIds([matched._id]);
+        }
+      }
     } catch (error) {
       console.error("Error fetching orders:", error);
       toast.error("Failed to fetch orders");
@@ -311,15 +329,32 @@ export default function BranchDispatch() {
       const element = document.getElementById("loading-slip-content");
       const canvas = await html2canvas(element, { scale: 2 });
       const imgData = canvas.toDataURL("image/png");
+      
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
         format: "a4",
       });
 
-      const imgWidth = 210;
+      const imgWidth = 210; // A4 width
+      const pageHeight = 297; // A4 height
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+      
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // Add the first page
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // Add subsequent pages if content overflows
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
       pdf.save(`Loading-Slip-${Date.now()}.pdf`);
       toast.success("PDF exported successfully!");
 

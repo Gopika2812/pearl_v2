@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaEdit, FaFileInvoice, FaSync, FaTrash, FaFilePdf, FaFileExcel } from "react-icons/fa";
+import { FaChevronDown, FaEdit, FaFileInvoice, FaSync, FaTrash, FaFilePdf, FaFileExcel, FaTruck } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -12,6 +13,7 @@ import { useBranch } from "../../context/BranchContext";
 
 const BranchInvoicedOrders = () => {
   const { currentBranch, user } = useBranch();
+  const navigate = useNavigate();
 
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -559,12 +561,21 @@ const BranchInvoicedOrders = () => {
                               <FaEdit />
                               Edit Bill
                             </button>
-                            <button
+                             <button
                                onClick={() => handleGenerateInvoice(order)}
                                className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-md shadow-[#319bab]/20"
                              >
                                <FaFileInvoice />
                                {order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
+                             </button>
+
+                             <button
+                               onClick={() => navigate(`/branch/dispatch?type=SO&voucher=${encodeURIComponent(order.voucherType)}&orderId=${order._id}`)}
+                               className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-indigo-500 text-white hover:bg-indigo-600 shadow-md shadow-indigo-500/20"
+                               title="Generate Loading Slip for this order"
+                             >
+                               <FaTruck />
+                               Loading Slip
                              </button>
 
                              {(user?.role === "ADMIN" || user?.role === "MANAGER" || user?.role === "SUPER_ADMIN") && (
