@@ -7,12 +7,36 @@ import { API_BASE } from "../api";
 
 const ACTION_META = {
   LOGIN:            { label: "Login",             color: "text-purple-700 bg-purple-100 border-purple-200" },
-  CREATE_SO:        { label: "Create Order",       color: "text-green-700 bg-green-100 border-green-200" },
-  UPDATE_SO:        { label: "Edit Order",         color: "text-blue-700 bg-blue-100 border-blue-200" },
-  DELETE_SO:        { label: "Delete Order",       color: "text-red-700 bg-red-100 border-red-200" },
-  FINALIZE_INVOICE: { label: "Generate Invoice",   color: "text-indigo-700 bg-indigo-100 border-indigo-200" },
-  PRINT_BILL:       { label: "Print Bill",         color: "text-orange-700 bg-orange-100 border-orange-200" },
-  GENERATE_SLIP:    { label: "Generate Slip",      color: "text-teal-700 bg-teal-100 border-teal-200" },
+  // Sales Order
+  CREATE_SO:        { label: "Create SO",         color: "text-green-700 bg-green-100 border-green-200" },
+  UPDATE_SO:        { label: "Update SO",         color: "text-blue-700 bg-blue-100 border-blue-200" },
+  CANCEL_SO:        { label: "Cancel SO",         color: "text-red-700 bg-red-100 border-red-200" },
+  INVOICE_SO:       { label: "Invoice SO",        color: "text-indigo-700 bg-indigo-100 border-indigo-200" },
+  RE_INVOICE_SO:    { label: "Re-Invoice SO",     color: "text-cyan-700 bg-cyan-100 border-cyan-200" },
+  REQUEST_REEDIT:   { label: "Request Re-Edit",   color: "text-amber-700 bg-amber-100 border-amber-200" },
+  APPROVE_REEDIT:   { label: "Approve Re-Edit",   color: "text-emerald-700 bg-emerald-100 border-emerald-200" },
+  CANCEL_BILL:      { label: "Cancel Bill",       color: "text-rose-700 bg-rose-100 border-rose-200" },
+  // Purchase Order
+  CREATE_PO:        { label: "Create PO",         color: "text-green-700 bg-green-100 border-green-200" },
+  UPDATE_PO:        { label: "Update PO",         color: "text-blue-700 bg-blue-100 border-blue-200" },
+  INVOICE_PO:       { label: "Invoice PO",        color: "text-indigo-700 bg-indigo-100 border-indigo-200" },
+  RE_INVOICE_PO:    { label: "Re-Invoice PO",     color: "text-cyan-700 bg-cyan-100 border-cyan-200" },
+  CANCEL_PO:        { label: "Cancel PO",         color: "text-red-700 bg-red-100 border-red-200" },
+  // Resources
+  CREATE_SALESMAN:  { label: "New Salesman",      color: "text-teal-700 bg-teal-100 border-teal-200" },
+  UPDATE_SALESMAN:  { label: "Update Salesman",   color: "text-blue-700 bg-blue-100 border-blue-200" },
+  DELETE_SALESMAN:  { label: "Delete Salesman",   color: "text-red-700 bg-red-100 border-red-200" },
+  CREATE_DELIVERYMAN: { label: "New Deliveryman", color: "text-teal-700 bg-teal-100 border-teal-200" },
+  UPDATE_DELIVERYMAN: { label: "Update Deliveryman", color: "text-blue-700 bg-blue-100 border-blue-200" },
+  DELETE_DELIVERYMAN: { label: "Delete Deliveryman", color: "text-red-700 bg-red-100 border-red-200" },
+  // Product & Price
+  UPDATE_PRODUCT:   { label: "Update Product",    color: "text-blue-700 bg-blue-100 border-blue-200" },
+  UPDATE_PRODUCT_PRICE: { label: "Price Change",  color: "text-orange-700 bg-orange-100 border-orange-200" },
+  CREATE_PRICE_REQUEST: { label: "Unlock Request", color: "text-purple-700 bg-purple-100 border-purple-200" },
+  UPDATE_PRICE_REQUEST_STATUS: { label: "Unlock Approval", color: "text-indigo-700 bg-indigo-100 border-indigo-200" },
+  // Users
+  UPDATE_USER:      { label: "Update User",       color: "text-blue-700 bg-blue-100 border-blue-200" },
+  DELETE_USER:      { label: "Delete User",       color: "text-red-700 bg-red-100 border-red-200" },
 };
 
 const getActionMeta = (action) =>
@@ -72,7 +96,6 @@ const SuperAdminAuditLogs = () => {
   const renderDiff = (before, after) => {
     if (!before && !after) return null;
     const allKeys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
-    // Skip noisy internal/array keys we can't easily display
     const skipKeys = new Set(["_id", "__v", "createdAt", "updatedAt"]);
     const changed = [];
 
@@ -80,7 +103,6 @@ const SuperAdminAuditLogs = () => {
       if (skipKeys.has(key)) return;
       const bVal = before?.[key];
       const aVal = after?.[key];
-      // Stringify for deep compare
       const bStr = JSON.stringify(bVal);
       const aStr = JSON.stringify(aVal);
       if (bStr !== aStr) {
@@ -92,33 +114,80 @@ const SuperAdminAuditLogs = () => {
 
     return (
       <div className="mt-2 rounded-lg border border-blue-100 overflow-hidden bg-blue-50/40">
-        <div className="px-3 py-1.5 bg-blue-50 border-b border-blue-100">
+        <div className="px-3 py-1.5 bg-blue-50 border-b border-blue-100 flex justify-between items-center">
           <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">
             Field Changes ({changed.length})
           </span>
         </div>
         <div className="divide-y divide-blue-50">
           {changed.map(({ key, before: bVal, after: aVal }) => {
+            const isItems = key === "items" || key === "sampleItems";
             const isArray = Array.isArray(bVal) || Array.isArray(aVal);
             const label = key.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase());
+
+            // Special handling for items array to show qty changes
+            if (isItems && isArray) {
+              const bArr = bVal || [];
+              const aArr = aVal || [];
+              const itemChanges = [];
+              
+              // Build map of new items
+              const aMap = {};
+              aArr.forEach(i => { if (i.productId) aMap[String(i.productId)] = i; });
+              
+              const bMap = {};
+              bArr.forEach(i => { if (i.productId) bMap[String(i.productId)] = i; });
+
+              const allPids = new Set([...Object.keys(aMap), ...Object.keys(bMap)]);
+              allPids.forEach(pid => {
+                const bi = bMap[pid];
+                const ai = aMap[pid];
+                if (!bi && ai) itemChanges.push({ name: ai.name, action: "ADDED", qty: ai.qty });
+                else if (bi && !ai) itemChanges.push({ name: bi.name, action: "REMOVED", qty: bi.qty });
+                else if (bi.qty !== ai.qty || bi.price !== ai.price) {
+                  itemChanges.push({ name: ai.name, action: "CHANGED", oldQty: bi.qty, newQty: ai.qty, oldPrice: bi.price, newPrice: ai.price });
+                }
+              });
+
+              if (itemChanges.length === 0) return null;
+
+              return (
+                <div key={key} className="px-3 py-2 text-xs bg-white/50">
+                   <div className="font-semibold text-gray-600 mb-1">{label} Array</div>
+                   <div className="space-y-1 mt-1">
+                     {itemChanges.map((ic, idx) => (
+                       <div key={idx} className="flex items-center gap-2 text-[10px]">
+                         <span className={`px-1 rounded font-bold ${ic.action === "ADDED" ? "bg-green-100 text-green-700" : ic.action === "REMOVED" ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
+                           {ic.action}
+                         </span>
+                         <span className="font-medium text-gray-700 truncate max-w-[120px]">{ic.name}</span>
+                         {ic.action === "CHANGED" ? (
+                           <span className="text-gray-500">
+                             {ic.oldQty !== ic.newQty && <span>Qty: {ic.oldQty} → {ic.newQty}</span>}
+                             {ic.oldPrice !== ic.newPrice && <span className="ml-1 text-orange-600">(₹{ic.oldPrice} → ₹{ic.newPrice})</span>}
+                           </span>
+                         ) : (
+                           <span className="text-gray-500">Qty: {ic.qty}</span>
+                         )}
+                       </div>
+                     ))}
+                   </div>
+                </div>
+              );
+            }
+
             return (
               <div key={key} className="px-3 py-2 text-xs">
                 <div className="font-semibold text-gray-600 mb-1">{label}</div>
-                {isArray ? (
-                  <span className="text-gray-500 italic">
-                    {Array.isArray(bVal) ? bVal.length : 0} items → {Array.isArray(aVal) ? aVal.length : 0} items
+                <div className="flex items-center flex-wrap gap-2">
+                  <span className="line-through text-red-500 bg-red-50 px-2 py-0.5 rounded">
+                    {bVal !== undefined && bVal !== null ? (typeof bVal === "object" ? "JSON" : String(bVal)) : "—"}
                   </span>
-                ) : (
-                  <div className="flex items-center flex-wrap gap-2">
-                    <span className="line-through text-red-500 bg-red-50 px-2 py-0.5 rounded">
-                      {bVal !== undefined && bVal !== null ? String(bVal) : "—"}
-                    </span>
-                    <span className="text-gray-400">→</span>
-                    <span className="text-green-700 font-semibold bg-green-50 px-2 py-0.5 rounded">
-                      {aVal !== undefined && aVal !== null ? String(aVal) : "—"}
-                    </span>
-                  </div>
-                )}
+                  <span className="text-gray-400">→</span>
+                  <span className="text-green-700 font-semibold bg-green-50 px-2 py-0.5 rounded">
+                    {aVal !== undefined && aVal !== null ? (typeof aVal === "object" ? "JSON" : String(aVal)) : "—"}
+                  </span>
+                </div>
               </div>
             );
           })}

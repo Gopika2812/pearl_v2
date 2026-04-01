@@ -9,6 +9,11 @@ import ProductGroup from "../models/ProductGroup.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SalesOrder from "../models/SalesOrder.js";
 import Warehouse from "../models/Warehouse.js";
+import DebitNote from "../models/DebitNote.js";
+import CreditNote from "../models/CreditNote.js";
+
+import { createAuditLog } from "../utils/logUtil.js";
+import auth from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -552,10 +557,8 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
   }
 });
 
-/**
- * PUT: Update Product
- */
-router.put("/:id", async (req, res) => {
+// PUT: Update Product
+router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, productGroup, productCategories = [], perQty, units, totalQty, purchasingPrice, sellingPrice, adminMargin, marginPercentage, lockedPrice, margin, hsnCode, gst, branchId } = req.body;
@@ -568,6 +571,14 @@ router.put("/:id", async (req, res) => {
       });
     }
 
+    const oldProduct = await Product.findById(id);
+    if (!oldProduct) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
     // Validate productGroup is a valid ObjectId if provided
     if (productGroup && !mongoose.Types.ObjectId.isValid(productGroup)) {
       return res.status(400).json({
@@ -577,8 +588,9 @@ router.put("/:id", async (req, res) => {
     }
 
     // Verify product group exists if provided and belongs to same branch
-    if (productGroup && branchId) {
-      const groupExists = await ProductGroup.findOne({ _id: productGroup, branchId });
+    if (productGroup && (branchId || oldProduct.branchId)) {
+      const bid = branchId || oldProduct.branchId;
+      const groupExists = await ProductGroup.findOne({ _id: productGroup, branchId: bid });
       if (!groupExists) {
         return res.status(400).json({
           success: false,
@@ -587,36 +599,12 @@ router.put("/:id", async (req, res) => {
       }
     }
 
-    // Validate productCategories array if provided
-    const validCategoryIds = [];
-    if (Array.isArray(productCategories) && productCategories.length > 0) {
-      for (const catId of productCategories) {
-        if (!mongoose.Types.ObjectId.isValid(catId)) {
-          return res.status(400).json({
-            success: false,
-            message: `Invalid Product Category ID: ${catId}`,
-          });
-        }
-
-        if (branchId) {
-          const categoryExists = await ProductCategory.findOne({ _id: catId, branchId });
-          if (!categoryExists) {
-            return res.status(400).json({
-              success: false,
-              message: `Product Category not found or does not belong to this branch: ${catId}`,
-            });
-          }
-        }
-        validCategoryIds.push(catId);
-      }
-    }
-
     // Prepare update object - only include provided fields
     const updateData = {};
     
     if (name !== undefined) updateData.name = name;
     if (productGroup !== undefined) updateData.productGroup = productGroup || null;
-    if (productCategories !== undefined) updateData.productCategories = validCategoryIds;
+    if (productCategories !== undefined) updateData.productCategories = productCategories;
     if (perQty !== undefined) updateData.perQty = Math.round(Number(perQty) * 100) / 100;
     if (units !== undefined) updateData.units = units;
     if (totalQty !== undefined) updateData.totalQty = Math.round(Number(totalQty) * 100) / 100;
@@ -629,8 +617,6 @@ router.put("/:id", async (req, res) => {
     if (lockedPrice !== undefined) updateData.lockedPrice = Math.round(Number(lockedPrice) * 100) / 100;
     if (margin !== undefined) updateData.margin = Math.round(Number(margin) * 100) / 100;
 
-    console.log("📝 Updating product", id, "with data:", updateData);
-
     const updatedProduct = await Product.findByIdAndUpdate(
       id,
       updateData,
@@ -640,19 +626,45 @@ router.put("/:id", async (req, res) => {
       .populate("productCategories", "name")
       .populate("warehouse", "name");
 
-    if (!updatedProduct) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
+    // Log price changes if any
+    const priceChanged = 
+      (purchasingPrice !== undefined && Math.round(purchasingPrice * 100) / 100 !== oldProduct.purchasingPrice) ||
+      (sellingPrice !== undefined && Math.round(sellingPrice * 100) / 100 !== oldProduct.sellingPrice);
+
+    if (priceChanged) {
+      await createAuditLog({
+        userId: req.user.id,
+        userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+        username: req.user.username,
+        branchId: req.user.branch || oldProduct.branchId,
+        action: "UPDATE_PRODUCT_PRICE",
+        description: `Updated price for product: ${updatedProduct.name}`,
+        targetId: id,
+        targetModel: "Product",
+        changes: {
+          before: {
+            purchasingPrice: oldProduct.purchasingPrice,
+            sellingPrice: oldProduct.sellingPrice,
+          },
+          after: {
+            purchasingPrice: updatedProduct.purchasingPrice,
+            sellingPrice: updatedProduct.sellingPrice,
+          },
+        },
+      });
+    } else {
+      // Log general update
+      await createAuditLog({
+        userId: req.user.id,
+        userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+        username: req.user.username,
+        branchId: req.user.branch || oldProduct.branchId,
+        action: "UPDATE_PRODUCT",
+        description: `Updated product details: ${updatedProduct.name}`,
+        targetId: id,
+        targetModel: "Product",
       });
     }
-
-    console.log("✅ Product updated:", {
-      id: updatedProduct._id,
-      purchasingPrice: updatedProduct.purchasingPrice,
-      sellingPrice: updatedProduct.sellingPrice,
-      margin: updatedProduct.margin,
-    });
 
     res.json({
       success: true,
@@ -814,34 +826,31 @@ router.get("/stock-journal", async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
-    const productIds = products.map((p) => p._id);
+    const branchOid = new mongoose.Types.ObjectId(branchId);
 
     // 2️⃣ Aggregate Purchase Orders (Inbound)
-    // We need both before-period (for opening) and during-period (for closing)
     const purchases = await PurchaseOrder.aggregate([
       {
         $match: {
-          branchId: new mongoose.Types.ObjectId(branchId),
+          branchId: branchOid,
           status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] },
-          createdAt: { $lt: end },
+          // We need everything created AFTER the start date to back-calculate opening
+          createdAt: { $gte: start },
         },
       },
       { $unwind: "$items" },
       {
         $group: {
           _id: "$items.productId",
-          beforePeriod: {
+          afterStart: { $sum: "$items.qty" },
+          afterEnd: {
             $sum: {
-              $cond: [{ $lt: ["$createdAt", start] }, "$items.qty", 0],
+              $cond: [{ $gt: ["$createdAt", end] }, "$items.qty", 0],
             },
           },
           duringPeriod: {
             $sum: {
-              $cond: [
-                { $and: [{ $gte: ["$createdAt", start] }, { $lt: ["$createdAt", end] }] },
-                "$items.qty",
-                0,
-              ],
+              $cond: [{ $lte: ["$createdAt", end] }, "$items.qty", 0],
             },
           },
         },
@@ -849,31 +858,83 @@ router.get("/stock-journal", async (req, res) => {
     ]);
 
     // 3️⃣ Aggregate Sales Orders (Outbound)
-    // We need both before-period (for opening) and during-period (for closing)
     const sales = await SalesOrder.aggregate([
       {
         $match: {
-          branchId: new mongoose.Types.ObjectId(branchId),
+          branchId: branchOid,
           invoiceGenerated: true,
-          createdAt: { $lt: end },
+          createdAt: { $gte: start },
         },
       },
       { $unwind: "$invoiceItems" },
       {
         $group: {
           _id: "$invoiceItems.productId",
-          beforePeriod: {
+          afterStart: { $sum: "$invoiceItems.qty" },
+          afterEnd: {
             $sum: {
-              $cond: [{ $lt: ["$createdAt", start] }, "$invoiceItems.qty", 0],
+              $cond: [{ $gt: ["$createdAt", end] }, "$invoiceItems.qty", 0],
             },
           },
           duringPeriod: {
             $sum: {
-              $cond: [
-                { $and: [{ $gte: ["$createdAt", start] }, { $lt: ["$createdAt", end] }] },
-                "$invoiceItems.qty",
-                0,
-              ],
+              $cond: [{ $lte: ["$createdAt", end] }, "$invoiceItems.qty", 0],
+            },
+          },
+        },
+      },
+    ]);
+
+    // 4️⃣ Aggregate Debit Notes (Outbound - Purchase Return)
+    const debitNotes = await DebitNote.aggregate([
+      {
+        $match: {
+          branchId: branchOid,
+          status: "confirmed",
+          createdAt: { $gte: start },
+        },
+      },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: "$items.productId",
+          afterStart: { $sum: "$items.returnedQty" },
+          afterEnd: {
+            $sum: {
+              $cond: [{ $gt: ["$createdAt", end] }, "$items.returnedQty", 0],
+            },
+          },
+          duringPeriod: {
+            $sum: {
+              $cond: [{ $lte: ["$createdAt", end] }, "$items.returnedQty", 0],
+            },
+          },
+        },
+      },
+    ]);
+
+    // 5️⃣ Aggregate Credit Notes (Inbound - Sales Return)
+    const creditNotes = await CreditNote.aggregate([
+      {
+        $match: {
+          branchId: branchOid,
+          status: { $in: ["Created", "confirmed"] },
+          createdAt: { $gte: start },
+        },
+      },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: "$items.productId",
+          afterStart: { $sum: "$items.qty" },
+          afterEnd: {
+            $sum: {
+              $cond: [{ $gt: ["$createdAt", end] }, "$items.qty", 0],
+            },
+          },
+          duringPeriod: {
+            $sum: {
+              $cond: [{ $lte: ["$createdAt", end] }, "$items.qty", 0],
             },
           },
         },
@@ -881,23 +942,31 @@ router.get("/stock-journal", async (req, res) => {
     ]);
 
     // Maps for O(1) lookup
-    const purchaseMap = new Map();
-    purchases.forEach((p) => purchaseMap.set(p._id.toString(), p));
+    const pMap = new Map(purchases.map(p => [p._id.toString(), p]));
+    const sMap = new Map(sales.map(s => [s._id.toString(), s]));
+    const dnMap = new Map(debitNotes.map(dn => [dn._id.toString(), dn]));
+    const cnMap = new Map(creditNotes.map(cn => [cn._id.toString(), cn]));
 
-    const salesMap = new Map();
-    sales.forEach((s) => salesMap.set(s._id.toString(), s));
-
-    // 4️⃣ Calculate Journal for each Product
+    // 6️⃣ Calculate Journal for each Product
     const journalData = products.map((product) => {
       const pid = product._id.toString();
-      const pData = purchaseMap.get(pid) || { beforePeriod: 0, duringPeriod: 0 };
-      const sData = salesMap.get(pid) || { beforePeriod: 0, duringPeriod: 0 };
+      const p = pMap.get(pid) || { afterStart: 0, afterEnd: 0, duringPeriod: 0 };
+      const s = sMap.get(pid) || { afterStart: 0, afterEnd: 0, duringPeriod: 0 };
+      const dn = dnMap.get(pid) || { afterStart: 0, afterEnd: 0, duringPeriod: 0 };
+      const cn = cnMap.get(pid) || { afterStart: 0, afterEnd: 0, duringPeriod: 0 };
 
-      // Formula: Opening At S = Initial + (Purchases < S) - (Sales < S)
-      const openingQty = (product.totalQty || 0) + pData.beforePeriod - sData.beforePeriod;
+      const totalQty = product.totalQty || 0;
+
+      // 🔄 BACK-CALCULATION LOGIC:
+      // Opening Qty (at Start) = Current - (In since Start) + (Out since Start)
+      const afterIn = p.afterStart + cn.afterStart;
+      const afterOut = s.afterStart + dn.afterStart;
+      const openingQty = totalQty - afterIn + afterOut;
       
-      // Formula: Closing At E = Opening + (Purchases S to E) - (Sales S to E)
-      const closingQty = openingQty + pData.duringPeriod - sData.duringPeriod;
+      // Closing Qty (at End) = Current - (In since End) + (Out since End)
+      const endIn = p.afterEnd + cn.afterEnd;
+      const endOut = s.afterEnd + dn.afterEnd;
+      const closingQty = totalQty - endIn + endOut;
 
       return {
         productId: pid,
@@ -912,8 +981,8 @@ router.get("/stock-journal", async (req, res) => {
           rate: product.sellingPrice || 0,
           amount: Math.round(Math.max(0, closingQty) * (product.sellingPrice || 0) * 100) / 100,
         },
-        purchasesInPeriod: pData.duringPeriod,
-        salesInPeriod: sData.duringPeriod,
+        purchasesInPeriod: p.duringPeriod + cn.duringPeriod, // Total "In" (Purchases + Returns to us)
+        salesInPeriod: s.duringPeriod + dn.duringPeriod,    // Total "Out" (Sales + Returns to supplier)
       };
     });
 

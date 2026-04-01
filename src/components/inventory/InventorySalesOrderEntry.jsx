@@ -105,13 +105,13 @@ export default function InventorySalesOrderEntry({
   const [customerMargin, setCustomerMargin] = useState(0);
   const [commonDiscount, setCommonDiscount] = useState("");
 
-  // EXTRA EXPENSES STATES
   const [extraExpenses, setExtraExpenses] = useState([]);
   const [showExtraExpensesModal, setShowExtraExpensesModal] = useState(false);
   const [isCustomExpense, setIsCustomExpense] = useState(false);
   const [expenseName, setExpenseName] = useState("Transport");
   const [expensePrice, setExpensePrice] = useState("");
   const [expenseGstPercent, setExpenseGstPercent] = useState(18);
+  const [masterExpenseNames, setMasterExpenseNames] = useState([]);
 
   // SEARCH STATES FOR TYPING
   const [customerSearch, setCustomerSearch] = useState("");
@@ -271,10 +271,27 @@ export default function InventorySalesOrderEntry({
 
   // AUTO-SET LOGGED IN USER AS BILLING PERSON
   useEffect(() => {
-    if (user && !billingPerson) {
+      if (user && !billingPerson) {
       setBillingPerson(user.fullName || user.username || "");
     }
   }, [user]);
+
+  // FETCH MASTER EXTRA EXPENSE NAMES
+  useEffect(() => {
+    if (!branchId) return;
+    const fetchMasterNames = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/extra-expense-master/${branchId}`);
+        const data = await res.json();
+        if (data.success) {
+          setMasterExpenseNames(data.data.map(item => item.name));
+        }
+      } catch (err) {
+        console.error("Error fetching master expense names:", err);
+      }
+    };
+    fetchMasterNames();
+  }, [branchId]);
 
   useEffect(() => {
     if (!voucherType) {
@@ -1022,7 +1039,7 @@ export default function InventorySalesOrderEntry({
     isClaim,
   };
 
-  const handleAddExtraExpense = () => {
+  const handleAddExtraExpense = async () => {
     if (!expenseName.trim() || !expensePrice) {
       toast.error("Please enter expense name and price");
       return;
@@ -1033,20 +1050,38 @@ export default function InventorySalesOrderEntry({
     const gstAmount = (baseAmount * gstPercent) / 100;
     const totalPrice = baseAmount + gstAmount;
 
+    const nameToSave = expenseName.trim();
+
     const newExpense = {
       id: Date.now(),
-      expenseName: expenseName.trim(),
+      expenseName: nameToSave,
       basePrice: baseAmount,
       gstPercent,
       gstAmount,
       totalPrice: totalPrice,
     };
 
+    // If it's a custom expense, save it to the master list
+    if (isCustomExpense) {
+      try {
+        await fetch(`${API_BASE}/extra-expense-master`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ branchId, name: nameToSave }),
+        });
+        // Update local master list if not already present
+        setMasterExpenseNames(prev => prev.includes(nameToSave) ? prev : [...prev, nameToSave]);
+      } catch (err) {
+        console.error("Failed to save custom expense name to master:", err);
+      }
+    }
+
     setExtraExpenses((prev) => [...prev, newExpense]);
     setExpenseName("Transport");
     setExpensePrice("");
     setExpenseGstPercent(18);
     setShowExtraExpensesModal(false);
+    setIsCustomExpense(false);
     toast.success("Expense added!");
   };
 
@@ -1984,7 +2019,7 @@ export default function InventorySalesOrderEntry({
                     }}
                     className="text-orange-600 hover:orange-700 hover:underline text-[10px] font-bold uppercase flex items-center gap-1 transition-all active:scale-95"
                   >
-                    {isCustomExpense ? "← Back to List" : "+ Add Custom Name"}
+                    {isCustomExpense ? "← Back to List" : "+ Add"}
                   </button>
                 </div>
                 
@@ -2014,6 +2049,12 @@ export default function InventorySalesOrderEntry({
                     <option value="Offloading">Offloading</option>
                     <option value="Unloading">Unloading</option>
                     <option value="Freezer">Freezer</option>
+                    {masterExpenseNames
+                      .filter(name => !["Transport", "Discount", "Offloading", "Unloading", "Freezer"].includes(name))
+                      .map((name, idx) => (
+                        <option key={idx} value={name}>{name}</option>
+                      ))
+                    }
                   </select>
                 )}
               </div>

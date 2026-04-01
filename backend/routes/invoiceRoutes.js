@@ -13,6 +13,9 @@ import SalesOwner from "../models/SalesOwner.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
+import Ledger from "../models/Ledger.js";
+import LedgerGroup from "../models/LedgerGroup.js";
+
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -542,7 +545,33 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         }
       }
 
+      // 📊 AUTOMATED LEDGER POSTING (Sales)
+      const salesAccountGroup = await LedgerGroup.findOneAndUpdate(
+        { branchId: invoice.branchId, name: "Sales Accounts" },
+        { $setOnInsert: { nature: "Income" } },
+        { upsert: true, new: true, session }
+      );
+
+      // Group items by GST% to post to corresponding ledgers
+      const gstSlabs = {};
+      invoice.items.forEach(item => {
+        const gst = item.gst || 0;
+        const gstFactor = 1 + (gst / 100);
+        const taxableValue = Math.round((item.total / gstFactor) * 100) / 100;
+        gstSlabs[gst] = (gstSlabs[gst] || 0) + taxableValue;
+      });
+
+      for (const [gst, amount] of Object.entries(gstSlabs)) {
+        const ledgerName = `Sales ${gst}%`;
+        await Ledger.findOneAndUpdate(
+          { branchId: invoice.branchId, name: ledgerName, groupId: salesAccountGroup._id },
+          { $inc: { currentBalance: amount } }, // Incomes increase with Credit, but here we track simple balance
+          { upsert: true, session }
+        );
+      }
+
       await session.commitTransaction();
+
 
       res.json({
         success: true,

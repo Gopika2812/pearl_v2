@@ -64,10 +64,9 @@ export const PAGE_CONFIG = [
         { id: "create-so", name: "Create SO", path: "/branch/sales-order", icon: "add" },
         { id: "sales-order-list", name: "Sales Order List", path: "/branch/sales-orders", icon: "list" },
         { id: "sales-invoice-list", name: "Sales Invoice List", path: "/branch/sales-invoices", icon: "invoice" },
-        { id: "credit-note", name: "Credit Note", path: "/branch/credit-note", icon: "return" },
         { id: "claims", name: "Claims", path: "/branch/claims", icon: "claims" },
-        { id: "receipt", name: "Receipt", path: "/branch/receipt", icon: "receipt", permissionFields: ["amount", "paymentMethod"] },
-      ]}
+      ]},
+      { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["margin", "debit", "credit", "gstin"] },
     ]
   },
   {
@@ -83,7 +82,6 @@ export const PAGE_CONFIG = [
     category: "Directory",
     items: [
       { id: "dispatch", name: "Loading & Dispatch", path: "/branch/dispatch", icon: "truck" },
-      { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["margin", "debit", "credit", "gstin"] },
       { id: "product-records", name: "Product Records", path: "/branch/product-records", icon: "box", permissionFields: ["purchasingPrice", "sellingPrice", "grossProfit"] },
     ]
   },
@@ -91,6 +89,8 @@ export const PAGE_CONFIG = [
     category: "Accounts",
     items: [
       { id: "locked-prices", name: "Locked Prices", path: "/branch/locked-prices", icon: "lock" },
+      { id: "ledgers", name: "Ledger", path: "/branch/ledger", icon: "book" },
+
       { id: "journals", name: "Journal Master", path: "/branch/journals", icon: "book" },
       { id: "stock-journal", name: "Stock Journal", path: "/branch/stock-journal", icon: "history" },
       { id: "day-book", name: "Day Book", path: "/branch/day-book", icon: "bookOpen" },

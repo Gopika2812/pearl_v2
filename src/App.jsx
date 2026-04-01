@@ -46,7 +46,9 @@ import BranchProductRecords from "./pages/branch/BranchProductRecords";
 import BranchLockedPrices from "./pages/branch/BranchLockedPrices";
 import BranchAdminRequests from "./pages/branch/BranchAdminRequests";
 import BranchStockSummary from "./pages/branch/BranchStockSummary";
+import BranchLedger from "./pages/branch/BranchLedger";
 import BranchExtraExpenseLedger from "./pages/branch/BranchExtraExpenseLedger";
+
 import BranchLoginPage from "./pages/BranchLoginPage";
 import BranchRegisterPage from "./pages/BranchRegisterPage";
 import UserRegistrationPage from "./pages/UserRegistrationPage";
@@ -186,8 +188,8 @@ function AppContent() {
               </>
             )}
 
-            {/* Main Content Area */}
-            <div className="flex-1 min-h-screen flex flex-col">
+            {/* Main Content Area: Offset by sidebar width (20 units = 80px) on desktop */}
+            <div className={`flex-1 min-h-screen flex flex-col transition-all duration-300 ${!hideLayout && !isInsightsRoute ? "md:ml-20" : ""}`}>
               {!hideLayout && (
                 <>
                   {user?.role === "SUPER_ADMIN" ? (
@@ -200,7 +202,7 @@ function AppContent() {
                 </>
               )}
 
-              <div className={`flex-1 ${isInsightsRoute ? "p-0" : "p-6"}`}>
+              <div className={`flex-1 transition-all duration-300 ${isInsightsRoute ? "p-0" : "p-6"} ${!hideLayout ? "pt-24" : ""}`}>
                 <Routes>
                   <Route path="/" element={<BranchLoginPage />} />
                   <Route path="/branch/other-payment" element={<BranchOtherPayment />} />
@@ -246,6 +248,7 @@ function AppContent() {
                   <Route path="/branch/day-book" element={<ProtectedRoute element={<BranchDayBook />} />} />
                   <Route path="/branch/admin-requests" element={<ProtectedRoute element={<BranchAdminRequests />} role={["ADMIN"]} />} />
                   <Route path="/branch/extra-expense-ledger" element={<ProtectedRoute element={<BranchExtraExpenseLedger />} />} />
+                  <Route path="/branch/ledger" element={<ProtectedRoute element={<BranchLedger />} />} />
 
                   {/* LEGACY ROUTES */}
                   <Route

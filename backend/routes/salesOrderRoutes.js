@@ -9,6 +9,7 @@ import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import GLService from "../utils/glService.js";
 import { createAuditLog } from "../utils/logUtil.js";
+import auth from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -309,7 +310,7 @@ router.get("/preview/:voucherType", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", auth, async (req, res) => {
   try {
     const {
       voucherType,
@@ -345,8 +346,8 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Invalid sales order data - voucherType, items, and branchId are required" });
     }
 
-    const financialYear = getFinancialYear();
-    console.log("📅 Financial year:", financialYear);
+    const currentFY = getFinancialYear();
+    console.log("📅 Financial year:", currentFY);
 
     // 🔑 Fetch voucher
     const voucher = await VoucherType.findOne({
@@ -359,19 +360,16 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ message: "Sales voucher not found" });
     }
 
-    // Credit limit check removed as requested
-    console.log("✅ Voucher found:", { prefix: voucher.prefix, counter: voucher.counter });
-
     // 🔁 Reset counter if FY changed
-    if (voucher.financialYear !== financialYear) {
+    if (voucher.financialYear !== currentFY) {
       voucher.counter = 1;
-      voucher.financialYear = financialYear;
+      voucher.financialYear = currentFY;
     }
 
     const invoiceId = `${voucher.prefix}/${String(voucher.counter).padStart(
       3,
       "0"
-    )}/${financialYear}`;
+    )}/${currentFY}`;
     
     console.log("📝 Generated invoiceId:", invoiceId);
 
@@ -386,9 +384,7 @@ router.post("/", async (req, res) => {
     console.log("✅ Customer found:", dbCustomer.name);
 
     const openingBalance = dbCustomer.closingBalance || dbCustomer.totalBalance || 0;
-    // ✅ FIXED: Closing balance = opening balance + grandTotal (SO increases customer's AR)
     const closingBalance = Math.round(openingBalance + grandTotal);
-
 
     // 🧾 Save Sales Order
     const salesOrder = new SalesOrder({
@@ -396,7 +392,6 @@ router.post("/", async (req, res) => {
       voucherType,
       orderType: "SO",
       branchId,
-
       customer: {
         customerId: customer.id,
         name: customer.name,
@@ -408,10 +403,8 @@ router.post("/", async (req, res) => {
         pincode: customer.pincode,
         gstin: customer.gstin,
       },
-
       openingBalance: Math.round(openingBalance),
       closingBalance,
-
       warehouse,
       billingPerson,
       agent,
@@ -438,37 +431,22 @@ router.post("/", async (req, res) => {
       salesOwner,
       salesMan,
       deliveryMan,
-      financialYear,
+      financialYear: currentFY,
       isClaim: isClaim || false,
     });
 
-    console.log("💾 About to save SalesOrder...");
     await salesOrder.save();
     console.log("✅ SalesOrder saved successfully");
-
-    // ⚠️ INVENTORY REDUCTION REMOVED - Only reduce when invoice is confirmed
-    // Inventory will be reduced when sales invoice is generated, not at order stage
-
-    // ⚠️ DO NOT UPDATE CUSTOMER DEBIT/BALANCE HERE
-    // Customer debit will be updated ONLY when invoice is generated
-    console.log("⏳ Customer debit will be updated when invoice is generated");
-
-    // ✅ POST JOURNAL ENTRY to GL
-    try {
-      const journalEntry = await GLService.postSalesOrderJE(salesOrder);
-      console.log(`✅ GL Entry posted: ${journalEntry.jeId}`);
-    } catch (glError) {
-      console.warn("⚠️ GL posting failed (non-blocking):", glError.message);
-      // Don't fail the SO creation if GL posting fails
-    }
 
     // ✅ Increment voucher counter
     voucher.counter += 1;
     await voucher.save();
+
     // Log Sales Order creation
     await createAuditLog({
-      userId: req.body.createdBy || req.body.userId || salesOrder.billingPerson || salesOrder.salesOwner,
-      username: req.body.createdByUsername || req.body.username || salesOrder.billingPerson || "System", 
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
       branchId: salesOrder.branchId,
       action: "CREATE_SO",
       description: `Created Sales Order: ${salesOrder.invoiceId} for ${salesOrder.customer.name}. Total: ₹${salesOrder.grandTotal}`,
@@ -485,7 +463,6 @@ router.post("/", async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Sales Order Save Error:", error.message);
-    console.error("Stack:", error.stack);
     res.status(500).json({ message: error.message || "Server error" });
   }
 });
@@ -540,7 +517,7 @@ router.get("/commissions/order/:salesOrderId", async (req, res) => {
 });
 
 // 🗑️ SOFT-CANCEL SALES ORDER (Revert effects, mark CANCELLED, keep in records)
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const salesOrder = await SalesOrder.findById(id);
@@ -607,6 +584,18 @@ router.delete("/:id", async (req, res) => {
     salesOrder.status = "CANCELLED";
     await salesOrder.save();
 
+    // Log the cancellation
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: salesOrder.branchId,
+      action: "CANCEL_SO",
+      description: `Cancelled Sales Order: ${salesOrder.invoiceId} (Customer: ${salesOrder.customer.name})`,
+      targetId: salesOrder._id,
+      targetModel: "SalesOrder",
+    });
+
     res.json({
       success: true,
       message: "Sales Order cancelled. Records kept for audit trail. Stock and customer balance reverted.",
@@ -670,7 +659,7 @@ router.patch("/:id/approve-edit", async (req, res) => {
 });
 
 // 🎯 GENERATE INVOICE FROM SALES ORDER
-router.patch("/:id/generate-invoice", async (req, res) => {
+router.patch("/:id/generate-invoice", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -703,6 +692,11 @@ router.patch("/:id/generate-invoice", async (req, res) => {
     if (isReInvoice) {
       console.log(`🔄 Re-Invoicing ${salesOrder.invoiceId} → updating ${salesOrder.salesInvoiceId}`);
 
+      const oldState = {
+        items: salesOrder.lastInvoicedItems.map(i => i.toObject()),
+        grandTotal: salesOrder.lastInvoicedGrandTotal
+      };
+
       // 1. Calculate Deltas
       const oldQtyMap = {};
       (salesOrder.lastInvoicedItems || []).forEach(item => {
@@ -720,17 +714,15 @@ router.patch("/:id/generate-invoice", async (req, res) => {
         const deltaQty = item.qty - oldQty;
         if (deltaQty !== 0) {
           await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -deltaQty } });
-          console.log(`📦 Stock delta for ${item.name}: ${deltaQty > 0 ? '-' : '+'}${Math.abs(deltaQty)}`);
         }
       }
 
-      // Handle removed items (not provided in the current invoiceItems but existed in lastInvoicedItems)
+      // Handle removed items
       const newPidSet = new Set(allNewItems.map(i => i.productId.toString()));
       for (const oldItem of salesOrder.lastInvoicedItems) {
         const pid = oldItem.productId.toString();
         if (!newPidSet.has(pid)) {
           await Product.findByIdAndUpdate(pid, { $inc: { totalQty: oldItem.qty } });
-          console.log(`📦 Removed item from invoice ${oldItem.name}: +${oldItem.qty} stock restored`);
         }
       }
 
@@ -743,7 +735,6 @@ router.patch("/:id/generate-invoice", async (req, res) => {
         await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
           $inc: { debit: balanceDelta, closingBalance: balanceDelta, totalBalance: balanceDelta }
         });
-        console.log(`💰 Customer balance delta applied: ${balanceDelta > 0 ? '+' : ''}₹${balanceDelta}`);
       }
 
       // 3. Update separate Invoice document
@@ -771,6 +762,25 @@ router.patch("/:id/generate-invoice", async (req, res) => {
         note: `Sales Invoice ${salesOrder.salesInvoiceId} updated with delta corrections.`
       });
 
+      // Log Re-Invoice
+      await createAuditLog({
+        userId: req.user.id,
+        userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+        username: req.user.username,
+        branchId: salesOrder.branchId,
+        action: "RE_INVOICE_SO",
+        description: `Re-Invoiced SO: ${salesOrder.invoiceId} (SI: ${salesOrder.salesInvoiceId}). Balance Delta: ₹${balanceDelta}`,
+        targetId: salesOrder._id,
+        targetModel: "SalesOrder",
+        changes: {
+          before: oldState,
+          after: {
+            items: allNewItems.map(i => i.toObject ? i.toObject() : i),
+            grandTotal: newTotal
+          }
+        }
+      });
+
       salesOrder.lastInvoicedItems = allNewItems;
       salesOrder.lastInvoicedGrandTotal = newTotal;
       salesOrder.status = "INVOICED";
@@ -785,13 +795,10 @@ router.patch("/:id/generate-invoice", async (req, res) => {
     }
 
     // ─── BRANCH B: FIRST-TIME INVOICE ─────────────────────────────────────
-    // 🆕 ABSOLUTE PREFIX SYNC: Derive SI ID 100% from SO ID Prefix (e.g., LOCALLINESSO -> LOCALLINESSI)
     const rawSoId = salesOrder.invoiceId || ""; 
-    // Stronger regex to strip "SO REF: ", "SO: ", "SO-", etc.
     const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, ""); 
     const soPrefixPrefix = cleanSoId.split('/')[0]; 
 
-    // Replace trailing SO with SI, or just append SI if not present
     let siPrefix = soPrefixPrefix.endsWith("SO") 
       ? soPrefixPrefix.replace(/SO$/i, "SI")
       : `${soPrefixPrefix}SI`;
@@ -891,6 +898,18 @@ router.patch("/:id/generate-invoice", async (req, res) => {
 
     await salesOrder.save();
 
+    // Log First-Time Invoice
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: salesOrder.branchId,
+      action: "INVOICE_SO",
+      description: `Generated Sales Invoice: ${siNumber} for PO: ${salesOrder.invoiceId}. Total: ₹${grandTotalToUse}`,
+      targetId: salesOrder._id,
+      targetModel: "SalesOrder",
+    });
+
     res.json({
       success: true,
       message: `Sales Invoice ${siNumber} generated successfully.`,
@@ -946,7 +965,7 @@ router.get("/unpaid/:customerId", async (req, res) => {
 });
 
 // ✏️ UPDATE SALES ORDER (From EditBillModal)
-router.put("/:id", async (req, res) => {
+router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, extraExpenses, extraExpenseAmount, customer, transportCharge } = req.body;
@@ -956,6 +975,14 @@ router.put("/:id", async (req, res) => {
     if (!salesOrder) {
       return res.status(404).json({ message: "Sales order not found" });
     }
+
+    const beforeState = {
+      items: JSON.parse(JSON.stringify(salesOrder.items || [])),
+      extraExpenses: JSON.parse(JSON.stringify(salesOrder.extraExpenses || [])),
+      grandTotal: salesOrder.grandTotal,
+      subtotal: salesOrder.subtotal,
+      customerName: salesOrder.customer?.name,
+    };
     
     if (salesOrder.invoiceGenerated && salesOrder.reEditRequestStatus !== "APPROVED") {
       return res.status(400).json({ message: "Cannot edit an order that has already been invoiced without admin approval" });
@@ -965,7 +992,6 @@ router.put("/:id", async (req, res) => {
     if (customer && customer.id && customer.id !== salesOrder.customer?.customerId?.toString()) {
       const dbCustomer = await Customer.findById(customer.id);
       if (dbCustomer) {
-        console.log(`👤 Customer changed for order ${id}: ${salesOrder.customer?.name} -> ${dbCustomer.name}`);
         salesOrder.customer = {
           customerId: dbCustomer._id,
           name: dbCustomer.name,
@@ -975,26 +1001,23 @@ router.put("/:id", async (req, res) => {
           state: dbCustomer.state,
           pincode: dbCustomer.pincode,
         };
-        // Reset starting balances for new customer if not invoiced
         if (!salesOrder.invoiceGenerated) {
           salesOrder.openingBalance = Math.round(dbCustomer.closingBalance || dbCustomer.totalBalance || 0);
         }
       }
     }
 
-
-    // 2. Identify the difference in grandTotal so we adjust Customer Balance smoothly
-    // EditBillModal strictly passes rounded grandTotals now but we'll safeguard it:
     const newGrandTotal = Math.round(Number(grandTotal) || 0);
     const difference = newGrandTotal - (salesOrder.grandTotal || 0);
 
-    // Capture 'before' state for audit log
-    const beforeState = {
-      items: JSON.parse(JSON.stringify(salesOrder.items || [])),
-      extraExpenses: JSON.parse(JSON.stringify(salesOrder.extraExpenses || [])),
-      grandTotal: salesOrder.grandTotal,
-      subtotal: salesOrder.subtotal,
-    };
+    // ─── PARTIAL BALANCE ADJUSTMENT (if already INVOICED) ───────────
+    if (salesOrder.status === "INVOICED" || salesOrder.invoiceGenerated) {
+        if (difference !== 0 && salesOrder.customer?.customerId) {
+          await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
+            $inc: { debit: difference, closingBalance: difference, totalBalance: difference }
+          });
+        }
+    }
 
     // 3. Update the fields
     salesOrder.items = items || [];
@@ -1013,18 +1036,14 @@ router.put("/:id", async (req, res) => {
     salesOrder.totalTax = Math.round(Number(totalTax) || 0);
     salesOrder.totalDiscount = Math.round(Number(totalDiscount) || 0);
     
-    // Set Grand Total variables
     salesOrder.grandTotal = newGrandTotal;
-    salesOrder.grandTotalWithMargin = newGrandTotal; // Usually margin relies on custom user input, syncing it as backup.
+    salesOrder.grandTotalWithMargin = newGrandTotal;
     
-    // Reset re-edit status after successful update
     if (salesOrder.reEditRequestStatus === "APPROVED") {
       salesOrder.reEditRequestStatus = "NONE";
-      salesOrder.isReEdited = true; // Mark as re-edited for invoice labeling
+      salesOrder.isReEdited = true;
     }
 
-    // Also shift closing balance for the exact SO receipt
-    // If customer changed, we reset it completely; otherwise we adjust by the difference
     if (customer && customer.id && customer.id !== salesOrder.customer?.customerId?.toString()) {
       salesOrder.closingBalance = salesOrder.openingBalance + newGrandTotal;
     } else {
@@ -1033,14 +1052,14 @@ router.put("/:id", async (req, res) => {
 
     await salesOrder.save();
 
-
     // Log Sales Order update
     await createAuditLog({
-      userId: req.body.updatedBy || salesOrder.billingPerson || "System",
-      username: req.body.updatedByUsername || salesOrder.billingPerson || "System",
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
       branchId: salesOrder.branchId,
       action: "UPDATE_SO",
-      description: `Updated Sales Order: ${salesOrder.invoiceId}. Total changed from ₹${beforeState.grandTotal} to ₹${salesOrder.grandTotal}`,
+      description: `Updated Sales Order: ${salesOrder.invoiceId}. Total: ₹${salesOrder.grandTotal}`,
       targetId: salesOrder._id,
       targetModel: "SalesOrder",
       changes: {
@@ -1049,6 +1068,7 @@ router.put("/:id", async (req, res) => {
           items: salesOrder.items,
           grandTotal: salesOrder.grandTotal,
           subtotal: salesOrder.subtotal,
+          customerName: salesOrder.customer?.name,
         }
       }
     });
@@ -1065,11 +1085,10 @@ router.put("/:id", async (req, res) => {
 });
 
 // 📨 REQUEST RE-EDIT PERMISSION
-router.patch("/:id/request-re-edit", async (req, res) => {
+router.patch("/:id/request-re-edit", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { username, requestedBy } = req.body;
-    const staffName = username || requestedBy || "Unknown Staff";
+    const staffName = req.user.username;
 
     const salesOrder = await SalesOrder.findById(id);
     if (!salesOrder) {
@@ -1088,8 +1107,9 @@ router.patch("/:id/request-re-edit", async (req, res) => {
 
     // Log request
     await createAuditLog({
-      userId: req.body.userId || "System",
-      username: username || "System",
+      userId: req.user.id,
+      userModel: "BranchUser",
+      username: req.user.username,
       branchId: salesOrder.branchId,
       action: "REQUEST_REEDIT",
       description: `Requested re-edit permission for Invoice: ${salesOrder.invoiceId}`,
@@ -1127,7 +1147,7 @@ router.get("/re-edit-requests/branch/:branchId", async (req, res) => {
 });
 
 // ✅ APPROVE RE-EDIT REQUEST
-router.patch("/:id/approve-re-edit", async (req, res) => {
+router.patch("/:id/approve-re-edit", auth, async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -1138,32 +1158,24 @@ router.patch("/:id/approve-re-edit", async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // 🏁 ERADICATE GHOST INVOICE: If an invoice exists, delete it and revert everything
     if (salesOrder.salesInvoiceId) {
-      const Invoice = mongoose.model("Invoice"); // Grab model
+      const Invoice = mongoose.model("Invoice");
       const Product = mongoose.model("Product");
       const Customer = mongoose.model("Customer");
 
       const invoice = await Invoice.findOne({ invoiceNumber: salesOrder.salesInvoiceId }).session(session);
       
       if (invoice) {
-        console.log(`🗑️ Eradicating ghost invoice ${invoice.invoiceNumber} for Re-Edit...`);
-        
         // REVERT STOCK
         for (const item of invoice.items) {
-          const product = await Product.findById(item.productId).session(session);
-          if (product) {
-            product.totalQty = (product.totalQty || 0) + (item.qty || 0);
-            await product.save({ session });
-          }
+          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty || 0 } }).session(session);
         }
 
         // REVERT CUSTOMER BALANCE
-        const customer = await Customer.findById(invoice.customer?.customerId).session(session);
-        if (customer && invoice.grandTotal > 0) {
-          customer.debit = Math.round((customer.debit || 0) - invoice.grandTotal);
-          customer.closingBalance = Math.round((customer.closingBalance || 0) - invoice.grandTotal);
-          await customer.save({ session });
+        if (invoice.customer?.customerId && invoice.grandTotal > 0) {
+          await Customer.findByIdAndUpdate(invoice.customer.customerId, {
+            $inc: { debit: -invoice.grandTotal, closingBalance: -invoice.grandTotal }
+          }).session(session);
         }
 
         // DELETE INVOICE
@@ -1171,14 +1183,26 @@ router.patch("/:id/approve-re-edit", async (req, res) => {
       }
     }
 
-    salesOrder.status = "PENDING"; // Move back to pending for editing
+    salesOrder.status = "PENDING";
     salesOrder.invoiceGenerated = false;
-    salesOrder.salesInvoiceId = null; // IMPORTANT: Clear the bad ID link
+    salesOrder.salesInvoiceId = null;
     salesOrder.reEditRequestStatus = "APPROVED";
     
     await salesOrder.save({ session });
-    await session.commitTransaction();
 
+    // Log approval
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: salesOrder.branchId,
+      action: "APPROVE_REEDIT",
+      description: `Approved re-edit for Invoice: ${salesOrder.invoiceId}. Original invoice deleted and effects reverted.`,
+      targetId: salesOrder._id,
+      targetModel: "SalesOrder",
+    });
+
+    await session.commitTransaction();
     res.json({ success: true, message: "Re-edit request approved. Invoice deleted and status reset." });
   } catch (err) {
     await session.abortTransaction();
@@ -1189,9 +1213,8 @@ router.patch("/:id/approve-re-edit", async (req, res) => {
   }
 });
 
-
 // ❌ REJECT RE-EDIT REQUEST
-router.patch("/:id/reject-re-edit", async (req, res) => {
+router.patch("/:id/reject-re-edit", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const salesOrder = await SalesOrder.findById(id);
@@ -1207,11 +1230,10 @@ router.patch("/:id/reject-re-edit", async (req, res) => {
 });
 
 // 📨 REQUEST CANCEL PERMISSION
-router.patch("/:id/request-cancel", async (req, res) => {
+router.patch("/:id/request-cancel", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { username, requestedBy } = req.body;
-    const staffName = username || requestedBy || "Unknown Staff";
+    const staffName = req.user.username;
 
     const salesOrder = await SalesOrder.findById(id);
     if (!salesOrder) return res.status(404).json({ message: "Sales order not found" });
@@ -1223,8 +1245,9 @@ router.patch("/:id/request-cancel", async (req, res) => {
     await salesOrder.save();
 
     await createAuditLog({
-      userId: req.body.userId || "System",
-      username: username || "System",
+      userId: req.user.id,
+      userModel: "BranchUser",
+      username: req.user.username,
       branchId: salesOrder.branchId,
       action: "REQUEST_CANCEL",
       description: `Requested cancellation permission for Invoice: ${salesOrder.invoiceId}`,
@@ -1239,7 +1262,7 @@ router.patch("/:id/request-cancel", async (req, res) => {
 });
 
 // ✅ APPROVE CANCEL REQUEST
-router.patch("/:id/approve-cancel", async (req, res) => {
+router.patch("/:id/approve-cancel", auth, async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -1250,7 +1273,6 @@ router.patch("/:id/approve-cancel", async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // 🏁 ERADICATE GHOST INVOICE: If an invoice exists, delete it and revert everything
     if (salesOrder.salesInvoiceId) {
       const Invoice = mongoose.model("Invoice");
       const Product = mongoose.model("Product");
@@ -1259,23 +1281,16 @@ router.patch("/:id/approve-cancel", async (req, res) => {
       const invoice = await Invoice.findOne({ invoiceNumber: salesOrder.salesInvoiceId }).session(session);
       
       if (invoice) {
-        console.log(`🗑️ Eradicating ghost invoice ${invoice.invoiceNumber} for Cancellation...`);
-        
         // REVERT STOCK
         for (const item of invoice.items) {
-          const product = await Product.findById(item.productId).session(session);
-          if (product) {
-            product.totalQty = (product.totalQty || 0) + (item.qty || 0);
-            await product.save({ session });
-          }
+          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty || 0 } }).session(session);
         }
 
         // REVERT CUSTOMER BALANCE
-        const customer = await Customer.findById(invoice.customer?.customerId).session(session);
-        if (customer && invoice.grandTotal > 0) {
-          customer.debit = Math.round((customer.debit || 0) - invoice.grandTotal);
-          customer.closingBalance = Math.round((customer.closingBalance || 0) - invoice.grandTotal);
-          await customer.save({ session });
+        if (invoice.customer?.customerId && invoice.grandTotal > 0) {
+          await Customer.findByIdAndUpdate(invoice.customer.customerId, {
+            $inc: { debit: -invoice.grandTotal, closingBalance: -invoice.grandTotal }
+          }).session(session);
         }
 
         // DELETE INVOICE
@@ -1289,8 +1304,19 @@ router.patch("/:id/approve-cancel", async (req, res) => {
     salesOrder.cancelRequestStatus = "APPROVED";
     
     await salesOrder.save({ session });
-    await session.commitTransaction();
 
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: salesOrder.branchId,
+      action: "APPROVE_CANCEL",
+      description: `Approved cancellation for Invoice: ${salesOrder.invoiceId}. Invoice deleted and effects reverted.`,
+      targetId: salesOrder._id,
+      targetModel: "SalesOrder",
+    });
+
+    await session.commitTransaction();
     res.json({ success: true, message: "Cancellation request approved. Invoice deleted." });
   } catch (err) {
     await session.abortTransaction();
@@ -1301,9 +1327,8 @@ router.patch("/:id/approve-cancel", async (req, res) => {
   }
 });
 
-
 // ❌ REJECT CANCEL REQUEST
-router.patch("/:id/reject-cancel", async (req, res) => {
+router.patch("/:id/reject-cancel", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const salesOrder = await SalesOrder.findById(id);
@@ -1319,12 +1344,10 @@ router.patch("/:id/reject-cancel", async (req, res) => {
 });
 
 // DELETE - Cancel and remove Sales Order (with sequence restoration)
-router.delete("/:id/cancel", async (req, res) => {
+router.delete("/:id/cancel", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, username } = req.body; // For audit logging
-
-    console.log(`🗑️ Attempting to cancel Sales Order: ${id}`);
+    const username = req.user.username;
 
     const salesOrder = await SalesOrder.findById(id);
     if (!salesOrder) {
@@ -1333,8 +1356,6 @@ router.delete("/:id/cancel", async (req, res) => {
 
     const { invoiceId, branchId, voucherType, financialYear, invoiceGenerated } = salesOrder;
 
-    // 1️⃣ CHECK SEQUENCE RESTORATION
-    // Logic: If this was the LATEST bill for this voucher type, we can decrement the counter
     const voucher = await VoucherType.findOne({
       branchId,
       name: voucherType.toLowerCase(),
@@ -1343,34 +1364,25 @@ router.delete("/:id/cancel", async (req, res) => {
     });
 
     if (voucher) {
-      // Extract numeric part of invoiceId (e.g., "SO/005/2025-26" -> 5)
       const parts = invoiceId.split("/");
       const currentCounterInInvoice = parseInt(parts[1], 10);
-
-      // If the current sequence is exactly currentCounterInInvoice + 1, it means this was the last one
       if (voucher.counter === currentCounterInInvoice + 1) {
         voucher.counter -= 1;
         await voucher.save();
-        console.log(`✅ Voucher sequence restored: ${invoiceId} was the latest. Counter back to ${voucher.counter}`);
-      } else {
-        console.log(`ℹ️ Voucher sequence NOT restored: ${invoiceId} (Num: ${currentCounterInInvoice}) was not the latest (Voucher Counter: ${voucher.counter})`);
       }
     }
 
-    // 2️⃣ DELETE ASSOCIATED INVOICE (if any)
     if (invoiceGenerated) {
       const Invoice = mongoose.model("Invoice");
       await Invoice.deleteOne({ salesOrderId: id });
-      console.log(`✅ Associated invoice for ${invoiceId} deleted`);
     }
 
-    // 3️⃣ DELETE SALES ORDER (triggers hooks for balance reversion)
-    const deletedOrder = await SalesOrder.findByIdAndDelete(id);
+    await SalesOrder.findByIdAndDelete(id);
     
-    // 4️⃣ AUDIT LOG
     await createAuditLog({
-      userId: userId || "System",
-      username: username || "System",
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: username,
       branchId,
       action: "CANCEL_BILL",
       description: `Cancelled and deleted Bill: ${invoiceId}. Reverted balance and commissions.`,

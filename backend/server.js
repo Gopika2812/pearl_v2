@@ -27,6 +27,7 @@ import debitNoteRoutes from "./routes/debitNoteRoutes.js";
 import deliveryManRoutes from "./routes/deliveryManRoutes.js";
 import eInvoiceRoutes from "./routes/eInvoiceRoutes.js";
 import extraExpenseLedgerRoutes from "./routes/extraExpenseLedgerRoutes.js";
+import extraExpenseMasterRoutes from "./routes/extraExpenseMasterRoutes.js";
 import extraExpenseRoutes from "./routes/extraExpenseRoutes.js";
 import financialReportRoutes from "./routes/financialReportRoutes.js";
 import gstRoutes from "./routes/gstRoutes.js";
@@ -50,6 +51,8 @@ import tallyJournalRoutes from "./routes/tallyJournalRoutes.js";
 import vendorRoutes from "./routes/vendorRoutes.js";
 import voucherTypeRoutes from "./routes/voucherTypeRoutes.js";
 import warehouseRoutes from "./routes/warehouseRoutes.js";
+import ledgerRoutes from "./routes/ledgerRoutes.js";
+
 
 
 const app = express();
@@ -111,7 +114,10 @@ app.use("/api/customer-locked-prices", customerLockedPriceRoutes);
 app.use("/api/einvoice", eInvoiceRoutes);
 app.use("/api/other-transactions", otherTransactionRoutes);
 app.use("/api/extra-expense-ledger", extraExpenseLedgerRoutes);
+app.use("/api/extra-expense-master", extraExpenseMasterRoutes);
 app.use("/api/price-requests", priceRequestRoutes);
+app.use("/api/ledgers", ledgerRoutes);
+
 
 
 // MongoDB Connect

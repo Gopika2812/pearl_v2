@@ -78,16 +78,22 @@ export default function SuperAdminUserApproval() {
       
       // Get the BranchUser ID from the approved user
       // We need to fetch the BranchUser to get its ID first
-      const branchUsers = await fetch(`${API_BASE}/branch-users?username=${user.username}`, {
+      const branchUsersResponse = await fetch(`${API_BASE}/branch-users?username=${user.username}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const branchUserData = await branchUsers.json();
-      const branchUserId = branchUserData.data?.[0]?._id;
 
-      if (!branchUserId) {
+      if (!branchUsersResponse.ok) {
+        throw new Error(`Failed to fetch user: ${branchUsersResponse.statusText}`);
+      }
+
+      const branchUserData = await branchUsersResponse.json();
+      
+      if (!branchUserData.success || !branchUserData.data || branchUserData.data.length === 0) {
         toast.error("Could not find user record. Please refresh and try again.");
         return;
       }
+
+      const branchUserId = branchUserData.data[0]._id;
 
       const res = await fetch(`${API_BASE}/super-admin/update-user/${branchUserId}`, {
         method: "PATCH",
@@ -97,6 +103,11 @@ export default function SuperAdminUserApproval() {
         },
         body: JSON.stringify({ role: editingRole }),
       });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: "Server error occurred" }));
+        throw new Error(errorData.message || "Failed to update role");
+      }
 
       const data = await res.json();
       if (data.success) {

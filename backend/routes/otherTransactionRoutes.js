@@ -1,7 +1,10 @@
 import express from "express";
 import OtherTransaction from "../models/OtherTransaction.js";
 import { createAuditLog } from "../utils/logUtil.js";
+import Ledger from "../models/Ledger.js";
+import LedgerGroup from "../models/LedgerGroup.js";
 import mongoose from "mongoose";
+
 
 const router = express.Router();
 
@@ -80,6 +83,35 @@ router.post("/", async (req, res) => {
     });
 
     await newTransaction.save();
+
+    // 📊 SYNC WITH LEDGER SYSTEM
+    try {
+      // 1. Find or Create Ledger Group
+      // Determine nature based on transaction type if not provided
+      const nature = type.toUpperCase() === "PAYMENT" ? "Expense" : "Income";
+      
+      const group = await LedgerGroup.findOneAndUpdate(
+        { branchId, name: ledgerGroup },
+        { $setOnInsert: { nature } },
+        { upsert: true, new: true }
+      );
+
+      // 2. Find or Create Ledger
+      const amountNum = Number(amount);
+      const balanceChange = type.toUpperCase() === "PAYMENT" ? -amountNum : amountNum;
+
+      await Ledger.findOneAndUpdate(
+        { branchId, name: ledgerName, groupId: group._id },
+        { $inc: { currentBalance: balanceChange } },
+        { upsert: true }
+      );
+      
+      console.log(`✅ Ledger "${ledgerName}" updated with ₹${balanceChange}`);
+    } catch (ledgerError) {
+      console.error("Error syncing with ledger system:", ledgerError);
+      // We don't fail the transaction if ledger sync fails, but we log it
+    }
+
 
     // CREATE AUDIT LOG
     await createAuditLog({

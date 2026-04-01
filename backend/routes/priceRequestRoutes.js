@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import PriceRequest from "../models/PriceRequest.js";
 import auth from "../middleware/auth.js";
+import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
 
@@ -30,7 +31,6 @@ router.post("/", auth, async (req, res) => {
       });
     }
 
-
     const newRequest = new PriceRequest({
       branchId: req.user.branch,
       staffId: req.user.id,
@@ -43,6 +43,18 @@ router.post("/", auth, async (req, res) => {
     });
 
     await newRequest.save();
+
+    // Log the price request creation
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: "BranchUser",
+      username: req.user.username,
+      branchId: req.user.branch,
+      action: "CREATE_PRICE_REQUEST",
+      description: `Requested price unlock for ${productName}: ₹${originalPrice} -> ₹${requestedPrice}`,
+      targetId: newRequest._id,
+      targetModel: "PriceRequest",
+    });
 
     res.status(201).json({
       success: true,
@@ -85,6 +97,11 @@ router.patch("/:id/status", auth, async (req, res) => {
       return res.status(403).json({ success: false, message: "Unauthorized." });
     }
 
+    const oldRequest = await PriceRequest.findById(id);
+    if (!oldRequest) {
+      return res.status(404).json({ success: false, message: "Request not found." });
+    }
+
     const update = {
       status,
       approvedBy: req.user.id,
@@ -93,9 +110,21 @@ router.patch("/:id/status", auth, async (req, res) => {
 
     const request = await PriceRequest.findByIdAndUpdate(id, update, { new: true });
 
-    if (!request) {
-      return res.status(404).json({ success: false, message: "Request not found." });
-    }
+    // Log the status update
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: req.user.branch || oldRequest.branchId,
+      action: "UPDATE_PRICE_REQUEST_STATUS",
+      description: `Price unlock request for ${oldRequest.productName} was ${status.toLowerCase()}`,
+      targetId: id,
+      targetModel: "PriceRequest",
+      changes: {
+        before: { status: oldRequest.status },
+        after: { status: status },
+      },
+    });
 
     res.json({ success: true, message: `Request ${status.toLowerCase()}`, data: request });
   } catch (error) {

@@ -89,20 +89,23 @@ const BranchSidebar = ({ isOpen, onClose }) => {
       <Link
         key={item.id}
         to={item.path}
-        className={`mx-3 mb-1 flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${
+        className={`mx-3 mb-1 flex items-center gap-4 px-3 py-3.5 rounded-2xl transition-all duration-300 relative group/item ${
           active
-            ? "bg-white text-secondary shadow-md font-semibold"
-            : "hover:bg-white/10 text-white/90"
+            ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/20 font-bold"
+            : "hover:bg-white/5 text-slate-400 hover:text-white"
         }`}
         onClick={isMobile ? onClose : undefined}
         title={item.name}
       >
-        <div className="w-8 flex justify-center flex-shrink-0">
-          <span className="text-lg">{ICON_MAP[item.icon]}</span>
+        <div className={`w-8 flex justify-center flex-shrink-0 transition-transform duration-300 ${active ? "scale-110" : "group-hover/item:scale-110"}`}>
+          <span className="text-xl">{ICON_MAP[item.icon]}</span>
         </div>
-        <span className={`text-sm whitespace-nowrap transition-opacity duration-300 ${!isMobile ? "opacity-0 group-hover:opacity-100" : ""}`}>
+        <span className={`text-[13px] font-bold uppercase tracking-wide whitespace-nowrap transition-all duration-500 ${!isMobile ? "opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0" : ""}`}>
           {item.name}
         </span>
+        {active && (
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-white rounded-l-full shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
+        )}
       </Link>
     );
   };
@@ -161,24 +164,27 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   return (
     <>
       {/* DESKTOP SIDEBAR */}
-      <aside className="hidden md:flex md:flex-col w-20 hover:w-64 transition-all duration-300 h-screen bg-gradient-to-b from-secondary to-secondary/90 text-white shadow-xl fixed left-0 top-0 group z-50 overflow-x-hidden">
-        {/* Header */}
-        <div className="px-4 py-6 border-b border-white/10 flex items-center h-[96px]">
-          <div className="flex items-center gap-3 w-full">
-            <img
-              src="/logo.jpeg"
-              alt="Pearls ERP Logo"
-              className="w-12 h-12 flex-shrink-0 object-contain rounded-lg"
-            />
-            <div className="text-xs text-white/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <p className="font-bold text-white">{branch?.name}</p>
-              <p>{branch?.location}</p>
+      <aside className="hidden md:flex md:flex-col w-20 hover:w-64 transition-all duration-500 ease-in-out h-screen bg-slate-900/95 backdrop-blur-xl text-white shadow-2xl fixed left-0 top-0 group z-50 overflow-x-hidden border-r border-white/5">
+        {/* Header with Glass Effect */}
+        <div className="px-4 py-8 flex items-center h-[100px] mb-4">
+          <div className="flex items-center gap-4 w-full px-2">
+            <div className="relative flex-shrink-0">
+              <img
+                src="/logo.jpeg"
+                alt="Pearls ERP Logo"
+                className="w-10 h-10 object-contain rounded-xl shadow-lg shadow-black/20"
+              />
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-slate-900 rounded-full"></div>
+            </div>
+            <div className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-x-2 group-hover:translate-x-0">
+              <p className="font-black text-sm tracking-tight text-white uppercase italic">Pearls <span className="text-emerald-400 not-italic">ERP</span></p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{branch?.name}</p>
             </div>
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar py-4">
+        {/* Navigation - Modern Scrollbar */}
+        <nav className="flex-1 overflow-y-auto no-scrollbar py-2 space-y-1">
           {PAGE_CONFIG.map(category => (
             <div key={category.category}>
               {category.items.map(item => (

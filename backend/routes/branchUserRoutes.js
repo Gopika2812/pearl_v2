@@ -7,6 +7,7 @@ import BranchUser from "../models/BranchUser.js";
 import PendingRegistration from "../models/PendingRegistration.js";
 import SuperAdmin from "../models/SuperAdmin.js";
 import { sendOTPEmail } from "../utils/emailService.js";
+import auth from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -280,6 +281,33 @@ router.post("/login", async (req, res) => {
   }
 });
 
+// GET: Fetch users (optionally filter by username)
+router.get("/", auth, async (req, res) => {
+  try {
+    const { username } = req.query;
+    let query = {};
+    if (username) {
+      query.username = username.toLowerCase();
+    }
+
+    const users = await BranchUser.find(query)
+      .select("-password")
+      .populate("branch", "name code location");
+
+    res.json({
+      success: true,
+      data: users,
+    });
+  } catch (error) {
+    console.error("Fetch Users Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
+      error: error.message,
+    });
+  }
+});
+
 // GET: Fetch all users for a branch
 router.get("/branch/:branchId", async (req, res) => {
   try {
@@ -348,7 +376,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // PUT: Update user
-router.put("/:id", async (req, res) => {
+router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { email, role, status } = req.body;
@@ -357,6 +385,14 @@ router.put("/:id", async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Invalid user ID",
+      });
+    }
+
+    const oldUser = await BranchUser.findById(id);
+    if (!oldUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
       });
     }
 
@@ -374,12 +410,33 @@ router.put("/:id", async (req, res) => {
       new: true,
     }).select("-password");
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
+    // Log the update
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: req.user.branch || user.branch,
+      action: "UPDATE_USER",
+      description: `Updated user: ${user.username}`,
+      targetId: id,
+      targetModel: "BranchUser",
+      changes: {
+        before: {
+          email: oldUser.email,
+          role: oldUser.role,
+          status: oldUser.status,
+          allowedPages: oldUser.allowedPages,
+          allowedQuickLinks: oldUser.allowedQuickLinks
+        },
+        after: {
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          allowedPages: user.allowedPages,
+          allowedQuickLinks: user.allowedQuickLinks
+        }
+      }
+    });
 
     res.json({
       success: true,
@@ -397,9 +454,13 @@ router.put("/:id", async (req, res) => {
 });
 
 // DELETE: Delete user
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (req.user.role !== "SUPER_ADMIN" && req.user.id !== id) {
+      return res.status(403).json({ success: false, message: "Unauthorized." });
+    }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -416,6 +477,18 @@ router.delete("/:id", async (req, res) => {
         message: "User not found",
       });
     }
+
+    // Log the deletion
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: req.user.branch || user.branch,
+      action: "DELETE_USER",
+      description: `Deleted user: ${user.username}`,
+      targetId: id,
+      targetModel: "BranchUser"
+    });
 
     res.json({
       success: true,

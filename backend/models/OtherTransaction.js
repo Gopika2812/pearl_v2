@@ -21,14 +21,6 @@ const OtherTransactionSchema = new mongoose.Schema(
     ledgerGroup: {
       type: String,
       required: true,
-      enum: [
-        "Fixed Assets",
-        "Current Assets",
-        "Indirect Expenses",
-        "Direct Expenses",
-        "Loans & Liabilities",
-        "Capital Account",
-      ],
     },
     ledgerName: {
       type: String,

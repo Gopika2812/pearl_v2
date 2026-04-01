@@ -1,11 +1,13 @@
 import express from "express";
 import mongoose from "mongoose";
 import DeliveryMan from "../models/DeliveryMan.js";
+import auth from "../middleware/auth.js";
+import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
 
 // ✅ CREATE Delivery Man
-router.post("/", async (req, res) => {
+router.post("/", auth, async (req, res) => {
   console.log("POST /api/delivery-men", req.body);
   try {
     const { name, phone, role, branchId } = req.body;
@@ -28,6 +30,19 @@ router.post("/", async (req, res) => {
     });
 
     await deliveryMan.save();
+
+    // Log the creation
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: req.user.branch || branchId,
+      action: "CREATE_DELIVERY_MAN",
+      description: `Created Delivery Man: ${name} (Role: ${deliveryMan.role})`,
+      targetId: deliveryMan._id,
+      targetModel: "DeliveryMan",
+    });
+
     res.status(201).json({
       success: true,
       message: "Delivery Man created successfully",
@@ -66,7 +81,7 @@ router.get("/", async (req, res) => {
 });
 
 // ✅ UPDATE Delivery Man
-router.put("/:id", async (req, res) => {
+router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, phone, role, isActive } = req.body;
@@ -75,6 +90,14 @@ router.put("/:id", async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Invalid Delivery Man ID",
+      });
+    }
+
+    const oldDeliveryMan = await DeliveryMan.findById(id);
+    if (!oldDeliveryMan) {
+      return res.status(404).json({
+        success: false,
+        message: "Delivery Man not found",
       });
     }
 
@@ -89,12 +112,34 @@ router.put("/:id", async (req, res) => {
       { new: true }
     );
 
-    if (!updatedDeliveryMan) {
-      return res.status(404).json({
-        success: false,
-        message: "Delivery Man not found",
-      });
-    }
+    // Prepare changes for audit log
+    const changes = {
+      before: {
+        name: oldDeliveryMan.name,
+        phone: oldDeliveryMan.phone,
+        role: oldDeliveryMan.role,
+        isActive: oldDeliveryMan.isActive,
+      },
+      after: {
+        name: updatedDeliveryMan.name,
+        phone: updatedDeliveryMan.phone,
+        role: updatedDeliveryMan.role,
+        isActive: updatedDeliveryMan.isActive,
+      },
+    };
+
+    // Log the update
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: req.user.branch || updatedDeliveryMan.branchId,
+      action: "UPDATE_DELIVERY_MAN",
+      description: `Updated Delivery Man: ${updatedDeliveryMan.name}`,
+      targetId: updatedDeliveryMan._id,
+      targetModel: "DeliveryMan",
+      changes,
+    });
 
     res.json({
       success: true,
@@ -112,7 +157,7 @@ router.put("/:id", async (req, res) => {
 });
 
 // ✅ DELETE Delivery Man
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -131,6 +176,18 @@ router.delete("/:id", async (req, res) => {
         message: "Delivery Man not found",
       });
     }
+
+    // Log the deletion
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: req.user.branch || deletedDeliveryMan.branchId,
+      action: "DELETE_DELIVERY_MAN",
+      description: `Deleted Delivery Man: ${deletedDeliveryMan.name}`,
+      targetId: id,
+      targetModel: "DeliveryMan",
+    });
 
     res.json({
       success: true,

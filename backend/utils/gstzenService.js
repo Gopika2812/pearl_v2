@@ -1,4 +1,6 @@
 import axios from "axios";
+import { wrapper } from "axios-cookiejar-support";
+import { CookieJar } from "tough-cookie";
 
 /**
  * GSTZen E-Invoice & E-Way Bill Service
@@ -7,16 +9,38 @@ import axios from "axios";
 
 class GSTZenService {
   constructor() {
-    this.apiKey = process.env.GSTZEN_API_KEY;
-    // GSTZen API endpoint - update based on your account type
-    this.baseUrl = process.env.GSTZEN_BASE_URL || "https://gstzen.in/api";
-    this.apiClient = axios.create({
+    // Load and trim API key and base URL
+    this.apiKey = (process.env.GSTZEN_API_KEY || "").trim();
+    this.baseUrl = (process.env.GSTZEN_BASE_URL || "https://my.gstzen.in").trim();
+    
+    if (!this.apiKey) {
+      console.error("❌ CRITICAL: GSTZEN_API_KEY is not set in environment variables!");
+    }
+    
+    if (!this.apiKey.includes('-')) {
+      console.error("⚠️  API Key format looks suspicious (no dashes). Expected format: xxxx-xxxx-xxxx-xxxx");
+    }
+    
+    // Create a CookieJar to persists cookies across requests
+    this.cookieJar = new CookieJar();
+    
+    // Create axios instance with proper headers and cookie jar support
+    this.apiClient = wrapper(axios.create({
       baseURL: this.baseUrl,
       timeout: 30000,
+      jar: this.cookieJar,
+      withCredentials: true,
+      // Add headers explicitly for each request
       headers: {
-        "Authorization": `Bearer ${this.apiKey}`,
         "Content-Type": "application/json"
-      }
+      },
+      validateStatus: () => true // Don't throw on any status code
+    }));
+
+    // Add interceptor to include Token header on all requests
+    this.apiClient.interceptors.request.use((config) => {
+      config.headers["Token"] = this.apiKey;
+      return config;
     });
   }
 
@@ -114,18 +138,59 @@ class GSTZenService {
             NetAmt: netAmt
           };
         }),
-        ValDtls: {
-          AssVal: Number(invoiceData.subtotal || 0),
-          CgstVal: Number(invoiceData.cgst || 0),
-          SgstVal: Number(invoiceData.sgst || 0),
-          IgstVal: Number(invoiceData.igst || 0),
-          CesVal: Number(invoiceData.cess || 0),
-          TotInvVal: Number(invoiceData.totalAmount || 0),
-          Discount: Number(invoiceData.discountAmount || 0),
-          OthChrg: Number(invoiceData.otherCharges || 0),
-          RndOffAmt: Number(invoiceData.roundOff || 0),
-          TotPayableAmt: Number(invoiceData.totalAmount || 0)
-        },
+        ValDtls: (() => {
+          // Calculate value details from items
+          const isSameState = sellerStateCode === buyerStateCode;
+          let totalAssVal = 0;
+          let totalTaxAmt = 0;
+          let totalDiscount = 0;
+
+          // Sum up from items
+          invoiceData.items.forEach(item => {
+            const qty = Number(item.qty || item.quantity || 0);
+            const rate = Number(item.sellingPrice || item.rate || 0);
+            const discount = Number(item.discountAmount || item.discount || 0);
+            const gstRate = Number(item.gst || item.gstRate || 0);
+            
+            const totAmt = Number((qty * rate).toFixed(2));
+            const preTaxVal = Number((totAmt - discount).toFixed(2));
+            const taxAmt = Number((preTaxVal * gstRate / 100).toFixed(2));
+            
+            totalAssVal += preTaxVal;
+            totalTaxAmt += taxAmt;
+            totalDiscount += discount;
+          });
+
+          totalAssVal = Number(totalAssVal.toFixed(2));
+          totalTaxAmt = Number(totalTaxAmt.toFixed(2));
+          totalDiscount = Number(totalDiscount.toFixed(2));
+
+          let cgstVal = 0, sgstVal = 0, igstVal = 0;
+          
+          if (isSameState) {
+            // Intra-state: split tax 50-50 between CGST and SGST
+            cgstVal = Number((totalTaxAmt / 2).toFixed(2));
+            sgstVal = Number((totalTaxAmt / 2).toFixed(2));
+          } else {
+            // Inter-state: use IGST
+            igstVal = totalTaxAmt;
+          }
+
+          const totInvVal = Number((totalAssVal + totalTaxAmt).toFixed(2));
+
+          return {
+            AssVal: totalAssVal,
+            CgstVal: cgstVal,
+            SgstVal: sgstVal,
+            IgstVal: igstVal,
+            CesVal: Number(invoiceData.cess || 0),
+            TotInvVal: totInvVal,
+            Discount: totalDiscount,
+            OthChrg: Number(invoiceData.otherCharges || 0),
+            RndOffAmt: Number(invoiceData.roundOff || 0),
+            TotPayableAmt: totInvVal
+          };
+        })(),
         PayDtls: {
           Nm: invoiceData.paymentMode || "CREDIT",
           FindNm: invoiceData.bankName || "",
@@ -141,13 +206,48 @@ class GSTZenService {
       };
 
       const endpoint = "/api/v1/invoice";
+      console.log(`\n${'='.repeat(80)}`);
       console.log(`🔗 Calling GSTZen API: ${this.baseUrl}${endpoint}`);
+      console.log(`🔑 API Key Status: ${this.apiKey ? '✓ SET' : '❌ NOT SET'}`);
+      console.log(`🔑 API Key Info: ${this.apiKey ? this.apiKey.substring(0, 12) + "..." + this.apiKey.substring(this.apiKey.length - 4) : "NOT SET"}`);
+      console.log(`🍪 Cookie Jar: ${this.cookieJar ? 'Enabled' : 'Disabled'}`);
       console.log(`📤 Full Payload:`);
       console.log(JSON.stringify(payload, null, 2));
+      console.log(`${'='.repeat(80)}\n`);
+      
+      // Log request config before sending
+      console.log(`📋 Request Config:`);
+      console.log(`   Method: POST`);
+      console.log(`   URL: ${this.baseUrl}${endpoint}`);
+      console.log(`   Headers:`, JSON.stringify(
+        { 'Content-Type': 'application/json', 'Token': 'TOKEN_REDACTED' },
+        null,
+        2
+      ));
       
       const response = await this.apiClient.post(endpoint, payload);
 
-      console.log(`✅ API Response Status:`, response.status);
+      console.log(`\n${'='.repeat(80)}`);
+      console.log(`✅ API Response Status: ${response.status}`);
+      console.log(`📬 Response Headers:`, JSON.stringify(response.headers, null, 2));
+      
+      // Log first part of response data
+      if (typeof response.data === 'string') {
+        if (response.data.includes('<!doctype html') || response.data.includes('<html')) {
+          console.log(`⚠️  Response is HTML (Error Page):`);
+          console.log(`   ${response.data.substring(0, 300)}...`);
+        } else {
+          console.log(`📋 Response Data:`, response.data.substring(0, 500));
+        }
+      } else {
+        console.log(`📋 Response Data:`, JSON.stringify(response.data, null, 2));
+      }
+      console.log(`${'='.repeat(80)}\n`);
+      
+      // Check if response is HTML (error page)
+      if (typeof response.data === 'string' && response.data.includes('<!doctype html')) {
+        throw new Error(`GSTZen returned HTML page instead of JSON. Possible authentication issue. Check GSTZEN_API_KEY format.`);
+      }
       
       const result = response.data.data || response.data;
       
@@ -166,36 +266,61 @@ class GSTZenService {
         throw new Error(response.data.message || JSON.stringify(response.data));
       }
     } catch (error) {
-      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message;
-      const errorCode = error.code;
       const errorStatus = error.response?.status;
+      let errorMsg = error.message;
       
-      console.error("❌ E-Invoice Error:");
-      console.error("   URL:", `${this.baseUrl}/api/v1/invoice`);
-      console.error("   HTTP Status:", errorStatus || "No response");
-      console.error("   Error Code:", errorCode || "Unknown");
-      console.error("   Error Message:", errorMsg);
-      console.error("   API Response:", error.response?.data);
-      
-      // Detailed troubleshooting guide
-      if (errorStatus === 400) {
-        console.error("\n🔧 HTTP 400 - Bad Request (Invalid Data):");
-        console.error("   This means GSTZen received the request but the data format is wrong");
-        console.error("   Check:");
-        console.error("   1. Is seller GSTIN correct? (15 digits)");
-        console.error("   2. Does every product have HSN code?");
-        console.error("   3. Are GST rates valid? (5, 12, 18, 28)");
-        console.error("   4. Check above JSON payload for missing/wrong fields");
-      } else if (errorStatus === 401 || errorStatus === 403) {
-        console.error("\n🔐 Authentication Error:");
-        console.error("   Check GSTZEN_API_KEY in .env");
-      } else if (errorCode === "ENOTFOUND") {
-        console.error("\n🌐 Connection Error:");
-        console.error("   Check GSTZEN_BASE_URL in .env");
-        console.error("   Check internet connection");
+      if (error.response?.data) {
+        if (typeof error.response.data === 'string') {
+          // Could be HTML
+          if (error.response.data.includes('<!doctype html') || error.response.data.includes('<html')) {
+            errorMsg = `GSTZen returned HTML (likely an error page). Status: ${errorStatus}`;
+          } else {
+            errorMsg = error.response.data.substring(0, 200);
+          }
+        } else {
+          errorMsg = error.response.data.message || error.response.data.error || JSON.stringify(error.response.data).substring(0, 200);
+        }
       }
       
-      throw new Error(errorMsg || `Failed to generate E-Invoice: ${errorCode}`);
+      console.error(`\n${'='.repeat(80)}`);
+      console.error(`❌ E-INVOICE GENERATION FAILED`);
+      console.error(`${'='.repeat(80)}`);
+      console.error(`   HTTP Status: ${errorStatus || 'No Response'}`);
+      console.error(`   Error Code: ${error.code || 'Unknown'}`);
+      console.error(`   Error Message: ${errorMsg}`);
+      console.error(`   Full Error: ${error.message}`);
+      
+      // Detailed diagnostics for 403
+      if (errorStatus === 403) {
+        console.error(`\n🔐 HTTP 403 FORBIDDEN - Possible Causes:`);
+        console.error(`   1. API KEY ISSUE:`);
+        console.error(`      - Is GSTZEN_API_KEY set in .env? ${this.apiKey ? 'YES ✓' : 'NO ✗'}`);
+        console.error(`      - API Key format (uuid): ${this.apiKey && this.apiKey.includes('-') ? 'YES ✓' : 'NO ✗'}`);
+        console.error(`      - Correct Key: ${this.apiKey ? this.apiKey.substring(0, 12) + '...' : 'NOT SET'}`);
+        console.error(`\n   2. POSSIBLE SOLUTIONS:`);
+        console.error(`      a) Verify API key is correct (40+ chars, has dashes)`);
+        console.error(`      b) Check if API key has EXPIRED on GSTZen account`);
+        console.error(`      c) Check if API has PERMISSION to use /api/v1/invoice endpoint`);
+        console.error(`      d) Try DELETING and REGENERATING the API key in GSTZen`);
+        console.error(`      e) Contact GSTZen support: support@gstzen.in`);
+        console.error(`      f) Check if your IP is WHITELISTED in GSTZen account settings`);
+      }
+      
+      // Diagnostics for other errors
+      if (errorStatus === 401 || errorStatus === 400) {
+        console.error(`\n${errorStatus === 401 ? '🔐 HTTP 401 UNAUTHORIZED' : '🔧 HTTP 400 BAD REQUEST'}`);
+        console.error(`   Check request headers and payload format`);
+      }
+      
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        console.error(`\n🌐 CONNECTION ERROR:`);
+        console.error(`   Cannot reach ${this.baseUrl}`);
+        console.error(`   Check GSTZEN_BASE_URL in .env`);
+        console.error(`   Check internet connection`);
+      }
+      
+      console.error(`${'='.repeat(80)}\n`);
+      throw new Error(errorMsg || `Failed to generate E-Invoice`);
     }
   }
 

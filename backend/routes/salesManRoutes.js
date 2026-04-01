@@ -1,11 +1,13 @@
 import express from "express";
 import mongoose from "mongoose";
 import SalesMan from "../models/SalesMan.js";
+import auth from "../middleware/auth.js";
+import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
 
 // ✅ CREATE Sales Man
-router.post("/", async (req, res) => {
+router.post("/", auth, async (req, res) => {
   console.log("POST /api/sales-men", req.body);
   try {
     const { name, phone, role, branchId } = req.body;
@@ -28,6 +30,19 @@ router.post("/", async (req, res) => {
     });
 
     await salesMan.save();
+
+    // Log the creation
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: req.user.branch || branchId,
+      action: "CREATE_SALES_MAN",
+      description: `Created Sales Man: ${name} (Role: ${salesMan.role})`,
+      targetId: salesMan._id,
+      targetModel: "SalesMan",
+    });
+
     res.status(201).json({
       success: true,
       message: "Sales Man created successfully",
@@ -66,7 +81,7 @@ router.get("/", async (req, res) => {
 });
 
 // ✅ UPDATE Sales Man
-router.put("/:id", async (req, res) => {
+router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, phone, role, isActive } = req.body;
@@ -75,6 +90,14 @@ router.put("/:id", async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Invalid Sales Man ID",
+      });
+    }
+
+    const oldSalesMan = await SalesMan.findById(id);
+    if (!oldSalesMan) {
+      return res.status(404).json({
+        success: false,
+        message: "Sales Man not found",
       });
     }
 
@@ -89,12 +112,34 @@ router.put("/:id", async (req, res) => {
       { new: true }
     );
 
-    if (!updatedSalesMan) {
-      return res.status(404).json({
-        success: false,
-        message: "Sales Man not found",
-      });
-    }
+    // Prepare changes for audit log
+    const changes = {
+      before: {
+        name: oldSalesMan.name,
+        phone: oldSalesMan.phone,
+        role: oldSalesMan.role,
+        isActive: oldSalesMan.isActive,
+      },
+      after: {
+        name: updatedSalesMan.name,
+        phone: updatedSalesMan.phone,
+        role: updatedSalesMan.role,
+        isActive: updatedSalesMan.isActive,
+      },
+    };
+
+    // Log the update
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: req.user.branch || updatedSalesMan.branchId,
+      action: "UPDATE_SALES_MAN",
+      description: `Updated Sales Man: ${updatedSalesMan.name}`,
+      targetId: updatedSalesMan._id,
+      targetModel: "SalesMan",
+      changes,
+    });
 
     res.json({
       success: true,
@@ -112,7 +157,7 @@ router.put("/:id", async (req, res) => {
 });
 
 // ✅ DELETE Sales Man
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -131,6 +176,18 @@ router.delete("/:id", async (req, res) => {
         message: "Sales Man not found",
       });
     }
+
+    // Log the deletion
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: req.user.branch || deletedSalesMan.branchId,
+      action: "DELETE_SALES_MAN",
+      description: `Deleted Sales Man: ${deletedSalesMan.name}`,
+      targetId: id,
+      targetModel: "SalesMan",
+    });
 
     res.json({
       success: true,

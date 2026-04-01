@@ -19,20 +19,135 @@ export default function BranchOtherTransaction({ type }) {
     note: "",
   });
 
-  const ledgerGroups = [
-    "Fixed Assets",
-    "Current Assets",
-    "Indirect Expenses",
-    "Direct Expenses",
-    "Loans & Liabilities",
-    "Capital Account",
-  ];
-
-  const defaultNames = ["Vehicle", "Staff Welfare", "Bank Charges", "Contra", "Others"];
+  const [availableGroups, setAvailableGroups] = useState([]);
+  const [availableLedgers, setAvailableLedgers] = useState([]);
+  const [showQuickAddGroup, setShowQuickAddGroup] = useState(false);
+  const [showQuickAddLedger, setShowQuickAddLedger] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupNature, setNewGroupNature] = useState("Expense");
+  const [newLedgerName, setNewLedgerName] = useState("");
 
   useEffect(() => {
-    if (currentBranch?._id) fetchTransactions();
+    if (currentBranch?._id) {
+       fetchTransactions();
+       fetchGroups();
+    }
   }, [currentBranch, type]);
+
+  useEffect(() => {
+    if (formData.ledgerGroup) {
+      const groupObj = availableGroups.find(g => g.name === formData.ledgerGroup);
+      if (groupObj) fetchLedgers(groupObj._id);
+      else setAvailableLedgers([]);
+    }
+  }, [formData.ledgerGroup, availableGroups]);
+
+  const fetchGroups = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_BASE}/ledgers/groups?branchId=${currentBranch._id}`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const data = await response.json();
+      setAvailableGroups(Array.isArray(data) ? data : []);
+      
+      // Default to "Indirect Expenses" if available
+      if (data.some(g => g.name === "Indirect Expenses")) {
+        setFormData(prev => ({ ...prev, ledgerGroup: "Indirect Expenses" }));
+      } else if (data.length > 0) {
+        setFormData(prev => ({ ...prev, ledgerGroup: data[0].name }));
+      }
+    } catch (err) {
+      console.error("Error fetching groups:", err);
+    }
+  };
+
+  const fetchLedgers = async (groupId) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_BASE}/ledgers?branchId=${currentBranch._id}&groupId=${groupId}`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const data = await response.json();
+      setAvailableLedgers(Array.isArray(data) ? data : []);
+      if (data.length > 0) {
+          setFormData(prev => ({ ...prev, ledgerName: data[0].name }));
+      } else {
+          setFormData(prev => ({ ...prev, ledgerName: "Others" }));
+      }
+    } catch (err) {
+      console.error("Error fetching ledgers:", err);
+    }
+  };
+
+  const handleQuickAddGroup = async () => {
+    if (!newGroupName.trim()) return toast.error("Enter group name");
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_BASE}/ledgers/groups`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: newGroupName,
+          nature: newGroupNature,
+          branchId: currentBranch._id,
+        }),
+      });
+      if (response.ok) {
+        toast.success("Group created");
+        const data = await response.json();
+        setAvailableGroups(prev => [...prev, data]);
+        setFormData(prev => ({ ...prev, ledgerGroup: data.name }));
+        setShowQuickAddGroup(false);
+        setNewGroupName("");
+      } else {
+        const err = await response.json();
+        toast.error(err.message || "Failed to create group");
+      }
+    } catch (err) {
+      toast.error("Group creation failed");
+    }
+  };
+
+  const handleQuickAddLedger = async () => {
+    if (!newLedgerName.trim()) return toast.error("Enter ledger name");
+    const groupObj = availableGroups.find(g => g.name === formData.ledgerGroup);
+    if (!groupObj) return toast.error("Select a group first");
+    
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_BASE}/ledgers`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: newLedgerName,
+          groupId: groupObj._id,
+          branchId: currentBranch._id,
+          openingDebit: 0,
+          openingCredit: 0,
+        }),
+      });
+      if (response.ok) {
+        toast.success("Ledger created");
+        const data = await response.json();
+        setAvailableLedgers(prev => [...prev, data]);
+        setFormData(prev => ({ ...prev, ledgerName: data.name }));
+        setShowQuickAddLedger(false);
+        setNewLedgerName("");
+      } else {
+        const err = await response.json();
+        toast.error(err.message || "Failed to create ledger");
+      }
+    } catch (err) {
+      toast.error("Ledger creation failed");
+    }
+  };
 
   const fetchTransactions = async () => {
     try {
@@ -194,36 +309,123 @@ export default function BranchOtherTransaction({ type }) {
             
             <form onSubmit={handleSubmit} className="p-8 space-y-5">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Ledger Group</label>
-                <select
-                  value={formData.ledgerGroup}
-                  onChange={(e) => setFormData({ ...formData, ledgerGroup: e.target.value })}
-                  className="w-full bg-gray-50 border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 transition font-medium"
-                >
-                  {ledgerGroups.map(g => <option key={g} value={g}>{g}</option>)}
-                </select>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Ledger Group</label>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setShowQuickAddGroup(!showQuickAddGroup);
+                      setNewGroupNature(isPayment ? "Expense" : "Income");
+                    }}
+                    className="text-blue-600 hover:text-blue-800 p-1 bg-blue-50 rounded-lg transition"
+                    title="Add New Group"
+                  >
+                    <FaPlus size={10} />
+                  </button>
+                </div>
+                
+                {showQuickAddGroup ? (
+                   <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 flex flex-col gap-2 mb-2 animate-in slide-in-from-top-2 duration-300">
+                      <input 
+                        type="text" 
+                        placeholder="New Group Name..." 
+                        className="w-full bg-white border-0 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 font-bold"
+                        value={newGroupName}
+                        onChange={(e) => setNewGroupName(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <select 
+                           className="flex-1 bg-white border-0 rounded-lg px-3 py-2 text-[10px] font-black uppercase tracking-wider"
+                           value={newGroupNature}
+                           onChange={(e) => setNewGroupNature(e.target.value)}
+                        >
+                           <option value="Asset">Asset</option>
+                           <option value="Liability">Liability</option>
+                           <option value="Income">Income</option>
+                           <option value="Expense">Expense</option>
+                        </select>
+                        <button 
+                          type="button" 
+                          onClick={handleQuickAddGroup}
+                          className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700"
+                        >
+                          Save
+                        </button>
+                      </div>
+                   </div>
+                ) : (
+                  <select
+                    value={formData.ledgerGroup}
+                    onChange={(e) => setFormData({ ...formData, ledgerGroup: e.target.value })}
+                    className="w-full bg-gray-50 border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 transition font-medium"
+                  >
+                    {availableGroups.length > 0 ? (
+                       availableGroups.map(g => <option key={g._id} value={g.name}>{g.name}</option>)
+                    ) : (
+                       <option disabled>Loading Groups...</option>
+                    )}
+                  </select>
+                )}
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Ledger Name</label>
-                <div className="relative group">
-                  <select
-                    value={formData.ledgerName}
-                    onChange={(e) => setFormData({ ...formData, ledgerName: e.target.value })}
-                    className="w-full bg-gray-50 border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 transition font-medium appearance-none"
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Ledger Name</label>
+                  <button 
+                    type="button"
+                    onClick={() => setShowQuickAddLedger(!showQuickAddLedger)}
+                    className="text-blue-600 hover:text-blue-800 p-1 bg-blue-50 rounded-lg transition"
+                    title="Add New Ledger"
                   >
-                    {defaultNames.map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                  <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-gray-400">
-                     <FaChevronDown size={12} />
-                  </div>
+                    <FaPlus size={10} />
+                  </button>
                 </div>
-                <input 
-                  type="text"
-                  placeholder="Or type custom name..."
-                  className="mt-2 w-full bg-gray-50 border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 transition text-sm italic"
-                  onChange={(e) => setFormData({ ...formData, ledgerName: e.target.value })}
-                />
+
+                {showQuickAddLedger ? (
+                   <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 flex gap-2 mb-2 animate-in slide-in-from-top-2 duration-300">
+                      <input 
+                        type="text" 
+                        placeholder="New Ledger Name..." 
+                        className="flex-1 bg-white border-0 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 font-bold"
+                        value={newLedgerName}
+                        onChange={(e) => setNewLedgerName(e.target.value)}
+                      />
+                      <button 
+                        type="button" 
+                        onClick={handleQuickAddLedger}
+                        className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700"
+                      >
+                        Save
+                      </button>
+                   </div>
+                ) : (
+                  <div className="relative group">
+                    <select
+                      value={formData.ledgerName}
+                      onChange={(e) => setFormData({ ...formData, ledgerName: e.target.value })}
+                      className="w-full bg-gray-50 border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 transition font-medium appearance-none"
+                    >
+                      {availableLedgers.length > 0 ? (
+                        availableLedgers.map(n => <option key={n._id} value={n.name}>{n.name}</option>)
+                      ) : (
+                        <option value="Others">Others</option>
+                      )}
+                    </select>
+                    <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-gray-400">
+                       <FaChevronDown size={12} />
+                    </div>
+                  </div>
+                )}
+                
+                {!showQuickAddLedger && (
+                   <input 
+                    type="text"
+                    placeholder="Or type custom name..."
+                    className="mt-2 w-full bg-gray-50 border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 transition text-sm italic"
+                    value={formData.ledgerName === "Others" ? "" : formData.ledgerName}
+                    onChange={(e) => setFormData({ ...formData, ledgerName: e.target.value })}
+                  />
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">

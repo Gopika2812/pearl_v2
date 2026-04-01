@@ -61,6 +61,24 @@ const InventoryPurchaseOrderEntry = ({
   useEffect(() => { setLocalProducts(products || []); }, [products]);
   useEffect(() => { if (user?.name) setBillingPerson(user.name); }, [user]);
 
+  // FETCH MASTER EXTRA EXPENSE NAMES
+  useEffect(() => {
+    const branchId = currentBranch?._id || currentBranch?.id;
+    if (!branchId) return;
+    const fetchMasterNames = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/extra-expense-master/${branchId}`);
+        const data = await res.json();
+        if (data.success) {
+          setMasterExpenseNames(data.data.map(item => item.name));
+        }
+      } catch (err) {
+        console.error("Error fetching master expense names:", err);
+      }
+    };
+    fetchMasterNames();
+  }, [currentBranch]);
+
   // Item Entry State
   const [selectedItem, setSelectedItem] = useState("");
   const [itemSearch, setItemSearch] = useState("");
@@ -84,6 +102,7 @@ const InventoryPurchaseOrderEntry = ({
   const [expenseName, setExpenseName] = useState("Transport");
   const [expensePrice, setExpensePrice] = useState("");
   const [expenseGst, setExpenseGst] = useState("");
+  const [masterExpenseNames, setMasterExpenseNames] = useState([]);
 
   // Filter products by fetching from API when group changes
   const [filteredProducts, setFilteredProducts] = useState([]);
@@ -274,7 +293,7 @@ const InventoryPurchaseOrderEntry = ({
   );
   const grandTotal = subtotal + totalTax + extraExpenseAmount;
 
-  const handleAddExtraExpense = () => {
+  const handleAddExtraExpense = async () => {
     if (!expenseName.trim() || !expensePrice) {
       toast.error("Please enter expense name and price");
       return;
@@ -285,9 +304,11 @@ const InventoryPurchaseOrderEntry = ({
     const gstAmount = (baseAmount * gstPct) / 100;
     const finalPrice = baseAmount + gstAmount;
 
+    const nameToSave = expenseName.trim();
+
     const newExpense = {
       id: Date.now(),
-      expenseName: expenseName.trim(),
+      expenseName: nameToSave,
       amount: baseAmount,       // Legacy
       basePrice: baseAmount,    // New
       gst: gstPct,              // Legacy
@@ -296,11 +317,28 @@ const InventoryPurchaseOrderEntry = ({
       totalPrice: finalPrice,
     };
 
+    // If it's a custom expense, save it to the master list
+    if (isCustomExpense) {
+      const branchId = currentBranch?._id || currentBranch?.id;
+      try {
+        await fetch(`${API_BASE}/extra-expense-master`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ branchId, name: nameToSave }),
+        });
+        // Update local master list if not already present
+        setMasterExpenseNames(prev => prev.includes(nameToSave) ? prev : [...prev, nameToSave]);
+      } catch (err) {
+        console.error("Failed to save custom expense name to master:", err);
+      }
+    }
+
     setExtraExpenses((prev) => [...prev, newExpense]);
-    setExpenseName("");
+    setExpenseName("Transport");
     setExpensePrice("");
     setExpenseGst("");
     setShowExtraExpensesModal(false);
+    setIsCustomExpense(false);
     toast.success("Expense added!");
   };
 
@@ -1011,7 +1049,7 @@ const InventoryPurchaseOrderEntry = ({
                     }}
                     className="text-[#319bab] hover:underline text-[10px] font-bold uppercase flex items-center gap-1 transition-all active:scale-95"
                   >
-                    {isCustomExpense ? "← Back to List" : "+ Add Custom Name"}
+                    {isCustomExpense ? "← Back to List" : "+ Add"}
                   </button>
                 </div>
                 
@@ -1041,6 +1079,12 @@ const InventoryPurchaseOrderEntry = ({
                     <option value="Offloading">Offloading</option>
                     <option value="Unloading">Unloading</option>
                     <option value="Freezer">Freezer</option>
+                    {masterExpenseNames
+                      .filter(name => !["Transport", "Discount", "Offloading", "Unloading", "Freezer"].includes(name))
+                      .map((name, idx) => (
+                        <option key={idx} value={name}>{name}</option>
+                      ))
+                    }
                   </select>
                 )}
               </div>
