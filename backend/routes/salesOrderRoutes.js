@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import auth from "../middleware/auth.js";
 import Commission from "../models/Commission.js";
 import Customer from "../models/Customer.js";
+import Invoice from "../models/Invoice.js";
 import Product from "../models/Product.js";
 import Receipt from "../models/Receipt.js";
 import SalesOrder from "../models/SalesOrder.js";
@@ -1109,8 +1110,41 @@ router.put("/:id", auth, async (req, res) => {
     salesOrder.grandTotal = newGrandTotal;
     salesOrder.grandTotalWithMargin = newGrandTotal;
 
+    // ─── SYNC INVOICE DATA (IF INVOICED) ──────────────────────────
     if (salesOrder.invoiceGenerated) {
       salesOrder.isReEdited = true;
+      
+      // Update internal invoice tracking fields
+      salesOrder.invoiceItems = items || [];
+      salesOrder.invoiceSampleItems = sampleItems || [];
+      salesOrder.invoiceSubtotal = salesOrder.subtotal;
+      salesOrder.invoiceTotalTax = salesOrder.totalTax;
+      salesOrder.invoiceTotalDiscount = salesOrder.totalDiscount;
+      salesOrder.invoiceTransportCharge = salesOrder.transportCharge;
+      salesOrder.invoiceGrandTotal = salesOrder.grandTotal;
+
+      // Update associated Invoice document in the "invoices" collection
+      try {
+        await Invoice.findOneAndUpdate(
+          { salesOrderId: salesOrder._id },
+          {
+            $set: {
+              items: items || [],
+              sampleItems: sampleItems || [],
+              subtotal: salesOrder.subtotal,
+              totalTax: { total: salesOrder.totalTax }, // Simplified sync
+              totalDiscount: salesOrder.totalDiscount,
+              transportCharge: salesOrder.transportCharge,
+              grandTotal: salesOrder.grandTotal,
+              customer: salesOrder.customer,
+            }
+          },
+          { sort: { createdAt: -1 } } // Update the latest invoice for this SO
+        );
+      } catch (invoiceErr) {
+        console.error("⚠️ Error syncing Invoice document:", invoiceErr.message);
+        // Non-blocking error for SO update
+      }
     }
 
     if (customer && customer.id && customer.id !== salesOrder.customer?.customerId?.toString()) {

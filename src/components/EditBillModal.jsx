@@ -62,7 +62,11 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       const branchIdToUse = order?.branchId || branchId;
       if (!branchIdToUse) return;
 
-      const res = await fetch(`${API_BASE}/customers?branchId=${branchIdToUse}&limit=10000`);
+      const res = await fetch(`${API_BASE}/customers?branchId=${branchIdToUse}&limit=10000`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
       const data = await res.json();
       setCustomers(data.data || []);
     } catch (err) {
@@ -86,7 +90,11 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       const url = `${API_BASE}/products?branchId=${branch}&limit=10000`;
       console.log(`📦 Fetching products from: ${url}`);
       
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
       
       if (!res.ok) {
         const errorData = await res.text();
@@ -227,7 +235,11 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
         console.log(`🔍 Checking locked price: Customer=${customerId}, Product=${productId}, Branch=${branch}`);
 
         if (customerId && branch) {
-          const res = await fetch(`${API_BASE}/customer-locked-prices/${customerId}/${productId}?branchId=${branch}`);
+          const res = await fetch(`${API_BASE}/customer-locked-prices/${customerId}/${productId}?branchId=${branch}`, {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+          });
           if (res.ok) {
             const data = await res.json();
             if (data.success && data.data?.lockedPrice) {
@@ -725,10 +737,8 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-semibold">
-                    ₹
-                    {items
-                      .reduce((sum, item) => sum + item.qty * item.sellingPrice, 0)
+                  <span className="font-semibold text-gray-800">
+                    ₹{items.reduce((sum, item) => sum + (parseFloat(item.qty) || 0) * (parseFloat(item.sellingPrice) || 0), 0)
                       .toLocaleString("en-IN", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
@@ -736,20 +746,27 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">Discount:</span>
+                  <span className="text-gray-600">Tax Total:</span>
+                  <span className="font-semibold text-blue-600">
+                    ₹{items.reduce((sum, item) => {
+                      const qty = parseFloat(item.qty) || 0;
+                      const price = parseFloat(item.sellingPrice) || 0;
+                      const dPercent = parseFloat(item.discountPercent) || 0;
+                      const discounted = (qty * price) - (qty * price * (dPercent / 100));
+                      const tax = item.igst ? discounted * (item.gst || 0) / 100 : discounted * ((item.cgst || 0) + (item.sgst || 0)) / 100;
+                      return sum + tax;
+                    }, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Item Discount:</span>
                   <span className="text-red-500 font-semibold">
-                    -₹
-                    {items
-                      .reduce((sum, item) => {
+                    -₹{items.reduce((sum, item) => {
                         const qty = parseFloat(item.qty) || 0;
                         const price = parseFloat(item.sellingPrice) || 0;
                         const dPercent = parseFloat(item.discountPercent) || 0;
                         return sum + (qty * price * (dPercent / 100));
-                      }, 0)
-                      .toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      }, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 {order?.commonDiscount > 0 && (
@@ -760,14 +777,12 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                     </span>
                   </div>
                 )}
-                {order?.transportCharge > 0 && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600">Transport:</span>
-                    <span className="text-gray-800 font-semibold">
-                      ₹{order.transportCharge.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Transport:</span>
+                  <span className="text-gray-800 font-semibold">
+                    ₹{parseFloat(transportCharge || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
                 {order?.extraExpenseAmount > 0 && (
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-gray-600">Extra Charges:</span>
@@ -779,8 +794,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                 <div className="border-t pt-3 flex justify-between items-center text-lg font-bold">
                   <span className="text-[#319bab]">Grand Total:</span>
                   <span className="text-[#319bab]">
-                    ₹
-                    {calculateGrandTotal().toLocaleString("en-IN", {
+                    ₹{calculateGrandTotal().toLocaleString("en-IN", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}

@@ -52,7 +52,12 @@ const BranchInvoicedOrders = () => {
     setLoading(true);
     try {
       const res = await fetch(
-        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isClaim=false`
+        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isClaim=false`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
       );
       const data = await res.json();
 
@@ -86,7 +91,10 @@ const BranchInvoicedOrders = () => {
     try {
       const res = await fetch(`${API_BASE}/sales-orders/${updatedOrder._id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
         body: JSON.stringify({
           items: updatedOrder.items,
           sampleItems: updatedOrder.sampleItems,
@@ -99,8 +107,6 @@ const BranchInvoicedOrders = () => {
           updatedBy: user?.id || user?._id,
           updatedByUsername: user?.username || user?.billingPerson,
         }),
-
-
       });
 
       const data = await res.json();
@@ -128,7 +134,10 @@ const BranchInvoicedOrders = () => {
     try {
       const res = await fetch(`${API_BASE}/sales-orders/${orderId}/approve-edit`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
         body: JSON.stringify({ editedBy: user?.username || user?.billingPerson })
       });
       const data = await res.json();
@@ -153,7 +162,10 @@ const BranchInvoicedOrders = () => {
     try {
       const res = await fetch(`${API_BASE}/sales-orders/${order._id}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
         body: JSON.stringify({ 
           userId: user?.id || user?._id, 
           username: user?.username || user?.fullName || user?.name || "System" 
@@ -189,7 +201,12 @@ const BranchInvoicedOrders = () => {
   const fetchInvoicesForOrder = async (salesOrderId) => {
     try {
       const res = await fetch(
-        `${API_BASE}/invoices?salesOrderId=${salesOrderId}`
+        `${API_BASE}/invoices?salesOrderId=${salesOrderId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
       );
       const data = await res.json();
       
