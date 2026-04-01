@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 
 const InventoryAddWarehouseModal = ({ isOpen, onClose, onSave, branchId, editingItem }) => {
   const [warehouse, setWarehouse] = useState({ name: "" });
@@ -28,9 +28,8 @@ const InventoryAddWarehouseModal = ({ isOpen, onClose, onSave, branchId, editing
         ? `${API_BASE}/warehouses/${editingItem._id}` 
         : `${API_BASE}/warehouses`;
 
-      const res = await fetch(url, {
+      const res = await fetchWithAuth(url, {
         method,
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: warehouse.name, branchId }),
       });
 

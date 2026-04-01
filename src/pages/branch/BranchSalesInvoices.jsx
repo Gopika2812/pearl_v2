@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FaChevronDown, FaEdit, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 const BranchSalesInvoices = () => {
@@ -26,7 +26,7 @@ const BranchSalesInvoices = () => {
     setLoading(true);
     try {
       // In this system, Sales Invoices are stored in the "Invoice" collection
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${API_BASE}/invoices?branchId=${currentBranch._id}${debouncedSearch ? `&search=${debouncedSearch}` : ""}`
       );
       const data = await res.json();
@@ -59,9 +59,8 @@ const BranchSalesInvoices = () => {
     try {
       // Point to parent SO for re-edit request
       const soId = invoice.salesOrderId?._id || invoice.salesOrderId;
-      const res = await fetch(`${API_BASE}/sales-orders/${soId}/request-re-edit`, {
+      const res = await fetchWithAuth(`${API_BASE}/sales-orders/${soId}/request-re-edit`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           username: user?.username || user?.fullName || "Staff",
           userId: user?.id || user?._id
@@ -90,9 +89,8 @@ const BranchSalesInvoices = () => {
     try {
       // Point to parent SO for cancel request
       const soId = invoice.salesOrderId?._id || invoice.salesOrderId;
-      const res = await fetch(`${API_BASE}/sales-orders/${soId}/request-cancel`, {
+      const res = await fetchWithAuth(`${API_BASE}/sales-orders/${soId}/request-cancel`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           username: user?.username || user?.fullName || "Staff",
           userId: user?.id || user?._id
@@ -125,9 +123,8 @@ const BranchSalesInvoices = () => {
 
     setRequestingAction(invoice._id);
     try {
-      const res = await fetch(`${API_BASE}/einvoice/generate/${invoice._id}`, {
+      const res = await fetchWithAuth(`${API_BASE}/einvoice/generate/${invoice._id}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user?.id || user?._id,
           username: user?.username || user?.fullName || "Staff",

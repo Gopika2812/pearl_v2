@@ -4,7 +4,7 @@ import {
   FaChevronRight, FaCalendarAlt, FaSync, FaChartLine 
 } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 
@@ -36,7 +36,7 @@ const BranchStockSummary = () => {
     setLoading(true);
     try {
       // 1. Fetch all products to know their groups
-      const prodRes = await fetch(`${API_BASE}/products?branchId=${currentBranch._id}&limit=10000`);
+      const prodRes = await fetchWithAuth(`${API_BASE}/products?branchId=${currentBranch._id}&limit=10000`);
       const prodData = await prodRes.json();
       const productToGroup = {};
       if (prodData.success) {
@@ -46,7 +46,7 @@ const BranchStockSummary = () => {
       }
 
       // 2. Fetch stock journal
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${API_BASE}/products/stock-journal?branchId=${currentBranch._id}&startDate=${fromDate}&endDate=${toDate}`
       );
       const data = await res.json();
@@ -74,13 +74,13 @@ const BranchStockSummary = () => {
     setLoading(true);
     try {
       // 1. Fetch Sales (Invoices)
-      const salesRes = await fetch(
+      const salesRes = await fetchWithAuth(
         `${API_BASE}/sales-orders/history?branchId=${currentBranch._id}&productId=${productId}&fromDate=${fromDate}&toDate=${toDate}`
       );
       const sales = await salesRes.json();
 
       // 2. Fetch Purchases (Received POs)
-      const purchaseRes = await fetch(
+      const purchaseRes = await fetchWithAuth(
         `${API_BASE}/purchase-orders?branchId=${currentBranch._id}&search=${selectedProduct.name}`
       );
       const purchasesRaw = await purchaseRes.json();

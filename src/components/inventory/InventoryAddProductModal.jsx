@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import FilterableCheckboxList from "../FilterableCheckboxList";
 import FilterableSelect from "../FilterableSelect";
 
@@ -174,9 +174,11 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     formData.append("branchId", branchId);
 
     try {
-      const res = await fetch(`${API_BASE}/products/bulk-upload`, {
+      const res = await fetchWithAuth(`${API_BASE}/products/bulk-upload`, {
         method: "POST",
         body: formData,
+        // Remove Content-Type so the browser sets it with the boundary for FormData
+        headers: { "Content-Type": undefined }
       });
 
       const data = await res.json();
@@ -269,9 +271,8 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         ? `${API_BASE}/products/${editingItem._id}` 
         : `${API_BASE}/products`;
 
-      const res = await fetch(url, {
+      const res = await fetchWithAuth(url, {
         method,
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 

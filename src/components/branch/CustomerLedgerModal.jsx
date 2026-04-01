@@ -5,7 +5,7 @@ import jsPDF from "jspdf";
 import { API_BASE } from "../../api";
 import { toast } from "react-toastify";
 
-const CustomerLedgerModal = ({ isOpen, onClose, customer }) => {
+const CustomerLedgerModal = ({ isOpen, onClose, customer, branch }) => {
   const [loading, setLoading] = useState(false);
   const [transactions, setTransactions] = useState([]);
   const [openingBalance, setOpeningBalance] = useState(0);
@@ -50,7 +50,7 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer }) => {
 
   const handleExportPDF = async () => {
     const element = document.getElementById("customer-ledger-content");
-    const canvas = await html2canvas(element, { scale: 2 });
+    const canvas = await html2canvas(element, { scale: 2, useCORS: true });
     const imgData = canvas.toDataURL("image/png");
     const pdf = new jsPDF({
       orientation: "portrait",
@@ -72,6 +72,9 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer }) => {
 
   const balanceColor = (bal) => bal > 0 ? "text-red-600" : bal < 0 ? "text-green-600" : "text-gray-800";
   const balanceLabel = (bal) => bal > 0 ? "Dr" : bal < 0 ? "Cr" : "";
+
+  const totalDebit = transactions.reduce((sum, t) => sum + t.debit, 0);
+  const totalCredit = transactions.reduce((sum, t) => sum + t.credit, 0);
 
   return (
     <div className="fixed inset-0 z-[100] flex justify-center items-center bg-black/60 backdrop-blur-sm p-4">
@@ -147,12 +150,60 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer }) => {
         </div>
 
         {/* Content */}
-        <div id="customer-ledger-content" className="flex-1 overflow-y-auto p-6 bg-white">
-          {/* Header for PDF */}
-          <div className="hidden pdf-only mb-8 text-center border-b-2 border-blue-800 pb-4">
-             <h1 className="text-2xl font-black text-blue-800 uppercase underline">Customer Account Ledger</h1>
-             <h2 className="text-xl font-bold mt-2">{customer.name}</h2>
-             <p className="text-gray-500 font-bold text-xs mt-1">Period: {formatDate(startDate)} to {formatDate(endDate)}</p>
+        <div id="customer-ledger-content" className="flex-1 overflow-y-auto p-8 bg-white">
+          {/* PDF HEADER: SELLER INFO */}
+          <div className="hidden pdf-only flex justify-between items-start border-b-4 border-blue-900 pb-6 mb-8">
+            <div className="flex items-center gap-6">
+              {branch?.logo ? (
+                 <img src={branch.logo} alt="Logo" className="w-24 h-24 object-contain rounded-xl" />
+              ) : (
+                 <div className="w-20 h-20 bg-blue-900 text-white rounded-xl flex items-center justify-center text-4xl font-black">
+                   {branch?.name?.charAt(0) || "P"}
+                 </div>
+              )}
+              <div>
+                <h1 className="text-3xl font-black text-blue-900 uppercase tracking-tight">{branch?.name || "Pearls ERP Branch"}</h1>
+                <p className="text-sm text-gray-600 font-bold max-w-md mt-1 italic">
+                  {branch?.address}, {branch?.city}, {branch?.state} - {branch?.pincode}
+                </p>
+                <div className="flex gap-4 mt-2 text-xs font-black text-gray-500 uppercase tracking-wider">
+                   {branch?.phone && <span>📞 {branch.phone}</span>}
+                   {branch?.gstin && <span>📄 GSTIN: {branch.gstin}</span>}
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+               <h2 className="text-xl font-black text-white bg-blue-900 px-4 py-1 rounded uppercase tracking-widest">Ledger Report</h2>
+               <p className="text-xs font-bold text-gray-400 mt-2 uppercase tracking-widest">Selective Period</p>
+               <p className="text-sm font-black text-blue-900">{formatDate(startDate)} TO {formatDate(endDate)}</p>
+            </div>
+          </div>
+
+          {/* CUSTOMER DETAILS (In PDF) */}
+          <div className="hidden pdf-only grid grid-cols-2 gap-8 mb-8 p-6 bg-slate-50 rounded-2xl border border-slate-200">
+             <div>
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Customer Details</h3>
+                <p className="text-xl font-black text-slate-900 uppercase">{customer.name}</p>
+                <p className="text-sm font-bold text-slate-500 mt-1">{customer.address || "No Address Provided"}</p>
+                <div className="mt-4 space-y-1">
+                   <p className="text-xs font-bold text-slate-700">📞 WhatsApp: <span className="text-slate-900">{customer.whatsapp || "N/A"}</span></p>
+                   <p className="text-xs font-bold text-slate-700">📄 GSTIN: <span className="text-slate-900 font-black">{customer.gstin || "Unregistered"}</span></p>
+                </div>
+             </div>
+             <div className="flex flex-col justify-center items-end border-l border-slate-200 pl-8">
+                <div className="text-right mb-4">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Opening Balance</p>
+                   <p className={`text-xl font-black ${balanceColor(openingBalance)} italic`}>₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</p>
+                </div>
+                <div className="text-right">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Dues</p>
+                   <p className={`text-2xl font-black ${balanceColor(closingBalance)}`}>₹{Math.abs(closingBalance).toLocaleString()} {balanceLabel(closingBalance)}</p>
+                </div>
+             </div>
+          </div>
+
+          <div className="pdf-only hidden mb-4">
+             <h4 className="text-xs font-black text-blue-900 uppercase tracking-widest border-l-4 border-blue-900 pl-2">Transaction History</h4>
           </div>
 
           {/* Transactions Table */}
@@ -235,10 +286,10 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer }) => {
                     <td className="px-6 py-5 font-black uppercase tracking-widest text-base">Closing Balance C/F</td>
                     <td className="px-6 py-5 uppercase font-bold text-xs opacity-70">C/B</td>
                     <td className="px-6 py-5 text-right font-bold">
-                       ₹{transactions.reduce((sum, t) => sum + t.debit, 0).toLocaleString()}
+                       ₹{totalDebit.toLocaleString()}
                     </td>
                     <td className="px-6 py-5 text-right font-bold">
-                       ₹{transactions.reduce((sum, t) => sum + t.credit, 0).toLocaleString()}
+                       ₹{totalCredit.toLocaleString()}
                     </td>
                     <td className="px-6 py-5 text-right font-black text-lg bg-white/10">
                       ₹{Math.abs(closingBalance).toLocaleString()} {balanceLabel(closingBalance)}
@@ -247,6 +298,36 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer }) => {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* PDF FOOTER SUMMARY */}
+          <div className="hidden pdf-only mt-12 grid grid-cols-4 gap-4 px-6 py-8 bg-blue-900 text-white rounded-2xl shadow-xl">
+             <div className="border-r border-white/20 pr-4">
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Opening Balance</p>
+                <p className="text-lg font-black mt-1">₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</p>
+             </div>
+             <div className="border-r border-white/20 px-4">
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Total Debit (+)</p>
+                <p className="text-lg font-black mt-1 text-red-200">₹{totalDebit.toLocaleString()}</p>
+             </div>
+             <div className="border-r border-white/20 px-4">
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Total Credit (-)</p>
+                <p className="text-lg font-black mt-1 text-green-200">₹{totalCredit.toLocaleString()}</p>
+             </div>
+             <div className="pl-4">
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Statement Balance</p>
+                <p className="text-2xl font-black mt-1">₹{Math.abs(closingBalance).toLocaleString()} {balanceLabel(closingBalance)}</p>
+             </div>
+          </div>
+
+          <div className="hidden pdf-only flex justify-between items-center mt-12 pt-8 border-t border-gray-200">
+             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                Generated via Pearls ERP on {new Date().toLocaleString()}
+             </div>
+             <div className="text-right">
+                <div className="w-32 h-1 bg-gray-200 mb-2"></div>
+                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Authorized Signature</p>
+             </div>
           </div>
           
           <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">

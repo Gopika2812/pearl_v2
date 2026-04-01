@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FaChevronDown, FaShoppingCart, FaSync, FaSearch, FaEdit, FaTrash } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import * as XLSX from "xlsx";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import EditPurchaseOrderModal from "../../components/branch/EditPurchaseOrderModal";
 
@@ -43,7 +43,7 @@ const BranchPurchaseOrders = () => {
     setLoading(true);
     try {
       const search = searchOverride !== undefined ? searchOverride : debouncedSearch;
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${API_BASE}/purchase-orders?branchId=${currentBranch._id}${search ? `&search=${search}` : ""}`
       );
       const data = await res.json();
@@ -92,7 +92,7 @@ const BranchPurchaseOrders = () => {
 
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/purchase-orders/${orderId}`, {
+      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${orderId}`, {
         method: "DELETE",
       });
       const data = await res.json();
@@ -118,9 +118,8 @@ const BranchPurchaseOrders = () => {
     if (!window.confirm("Request admin permission to re-edit this invoiced Purchase Order?")) return;
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/purchase-orders/${orderId}/request-edit`, {
+      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${orderId}/request-edit`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestedBy: "Current User" }) // In a real app, use actual user name
       });
       const data = await res.json();
@@ -138,9 +137,8 @@ const BranchPurchaseOrders = () => {
     if (!window.confirm("Request admin permission to CANCEL this invoiced Purchase Order? This will revert stock and vendor balance if approved.")) return;
     try {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/purchase-orders/${orderId}/request-cancel`, {
+      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${orderId}/request-cancel`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestedBy: "Current User" })
       });
       const data = await res.json();
@@ -400,9 +398,8 @@ const BranchPurchaseOrders = () => {
                                   onClick={async () => {
                                     try {
                                       setLoading(true);
-                                      const res = await fetch(`${API_BASE}/purchase-orders/${order._id}/generate-invoice`, {
+                                      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${order._id}/generate-invoice`, {
                                         method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
                                       });
                                       const data = await res.json();
                                       if (!res.ok) throw new Error(data.message || 'Failed to generate invoice');

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FaPlus, FaTrash } from "react-icons/fa";
 import { ToastContainer, toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import InventoryAddCustomerModal from "./InventoryAddCustomerModal";
 import InventoryAddDeliveryManModal from "./InventoryAddDeliveryManModal";
@@ -140,9 +140,7 @@ export default function InventorySalesOrderEntry({
     
     pollingRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`${API_BASE}/price-requests/my-status/${pId}`, {
-          headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
-        });
+        const res = await fetchWithAuth(`${API_BASE}/price-requests/my-status/${pId}`);
         const data = await res.json();
         
         if (data.success && data.data) {
@@ -170,9 +168,7 @@ export default function InventorySalesOrderEntry({
   const checkPriceStatusOnSelect = async (pId) => {
     if (!pId) return;
     try {
-      const res = await fetch(`${API_BASE}/price-requests/my-status/${pId}`, {
-        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
-      });
+      const res = await fetchWithAuth(`${API_BASE}/price-requests/my-status/${pId}`);
       const data = await res.json();
       
       if (data.success && data.data) {
@@ -210,12 +206,8 @@ export default function InventorySalesOrderEntry({
     }
     
     try {
-      const res = await fetch(`${API_BASE}/price-requests`, {
+      const res = await fetchWithAuth(`${API_BASE}/price-requests`, {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token")}`
-        },
         body: JSON.stringify({
           productId: selectedItem,
           productName: itemSearch,
@@ -281,7 +273,7 @@ export default function InventorySalesOrderEntry({
     if (!branchId) return;
     const fetchMasterNames = async () => {
       try {
-        const res = await fetch(`${API_BASE}/extra-expense-master/${branchId}`);
+        const res = await fetchWithAuth(`${API_BASE}/extra-expense-master/${branchId}`);
         const data = await res.json();
         if (data.success) {
           setMasterExpenseNames(data.data.map(item => item.name));
@@ -308,7 +300,7 @@ export default function InventorySalesOrderEntry({
 
     const fetchPreview = async () => {
       try {
-        const res = await fetch(
+        const res = await fetchWithAuth(
           `${API_BASE}/sales-orders/preview/${voucherType}?branchId=${branchId}`
         );
         const data = await res.json();
@@ -366,7 +358,7 @@ export default function InventorySalesOrderEntry({
   useEffect(() => {
     const loadPoItems = async () => {
       try {
-        const res = await fetch(`${API_BASE}/purchase-orders/items`);
+        const res = await fetchWithAuth(`${API_BASE}/purchase-orders/items`);
         const data = await res.json();
         if (!res.ok) throw new Error();
         setPoItems(data || []);
@@ -391,7 +383,7 @@ export default function InventorySalesOrderEntry({
     const fetchCustomersFromBackend = async () => {
       setSearchingCustomers(true);
       try {
-        const res = await fetch(
+        const res = await fetchWithAuth(
           `${API_BASE}/customers?search=${encodeURIComponent(customerSearch)}&branchId=${branchId}&limit=100`
         );
         const data = await res.json();
@@ -441,7 +433,7 @@ export default function InventorySalesOrderEntry({
     }
 
     try {
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${API_BASE}/sales-orders/recent?customerId=${customerId}&productId=${productId}&limit=5`
       );
       const data = await res.json();
@@ -465,7 +457,7 @@ export default function InventorySalesOrderEntry({
     const fetchProductsByGroup = async () => {
       setLoadingProducts(true);
       try {
-        const res = await fetch(`${API_BASE}/products/group/${productGroup}`);
+        const res = await fetchWithAuth(`${API_BASE}/products/group/${productGroup}`);
         const data = await res.json();
 
         if (data.success) {
@@ -501,7 +493,7 @@ export default function InventorySalesOrderEntry({
     const fetchSampleProductsByGroup = async () => {
       setLoadingSampleProducts(true);
       try {
-        const res = await fetch(`${API_BASE}/products/group/${sampleProductGroup}`);
+        const res = await fetchWithAuth(`${API_BASE}/products/group/${sampleProductGroup}`);
         const data = await res.json();
 
         if (data.success) {
@@ -538,7 +530,7 @@ export default function InventorySalesOrderEntry({
 
       for (const product of filteredProducts) {
         try {
-          const res = await fetch(`${API_BASE}/products/available/${product._id}`);
+          const res = await fetchWithAuth(`${API_BASE}/products/available/${product._id}`);
           const data = await res.json();
           newCache[product._id] = data.data?.availableQty || 0;
         } catch (err) {
@@ -683,7 +675,7 @@ export default function InventorySalesOrderEntry({
 
   const fetchCustomerLockedPrice = async (cId, pId) => {
     try {
-      const res = await fetch(`${API_BASE}/customer-locked-prices/${cId}/${pId}?branchId=${branchId}`);
+      const res = await fetchWithAuth(`${API_BASE}/customer-locked-prices/${cId}/${pId}?branchId=${branchId}`);
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.data.lockedPrice > 0) {
@@ -846,9 +838,8 @@ export default function InventorySalesOrderEntry({
     // 8️⃣ SAVE LOCKED PRICE IF CHECKED
     if (isAdmin && isLocked) {
       try {
-        await fetch(`${API_BASE}/customer-locked-prices`, {
+        await fetchWithAuth(`${API_BASE}/customer-locked-prices`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             branchId,
             customerId: customerId,
@@ -1064,9 +1055,8 @@ export default function InventorySalesOrderEntry({
     // If it's a custom expense, save it to the master list
     if (isCustomExpense) {
       try {
-        await fetch(`${API_BASE}/extra-expense-master`, {
+        await fetchWithAuth(`${API_BASE}/extra-expense-master`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ branchId, name: nameToSave }),
         });
         // Update local master list if not already present
@@ -1166,9 +1156,8 @@ export default function InventorySalesOrderEntry({
         grandTotal: payload.grandTotal,
       });
 
-      const res = await fetch(`${API_BASE}/sales-orders`, {
+      const res = await fetchWithAuth(`${API_BASE}/sales-orders`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
@@ -1200,9 +1189,8 @@ export default function InventorySalesOrderEntry({
   const requestCreditLimitBypass = async () => {
     if (!customerId) return;
     try {
-      const res = await fetch(`${API_BASE}/customers/${customerId}/request-credit-bypass`, {
+      const res = await fetchWithAuth(`${API_BASE}/customers/${customerId}/request-credit-bypass`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requestedBy: user?.username || user?.name || "Unknown Staff"
         })

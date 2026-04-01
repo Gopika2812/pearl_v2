@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import jsPDF from "jspdf";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
+import { API_BASE, fetchWithAuth } from "../../api";
 const PAGE_SIZE = 10;
 const CHART_PAGE_SIZE = 5;
 
@@ -1456,15 +1456,15 @@ export default function BranchInsights() {
     setLoading(true);
     try {
       const [receiptRes, paymentRes, soRes, poRes, prodRes, groupRes, billingRes, salesmensRes, deliversRes] = await Promise.all([
-        fetch(`${API_BASE}/receipts`),
-        fetch(`${API_BASE}/payments`),
-        fetch(`${API_BASE}/sales-orders?branchId=${branch._id}`),
-        fetch(`${API_BASE}/purchase-orders?branchId=${branch._id}`),
-        fetch(`${API_BASE}/products?branchId=${branch._id}&limit=10000`),
-        fetch(`${API_BASE}/product-groups?branchId=${branch._id}`),
-        fetch(`${API_BASE}/sales-owners?branchId=${branch._id}`),
-        fetch(`${API_BASE}/sales-men?branchId=${branch._id}`),
-        fetch(`${API_BASE}/delivery-men?branchId=${branch._id}`),
+        fetchWithAuth(`${API_BASE}/receipts`),
+        fetchWithAuth(`${API_BASE}/payments`),
+        fetchWithAuth(`${API_BASE}/sales-orders?branchId=${branch._id}`),
+        fetchWithAuth(`${API_BASE}/purchase-orders?branchId=${branch._id}`),
+        fetchWithAuth(`${API_BASE}/products?branchId=${branch._id}&limit=10000`),
+        fetchWithAuth(`${API_BASE}/product-groups?branchId=${branch._id}`),
+        fetchWithAuth(`${API_BASE}/sales-owners?branchId=${branch._id}`),
+        fetchWithAuth(`${API_BASE}/sales-men?branchId=${branch._id}`),
+        fetchWithAuth(`${API_BASE}/delivery-men?branchId=${branch._id}`),
       ]);
 
       if (!receiptRes.ok) {

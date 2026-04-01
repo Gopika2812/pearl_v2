@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FaPlus, FaTrash, FaMoneyBillWave, FaDownload, FaFileAlt, FaChevronDown } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { useBranch } from "../../context/BranchContext";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
+import { API_BASE, fetchWithAuth } from "../../api";
 
 export default function BranchOtherTransaction({ type }) {
   const { currentBranch, user } = useBranch();
@@ -44,10 +42,7 @@ export default function BranchOtherTransaction({ type }) {
 
   const fetchGroups = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE}/ledgers/groups?branchId=${currentBranch._id}`, {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
+      const response = await fetchWithAuth(`${API_BASE}/ledgers/groups?branchId=${currentBranch._id}`);
       const data = await response.json();
       setAvailableGroups(Array.isArray(data) ? data : []);
       
@@ -64,10 +59,7 @@ export default function BranchOtherTransaction({ type }) {
 
   const fetchLedgers = async (groupId) => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE}/ledgers?branchId=${currentBranch._id}&groupId=${groupId}`, {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
+      const response = await fetchWithAuth(`${API_BASE}/ledgers?branchId=${currentBranch._id}&groupId=${groupId}`);
       const data = await response.json();
       setAvailableLedgers(Array.isArray(data) ? data : []);
       if (data.length > 0) {
@@ -83,13 +75,8 @@ export default function BranchOtherTransaction({ type }) {
   const handleQuickAddGroup = async () => {
     if (!newGroupName.trim()) return toast.error("Enter group name");
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE}/ledgers/groups`, {
+      const response = await fetchWithAuth(`${API_BASE}/ledgers/groups`, {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
         body: JSON.stringify({
           name: newGroupName,
           nature: newGroupNature,
@@ -118,13 +105,8 @@ export default function BranchOtherTransaction({ type }) {
     if (!groupObj) return toast.error("Select a group first");
     
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE}/ledgers`, {
+      const response = await fetchWithAuth(`${API_BASE}/ledgers`, {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
         body: JSON.stringify({
           name: newLedgerName,
           groupId: groupObj._id,
@@ -152,9 +134,7 @@ export default function BranchOtherTransaction({ type }) {
   const fetchTransactions = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/other-transactions?branchId=${currentBranch._id}&type=${type}`, {
-        headers: { "Content-Type": "application/json" },
-      });
+      const response = await fetchWithAuth(`${API_BASE}/other-transactions?branchId=${currentBranch._id}&type=${type}`);
       const data = await response.json();
       setTransactions(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -172,9 +152,8 @@ export default function BranchOtherTransaction({ type }) {
     }
 
     try {
-      const response = await fetch(`${API_BASE}/other-transactions`, {
+      const response = await fetchWithAuth(`${API_BASE}/other-transactions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
           branchId: currentBranch._id,
@@ -207,7 +186,7 @@ export default function BranchOtherTransaction({ type }) {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this record?")) return;
     try {
-      const response = await fetch(`${API_BASE}/other-transactions/${id}`, {
+      const response = await fetchWithAuth(`${API_BASE}/other-transactions/${id}`, {
         method: "DELETE",
       });
       if (response.ok) {

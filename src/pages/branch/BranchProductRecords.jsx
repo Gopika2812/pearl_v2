@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FaSync, FaFilter, FaSearch, FaHistory, FaFileExport } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast, ToastContainer } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 
@@ -39,7 +39,7 @@ const BranchProductRecords = () => {
       if (selectedProductGroupId) url += `&productGroupId=${selectedProductGroupId}`;
       if (selectedProductId) url += `&productId=${selectedProductId}`;
 
-      const res = await fetch(url);
+      const res = await fetchWithAuth(url);
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.message || "Failed to fetch history");

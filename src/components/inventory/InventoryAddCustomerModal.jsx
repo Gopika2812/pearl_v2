@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaBuilding, FaChevronRight, FaCloudUploadAlt, FaIdCard, FaMapMarkedAlt, FaPhoneAlt, FaTimes, FaWallet } from "react-icons/fa";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import FilterableCheckboxList from "../FilterableCheckboxList";
 import FilterableSelect from "../FilterableSelect";
 
@@ -101,9 +101,11 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     formData.append("branchId", branchId);
 
     try {
-      const res = await fetch(`${API_BASE}/customers/bulk-upload`, {
+      const res = await fetchWithAuth(`${API_BASE}/customers/bulk-upload`, {
         method: "POST",
         body: formData,
+        // Remove Content-Type so the browser sets it with the boundary for FormData
+        headers: { "Content-Type": undefined }
       });
 
       const data = await res.json();
@@ -154,7 +156,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
 
     setIsFetchingGst(true);
     try {
-      const res = await fetch(`${API_BASE}/gst/search/${customer.gstin}`);
+      const res = await fetchWithAuth(`${API_BASE}/gst/search/${customer.gstin}`);
       const result = await res.json();
 
       if (!res.ok) throw new Error(result.message || "Failed to fetch GST details");

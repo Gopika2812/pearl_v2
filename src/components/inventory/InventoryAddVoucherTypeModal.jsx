@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 
 const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave, branchId, editingItem }) => {
   const [voucherName, setVoucherName] = useState("");
@@ -28,7 +28,7 @@ const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave, branchId, editi
   useEffect(() => {
     if (isOpen && branchId) {
       setFetchingVouchers(true);
-      fetch(`${API_BASE}/voucher-types?branchId=${branchId}`)
+      fetchWithAuth(`${API_BASE}/voucher-types?branchId=${branchId}`)
         .then(res => res.json())
         .then(data => {
           setExistingVouchers(Array.isArray(data) ? data : data.data || []);
@@ -90,9 +90,8 @@ const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave, branchId, editi
         ? `${API_BASE}/voucher-types/${editingItem._id}` 
         : `${API_BASE}/voucher-types`;
 
-      const res = await fetch(url, {
+      const res = await fetchWithAuth(url, {
         method,
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: voucherName,
           orderType,

@@ -13,7 +13,7 @@ import {
     FaUser,
     FaWarehouse
 } from "react-icons/fa";
-import { API_BASE } from "../api";
+import { API_BASE, fetchWithAuth } from "../api";
 import CreditNoteModal from "../components/inventory/CreditNoteModal";
 import DebitNoteModal from "../components/inventory/DebitNoteModal";
 import PaymentModal from "../components/inventory/PaymentModal";
@@ -145,7 +145,7 @@ const OthersSummary = () => {
       else if (tableType === "debit-notes") endpoint = `${API_BASE}/debit-notes`;
       else if (tableType === "payments") endpoint = `${API_BASE}/payments`;
 
-      const response = await fetch(endpoint);
+      const response = await fetchWithAuth(endpoint);
       const result = await response.json();
 
       // Handle both response formats (with and without success wrapper)
@@ -172,7 +172,7 @@ const OthersSummary = () => {
       // 💰 For sales personnel, enhance with actual earned commissions
       if (["sales-owners", "sales-men", "delivery-men"].includes(tableType)) {
         try {
-          const commissionsRes = await fetch(`${API_BASE}/sales-orders/commissions`);
+          const commissionsRes = await fetchWithAuth(`${API_BASE}/sales-orders/commissions`);
           const commissionsData = await commissionsRes.json();
           const commissions = commissionsData.success ? commissionsData.data : commissionsData;
           
@@ -220,11 +220,11 @@ const OthersSummary = () => {
     const fetchPersons = async () => {
       try {
         const [ownersRes, menRes, deliveryRes, vendorsRes, poRes] = await Promise.all([
-          fetch(`${API_BASE}/sales-owners`),
-          fetch(`${API_BASE}/sales-men`),
-          fetch(`${API_BASE}/delivery-men`),
-          fetch(`${API_BASE}/vendors`),
-          fetch(`${API_BASE}/purchase-orders`),
+          fetchWithAuth(`${API_BASE}/sales-owners`),
+          fetchWithAuth(`${API_BASE}/sales-men`),
+          fetchWithAuth(`${API_BASE}/delivery-men`),
+          fetchWithAuth(`${API_BASE}/vendors`),
+          fetchWithAuth(`${API_BASE}/purchase-orders`),
         ]);
 
         const ownersData = await ownersRes.json();
@@ -290,9 +290,8 @@ const OthersSummary = () => {
       else if (tableType === "delivery-men") endpoint = `${API_BASE}/delivery-men/${editingItem._id}`;
       else if (tableType === "commission-rules") endpoint = `${API_BASE}/commission-rules/${editingItem._id}`;
 
-      const response = await fetch(endpoint, {
+      const response = await fetchWithAuth(endpoint, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editFormData),
       });
 
@@ -352,9 +351,8 @@ const OthersSummary = () => {
         return;
       }
 
-      const response = await fetch(`${API_BASE}/commission-rules`, {
+      const response = await fetchWithAuth(`${API_BASE}/commission-rules`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           roleType: commissionRuleForm.roleType,
           personId: commissionRuleForm.personId,
@@ -410,7 +408,7 @@ const OthersSummary = () => {
       else if (tableType === "commission-rules") endpoint = `${API_BASE}/commission-rules/${id}`;
       else if (tableType === "sales-orders") endpoint = `${API_BASE}/sales-orders/${id}`;
 
-      const response = await fetch(endpoint, {
+      const response = await fetchWithAuth(endpoint, {
         method: "DELETE",
       });
 

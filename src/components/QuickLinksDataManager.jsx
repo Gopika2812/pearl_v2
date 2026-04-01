@@ -3,7 +3,7 @@ import React, { useEffect, useState, Fragment } from "react";
 import { FaEdit, FaTrash, FaCheck, FaTimes, FaPlus, FaPlusCircle, FaSync, FaSave, FaExclamationTriangle, FaBox, FaArrowLeft, FaEye, FaArrowRight, FaLink, FaExternalLinkAlt, FaImage, FaChevronDown, FaChevronLeft, FaChevronRight, FaChevronUp, FaSearch, FaFileExport } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
-import { API_BASE } from "../api";
+import { API_BASE, apiWithAuth } from "../api";
 import { QUICK_LINKS_CONFIG } from "../utils/quickLinksConfig";
 import { useBranch } from "../context/BranchContext";
 
@@ -142,8 +142,8 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   const fetchProductGroupsAndCategories = async () => {
     try {
       const [groupsRes, categsRes] = await Promise.all([
-        axios.get(`${API_BASE}/product-groups`, { params: { branchId, limit: 1000 } }),
-        axios.get(`${API_BASE}/product-categories`, { params: { branchId, limit: 1000 } })
+        apiWithAuth.get(`/product-groups`, { params: { branchId, limit: 1000 } }),
+        apiWithAuth.get(`/product-categories`, { params: { branchId, limit: 1000 } })
       ]);
       setProductGroups(Array.isArray(groupsRes.data) ? groupsRes.data : groupsRes.data.data || []);
       setProductCategories(Array.isArray(categsRes.data) ? categsRes.data : categsRes.data.data || []);
@@ -156,7 +156,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API_BASE}${config.endpoint}`, {
+      const response = await apiWithAuth.get(config.endpoint, {
         params: { branchId, limit: 10000 }, // Request up to 10000 records
       });
       setData(Array.isArray(response.data) ? response.data : response.data.data || []);
@@ -172,7 +172,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     if (!window.confirm("Are you sure you want to delete this item?")) return;
 
     try {
-      await axios.delete(`${API_BASE}${config.endpoint}/${id}`);
+      await apiWithAuth.delete(`${config.endpoint}/${id}`);
       setData(data.filter(item => item._id !== id));
       toast.success("Deleted successfully");
       fetchData();
@@ -223,7 +223,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
         payload.productCategoryId = groupMarginData.selectedCategoryId;
       }
 
-      const response = await axios.post(`${API_BASE}/products/apply-group-margin`, payload);
+      const response = await apiWithAuth.post(`/products/apply-group-margin`, payload);
       
       if (response.data.success) {
         toast.success(response.data.message);

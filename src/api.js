@@ -28,8 +28,8 @@ export const getAPIEndpoint = (path) => {
 };
 
 // Utility to create axios instance with proper error handling
-export const createApiClient = (axios) => {
-  const instance = axios.create({
+export const createApiClient = (axiosInstance) => {
+  const instance = axiosInstance.create({
     baseURL: API_BASE,
     timeout: 10000,
     headers: {
@@ -37,29 +37,32 @@ export const createApiClient = (axios) => {
     },
   });
 
+  // Request interceptor for authentication
+  instance.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem("token");
+      if (token) {
+        config.headers["Authorization"] = `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
+
   // Add response interceptor for better error handling
   instance.interceptors.response.use(
     (response) => response,
     (error) => {
-      if (error.response?.status === 404) {
+      if (error.response?.status === 401) {
+        console.warn("🔐 401 Unauthorized: Session may have expired.");
+      } else if (error.response?.status === 404) {
         console.error(
-          `❌ 404 Error: Backend endpoint not found at ${API_BASE}`,
-          `\n   Check if backend is deployed and running.`
+          `❌ 404 Error: Backend endpoint not found at ${API_BASE}`
         );
       } else if (error.response?.status === 503) {
-        console.error(
-          `⚠️  503 Service Unavailable: Backend is temporarily down`,
-          `\n   The backend server at ${DEFAULT_BACKEND} may be restarting.`,
-          `\n   Try again in a few moments.`
-        );
+        console.error(`⚠️  503 Service Unavailable: Backend is temporarily down`);
       } else if (!error.response) {
-        console.error(
-          `❌ Network Error: Cannot reach backend at ${API_BASE}`,
-          `\n   Possible causes:`,
-          `\n   - Backend server is not running`,
-          `\n   - Network connection issue`,
-          `\n   - CORS configuration issue`
-        );
+        console.error(`❌ Network Error: Cannot reach backend at ${API_BASE}`);
       }
       return Promise.reject(error);
     }
@@ -67,6 +70,32 @@ export const createApiClient = (axios) => {
 
   return instance;
 };
+
+// Utility to fetch with Authorization header
+export const fetchWithAuth = async (url, options = {}) => {
+  const token = localStorage.getItem("token");
+  const headers = {
+    "Content-Type": "application/json",
+    ...options.headers,
+  };
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  return response;
+};
+
+// Global authenticated axios instance (to be used with axios dependency)
+// Note: Callers should pass the axios library to createApiClient if needed,
+// but for simple components, we can just use the instance.
+import axios from "axios";
+export const apiWithAuth = createApiClient(axios);
 
 // Export app environment
 export { APP_ENV };

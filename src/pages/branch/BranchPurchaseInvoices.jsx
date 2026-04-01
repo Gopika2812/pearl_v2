@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FaChevronDown, FaFileAlt, FaSync, FaSearch } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 const BranchPurchaseInvoices = () => {
@@ -24,7 +24,7 @@ const BranchPurchaseInvoices = () => {
     if (!currentBranch?._id) return;
     setLoading(true);
     try {
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${API_BASE}/purchase-invoices?branchId=${currentBranch._id}${debouncedSearch ? `&search=${debouncedSearch}` : ""}`
       );
       const data = await res.json();

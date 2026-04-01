@@ -1,9 +1,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useBranch } from "./BranchContext";
+import { API_BASE, fetchWithAuth } from "../api";
 
 const InventoryContext = createContext();
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 
 
 export const InventoryProvider = ({ children }) => {
@@ -69,7 +68,7 @@ export const InventoryProvider = ({ children }) => {
       const branchId = currentBranch?._id;
       if (!branchId) return;
       
-      const res = await fetch(`${API_BASE}/voucher-types?branchId=${branchId}`);
+      const res = await fetchWithAuth(`${API_BASE}/voucher-types?branchId=${branchId}`);
       const data = await res.json();
       setVoucherTypes(data.data || data);
     } catch (err) {
@@ -82,7 +81,7 @@ export const InventoryProvider = ({ children }) => {
       const branchId = currentBranch?._id;
       if (!branchId) return;
       
-      const res = await fetch(`${API_BASE}/vendors?branchId=${branchId}`);
+      const res = await fetchWithAuth(`${API_BASE}/vendors?branchId=${branchId}`);
       const data = await res.json();
       setVendors(data.data || data);
     } catch (err) {
@@ -99,7 +98,7 @@ export const InventoryProvider = ({ children }) => {
       }
       
       console.log(`📦 Fetching ProductGroups for branchId: ${branchId}`);
-      const res = await fetch(`${API_BASE}/product-groups?branchId=${branchId}`);
+      const res = await fetchWithAuth(`${API_BASE}/product-groups?branchId=${branchId}`);
       
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
@@ -128,7 +127,7 @@ export const InventoryProvider = ({ children }) => {
       }
       
       console.log(`🏷️ Fetching ProductCategories for branchId: ${branchId}`);
-      const res = await fetch(`${API_BASE}/product-categories?branchId=${branchId}`);
+      const res = await fetchWithAuth(`${API_BASE}/product-categories?branchId=${branchId}`);
       
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
@@ -157,7 +156,7 @@ export const InventoryProvider = ({ children }) => {
       }
       
       console.log(`👥 Fetching CustomerCategories for branchId: ${branchId}`);
-      const res = await fetch(`${API_BASE}/customer-categories?branchId=${branchId}`);
+      const res = await fetchWithAuth(`${API_BASE}/customer-categories?branchId=${branchId}`);
       
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
@@ -186,7 +185,7 @@ export const InventoryProvider = ({ children }) => {
       }
       
       console.log(`👥 Fetching CustomerGroups for branchId: ${branchId}`);
-      const res = await fetch(`${API_BASE}/customer-groups?branchId=${branchId}`);
+      const res = await fetchWithAuth(`${API_BASE}/customer-groups?branchId=${branchId}`);
       
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
@@ -215,7 +214,7 @@ export const InventoryProvider = ({ children }) => {
       }
       
       console.log(`🔌 Fetching Products for branchId: ${branchId}`);
-      const res = await fetch(`${API_BASE}/products?branchId=${branchId}&limit=10000`);
+      const res = await fetchWithAuth(`${API_BASE}/products?branchId=${branchId}&limit=10000`);
       
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
@@ -240,7 +239,7 @@ export const InventoryProvider = ({ children }) => {
       const branchId = currentBranch?._id;
       if (!branchId) return;
       
-      const res = await fetch(`${API_BASE}/warehouses?branchId=${branchId}`);
+      const res = await fetchWithAuth(`${API_BASE}/warehouses?branchId=${branchId}`);
       const json = await res.json();
       setWarehouses(json.data || []);
     } catch (err) {
@@ -253,7 +252,7 @@ export const InventoryProvider = ({ children }) => {
       const branchId = currentBranch?._id;
       if (!branchId) return;
       
-      const res = await fetch(`${API_BASE}/customers?branchId=${branchId}`);
+      const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${branchId}`);
       const json = await res.json();
       setCustomers(json.data || []);
     } catch (err) {
@@ -266,7 +265,7 @@ export const InventoryProvider = ({ children }) => {
       const branchId = currentBranch?._id;
       if (!branchId) return;
       
-      const res = await fetch(`${API_BASE}/sales-owners?branchId=${branchId}`);
+      const res = await fetchWithAuth(`${API_BASE}/sales-owners?branchId=${branchId}`);
       const json = await res.json();
       setSalesOwners(json.data || []);
     } catch (err) {
@@ -279,7 +278,7 @@ export const InventoryProvider = ({ children }) => {
       const branchId = currentBranch?._id;
       if (!branchId) return;
       
-      const res = await fetch(`${API_BASE}/sales-men?branchId=${branchId}`);
+      const res = await fetchWithAuth(`${API_BASE}/sales-men?branchId=${branchId}`);
       const json = await res.json();
       setSalesMen(json.data || []);
     } catch (err) {
@@ -292,7 +291,7 @@ export const InventoryProvider = ({ children }) => {
       const branchId = currentBranch?._id;
       if (!branchId) return;
       
-      const res = await fetch(`${API_BASE}/delivery-men?branchId=${branchId}`);
+      const res = await fetchWithAuth(`${API_BASE}/delivery-men?branchId=${branchId}`);
       const json = await res.json();
       setDeliveryMen(json.data || []);
     } catch (err) {
@@ -302,7 +301,7 @@ export const InventoryProvider = ({ children }) => {
 
   const fetchCommissions = async () => {
     try {
-      const res = await fetch(`${API_BASE}/sales-orders/commissions`);
+      const res = await fetchWithAuth(`${API_BASE}/sales-orders/commissions`);
       const json = await res.json();
       setCommissions(json.data || []);
     } catch (err) {
@@ -348,9 +347,8 @@ export const InventoryProvider = ({ children }) => {
         return;
       }
 
-      const res = await fetch(url, {
+      const res = await fetchWithAuth(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
 
@@ -407,9 +405,8 @@ export const InventoryProvider = ({ children }) => {
       // Remove _id from data to avoid conflicts
       const { _id, ...updatePayload } = data;
 
-      const res = await fetch(url, {
+      const res = await fetchWithAuth(url, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatePayload),
       });
 

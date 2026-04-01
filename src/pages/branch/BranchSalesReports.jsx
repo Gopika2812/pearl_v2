@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { FaBox, FaChartBar, FaList, FaThLarge, FaUser } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 export default function BranchSalesReports() {
@@ -30,7 +30,7 @@ export default function BranchSalesReports() {
     try {
       // Fetch all sales invoices for this branch
       const url = `${API_BASE}/sales-invoices?branchId=${branchId}&limit=10000`;
-      const res = await fetch(url);
+      const res = await fetchWithAuth(url);
       if (!res.ok) throw new Error("Failed to fetch invoices");
 
       const data = await res.json();

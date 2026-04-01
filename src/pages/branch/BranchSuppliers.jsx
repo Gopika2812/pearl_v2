@@ -3,7 +3,7 @@ import { FaList, FaSpinner, FaThLarge, FaPlus, FaFileExport, FaChevronDown, FaCh
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 import VendorLedgerModal from "../../components/branch/VendorLedgerModal";
@@ -52,10 +52,7 @@ const BranchSuppliers = () => {
       
       // Fetch all vendors
       const vendorUrl = `${API_BASE}/vendors?branchId=${branchId}`;
-      const vendorResponse = await fetch(vendorUrl, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+      const vendorResponse = await fetchWithAuth(vendorUrl);
 
       if (!vendorResponse.ok) {
         throw new Error("Failed to fetch suppliers");
@@ -67,16 +64,10 @@ const BranchSuppliers = () => {
       // Fetch purchase orders and payments for credit calculation
       // NOTE: Fetching ALL POs, then filtering by branchId in the app
       const poUrl = `${API_BASE}/purchase-orders`;
-      const poResponse = await fetch(poUrl, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+      const poResponse = await fetchWithAuth(poUrl);
 
       const paymentUrl = `${API_BASE}/payments`;
-      const paymentResponse = await fetch(paymentUrl, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+      const paymentResponse = await fetchWithAuth(paymentUrl);
 
       let purchaseOrders = [];
       let payments = [];

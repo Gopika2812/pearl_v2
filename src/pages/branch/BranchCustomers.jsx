@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaWhatsapp, FaMapMarkerAlt, FaEnvelope, FaUserTie, FaTags } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 import CustomerLedgerModal from "../../components/branch/CustomerLedgerModal";
@@ -58,10 +58,7 @@ const BranchCustomers = () => {
   const fetchSalesOrders = async () => {
     try {
       const url = `${API_BASE}/sales-orders`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+      const response = await fetchWithAuth(url);
 
       if (response.ok) {
         const result = await response.json();
@@ -76,10 +73,7 @@ const BranchCustomers = () => {
   const fetchCustomerPayments = async () => {
     try {
       const url = `${API_BASE}/receipts`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+      const response = await fetchWithAuth(url);
 
       if (response.ok) {
         const result = await response.json();
@@ -100,10 +94,7 @@ const BranchCustomers = () => {
       console.log("Fetching customers from:", url);
       console.log("Branch ID:", branchId);
       
-      const response = await fetch(url, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
+      const response = await fetchWithAuth(url);
 
       const result = await response.json();
       console.log("Customers Response:", result);
@@ -225,7 +216,7 @@ const BranchCustomers = () => {
       setLoading(true);
       // Fetch all customers (up to 10000) for export
       const url = `${API_BASE}/customers?branchId=${branchId}&limit=10000`;
-      const response = await fetch(url);
+      const response = await fetchWithAuth(url);
       const result = await response.json();
 
       if (!response.ok) throw new Error(result.message || "Failed to fetch all customers");
@@ -766,6 +757,7 @@ const BranchCustomers = () => {
         isOpen={!!selectedLedgerCustomer}
         onClose={() => setSelectedLedgerCustomer(null)}
         customer={selectedLedgerCustomer}
+        branch={branch}
         salesOrders={salesOrders}
         customerPayments={customerPayments}
       />
