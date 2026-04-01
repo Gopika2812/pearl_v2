@@ -28,6 +28,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
   // Generated invoice
   const [generatedInvoice, setGeneratedInvoice] = useState(null);
+  const [numCopies, setNumCopies] = useState(2);
 
   // Options
   const [shouldPrint, setShouldPrint] = useState(false);
@@ -331,10 +332,13 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
     // Define copies to generate
     const isReEdited = !!order.isReEdited || !!order.invoiceGenerated;
-    const copies = isReEdited ? ["RE-EDIT ORIGINAL", "RE-EDIT COPY 1"] : ["ORIGINAL INVOICE", "COPY 1"];
+    const baseTitles = isReEdited 
+      ? ["RE-EDIT ORIGINAL", "RE-EDIT COPY 1", "RE-EDIT COPY 2"] 
+      : ["ORIGINAL INVOICE", "OFFICE COPY", "EXTRA COPY"];
     
-    // Generate each selected format for each copy
-    copies.forEach(copyTitle => {
+    const copiesToGenerate = baseTitles.slice(0, numCopies);
+
+    copiesToGenerate.forEach(copyTitle => {
       // Invoice Format 1: ORDER DETAILS
       if (formats.includes("ORDER_DETAILS")) {
         html += `
@@ -366,8 +370,12 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   <div>${new Date().toLocaleDateString("en-IN")}</div>
                 </div>
                 <div class="order-header-col">
-                  <div class="label">Billing Person:</div>
+                  <div class="label">Billing:</div>
                   <div style="font-weight: bold;">${previewData?.billingPerson || "-"}</div>
+                </div>
+                <div class="order-header-col">
+                  <div class="label">Delivery:</div>
+                  <div style="font-weight: bold;">${previewData?.deliveryMan || "-"}</div>
                 </div>
               </div>
 
@@ -406,7 +414,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                     <tr>
                       <td>${item.name}</td>
                       <td>${item.hsn || "-"}</td>
-                      <td style="text-align: right;">${item.qty} ${item.unit || "Kg"}</td>
+                      <td style="text-align: right;">${item.qty} <span style="text-transform: uppercase;">${item.unit || ""}</span></td>
                       <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
                       <td style="text-align: right;">₹${item.total?.toFixed(2) || 0}</td>
                     </tr>
@@ -460,6 +468,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   <div>SGST (${previewData?.items?.[0]?.sgst || 0}%): <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>
                   ${previewData?.commonDiscount > 0 ? `<div>Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
                   ${previewData?.transportCharge > 0 ? `<div>Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
+                  ${previewData?.transportGstAmount > 0 ? `<div>Transport GST (${previewData.transportGstPercent}%): <strong>₹${previewData.transportGstAmount.toFixed(2)}</strong></div>` : ""}
                   ${previewData?.extraExpenseAmount > 0 ? `<div>Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
                   <div class="grand-total">Grand Total: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
                 </div>
@@ -495,6 +504,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
               <div style="text-align: center; margin-bottom: 20px; font-size: 13px;">
                 <strong>Invoice No: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</strong> | Date: ${new Date().toLocaleDateString("en-IN")}
+                <div style="font-size: 10px; color: #666; margin-top: 5px;">
+                  Billing: ${previewData?.billingPerson || "-"} | Delivery: ${previewData?.deliveryMan || "-"}
+                </div>
               </div>
 
               <table>
@@ -541,6 +553,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 <div>CGST (${previewData?.items?.[0]?.cgst || 0}%): <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
                 <div>SGST (${previewData?.items?.[0]?.sgst || 0}%): <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>
                 ${previewData?.commonDiscount > 0 ? `<div>Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
+                ${previewData?.transportCharge > 0 ? `<div>Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
+                ${previewData?.transportGstAmount > 0 ? `<div>Transport GST (${previewData.transportGstPercent}%): <strong>₹${previewData.transportGstAmount.toFixed(2)}</strong></div>` : ""}
+                ${previewData?.extraExpenseAmount > 0 ? `<div>Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
                 <div class="grand-total">TOTAL AMOUNT: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
               </div>
 
@@ -580,7 +595,6 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         `;
       }
     });
-
 
     html += "</body></html>";
     return html;
@@ -726,6 +740,25 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   />
                   <span className="font-semibold">💬 Send via WhatsApp</span>
                 </label>
+              </div>
+
+              {/* Number of Copies */}
+              <div className="bg-blue-50 p-4 rounded-lg mt-6">
+                <label className="block font-semibold mb-3">Number of Invoice Copies:</label>
+                <div className="flex gap-4">
+                  {[1, 2, 3].map((num) => (
+                    <label key={num} className="flex items-center gap-2 cursor-pointer bg-white px-4 py-2 rounded-lg border hover:border-blue-500 transition">
+                      <input
+                        type="radio"
+                        value={num}
+                        checked={numCopies === num}
+                        onChange={(e) => setNumCopies(parseInt(e.target.value))}
+                        className="w-4 h-4"
+                      />
+                      <span className="font-bold">{num} Copy{num > 1 ? "ies" : ""}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
           )}

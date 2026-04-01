@@ -149,10 +149,27 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       }
     }
 
+    // Fetch delivery man name
+    let deliveryManName = "-";
+    if (salesOrder.deliveryMan) {
+      if (mongoose.Types.ObjectId.isValid(salesOrder.deliveryMan)) {
+        const dMan = await DeliveryMan.findById(salesOrder.deliveryMan).select('name').lean();
+        deliveryManName = dMan?.name || "-";
+      } else {
+        deliveryManName = salesOrder.deliveryMan;
+      }
+    }
+
+    // Transport GST calculation
+    const tCharge = salesOrder.transportCharge || 0;
+    const tGstPercent = salesOrder.transportGstPercent || 0;
+    const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
+
     const previewData = {
       invoiceNumber: salesOrder.invoiceId, // Use Sales Order's invoiceId
       salesOrderId,
       billingPerson: billingPersonName,
+      deliveryMan: deliveryManName,
       customer: salesOrder.customer,
       seller: {
         name: salesOrder.branchId?.name || "PEARL AGENCY",
@@ -169,11 +186,13 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       sampleItems: salesOrder.sampleItems || [],
       subtotal,
       totalTax,
-      transportCharge: salesOrder.transportCharge || 0,
+      transportCharge: tCharge,
+      transportGstPercent: tGstPercent,
+      transportGstAmount: tGstAmount,
       extraExpenses: salesOrder.extraExpenses || [],
       extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
       commonDiscount: commonDiscount,
-      grandTotal,
+      grandTotal: Math.round(grandTotal + tGstAmount),
       openingBalance: salesOrder.openingBalance || 0,
       closingBalance: (salesOrder.openingBalance || 0) + grandTotal,
       notes,
@@ -336,7 +355,11 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
       const commonDiscount = salesOrder.commonDiscount || 0;
-      const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) - commonDiscount);
+      const tCharge = salesOrder.transportCharge || 0;
+      const tGstPercent = salesOrder.transportGstPercent || 0;
+      const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
+      
+      const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tGstAmount - commonDiscount);
 
       // Note: We already found the invoice object above if it exists
 
@@ -365,8 +388,10 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         invoice.sampleItems = salesOrder.sampleItems || [];
         invoice.subtotal = subtotal;
         invoice.totalTax = totalTax;
-        invoice.transportCharge = salesOrder.transportCharge || 0;
-        invoice.extraExpenses = salesOrder.extraExpenses || [];
+        invoice.transportCharge = tCharge;
+        invoice.transportGstPercent = tGstPercent;
+        invoice.transportGstAmount = tGstAmount;
+        invoice.extraExpenses = salesOrder.extraExpenses || [],
         invoice.extraExpenseAmount = salesOrder.extraExpenseAmount || 0;
         invoice.commonDiscount = commonDiscount;
         invoice.grandTotal = grandTotal;
@@ -414,7 +439,9 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           sampleItems: salesOrder.sampleItems || [],
           subtotal,
           totalTax,
-          transportCharge: salesOrder.transportCharge || 0,
+          transportCharge: tCharge,
+          transportGstPercent: tGstPercent,
+          transportGstAmount: tGstAmount,
           extraExpenses: salesOrder.extraExpenses || [],
           extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
           commonDiscount,

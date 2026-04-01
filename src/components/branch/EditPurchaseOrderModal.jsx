@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { FaPlus, FaSave, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 
 const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
   const [items, setItems] = useState([]);
@@ -187,7 +187,7 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
         transportCharge: order?.transportCharge || 0,
       };
 
-      const res = await fetch(`${API_BASE}/purchase-orders/${order._id}`, {
+      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${order._id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

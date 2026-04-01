@@ -20,6 +20,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     sgst: 0,
     igst: false,
     discountPercent: "",
+    unit: "",
   });
 
   const [productSearch, setProductSearch] = useState("");
@@ -29,6 +30,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [transportCharge, setTransportCharge] = useState(0);
+  const [transportGstPercent, setTransportGstPercent] = useState(0);
 
 
   // Initialize items from order
@@ -49,6 +51,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       setItems(initializedItems);
       setSampleItems(order.sampleItems || []);
       setTransportCharge(order.transportCharge || 0);
+      setTransportGstPercent(order.transportGstPercent || 0);
       setSelectedCustomer(order.customer);
       setCustomerSearch(order.customer?.name || "");
       fetchProducts();
@@ -131,9 +134,10 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   const calculateGrandTotal = () => {
     const itemsTotal = items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
     const transport = Number(transportCharge) || 0;
+    const transportGst = (transport * (Number(transportGstPercent) || 0)) / 100;
     const extra = order?.extraExpenseAmount || 0;
     const commDiscount = order?.commonDiscount || 0;
-    return itemsTotal + transport + extra - commDiscount;
+    return itemsTotal + transport + transportGst + extra - commDiscount;
   };
 
   // Handle quantity change
@@ -141,6 +145,13 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     const updated = [...items];
     updated[index].qty = Math.max(1, parseInt(qty) || 1);
     updated[index].total = calculateItemTotal(updated[index]);
+    setItems(updated);
+  };
+
+  // Handle unit change
+  const handleUnitChange = (index, unit) => {
+    const updated = [...items];
+    updated[index].unit = unit;
     setItems(updated);
   };
 
@@ -269,6 +280,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
         cgst: isIgst ? 0 : gstRate / 2,
         sgst: isIgst ? 0 : gstRate / 2,
         igst: isIgst,
+        unit: product.units || "",
       });
       console.log("✅ New item state updated with price:", price);
     }
@@ -316,6 +328,8 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
         }, 0)),
         commonDiscount: order?.commonDiscount || 0,
         transportCharge: Math.round(Number(transportCharge) || 0),
+        transportGstPercent: Number(transportGstPercent) || 0,
+        transportGstAmount: Math.round((Number(transportCharge) || 0) * (Number(transportGstPercent) || 0) / 100),
         grandTotal: Math.round(newItemsTotal),
         customer: selectedCustomer ? {
           id: selectedCustomer.customerId || selectedCustomer._id,
@@ -416,17 +430,32 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
           {/* TRANSPORT CHARGE */}
           <div className="bg-[#319bab]/5 p-4 rounded-xl border border-[#319bab]/20">
             <h3 className="text-sm font-bold text-[#319bab] uppercase tracking-tight mb-3">🚚 Transport & Logistics</h3>
-            <div className="w-full md:w-1/3">
-              <label className="block text-xs font-bold text-gray-600 mb-1">Transport Charge (₹)</label>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-gray-400 font-bold">₹</span>
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  value={transportCharge}
-                  onChange={(e) => setTransportCharge(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-2 focus:ring-2 focus:ring-[#319bab] outline-none font-bold text-gray-800"
-                />
+            <div className="flex flex-col md:flex-row gap-6">
+              <div className="flex-1">
+                <label className="block text-xs font-bold text-gray-600 mb-1">Transport Charge (₹)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-gray-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    placeholder="0.00"
+                    value={transportCharge}
+                    onChange={(e) => setTransportCharge(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-2 focus:ring-2 focus:ring-[#319bab] outline-none font-bold text-gray-800"
+                  />
+                </div>
+              </div>
+              <div className="w-full md:w-1/4">
+                <label className="block text-xs font-bold text-gray-600 mb-1">Transport GST (%)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    placeholder="18"
+                    value={transportGstPercent}
+                    onChange={(e) => setTransportGstPercent(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg pr-8 pl-3 py-2 focus:ring-2 focus:ring-[#319bab] outline-none font-bold text-gray-800 text-center"
+                  />
+                  <span className="absolute right-3 top-2.5 text-gray-400 font-bold">%</span>
+                </div>
               </div>
             </div>
           </div>
@@ -447,6 +476,9 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                     </th>
                     <th className="px-4 py-3 text-center font-bold text-gray-700">
                       Qty
+                    </th>
+                    <th className="px-4 py-3 text-center font-bold text-gray-700">
+                      Unit
                     </th>
                     <th className="px-4 py-3 text-right font-bold text-gray-700">
                       Rate
@@ -479,6 +511,15 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                           onChange={(e) => handleQtyChange(idx, e.target.value)}
                           className="w-16 border border-gray-300 rounded px-2 py-1 text-center focus:ring-2 focus:ring-[#319bab] outline-none"
                           min="1"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="text"
+                          value={item.unit}
+                          onChange={(e) => handleUnitChange(idx, e.target.value)}
+                          placeholder="kg"
+                          className="w-16 border border-gray-300 rounded px-2 py-1 text-center focus:ring-2 focus:ring-[#319bab] outline-none uppercase text-xs font-bold"
                         />
                       </td>
                       <td className="px-4 py-3">
@@ -607,8 +648,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
               </button>
             ) : (
               <div className="bg-green-50 p-6 rounded-lg border-2 border-green-200">
-                <h4 className="font-bold text-gray-800 mb-4">Add New Item</h4>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-2">
                        Product *
@@ -662,12 +702,29 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       value={newItem.qty}
                       onChange={(e) =>
                         setNewItem({ 
-                          ...newItem, 
-                          qty: e.target.value === "" ? "" : parseInt(e.target.value)
+                           ...newItem, 
+                           qty: e.target.value === "" ? "" : parseInt(e.target.value)
                         })
                       }
                       className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none"
                       min="1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-2">
+                      Unit
+                    </label>
+                    <input
+                      type="text"
+                      value={newItem.unit}
+                      onChange={(e) =>
+                        setNewItem({ 
+                           ...newItem, 
+                           unit: e.target.value
+                        })
+                      }
+                      placeholder="kg"
+                      className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none uppercase font-bold text-xs"
                     />
                   </div>
                   <div>

@@ -1055,7 +1055,7 @@ router.get("/unpaid/:customerId", async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, extraExpenses, extraExpenseAmount, customer, transportCharge } = req.body;
+    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, extraExpenses, extraExpenseAmount, customer, transportCharge, transportGstPercent, transportGstAmount } = req.body;
 
     // 1. Find the order first
     const salesOrder = await SalesOrder.findById(id);
@@ -1117,6 +1117,8 @@ router.put("/:id", auth, async (req, res) => {
     }));
     salesOrder.extraExpenseAmount = Math.round(Number(extraExpenseAmount) || 0);
     salesOrder.transportCharge = Math.round(Number(transportCharge) || 0);
+    salesOrder.transportGstPercent = Math.round(Number(transportGstPercent) || 0);
+    salesOrder.transportGstAmount = Math.round(Number(transportGstAmount) || 0);
 
     salesOrder.subtotal = Math.round(Number(subtotal) || 0);
     salesOrder.totalTax = Math.round(Number(totalTax) || 0);
@@ -1150,6 +1152,8 @@ router.put("/:id", auth, async (req, res) => {
               totalTax: { total: salesOrder.totalTax }, // Simplified sync
               totalDiscount: salesOrder.totalDiscount,
               transportCharge: salesOrder.transportCharge,
+              transportGstPercent: salesOrder.transportGstPercent,
+              transportGstAmount: salesOrder.transportGstAmount,
               grandTotal: salesOrder.grandTotal,
               customer: salesOrder.customer,
             }

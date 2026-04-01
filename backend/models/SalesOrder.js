@@ -45,6 +45,7 @@ const salesOrderSchema = new mongoose.Schema(
         name: String,
         hsn: String,
         qty: Number,
+        unit: { type: String, default: "" },
         sellingPrice: Number,
 
         discountType: {
@@ -93,6 +94,7 @@ const salesOrderSchema = new mongoose.Schema(
         name: String,
         hsn: String,
         qty: Number,
+        unit: { type: String, default: "" },
         sellingPrice: Number,
 
         discountType: {
@@ -146,6 +148,8 @@ const salesOrderSchema = new mongoose.Schema(
     commonDiscount: { type: Number, default: 0 },
     totalTax: Number,
     transportCharge: Number,
+    transportGstPercent: { type: Number, default: 0 },
+    transportGstAmount: { type: Number, default: 0 },
     grandTotal: Number,
     customerMargin: Number,
     marginAmount: Number,
@@ -217,8 +221,8 @@ const salesOrderSchema = new mongoose.Schema(
     lastInvoicedItems: [
       {
         productId: mongoose.Schema.Types.ObjectId,
-        name: String,
         qty: Number,
+        unit: { type: String, default: "" },
         sellingPrice: Number,
         total: Number,
       },

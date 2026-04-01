@@ -62,6 +62,7 @@ const invoiceSchema = new mongoose.Schema(
         name: String,
         hsn: String,
         qty: Number, // CONFIRMED/BILLED QTY
+        unit: { type: String, default: "" },
         sellingPrice: Number,
         discountType: String,
         discountPercent: Number,
@@ -84,6 +85,7 @@ const invoiceSchema = new mongoose.Schema(
         name: String,
         hsn: String,
         qty: Number, // BACK ORDER QTY
+        unit: { type: String, default: "" },
         sellingPrice: Number,
         gst: Number,
       },
@@ -99,6 +101,7 @@ const invoiceSchema = new mongoose.Schema(
         name: String,
         hsn: String,
         qty: Number,
+        unit: { type: String, default: "" },
         sellingPrice: Number,
       },
     ],
@@ -114,6 +117,8 @@ const invoiceSchema = new mongoose.Schema(
       total: Number,
     },
     transportCharge: Number,
+    transportGstPercent: { type: Number, default: 0 },
+    transportGstAmount: { type: Number, default: 0 },
     extraExpenses: [
       {
         expenseName: String,

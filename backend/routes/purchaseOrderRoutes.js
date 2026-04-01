@@ -1,13 +1,13 @@
 import express from "express";
-import Product from "../models/Product.js";
-import PurchaseOrder from "../models/PurchaseOrder.js";
-import PurchaseInvoice from "../models/PurchaseInvoice.js";
-import Vendor from "../models/Vendor.js";
-import VoucherType from "../models/VoucherType.js";
-import Payment from "../models/Payment.js";
-import { getFinancialYear as getGlobalFinancialYear } from "../utils/financialYear.js";
 import Ledger from "../models/Ledger.js";
 import LedgerGroup from "../models/LedgerGroup.js";
+import Payment from "../models/Payment.js";
+import Product from "../models/Product.js";
+import PurchaseInvoice from "../models/PurchaseInvoice.js";
+import PurchaseOrder from "../models/PurchaseOrder.js";
+import Vendor from "../models/Vendor.js";
+import VoucherType from "../models/VoucherType.js";
+import { getFinancialYear as getGlobalFinancialYear } from "../utils/financialYear.js";
 
 
 import auth from "../middleware/auth.js";
@@ -74,7 +74,7 @@ router.get("/", async (req, res) => {
   try {
     const { branchId, search, status, statuses, excludeStatus } = req.query;
     const query = {};
-    
+
     // Filter by branchId if provided
     if (branchId) {
       query.branchId = branchId;
@@ -110,16 +110,16 @@ router.get("/", async (req, res) => {
         { "items.name": { $regex: search, $options: "i" } },
       ];
     }
-    
+
     console.log("🔍 GET /api/purchase-orders - query:", JSON.stringify(query));
     const orders = await PurchaseOrder.find(query).sort({ createdAt: -1 });
     console.log(`✅ Found ${orders.length} purchase orders`);
-    
+
     res.json(orders);
   } catch (err) {
     console.error("❌ Get POs error:", err);
-    res.status(500).json({ 
-      message: err.message 
+    res.status(500).json({
+      message: err.message
     });
   }
 });
@@ -137,7 +137,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     // ─── BRANCH A: RE-INVOICE (delta recalculation) ───────────────────────
     if (isReInvoice) {
       console.log(`🔄 Re-Invoicing ${order.invoiceId} → updating ${order.purchaseInvoiceId}`);
-      
+
       const oldState = {
         items: order.lastInvoicedItems.map(i => i.toObject()),
         grandTotal: order.lastInvoicedGrandTotal
@@ -178,13 +178,30 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       }
 
       // Update separate Invoice document
+      const invoiceItems = (req.body.items && req.body.items.length > 0) ? req.body.items : order.items;
+
+      // If custom items sent, recalculate core totals
+      let subtotal = order.subtotal;
+      let totalTax = order.totalTax;
+      let grandTotal = order.grandTotal;
+
+      if (req.body.items && req.body.items.length > 0) {
+        subtotal = invoiceItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
+        totalTax = invoiceItems.reduce((acc, i) => {
+          const gst = Number(i.gst || 0);
+          const iBase = Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty));
+          return acc + (iBase * gst / 100);
+        }, 0);
+        grandTotal = subtotal + totalTax + (order.extraExpenseAmount || 0);
+      }
+
       await PurchaseInvoice.findOneAndUpdate(
         { purchaseInvoiceId: order.purchaseInvoiceId, branchId: order.branchId },
         {
-          items: order.items,
-          subtotal: order.subtotal,
-          totalTax: order.totalTax,
-          grandTotal: order.grandTotal,
+          items: invoiceItems,
+          subtotal: Math.round(subtotal),
+          totalTax: Math.round(totalTax),
+          grandTotal: Math.round(grandTotal),
           extraExpenses: order.extraExpenses || [],
           extraExpenseAmount: order.extraExpenseAmount || 0,
         }
@@ -253,6 +270,24 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
 
     const piNumber = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
 
+    // Prefer items from req.body if provided during conversion
+    const invoiceItems = (req.body.items && req.body.items.length > 0) ? req.body.items : order.items;
+
+    // If custom items sent, recalculate core totals
+    let subtotal = order.subtotal;
+    let totalTax = order.totalTax;
+    let grandTotal = order.grandTotal;
+
+    if (req.body.items && req.body.items.length > 0) {
+      subtotal = invoiceItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
+      totalTax = invoiceItems.reduce((acc, i) => {
+        const gst = Number(i.gst || 0);
+        const iBase = Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty));
+        return acc + (iBase * gst / 100);
+      }, 0);
+      grandTotal = subtotal + totalTax + (order.extraExpenseAmount || 0);
+    }
+
     const purchaseInvoice = new PurchaseInvoice({
       purchaseInvoiceId: piNumber,
       purchaseOrderId: order._id,
@@ -260,12 +295,12 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       branchId: order.branchId,
       warehouse: order.warehouse,
       vendor: order.vendor || "Unknown",
-      items: order.items,
-      subtotal: order.subtotal,
-      totalTax: order.totalTax,
+      items: invoiceItems,
+      subtotal: Math.round(subtotal),
+      totalTax: Math.round(totalTax),
       extraExpenses: order.extraExpenses || [],
       extraExpenseAmount: order.extraExpenseAmount || 0,
-      grandTotal: order.grandTotal,
+      grandTotal: Math.round(grandTotal),
       financialYear: currentFY,
     });
 
@@ -465,9 +500,10 @@ router.put("/:id", auth, async (req, res) => {
     const order = await PurchaseOrder.findById(id);
     if (!order) return res.status(404).json({ message: "Purchase Order not found" });
 
-    if (order.status === "INVOICED") {
-      return res.status(400).json({ message: "Cannot edit an order that has already been invoiced" });
-    }
+    // Allowed direct editing for invoiced orders
+    // if (order.status === "INVOICED") {
+    //   return res.status(400).json({ message: "Cannot edit an order that has already been invoiced" });
+    // }
 
     const oldState = {
       items: order.items.map(i => i.toObject()),
@@ -566,7 +602,7 @@ router.delete("/:id", auth, async (req, res) => {
  */
 const revertPOEffects = async (order) => {
   console.log(`🔄 Reverting PO Effects: ${order.invoiceId}`);
-  
+
   // 1. Decrease product qty
   for (const item of order.items) {
     await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -item.qty } });
@@ -577,7 +613,7 @@ const revertPOEffects = async (order) => {
   if (order.vendor && order.grandTotal) {
     const vendorName = typeof order.vendor === 'string' ? order.vendor : order.vendor?.name;
     const vendorId = typeof order.vendor === 'object' ? (order.vendor?._id || order.vendor?.id) : null;
-    
+
     if (vendorId) {
       await Vendor.findByIdAndUpdate(vendorId, { $inc: { credit: -order.grandTotal } });
     } else if (vendorName) {
@@ -706,12 +742,12 @@ router.patch("/:id/approve-cancel", async (req, res) => {
 
     if (order.status === "INVOICED") {
       console.log(`🕒 Starting cancellation reversion for PO: ${order.invoiceId}`);
-      
+
       // 1. Determine items to revert (prioritize lastInvoicedItems snapshot)
-      const itemsToRevert = (order.lastInvoicedItems && order.lastInvoicedItems.length > 0) 
-        ? order.lastInvoicedItems 
+      const itemsToRevert = (order.lastInvoicedItems && order.lastInvoicedItems.length > 0)
+        ? order.lastInvoicedItems
         : order.items;
-      
+
       const totalToRevert = order.lastInvoicedGrandTotal || order.grandTotal;
 
       // 2. Revert Stock
@@ -797,7 +833,7 @@ router.patch("/:id/approve-cancel", async (req, res) => {
     // Snapshot into editHistory
     order.editHistory.push({
       version: (order.editHistory.length || 0) + 1,
-      editType: 'RE_EDIT_STARTED', 
+      editType: 'RE_EDIT_STARTED',
       items: order.items.map(i => i.toObject ? i.toObject() : i),
       grandTotal: order.grandTotal,
       editedAt: new Date(),

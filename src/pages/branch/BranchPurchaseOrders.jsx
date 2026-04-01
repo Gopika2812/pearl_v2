@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaShoppingCart, FaSync, FaSearch, FaEdit, FaTrash } from "react-icons/fa";
+import { FaChevronDown, FaEdit, FaSearch, FaShoppingCart, FaSync, FaTrash } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import * as XLSX from "xlsx";
 import { API_BASE, fetchWithAuth } from "../../api";
-import { useBranch } from "../../context/BranchContext";
 import EditPurchaseOrderModal from "../../components/branch/EditPurchaseOrderModal";
+import { useBranch } from "../../context/BranchContext";
 
 const BranchPurchaseOrders = () => {
   const { currentBranch, user } = useBranch();
@@ -24,6 +24,8 @@ const BranchPurchaseOrders = () => {
   const [editingOrder, setEditingOrder] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [editItems, setEditItems] = useState([]);
 
   // Search debounce logic
   useEffect(() => {
@@ -73,11 +75,11 @@ const BranchPurchaseOrders = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case "PLACED":    return "bg-blue-100 text-blue-700";
-      case "INVOICED":  return "bg-green-100 text-green-700";
+      case "PLACED": return "bg-blue-100 text-blue-700";
+      case "INVOICED": return "bg-green-100 text-green-700";
       case "CANCELLED": return "bg-red-100 text-red-600 line-through";
-      case "PENDING":   return "bg-yellow-100 text-yellow-700";
-      default:          return "bg-gray-100 text-gray-700";
+      case "PENDING": return "bg-yellow-100 text-yellow-700";
+      default: return "bg-gray-100 text-gray-700";
     }
   };
 
@@ -112,6 +114,42 @@ const BranchPurchaseOrders = () => {
   const handleEditClick = (order) => {
     setEditingOrder(order);
     setShowEditModal(true);
+  };
+
+  const handleItemChange = (index, field, value) => {
+    const updated = [...editItems];
+    updated[index][field] = value;
+    if (field === "qty" || field === "purchasePrice" || field === "gst") {
+      const q = parseFloat(updated[index].qty) || 0;
+      const p = parseFloat(updated[index].purchasePrice) || 0;
+      const g = parseFloat(updated[index].gst) || 0;
+      const base = q * p;
+      updated[index].rowPrice = base;
+      updated[index].total = base * (1 + g / 100);
+    }
+    setEditItems(updated);
+  };
+
+  const handleConfirmInvoice = async () => {
+    if (!editingOrder) return;
+    try {
+      setLoading(true);
+      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${editingOrder._id}/generate-invoice`, {
+        method: "POST",
+        body: JSON.stringify({ items: editItems }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to generate invoice");
+
+      toast.success(`Purchase Invoice ${data.piNumber} generated successfully!`);
+      setShowInvoiceModal(false);
+      setEditingOrder(null);
+      fetchPurchaseOrders();
+    } catch (err) {
+      toast.error(err.message || "Failed to generate invoice");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRequestEdit = async (orderId) => {
@@ -198,6 +236,109 @@ const BranchPurchaseOrders = () => {
         theme="colored"
       />
 
+      {/* INVOICE PREVIEW & EDIT MODAL */}
+      {showInvoiceModal && editingOrder && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto border border-gray-100">
+            <div className="sticky top-0 bg-gradient-to-r from-green-600 to-green-700 text-white p-6 flex justify-between items-center shadow-lg">
+              <div>
+                <h2 className="text-xl font-black uppercase tracking-widest">
+                  📄 Invoice Preview & Edit
+                </h2>
+                <p className="text-xs text-green-100 mt-1 font-bold">
+                  Finalize items and units before generating Purchase Invoice for {editingOrder.invoiceId}
+                </p>
+              </div>
+              <button onClick={() => setShowInvoiceModal(false)} className="text-2xl hover:scale-110 transition drop-shadow-md">✕</button>
+            </div>
+
+            <div className="p-8 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50 p-6 rounded-2xl border border-gray-100 shadow-inner">
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">Vendor</p>
+                  <p className="text-sm font-black text-gray-800">{editingOrder.vendor || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">Warehouse</p>
+                  <p className="text-sm font-black text-gray-800">{editingOrder.warehouse || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">PO Date</p>
+                  <p className="text-sm font-black text-gray-800">{new Date(editingOrder.date || editingOrder.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+
+              <div className="overflow-hidden border border-gray-100 rounded-2xl shadow-sm">
+                <table className="w-full text-xs">
+                  <thead className="bg-[#319bab]/10 border-b border-gray-100">
+                    <tr>
+                      <th className="px-4 py-4 text-left font-black text-[#319bab] uppercase">Product</th>
+                      <th className="px-4 py-4 text-center font-black text-[#319bab] uppercase w-24">Qty</th>
+                      <th className="px-4 py-4 text-center font-black text-[#319bab] uppercase w-24">Unit</th>
+                      <th className="px-4 py-4 text-right font-black text-[#319bab] uppercase w-32">Rate (₹)</th>
+                      <th className="px-4 py-4 text-center font-black text-[#319bab] uppercase w-16">GST %</th>
+                      <th className="px-4 py-4 text-right font-black text-[#319bab] uppercase w-32">Total (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {editItems.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50 transition drop-shadow-sm">
+                        <td className="px-4 py-4 font-bold text-gray-700">{item.name}</td>
+                        <td className="px-4 py-4">
+                          <input
+                            type="number"
+                            className="w-full border border-gray-200 rounded-lg px-2 py-2 text-center font-bold focus:ring-1 focus:ring-green-500 outline-none transition"
+                            value={item.qty}
+                            onChange={(e) => handleItemChange(idx, "qty", e.target.value)}
+                          />
+                        </td>
+                        <td className="px-4 py-4">
+                          <input
+                            type="text"
+                            className="w-full border border-gray-200 rounded-lg px-2 py-2 text-center font-bold focus:ring-1 focus:ring-green-500 outline-none transition uppercase text-[10px]"
+                            value={item.unit}
+                            placeholder="kg"
+                            onChange={(e) => handleItemChange(idx, "unit", e.target.value)}
+                          />
+                        </td>
+                        <td className="px-4 py-4">
+                          <input
+                            type="number"
+                            className="w-full border border-gray-200 rounded-lg px-2 py-2 text-right font-bold focus:ring-1 focus:ring-green-500 outline-none transition"
+                            value={item.purchasePrice}
+                            onChange={(e) => handleItemChange(idx, "purchasePrice", e.target.value)}
+                          />
+                        </td>
+                        <td className="px-4 py-4 text-center font-black text-gray-400">{item.gst}%</td>
+                        <td className="px-4 py-4 text-right font-black text-green-600">
+                          ₹{(parseFloat(item.total) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-end gap-4 pt-6 border-t border-gray-100">
+                <button
+                  onClick={() => setShowInvoiceModal(false)}
+                  className="px-8 py-3 bg-gray-100 text-gray-500 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-gray-200 transition shadow-md shadow-gray-50 active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmInvoice}
+                  disabled={loading}
+                  className="px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:shadow-lg hover:shadow-green-100 transition shadow-md shadow-green-50 active:scale-95 disabled:opacity-50"
+                >
+                  {loading ? "Generating..." : "✔️ Confirm & Generate Invoice"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="w-full">
         {/* HEADER */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
@@ -247,7 +388,7 @@ const BranchPurchaseOrders = () => {
             />
           </div>
           {searchTerm && (
-            <button 
+            <button
               onClick={() => setSearchTerm("")}
               className="text-gray-400 hover:text-red-500 font-bold transition-colors text-xs px-2"
             >
@@ -294,8 +435,8 @@ const BranchPurchaseOrders = () => {
                             >
                               <FaChevronDown
                                 className={`text-xs transition-transform ${expandedOrders[order._id]
-                                    ? "rotate-180"
-                                    : ""
+                                  ? "rotate-180"
+                                  : ""
                                   }`}
                               />
                             </button>
@@ -340,7 +481,7 @@ const BranchPurchaseOrders = () => {
                             >
                               {order.status}
                             </span>
-                            
+
                             {/* REQUEST STATUS LABELS */}
                             {order.editRequestStatus === "PENDING" && (
                               <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold">
@@ -395,63 +536,32 @@ const BranchPurchaseOrders = () => {
                                 <button
                                   className="bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 px-4 rounded-lg text-xs shadow-md shadow-green-100 transition disabled:bg-gray-300 disabled:cursor-not-allowed uppercase"
                                   disabled={loading}
-                                  onClick={async () => {
-                                    try {
-                                      setLoading(true);
-                                      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${order._id}/generate-invoice`, {
-                                        method: 'POST',
-                                      });
-                                      const data = await res.json();
-                                      if (!res.ok) throw new Error(data.message || 'Failed to generate invoice');
-                                      if (data.debitSubtracted > 0) {
-                                        toast.info(
-                                          `Netting Applied: ₹${data.debitSubtracted.toLocaleString()} subtracted from Vendor Debit. ` +
-                                          `Remaining ₹${data.creditAdded.toLocaleString()} added to Credit.`,
-                                          { autoClose: 5000 }
-                                        );
-                                      }
-                                      toast.success(`Purchase Invoice ${data.piNumber} generated successfully!`);
-                                      fetchPurchaseOrders();
-                                    } catch (err) {
-                                      toast.error(err.message || 'Failed to generate invoice');
-                                    } finally {
-                                      setLoading(false);
-                                    }
+                                  onClick={() => {
+                                    setEditingOrder(order);
+                                    setEditItems(order.items.map(i => ({ ...i })));
+                                    setShowInvoiceModal(true);
                                   }}
                                 >
                                   Invoiced
                                 </button>
                               </>
                             ) : (
-                              <div className="flex items-center gap-2">
-                                {/* IF APPROVED, ALLOW EDIT */}
-                                {order.editRequestStatus === "APPROVED" ? (
-                                  <button
-                                    onClick={() => handleEditClick(order)}
-                                    className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-lg transition shadow-md shadow-orange-100 flex items-center gap-1 text-xs font-bold"
-                                    title="Edit Approved - Click to modify"
-                                  >
-                                    <FaEdit size={12} /> RE-EDIT
-                                  </button>
-                                ) : (
-                                  <>
-                                    <button
-                                      onClick={() => handleRequestEdit(order._id)}
-                                      disabled={order.editRequestStatus === "PENDING" || order.cancelRequestStatus === "PENDING"}
-                                      className="bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg text-[10px] font-bold transition shadow-sm disabled:opacity-50"
-                                    >
-                                      REQUEST EDIT
-                                    </button>
-                                    <button
-                                      onClick={() => handleRequestCancel(order._id)}
-                                      disabled={order.cancelRequestStatus === "PENDING" || order.editRequestStatus === "PENDING"}
-                                      className="bg-red-600 text-white hover:bg-red-700 px-3 py-1.5 rounded-lg text-[10px] font-bold transition shadow-sm disabled:opacity-50"
-                                    >
-                                      REQUEST CANCEL
-                                    </button>
-                                  </>
-                                )}
-                              </div>
+                              <>
+                                <button
+                                  onClick={() => handleEditClick(order)}
+                                  className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-lg transition shadow-md shadow-orange-100 flex items-center gap-1 text-xs font-bold"
+                                  title="Edit Invoiced Order"
+                                >
+                                  <FaEdit size={12} /> RE-EDIT
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteOrder(order._id)}
+                                  className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition shadow-md shadow-red-100 flex items-center gap-1 text-xs font-bold"
+                                  title="Cancel Invoiced Order"
+                                >
+                                  <FaTrash size={12} /> CANCEL
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
@@ -610,11 +720,11 @@ const BranchPurchaseOrders = () => {
 
                                 {order.editHistory.map((snap, idx) => {
                                   const typeConfig = {
-                                    CREATED:         { icon: "📋", label: "Original",       color: "border-blue-200 bg-blue-50" },
-                                    PRE_INVOICE_EDIT:{ icon: "✏️", label: "Edited (Pre-Invoice)", color: "border-yellow-200 bg-yellow-50" },
-                                    INVOICED:        { icon: "✅", label: "Invoiced",        color: "border-green-200 bg-green-50" },
+                                    CREATED: { icon: "📋", label: "Original", color: "border-blue-200 bg-blue-50" },
+                                    PRE_INVOICE_EDIT: { icon: "✏️", label: "Edited (Pre-Invoice)", color: "border-yellow-200 bg-yellow-50" },
+                                    INVOICED: { icon: "✅", label: "Invoiced", color: "border-green-200 bg-green-50" },
                                     RE_EDIT_STARTED: { icon: "🔄", label: "Re-Edit Started", color: "border-orange-200 bg-orange-50" },
-                                    RE_INVOICED:     { icon: "🔁", label: "Re-Invoiced",     color: "border-purple-200 bg-purple-50" },
+                                    RE_INVOICED: { icon: "🔁", label: "Re-Invoiced", color: "border-purple-200 bg-purple-50" },
                                   };
                                   const cfg = typeConfig[snap.editType] || { icon: "📌", label: snap.editType, color: "border-gray-200 bg-gray-50" };
 

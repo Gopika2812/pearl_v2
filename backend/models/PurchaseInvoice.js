@@ -47,6 +47,7 @@ const purchaseInvoiceSchema = new mongoose.Schema(
         cgst: Number,
         sgst: Number,
         igst: Number,
+        unit: { type: String, default: "" },
         rowPrice: Number, // Pre-tax
         total: Number,    // Post-tax
       },
