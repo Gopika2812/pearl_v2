@@ -318,6 +318,16 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           line-height: 1.5;
         }
         
+        .quick-info { 
+          font-size: 8px; 
+          color: #64748b; 
+          margin-bottom: 5px;
+          display: flex;
+          justify-content: space-between;
+          border-bottom: 1px dotted #e2e8f0;
+          padding-bottom: 2px;
+        }
+        
         @media print { 
           body { margin: 0; padding: 0; } 
           .page { margin: 0; padding: 5mm; }
@@ -344,15 +354,20 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         html += `
           <div class="page">
             <div class="page-content">
+              <!-- QUICK REF HEADER -->
+              <div class="quick-info">
+                <span>INV: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</span>
+                <span>CUST: ${previewData?.customer?.name || "CASH CUSTOMER"}</span>
+              </div>
               <!-- TOP HEADER WITH LOGO -->
               <div class="top-header">
-                <div class="logo-box"><img src="/logo.jpeg" alt="Pearl Agency Logo" /></div>
+                <div class="logo-box"><img src="${previewData?.seller?.logo || "/logo.jpeg"}" alt="Logo" /></div>
                 <div class="company-header">
-                  <div class="company-name">PEARL AGENCY</div>
+                  <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
                   <div class="company-address">
-                    <strong>12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu</strong><br/>
+                    <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
                     Mobile: ${previewData?.seller?.phone || "9429692970"} | GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
-                    GPAY No: ${previewData?.seller?.gpayNo || "8825847884"} | State: Tamil Nadu (Code: ${previewData?.seller?.stateCode || "33"})
+                    GPAY No: ${previewData?.seller?.gpayNo || "8825847884"} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
               </div>
@@ -367,7 +382,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 </div>
                 <div class="order-header-col">
                   <div class="label">Date:</div>
-                  <div>${new Date().toLocaleDateString("en-IN")}</div>
+                  <div style="font-weight: bold;">${new Date().toLocaleDateString("en-IN")}</div>
                 </div>
                 <div class="order-header-col">
                   <div class="label">Billing:</div>
@@ -487,15 +502,20 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         html += `
           <div class="page">
             <div class="page-content">
+              <!-- QUICK REF HEADER -->
+              <div class="quick-info">
+                <span>INV: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</span>
+                <span>CUST: ${previewData?.customer?.name || "CASH CUSTOMER"}</span>
+              </div>
               <!-- TOP HEADER WITH LOGO -->
               <div class="top-header">
-                <div class="logo-box"><img src="/logo.jpeg" alt="Pearl Agency Logo" /></div>
+                <div class="logo-box"><img src="${previewData?.seller?.logo || "/logo.jpeg"}" alt="Logo" /></div>
                 <div class="company-header">
-                  <div class="company-name">PEARL AGENCY</div>
+                  <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
                   <div class="company-address">
-                    <strong>12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu</strong><br/>
+                    <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
                     Mobile: ${previewData?.seller?.phone || "9429692970"} | GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
-                    GPAY No: ${previewData?.seller?.gpayNo || "8825847884"} | State: Tamil Nadu (Code: ${previewData?.seller?.stateCode || "33"})
+                    GPAY No: ${previewData?.seller?.gpayNo || "8825847884"} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
               </div>
