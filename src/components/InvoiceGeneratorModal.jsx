@@ -138,9 +138,15 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   const handlePrint = async () => {
     try {
       const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        toast.warning("🔔 Pop-up blocked! Please allow pop-ups for this site to print.");
+        return;
+      }
       printWindow.document.write(getInvoiceHTML());
       printWindow.document.close();
-      setTimeout(() => printWindow.print(), 250);
+      setTimeout(() => {
+        if (printWindow) printWindow.print();
+      }, 250);
 
       // Mark as printed
       if (generatedInvoice?._id) {

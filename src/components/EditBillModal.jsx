@@ -31,6 +31,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [transportCharge, setTransportCharge] = useState(0);
   const [transportGstPercent, setTransportGstPercent] = useState(0);
+  const [commonDiscount, setCommonDiscount] = useState(0);
 
 
   // Initialize items from order
@@ -52,6 +53,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       setSampleItems(order.sampleItems || []);
       setTransportCharge(order.transportCharge || 0);
       setTransportGstPercent(order.transportGstPercent || 0);
+      setCommonDiscount(order.commonDiscount || 0);
       setSelectedCustomer(order.customer);
       setCustomerSearch(order.customer?.name || "");
       fetchProducts();
@@ -149,7 +151,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     const transport = Number(transportCharge) || 0;
     const transportGst = (transport * (Number(transportGstPercent) || 0)) / 100;
     const extra = order?.extraExpenseAmount || 0;
-    const commDiscount = order?.commonDiscount || 0;
+    const commDiscount = Number(commonDiscount) || 0;
     return itemsTotal + transport + transportGst + extra - commDiscount;
   };
 
@@ -184,6 +186,23 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     const price = parseFloat(updated[index].sellingPrice) || 0;
     const dPercent = parseFloat(updated[index].discountPercent) || 0;
     updated[index].discountAmount = (qty * price) * (dPercent / 100);
+    updated[index].total = calculateItemTotal(updated[index]);
+    setItems(updated);
+  };
+
+  // Handle flat discount amount change
+  const handleDiscountAmountChange = (index, amount) => {
+    const updated = [...items];
+    const value = amount === "" ? 0 : parseFloat(amount);
+    updated[index].discountAmount = value;
+    const qty = parseFloat(updated[index].qty) || 0;
+    const price = parseFloat(updated[index].sellingPrice) || 0;
+    const subtotal = qty * price;
+    if (subtotal > 0) {
+      updated[index].discountPercent = parseFloat(((value / subtotal) * 100).toFixed(2));
+    } else {
+      updated[index].discountPercent = 0;
+    }
     updated[index].total = calculateItemTotal(updated[index]);
     setItems(updated);
   };
@@ -348,7 +367,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
           const dPercent = parseFloat(item.discountPercent) || 0;
           return sum + (qty * price * (dPercent / 100));
         }, 0)),
-        commonDiscount: order?.commonDiscount || 0,
+        commonDiscount: Number(commonDiscount) || 0,
         transportCharge: Math.round(Number(transportCharge) || 0),
         transportGstPercent: Number(transportGstPercent) || 0,
         transportGstAmount: Math.round((Number(transportCharge) || 0) * (Number(transportGstPercent) || 0) / 100),
@@ -506,7 +525,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       Rate
                     </th>
                     <th className="px-4 py-3 text-right font-bold text-gray-700">
-                      Discount (%)
+                      Discount (% / ₹)
                     </th>
                     <th className="px-4 py-3 text-center font-bold text-gray-700">
                       Tax
@@ -571,18 +590,29 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            value={item.discountPercent}
-                            onChange={(e) => handleDiscountChange(idx, e.target.value)}
-                            className="w-20 border border-gray-300 rounded px-2 py-1 text-right focus:ring-2 focus:ring-[#319bab] outline-none"
-                            step="0.01"
-                            min="0"
-                            max="100"
-                            placeholder="0"
-                          />
-                          <span className="text-gray-500">%</span>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              value={item.discountPercent}
+                              onChange={(e) => handleDiscountChange(idx, e.target.value)}
+                              className="w-20 border border-gray-300 rounded px-2 py-1 text-right focus:ring-1 focus:ring-[#319bab] outline-none text-[11px]"
+                              step="0.01"
+                              min="0"
+                              max="100"
+                              placeholder="0"
+                            />
+                            <span className="text-[10px] text-gray-400 font-bold">%</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              value={item.discountAmount || ""}
+                              onChange={(e) => handleDiscountAmountChange(idx, e.target.value)}
+                              className="w-20 border border-gray-200 bg-gray-50 rounded px-2 py-1 text-right focus:ring-1 focus:ring-blue-300 outline-none text-[10px] text-gray-600"
+                              placeholder="Amt ₹"
+                            />
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center text-sm">
@@ -895,14 +925,21 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       }, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </span>
                 </div>
-                {order?.commonDiscount > 0 && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600">Special Discount:</span>
-                    <span className="text-red-500 font-semibold">
-                      -₹{order.commonDiscount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                    </span>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Special Discount:</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-red-500 font-semibold">-₹</span>
+                    <input
+                      type="number"
+                      value={commonDiscount}
+                      onChange={(e) => setCommonDiscount(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                      className="w-24 border border-gray-300 rounded px-2 py-1 text-right focus:ring-2 focus:ring-red-500 outline-none text-red-500 font-semibold"
+                      placeholder="0"
+                      step="0.01"
+                      min="0"
+                    />
                   </div>
-                )}
+                </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600">Transport:</span>
                   <span className="text-gray-800 font-semibold">

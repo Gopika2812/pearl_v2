@@ -164,6 +164,30 @@ const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave, branchId, editi
               />
             </div>
 
+            {/* Prefix */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Voucher Prefix 📄
+              </label>
+              <input
+                type="text"
+                required
+                className={`w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 ${
+                  prefix && prefix.length > 6 
+                    ? "border-red-500 bg-red-50 focus:ring-red-200 shadow-sm" 
+                    : "border-gray-200 focus:ring-[#319bab]/30"
+                }`}
+                placeholder="e.g. SI / B1SI"
+                value={prefix}
+                onChange={(e) => setPrefix(e.target.value.toUpperCase())}
+              />
+              {prefix && prefix.length > 6 ? (
+                <p className="text-[10px] text-red-600 font-bold mt-1">⚠️ Prefix too long! Max 6 chars required for 16-char Invoice limit.</p>
+              ) : (
+                <p className="text-[9px] text-gray-500 mt-1 italic">Example: {prefix || "PREFIX"}/001/26-27</p>
+              )}
+            </div>
+
             {/* Order Type */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
