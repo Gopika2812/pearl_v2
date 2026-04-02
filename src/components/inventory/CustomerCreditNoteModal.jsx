@@ -28,10 +28,10 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer, onCreditSuccess })
     setLoading(true);
     try {
       // For returns, we can look at any invoiced order (not just unpaid)
-      const response = await fetchWithAuth(`${API_BASE}/sales-orders?customerName=${customer.name}&status=INVOICED`);
-      const result = await response.json();
-      if (result.success) {
-        setInvoices(result.data || []);
+      const response = await fetchWithAuth(`${API_BASE}/sales-orders?customerName=${encodeURIComponent(customer.name)}&status=INVOICED`);
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        setInvoices(data);
       }
     } catch (error) {
       console.error("Fetch invoices error:", error);

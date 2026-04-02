@@ -125,7 +125,7 @@ router.post("/:id/record-payment", async (req, res) => {
 // GET all sales orders (for OthersSummary)
 router.get("/", async (req, res) => {
   try {
-    const { branchId } = req.query;
+    const { branchId, customerName, status, isClaim } = req.query;
     const query = {};
 
     // Filter by branchId if provided (Inclusive of missing branch IDs for test data)
@@ -133,8 +133,16 @@ router.get("/", async (req, res) => {
       query.$or = [{ branchId }, { branchId: { $exists: false } }];
     }
 
-    if (req.query.isClaim !== undefined) {
-      query.isClaim = req.query.isClaim === "true";
+    if (customerName) {
+      query["customer.name"] = { $regex: customerName, $options: "i" };
+    }
+
+    if (status) {
+      query.status = status.toUpperCase();
+    }
+
+    if (isClaim !== undefined) {
+      query.isClaim = isClaim === "true";
     }
 
     const salesOrders = await SalesOrder.find(query)
