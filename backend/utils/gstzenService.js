@@ -50,7 +50,12 @@ class GSTZenService {
           }
         }
       }
-      
+
+      // 🛡️ INVOICE NUMBER LENGTH PRE-CHECK
+      if (String(invoiceData.invoiceNumber).length > 16) {
+        throw new Error(`Invoice Number "${invoiceData.invoiceNumber}" is too long (${invoiceData.invoiceNumber.length} chars). Max 16 allowed for E-Invoicing.`);
+      }
+
       const sellerGstin = invoiceData.seller?.gstin || invoiceData.branchId?.gstin || "33DULPS2600Q1Z6";
       const sellerStateCode = String(invoiceData.seller?.stateCode || invoiceData.branchId?.stateCode || "33").padStart(2, "0");
       const buyerGstin = invoiceData.customer?.gstin || invoiceData.customer?.customerId?.gstin || "URP";

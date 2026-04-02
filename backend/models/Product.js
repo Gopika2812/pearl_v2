@@ -38,12 +38,7 @@ const productSchema = new mongoose.Schema(
     hsnCode: { 
       type: String, 
       required: true,
-      validate: {
-        validator: function(v) {
-          return /^\d{4}$|^\d{6}$|^\d{8}$/.test(v);
-        },
-        message: props => `${props.value} is not a valid HSN code! Must be 4, 6, or 8 digits.`
-      }
+      trim: true
     },
     hsn: { type: String, default: "" }, // Alias for hsnCode
     gst: { type: Number, default: 0 },

@@ -3,7 +3,11 @@ import mongoose from "mongoose";
 const invoiceSchema = new mongoose.Schema(
   {
     // Basic Info
-    invoiceNumber: { type: String, required: true }, // unique index handled per-branch
+    invoiceNumber: { 
+      type: String, 
+      required: true,
+      maxlength: [16, "Invoice number must be at most 16 characters for GST/E-Invoicing compliance."]
+    }, // unique index handled per-branch
     invoiceDate: { type: Date, default: Date.now },
     financialYear: String,
 

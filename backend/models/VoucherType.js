@@ -26,6 +26,13 @@ const voucherTypeSchema = new mongoose.Schema(
       required: true,
       uppercase: true,
       trim: true,
+      validate: {
+        validator: function(v) {
+          // Max Prefix length = 16 - 1 (slash) - 3 (padded counter) - 1 (slash) - 5 (FY: 25-26) = 6 chars
+          return v.length <= 6;
+        },
+        message: props => `Prefix "${props.value}" is too long (${props.value.length} chars). Max 6 characters allowed to keep the total Invoice Number within 16 chars.`
+      }
     },
 
     counter: { type: Number, default: 1 },
