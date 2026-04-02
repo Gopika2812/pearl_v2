@@ -130,6 +130,19 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     return discounted + taxAmount;
   };
 
+  // Handle HSN change
+  const handleHsnChange = (index, hsn, isSample = false) => {
+    if (isSample) {
+      const updated = [...sampleItems];
+      updated[index].hsn = hsn;
+      setSampleItems(updated);
+    } else {
+      const updated = [...items];
+      updated[index].hsn = hsn;
+      setItems(updated);
+    }
+  };
+
   // Calculate grand total accounting for expenses, transport and common discount
   const calculateGrandTotal = () => {
     const itemsTotal = items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
@@ -294,6 +307,15 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   // Save changes
   const handleSave = async () => {
     try {
+      // 🛡️ HSN VALIDATION PRE-CHECK
+      for (const item of items) {
+        const hsn = String(item.hsn || "").trim();
+        if (!/^\d{4}$|^\d{6}$|^\d{8}$/.test(hsn)) {
+          toast.error(`Invalid HSN "${hsn}" for product "${item.name}". HSN must be 4, 6, or 8 digits.`);
+          return;
+        }
+      }
+
       setLoading(true);
       
       const newItemsTotal = calculateGrandTotal();
@@ -501,8 +523,21 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                   {items.map((item, idx) => (
                     <tr key={idx} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-semibold">{item.name}</td>
-                      <td className="px-4 py-3 text-center text-gray-600">
-                        {item.hsn}
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="text"
+                          value={item.hsn}
+                          onChange={(e) => handleHsnChange(idx, e.target.value)}
+                          className={`w-24 border rounded px-2 py-1 text-center focus:ring-2 focus:ring-[#319bab] outline-none text-xs font-mono ${
+                            item.hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(item.hsn).trim())
+                              ? "border-red-500 bg-red-50"
+                              : "border-gray-300"
+                          }`}
+                          placeholder="HSN"
+                        />
+                        {item.hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(item.hsn).trim()) && (
+                          <p className="text-[9px] text-red-600 font-bold mt-1">Invalid</p>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <input
@@ -613,8 +648,18 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                     {sampleItems.map((item, idx) => (
                       <tr key={idx} className="hover:bg-yellow-50 bg-yellow-50">
                         <td className="px-4 py-3 font-semibold">{item.name}</td>
-                        <td className="px-4 py-3 text-center text-gray-600">
-                          {item.hsn}
+                        <td className="px-4 py-3 text-center">
+                          <input
+                            type="text"
+                            value={item.hsn}
+                            onChange={(e) => handleHsnChange(idx, e.target.value, true)}
+                            className={`w-20 border rounded px-2 py-1 text-center focus:ring-2 focus:ring-yellow-500 outline-none text-xs font-mono ${
+                              item.hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(item.hsn).trim())
+                                ? "border-red-500 bg-red-50"
+                                : "border-gray-200"
+                            }`}
+                            placeholder="HSN"
+                          />
                         </td>
                         <td className="px-4 py-3 text-center">{item.qty}</td>
                         <td className="px-4 py-3 text-right">
@@ -768,6 +813,30 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-2">
+                       HSN Code
+                    </label>
+                    <input
+                      type="text"
+                      value={newItem.hsn}
+                      onChange={(e) =>
+                        setNewItem({
+                          ...newItem,
+                          hsn: e.target.value,
+                        })
+                      }
+                      placeholder="4, 6, 8 digits"
+                      className={`w-full border rounded px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none text-sm font-mono ${
+                        newItem.hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(newItem.hsn).trim())
+                          ? "border-red-500 bg-red-50"
+                          : "border-gray-300"
+                      }`}
+                    />
+                    {newItem.hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(newItem.hsn).trim()) && (
+                      <p className="text-[9px] text-red-600 font-bold mt-1">4, 6, 8 digits only</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">

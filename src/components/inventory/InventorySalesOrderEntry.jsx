@@ -1633,8 +1633,15 @@ export default function InventorySalesOrderEntry({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>HSN</label>
-                  <input className={inputClass} value={hsn} readOnly />
+                  <input 
+                    className={`${inputClass} ${hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(hsn).trim()) ? 'border-red-500 bg-red-50' : ''}`} 
+                    value={hsn} 
+                    onChange={(e) => setHsn(e.target.value)}
+                    placeholder="4, 6 or 8 digits"
+                  />
+                  {hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(hsn).trim()) && (
+                    <p className="text-[10px] text-red-600 font-bold mt-1">⚠️ Must be 4, 6, or 8 digits</p>
+                  )}
                 </div>
                 <div>
                   <label className={labelClass}>

@@ -222,6 +222,13 @@ const ProductSummary = () => {
   // Handle Save Edit
   const handleSaveEdit = async () => {
     try {
+      // 🛡️ HSN VALIDATION
+      const hsn = String(editFormData.hsnCode || "").trim();
+      if (!/^\d{4}$|^\d{6}$|^\d{8}$/.test(hsn)) {
+        alert(`Invalid HSN Code: "${hsn}". HSN must be exactly 4, 6, or 8 digits.`);
+        return;
+      }
+
       const response = await fetch(`${API_BASE}/products/${editingProduct._id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -1120,8 +1127,17 @@ const ProductSummary = () => {
                     onChange={(e) =>
                       setEditFormData({ ...editFormData, hsnCode: e.target.value })
                     }
-                    className="w-full p-2 border rounded-lg outline-blue-500 focus:ring-1 focus:ring-blue-500"
+                    className={`w-full p-2 border rounded-lg outline-blue-500 focus:ring-1 focus:ring-blue-500 ${
+                      editFormData.hsnCode && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(editFormData.hsnCode).trim())
+                        ? "border-red-500 bg-red-50"
+                        : ""
+                    }`}
                   />
+                  {editFormData.hsnCode && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(editFormData.hsnCode).trim()) && (
+                    <p className="text-[10px] text-red-600 font-bold mt-1">
+                      ⚠️ Must be 4, 6, or 8 digits
+                    </p>
+                  )}
                 </div>
 
                 <div>

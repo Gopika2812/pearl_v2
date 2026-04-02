@@ -37,6 +37,20 @@ class GSTZenService {
     try {
       console.log("\n🚀 Generating E-Invoice IRN...");
       
+      // 🛡️ HSN PRE-CHECK: GSTZen/NIC requires HSN to be exactly 4, 6, or 8 digits.
+      // Prevent "HSN not found" errors by validating before API call.
+      if (invoiceData.items && Array.isArray(invoiceData.items)) {
+        for (const item of invoiceData.items) {
+          const hsn = String(item.hsn || item.productId?.hsnCode || "").trim();
+          if (!/^\d{4}$|^\d{6}$|^\d{8}$/.test(hsn)) {
+            const errorMsg = `Product "${item.name}" has an invalid HSN code "${hsn}". ` +
+                           `HSN must be exactly 4, 6, or 8 digits. Please edit the bill and fix this to proceed.`;
+            console.error(`❌ Pre-check fail: ${errorMsg}`);
+            throw new Error(errorMsg);
+          }
+        }
+      }
+      
       const sellerGstin = invoiceData.seller?.gstin || invoiceData.branchId?.gstin || "33DULPS2600Q1Z6";
       const sellerStateCode = String(invoiceData.seller?.stateCode || invoiceData.branchId?.stateCode || "33").padStart(2, "0");
       const buyerGstin = invoiceData.customer?.gstin || invoiceData.customer?.customerId?.gstin || "URP";
