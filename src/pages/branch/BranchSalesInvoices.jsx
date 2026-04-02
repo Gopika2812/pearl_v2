@@ -109,18 +109,15 @@ const BranchSalesInvoices = () => {
       setRequestingAction(null);
     }
   };
-
   // ✅ GENERATE E-INVOICE FUNCTION
-  const handleGenerateEInvoice = async (invoice) => {
-    // 🚀 ALLOW RE-GENERATION (Removed blocking check as per user request)
-    /*
-    if (invoice.einvoiceStatus === "GENERATED") {
-      toast.info("E-Invoice already generated for this invoice");
+  const handleGenerateEInvoice = async (invoice, transportDetails = null) => {
+    // 🚀 Check if transport details are required (>50k and not provided yet)
+    if (invoice.grandTotal > 50000 && !transportDetails && !invoice.ewayBillNo) {
+      setShowTransportModal(invoice);
       return;
     }
-    */
 
-    if (!window.confirm(`Generate E-Invoice for ${invoice.invoiceNumber}?\n\nThis will submit to GST Portal and generate IRN + E-Way Bill.`)) {
+    if (!transportDetails && !window.confirm(`Generate E-Invoice for ${invoice.invoiceNumber}?`)) {
       return;
     }
 
@@ -131,17 +128,18 @@ const BranchSalesInvoices = () => {
         body: JSON.stringify({
           userId: user?.id || user?._id,
           username: user?.username || user?.fullName || "Staff",
-          generateEWayBill: invoice.grandTotal > 50000
+          transportDetails: transportDetails
         })
       });
 
       const data = await res.json();
 
       if (data.success) {
-        toast.success(`✅ E-Invoice Generated Successfully`);
+        toast.success(`✅ E-Invoice ${data.ewayBillNo ? "& E-Way Bill " : ""}Generated Successfully`);
+        setShowTransportModal(null);
         fetchInvoices();
       } else {
-        toast.error(`❌ Error: ${data.message || "Failed to generate E-Invoice"}`);
+        toast.error(`❌ Error: ${data.error || data.message || "Failed to generate"}`);
       }
     } catch (err) {
       console.error("Error:", err);
@@ -151,9 +149,165 @@ const BranchSalesInvoices = () => {
     }
   };
 
+
+  // 🚚 GENERATE E-WAY BILL ONLY (POST-IRN)
+  const handleGenerateEWayBillOnly = async (invoice, transportDetails = null) => {
+    if (!transportDetails) {
+      setShowTransportModal({ ...invoice, isEwbOnly: true });
+      return;
+    }
+
+    setRequestingAction(invoice._id);
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/einvoice/generate-ewb-only/${invoice._id}`, {
+        method: "POST",
+        body: JSON.stringify({ transportDetails })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        toast.success("✅ E-Way Bill Generated Successfully");
+        setShowTransportModal(null);
+        fetchInvoices();
+      } else {
+        toast.error(`❌ Error: ${data.message || "Failed to generate E-Way Bill"}`);
+      }
+    } catch (err) {
+      toast.error("Error: " + err.message);
+    } finally {
+      setRequestingAction(null);
+    }
+  };
+
+  const [showTransportModal, setShowTransportModal] = useState(null);
+
+  // 🚚 TRANSPORT DETAILS MODAL COMPONENT
+  const TransportDetailsModal = ({ invoice, onClose, onConfirm }) => {
+    const isEwbOnly = invoice.isEwbOnly;
+    const [details, setDetails] = useState({
+      vehicleNo: invoice.vehicleNo || "",
+      transportMode: invoice.transportMode || "1",
+      transportDistance: invoice.transportDistance || 50, // Default to 50 for safety
+      vehicleType: invoice.vehicleType || "REGULAR",
+      transporterId: invoice.transporterId || "",
+      transporterName: invoice.transporterName || ""
+    });
+
+    return (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className={`p-6 text-white text-center ${isEwbOnly ? "bg-blue-600" : "bg-[#319bab]"}`}>
+            <h3 className="text-xl font-black uppercase tracking-tight flex items-center justify-center gap-2">
+              <FaFileContract /> {isEwbOnly ? "Generate E-Way Bill" : "Transport Details Required"}
+            </h3>
+            <p className="text-xs opacity-90 mt-1 font-bold">
+              {isEwbOnly ? "IRN is already generated. Now creating the E-Way Bill." : "Mandatory for E-Way Bill (Invoice > ₹50,000)"}
+            </p>
+          </div>
+          
+          <div className="p-8 space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Transport Mode</label>
+                <select 
+                  value={details.transportMode}
+                  onChange={(e) => setDetails({...details, transportMode: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
+                >
+                  <option value="1">Road</option>
+                  <option value="2">Rail</option>
+                  <option value="3">Air</option>
+                  <option value="4">Ship</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Vehicle Number</label>
+                <input 
+                  type="text"
+                  placeholder="TN01AB1234"
+                  value={details.vehicleNo}
+                  onChange={(e) => setDetails({...details, vehicleNo: e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase()})}
+                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Distance (approx KM)</label>
+                <input 
+                  type="number"
+                  placeholder="50"
+                  value={details.transportDistance}
+                  onChange={(e) => setDetails({...details, transportDistance: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Vehicle Type</label>
+                <select 
+                  value={details.vehicleType}
+                  onChange={(e) => setDetails({...details, vehicleType: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
+                >
+                  <option value="REGULAR">Regular</option>
+                  <option value="OVERSIZED">Oversized</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Transporter GSTIN (Optional)</label>
+              <input 
+                type="text"
+                placeholder="33XXXXX..."
+                value={details.transporterId}
+                onChange={(e) => setDetails({...details, transporterId: e.target.value.toUpperCase()})}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 pt-6 border-t border-gray-50">
+              <button 
+                onClick={onClose}
+                className="flex-1 px-6 py-4 rounded-2xl font-black text-xs text-gray-400 hover:bg-gray-50 transition"
+              >
+                CANCEL
+              </button>
+              <button 
+                onClick={() => {
+                  if (!details.vehicleNo) return toast.warning("Vehicle Number is required");
+                  onConfirm(details);
+                }}
+                className={`flex-1 text-white px-6 py-4 rounded-2xl font-black text-xs shadow-xl transition ${isEwbOnly ? "bg-blue-600 shadow-blue-100 hover:bg-blue-700" : "bg-[#319bab] shadow-blue-100 hover:bg-blue-700"}`}
+              >
+                {isEwbOnly ? "GENERATE E-WAY BILL" : "GENERATE NOW"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <ToastContainer position="top-right" autoClose={2500} theme="colored" />
+
+      {showTransportModal && (
+        <TransportDetailsModal 
+          invoice={showTransportModal}
+          onClose={() => setShowTransportModal(null)}
+          onConfirm={(details) => {
+            if (showTransportModal.isEwbOnly) {
+              handleGenerateEWayBillOnly(showTransportModal, details);
+            } else {
+              handleGenerateEInvoice(showTransportModal, details);
+            }
+          }}
+        />
+      )}
 
       <div className="w-full">
         {/* HEADER */}
@@ -244,22 +398,35 @@ const BranchSalesInvoices = () => {
                            ₹{(inv.grandTotal || 0).toLocaleString()}
                         </td>
                         <td className="px-6 py-5 text-center">
-                           {inv.einvoiceStatus === "GENERATED" ? (
-                             <div className="flex flex-col items-center gap-1">
-                               <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
-                                  ✅ Validated
-                               </span>
-                               <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold">{inv.irn?.substring(0, 8)}...</code>
-                             </div>
-                           ) : inv.einvoiceStatus === "FAILED" ? (
-                             <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
-                                ❌ Failed
-                             </span>
-                           ) : (
-                             <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
-                                📄 Pending
-                             </span>
-                           )}
+                           <div className="flex flex-col gap-2 scale-90">
+                              {/* E-INVOICE BADGE */}
+                              {inv.einvoiceStatus === "GENERATED" ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-green-200">
+                                     ✅ IRN READY
+                                  </span>
+                                  <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold truncate w-24" title={inv.irn}>{inv.irn?.substring(0, 12)}...</code>
+                                </div>
+                              ) : (
+                                <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-yellow-200">
+                                   📄 SI PENDING
+                                </span>
+                              )}
+
+                              {/* E-WAY BILL BADGE */}
+                              {inv.ewayBillNo ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-blue-200">
+                                     🚚 EWB READY
+                                  </span>
+                                  <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold">{inv.ewayBillNo}</code>
+                                </div>
+                              ) : inv.grandTotal > 50000 ? (
+                                <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-orange-200">
+                                   📦 EWB REQD
+                                </span>
+                              ) : null}
+                           </div>
                         </td>
                         <td className="px-6 py-5 text-center">
                            {inv.salesOrderId?.reEditRequestStatus === "PENDING" ? (
@@ -278,26 +445,63 @@ const BranchSalesInvoices = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                            <div className="flex items-center gap-2 justify-center flex-wrap">
-                              {/* ✅ GENERATE E-INVOICE BUTTON */}
-                              <button
-                                onClick={() => handleGenerateEInvoice(inv)}
-                                disabled={requestingAction === inv._id}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${
-                                  inv.einvoiceStatus === "GENERATED"
-                                    ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
-                                    : "bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white"
-                                }`}
-                                title={inv.einvoiceStatus === "GENERATED" ? `IRN: ${inv.irn}` : "Submit to GST Portal"}
-                              >
-                                {requestingAction === inv._id ? (
-                                  <FaSync className="animate-spin" />
-                                ) : (
-                                  <>
-                                    <FaFileContract />
-                                    E-INVOICE
-                                  </>
-                                )}
-                              </button>
+                               {/* ✅ GENERATE E-WAY BILL ONLY BUTTON (Visible if E-Invoice exists but E-Way Bill missing for >50k) */}
+                               {inv.einvoiceStatus === "GENERATED" && !inv.ewayBillNo && inv.grandTotal > 50000 && (
+                                 <button
+                                   onClick={() => handleGenerateEWayBillOnly(inv)}
+                                   disabled={requestingAction === inv._id}
+                                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-600 hover:text-white text-[10px] font-black transition-all"
+                                   title="Only generate E-Way Bill"
+                                 >
+                                   {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <><FaSync /> GEN EWB</>}
+                                 </button>
+                               )}
+
+                               {/* ✅ GENERATE E-INVOICE BUTTON */}
+                               <button
+                                 onClick={() => handleGenerateEInvoice(inv)}
+                                 disabled={requestingAction === inv._id}
+                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${
+                                   inv.einvoiceStatus === "GENERATED"
+                                     ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
+                                     : "bg-[#319bab] text-white border-[#319bab] hover:bg-blue-700"
+                                 }`}
+                               >
+                                 {requestingAction === inv._id ? (
+                                   <FaSync className="animate-spin" />
+                                 ) : (
+                                   <>
+                                     <FaFileContract />
+                                     {inv.einvoiceStatus === "GENERATED" ? "RE-GENERATE" : "GENERATE E-INV"}
+                                   </>
+                                 )}
+                               </button>
+
+                               {/* PDF DOWNLOAD BUTTONS */}
+                               {inv.einvoiceStatus === "GENERATED" && (
+                                 <div className="flex gap-1">
+                                   <a
+                                     href={`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.invoicePdfUrl}`}
+                                     target="_blank"
+                                     rel="noopener noreferrer"
+                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200 text-[10px] font-black transition-all"
+                                     title="Download E-Invoice PDF"
+                                   >
+                                     <FaFileAlt /> PDF
+                                   </a>
+                                   {inv.ewayBillPdfUrl && (
+                                     <a
+                                       href={`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`}
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all"
+                                       title="Download E-Way Bill PDF"
+                                     >
+                                       🚚 EWB
+                                     </a>
+                                   )}
+                                 </div>
+                               )}
 
                               <button
                                 onClick={() => handleRequestEdit(inv)}

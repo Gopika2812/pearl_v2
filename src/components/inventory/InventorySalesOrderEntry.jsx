@@ -129,6 +129,15 @@ export default function InventorySalesOrderEntry({
   const [activePriceRequest, setActivePriceRequest] = useState(null);
   const pollingRef = useRef(null);
 
+  // UNIT CONVERSION STATES
+  const [convValue, setConvValue] = useState(1);
+  const [convUnit, setConvUnit] = useState("");
+  const [convAltValue, setConvAltValue] = useState(1);
+  const [convAltUnit, setConvAltUnit] = useState("");
+  const [altQty, setAltQty] = useState(0);
+
+  const unitOptions = ["Pcs", "Box", "Pkt", "Kg", "Grm", "Mtr", "Bundle", "Set", "Case", "Roll", "Bag"];
+
   // Check if current user is Admin or Super Admin
   const isAdmin = useMemo(() => {
     return user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
@@ -596,6 +605,41 @@ export default function InventorySalesOrderEntry({
     });
   }, [filteredProducts, poItems]);
 
+  // UNIT CONVERSION CALCULATION
+  useEffect(() => {
+    if (qty && convValue && convAltValue) {
+      const calculatedAlt = (Number(qty) * Number(convAltValue)) / Number(convValue);
+      setAltQty(Number(calculatedAlt.toFixed(2)));
+    } else {
+      setAltQty(0);
+    }
+  }, [qty, convValue, convAltValue]);
+
+  const saveProductConversion = async () => {
+    if (!selectedItem) {
+      toast.warning("Please select a product first");
+      return;
+    }
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/products/${selectedItem}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          unitConversion: {
+            value: convValue,
+            unit: convUnit,
+            altValue: convAltValue,
+            altUnit: convAltUnit
+          }
+        })
+      });
+      if (res.ok) {
+        toast.success("Product unit conversion saved!");
+      }
+    } catch (err) {
+      toast.error("Failed to save conversion");
+    }
+  };
+
 
 
   const updateSellingPrice = (product, cMargin) => {
@@ -665,6 +709,19 @@ export default function InventorySalesOrderEntry({
     setSgst(product.gst / 2);
     setIgst(false);
     setHsn(product.hsn);
+
+    // Set Unit Conversion from Product
+    if (product.unitConversion) {
+      setConvValue(product.unitConversion.value || 1);
+      setConvUnit(product.unitConversion.unit || product.units || "");
+      setConvAltValue(product.unitConversion.altValue || 1);
+      setConvAltUnit(product.unitConversion.altUnit || "");
+    } else {
+      setConvValue(1);
+      setConvUnit(product.units || "");
+      setConvAltValue(1);
+      setConvAltUnit("");
+    }
 
     if (customerId) {
       fetchRecentOrders(customerId, id);
@@ -832,6 +889,8 @@ export default function InventorySalesOrderEntry({
         total: totalAmount,
         lockedPrice: isLocked ? Number(sellingPrice) : (p.lockedPrice || 0),
         isNegativeStockBilled,
+        altQty: Number(altQty),
+        altUnit: convAltUnit,
       },
     ]);
 
@@ -1621,9 +1680,64 @@ export default function InventorySalesOrderEntry({
                 </div>
               </div>
 
+              {/* UNIT CONVERSION UI */}
+              <div className="bg-[#319bab]/5 p-3 rounded-lg border border-[#319bab]/20 my-2 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black text-[#319bab] uppercase tracking-widest">Unit Conversion</span>
+                  <button 
+                    onClick={saveProductConversion}
+                    className="text-[10px] bg-[#319bab] text-white px-2 py-0.5 rounded hover:bg-[#257f87] transition font-bold"
+                  >
+                    SAVE DEFAULT
+                  </button>
+                </div>
+                <div className="grid grid-cols-4 gap-2 items-center">
+                  <input
+                    type="number"
+                    className={`${inputClass} text-center`}
+                    value={convValue}
+                    onChange={(e) => setConvValue(Number(e.target.value))}
+                    placeholder="Val"
+                  />
+                  <select 
+                    className={`${selectClass} text-xs`}
+                    value={convUnit}
+                    onChange={(e) => setConvUnit(e.target.value)}
+                  >
+                    <option value="">Unit</option>
+                    {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                  <div className="text-center font-bold text-[#319bab]">=</div>
+                  <div className="flex gap-1 col-span-1">
+                    <input
+                      type="number"
+                      className={`${inputClass} text-center`}
+                      value={convAltValue}
+                      onChange={(e) => setConvAltValue(Number(e.target.value))}
+                      placeholder="Alt"
+                    />
+                    <select 
+                      className={`${selectClass} text-xs`}
+                      value={convAltUnit}
+                      onChange={(e) => setConvAltUnit(e.target.value)}
+                    >
+                      <option value="">Alt Unit</option>
+                      {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>Quantity</label>
+                  <div className="flex justify-between items-center">
+                    <label className={labelClass}>Quantity</label>
+                    {altQty > 0 && (
+                      <span className="text-[10px] font-bold text-[#319bab] bg-white px-1 rounded border border-[#319bab]/20">
+                        {altQty} {convAltUnit}
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="number"
                     className={inputClass}

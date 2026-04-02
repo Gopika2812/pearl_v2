@@ -565,19 +565,33 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
 
 
 
-          {/* GST - Full Width now */}
-          <div className="mb-4">
-            <label className={labelClass}>GST (%)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              max="28"
-              className={inputClass}
-              placeholder="Enter GST %"
-              value={product.gst}
-              onChange={(e) => setProduct({ ...product, gst: e.target.value })}
-            />
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            {/* HSN Code */}
+            <div>
+              <label className={labelClass}>HSN Code</label>
+              <input
+                type="text"
+                className={inputClass}
+                placeholder="Enter HSN Code"
+                value={product.hsnCode}
+                onChange={(e) => setProduct({ ...product, hsnCode: e.target.value })}
+              />
+            </div>
+
+            {/* GST */}
+            <div>
+              <label className={labelClass}>GST (%)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="28"
+                className={inputClass}
+                placeholder="Enter GST %"
+                value={product.gst}
+                onChange={(e) => setProduct({ ...product, gst: e.target.value })}
+              />
+            </div>
           </div>
 
           {/* Action Buttons - Sticky Bottom */}

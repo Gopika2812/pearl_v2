@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FaPlus, FaTrash, FaMoneyBillWave, FaDownload, FaFileAlt, FaChevronDown } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
+import { useBranch } from "../../context/BranchContext";
 
 export default function BranchOtherTransaction({ type }) {
   const { currentBranch, user } = useBranch();

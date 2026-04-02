@@ -174,6 +174,19 @@ const invoiceSchema = new mongoose.Schema(
     ewayBillNo: String,
     ewayBillDate: String,
     ewayBillValidUntil: String,
+
+    // PDF URLs from GSTZen
+    invoicePdfUrl: String,
+    ewayBillPdfUrl: String,
+    signedQrCodeImgUrl: String,
+
+    // Transport Details for E-Way Bill
+    transportMode: { type: String, default: "1" }, // 1: Road, 2: Rail, 3: Air, 4: Ship
+    transportDistance: { type: Number, default: 0 },
+    vehicleNo: { type: String, default: "" },
+    vehicleType: { type: String, enum: ["REGULAR", "OVERSIZED"], default: "REGULAR" },
+    transporterId: { type: String, default: "" },
+    transporterName: { type: String, default: "" },
   },
   { timestamps: true }
 );

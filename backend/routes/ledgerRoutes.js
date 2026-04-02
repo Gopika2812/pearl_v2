@@ -162,8 +162,15 @@ router.post("/bulk-upload", auth, upload.single("file"), async (req, res) => {
     }
 
     if (!branchId || !req.file) {
-
       return res.status(400).json({ message: "branchId and Excel file are required" });
+    }
+
+    // Cast branchId to ensure Mongoose compatibility
+    let validBranchId;
+    try {
+      validBranchId = new mongoose.Types.ObjectId(branchId);
+    } catch (e) {
+      return res.status(400).json({ message: "Invalid branchId format" });
     }
 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
@@ -174,8 +181,8 @@ router.post("/bulk-upload", auth, upload.single("file"), async (req, res) => {
     let diagnostics = [];
 
     // Helper Keywords
-    const nameKeywords = ["accountname", "ledgername", "name", "ledger", "account", "ledgerdetails", "accounttitle", "particluars", "particulars"];
-    const groupKeywords = ["accountgroup", "ledgergroup", "group", "accounttype", "category", "parent", "head", "undergroup"];
+    const nameKeywords = ["accountname", "ledgername", "name", "ledger", "account", "ledgerdetails", "accounttitle", "particluars", "particulars", "partyname"];
+    const groupKeywords = ["accountgroup", "ledgergroup", "group", "accounttype", "category", "parent", "head", "undergroup", "under"];
 
     // 1. Scan ALL Sheets to find the one with the most data
     for (const sheetName of workbook.SheetNames) {
@@ -251,39 +258,61 @@ router.post("/bulk-upload", auth, upload.single("file"), async (req, res) => {
         const nature = getVal(["nature", "type"]) || "Expense";
         const gstString = getVal(["gst", "gstpercent", "tax", "gstper", "gstrate", "gstn"]);
         const gst = parseFloat(gstString) || 0;
-        const gstin = getVal(["gstinpan", "gstin", "pan", "gstnumber", "gstno", "gstintin"]);
+        const gstin = getVal(["gstinpan", "gstin", "pan", "gstnumber", "gstno", "gstintin", "gstinuin", "gstin/uin"]);
         const hsn = getVal(["hsn", "hsncode", "hsnac", "sac"]);
-        const openingDebit = parseFloat(getVal(["openingdr", "dr", "debit", "openingdebit", "drbalance", "amountdr"])) || 0;
+        const openingDebit = parseFloat(getVal(["openingdr", "dr", "debit", "openingdebit", "drbalance", "amountdr", "openingbalance"])) || 0;
         const openingCredit = parseFloat(getVal(["openingcr", "cr", "credit", "openingcredit", "crbalance", "amountcr"])) || 0;
         const notes = getVal(["notes", "narration", "description", "remarks", "memo"]);
         
         const contactPerson = getVal(["contactperson", "contact", "person", "contactname", "vendorname"]);
-        const phone = getVal(["phone", "mobile", "contactno", "whatsapp", "telephoneno", "cell", "mobileno", "phoneno"]);
+        // Combined phone number detection
+        const phone = [
+          getVal(["whatsapp"]),
+          getVal(["mobile", "mobileno", "contactno"]),
+          getVal(["phone", "phoneno", "telephoneno", "cell"])
+        ].filter(v => v).join(", ") || "";
+        
         const email = getVal(["email", "mailid", "emailaddress"]);
         const address = getVal(["address", "location", "fulladdress"]);
         const city = getVal(["city", "town", "district"]);
-        const state = getVal(["state", "region", "province"]);
+        const state = getVal(["state", "region", "province", "statename"]);
         const pincode = getVal(["pincode", "zip", "zipcode", "postcode"]);
         const country = getVal(["country", "nation"]) || "India";
-        const registrationType = getVal(["registrationtype", "gsttype", "taxregistration"]);
-        const pan = getVal(["pan", "panno", "incometaxno"]);
+        const registrationType = getVal(["registrationtype", "gsttype", "taxregistration", "gstregistrationtype"]);
+        const pan = getVal(["pan", "panno", "incometaxno", "panitno"]);
 
         if (!name || !groupName) {
           skippedCount++;
+          const reason = !name && !groupName ? "Name and Group missing" : !name ? "Name missing" : "Group missing";
           errors.push({ 
             row: index + bestHeaderRowIndex + 2, 
-            reason: `Account name or group missing. Found: Name='${name}', Group='${groupName}'`
+            reason: `${reason}. Detected headers: ${Object.keys(bestHeaderMap).join(", ")}`,
+            data: row.slice(0, 5) // Show first 5 columns for debugging
           });
           continue;
         }
 
-        // Handle Group
+        // Handle Group Auto-Nature Detection
+        let detectedNature = nature;
+        if (!getVal(["nature", "type"])) {
+          const gn = groupName.toLowerCase();
+          if (gn.includes("debtor") || gn.includes("bank") || gn.includes("cash") || gn.includes("asset") || gn.includes("stock")) {
+            detectedNature = "Asset";
+          } else if (gn.includes("creditor") || gn.includes("liability") || gn.includes("loan") || gn.includes("tax") || gn.includes("payable")) {
+            detectedNature = "Liability";
+          } else if (gn.includes("sale") || gn.includes("income") || gn.includes("revenue")) {
+            detectedNature = "Income";
+          } else if (gn.includes("purchase") || gn.includes("expense") || gn.includes("direct") || gn.includes("indirect")) {
+            detectedNature = "Expense";
+          }
+        }
+        
         let groupId = groupMap.get(groupName.toLowerCase().trim());
         if (!groupId) {
           const newGroup = new LedgerGroup({
             name: groupName,
-            nature,
-            branchId
+            nature: detectedNature,
+            branchId: validBranchId
           });
           const savedGroup = await newGroup.save();
           groupId = savedGroup._id;
@@ -293,7 +322,7 @@ router.post("/bulk-upload", auth, upload.single("file"), async (req, res) => {
         // Create or Update Ledger
         const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const existingLedger = await Ledger.findOne({ 
-          branchId, 
+          branchId: validBranchId, 
           name: { $regex: `^${escapedName}$`, $options: "i" } 
         });
         
@@ -318,8 +347,9 @@ router.post("/bulk-upload", auth, upload.single("file"), async (req, res) => {
           registrationType,
           country,
           pan,
-          branchId,
-        };if (existingLedger) {
+          branchId: validBranchId,
+        };
+if (existingLedger) {
           Object.assign(existingLedger, ledgerData);
           await existingLedger.save();
         } else {
@@ -339,9 +369,11 @@ router.post("/bulk-upload", auth, upload.single("file"), async (req, res) => {
 
     res.json({
       success: true,
-      version: "3.5-SmartScan",
+      version: "3.6-DetailedErrors",
       foundInSheet: bestSheet,
       message: `Bulk upload completed: ${createdCount} created/updated, ${skippedCount} skipped.`,
+      detectedHeaders: Object.keys(bestHeaderMap),
+      lastErrors: errors.slice(-5).map(e => `Row ${e.row}: ${e.error || e.reason}`),
       diagnostics
     });
 

@@ -44,9 +44,9 @@ export const QUICK_LINKS_CONFIG = {
     label: "Product",
     desc: "Master record of all sellable and stock items",
     endpoint: "/products",
-    displayFields: ["name", "totalQty", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "productGroup", "productCategories", "warehouse"],
-    editableFields: ["name", "purchasingPrice", "sellingPrice", "adminMargin", "productGroup", "productCategories", "warehouse"],
-    detailedFields: ["name", "totalQty", "totalQtyUnit", "perQty", "units", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "hsnCode", "gst"],
+    displayFields: ["name", "hsnCode", "totalQty", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "productGroup", "productCategories", "warehouse"],
+    editableFields: ["name", "hsnCode", "purchasingPrice", "sellingPrice", "adminMargin", "productGroup", "productCategories", "warehouse"],
+    detailedFields: ["name", "hsnCode", "totalQty", "totalQtyUnit", "perQty", "units", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "gst"],
     permissionFields: ["purchasingPrice", "adminMargin", "sellingPrice", "marginPercentage", "gst", "totalQty"]
   },
   customer_category: {

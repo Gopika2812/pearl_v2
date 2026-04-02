@@ -64,6 +64,13 @@ const productSchema = new mongoose.Schema(
       threshold: { type: Number, default: null }, // Manual override for reorder threshold
       restockingQty: { type: Number, default: null }, // Manual override for restocking quantity
     },
+    // Unit Conversion Configuration
+    unitConversion: {
+      value: { type: Number, default: 1 },
+      unit: { type: String, default: "" },
+      altValue: { type: Number, default: 1 },
+      altUnit: { type: String, default: "" }
+    }
   },
   { timestamps: true }
 );

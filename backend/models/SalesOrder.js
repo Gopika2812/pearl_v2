@@ -46,6 +46,8 @@ const salesOrderSchema = new mongoose.Schema(
         hsn: String,
         qty: Number,
         unit: { type: String, default: "" },
+        altQty: { type: Number, default: 0 },
+        altUnit: { type: String, default: "" },
         sellingPrice: Number,
 
         discountType: {
@@ -95,6 +97,8 @@ const salesOrderSchema = new mongoose.Schema(
         hsn: String,
         qty: Number,
         unit: { type: String, default: "" },
+        altQty: { type: Number, default: 0 },
+        altUnit: { type: String, default: "" },
         sellingPrice: Number,
 
         discountType: {
@@ -223,6 +227,8 @@ const salesOrderSchema = new mongoose.Schema(
         productId: mongoose.Schema.Types.ObjectId,
         qty: Number,
         unit: { type: String, default: "" },
+        altQty: { type: Number, default: 0 },
+        altUnit: { type: String, default: "" },
         sellingPrice: Number,
         total: Number,
       },
