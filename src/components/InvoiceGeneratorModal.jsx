@@ -22,6 +22,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   const [editedItems, setEditedItems] = useState([]);
   const [notes, setNotes] = useState("");
   const [invoiceType, setInvoiceType] = useState("ORDER_DETAILS");
+  const [commonDiscount, setCommonDiscount] = useState(0);
 
   // Preview state
   const [previewData, setPreviewData] = useState(null);
@@ -45,6 +46,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           backOrderQty: 0,
         }))
       );
+      setNotes(order.notes || "");
+      setCommonDiscount(order.commonDiscount || 0);
     }
   }, [order]);
 
@@ -71,6 +74,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             items: editedItems,
             notes,
             invoiceType,
+            commonDiscount,
           }),
         }
       );
@@ -102,6 +106,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             items: editedItems,
             notes,
             invoiceType,
+            commonDiscount,
             finalizedBy: user?.id || user?._id,
             finalizedByUsername: user?.username || user?.fullName || user?.name || "System",
           }),
@@ -744,6 +749,22 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
                   rows="4"
                 />
+              </div>
+
+              {/* Special Discount */}
+              <div className="mb-6">
+                <label className="block font-semibold mb-2">Special Discount (₹):</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl text-gray-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    value={commonDiscount}
+                    onChange={(e) => setCommonDiscount(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                    placeholder="Enter special discount amount..."
+                    className="flex-1 p-3 border-2 border-red-200 rounded-lg focus:border-red-500 focus:outline-none font-bold text-red-600 bg-red-50/30"
+                    min="0"
+                  />
+                </div>
               </div>
 
               {/* Options */}

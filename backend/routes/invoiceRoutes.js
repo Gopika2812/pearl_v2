@@ -56,7 +56,14 @@ router.get("/prepare/:salesOrderId", async (req, res) => {
 router.post("/preview/:salesOrderId", async (req, res) => {
   try {
     const { salesOrderId } = req.params;
-    const { items, notes, invoiceType = "ORDER_DETAILS" } = req.body;
+    const { 
+      items, 
+      notes, 
+      invoiceType = "ORDER_DETAILS", 
+      commonDiscount: customCommonDiscount,
+      finalizedBy, 
+      finalizedByUsername 
+    } = req.body;
 
     const salesOrder = await SalesOrder.findById(salesOrderId)
       .populate("branchId")
@@ -128,7 +135,9 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     };
     totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
-    const commonDiscount = salesOrder.commonDiscount || 0;
+    const commonDiscount = customCommonDiscount !== undefined 
+      ? Number(customCommonDiscount) 
+      : (salesOrder.commonDiscount || 0);
     const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) - commonDiscount);
 
     // Fetch billing person name
@@ -211,7 +220,14 @@ router.post("/preview/:salesOrderId", async (req, res) => {
 router.post("/finalize/:salesOrderId", async (req, res) => {
   try {
     const { salesOrderId } = req.params;
-    const { items, notes, invoiceType = "ORDER_DETAILS" } = req.body;
+    const { 
+      items, 
+      notes, 
+      invoiceType = "ORDER_DETAILS", 
+      commonDiscount: customCommonDiscount,
+      finalizedBy, 
+      finalizedByUsername 
+    } = req.body;
 
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -363,7 +379,9 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       };
       totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
-      const commonDiscount = salesOrder.commonDiscount || 0;
+      const commonDiscount = customCommonDiscount !== undefined 
+        ? Number(customCommonDiscount) 
+        : (salesOrder.commonDiscount || 0);
       const tCharge = salesOrder.transportCharge || 0;
       const tGstPercent = salesOrder.transportGstPercent || 0;
       const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
