@@ -121,8 +121,8 @@ class GSTZenService {
       }
 
       // Final Path Logic
-      let endpoint = (process.env.GSTZEN_EINVOICE_ENDPOINT || "").trim().replace(/^\/+/, "");
-      if (!endpoint) throw new Error("GSTZEN_EINVOICE_ENDPOINT missing in .env");
+      let endpoint = (process.env.GSTZEN_EINVOICE_ENDPOINT || "/~gstzen/a/post-einvoice-data/einvoice-json/").trim().replace(/^\/+/, "");
+      // if (!endpoint) throw new Error("GSTZEN_EINVOICE_ENDPOINT missing in .env");
 
       console.log(`📡 Sending to: ${this.baseUrl}/${endpoint}`);
       const response = await this.apiClient.post(endpoint, payload);
