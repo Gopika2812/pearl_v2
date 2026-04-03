@@ -1,15 +1,14 @@
-import React, { useEffect, useState } from "react";
-import { FaBookOpen, FaCalendarAlt, FaFileAlt, FaSearch, FaSync, FaUser, FaFilter, FaFileExcel } from "react-icons/fa";
-import * as XLSX from "xlsx";
+import { useEffect, useState } from "react";
+import { FaBookOpen, FaCalendarAlt, FaFileAlt, FaFileExcel, FaFilter, FaSearch, FaSync, FaUser } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
+import * as XLSX from "xlsx";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
-
 const BranchDayBook = () => {
     const { currentBranch } = useBranch();
     const [dayBook, setDayBook] = useState([]);
     const [loading, setLoading] = useState(false);
-    
+
     // Filters
     const [searchTerm, setSearchTerm] = useState("");
     const [filterVoucherType, setFilterVoucherType] = useState("");
@@ -90,7 +89,7 @@ const BranchDayBook = () => {
         const worksheet = XLSX.utils.json_to_sheet(exportData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Daybook Report");
-        
+
         // Auto-size columns (rough approximation)
         const maxLen = exportData.reduce((acc, row) => {
             Object.keys(row).forEach((key, i) => {
@@ -109,7 +108,7 @@ const BranchDayBook = () => {
         <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20">
             <ToastContainer />
             <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
-                
+
                 {/* HEADER SECTION */}
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -126,34 +125,34 @@ const BranchDayBook = () => {
                         </div>
 
                         <div className="flex items-center gap-2">
-                             <div className="flex items-center bg-gray-50 p-2 rounded-xl border border-gray-200">
+                            <div className="flex items-center bg-gray-50 p-2 rounded-xl border border-gray-200">
                                 <div className="flex items-center gap-2 px-2">
                                     <FaCalendarAlt className="text-[#319bab] text-sm" />
-                                    <input 
-                                        type="date" 
+                                    <input
+                                        type="date"
                                         value={fromDate}
                                         onChange={(e) => setFromDate(e.target.value)}
-                                        className="bg-transparent text-xs font-bold outline-none text-gray-700" 
+                                        className="bg-transparent text-xs font-bold outline-none text-gray-700"
                                     />
                                 </div>
                                 <span className="text-gray-300 mx-1">|</span>
                                 <div className="flex items-center gap-2 px-2">
-                                    <input 
-                                        type="date" 
+                                    <input
+                                        type="date"
                                         value={toDate}
                                         onChange={(e) => setToDate(e.target.value)}
-                                        className="bg-transparent text-xs font-bold outline-none text-gray-700" 
+                                        className="bg-transparent text-xs font-bold outline-none text-gray-700"
                                     />
                                 </div>
                             </div>
-                            <button 
+                            <button
                                 onClick={fetchDayBook}
                                 className="p-3 bg-white text-[#319bab] border border-gray-200 rounded-xl hover:bg-gray-50 transition shadow-sm"
                                 title="Refresh"
                             >
                                 <FaSync className={loading ? "animate-spin" : ""} />
                             </button>
-                            <button 
+                            <button
                                 onClick={handleExportExcel}
                                 className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/20 text-xs font-bold"
                                 title="Export to Excel"
@@ -169,9 +168,9 @@ const BranchDayBook = () => {
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="relative">
                         <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input 
-                            type="text" 
-                            placeholder="Search Customer/Supplier..." 
+                        <input
+                            type="text"
+                            placeholder="Search Customer/Supplier..."
                             className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#319bab] outline-none text-sm font-medium transition"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -179,9 +178,9 @@ const BranchDayBook = () => {
                     </div>
                     <div className="relative">
                         <FaFilter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input 
-                            type="text" 
-                            placeholder="Filter Voucher Type (SI, PI...)" 
+                        <input
+                            type="text"
+                            placeholder="Filter Voucher Type (SI, PI...)"
                             className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#319bab] outline-none text-sm font-medium transition"
                             value={filterVoucherType}
                             onChange={(e) => setFilterVoucherType(e.target.value)}
@@ -189,9 +188,9 @@ const BranchDayBook = () => {
                     </div>
                     <div className="relative">
                         <FaFileAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input 
-                            type="text" 
-                            placeholder="Filter Invoice ID..." 
+                        <input
+                            type="text"
+                            placeholder="Filter Invoice ID..."
                             className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#319bab] outline-none text-sm font-medium transition"
                             value={filterInvoiceId}
                             onChange={(e) => setFilterInvoiceId(e.target.value)}
@@ -253,11 +252,10 @@ const BranchDayBook = () => {
                                                 </p>
                                             </td>
                                             <td className="px-6 py-5">
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-tight uppercase ${
-                                                    entry.type === "SALE" 
-                                                    ? "bg-emerald-100 text-emerald-700" 
-                                                    : "bg-amber-100 text-amber-700"
-                                                }`}>
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-tight uppercase ${entry.type === "SALE"
+                                                        ? "bg-emerald-100 text-emerald-700"
+                                                        : "bg-amber-100 text-amber-700"
+                                                    }`}>
                                                     {entry.voucherType}
                                                 </span>
                                             </td>
@@ -284,7 +282,7 @@ const BranchDayBook = () => {
                                     ))
                                 )}
                             </tbody>
-                            
+
                             {/* TABLE FOOTER / TOTALS */}
                             {!loading && filteredEntries.length > 0 && (
                                 <tfoot className="bg-gray-50/80 border-t-2 border-gray-100">
@@ -310,7 +308,7 @@ const BranchDayBook = () => {
                         * The Day Book only includes finalized and invoiced transactions.
                     </p>
                     <div className="flex items-center gap-4">
-                         <div className="flex flex-col items-end">
+                        <div className="flex flex-col items-end">
                             <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Net Total</span>
                             <span className={`text-xl font-black ${totalDebit - totalCredit >= 0 ? "text-emerald-600" : "text-amber-600"}`}>
                                 ₹{(totalDebit - totalCredit).toLocaleString()}
