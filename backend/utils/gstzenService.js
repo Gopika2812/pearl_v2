@@ -8,7 +8,11 @@ import { CookieJar } from "tough-cookie";
 
 class GSTZenService {
   constructor() {
-    this.apiKey = (process.env.GSTZen_API_KEY || "").trim();
+    this.apiKey = (process.env.GSTZEN_API_KEY || process.env.GSTZen_API_KEY || "").trim();
+    if (!this.apiKey) {
+      console.warn("⚠️ GSTZEN_API_KEY is missing in your environment configuration.");
+    }
+    
     // Normalize Base URL to NOT have a trailing slash
     this.baseUrl = (process.env.GSTZEN_BASE_URL || "https://my.gstzen.in").trim().replace(/\/+$/, "");
     
