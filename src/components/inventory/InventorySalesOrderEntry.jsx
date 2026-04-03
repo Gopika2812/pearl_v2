@@ -127,6 +127,7 @@ export default function InventorySalesOrderEntry({
   const [isLocked, setIsLocked] = useState(false); // New state for Lock Price checkbox
   const [isPriceAuthorized, setIsPriceAuthorized] = useState(false);
   const [activePriceRequest, setActivePriceRequest] = useState(null);
+  const [orderDate, setOrderDate] = useState(new Date().toISOString().split("T")[0]);
   const pollingRef = useRef(null);
 
   // UNIT CONVERSION STATES
@@ -1090,6 +1091,7 @@ export default function InventorySalesOrderEntry({
     deliveryMan,
     billingPerson,
     isClaim,
+    orderDate,
   };
 
   const handleAddExtraExpense = async () => {
@@ -1150,6 +1152,7 @@ export default function InventorySalesOrderEntry({
     setSelectedCustomer(null);
     setCustomerSearch("");
     setCustomerMargin(0);
+    setOrderDate(new Date().toISOString().split("T")[0]);
 
     // Billing Persons
     setSalesOwner("");
@@ -1317,6 +1320,16 @@ export default function InventorySalesOrderEntry({
                 <option key={v._id} value={v.name}>{v.name}</option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className={labelClass}>Order Date</label>
+            <input
+              type="date"
+              className={inputClass}
+              value={orderDate}
+              onChange={(e) => setOrderDate(e.target.value)}
+            />
           </div>
 
           <div>

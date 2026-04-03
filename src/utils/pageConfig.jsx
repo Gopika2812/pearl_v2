@@ -81,7 +81,6 @@ export const PAGE_CONFIG = [
   {
     category: "Directory",
     items: [
-      { id: "dispatch", name: "Loading & Dispatch", path: "/branch/dispatch", icon: "truck" },
       { id: "product-records", name: "Product Records", path: "/branch/product-records", icon: "box", permissionFields: ["purchasingPrice", "sellingPrice", "grossProfit"] },
     ]
   },

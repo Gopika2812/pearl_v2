@@ -37,6 +37,7 @@ const InventoryPurchaseOrderEntry = ({
   const [invoiceId, setInvoiceId] = useState("");
   const [productGroup, setProductGroup] = useState("");
   const [billingPerson, setBillingPerson] = useState(user?.name || "");
+  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
 
   // Modal states
   const [showVoucherModal, setShowVoucherModal] = useState(false);
@@ -371,6 +372,7 @@ const InventoryPurchaseOrderEntry = ({
     setWarehouse("");
     setProductGroup("");
     setBillingPerson("");
+    setDate(new Date().toISOString().split("T")[0]);
 
     // Items
     setItems([]);
@@ -424,6 +426,7 @@ const InventoryPurchaseOrderEntry = ({
       grandTotal: Math.round(grandTotal),
       billingPerson,
       invoiceId,
+      date,
       status: "PLACED",
     };
 
@@ -509,6 +512,16 @@ const InventoryPurchaseOrderEntry = ({
             className={`${inputClass} bg-gray-50 font-bold text-[#319bab]`}
             value={invoiceId}
             readOnly
+          />
+        </div>
+
+        <div>
+          <label className={labelClass}>Order Date</label>
+          <input
+            type="date"
+            className={inputClass}
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
           />
         </div>
 

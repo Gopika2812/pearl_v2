@@ -88,6 +88,10 @@ const LedgerSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    paymentMethod: {
+      type: String,
+      trim: true,
+    },
     isActive: {
 
       type: Boolean,

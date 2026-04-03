@@ -100,8 +100,10 @@ const BranchPurchaseInvoices = () => {
                     <th className="px-6 py-4 text-left">Invoice ID</th>
                     <th className="px-6 py-4 text-left">Order Reference</th>
                     <th className="px-6 py-4 text-left">Vendor</th>
+                    <th className="px-6 py-4 text-left">Vendor Bill#</th>
+                    <th className="px-6 py-4 text-center">Bill Date</th>
                     <th className="px-6 py-4 text-right">Grand Total</th>
-                    <th className="px-6 py-4 text-center">Date</th>
+                    <th className="px-6 py-4 text-center">Entry Date</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -123,9 +125,18 @@ const BranchPurchaseInvoices = () => {
                           {inv.purchaseOrderId ? `PO Ref: ${inv.purchaseOrderId.invoiceId || inv.purchaseOrderId}` : "N/A"}
                         </td>
                         <td className="px-6 py-4 font-bold text-gray-800">{inv.vendor}</td>
+                        <td className="px-6 py-4 text-xs font-bold text-blue-600 italic">
+                          {inv.vendorBillNo || "N/A"}
+                        </td>
+                        <td className="px-6 py-4 text-center text-xs font-semibold text-gray-500">
+                          {inv.vendorDate ? new Date(inv.vendorDate).toLocaleDateString("en-IN") : "N/A"}
+                        </td>
                         <td className="px-6 py-4 text-right font-black text-green-700">₹{(inv.grandTotal || 0).toLocaleString()}</td>
-                        <td className="px-6 py-4 text-center text-xs text-gray-500">
-                           {new Date(inv.createdAt).toLocaleDateString("en-IN")}
+                        <td className="px-6 py-4 text-center">
+                          <p className="text-xs font-bold text-gray-700">{new Date(inv.createdAt).toLocaleDateString("en-IN")}</p>
+                          <p className="text-[10px] text-gray-400 font-bold mt-0.5">
+                             {new Date(inv.createdAt).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit' })}
+                          </p>
                         </td>
                       </tr>
 

@@ -10,6 +10,8 @@ import PurchaseInvoice from "../models/PurchaseInvoice.js";
 import Payment from "../models/Payment.js";
 import DebitNote from "../models/DebitNote.js";
 import Receipt from "../models/Receipt.js";
+import PurchaseOrder from "../models/PurchaseOrder.js";
+import mongoose from "mongoose";
 
 const router = express.Router();
 
@@ -528,6 +530,61 @@ router.get("/day-book", async (req, res) => {
       message: "Failed to fetch Day Book data",
       error: error.message 
     });
+  }
+});
+
+/**
+ * Upcoming Orders (Future Dated)
+ * Fetches SOs and POs with date > today
+ */
+router.get("/upcoming-orders", async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    if (!branchId) return res.status(400).json({ success: false, message: "branchId is required" });
+
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+
+    const [upcomingSales, upcomingPurchases] = await Promise.all([
+      SalesOrder.find({
+        branchId,
+        orderDate: { $gt: today },
+        status: { $ne: "CANCELLED" }
+      }).select("invoiceId customer orderDate status"),
+      
+      mongoose.model("PurchaseOrder").find({
+        branchId,
+        date: { $gt: today },
+        status: { $ne: "CANCELLED" }
+      }).select("invoiceId vendor date status")
+    ]);
+
+    const allUpcoming = [
+      ...upcomingSales.map(s => ({
+        id: s.invoiceId,
+        _id: s._id,
+        date: s.orderDate,
+        name: s.customer?.name || "Customer",
+        type: "SO",
+        status: s.status
+      })),
+      ...upcomingPurchases.map(p => ({
+        id: p.invoiceId,
+        _id: p._id,
+        date: p.date,
+        name: p.vendor || "Supplier",
+        type: "PO",
+        status: p.status
+      }))
+    ].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    res.json({
+      success: true,
+      data: allUpcoming
+    });
+  } catch (error) {
+    console.error("Upcoming Orders Error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch upcoming orders" });
   }
 });
 

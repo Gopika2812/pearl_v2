@@ -287,7 +287,7 @@ const salesOrderSchema = new mongoose.Schema(
     },
     
     salesInvoiceId: { type: String }, // Links to separate Invoice document (SI/xxx)
-
+    orderDate: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

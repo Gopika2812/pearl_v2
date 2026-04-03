@@ -88,6 +88,8 @@ const purchaseInvoiceSchema = new mongoose.Schema(
       enum: ["NONE", "PENDING", "APPROVED", "REJECTED"], 
       default: "NONE" 
     },
+    vendorBillNo: { type: String },
+    vendorDate: { type: Date },
   },
   { timestamps: true }
 );

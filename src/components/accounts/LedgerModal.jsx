@@ -287,6 +287,22 @@ const LedgerModal = ({ isOpen, onClose, branchId, onLedgerCreated }) => {
                 onChange={handleChange}
               />
             </div>
+            <div className="md:col-span-2">
+              <label className={labelClass}>Payment Method Association (Optional)</label>
+              <select
+                name="paymentMethod"
+                className={inputClass}
+                value={formData.paymentMethod}
+                onChange={handleChange}
+              >
+                <option value="">None / Not a Payment Ledger</option>
+                <option value="CASH">CASH</option>
+                <option value="BANK_TRANSFER">BANK TRANSFER</option>
+                <option value="UPI">UPI</option>
+                <option value="CHEQUE">CHEQUE</option>
+                <option value="CREDIT_CARD">CREDIT CARD</option>
+              </select>
+            </div>
 
             {/* OPENING BALANCES */}
             <div>

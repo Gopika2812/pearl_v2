@@ -204,6 +204,8 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
           grandTotal: Math.round(grandTotal),
           extraExpenses: order.extraExpenses || [],
           extraExpenseAmount: order.extraExpenseAmount || 0,
+          vendorBillNo: req.body.vendorBillNo,
+          vendorDate: req.body.vendorDate ? new Date(req.body.vendorDate) : undefined,
         }
       );
 
@@ -271,14 +273,15 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     const piNumber = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
 
     // Prefer items from req.body if provided during conversion
-    const invoiceItems = (req.body.items && req.body.items.length > 0) ? req.body.items : order.items;
+    const { items: bodyItems, vendorBillNo, vendorDate } = req.body;
+    const invoiceItems = (bodyItems && bodyItems.length > 0) ? bodyItems : order.items;
 
     // If custom items sent, recalculate core totals
     let subtotal = order.subtotal;
     let totalTax = order.totalTax;
     let grandTotal = order.grandTotal;
 
-    if (req.body.items && req.body.items.length > 0) {
+    if (bodyItems && bodyItems.length > 0) {
       subtotal = invoiceItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
       totalTax = invoiceItems.reduce((acc, i) => {
         const gst = Number(i.gst || 0);
@@ -302,6 +305,8 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       extraExpenseAmount: order.extraExpenseAmount || 0,
       grandTotal: Math.round(grandTotal),
       financialYear: currentFY,
+      vendorBillNo: req.body.vendorBillNo,
+      vendorDate: req.body.vendorDate ? new Date(req.body.vendorDate) : undefined,
     });
 
     await purchaseInvoice.save();

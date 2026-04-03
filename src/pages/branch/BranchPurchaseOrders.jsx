@@ -28,6 +28,8 @@ const BranchPurchaseOrders = () => {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [editItems, setEditItems] = useState([]);
+  const [vendorBillNo, setVendorBillNo] = useState("");
+  const [vendorDate, setVendorDate] = useState("");
 
   // Search debounce logic
   useEffect(() => {
@@ -134,11 +136,15 @@ const BranchPurchaseOrders = () => {
 
   const handleConfirmInvoice = async () => {
     if (!editingOrder) return;
+    if (!vendorBillNo || !vendorDate) {
+      toast.error("Please enter Vendor Bill Number and Bill Date");
+      return;
+    }
     try {
       setLoading(true);
       const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${editingOrder._id}/generate-invoice`, {
         method: "POST",
-        body: JSON.stringify({ items: editItems }),
+        body: JSON.stringify({ items: editItems, vendorBillNo, vendorDate }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to generate invoice");
@@ -267,6 +273,29 @@ const BranchPurchaseOrders = () => {
                 <div>
                   <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">PO Date</p>
                   <p className="text-sm font-black text-gray-800">{new Date(editingOrder.date || editingOrder.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+
+              {/* VENDOR BILL DETAILS */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-blue-50 p-6 rounded-2xl border border-blue-100 shadow-inner">
+                <div>
+                  <label className="text-[10px] text-blue-600 uppercase font-black tracking-widest block mb-2">Vendor Bill Number <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    className="w-full border border-blue-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm"
+                    placeholder="Enter Supplier Invoice/Bill No."
+                    value={vendorBillNo}
+                    onChange={(e) => setVendorBillNo(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-blue-600 uppercase font-black tracking-widest block mb-2">Vendor Bill Date <span className="text-red-500">*</span></label>
+                  <input
+                    type="date"
+                    className="w-full border border-blue-200 rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm"
+                    value={vendorDate}
+                    onChange={(e) => setVendorDate(e.target.value)}
+                  />
                 </div>
               </div>
 

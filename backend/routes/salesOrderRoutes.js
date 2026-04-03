@@ -346,6 +346,7 @@ router.post("/", auth, async (req, res) => {
       extraExpenseAmount,
       commonDiscount,
       isClaim,
+      orderDate,
     } = req.body;
 
     console.log("📤 POST /sales-orders received");
@@ -443,6 +444,7 @@ router.post("/", auth, async (req, res) => {
       deliveryMan,
       financialYear: currentFY,
       isClaim: isClaim || false,
+      orderDate: orderDate ? new Date(orderDate) : new Date(),
     });
 
     await salesOrder.save();
