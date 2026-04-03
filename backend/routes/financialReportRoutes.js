@@ -508,7 +508,7 @@ router.get("/day-book", async (req, res) => {
     const dayBook = [
       ...sales.map(s => ({
         _id: s._id,
-        date: s.orderDate || s.createdAt,
+        date: s.createdAt || s.orderDate, // Prioritize createdAt for accurate time
         name: s.customer?.name || "Cash Customer",
         voucherType: s.status === "INVOICED" ? "SI" : "SO",
         invoiceId: s.status === "INVOICED" ? s.salesInvoiceId || s.invoiceId : s.invoiceId,
@@ -519,7 +519,7 @@ router.get("/day-book", async (req, res) => {
       })),
       ...purchaseOrders.map(po => ({
         _id: po._id,
-        date: po.date || po.createdAt,
+        date: po.createdAt || po.date,
         name: po.vendor || "Supplier",
         voucherType: po.status === "INVOICED" ? "PI" : "PO",
         invoiceId: po.status === "INVOICED" ? po.purchaseInvoiceId || po.invoiceId : po.invoiceId,
@@ -530,7 +530,7 @@ router.get("/day-book", async (req, res) => {
       })),
       ...purchaseInvoices.map(p => ({
         _id: p._id,
-        date: p.vendorDate || p.invoiceDate || p.createdAt,
+        date: p.createdAt || p.vendorDate || p.invoiceDate,
         name: p.vendor || "N/A",
         voucherType: p.voucherType || "PI",
         invoiceId: p.purchaseInvoiceId,
@@ -546,7 +546,7 @@ router.get("/day-book", async (req, res) => {
         voucherType: "CN",
         invoiceId: cn.creditNoteId,
         debit: 0,
-        credit: cn.grandTotal || 0, // A reduction in sales is a credit entry
+        credit: cn.grandTotal || 0,
         type: "CREDIT_NOTE"
       })),
       ...receipts.map(r => ({
@@ -575,7 +575,7 @@ router.get("/day-book", async (req, res) => {
         name: dn.vendor?.name || "N/A",
         voucherType: "DN",
         invoiceId: dn.debitNoteId,
-        debit: dn.grandTotal || 0, // A reduction in purchase is a debit entry
+        debit: dn.grandTotal || 0,
         credit: 0,
         type: "DEBIT_NOTE"
       }))
