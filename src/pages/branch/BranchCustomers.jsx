@@ -40,6 +40,37 @@ const BranchCustomers = () => {
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
+  const [exportDate, setExportDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const handleExportBalances = async () => {
+    try {
+      setLoading(true);
+      const url = `${API_BASE}/customers/export/opening-closing?branchId=${branchId}&date=${exportDate}`;
+      const response = await fetchWithAuth(url);
+      const result = await response.json();
+
+      if (!result.success) throw new Error(result.message || "Export failed");
+
+      const balanceData = result.data.map(c => ({
+        "Customer Name": c.name,
+        "GSTIN": c.gstin,
+        "WhatsApp": c.whatsapp,
+        [`Opening Balance (${exportDate})`]: c.openingBalance,
+        "Closing Balance (Current)": c.closingBalance
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(balanceData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Balances");
+      XLSX.writeFile(workbook, `Debtors_Balances_${exportDate}_to_Current.xlsx`);
+      toast.success("Opening balances exported successfully!");
+    } catch (error) {
+      console.error("Balance export error:", error);
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
   useEffect(() => {
@@ -310,6 +341,21 @@ const BranchCustomers = () => {
             >
               <FaFileExport /> Export Excel
             </button>
+
+            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+              <input 
+                type="date"
+                value={exportDate}
+                onChange={(e) => setExportDate(e.target.value)}
+                className="bg-white border border-slate-200 text-[11px] font-bold rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-primary outline-none"
+              />
+              <button
+                onClick={handleExportBalances}
+                className="bg-primary hover:bg-primary/90 text-white px-3 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all shadow-md flex items-center gap-2"
+              >
+                <FaFileExport /> Export Balances
+              </button>
+            </div>
             
             <div className="flex bg-gray-100 p-1 rounded-xl items-center">
               <button

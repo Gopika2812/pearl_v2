@@ -298,9 +298,13 @@ const LedgerModal = ({ isOpen, onClose, branchId, onLedgerCreated }) => {
                 <option value="">None / Not a Payment Ledger</option>
                 <option value="CASH">CASH</option>
                 <option value="BANK_TRANSFER">BANK TRANSFER</option>
-                <option value="UPI">UPI</option>
-                <option value="CHEQUE">CHEQUE</option>
+                <option value="UPI">UPI / G-PAY / PHONEPE</option>
+                <option value="CHEQUE">CHEQUE / DD</option>
                 <option value="CREDIT_CARD">CREDIT CARD</option>
+                <option value="DEBIT_CARD">DEBIT CARD</option>
+                <option value="NEFT_RTGS">NEFT / RTGS / IMPS</option>
+                <option value="POS">POS TERMINAL</option>
+                <option value="PAYTM">PAYTM WALLET</option>
               </select>
             </div>
 

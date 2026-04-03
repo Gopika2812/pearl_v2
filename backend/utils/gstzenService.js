@@ -12,12 +12,12 @@ class GSTZenService {
     if (!this.apiKey) {
       console.warn("⚠️ GSTZEN_API_KEY is missing in your environment configuration.");
     }
-    
+
     // Normalize Base URL to NOT have a trailing slash
     this.baseUrl = (process.env.GSTZEN_BASE_URL || "https://my.gstzen.in").trim().replace(/\/+$/, "");
-    
+
     this.cookieJar = new CookieJar();
-    
+
     this.apiClient = wrapper(axios.create({
       baseURL: this.baseUrl,
       timeout: 30000,
@@ -40,7 +40,7 @@ class GSTZenService {
   async generateEInvoice(invoiceData) {
     try {
       console.log("\n🚀 Generating E-Invoice IRN...");
-      
+
       // 🛡️ HSN PRE-CHECK: GSTZen/NIC/Tax Portal requires a minimum of 6 digits for B2B E-Invoices.
       // (NIC strictly rejects 4-digit HSNs for businesses above the ₹5Cr threshold).
       if (invoiceData.items && Array.isArray(invoiceData.items)) {
@@ -49,8 +49,8 @@ class GSTZenService {
           // NIC portal currently enforces 6 or 8 digits for E-Invoicing
           if (!/^\d{6}$|^\d{8}$/.test(hsn)) {
             const errorMsg = `Product "${item.name}" has a 4-digit HSN code "${hsn}". ` +
-                           `The Tax Portal requires a minimum of 6 digits for E-Invoicing. ` +
-                           `Please update the HSN to 6 digits (e.g., 160100) in the product master or edit the bill to proceed.`;
+              `The Tax Portal requires a minimum of 6 digits for E-Invoicing. ` +
+              `Please update the HSN to 6 digits (e.g., 160100) in the product master or edit the bill to proceed.`;
             console.error(`❌ Pre-check fail: ${errorMsg}`);
             throw new Error(errorMsg);
           }
@@ -68,26 +68,77 @@ class GSTZenService {
       const buyerStateCode = String(invoiceData.customer?.stateCode || invoiceData.customer?.customerId?.stateCode || "33").padStart(2, "0");
       const isInterState = sellerStateCode !== buyerStateCode;
 
+      let totalAssVal = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0, totalGrand = 0;
+
       const itemList = invoiceData.items.map((item, idx) => {
         const qty = Number(item.qty || 0);
         const rate = Number(item.sellingPrice || 0);
         const discount = Number(item.discountAmount || 0);
         const gstRt = Number(item.gst || 0);
+
+        // Calculate Assessable Amount (Vettable base price)
         const assessableAmt = Number((qty * rate - discount).toFixed(2));
-        const taxAmt = Number((assessableAmt * gstRt / 100).toFixed(2));
-        let cgstAmt = 0, sgstAmt = 0, igstAmt = 0;
-        if (isInterState) { igstAmt = taxAmt; } else { cgstAmt = sgstAmt = Number((taxAmt / 2).toFixed(2)); }
+
+        // Use pre-calculated tax if possible, else recalculate
+        let cgstAmt = Number((item.cgst || 0).toFixed(2));
+        let sgstAmt = Number((item.sgst || 0).toFixed(2));
+        let igstAmt = Number((item.igst || 0).toFixed(2));
+
+        // If all are zero but GST rate exists, recalculate for safety
+        if (cgstAmt === 0 && sgstAmt === 0 && igstAmt === 0 && gstRt > 0) {
+          const totalTax = Number((assessableAmt * gstRt / 100).toFixed(2));
+          if (isInterState) {
+            igstAmt = totalTax;
+          } else {
+            cgstAmt = sgstAmt = Number((totalTax / 2).toFixed(2));
+          }
+        }
+
+        const itemTotal = Number((assessableAmt + cgstAmt + sgstAmt + igstAmt).toFixed(2));
+
+        // Add to running totals for header
+        totalAssVal += assessableAmt;
+        totalCgst += cgstAmt;
+        totalSgst += sgstAmt;
+        totalIgst += igstAmt;
+        totalGrand += itemTotal;
 
         return {
           SlNo: String(idx + 1),
-          PrdDesc: String(item.name || "Product").substring(0, 100),
+          PrdDesc: String(item.name || "Product").substring(0, 100).trim(),
           HsnCd: String(item.hsn || item.productId?.hsnCode || "21050000").trim(),
           Qty: qty, Units: "NOS", UnitPrice: rate, TotAmt: Number((qty * rate).toFixed(2)),
           Discount: discount, AssAmt: assessableAmt, GstRt: gstRt,
           IgstAmt: igstAmt, CgstAmt: cgstAmt, SgstAmt: sgstAmt,
-          TotItemVal: Number((assessableAmt + taxAmt).toFixed(2))
+          TotItemVal: itemTotal
         };
       });
+
+      // Handle Extra Expenses (Add to ValDtls if they exist)
+      let extraExpensesAmt = 0;
+      if (invoiceData.extraExpenses && Array.isArray(invoiceData.extraExpenses)) {
+        invoiceData.extraExpenses.forEach(exp => {
+          totalAssVal += Number((exp.basePrice || 0).toFixed(2));
+          totalCgst += Number((exp.cgstAmount || exp.gstAmount / 2 || 0).toFixed(2));
+          totalSgst += Number((exp.sgstAmount || exp.gstAmount / 2 || 0).toFixed(2));
+          totalIgst += Number((exp.igstAmount || 0).toFixed(2));
+          totalGrand += Number((exp.totalPrice || 0).toFixed(2));
+        });
+      }
+
+      // Final Rounding for Header
+      totalAssVal = Number(totalAssVal.toFixed(2));
+      totalCgst = Number(totalCgst.toFixed(2));
+      totalSgst = Number(totalSgst.toFixed(2));
+      totalIgst = Number(totalIgst.toFixed(2));
+      
+      // Calculate calculated grand total
+      const calculatedGrand = Number((totalAssVal + totalCgst + totalSgst + totalIgst).toFixed(2));
+      
+      // Check for Round Off / Bill Level Discount
+      // If our grandTotal is DIFFERENT from the calculated total, we must put the difference in RoundOff
+      const billGrandTotal = Number((invoiceData.grandTotal || calculatedGrand).toFixed(2));
+      const roundOff = Number((billGrandTotal - calculatedGrand).toFixed(2));
 
       const payload = {
         Version: "1.1",
@@ -109,11 +160,12 @@ class GSTZenService {
         },
         ItemList: itemList,
         ValDtls: {
-          AssVal: Number((invoiceData.subtotal || 0).toFixed(2)),
-          CgstVal: Number((invoiceData.totalTax?.cgst || 0).toFixed(2)),
-          SgstVal: Number((invoiceData.totalTax?.sgst || 0).toFixed(2)),
-          IgstVal: Number((invoiceData.totalTax?.igst || 0).toFixed(2)),
-          TotInvVal: Number((invoiceData.grandTotal || 0).toFixed(2))
+          AssVal: totalAssVal,
+          CgstVal: totalCgst,
+          SgstVal: totalSgst,
+          IgstVal: totalIgst,
+          RndOffAmt: roundOff,
+          TotInvVal: billGrandTotal
         }
       };
 
@@ -134,7 +186,7 @@ class GSTZenService {
       const response = await this.apiClient.post(endpoint, payload);
       const result = response.data;
       console.log("📝 GSTZen SUCCESS Response Keys:", Object.keys(result));
-      
+
       if (result.status === 1 || result.Irn || result.irn) {
         // ✨ EXHAUSTIVE QR DATA EXTRACTION
         const qrUrl = result.QrCodeImageUrl || result.QrCodeUrl || result.IrnQrCodeUrl || result.irn_qr_code_url || result.qr_code_image_url;
@@ -172,7 +224,7 @@ class GSTZenService {
     try {
       const now = new Date().toLocaleTimeString();
       console.log(`\n🚚 [${now}] FORCING Standalone E-Way Bill Update...`);
-      
+
       const cleanVehNo = String(invoiceData.vehicleNo).replace(/[^A-Za-z0-9]/g, "").toUpperCase();
       const distance = Number(invoiceData.transportDistance || 59);
 
@@ -181,10 +233,10 @@ class GSTZenService {
         Irn: irnData.irn || invoiceData.irn,
         // Including TranDtls and DocDtls forces GSTZen to treat this as a fresh validation attempt
         TranDtls: { TaxSch: "GST", SupTyp: "B2B", RegRev: "N", IgstOnIntra: "N" },
-        DocDtls: { 
-          Typ: "INV", 
-          No: String(invoiceData.invoiceNumber), 
-          Dt: this.formatDate(invoiceData.invoiceDate) 
+        DocDtls: {
+          Typ: "INV",
+          No: String(invoiceData.invoiceNumber),
+          Dt: this.formatDate(invoiceData.invoiceDate)
         },
         SellerDtls: { Gstin: invoiceData.seller?.gstin || invoiceData.branchId?.gstin || "33DULPS2600Q1Z6" },
         EwbDtls: {

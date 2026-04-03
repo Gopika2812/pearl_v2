@@ -830,4 +830,123 @@ router.post("/login", async (req, res) => {
   }
 });
 
+/**
+ * GET: Export Opening and Closing Balances for All Customers (Bulk)
+ */
+router.get("/export/opening-closing", async (req, res) => {
+  try {
+    const { branchId, date } = req.query;
+
+    if (!branchId || !date) {
+      return res.status(400).json({ success: false, message: "branchId and date are required" });
+    }
+
+    const branchObjectId = new mongoose.Types.ObjectId(branchId);
+    
+    // Parse input date (it comes in as YYYY-MM-DD from the frontend picker)
+    // To get the opening balance of March 1st IST, we need all transactions 
+    // from March 1st 00:00 IST onwards.
+    // IST is UTC + 5:30. So March 1st 00:00 IST = Feb 28th 18:30 UTC.
+    const dateArr = date.split("-").map(Number); // [2026, 3, 1]
+    const startIST = new Date(Date.UTC(dateArr[0], dateArr[1]-1, dateArr[2], 0, 0, 0));
+    // Subtract 5.5 hours to align UTC with IST midnight
+    startIST.setMinutes(startIST.getMinutes() - 330); 
+
+    // 1. Get ALL customers for this branch
+    const customers = await Customer.find({ branchId: branchObjectId }).lean();
+    const customerIds = customers.map(c => c._id);
+
+    // 2. Fetch ALL transactions after 'startIST' for ALL relevant customers at once
+
+    // Debits: Sales Invoices after 'startIST'
+    const salesAfterStart = await SalesOrder.find({
+      branchId: branchObjectId,
+      "customer.customerId": { $in: customerIds },
+      status: "INVOICED",
+      createdAt: { $gte: startIST }
+    }).select("invoiceGrandTotal grandTotal customer.customerId createdAt").lean();
+
+    // Credits: Receipts after 'startIST'
+    const receiptsAfterStart = await Receipt.find({
+      branchId: branchObjectId,
+      "customer.customerId": { $in: customerIds },
+      status: "confirmed",
+      createdAt: { $gte: startIST }
+    }).select("amount customer.customerId createdAt").lean();
+
+    // Credits: Credit Notes after 'startIST'
+    const cnAfterStart = await CreditNote.find({
+      branchId: branchObjectId,
+      "customer.customerId": { $in: customerIds },
+      status: "Created",
+      createdAt: { $gte: startIST }
+    }).select("grandTotal customer.customerId createdAt").lean();
+
+    // 2.5 Credits/Debits: Other Transactions (Receipts/Payments) after 'startIST'
+    const otherTxnsAfterStart = await OtherTransaction.find({
+      branchId: branchObjectId,
+      "customer.customerId": { $in: customerIds },
+      createdAt: { $gte: startIST }
+    }).select("amount type customer.customerId createdAt").lean();
+
+    // 3. Map transactions to customers for quick lookup
+    const salesMap = {};
+    const receiptsMap = {};
+    const cnMap = {};
+
+    salesAfterStart.forEach(s => {
+      const cid = s.customer.customerId.toString();
+      salesMap[cid] = (salesMap[cid] || 0) + (s.invoiceGrandTotal || s.grandTotal || 0);
+    });
+
+    receiptsAfterStart.forEach(r => {
+      const cid = r.customer.customerId.toString();
+      receiptsMap[cid] = (receiptsMap[cid] || 0) + (r.amount || 0);
+    });
+
+    cnAfterStart.forEach(cn => {
+      const cid = cn.customer.customerId.toString();
+      cnMap[cid] = (cnMap[cid] || 0) + (cn.grandTotal || 0);
+    });
+
+    const otherReceiptsMap = {};
+    const otherPaymentsMap = {};
+
+    otherTxnsAfterStart.forEach(o => {
+      const cid = o.customer.customerId.toString();
+      if (o.type === "RECEIPT") {
+        otherReceiptsMap[cid] = (otherReceiptsMap[cid] || 0) + (o.amount || 0);
+      } else {
+        otherPaymentsMap[cid] = (otherPaymentsMap[cid] || 0) + (o.amount || 0);
+      }
+    });
+
+    // 4. Calculate balances
+    const results = customers.map(c => {
+      const cid = c._id.toString();
+      const currentBalance = (c.debit || 0) - (c.credit || 0);
+      
+      const debitsAfter = (salesMap[cid] || 0) + (otherPaymentsMap[cid] || 0);
+      const creditsAfter = (receiptsMap[cid] || 0) + (cnMap[cid] || 0) + (otherReceiptsMap[cid] || 0);
+
+      // Opening Balance = Current - (Debits after) + (Credits after)
+      const openingBalance = currentBalance - debitsAfter + creditsAfter;
+
+      return {
+        _id: c._id,
+        name: c.name,
+        gstin: c.gstin || "-",
+        whatsapp: c.whatsapp || "-",
+        openingBalance: Math.round(openingBalance * 100) / 100,
+        closingBalance: Math.round(currentBalance * 100) / 100, // Re-mapped to current as 'Closing'
+      };
+    });
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error("Export Opening Balances Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 export default router;

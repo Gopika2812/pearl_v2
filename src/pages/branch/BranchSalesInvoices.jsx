@@ -113,8 +113,8 @@ const BranchSalesInvoices = () => {
   };
   // ✅ GENERATE E-INVOICE FUNCTION
   const handleGenerateEInvoice = async (invoice, transportDetails = null) => {
-    // 🚀 Check if transport details are required (>50k and not provided yet)
-    if (invoice.grandTotal > 50000 && !transportDetails && !invoice.ewayBillNo) {
+    // 🚀 Check if transport details are required (>10k and not provided yet)
+    if (invoice.grandTotal > 10000 && !transportDetails && !invoice.ewayBillNo) {
       setShowTransportModal(invoice);
       return;
     }
@@ -204,7 +204,7 @@ const BranchSalesInvoices = () => {
               <FaFileContract /> {isEwbOnly ? "Generate E-Way Bill" : "Transport Details Required"}
             </h3>
             <p className="text-xs opacity-90 mt-1 font-bold">
-              {isEwbOnly ? "IRN is already generated. Now creating the E-Way Bill." : "Mandatory for E-Way Bill (Invoice > ₹50,000)"}
+              {isEwbOnly ? "IRN is already generated. Now creating the E-Way Bill." : "Mandatory for E-Way Bill (Invoice > ₹10,000)"}
             </p>
           </div>
           
@@ -431,7 +431,7 @@ const BranchSalesInvoices = () => {
                                   </span>
                                   <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold">{inv.ewayBillNo}</code>
                                 </div>
-                              ) : inv.grandTotal > 50000 ? (
+                              ) : inv.grandTotal > 10000 ? (
                                 <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-orange-200">
                                    📦 EWB REQD
                                 </span>
@@ -456,7 +456,7 @@ const BranchSalesInvoices = () => {
                         <td className="px-6 py-4 text-center">
                            <div className="flex items-center gap-2 justify-center flex-wrap">
                                {/* ✅ GENERATE E-WAY BILL ONLY BUTTON (Visible if E-Invoice exists but E-Way Bill missing for >50k) */}
-                               {inv.einvoiceStatus === "GENERATED" && !inv.ewayBillNo && inv.grandTotal > 50000 && (
+                               {inv.einvoiceStatus === "GENERATED" && !inv.ewayBillNo && inv.grandTotal > 10000 && (
                                  <button
                                    onClick={() => handleGenerateEWayBillOnly(inv)}
                                    disabled={requestingAction === inv._id}

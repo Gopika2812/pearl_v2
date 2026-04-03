@@ -52,7 +52,6 @@ export const PAGE_CONFIG = [
         { id: "create-po", name: "Create PO", path: "/branch/po", icon: "add" },
         { id: "purchase-list", name: "Purchase Order List", path: "/branch/purchase-orders", icon: "list", permissionFields: ["grandTotal", "totalPaid", "status"] },
         { id: "purchase-invoice-list", name: "Purchase Invoice List", path: "/branch/purchase-invoices", icon: "invoice" },
-        { id: "restocking", name: "Restocking", path: "/branch/recycling", icon: "inventory" },
       ]},
       { id: "suppliers", name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: "handshake", permissionFields: ["credit", "debit", "gstin"] },
     ]

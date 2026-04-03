@@ -42,7 +42,9 @@ const BranchDayBook = () => {
 
     // Filtering logic
     const filteredEntries = dayBook.filter(entry => {
-        const matchesSearch = entry.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = 
+            entry.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+            entry.invoiceId.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesVoucher = !filterVoucherType || entry.voucherType.toLowerCase().includes(filterVoucherType.toLowerCase());
         const matchesInvoice = !filterInvoiceId || entry.invoiceId.toLowerCase().includes(filterInvoiceId.toLowerCase());
         return matchesSearch && matchesVoucher && matchesInvoice;
@@ -260,7 +262,7 @@ const BranchDayBook = () => {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-5 font-bold text-[#319bab] text-sm tracking-tight">
-                                                #{entry.invoiceId}
+                                                {entry.invoiceId}
                                             </td>
                                             <td className="px-6 py-5">
                                                 <div className="flex items-center gap-3">
