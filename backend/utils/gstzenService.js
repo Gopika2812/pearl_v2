@@ -129,9 +129,16 @@ class GSTZenService {
       console.log(`📡 Sending to: ${this.baseUrl}/${endpoint}`);
       const response = await this.apiClient.post(endpoint, payload);
       const result = response.data;
-      console.log("📝 GSTZen Success IRN:", result.Irn || result.irn || "Already Gen");
-
+      console.log("📝 GSTZen SUCCESS Response Keys:", Object.keys(result));
+      
       if (result.status === 1 || result.Irn || result.irn) {
+        // ✨ EXHAUSTIVE QR DATA EXTRACTION
+        const qrUrl = result.QrCodeImageUrl || result.QrCodeUrl || result.IrnQrCodeUrl || result.irn_qr_code_url || result.qr_code_image_url;
+        const signedQr = result.SignedQRCode || result.SignedQrCode || result.signed_qr_code;
+        const qrImgData = result.QrCodeImage || result.qr_code_image;
+
+        console.log(`✅ E-Invoice Data: IRN=[${result.Irn || result.irn}], QR_URL=[${qrUrl ? 'YES' : 'NO'}], SIGNED_QR=[${signedQr ? 'YES' : 'NO'}]`);
+
         return {
           success: true,
           irn: result.Irn || result.irn,
@@ -140,9 +147,10 @@ class GSTZenService {
           ewayBillNo: result.EwbNo || result.ewbNo,
           invoicePdfUrl: result.InvoicePdfUrl,
           ewayBillPdfUrl: result.EWayBillPdfUrl,
-          qrCodeUrl: result.QrCodeImageUrl || result.QrCodeUrl || result.IrnQrCodeUrl,
+          qrCodeUrl: qrUrl,
           signedInvoice: result.SignedInvoice,
-          signedQrCode: result.SignedQRCode || result.SignedQrCode
+          signedQrCode: signedQr,
+          signedQrCodeImgUrl: qrImgData // Base64 if returned
         };
       } else {
         throw new Error(result.message || "Tax Portal Validation Error");

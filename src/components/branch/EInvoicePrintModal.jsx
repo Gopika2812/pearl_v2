@@ -4,6 +4,22 @@ import { useState } from "react";
 const EInvoicePrintModal = ({ invoice, onClose }) => {
   const [loading] = useState(false);
 
+  if (!invoice) return null;
+
+  // 🛡️ MULTI-LEVEL QR FETCHING LOGIC
+  let qrImage = "";
+  if (invoice.qrCodeUrl) {
+    qrImage = invoice.qrCodeUrl.startsWith('http') ? invoice.qrCodeUrl : `https://my.gstzen.in${invoice.qrCodeUrl}`;
+  } else if (invoice.signedQrCodeImgUrl) {
+    // Direct Base64 Image from GSTZen
+    qrImage = invoice.signedQrCodeImgUrl.startsWith('data:image') 
+      ? invoice.signedQrCodeImgUrl 
+      : `data:image/png;base64,${invoice.signedQrCodeImgUrl}`;
+  } else if (invoice.signedQrCode) {
+    // Fallback: Generate QR from Signed Tax String
+    qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(invoice.signedQrCode)}`;
+  }
+
   // Print function
   const handlePrint = () => {
     const printWindow = window.open("", "_blank");
@@ -93,15 +109,6 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
     const ackNo = invoice.ackNo || "N/A";
     const ackDate = invoice.ackDate ? new Date(invoice.ackDate).toLocaleString() : "N/A";
     
-    // 🛡️ MULTI-LEVEL QR FETCHING LOGIC
-    let qrImage = "";
-    if (invoice.qrCodeUrl) {
-      qrImage = invoice.qrCodeUrl.startsWith('http') ? invoice.qrCodeUrl : `https://my.gstzen.in${invoice.qrCodeUrl}`;
-    } else if (invoice.signedQrCode) {
-      // Fallback: Generate QR from Signed Tax String
-      qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(invoice.signedQrCode)}`;
-    }
-
     let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">${style}</head><body>`;
 
     // FIRST PAGE - TAX INVOICE
@@ -228,8 +235,6 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
     return html;
   };
 
-  if (!invoice) return null;
-
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
@@ -258,10 +263,18 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
                   <div className="text-2xl font-black text-gray-800 uppercase tracking-tighter">{invoice.seller?.name || "PEARL AGENCY"}</div>
                   <div className="text-xs text-gray-500 font-bold mt-1 max-w-xs">{invoice.seller?.address}</div>
                 </div>
-                <div className="w-24 h-24 bg-gray-100 border border-dashed rounded-lg flex items-center justify-center text-[10px] text-gray-300 font-bold text-center p-2">
-                   [ QR CODE READY ]
+                
+                <div className="w-24 h-24 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                  {qrImage ? (
+                    <img src={qrImage} className="w-full h-full object-contain p-1" alt="Preview QR" />
+                  ) : (
+                    <div className="text-[10px] text-gray-300 font-bold text-center p-2 underline decoration-red-500 decoration-2">
+                       [ QR MISSING ]
+                    </div>
+                  )}
                 </div>
               </div>
+
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-6">
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div className="text-left font-bold">
@@ -275,6 +288,7 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
                   </div>
                 </div>
               </div>
+
               <div className="space-y-3">
                 <div className="h-4 bg-gray-100 rounded w-full"></div>
                 <div className="h-4 bg-gray-50 rounded w-3/4"></div>

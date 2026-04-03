@@ -85,6 +85,7 @@ router.post("/generate/:invoiceId", async (req, res) => {
     invoice.invoicePdfUrl = eInvoiceResult.invoicePdfUrl;
     invoice.ewayBillPdfUrl = eInvoiceResult.ewayBillPdfUrl;
     invoice.qrCodeUrl = eInvoiceResult.qrCodeUrl;
+    invoice.signedQrCodeImgUrl = eInvoiceResult.signedQrCodeImgUrl;
 
     await invoice.save();
 
