@@ -760,6 +760,7 @@ const BranchCustomers = () => {
         branch={branch}
         salesOrders={salesOrders}
         customerPayments={customerPayments}
+        onBalanceUpdate={() => fetchCustomers(currentPage)}
       />
 
       {/* RECEIPT MODAL */}

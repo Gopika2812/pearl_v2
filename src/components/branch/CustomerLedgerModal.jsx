@@ -1,15 +1,20 @@
 import { useState, useEffect } from "react";
-import { FaTimes, FaFileInvoiceDollar, FaDownload, FaCalendarAlt, FaSpinner } from "react-icons/fa";
+import { FaTimes, FaFileInvoiceDollar, FaDownload, FaCalendarAlt, FaSpinner, FaPencilAlt, FaCheck } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { toast } from "react-toastify";
 
-const CustomerLedgerModal = ({ isOpen, onClose, customer, branch }) => {
+const CustomerLedgerModal = ({ isOpen, onClose, customer, branch, onBalanceUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [transactions, setTransactions] = useState([]);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [closingBalance, setClosingBalance] = useState(0);
+
+  // Editing state
+  const [editingType, setEditingType] = useState(null); // 'opening' or 'closing'
+  const [editValue, setEditValue] = useState("");
+  const [savingBalance, setSavingBalance] = useState(false);
 
   // Date Filters
   const now = new Date();
@@ -43,6 +48,53 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer, branch }) => {
       toast.error("Error connecting to server");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveBalance = async () => {
+    if (!editValue || isNaN(editValue)) {
+      toast.error("Please enter a valid number");
+      return;
+    }
+
+    setSavingBalance(true);
+    try {
+      const newValue = parseFloat(editValue);
+      let diff = 0;
+
+      if (editingType === 'opening') {
+        diff = newValue - openingBalance;
+      } else {
+        diff = newValue - closingBalance;
+      }
+
+      // Permanent adjustment to customer's balance. 
+      // We apply the delta specifically to the debit field for simplicity, 
+      // or to whichever field makes sense. In this ERP, debit-credit = balance.
+      // So adding diff to debit is equivalent to increasing the balance.
+      
+      const updatedDebit = (customer.debit || 0) + diff;
+
+      const response = await fetchWithAuth(`${API_BASE}/customers/${customer._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ debit: updatedDebit })
+      });
+
+      if (response.ok) {
+        toast.success(`Balance adjusted by ₹${Math.abs(diff).toLocaleString()}`);
+        setEditingType(null);
+        fetchLedger();
+        if (onBalanceUpdate) onBalanceUpdate();
+      } else {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to update balance");
+      }
+    } catch (err) {
+      console.error("Error saving balance:", err);
+      toast.error(err.message || "Failed to save balance");
+    } finally {
+      setSavingBalance(false);
     }
   };
 
@@ -137,14 +189,76 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer, branch }) => {
            </div>
 
            <div className="flex gap-4">
-              <div className="text-right">
-                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Opening Balance</p>
-                <p className={`text-sm font-black ${balanceColor(openingBalance)}`}>₹{Math.abs(openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {balanceLabel(openingBalance)}</p>
+              <div className="text-right group">
+                <div className="flex items-center justify-end gap-1">
+                  {editingType === 'opening' ? (
+                    <div className="flex items-center gap-1 bg-white border rounded shadow-sm px-1">
+                      <input 
+                        type="number"
+                        autoFocus
+                        className="w-24 text-xs font-bold outline-none"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveBalance()}
+                      />
+                      <button onClick={handleSaveBalance} className="text-green-600 p-1 hover:bg-green-50 rounded">
+                        {savingBalance ? <FaSpinner className="animate-spin" /> : <FaCheck size={10} />}
+                      </button>
+                      <button onClick={() => setEditingType(null)} className="text-red-600 p-1 hover:bg-red-50 rounded">
+                        <FaTimes size={10} />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Opening Balance</p>
+                      <button 
+                        onClick={() => { setEditingType('opening'); setEditValue(openingBalance.toString()); }}
+                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-600 transition"
+                      >
+                        <FaPencilAlt size={8} />
+                      </button>
+                    </>
+                  )}
+                </div>
+                {editingType !== 'opening' && (
+                  <p className={`text-sm font-black ${balanceColor(openingBalance)}`}>₹{Math.abs(openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {balanceLabel(openingBalance)}</p>
+                )}
               </div>
               <div className="w-px h-8 bg-gray-300 mx-1"></div>
-              <div className="text-right">
-                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Closing Balance</p>
-                <p className={`text-sm font-black ${balanceColor(closingBalance)}`}>₹{Math.abs(closingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {balanceLabel(closingBalance)}</p>
+              <div className="text-right group">
+                 <div className="flex items-center justify-end gap-1">
+                  {editingType === 'closing' ? (
+                    <div className="flex items-center gap-1 bg-white border rounded shadow-sm px-1">
+                      <input 
+                        type="number"
+                        autoFocus
+                        className="w-24 text-xs font-bold outline-none"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveBalance()}
+                      />
+                      <button onClick={handleSaveBalance} className="text-green-600 p-1 hover:bg-green-50 rounded">
+                        {savingBalance ? <FaSpinner className="animate-spin" /> : <FaCheck size={10} />}
+                      </button>
+                      <button onClick={() => setEditingType(null)} className="text-red-600 p-1 hover:bg-red-50 rounded">
+                        <FaTimes size={10} />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Closing Balance</p>
+                      <button 
+                        onClick={() => { setEditingType('closing'); setEditValue(closingBalance.toString()); }}
+                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-600 transition"
+                      >
+                        <FaPencilAlt size={8} />
+                      </button>
+                    </>
+                  )}
+                </div>
+                {editingType !== 'closing' && (
+                  <p className={`text-sm font-black ${balanceColor(closingBalance)}`}>₹{Math.abs(closingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {balanceLabel(closingBalance)}</p>
+                )}
               </div>
            </div>
         </div>
