@@ -58,7 +58,7 @@ const BranchInvoicedOrders = () => {
     setLoading(true);
     try {
       const res = await fetch(
-        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isClaim=false`,
+        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isClaim=false&fromDate=${filterFromDate}&toDate=${filterToDate}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -81,7 +81,7 @@ const BranchInvoicedOrders = () => {
 
   useEffect(() => {
     fetchSalesOrders();
-  }, [currentBranch?._id]);
+  }, [currentBranch?._id, filterFromDate, filterToDate]);
 
   const handleGenerateInvoice = (order) => {
     setSelectedOrder(order);
@@ -242,9 +242,9 @@ const BranchInvoicedOrders = () => {
     const matchesCustomerName = filterCustomerName === "" || 
       (order.customer?.name && order.customer.name.toLowerCase().includes(filterCustomerName.toLowerCase()));
     
-    const orderDate = new Date(order.createdAt);
+    const orderDate = new Date(order.orderDate || order.createdAt);
     const orderDateStr = orderDate.toISOString().split('T')[0];
-    const orderTimeStr = orderDate.toTimeString().slice(0, 5);
+    const orderTimeStr = new Date(order.createdAt).toTimeString().slice(0, 5);
     
     const matchesFromDate = filterFromDate === "" || orderDateStr >= filterFromDate;
     const matchesToDate = filterToDate === "" || orderDateStr <= filterToDate;

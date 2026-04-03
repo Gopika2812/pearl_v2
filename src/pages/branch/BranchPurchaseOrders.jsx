@@ -30,6 +30,8 @@ const BranchPurchaseOrders = () => {
   const [editItems, setEditItems] = useState([]);
   const [vendorBillNo, setVendorBillNo] = useState("");
   const [vendorDate, setVendorDate] = useState("");
+  const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Search debounce logic
   useEffect(() => {
@@ -50,7 +52,7 @@ const BranchPurchaseOrders = () => {
     try {
       const search = searchOverride !== undefined ? searchOverride : debouncedSearch;
       const res = await fetchWithAuth(
-        `${API_BASE}/purchase-orders?branchId=${currentBranch._id}${search ? `&search=${search}` : ""}`
+        `${API_BASE}/purchase-orders?branchId=${currentBranch._id}${search ? `&search=${search}` : ""}&fromDate=${filterFromDate}&toDate=${filterToDate}`
       );
       const data = await res.json();
 
@@ -68,7 +70,7 @@ const BranchPurchaseOrders = () => {
 
   useEffect(() => {
     fetchPurchaseOrders();
-  }, [currentBranch?._id, debouncedSearch]);
+  }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate]);
 
   const toggleExpanded = (orderId) => {
     setExpandedOrders((prev) => ({
@@ -88,7 +90,22 @@ const BranchPurchaseOrders = () => {
   };
 
   // Now using server-side search:
-  const filteredOrders = purchaseOrders;
+  // Now using local filtering based on date range and search term
+  const filteredOrders = purchaseOrders.filter(order => {
+    const orderDate = new Date(order.date || order.createdAt);
+    const orderDateStr = orderDate.toISOString().split('T')[0];
+    
+    // Date filter
+    const matchesFromDate = filterFromDate === "" || orderDateStr >= filterFromDate;
+    const matchesToDate = filterToDate === "" || orderDateStr <= filterToDate;
+    
+    // Search term filter (if any local search is still needed, though we search on server too)
+    const matchesSearch = searchTerm === "" || 
+      (order.invoiceId && order.invoiceId.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (order.vendor && order.vendor.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    return matchesFromDate && matchesToDate && matchesSearch;
+  });
 
 
   const handleDeleteOrder = async (orderId) => {
@@ -407,8 +424,8 @@ const BranchPurchaseOrders = () => {
         </div>
 
         {/* SEARCH BAR */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 flex items-center gap-4">
-          <div className="relative flex-1">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 flex flex-col md:flex-row items-center gap-4">
+          <div className="relative flex-1 w-full">
             <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
             <input
               type="text"
@@ -418,10 +435,42 @@ const BranchPurchaseOrders = () => {
               className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-[#319bab] transition-all text-sm font-medium text-gray-700"
             />
           </div>
+          
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="flex items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-1">
+              <span className="text-[10px] font-black text-gray-400 uppercase mr-2 mt-0.5">From</span>
+              <input
+                type="date"
+                value={filterFromDate}
+                onChange={(e) => setFilterFromDate(e.target.value)}
+                className="bg-transparent border-none focus:ring-0 text-xs font-bold text-gray-700 outline-none"
+              />
+            </div>
+            <div className="flex items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-1">
+              <span className="text-[10px] font-black text-gray-400 uppercase mr-2 mt-0.5">To</span>
+              <input
+                type="date"
+                value={filterToDate}
+                onChange={(e) => setFilterToDate(e.target.value)}
+                className="bg-transparent border-none focus:ring-0 text-xs font-bold text-gray-700 outline-none"
+              />
+            </div>
+            <button
+               onClick={() => {
+                 setFilterFromDate(new Date().toISOString().split('T')[0]);
+                 setFilterToDate(new Date().toISOString().split('T')[0]);
+                 setSearchTerm("");
+               }}
+               className="text-[10px] font-black text-[#319bab] hover:text-[#257f87] uppercase tracking-wider px-2"
+            >
+              Reset
+            </button>
+          </div>
+
           {searchTerm && (
             <button
               onClick={() => setSearchTerm("")}
-              className="text-gray-400 hover:text-red-500 font-bold transition-colors text-xs px-2"
+              className="text-gray-400 hover:text-red-500 font-bold transition-colors text-xs px-2 hidden md:block"
             >
               CLEAR
             </button>

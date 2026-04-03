@@ -431,44 +431,57 @@ router.get("/day-book", async (req, res) => {
       return res.status(400).json({ success: false, message: "Branch ID is required" });
     }
 
-    const query = { branchId };
+    const dateFilter = {};
     if (fromDate || toDate) {
-      query.createdAt = {};
-      if (fromDate) query.createdAt.$gte = new Date(fromDate);
+      if (fromDate) dateFilter.$gte = new Date(fromDate);
       if (toDate) {
-         const end = new Date(toDate);
-         end.setHours(23, 59, 59, 999);
-         query.createdAt.$lte = end;
+        const end = new Date(toDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.$lte = end;
       }
     }
 
-    // 1. Fetch Invoiced Sales Orders
+    // 1. Fetch Invoiced Sales Orders (using orderDate)
     const sales = await SalesOrder.find({
-      ...query,
-      status: "INVOICED"
-    }).select("invoiceId customer voucherType grandTotal createdAt");
+      branchId,
+      status: "INVOICED",
+      ...(fromDate || toDate ? { orderDate: dateFilter } : {})
+    }).select("invoiceId customer voucherType grandTotal orderDate createdAt");
 
-    // 2. Fetch Purchase Invoices
-    const purchases = await PurchaseInvoice.find(query)
-      .select("purchaseInvoiceId vendor voucherType grandTotal createdAt");
+    // 2. Fetch Purchase Invoices (using vendorDate or invoiceDate)
+    const purchases = await PurchaseInvoice.find({
+      branchId,
+      ...(fromDate || toDate ? { 
+        $or: [
+          { vendorDate: dateFilter },
+          { invoiceDate: dateFilter }
+        ]
+      } : {})
+    }).select("purchaseInvoiceId vendor voucherType grandTotal vendorDate invoiceDate createdAt");
 
-    // 3. Fetch Receipts (Inflow -> Debit)
-    const receipts = await Receipt.find(query)
-      .select("receiptId customer amount createdAt");
+    // 3. Fetch Receipts (using createdAt for now, or a custom 'date' if available)
+    const receipts = await Receipt.find({
+      branchId,
+      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
+    }).select("receiptId customer amount createdAt");
 
-    // 4. Fetch Payments (Outflow -> Credit)
-    const payments = await Payment.find(query)
-      .select("paymentId vendor expenseDetails amount createdAt");
+    // 4. Fetch Payments
+    const payments = await Payment.find({
+      branchId,
+      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
+    }).select("paymentId vendor expenseDetails amount createdAt");
 
-    // 5. Fetch Debit Notes (Purchase Return / Decrease AP -> Debit)
-    const debitNotes = await DebitNote.find(query)
-      .select("debitNoteId vendor grandTotal createdAt");
+    // 5. Fetch Debit Notes
+    const debitNotes = await DebitNote.find({
+      branchId,
+      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
+    }).select("debitNoteId vendor grandTotal createdAt text");
 
     // Combine and Transform
     const dayBook = [
       ...sales.map(s => ({
         _id: s._id,
-        date: s.createdAt,
+        date: s.orderDate || s.createdAt,
         name: s.customer?.name || "Cash Customer",
         voucherType: s.voucherType || "SI",
         invoiceId: s.invoiceId,
@@ -478,7 +491,7 @@ router.get("/day-book", async (req, res) => {
       })),
       ...purchases.map(p => ({
         _id: p._id,
-        date: p.createdAt,
+        date: p.vendorDate || p.invoiceDate || p.createdAt,
         name: p.vendor || "N/A",
         voucherType: p.voucherType || "PI",
         invoiceId: p.purchaseInvoiceId,
