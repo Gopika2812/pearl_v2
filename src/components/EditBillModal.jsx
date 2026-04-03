@@ -20,7 +20,14 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     sgst: 0,
     igst: false,
     discountPercent: "",
-    unit: "",
+    unitConversion: {
+      value: "",
+      unit: "",
+      altValue: "",
+      altUnit: ""
+    },
+    altQty: 0,
+    altUnit: "",
   });
 
   const [productSearch, setProductSearch] = useState("");
@@ -31,6 +38,8 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [transportCharge, setTransportCharge] = useState(0);
   const [transportGstPercent, setTransportGstPercent] = useState(0);
+  const [commonDiscount, setCommonDiscount] = useState(0);
+  const [roundOff, setRoundOff] = useState(0);
 
 
   // Initialize items from order
@@ -52,6 +61,8 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       setSampleItems(order.sampleItems || []);
       setTransportCharge(order.transportCharge || 0);
       setTransportGstPercent(order.transportGstPercent || 0);
+      setCommonDiscount(order.commonDiscount || 0);
+      setRoundOff(order.roundOff || 0);
       setSelectedCustomer(order.customer);
       setCustomerSearch(order.customer?.name || "");
       fetchProducts();
@@ -116,6 +127,38 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     }
   };
 
+  // Save Product Conversion from Modal
+  const saveProductConversion = async () => {
+    if (!newItem.productId) {
+      toast.warning("Please select a product first");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/products/${newItem.productId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          unitConversion: {
+            value: newItem.unitConversion?.value || 1,
+            unit: newItem.unitConversion?.unit || newItem.unit || "",
+            altValue: newItem.unitConversion?.altValue || 1,
+            altUnit: newItem.unitConversion?.altUnit || newItem.altUnit || ""
+          }
+        })
+      });
+      if (res.ok) {
+        toast.success("Product unit conversion saved!");
+        // Update local products list to reflect the change
+        fetchProducts();
+      }
+    } catch (err) {
+      toast.error("Failed to save conversion");
+    }
+  };
+
   // Calculate item total
   const calculateItemTotal = (item) => {
     const qty = parseFloat(item.qty) || 0;
@@ -130,20 +173,44 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     return discounted + taxAmount;
   };
 
+  // Handle HSN change
+  const handleHsnChange = (index, hsn, isSample = false) => {
+    if (isSample) {
+      const updated = [...sampleItems];
+      updated[index].hsn = hsn;
+      setSampleItems(updated);
+    } else {
+      const updated = [...items];
+      updated[index].hsn = hsn;
+      setItems(updated);
+    }
+  };
+
   // Calculate grand total accounting for expenses, transport and common discount
   const calculateGrandTotal = () => {
     const itemsTotal = items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
     const transport = Number(transportCharge) || 0;
     const transportGst = (transport * (Number(transportGstPercent) || 0)) / 100;
     const extra = order?.extraExpenseAmount || 0;
-    const commDiscount = order?.commonDiscount || 0;
-    return itemsTotal + transport + transportGst + extra - commDiscount;
+    const commDiscount = Number(commonDiscount) || 0;
+    const rOff = Number(roundOff) || 0;
+    return itemsTotal + transport + transportGst + extra - commDiscount + rOff;
   };
 
   // Handle quantity change
   const handleQtyChange = (index, qty) => {
     const updated = [...items];
-    updated[index].qty = Math.max(1, parseInt(qty) || 1);
+    const newQty = Math.max(1, parseInt(qty) || 1);
+    updated[index].qty = newQty;
+    
+    // Recalculate alternate quantity if conversion is present
+    if (updated[index].unitConversion) {
+      const conv = updated[index].unitConversion;
+      const val = parseFloat(conv.value) || 1;
+      const altVal = parseFloat(conv.altValue) || 1;
+      updated[index].altQty = parseFloat(((newQty * altVal) / val).toFixed(2));
+    }
+    
     updated[index].total = calculateItemTotal(updated[index]);
     setItems(updated);
   };
@@ -171,6 +238,23 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     const price = parseFloat(updated[index].sellingPrice) || 0;
     const dPercent = parseFloat(updated[index].discountPercent) || 0;
     updated[index].discountAmount = (qty * price) * (dPercent / 100);
+    updated[index].total = calculateItemTotal(updated[index]);
+    setItems(updated);
+  };
+
+  // Handle flat discount amount change
+  const handleDiscountAmountChange = (index, amount) => {
+    const updated = [...items];
+    const value = amount === "" ? 0 : parseFloat(amount);
+    updated[index].discountAmount = value;
+    const qty = parseFloat(updated[index].qty) || 0;
+    const price = parseFloat(updated[index].sellingPrice) || 0;
+    const subtotal = qty * price;
+    if (subtotal > 0) {
+      updated[index].discountPercent = parseFloat(((value / subtotal) * 100).toFixed(2));
+    } else {
+      updated[index].discountPercent = 0;
+    }
     updated[index].total = calculateItemTotal(updated[index]);
     setItems(updated);
   };
@@ -270,6 +354,9 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
         console.warn("⚠️ Failed to fetch locked price (non-blocking):", err);
       }
       
+      const conv = product.unitConversion || null;
+      const initialAltQty = conv ? parseFloat(((1 * (conv.altValue || 1)) / (conv.value || 1)).toFixed(2)) : 0;
+      
       setNewItem({
         ...newItem,
         productId: product._id,
@@ -281,8 +368,11 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
         sgst: isIgst ? 0 : gstRate / 2,
         igst: isIgst,
         unit: product.units || "",
+        unitConversion: conv,
+        altQty: initialAltQty,
+        altUnit: conv?.altUnit || "",
       });
-      console.log("✅ New item state updated with price:", price);
+      console.log("✅ New item state updated with price and GST:", { price, gstRate });
     }
   };
 
@@ -294,6 +384,15 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   // Save changes
   const handleSave = async () => {
     try {
+      // 🛡️ HSN VALIDATION PRE-CHECK
+      for (const item of items) {
+        const hsn = String(item.hsn || "").trim();
+        if (!/^\d{4}$|^\d{6}$|^\d{8}$/.test(hsn)) {
+          toast.error(`Invalid HSN "${hsn}" for product "${item.name}". HSN must be 4, 6, or 8 digits.`);
+          return;
+        }
+      }
+
       setLoading(true);
       
       const newItemsTotal = calculateGrandTotal();
@@ -326,11 +425,13 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
           const dPercent = parseFloat(item.discountPercent) || 0;
           return sum + (qty * price * (dPercent / 100));
         }, 0)),
-        commonDiscount: order?.commonDiscount || 0,
+        commonDiscount: Math.round(Number(commonDiscount) || 0),
+        roundOff: Number(roundOff) || 0,
         transportCharge: Math.round(Number(transportCharge) || 0),
         transportGstPercent: Number(transportGstPercent) || 0,
         transportGstAmount: Math.round((Number(transportCharge) || 0) * (Number(transportGstPercent) || 0) / 100),
         grandTotal: Math.round(newItemsTotal),
+        updatedByUsername: localStorage.getItem("username") || "System",
         customer: selectedCustomer ? {
           id: selectedCustomer.customerId || selectedCustomer._id,
           name: selectedCustomer.name,
@@ -484,7 +585,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       Rate
                     </th>
                     <th className="px-4 py-3 text-right font-bold text-gray-700">
-                      Discount (%)
+                      Discount (% / ₹)
                     </th>
                     <th className="px-4 py-3 text-center font-bold text-gray-700">
                       Tax
@@ -500,9 +601,29 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                 <tbody className="divide-y">
                   {items.map((item, idx) => (
                     <tr key={idx} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-semibold">{item.name}</td>
-                      <td className="px-4 py-3 text-center text-gray-600">
-                        {item.hsn}
+                      <td className="px-4 py-3">
+                        <div className="font-semibold">{item.name}</div>
+                        {item.altQty > 0 && (
+                          <div className="text-[10px] text-[#319bab] font-bold">
+                            ({item.altQty} {item.altUnit || "Alt"})
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="text"
+                          value={item.hsn}
+                          onChange={(e) => handleHsnChange(idx, e.target.value)}
+                          className={`w-24 border rounded px-2 py-1 text-center focus:ring-2 focus:ring-[#319bab] outline-none text-xs font-mono ${
+                            item.hsn && !/^\d{6}$|^\d{8}$/.test(String(item.hsn).trim())
+                              ? "border-red-500 bg-red-50"
+                              : "border-gray-300"
+                          }`}
+                          placeholder="HSN"
+                        />
+                        {item.hsn && !/^\d{6}$|^\d{8}$/.test(String(item.hsn).trim()) && (
+                          <p className="text-[9px] text-red-600 font-bold mt-1" title="E-Invoice requires 6 or 8 digits">Invalid</p>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <input
@@ -536,18 +657,29 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            value={item.discountPercent}
-                            onChange={(e) => handleDiscountChange(idx, e.target.value)}
-                            className="w-20 border border-gray-300 rounded px-2 py-1 text-right focus:ring-2 focus:ring-[#319bab] outline-none"
-                            step="0.01"
-                            min="0"
-                            max="100"
-                            placeholder="0"
-                          />
-                          <span className="text-gray-500">%</span>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              value={item.discountPercent}
+                              onChange={(e) => handleDiscountChange(idx, e.target.value)}
+                              className="w-20 border border-gray-300 rounded px-2 py-1 text-right focus:ring-1 focus:ring-[#319bab] outline-none text-[11px]"
+                              step="0.01"
+                              min="0"
+                              max="100"
+                              placeholder="0"
+                            />
+                            <span className="text-[10px] text-gray-400 font-bold">%</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              value={item.discountAmount || ""}
+                              onChange={(e) => handleDiscountAmountChange(idx, e.target.value)}
+                              className="w-20 border border-gray-200 bg-gray-50 rounded px-2 py-1 text-right focus:ring-1 focus:ring-blue-300 outline-none text-[10px] text-gray-600"
+                              placeholder="Amt ₹"
+                            />
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center text-sm">
@@ -613,8 +745,18 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                     {sampleItems.map((item, idx) => (
                       <tr key={idx} className="hover:bg-yellow-50 bg-yellow-50">
                         <td className="px-4 py-3 font-semibold">{item.name}</td>
-                        <td className="px-4 py-3 text-center text-gray-600">
-                          {item.hsn}
+                        <td className="px-4 py-3 text-center">
+                          <input
+                            type="text"
+                            value={item.hsn}
+                            onChange={(e) => handleHsnChange(idx, e.target.value, true)}
+                            className={`w-20 border rounded px-2 py-1 text-center focus:ring-2 focus:ring-yellow-500 outline-none text-xs font-mono ${
+                              item.hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(item.hsn).trim())
+                                ? "border-red-500 bg-red-50"
+                                : "border-gray-200"
+                            }`}
+                            placeholder="HSN"
+                          />
                         </td>
                         <td className="px-4 py-3 text-center">{item.qty}</td>
                         <td className="px-4 py-3 text-right">
@@ -710,20 +852,81 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       min="1"
                     />
                   </div>
+                  <div className="md:col-span-2">
+                    <div className="bg-[#319bab]/5 p-3 rounded-lg border border-[#319bab]/20 mb-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-black text-[#319bab] uppercase tracking-widest leading-none">Unit Conversion</span>
+                        <button 
+                          onClick={saveProductConversion}
+                          className="text-[9px] bg-[#319bab] text-white px-2 py-0.5 rounded hover:bg-[#257f87] transition font-bold"
+                        >
+                          SAVE AS DEFAULT
+                        </button>
+                      </div>
+                    <div className="flex gap-2 items-center">
+                      <div className="w-16">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          className="w-full border border-gray-300 rounded px-2 py-1 text-center text-xs focus:ring-1 focus:ring-[#319bab] outline-none"
+                          value={newItem.unitConversion?.value || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "" || /^\d*\.?\d*$/.test(val)) {
+                              const numVal = parseFloat(val) || 1;
+                              const altQty = parseFloat(((newItem.qty || 1) * (newItem.unitConversion?.altValue || 1) / numVal).toFixed(2));
+                              setNewItem({
+                                ...newItem,
+                                unitConversion: { ...newItem.unitConversion, value: val },
+                                altQty
+                              });
+                            }
+                          }}
+                          placeholder="Val"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <span className="text-[10px] text-gray-500 font-bold uppercase truncate block text-center border-b border-gray-100">{newItem.unit || "Unit"}</span>
+                      </div>
+                      <div className="text-center font-bold text-[#319bab]">=</div>
+                      <div className="w-24">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          className="w-full border border-gray-300 rounded px-2 py-1 text-center text-xs focus:ring-1 focus:ring-[#319bab] outline-none"
+                          value={newItem.unitConversion?.altValue || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "" || /^\d*\.?\d*$/.test(val)) {
+                              const numAltVal = parseFloat(val) || 1;
+                              const altQty = parseFloat(((newItem.qty || 1) * numAltVal / (newItem.unitConversion?.value || 1)).toFixed(2));
+                              setNewItem({
+                                ...newItem,
+                                unitConversion: { ...newItem.unitConversion, altValue: val },
+                                altQty
+                              });
+                            }
+                          }}
+                          placeholder="Alt"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <span className="text-[10px] text-gray-500 font-bold uppercase truncate block text-center border-b border-gray-100">{newItem.altUnit || "Alt"}</span>
+                      </div>
+                    </div>
+                    </div>
+                  </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-2">
-                      Unit
+                      Unit (Base)
                     </label>
                     <input
                       type="text"
                       value={newItem.unit}
                       onChange={(e) =>
-                        setNewItem({ 
-                           ...newItem, 
-                           unit: e.target.value
-                        })
+                        setNewItem({ ...newItem, unit: e.target.value })
                       }
-                      placeholder="kg"
+                      placeholder="pcs"
                       className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none uppercase font-bold text-xs"
                     />
                   </div>
@@ -768,6 +971,30 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-2">
+                       HSN Code
+                    </label>
+                    <input
+                      type="text"
+                      value={newItem.hsn}
+                      onChange={(e) =>
+                        setNewItem({
+                          ...newItem,
+                          hsn: e.target.value,
+                        })
+                      }
+                      placeholder="4, 6, 8 digits"
+                      className={`w-full border rounded px-3 py-2 focus:ring-2 focus:ring-green-500 outline-none text-sm font-mono ${
+                        newItem.hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(newItem.hsn).trim())
+                          ? "border-red-500 bg-red-50"
+                          : "border-gray-300"
+                      }`}
+                    />
+                    {newItem.hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(newItem.hsn).trim()) && (
+                      <p className="text-[9px] text-red-600 font-bold mt-1">4, 6, 8 digits only</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -826,14 +1053,21 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       }, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </span>
                 </div>
-                {order?.commonDiscount > 0 && (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600">Special Discount:</span>
-                    <span className="text-red-500 font-semibold">
-                      -₹{order.commonDiscount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                    </span>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Special Discount:</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-red-500 font-semibold">-₹</span>
+                    <input
+                      type="number"
+                      value={commonDiscount}
+                      onChange={(e) => setCommonDiscount(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                      className="w-24 border border-gray-300 rounded px-2 py-1 text-right focus:ring-2 focus:ring-red-500 outline-none text-red-500 font-semibold"
+                      placeholder="0"
+                      step="0.01"
+                      min="0"
+                    />
                   </div>
-                )}
+                </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600">Transport:</span>
                   <span className="text-gray-800 font-semibold">
@@ -848,13 +1082,25 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                     </span>
                   </div>
                 )}
-                <div className="border-t pt-3 flex justify-between items-center text-lg font-bold">
-                  <span className="text-[#319bab]">Grand Total:</span>
-                  <span className="text-[#319bab]">
-                    ₹{calculateGrandTotal().toLocaleString("en-IN", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                {/* ROUND OFF */}
+                <div className="flex justify-between items-center mb-2 text-sm">
+                  <span className="text-gray-600 font-semibold">ROUND OFF (+/-)</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">₹</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="w-24 border border-gray-300 rounded px-2 py-1 text-right focus:ring-2 focus:ring-[#319bab] outline-none font-bold"
+                      value={roundOff}
+                      onChange={(e) => setRoundOff(e.target.value === "" ? 0 : parseFloat(e.target.value))}
+                    />
+                  </div>
+                </div>
+
+                <div className="border-t pt-2 mt-2 flex justify-between items-center">
+                  <span className="text-lg font-bold text-[#319bab]">GRAND TOTAL</span>
+                  <span className="text-2xl font-black text-[#319bab]">
+                    ₹{Math.round(calculateGrandTotal()).toLocaleString()}
                   </span>
                 </div>
               </div>

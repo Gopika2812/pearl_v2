@@ -130,9 +130,9 @@ export default function InventorySalesOrderEntry({
   const pollingRef = useRef(null);
 
   // UNIT CONVERSION STATES
-  const [convValue, setConvValue] = useState(1);
+  const [convValue, setConvValue] = useState("");
   const [convUnit, setConvUnit] = useState("");
-  const [convAltValue, setConvAltValue] = useState(1);
+  const [convAltValue, setConvAltValue] = useState("");
   const [convAltUnit, setConvAltUnit] = useState("");
   const [altQty, setAltQty] = useState(0);
 
@@ -607,9 +607,11 @@ export default function InventorySalesOrderEntry({
 
   // UNIT CONVERSION CALCULATION
   useEffect(() => {
-    if (qty && convValue && convAltValue) {
-      const calculatedAlt = (Number(qty) * Number(convAltValue)) / Number(convValue);
-      setAltQty(Number(calculatedAlt.toFixed(2)));
+    const q = parseFloat(qty) || 0;
+    const val = parseFloat(convValue) || 1;
+    const aVal = parseFloat(convAltValue) || 1;
+    if (q > 0) {
+      setAltQty(parseFloat(((q * aVal) / val).toFixed(2)));
     } else {
       setAltQty(0);
     }
@@ -712,14 +714,14 @@ export default function InventorySalesOrderEntry({
 
     // Set Unit Conversion from Product
     if (product.unitConversion) {
-      setConvValue(product.unitConversion.value || 1);
+      setConvValue(product.unitConversion.value || "");
       setConvUnit(product.unitConversion.unit || product.units || "");
-      setConvAltValue(product.unitConversion.altValue || 1);
+      setConvAltValue(product.unitConversion.altValue || "");
       setConvAltUnit(product.unitConversion.altUnit || "");
     } else {
-      setConvValue(1);
+      setConvValue("");
       setConvUnit(product.units || "");
-      setConvAltValue(1);
+      setConvAltValue("");
       setConvAltUnit("");
     }
 
@@ -874,6 +876,7 @@ export default function InventorySalesOrderEntry({
         name: p.name,
         hsn,
         qty: Number(qty),
+        unit: convUnit, // 🛠️ FIX: Pass the base unit (e.g. Pkt)
         sellingPrice: Number(adjustedSellingPrice),
 
         baseAmount,
@@ -1633,8 +1636,15 @@ export default function InventorySalesOrderEntry({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>HSN</label>
-                  <input className={inputClass} value={hsn} readOnly />
+                  <input 
+                    className={`${inputClass} ${hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(hsn).trim()) ? 'border-red-500 bg-red-50' : ''}`} 
+                    value={hsn} 
+                    onChange={(e) => setHsn(e.target.value)}
+                    placeholder="4, 6 or 8 digits"
+                  />
+                  {hsn && !/^\d{4}$|^\d{6}$|^\d{8}$/.test(String(hsn).trim()) && (
+                    <p className="text-[10px] text-red-600 font-bold mt-1">⚠️ Must be 4, 6, or 8 digits</p>
+                  )}
                 </div>
                 <div>
                   <label className={labelClass}>
@@ -1691,38 +1701,58 @@ export default function InventorySalesOrderEntry({
                     SAVE DEFAULT
                   </button>
                 </div>
-                <div className="grid grid-cols-4 gap-2 items-center">
-                  <input
-                    type="number"
-                    className={`${inputClass} text-center`}
-                    value={convValue}
-                    onChange={(e) => setConvValue(Number(e.target.value))}
-                    placeholder="Val"
-                  />
-                  <select 
-                    className={`${selectClass} text-xs`}
-                    value={convUnit}
-                    onChange={(e) => setConvUnit(e.target.value)}
-                  >
-                    <option value="">Unit</option>
-                    {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
-                  <div className="text-center font-bold text-[#319bab]">=</div>
-                  <div className="flex gap-1 col-span-1">
+                <div className="flex gap-2 items-center">
+                  <div className="w-16">
                     <input
-                      type="number"
-                      className={`${inputClass} text-center`}
-                      value={convAltValue}
-                      onChange={(e) => setConvAltValue(Number(e.target.value))}
-                      placeholder="Alt"
+                      type="text"
+                      inputMode="decimal"
+                      className={`${inputClass} text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                      value={convValue}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "" || /^\d*\.?\d*$/.test(val)) setConvValue(val);
+                      }}
+                      placeholder="Val"
                     />
+                  </div>
+                  <div className="flex-1">
                     <select 
                       className={`${selectClass} text-xs`}
-                      value={convAltUnit}
+                      value={unitOptions.find(u => u.toLowerCase() === (convUnit || "").toLowerCase()) || convUnit}
+                      onChange={(e) => setConvUnit(e.target.value)}
+                    >
+                      <option value="">Unit</option>
+                      {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                      {convUnit && !unitOptions.some(u => u.toLowerCase() === convUnit.toLowerCase()) && (
+                        <option value={convUnit}>{convUnit}</option>
+                      )}
+                    </select>
+                  </div>
+                  <div className="text-center font-bold text-[#319bab]">=</div>
+                  <div className="w-20">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      className={`${inputClass} text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                      value={convAltValue}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "" || /^\d*\.?\d*$/.test(val)) setConvAltValue(val);
+                      }}
+                      placeholder="Alt"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <select 
+                      className={`${selectClass} text-xs`}
+                      value={unitOptions.find(u => u.toLowerCase() === (convAltUnit || "").toLowerCase()) || convAltUnit}
                       onChange={(e) => setConvAltUnit(e.target.value)}
                     >
                       <option value="">Alt Unit</option>
                       {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                      {convAltUnit && !unitOptions.some(u => u.toLowerCase() === convAltUnit.toLowerCase()) && (
+                        <option value={convAltUnit}>{convAltUnit}</option>
+                      )}
                     </select>
                   </div>
                 </div>
@@ -1738,15 +1768,18 @@ export default function InventorySalesOrderEntry({
                       </span>
                     )}
                   </div>
-                  <input
-                    type="number"
-                    className={inputClass}
-                    value={qty}
-                    min={0}
-                    max={availableQtyCache[selectedItem] ?? productsWithStock.find(p => p._id === selectedItem)?.availableQty ?? 0}
-                    onChange={(e) => setQty(e.target.value === "" ? "" : +e.target.value)}
-                    placeholder="0"
-                  />
+                  <div className="relative">
+                    <input
+                      type="number"
+                      className={`${inputClass} pr-16`}
+                      value={qty}
+                      min={0}
+                      max={availableQtyCache[selectedItem] ?? productsWithStock.find(p => p._id === selectedItem)?.availableQty ?? 0}
+                      onChange={(e) => setQty(e.target.value === "" ? "" : +e.target.value)}
+                      placeholder="0"
+                    />
+                    <span className="absolute right-3 top-2 text-[10px] text-gray-400 font-bold uppercase">{convUnit || "Pcs"}</span>
+                  </div>
                 </div>
                 <div>
                   <label className={labelClass}>GST %</label>
@@ -1819,7 +1852,12 @@ export default function InventorySalesOrderEntry({
                         {item.name}
                         <div className="text-[10px] text-gray-400">HSN: {item.hsn}</div>
                       </td>
-                      <td className="px-4 py-3 text-center">{item.qty}</td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="font-bold">{item.qty} {item.unit || "Pcs"}</div>
+                        {item.altQty > 0 && (
+                          <div className="text-[10px] text-[#319bab] font-semibold">({item.altQty} {item.altUnit})</div>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right">₹{item.sellingPrice}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="font-semibold text-gray-800">{item.discountPercent}%</div>

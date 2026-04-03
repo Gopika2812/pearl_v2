@@ -3,7 +3,11 @@ import mongoose from "mongoose";
 const invoiceSchema = new mongoose.Schema(
   {
     // Basic Info
-    invoiceNumber: { type: String, required: true }, // unique index handled per-branch
+    invoiceNumber: { 
+      type: String, 
+      required: true,
+      maxlength: [16, "Invoice number must be at most 16 characters for GST/E-Invoicing compliance."]
+    }, // unique index handled per-branch
     invoiceDate: { type: Date, default: Date.now },
     financialYear: String,
 
@@ -63,6 +67,8 @@ const invoiceSchema = new mongoose.Schema(
         hsn: String,
         qty: Number, // CONFIRMED/BILLED QTY
         unit: { type: String, default: "" },
+        altQty: { type: Number, default: 0 },
+        altUnit: { type: String, default: "" },
         sellingPrice: Number,
         discountType: String,
         discountPercent: Number,
@@ -86,6 +92,8 @@ const invoiceSchema = new mongoose.Schema(
         hsn: String,
         qty: Number, // BACK ORDER QTY
         unit: { type: String, default: "" },
+        altQty: { type: Number, default: 0 },
+        altUnit: { type: String, default: "" },
         sellingPrice: Number,
         gst: Number,
       },
@@ -102,6 +110,8 @@ const invoiceSchema = new mongoose.Schema(
         hsn: String,
         qty: Number,
         unit: { type: String, default: "" },
+        altQty: { type: Number, default: 0 },
+        altUnit: { type: String, default: "" },
         sellingPrice: Number,
       },
     ],
@@ -116,6 +126,8 @@ const invoiceSchema = new mongoose.Schema(
       igst: Number,
       total: Number,
     },
+    roundOff: { type: Number, default: 0 },
+    customerMargin: Number,
     transportCharge: Number,
     transportGstPercent: { type: Number, default: 0 },
     transportGstAmount: { type: Number, default: 0 },
@@ -129,6 +141,7 @@ const invoiceSchema = new mongoose.Schema(
       },
     ],
     extraExpenseAmount: { type: Number, default: 0 },
+    roundOff: { type: Number, default: 0 },
     grandTotal: Number,
 
     // Closing Balance

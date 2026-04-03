@@ -22,7 +22,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     // Read Excel
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet);
+    const rows = XLSX.utils.sheet_to_json(sheet, { raw: false });
 
     console.log("Raw rows from Excel:", JSON.stringify(rows, null, 2));
     console.log("Total rows to process:", rows.length);

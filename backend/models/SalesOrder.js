@@ -77,6 +77,9 @@ const salesOrderSchema = new mongoose.Schema(
         name: String,
         hsn: String,
         qty: Number,
+        unit: { type: String, default: "" },
+        altQty: { type: Number, default: 0 },
+        altUnit: { type: String, default: "" },
         sellingPrice: Number,
         isSample: {
           type: Boolean,
@@ -128,6 +131,9 @@ const salesOrderSchema = new mongoose.Schema(
         name: String,
         hsn: String,
         qty: Number,
+        unit: { type: String, default: "" },
+        altQty: { type: Number, default: 0 },
+        altUnit: { type: String, default: "" },
         sellingPrice: Number,
         isSample: {
           type: Boolean,
@@ -141,6 +147,7 @@ const salesOrderSchema = new mongoose.Schema(
     invoiceTotalDiscount: Number,
     invoiceTotalTax: Number,
     invoiceTransportCharge: Number,
+    invoiceCommonDiscount: { type: Number, default: 0 },
     invoiceGrandTotal: Number,
 
     // Invoice balance (opening and closing balance when invoice is confirmed)

@@ -513,8 +513,13 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                             if (field === "debit" || field === "credit" || field === "sellingPrice" || field === "purchasingPrice") {
                               displayValue = `₹${displayValue.toFixed(2)}`;
                             }
-                          } else if (typeof value === "string" && !isNaN(parseFloat(value)) && isFinite(value)) {
-                            // Handle numeric strings
+                          } else if (
+                            typeof value === "string" && 
+                            !isNaN(parseFloat(value)) && 
+                            isFinite(value) &&
+                            !["hsnCode", "hsn", "pincode", "stateCode", "whatsapp", "phone"].includes(field)
+                          ) {
+                            // Handle numeric strings (Prices, amounts, etc.) but skip identifiers
                             const num = parseFloat(value);
                             displayValue = Math.round(num * 100) / 100;
                             if (field === "debit" || field === "credit" || field === "sellingPrice" || field === "purchasingPrice") {

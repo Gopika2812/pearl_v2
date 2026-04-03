@@ -22,6 +22,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   const [editedItems, setEditedItems] = useState([]);
   const [notes, setNotes] = useState("");
   const [invoiceType, setInvoiceType] = useState("ORDER_DETAILS");
+  const [commonDiscount, setCommonDiscount] = useState(0);
 
   // Preview state
   const [previewData, setPreviewData] = useState(null);
@@ -45,6 +46,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           backOrderQty: 0,
         }))
       );
+      setNotes(order.notes || "");
+      setCommonDiscount(order.commonDiscount || 0);
     }
   }, [order]);
 
@@ -71,6 +74,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             items: editedItems,
             notes,
             invoiceType,
+            commonDiscount,
           }),
         }
       );
@@ -102,6 +106,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             items: editedItems,
             notes,
             invoiceType,
+            commonDiscount,
             finalizedBy: user?.id || user?._id,
             finalizedByUsername: user?.username || user?.fullName || user?.name || "System",
           }),
@@ -138,9 +143,15 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   const handlePrint = async () => {
     try {
       const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        toast.warning("🔔 Pop-up blocked! Please allow pop-ups for this site to print.");
+        return;
+      }
       printWindow.document.write(getInvoiceHTML());
       printWindow.document.close();
-      setTimeout(() => printWindow.print(), 250);
+      setTimeout(() => {
+        if (printWindow) printWindow.print();
+      }, 250);
 
       // Mark as printed
       if (generatedInvoice?._id) {
@@ -330,7 +341,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         
         @media print { 
           body { margin: 0; padding: 0; } 
-          .page { margin: 0; padding: 5mm; }
+          .page { margin: 0 auto; padding: 5mm; page-break-after: avoid !important; }
         }
       </style>
     `;
@@ -394,21 +405,14 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 </div>
               </div>
 
-              <!-- SENDER & BUYER -->
+              <!-- BUYER (BILL TO) -->
               <div class="sender-buyer">
-                <div class="sender-buyer-col">
-                  <strong>SENDER (FROM)</strong>
-                  ${previewData?.seller?.name || "PEARL AGENCY"}<br/>
-                  ${previewData?.seller?.address || "Vanarpettai, Tirunelveli"}<br/>
-                  GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
-                  Phone: ${previewData?.seller?.phone || "9429692970"}
-                </div>
                 <div class="sender-buyer-col">
                   <strong>BUYER (BILL TO)</strong>
                   ${previewData?.customer?.name}<br/>
                   ${previewData?.customer?.address}<br/>
                   ${previewData?.customer?.district ? previewData?.customer?.district + ', ' : ''}${previewData?.customer?.state || ""} ${previewData?.customer?.pincode || ""}<br/>
-                  Mobile: ${previewData?.customer?.whatsapp || "-"}
+                  Mobile: ${previewData?.customer?.whatsapp || "-"} | GSTIN: ${previewData?.customer?.gstin || "N/A"}
                 </div>
               </div>
 
@@ -417,10 +421,13 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
               <table>
                 <thead>
                   <tr>
-                    <th style="width: 40%;">Product Name</th>
+                    <th style="width: 30%;">Product Name</th>
                     <th>HSN</th>
+                    <th>GST</th>
                     <th style="text-align: right;">Qty</th>
-                    <th style="text-align: right;">Price</th>
+                    <th style="text-align: right;">Rate</th>
+                    <th style="text-align: center;">Per</th>
+                    <th style="text-align: right;">Discount</th>
                     <th style="text-align: right;">Total</th>
                   </tr>
                 </thead>
@@ -429,8 +436,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                     <tr>
                       <td>${item.name}</td>
                       <td>${item.hsn || "-"}</td>
-                      <td style="text-align: right;">${item.qty} <span style="text-transform: uppercase;">${item.unit || ""}</span></td>
+                      <td style="text-align: center;">${item.gst || 0}%</td>
+                      <td style="text-align: right;">${item.qty} ${item.unit || ""} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
                       <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
+                      <td style="text-align: center; text-transform: uppercase;">${item.unit || ""}</td>
+                      <td style="text-align: right;">${item.discountPercent || 0}% (-₹${(item.discountAmount || 0).toFixed(2)})</td>
                       <td style="text-align: right;">₹${item.total?.toFixed(2) || 0}</td>
                     </tr>
                   `).join("")}
@@ -444,10 +454,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   <table style="margin-top: 5px;">
                     <thead>
                       <tr>
-                        <th>Product Name</th>
+                        <th style="width: 40%;">Product Name</th>
                         <th>HSN</th>
                         <th style="text-align: right;">Qty</th>
-                        <th style="text-align: right;">Price</th>
+                        <th style="text-align: right;">Rate</th>
+                        <th style="text-align: center;">Per</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -455,8 +466,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                         <tr>
                           <td>${item.name}</td>
                           <td>${item.hsn || "-"}</td>
-                          <td style="text-align: right;">${item.qty}</td>
+                          <td style="text-align: right;">${item.qty} ${item.unit || ""} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
                           <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
+                          <td style="text-align: center; text-transform: uppercase;">${item.unit || ""}</td>
                         </tr>
                       `).join("")}
                     </tbody>
@@ -586,19 +598,21 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         <table>
           <thead>
             <tr>
-              <th>Product Name</th>
-              <th style="text-align: right;">Requested</th>
-              <th style="text-align: right;">Confirmed</th>
-              <th style="text-align: right;">Pending ⚠️</th>
+              <th style="width: 40%;">Product Name</th>
+              <th style="text-align: right;">Req</th>
+              <th style="text-align: right;">Conf</th>
+              <th style="text-align: right;">Pend ⚠️</th>
+              <th style="text-align: center;">Per</th>
             </tr>
           </thead>
           <tbody>
             ${editedItems.map((item, idx) => item.backOrderQty > 0 ? `
               <tr>
                 <td>${item.name}</td>
-                <td style="text-align: right;">${item.qty}</td>
-                <td style="text-align: right;">${item.confirmedQty}</td>
-                <td style="text-align: right; color: red; font-weight: bold;">${item.backOrderQty}</td>
+                <td style="text-align: right;">${item.qty} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
+                <td style="text-align: right;">${item.confirmedQty} ${item.altQty > 0 ? `(${(item.altQty * (item.confirmedQty / item.qty)).toFixed(0)} ${item.altUnit})` : ""}</td>
+                <td style="text-align: right; color: red; font-weight: bold;">${item.backOrderQty} ${item.altQty > 0 ? `(${(item.altQty * (item.backOrderQty / item.qty)).toFixed(0)} ${item.altUnit})` : ""}</td>
+                <td style="text-align: center; text-transform: uppercase;">${item.unit || ""}</td>
               </tr>
             ` : "").join("")}
           </tbody>
@@ -702,21 +716,32 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                     {editedItems.map((item, idx) => (
                       <tr key={item._id} className="border hover:bg-gray-50">
                         <td className="border p-3">{item.name}</td>
-                        <td className="border p-3 text-right font-semibold">{item.qty}</td>
+                        <td className="border p-3 text-right font-semibold">
+                          {item.qty} {item.unit || "Units"} <br/>
+                          <span className="text-[10px] text-gray-400">{item.altQty > 0 && `(${item.altQty} ${item.altUnit})`}</span>
+                        </td>
                         <td className="border p-3">
-                          <input
-                            type="number"
-                            min="0"
-                            max={item.qty}
-                            value={item.confirmedQty}
-                            onChange={(e) =>
-                              handleQtyChange(idx, parseInt(e.target.value) || 0)
-                            }
-                            className="w-20 p-2 border rounded text-right bg-blue-50"
-                          />
+                          <div className="flex flex-col items-end">
+                            <input
+                              type="number"
+                              min="0"
+                              max={item.qty}
+                              value={item.confirmedQty}
+                              onChange={(e) =>
+                                handleQtyChange(idx, parseInt(e.target.value) || 0)
+                              }
+                              className="w-20 p-2 border rounded text-right bg-blue-50"
+                            />
+                            <span className="text-[10px] text-blue-600 font-bold mt-1">
+                              {item.altQty > 0 && `${(item.altQty * (item.confirmedQty / item.qty)).toFixed(1)} ${item.altUnit}`}
+                            </span>
+                          </div>
                         </td>
                         <td className="border p-3 text-right text-red-600 font-bold">
-                          {item.backOrderQty}
+                          {item.backOrderQty} {item.unit || "Units"} <br/>
+                          <span className="text-[10px] text-red-400 font-normal">
+                             {item.altQty > 0 && `(${(item.altQty * (item.backOrderQty / item.qty)).toFixed(1)} ${item.altUnit})`}
+                          </span>
                         </td>
                         <td className="border p-3 text-right">₹{item.sellingPrice}</td>
                         <td className="border p-3 text-right font-semibold">
@@ -738,6 +763,22 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
                   rows="4"
                 />
+              </div>
+
+              {/* Special Discount */}
+              <div className="mb-6">
+                <label className="block font-semibold mb-2">Special Discount (₹):</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl text-gray-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    value={commonDiscount}
+                    onChange={(e) => setCommonDiscount(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                    placeholder="Enter special discount amount..."
+                    className="flex-1 p-3 border-2 border-red-200 rounded-lg focus:border-red-500 focus:outline-none font-bold text-red-600 bg-red-50/30"
+                    min="0"
+                  />
+                </div>
               </div>
 
               {/* Options */}

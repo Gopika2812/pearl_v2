@@ -325,7 +325,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                   <p className="text-green-600/70 text-sm mt-1 font-medium">Instantly add hundreds of customers via Excel (.xlsx, .xls)</p>
                   
                   <div className="mt-4 flex flex-wrap gap-2 justify-center md:justify-start">
-                    {['Name', 'WhatsApp', 'Email', 'Address', 'GSTIN', 'Margin', 'Debit'].map(tag => (
+                    {['Name', 'WhatsApp', 'Email', 'Address', 'Pincode', 'State Code', 'GSTIN', 'Margin', 'Debit'].map(tag => (
                       <span key={tag} className="px-3 py-1 bg-white/80 border border-green-100 text-green-700 rounded-lg text-[10px] font-bold shadow-sm">{tag}</span>
                     ))}
                   </div>

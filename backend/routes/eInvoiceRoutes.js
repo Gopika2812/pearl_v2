@@ -81,9 +81,10 @@ router.post("/generate/:invoiceId", async (req, res) => {
       invoice.ewayBillValidUntil = eInvoiceResult.ewayBillValidUntil;
     }
 
-    // PDF URLs
+    // PDF & QR URLs
     invoice.invoicePdfUrl = eInvoiceResult.invoicePdfUrl;
     invoice.ewayBillPdfUrl = eInvoiceResult.ewayBillPdfUrl;
+    invoice.qrCodeUrl = eInvoiceResult.qrCodeUrl;
 
     await invoice.save();
 

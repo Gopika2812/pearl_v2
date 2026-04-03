@@ -56,7 +56,9 @@ export default function BranchDispatch() {
           name: item.name || item.productName,
           qty: item.qty,
           hsn: item.hsn,
-          unit: "Units",
+          unit: item.unit || "Units",
+          altQty: item.altQty || 0,
+          altUnit: item.altUnit || "",
           invoiceId: order.invoiceId || order.poId,
         }))
       );
@@ -244,7 +246,9 @@ export default function BranchDispatch() {
       name: item.name || item.productName,
       qty: item.qty,
       hsn: item.hsn,
-      unit: "Units",
+      unit: item.unit || "Units",
+      altQty: item.altQty || 0,
+      altUnit: item.altUnit || "",
     }));
     setLoadedProducts({
       type: "products",
@@ -577,10 +581,10 @@ export default function BranchDispatch() {
                             {product.hsn || "-"}
                           </td>
                           <td className="border border-gray-300 px-4 py-2 text-right font-semibold">
-                            {product.qty}
+                            {product.qty} {product.unit || "Units"} {product.altQty > 0 && `(${product.altQty} ${product.altUnit})`}
                           </td>
-                          <td className="border border-gray-300 px-4 py-2 text-center">
-                            {product.unit}
+                          <td className="border border-gray-300 px-4 py-2 text-center text-[10px] text-gray-500">
+                             {product.unit}
                           </td>
                         </tr>
                       ))}

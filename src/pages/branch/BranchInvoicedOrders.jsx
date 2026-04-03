@@ -38,10 +38,14 @@ const BranchInvoicedOrders = () => {
   const [filterVoucherType, setFilterVoucherType] = useState("");
   const [filterInvoiceId, setFilterInvoiceId] = useState("");
   const [filterCustomerName, setFilterCustomerName] = useState("");
-  const [filterFromDate, setFilterFromDate] = useState("");
-  const [filterToDate, setFilterToDate] = useState("");
+  const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterFromTime, setFilterFromTime] = useState("");
   const [filterToTime, setFilterToTime] = useState("");
+  
+  // Selection state for multi-select loading slip
+  const [selectedOrderIds, setSelectedOrderIds] = useState([]);
+  const selectedOrders = salesOrders.filter(so => selectedOrderIds.includes(so._id));
 
   // Fetch sales orders for current branch
   const fetchSalesOrders = async () => {
@@ -102,12 +106,16 @@ const BranchInvoicedOrders = () => {
           sampleItems: updatedOrder.sampleItems,
           customer: updatedOrder.customer,
           transportCharge: updatedOrder.transportCharge,
+          transportGstPercent: updatedOrder.transportGstPercent,
+          transportGstAmount: updatedOrder.transportGstAmount,
           subtotal: updatedOrder.subtotal,
           totalTax: updatedOrder.totalTax,
           totalDiscount: updatedOrder.totalDiscount,
+          commonDiscount: updatedOrder.commonDiscount,
+          roundOff: updatedOrder.roundOff,
           grandTotal: updatedOrder.grandTotal,
           updatedBy: user?.id || user?._id,
-          updatedByUsername: user?.username || user?.billingPerson,
+          updatedByUsername: user?.username || user?.billingPerson || localStorage.getItem("username"),
         }),
       });
 
@@ -357,11 +365,21 @@ const BranchInvoicedOrders = () => {
                 <FaFileExcel /> Excel
               </button>
               <button
-                onClick={() => setShowSlipModal(true)}
-                disabled={filteredSalesOrders.length === 0}
-                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 shadow-sm"
+                onClick={() => {
+                  if (selectedOrderIds.length > 0) {
+                    setShowSlipModal(true);
+                  } else {
+                    toast.warn("Please select at least one order to generate a consolidated slip");
+                  }
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-sm text-sm font-bold ${
+                  selectedOrderIds.length > 0 
+                  ? "bg-indigo-600 text-white hover:bg-indigo-700" 
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                }`}
               >
-                <FaFileInvoice /> Generate Slip
+                <FaTruck />
+                Generate Consolidated Slip ({selectedOrderIds.length})
               </button>
               <button
                 onClick={fetchSalesOrders}
@@ -459,6 +477,20 @@ const BranchInvoicedOrders = () => {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold border-b">
                   <tr>
+                    <th className="px-6 py-4 text-center">
+                      <input 
+                        type="checkbox"
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedOrderIds(filteredSalesOrders.map(so => so._id));
+                          } else {
+                            setSelectedOrderIds([]);
+                          }
+                        }}
+                        checked={filteredSalesOrders.length > 0 && selectedOrderIds.length === filteredSalesOrders.length}
+                      />
+                    </th>
                     <th className="px-6 py-4 text-left">Invoice ID</th>
                     <th className="px-6 py-4 text-left">Customer</th>
                     {isFieldAllowed("itemsCount") && <th className="px-6 py-4 text-center">Items</th>}
@@ -472,7 +504,20 @@ const BranchInvoicedOrders = () => {
                   {filteredSalesOrders.map((order) => (
                     <React.Fragment key={order._id}>
                       <tr className={`hover:bg-gray-50 transition ${order.status === "CANCELLED" ? "opacity-60 bg-red-50/50" : ""}`}>
-                       
+                        <td className="px-6 py-4 text-center">
+                          <input 
+                            type="checkbox"
+                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                            checked={selectedOrderIds.includes(order._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedOrderIds(prev => [...prev, order._id]);
+                              } else {
+                                setSelectedOrderIds(prev => prev.filter(id => id !== order._id));
+                              }
+                            }}
+                          />
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <button
@@ -551,8 +596,6 @@ const BranchInvoicedOrders = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center gap-2 justify-center flex-wrap">
-                            {/* REMOVED RE-EDIT FROM SO LIST */}
-
                             <button
                               onClick={() => handleEditBill(order)}
                               className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 shadow-md shadow-orange-500/20"
@@ -567,15 +610,6 @@ const BranchInvoicedOrders = () => {
                              >
                                <FaFileInvoice />
                                {order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
-                             </button>
-
-                             <button
-                               onClick={() => navigate(`/branch/dispatch?type=SO&voucher=${encodeURIComponent(order.voucherType)}&orderId=${order._id}`)}
-                               className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-indigo-500 text-white hover:bg-indigo-600 shadow-md shadow-indigo-500/20"
-                               title="Generate Loading Slip for this order"
-                             >
-                               <FaTruck />
-                               Loading Slip
                              </button>
 
                              {(user?.role === "ADMIN" || user?.role === "MANAGER" || user?.role === "SUPER_ADMIN") && (
@@ -640,7 +674,7 @@ const BranchInvoicedOrders = () => {
                                               {item.hsn}
                                             </td>
                                             <td className={`py-2 px-3 text-center font-bold ${item.isNegativeStockBilled ? 'text-red-600 bg-red-50 rounded shadow-sm border border-red-100 flex items-center justify-center gap-1' : ''}`}>
-                                              {item.qty} {item.isNegativeStockBilled && <span title="Billed with negative stock">⚠️</span>}
+                                              {item.qty} {item.unit || "Units"} {item.altQty > 0 && `(${item.altQty} ${item.altUnit})`} {item.isNegativeStockBilled && <span title="Billed with negative stock">⚠️</span>}
                                             </td>
                                             <td className="py-2 px-3 text-right">
                                               ₹{item.sellingPrice?.toFixed(2)}
@@ -707,7 +741,7 @@ const BranchInvoicedOrders = () => {
                                                 {item.hsn}
                                               </td>
                                               <td className={`py-2 px-3 text-center font-bold ${item.isNegativeStockBilled ? 'text-red-600 bg-red-50 rounded shadow-sm border border-red-100 flex items-center justify-center gap-1' : ''}`}>
-                                                {item.qty} {item.isNegativeStockBilled && <span title="Billed with negative stock">⚠️</span>}
+                                                {item.qty} {item.unit || "Units"} {item.altQty > 0 && `(${item.altQty} ${item.altUnit})`} {item.isNegativeStockBilled && <span title="Billed with negative stock">⚠️</span>}
                                               </td>
                                               <td className="py-2 px-3 text-right">
                                                 ₹{item.sellingPrice?.toFixed(2)}
@@ -852,10 +886,10 @@ const BranchInvoicedOrders = () => {
                                                     {invoiceItem.name}
                                                   </td>
                                                   <td className={`py-2 px-3 text-center font-bold ${originalItem?.isNegativeStockBilled ? 'text-red-600 bg-red-50 rounded shadow-sm border border-red-100 flex items-center justify-center gap-1' : ''}`}>
-                                                    {originalItem?.qty || "-"} {originalItem?.isNegativeStockBilled && <span title="Billed with negative stock">⚠️</span>}
+                                                    {originalItem?.qty ? `${originalItem.qty} ${originalItem.unit || "Units"} ${originalItem.altQty > 0 ? `(${originalItem.altQty} ${originalItem.altUnit})` : ""}` : "-"} {originalItem?.isNegativeStockBilled && <span title="Billed with negative stock">⚠️</span>}
                                                   </td>
                                                   <td className="py-2 px-3 text-center font-semibold text-green-600">
-                                                    {invoiceItem.qty}
+                                                    {invoiceItem.qty} {invoiceItem.unit || "Units"} {invoiceItem.altQty > 0 && `(${invoiceItem.altQty} ${invoiceItem.altUnit})`}
                                                   </td>
                                                   <td className="py-2 px-3 text-center font-semibold text-red-600">
                                                     {backOrderQty > 0
@@ -931,11 +965,14 @@ const BranchInvoicedOrders = () => {
       )}
 
       {/* AGGREGATE SLIP MODAL */}
-      <AggregateSlipModal 
-        isOpen={showSlipModal} 
-        onClose={() => setShowSlipModal(false)} 
-        orders={filteredSalesOrders} 
-      />
+      {showSlipModal && (
+        <AggregateSlipModal
+          isOpen={showSlipModal}
+          onClose={() => setShowSlipModal(false)}
+          orders={selectedOrders}
+          branch={currentBranch}
+        />
+      )}
     </div>
   );
 };

@@ -56,7 +56,14 @@ router.get("/prepare/:salesOrderId", async (req, res) => {
 router.post("/preview/:salesOrderId", async (req, res) => {
   try {
     const { salesOrderId } = req.params;
-    const { items, notes, invoiceType = "ORDER_DETAILS" } = req.body;
+    const { 
+      items, 
+      notes, 
+      invoiceType = "ORDER_DETAILS", 
+      commonDiscount: customCommonDiscount,
+      finalizedBy, 
+      finalizedByUsername 
+    } = req.body;
 
     const salesOrder = await SalesOrder.findById(salesOrderId)
       .populate("branchId")
@@ -109,6 +116,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       return {
         ...originalItem.toObject(),
         qty: confirmedQty,
+        altQty: originalItem.altQty ? Math.round(originalItem.altQty * qtyRatio) : 0,
         total: itemTotalWithTax,
       };
     });
@@ -128,7 +136,9 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     };
     totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
-    const commonDiscount = salesOrder.commonDiscount || 0;
+    const commonDiscount = customCommonDiscount !== undefined 
+      ? Number(customCommonDiscount) 
+      : (salesOrder.commonDiscount || 0);
     const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) - commonDiscount);
 
     // Fetch billing person name
@@ -211,7 +221,14 @@ router.post("/preview/:salesOrderId", async (req, res) => {
 router.post("/finalize/:salesOrderId", async (req, res) => {
   try {
     const { salesOrderId } = req.params;
-    const { items, notes, invoiceType = "ORDER_DETAILS" } = req.body;
+    const { 
+      items, 
+      notes, 
+      invoiceType = "ORDER_DETAILS", 
+      commonDiscount: customCommonDiscount,
+      finalizedBy, 
+      finalizedByUsername 
+    } = req.body;
 
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -285,6 +302,14 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         console.log(`✨ Generated NEW Independent Invoice Number: ${invoiceNumber} for SO: ${salesOrder.invoiceId}`);
       }
 
+      // 🛡️ INVOICE NUMBER LENGTH VALIDATION (GST/E-INVOICE COMPATIBILITY)
+      if (invoiceNumber.length > 16) {
+        await session.abortTransaction();
+        return res.status(400).json({ 
+          message: `Generated Invoice Number "${invoiceNumber}" is too long (${invoiceNumber.length} chars). Max 16 allowed for E-Invoicing. Please shorten the Voucher Prefix.` 
+        });
+      }
+
 
       // Process items
       const processedItems = items.map((item) => {
@@ -299,6 +324,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         return {
           ...originalItem.toObject(),
           qty: confirmedQty,
+          altQty: originalItem.altQty ? Math.round(originalItem.altQty * qtyRatio) : 0,
           total: Math.round(originalItem.total * qtyRatio * 100) / 100,
         };
       });
@@ -355,7 +381,9 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       };
       totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
-      const commonDiscount = salesOrder.commonDiscount || 0;
+      const commonDiscount = customCommonDiscount !== undefined 
+        ? Number(customCommonDiscount) 
+        : (salesOrder.commonDiscount || 0);
       const tCharge = salesOrder.transportCharge || 0;
       const tGstPercent = salesOrder.transportGstPercent || 0;
       const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
@@ -619,8 +647,15 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       await session.endSession();
     }
   } catch (error) {
-    console.error("Error finalizing invoice:", error);
-    res.status(500).json({ message: "Failed to finalize invoice" });
+    console.error("❌ Error finalizing invoice:", error);
+    
+    // Catch Mongoose Validation Errors (e.g., HSN length, Invoice Number length)
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({ message: `Validation Error: ${messages.join(', ')}` });
+    }
+
+    res.status(500).json({ message: error.message || "Failed to finalize invoice" });
   }
 });
 

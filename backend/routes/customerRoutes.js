@@ -37,7 +37,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet);
+    const rows = XLSX.utils.sheet_to_json(sheet, { raw: false });
 
     console.log("📄 TOTAL ROWS:", rows.length);
     console.log("📄 FIRST ROW RAW:", rows[0]);
@@ -68,60 +68,15 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
     // 🔄 First pass: Validate and collect all valid records
     for (const row of rows) {
-      const normalized = Object.fromEntries(
+      const normalizedKeys = Object.keys(row).map(k => k.replace(/[\s"\n\r]+/g, "").toLowerCase());
+      const normalizedRow = Object.fromEntries(
         Object.entries(row).map(([k, v]) => [
           k.replace(/[\s"\n\r]+/g, "").toLowerCase(),
           String(v || "").trim(),
         ])
       );
 
-      const name = normalized.customername || normalized.name || normalized.debtorname;
-      const whatsapp = String(normalized.whatsapp || "").trim();
-      const email = normalized.email || "";
-      const address = normalized.address || "";
-      const district = normalized.district || "";
-      const state = normalized.state || "";
-      const country = normalized.country || "India";
-      const pincode = normalized.pincode || "";
-      const stateCode = normalized.statecode || "";
-      const registrationType = (normalized.registrationtype || "regular").toLowerCase();
-      const gstin = normalized.gstin || "";
-      const salesOwnerName = normalized.salesowner || "";
-      let margin = parseFloat(String(normalized.margin || "").replace(/[^0-9.-]+/g, "")) || 0;
-      // 💡 Handle Excel Percentage Formatting (e.g. 1% -> 0.01)
-      // If the value is very small (between -1 and 1, but not 0), we multiply by 100 
-      // unless specifically intended as a tiny fraction. In this business context, 
-      // margins are usually whole percentages.
-      if (margin !== 0 && Math.abs(margin) < 1) {
-        margin = margin * 100;
-        console.log(`📊 Converted decimal margin ${margin/100} to percentage: ${margin}%`);
-      }
-      
-      const rawDebit = normalized.debit || normalized.debitbalance || normalized["debit(₹)"] || normalized.dr || "";
-      const rawCredit = normalized.credit || normalized.creditbalance || normalized["credit(₹)"] || normalized.cr || "";
-      
-      const credit = parseFloat(String(rawCredit).replace(/[^0-9.-]+/g, "")) || 0;
-      const debit = parseFloat(String(rawDebit).replace(/[^0-9.-]+/g, "")) || 0;
-
-      // Parse comma-separated categories and groups
-      const customerCategoryNames = (normalized.customercategories || normalized.customercategory || "")
-        .split(",")
-        .map(c => c.trim().toLowerCase())
-        .filter(c => c);
-      
-      const customerGroupNames = (normalized.customergroups || normalized.customergroup || "")
-        .split(",")
-        .map(g => g.trim().toLowerCase())
-        .filter(g => g);
-
-      // Bank Details
-      const accountHolder = normalized.accountholder || "";
-      const accountNumber = normalized.accountnumber || "";
-      const ifsc = normalized.ifsc || "";
-      const branch = normalized.branch || "";
-      const upi = normalized.upi || "";
-
-      // ❌ Validation checks
+      const name = normalizedRow.customername || normalizedRow.name || normalizedRow.debtorname;
       if (!name) {
         skipped.push({ row, reason: "Missing customer name" });
         continue;
@@ -130,63 +85,104 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       // Check if customer already exists (case-insensitive)
       const existingCustomerId = existingCustomersMap.get(name.toLowerCase());
 
-      // Lookup SalesOwner ID from map
-      let salesOwnerId = null;
-      if (salesOwnerName) {
-        salesOwnerId = salesOwnerMap.get(salesOwnerName.toLowerCase());
-        if (!salesOwnerId) {
-          skipped.push({ row, reason: `Sales Owner "${salesOwnerName}" not found` });
-          continue;
+      // Prepare data object - only include fields present in normalizedRow
+      let customerData = { branchId, name };
+
+      // Optional fields logic: only add to customerData if present in Excel
+      if (normalizedRow.whatsapp !== undefined) customerData.whatsapp = normalizedRow.whatsapp;
+      if (normalizedRow.email !== undefined) customerData.email = normalizedRow.email;
+      if (normalizedRow.address !== undefined) customerData.address = normalizedRow.address;
+      if (normalizedRow.district !== undefined) customerData.district = normalizedRow.district;
+      if (normalizedRow.state !== undefined) customerData.state = normalizedRow.state;
+      if (normalizedRow.country !== undefined) customerData.country = normalizedRow.country || "India";
+      if (normalizedRow.pincode !== undefined) customerData.pincode = normalizedRow.pincode;
+      if (normalizedRow.statecode !== undefined) {
+        let sc = normalizedRow.statecode || "33";
+        // Ensure state code is at least 2 digits (e.g., "7" -> "07")
+        if (/^\d{1}$/.test(sc)) sc = sc.padStart(2, '0');
+        customerData.stateCode = sc;
+      }
+      if (normalizedRow.gstin !== undefined) customerData.gstin = normalizedRow.gstin;
+      if (normalizedRow.registrationtype !== undefined) {
+        customerData.registrationType = (normalizedRow.registrationtype.toLowerCase() === "unregistered" ? "unregistered" : "regular");
+      }
+
+      // Financials
+      const rawDebit = normalizedRow.debit || normalizedRow.debitbalance || normalizedRow["debit(₹)"] || normalizedRow.dr;
+      if (rawDebit !== undefined) {
+        customerData.debit = parseFloat(String(rawDebit).replace(/[^0-9.-]+/g, "")) || 0;
+      }
+
+      const rawCredit = normalizedRow.credit || normalizedRow.creditbalance || normalizedRow["credit(₹)"] || normalizedRow.cr;
+      if (rawCredit !== undefined) {
+        customerData.credit = parseFloat(String(rawCredit).replace(/[^0-9.-]+/g, "")) || 0;
+      }
+
+      if (normalizedRow.margin !== undefined) {
+        let margin = parseFloat(String(normalizedRow.margin).replace(/[^0-9.-]+/g, "")) || 0;
+        if (margin !== 0 && Math.abs(margin) < 1) {
+          margin = margin * 100;
+        }
+        customerData.margin = Math.round(margin * 100) / 100;
+      }
+
+      // Sales Owner
+      if (normalizedRow.salesowner !== undefined) {
+        const salesOwnerName = normalizedRow.salesowner;
+        if (salesOwnerName) {
+          const salesOwnerId = salesOwnerMap.get(salesOwnerName.toLowerCase());
+          if (salesOwnerId) {
+            customerData.salesOwner = salesOwnerId;
+          } else {
+            skipped.push({ row, reason: `Sales Owner "${salesOwnerName}" not found` });
+            continue;
+          }
+        } else {
+          customerData.salesOwner = null;
         }
       }
 
-      // Lookup CustomerCategory IDs from map (optional, multiple)
-      let customerCategoryIds = [];
-      for (const categoryName of customerCategoryNames) {
-        const categoryId = customerCategoryMap.get(categoryName);
-        if (!categoryId) {
-          skipped.push({ row, reason: `Customer Category "${categoryName}" not found` });
+      // Categories & Groups (Comma separated)
+      if (normalizedRow.customercategories !== undefined || normalizedRow.customercategory !== undefined) {
+        const catStr = normalizedRow.customercategories || normalizedRow.customercategory || "";
+        const catNames = catStr.split(",").map(c => c.trim().toLowerCase()).filter(c => c);
+        let categoryIds = [];
+        let catMissing = false;
+        for (const cName of catNames) {
+          const cId = customerCategoryMap.get(cName);
+          if (!cId) { catMissing = true; break; }
+          categoryIds.push(cId);
+        }
+        if (catMissing) {
+          skipped.push({ row, reason: `One or more customer categories not found` });
           continue;
         }
-        customerCategoryIds.push(categoryId);
+        customerData.customerCategories = categoryIds;
       }
 
-      // Lookup CustomerGroup IDs from map (optional, multiple)
-      let customerGroupIds = [];
-      for (const groupName of customerGroupNames) {
-        const groupId = customerGroupMap.get(groupName);
-        if (!groupId) {
-          skipped.push({ row, reason: `Customer Group "${groupName}" not found` });
+      if (normalizedRow.customergroups !== undefined || normalizedRow.customergroup !== undefined) {
+        const grpStr = normalizedRow.customergroups || normalizedRow.customergroup || "";
+        const grpNames = grpStr.split(",").map(g => g.trim().toLowerCase()).filter(g => g);
+        let groupIds = [];
+        let grpMissing = false;
+        for (const gName of grpNames) {
+          const gId = customerGroupMap.get(gName);
+          if (!gId) { grpMissing = true; break; }
+          groupIds.push(gId);
+        }
+        if (grpMissing) {
+          skipped.push({ row, reason: `One or more customer groups not found` });
           continue;
         }
-        customerGroupIds.push(groupId);
+        customerData.customerGroups = groupIds;
       }
 
-      const customerData = {
-        branchId,
-        name,
-        whatsapp,
-        email,
-        address,
-        district,
-        state,
-        stateCode: stateCode || "33",
-        country,
-        pincode,
-        registrationType: (registrationType === "unregistered" ? "unregistered" : "regular"),
-        gstin,
-        margin: Math.round(margin * 100) / 100,
-        credit: credit,
-        debit: debit,
-        salesOwner: salesOwnerId,
-        customerCategories: customerCategoryIds,
-        customerGroups: customerGroupIds,
-        accountHolder,
-        accountNumber,
-        ifsc,
-        branch,
-        upi,
-      };
+      // Bank Details
+      if (normalizedRow.accountholder !== undefined) customerData.accountHolder = normalizedRow.accountholder;
+      if (normalizedRow.accountnumber !== undefined) customerData.accountNumber = normalizedRow.accountnumber;
+      if (normalizedRow.ifsc !== undefined) customerData.ifsc = normalizedRow.ifsc;
+      if (normalizedRow.branch !== undefined) customerData.branch = normalizedRow.branch;
+      if (normalizedRow.upi !== undefined) customerData.upi = normalizedRow.upi;
 
       if (existingCustomerId) {
         // Queue for update
@@ -197,8 +193,14 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
           }
         });
       } else {
-        // Queue for insert
-        customersToBulkInsert.push(customerData);
+        // Queue for insert (for new, ensure essential defaults)
+        const newCustomerData = {
+          ...customerData,
+          stateCode: customerData.stateCode || "33",
+          country: customerData.country || "India",
+          registrationType: customerData.registrationType || "regular",
+        };
+        customersToBulkInsert.push(newCustomerData);
         existingCustomersMap.set(name.toLowerCase(), "pending_insert");
       }
     }

@@ -35,7 +35,11 @@ const productSchema = new mongoose.Schema(
     mrp: { type: Number, default: 0 }, // Maximum Retail Price
     margin: { type: Number, default: 0 },
     marginPercentage: { type: Number, default: 0 }, // Margin as percentage for group calculations
-    hsnCode: { type: String, required: true },
+    hsnCode: { 
+      type: String, 
+      required: true,
+      trim: true
+    },
     hsn: { type: String, default: "" }, // Alias for hsnCode
     gst: { type: Number, default: 0 },
     adminMargin: { type: Number, default: 0 }, // Additional margin for Sales Order override

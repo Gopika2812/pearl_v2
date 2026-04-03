@@ -8,7 +8,7 @@ import { CookieJar } from "tough-cookie";
 
 class GSTZenService {
   constructor() {
-    this.apiKey = (process.env.GSTZEN_API_KEY || "").trim();
+    this.apiKey = (process.env.GSTZen_API_KEY || "").trim();
     // Normalize Base URL to NOT have a trailing slash
     this.baseUrl = (process.env.GSTZEN_BASE_URL || "https://my.gstzen.in").trim().replace(/\/+$/, "");
     
@@ -37,6 +37,27 @@ class GSTZenService {
     try {
       console.log("\n🚀 Generating E-Invoice IRN...");
       
+      // 🛡️ HSN PRE-CHECK: GSTZen/NIC/Tax Portal requires a minimum of 6 digits for B2B E-Invoices.
+      // (NIC strictly rejects 4-digit HSNs for businesses above the ₹5Cr threshold).
+      if (invoiceData.items && Array.isArray(invoiceData.items)) {
+        for (const item of invoiceData.items) {
+          const hsn = String(item.hsn || item.productId?.hsnCode || "").trim();
+          // NIC portal currently enforces 6 or 8 digits for E-Invoicing
+          if (!/^\d{6}$|^\d{8}$/.test(hsn)) {
+            const errorMsg = `Product "${item.name}" has a 4-digit HSN code "${hsn}". ` +
+                           `The Tax Portal requires a minimum of 6 digits for E-Invoicing. ` +
+                           `Please update the HSN to 6 digits (e.g., 160100) in the product master or edit the bill to proceed.`;
+            console.error(`❌ Pre-check fail: ${errorMsg}`);
+            throw new Error(errorMsg);
+          }
+        }
+      }
+
+      // 🛡️ INVOICE NUMBER LENGTH PRE-CHECK
+      if (String(invoiceData.invoiceNumber).length > 16) {
+        throw new Error(`Invoice Number "${invoiceData.invoiceNumber}" is too long (${invoiceData.invoiceNumber.length} chars). Max 16 allowed for E-Invoicing.`);
+      }
+
       const sellerGstin = invoiceData.seller?.gstin || invoiceData.branchId?.gstin || "33DULPS2600Q1Z6";
       const sellerStateCode = String(invoiceData.seller?.stateCode || invoiceData.branchId?.stateCode || "33").padStart(2, "0");
       const buyerGstin = invoiceData.customer?.gstin || invoiceData.customer?.customerId?.gstin || "URP";
@@ -118,7 +139,10 @@ class GSTZenService {
           ackDate: result.AckDt || result.ackDate,
           ewayBillNo: result.EwbNo || result.ewbNo,
           invoicePdfUrl: result.InvoicePdfUrl,
-          ewayBillPdfUrl: result.EWayBillPdfUrl
+          ewayBillPdfUrl: result.EWayBillPdfUrl,
+          qrCodeUrl: result.QrCodeImageUrl || result.QrCodeUrl || result.IrnQrCodeUrl,
+          signedInvoice: result.SignedInvoice,
+          signedQrCode: result.SignedQRCode || result.SignedQrCode
         };
       } else {
         throw new Error(result.message || "Tax Portal Validation Error");

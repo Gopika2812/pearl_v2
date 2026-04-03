@@ -323,7 +323,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet);
+    const rows = XLSX.utils.sheet_to_json(sheet, { raw: false });
 
     console.log("📄 TOTAL ROWS:", rows.length);
     console.log("📄 FIRST ROW RAW:", rows[0]);
@@ -347,13 +347,11 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     );
 
     // ⚡ OPTIMIZATION: Batch load all existing products in this branch
+    // Product names are unique per branch, so we can index by name alone for lookup
     const existingProducts = await Product.find({ branchId }, { _id: 1, name: 1, productGroup: 1 });
-    const existingProductMap = new Map();
-    existingProducts.forEach((p) => {
-      // productGroup might be null for some old data, handle safely
-      const groupId = p.productGroup ? p.productGroup.toString() : "null";
-      existingProductMap.set(`${p.name.toLowerCase()}|${groupId}`, p._id);
-    });
+    const existingProductNameMap = new Map(
+      existingProducts.map(p => [p.name.toLowerCase(), p._id])
+    );
 
     let productsToBulkInsert = [];
     let productsToBulkUpdate = [];
@@ -361,156 +359,164 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
     // 🔄 First pass: Validate and collect all valid records
     for (const row of rows) {
-      const normalized = Object.fromEntries(
+      const normalizedRow = Object.fromEntries(
         Object.entries(row).map(([k, v]) => [
           k.replace(/[\s"\n\r]+/g, "").toLowerCase(),
           String(v || "").trim(),
         ])
       );
 
-      const name = normalized.name || "";
-      const groupName = normalized.productgroup || "";
-      const categoriesStr = normalized.productcategories || ""; // Comma-separated list
-      const warehouseName = normalized.warehouse || ""; // NEW: Extract warehouse name
-      const perQty = Number(normalized.perqty || 1); // Default to 1
-      const units = normalized.units || "kg"; // Default to kg
-      const totalQty = Number(normalized.totalqty || 0);
-      
-      // ✅ Better number parsing with fallback and validation
-      let purchasingPrice = 0;
-      if (normalized.purchasingprice) {
-        const parsed = parseFloat(normalized.purchasingprice.toString().replace(/[^\d.-]/g, ''));
-        purchasingPrice = isNaN(parsed) ? 0 : parsed;
-      }
-      
-      let sellingPrice = 0;
-      if (normalized.sellingprice) {
-        const parsed = parseFloat(normalized.sellingprice.toString().replace(/[^\d.-]/g, ''));
-        sellingPrice = isNaN(parsed) ? 0 : parsed;
-      }
-      
-      // 💰 Calculate sellingPrice from margin if sellingPrice not provided
-      let margin = 0;
-      if (normalized.margin) {
-        const parsed = parseFloat(normalized.margin.toString().replace(/[^\d.-]/g, ''));
-        margin = isNaN(parsed) ? 0 : parsed;
-      }
-      
-      // If sellingPrice is 0 but margin is provided, calculate it
-      if (sellingPrice === 0 && margin > 0 && purchasingPrice > 0) {
-        sellingPrice = purchasingPrice + (purchasingPrice * margin / 100);
-        console.log(`💰 Auto-calculated sellingPrice from margin: ${purchasingPrice} + ${margin}% = ${sellingPrice}`);
-      }
-      
-      const hsnCode = normalized.hsncode || "N/A"; // Default to N/A
-      
-      let gst = 0;
-      const gstRaw = normalized['gst%'] || normalized.gst || normalized.gstpercent || normalized['tax%'] || normalized.tax;
-      if (gstRaw) {
-        const parsed = parseFloat(gstRaw.toString().replace(/[^\d.-]/g, ''));
-        gst = isNaN(parsed) ? 0 : parsed;
-      }
-
-      // Only name is strictly mandatory. If groupName is missing, we will push it to an "Uncategorized" group.
+      const name = normalizedRow.stockitem || normalizedRow.productname || normalizedRow.name || "";
       if (!name) {
         skipped.push({ row, reason: "Missing product name" });
         continue;
       }
 
-      let finalGroupName = groupName;
-      if (!finalGroupName) {
-        finalGroupName = "General";
+      // Check if product already exists (by name only within branch)
+      const existingProductId = existingProductNameMap.get(name.toLowerCase());
+
+      // Prepare data object - only include fields present in normalizedRow
+      let productData = { branchId, name };
+
+      // Product Group logic: only update if group is provided
+      if (normalizedRow.stockgroup !== undefined || normalizedRow.productgroup !== undefined || normalizedRow.group !== undefined) {
+        const groupName = normalizedRow.stockgroup || normalizedRow.productgroup || normalizedRow.group || "General";
+        let groupId = productGroupMap.get(groupName.toLowerCase());
+        if (!groupId) {
+          try {
+            const newGroup = await ProductGroup.create({ name: groupName, branchId });
+            groupId = newGroup._id;
+            productGroupMap.set(groupName.toLowerCase(), groupId);
+          } catch (err) {
+            skipped.push({ row, reason: `Could not create product group: ${err.message}` });
+            continue;
+          }
+        }
+        productData.productGroup = groupId;
       }
 
-      // Validate GST bounds loosely, but don't strictly skip
-      if (gst < 0) gst = 0;
-      if (gst > 100) gst = 100;
+      // Optional fields logic: only add to productData if present in Excel
+      if (normalizedRow.perqty !== undefined) productData.perQty = Math.round(Number(normalizedRow.perqty) * 100) / 100;
+      
+      // 🔄 Unit Conversion Mapping & Extraction
+      const cleanNumber = (val) => {
+        if (val === undefined || val === null || val === "") return 1;
+        const matched = String(val).match(/(\d+\.?\d*)/);
+        return matched ? parseFloat(matched[1]) : 1;
+      };
 
-      // Ensure prices are simply not NaN (fallback to 0)
-      if (isNaN(purchasingPrice)) purchasingPrice = 0;
-      if (isNaN(sellingPrice)) sellingPrice = 0;
-      if (purchasingPrice < 0) purchasingPrice = 0;
-      if (sellingPrice < 0) sellingPrice = 0;
+      if (normalizedRow.unit !== undefined || normalizedRow.units !== undefined || normalizedRow.qtyunit !== undefined) {
+        productData.units = normalizedRow.unit || normalizedRow.units || normalizedRow.qtyunit;
+      }
 
-      // Auto-create Product Group if it doesn't exist
-      let groupId = productGroupMap.get(finalGroupName.toLowerCase());
-      if (!groupId) {
-        try {
-          const newGroup = await ProductGroup.create({ name: finalGroupName, branchId });
-          groupId = newGroup._id;
-          productGroupMap.set(finalGroupName.toLowerCase(), groupId);
-          console.log(`✨ Auto-created new Product Group: ${finalGroupName}`);
-        } catch (err) {
-          skipped.push({ row, reason: `Could not create product group: ${err.message}` });
-          continue;
+      const toTitleCase = (str) => {
+        if (!str) return "";
+        return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+      };
+
+      const uUnit = toTitleCase(normalizedRow.qtyunit || normalizedRow.unit || normalizedRow.units || productData.units || "");
+      const aUnit = toTitleCase(normalizedRow.altunit || "");
+      const uVal = cleanNumber(normalizedRow.unitvalue || normalizedRow.value);
+      const aVal = cleanNumber(normalizedRow.altvalue || normalizedRow.altunitvalue);
+
+      if (uUnit || aUnit) {
+        productData.unitConversion = {
+          unit: uUnit,
+          altUnit: aUnit,
+          value: uVal,
+          altValue: aVal
+        };
+      }
+
+      if (normalizedRow.totalqty !== undefined) productData.totalQty = Math.round(Number(normalizedRow.totalqty) * 100) / 100;
+      
+      // Handle HSN Code (Check multiple aliases)
+      let hsnVal = normalizedRow.hsncode || normalizedRow.hsn;
+      if (hsnVal !== undefined) {
+        const originalHsn = hsnVal;
+        // Smart padding: if it's a numeric string of length 7, 5, 3, or 1, pad with leading zero
+        if (/^\d{1,7}$/.test(hsnVal) && hsnVal.length % 2 !== 0) {
+          hsnVal = hsnVal.padStart(hsnVal.length + 1, '0');
+        }
+        if (originalHsn !== hsnVal) {
+          console.log(`✨ Smart Padded HSN: "${originalHsn}" -> "${hsnVal}" for product: "${name}"`);
+        }
+        productData.hsnCode = hsnVal;
+      }
+
+      // GST Check
+      const gstRaw = normalizedRow['gst%'] || normalizedRow.gst || normalizedRow.gstpercent || normalizedRow['tax%'] || normalizedRow.tax;
+      if (gstRaw !== undefined) {
+        let gst = parseFloat(String(gstRaw).replace(/[^\d.-]/g, ''));
+        productData.gst = isNaN(gst) ? 0 : Math.round(gst * 100) / 100;
+      }
+
+      // Financials (Prices & Margins)
+      let pPrice = undefined;
+      if (normalizedRow.purchasingprice !== undefined) {
+        pPrice = parseFloat(normalizedRow.purchasingprice.toString().replace(/[^\d.-]/g, ''));
+        if (!isNaN(pPrice)) productData.purchasingPrice = Math.round(pPrice * 100) / 100;
+      }
+
+      let sPrice = undefined;
+      if (normalizedRow.sellingprice !== undefined) {
+        sPrice = parseFloat(normalizedRow.sellingprice.toString().replace(/[^\d.-]/g, ''));
+        if (!isNaN(sPrice)) productData.sellingPrice = Math.round(sPrice * 100) / 100;
+      }
+
+      let marginPercent = undefined;
+      if (normalizedRow.margin !== undefined) {
+        marginPercent = parseFloat(normalizedRow.margin.toString().replace(/[^\d.-]/g, ''));
+        if (!isNaN(marginPercent)) productData.marginPercentage = Math.round(marginPercent * 100) / 100;
+      }
+
+      // Calculate missing price/margin if possible
+      if (productData.purchasingPrice !== undefined && productData.sellingPrice !== undefined) {
+        productData.margin = Math.round((productData.sellingPrice - productData.purchasingPrice) * 100) / 100;
+        if (productData.purchasingPrice > 0) {
+          productData.marginPercentage = Math.round((productData.margin / productData.purchasingPrice) * 100 * 100) / 100;
+        }
+      } else if (productData.purchasingPrice !== undefined && productData.marginPercentage !== undefined) {
+        productData.margin = Math.round((productData.purchasingPrice * productData.marginPercentage / 100) * 100) / 100;
+        productData.sellingPrice = Math.round((productData.purchasingPrice + productData.margin) * 100) / 100;
+      }
+
+      // Warehouse
+      if (normalizedRow.warehouse !== undefined) {
+        const whName = normalizedRow.warehouse;
+        if (whName) {
+          let whId = warehouseMap.get(whName.toLowerCase());
+          if (!whId) {
+            try {
+              const newWH = await Warehouse.create({ name: whName, branchId });
+              whId = newWH._id;
+              warehouseMap.set(whName.toLowerCase(), whId);
+            } catch (err) { console.warn("Warehouse creation failed"); }
+          }
+          if (whId) productData.warehouse = whId;
+        } else {
+          productData.warehouse = null;
         }
       }
 
-      // Auto-create Product Categories if they don't exist
-      const categoryIds = [];
-      if (categoriesStr) {
-        const categoryNames = categoriesStr.split(',').map(c => c.trim()).filter(c => c);
-        for (const catName of categoryNames) {
+      // Categories
+      if (normalizedRow.productcategories !== undefined || normalizedRow.productcategory !== undefined) {
+        const catStr = normalizedRow.productcategories || normalizedRow.productcategory || "";
+        const catNames = catStr.split(',').map(c => c.trim()).filter(c => c);
+        let categoryIds = [];
+        for (const catName of catNames) {
           let catId = productCategoryMap.get(catName.toLowerCase());
           if (!catId) {
             try {
               const newCat = await ProductCategory.create({ name: catName, branchId });
               catId = newCat._id;
               productCategoryMap.set(catName.toLowerCase(), catId);
-              console.log(`✨ Auto-created new Product Category: ${catName}`);
-            } catch (err) {
-              console.warn(`Could not create category ${catName}, skipping category assignment`);
-            }
+            } catch (err) { console.warn("Category creation failed"); }
           }
           if (catId) categoryIds.push(catId);
         }
+        productData.productCategories = categoryIds;
       }
-
-      // Auto-create Warehouse if it doesn't exist
-      let warehouseId = null;
-      if (warehouseName) {
-        warehouseId = warehouseMap.get(warehouseName.toLowerCase());
-        if (!warehouseId) {
-          try {
-            const newWarehouse = await Warehouse.create({ name: warehouseName, branchId });
-            warehouseId = newWarehouse._id;
-            warehouseMap.set(warehouseName.toLowerCase(), warehouseId);
-            console.log(`✨ Auto-created new Warehouse: ${warehouseName}`);
-          } catch (err) {
-            console.warn(`Could not create warehouse ${warehouseName}, skipping warehouse assignment`);
-          }
-        }
-      }
-
-      // Check if product already exists
-      const productKey = `${name.toLowerCase()}|${groupId.toString()}`;
-      const existingProductId = existingProductMap.get(productKey);
-
-      // 💰 Calculate margin and marginPercentage
-      let finalMargin = 0;
-      let finalMarginPercentage = margin; 
-
-      if (purchasingPrice > 0 && sellingPrice > 0) {
-        finalMargin = sellingPrice - purchasingPrice;
-        finalMarginPercentage = (finalMargin / purchasingPrice) * 100;
-      }
-
-      const productData = {
-        branchId,
-        productGroup: groupId,
-        productCategories: categoryIds,
-        warehouse: warehouseId, // NEW: Add warehouse ID
-        name,
-        perQty: Math.round(perQty * 100) / 100,
-        units,
-        totalQty: Math.round(totalQty * 100) / 100,
-        purchasingPrice: Math.round(purchasingPrice * 100) / 100,
-        sellingPrice: Math.round(sellingPrice * 100) / 100,
-        margin: Math.round(finalMargin * 100) / 100,
-        marginPercentage: Math.round(finalMarginPercentage * 100) / 100,
-        hsnCode,
-        gst: Math.round(gst * 100) / 100,
-      };
 
       if (existingProductId) {
         productsToBulkUpdate.push({
@@ -520,9 +526,20 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
           }
         });
       } else {
-        productsToBulkInsert.push(productData);
-        // Prevent duplicates in same batch from creating multiple inserts
-        existingProductMap.set(productKey, "pending_insert");
+        // Ensure essential defaults for NEW products
+        const newProductData = {
+          productGroup: productData.productGroup || (await ProductGroup.findOne({ name: "General", branchId }))?._id || (await ProductGroup.create({ name: "General", branchId }))._id,
+          perQty: 1,
+          units: "kg",
+          totalQty: 0,
+          hsnCode: "0000",
+          purchasingPrice: 0,
+          sellingPrice: 0,
+          gst: 0,
+          ...productData
+        };
+        productsToBulkInsert.push(newProductData);
+        existingProductNameMap.set(name.toLowerCase(), "pending_insert");
       }
     }
 
@@ -561,7 +578,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, productGroup, productCategories = [], perQty, units, totalQty, purchasingPrice, sellingPrice, adminMargin, marginPercentage, lockedPrice, margin, hsnCode, gst, branchId } = req.body;
+    const { name, productGroup, productCategories = [], perQty, units, totalQty, purchasingPrice, sellingPrice, adminMargin, marginPercentage, lockedPrice, margin, hsnCode, gst, branchId, unitConversion } = req.body;
 
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -616,6 +633,7 @@ router.put("/:id", auth, async (req, res) => {
     if (marginPercentage !== undefined) updateData.marginPercentage = Math.round(Number(marginPercentage) * 100) / 100;
     if (lockedPrice !== undefined) updateData.lockedPrice = Math.round(Number(lockedPrice) * 100) / 100;
     if (margin !== undefined) updateData.margin = Math.round(Number(margin) * 100) / 100;
+    if (unitConversion !== undefined) updateData.unitConversion = unitConversion;
 
     const updatedProduct = await Product.findByIdAndUpdate(
       id,

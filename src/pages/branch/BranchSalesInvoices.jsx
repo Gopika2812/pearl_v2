@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaEdit, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash } from "react-icons/fa";
+import { FaChevronDown, FaEdit, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaDownload } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import EInvoicePrintModal from "../../components/branch/EInvoicePrintModal";
 
 const BranchSalesInvoices = () => {
   const { currentBranch, user } = useBranch();
@@ -12,6 +13,7 @@ const BranchSalesInvoices = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [requestingAction, setRequestingAction] = useState(null); // ID of invoice currently requesting
+  const [showEInvoiceModal, setShowEInvoiceModal] = useState(null);
 
   // Search debounce logic
   useEffect(() => {
@@ -309,6 +311,14 @@ const BranchSalesInvoices = () => {
         />
       )}
 
+      {/* 📄 UNIFIED E-INVOICE PRINT MODAL */}
+      {showEInvoiceModal && (
+        <EInvoicePrintModal 
+          invoice={showEInvoiceModal}
+          onClose={() => setShowEInvoiceModal(null)}
+        />
+      )}
+
       <div className="w-full">
         {/* HEADER */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
@@ -477,25 +487,23 @@ const BranchSalesInvoices = () => {
                                  )}
                                </button>
 
-                               {/* PDF DOWNLOAD BUTTONS */}
+                               {/* SEPARATE DOWNLOAD BUTTONS */}
                                {inv.einvoiceStatus === "GENERATED" && (
                                  <div className="flex gap-1">
-                                   <a
-                                     href={`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.invoicePdfUrl}`}
-                                     target="_blank"
-                                     rel="noopener noreferrer"
-                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200 text-[10px] font-black transition-all"
-                                     title="Download E-Invoice PDF"
+                                   <button
+                                     onClick={() => setShowEInvoiceModal(inv)}
+                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#319bab] text-white border border-[#319bab] hover:bg-blue-600 text-[10px] font-black transition-all shadow-sm"
+                                     title="View/Print Custom E-Invoice"
                                    >
                                      <FaFileAlt /> PDF
-                                   </a>
+                                   </button>
                                    {inv.ewayBillPdfUrl && (
                                      <a
                                        href={`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`}
                                        target="_blank"
                                        rel="noopener noreferrer"
-                                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all"
-                                       title="Download E-Way Bill PDF"
+                                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all shadow-sm"
+                                       title="Download E-Way Bill (Portal PDF)"
                                      >
                                        🚚 EWB
                                      </a>
@@ -544,7 +552,7 @@ const BranchSalesInvoices = () => {
                                      {inv.items.map((item, idx) => (
                                        <tr key={idx} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
                                          <td className="py-3 font-bold text-gray-700">{item.name}</td>
-                                         <td className="py-3 text-center font-black text-blue-600 bg-blue-50/50 rounded-lg">{item.qty}</td>
+                                         <td className="py-3 text-center font-black text-blue-600 bg-blue-50/50 rounded-lg">{item.qty} {item.unit || "Units"} {item.altQty > 0 && `(${item.altQty} ${item.altUnit})`}</td>
                                          <td className="py-3 text-right font-black text-gray-800">₹{item.total?.toLocaleString()}</td>
                                        </tr>
                                      ))}

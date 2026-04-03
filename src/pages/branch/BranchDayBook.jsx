@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { FaBookOpen, FaCalendarAlt, FaFileAlt, FaSearch, FaSync, FaUser, FaFilter } from "react-icons/fa";
+import { FaBookOpen, FaCalendarAlt, FaFileAlt, FaSearch, FaSync, FaUser, FaFilter, FaFileExcel } from "react-icons/fa";
+import * as XLSX from "xlsx";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -51,6 +52,59 @@ const BranchDayBook = () => {
     const totalDebit = filteredEntries.reduce((sum, e) => sum + (e.debit || 0), 0);
     const totalCredit = filteredEntries.reduce((sum, e) => sum + (e.credit || 0), 0);
 
+    const handleExportExcel = () => {
+        if (filteredEntries.length === 0) {
+            toast.warn("No transactions to export");
+            return;
+        }
+
+        const exportData = filteredEntries.map((entry) => ({
+            "Date": new Date(entry.date).toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric"
+            }),
+            "Time": new Date(entry.date).toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true
+            }),
+            "Voucher Type": entry.voucherType || "-",
+            "Invoice ID": entry.invoiceId || "-",
+            "Account Name": entry.name || "-",
+            "Debit (Sales)": entry.debit || 0,
+            "Credit (Purchase)": entry.credit || 0
+        }));
+
+        // Add a totals row at the bottom
+        exportData.push({
+            "Date": "TOTAL",
+            "Time": "",
+            "Voucher Type": "",
+            "Invoice ID": "",
+            "Account Name": "",
+            "Debit (Sales)": totalDebit,
+            "Credit (Purchase)": totalCredit
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Daybook Report");
+        
+        // Auto-size columns (rough approximation)
+        const maxLen = exportData.reduce((acc, row) => {
+            Object.keys(row).forEach((key, i) => {
+                const len = row[key] ? row[key].toString().length : 5;
+                if (!acc[i] || len > acc[i]) acc[i] = len;
+            });
+            return acc;
+        }, []);
+        worksheet["!cols"] = maxLen.map(len => ({ wch: len + 5 }));
+
+        XLSX.writeFile(workbook, `Daybook_${fromDate}_to_${toDate}.xlsx`);
+        toast.success("Excel report exported successfully");
+    };
+
     return (
         <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20">
             <ToastContainer />
@@ -98,6 +152,14 @@ const BranchDayBook = () => {
                                 title="Refresh"
                             >
                                 <FaSync className={loading ? "animate-spin" : ""} />
+                            </button>
+                            <button 
+                                onClick={handleExportExcel}
+                                className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/20 text-xs font-bold"
+                                title="Export to Excel"
+                            >
+                                <FaFileExcel />
+                                <span>EXPORT</span>
                             </button>
                         </div>
                     </div>

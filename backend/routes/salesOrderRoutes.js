@@ -146,7 +146,7 @@ router.get("/", async (req, res) => {
     }
 
     const salesOrders = await SalesOrder.find(query)
-      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal")
+      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal commonDiscount closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal")
       .populate('salesOwner', 'name')
       .sort({ createdAt: -1 });
 
@@ -344,6 +344,7 @@ router.post("/", auth, async (req, res) => {
       deliveryMan,
       extraExpenses,
       extraExpenseAmount,
+      commonDiscount,
       isClaim,
     } = req.body;
 
@@ -434,6 +435,7 @@ router.post("/", auth, async (req, res) => {
         totalPrice: Math.round(Number(exp.totalPrice) || 0),
       })),
       extraExpenseAmount: Math.round(Number(extraExpenseAmount) || 0),
+      commonDiscount: Math.round(Number(commonDiscount) || 0),
       ewayEnabled,
       ewayDetails,
       salesOwner,
@@ -715,6 +717,7 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
       invoiceTotalTax,
       invoiceTransportCharge,
       invoiceGrandTotal,
+      invoiceCommonDiscount,
       invoiceOpeningBalance,
       invoiceClosingBalance,
     } = req.body;
@@ -821,6 +824,7 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
           sampleItems: samplesToInvoice,
           subtotal: Math.round(Number(invoiceSubtotal) || 0),
           totalDiscount: Math.round(Number(invoiceTotalDiscount) || 0),
+          commonDiscount: Math.round(Number(invoiceCommonDiscount) || 0),
           totalTax: { total: Math.round(Number(invoiceTotalTax) || 0) },
           transportCharge: Math.round(Number(invoiceTransportCharge) || 0),
           grandTotal: newTotal,
@@ -924,6 +928,7 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
       sampleItems: samplesToInvoice,
       subtotal: Math.round(Number(invoiceSubtotal) || 0),
       totalDiscount: Math.round(Number(invoiceTotalDiscount) || 0),
+      commonDiscount: Math.round(Number(invoiceCommonDiscount) || 0),
       totalTax: { total: Math.round(Number(invoiceTotalTax) || 0) },
       transportCharge: Math.round(Number(invoiceTransportCharge) || 0),
       grandTotal: grandTotalToUse,
@@ -1063,9 +1068,8 @@ router.get("/unpaid/:customerId", async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, extraExpenses, extraExpenseAmount, customer, transportCharge, transportGstPercent, transportGstAmount } = req.body;
+    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, commonDiscount, extraExpenses, extraExpenseAmount, customer, transportCharge, transportGstPercent, transportGstAmount, roundOff } = req.body;
 
-    // 1. Find the order first
     const salesOrder = await SalesOrder.findById(id);
     if (!salesOrder) {
       return res.status(404).json({ message: "Sales order not found" });
@@ -1079,12 +1083,17 @@ router.put("/:id", auth, async (req, res) => {
       customerName: salesOrder.customer?.name,
     };
 
-    // 🏁 PERMISSION GATE REMOVED: Allow editing even if already invoiced.
-    // Audit logs and re-invoicing logic will handle the deltas.
+    // 🔄 CUSTOMER CHANGE - DELTA HANDLING ───────────────────────────
+    let customerSwapped = false;
+    let oldCustomerId = null;
+    let oldCustomerObj = null;
 
-    // UPDATE CUSTOMER IF PROVIDED
     if (customer && customer.id && customer.id !== salesOrder.customer?.customerId?.toString()) {
+      customerSwapped = true;
+      oldCustomerId = salesOrder.customer.customerId;
+      oldCustomerObj = await Customer.findById(oldCustomerId);
       const dbCustomer = await Customer.findById(customer.id);
+      
       if (dbCustomer) {
         salesOrder.customer = {
           customerId: dbCustomer._id,
@@ -1094,9 +1103,16 @@ router.put("/:id", auth, async (req, res) => {
           district: dbCustomer.district,
           state: dbCustomer.state,
           pincode: dbCustomer.pincode,
+          gstin: dbCustomer.gstin,
+          stateCode: dbCustomer.stateCode || "33",
         };
-        if (!salesOrder.invoiceGenerated) {
-          salesOrder.openingBalance = Math.round(dbCustomer.closingBalance || dbCustomer.totalBalance || 0);
+        
+        // Update So's opening/closing for the new customer
+        if (salesOrder.invoiceGenerated) {
+           salesOrder.openingBalance = Math.round(dbCustomer.openingBalance || 0);
+           // Closing will be updated below once newGrandTotal is ready
+        } else {
+           salesOrder.openingBalance = Math.round(dbCustomer.closingBalance || dbCustomer.totalBalance || 0);
         }
       }
     }
@@ -1104,16 +1120,84 @@ router.put("/:id", auth, async (req, res) => {
     const newGrandTotal = Math.round(Number(grandTotal) || 0);
     const difference = newGrandTotal - (salesOrder.grandTotal || 0);
 
-    // ─── PARTIAL BALANCE ADJUSTMENT (if already INVOICED) ───────────
-    if (salesOrder.status === "INVOICED" || salesOrder.invoiceGenerated) {
-      if (difference !== 0 && salesOrder.customer?.customerId) {
-        await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
-          $inc: { debit: difference, closingBalance: difference, totalBalance: difference }
-        });
+    // ─── RE-INVOICING DELTA CALCULATIONS (IF INVOICED) ─────────────
+    if (salesOrder.invoiceGenerated || salesOrder.status === "INVOICED") {
+      // 1. Stock Deltas
+      const oldInvoiceItems = salesOrder.lastInvoicedItems || [];
+      const oldQtyMap = {};
+      oldInvoiceItems.forEach(item => {
+        if (item.productId) oldQtyMap[item.productId.toString()] = item.qty || 0;
+      });
+
+      const newItems = items || [];
+      const newSampleItems = sampleItems || [];
+      const allNewItems = [...newItems, ...newSampleItems];
+
+      for (const item of allNewItems) {
+        if (item.productId) {
+          const pid = item.productId.toString();
+          const oldQty = oldQtyMap[pid] || 0;
+          const deltaQty = (item.qty || 0) - oldQty;
+          
+          if (deltaQty !== 0) {
+            await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -deltaQty } });
+            console.log(`📦 Stock Delta Applied [${item.name}]: ${-deltaQty}`);
+          }
+          
+          // 🛡️ HSN MASTER SYNC: Update Product Master HSN if changed in bill
+          if (item.hsn && item.hsn.length >= 4) {
+             await Product.findByIdAndUpdate(item.productId, { $set: { hsnCode: item.hsn } });
+          }
+
+          delete oldQtyMap[pid];
+        }
       }
+
+      for (const [pid, oldQty] of Object.entries(oldQtyMap)) {
+        if (oldQty > 0) {
+          await Product.findByIdAndUpdate(pid, { $inc: { totalQty: oldQty } });
+          console.log(`📦 Stock Restored (Item Removed): +${oldQty}`);
+        }
+      }
+
+      // 2. Financial Deltas (Customer Balance)
+      if (customerSwapped) {
+        // ✨ FULL SWAP: Revert old total from old customer, Apply new total to new customer
+        const oldTotal = beforeState.grandTotal || 0;
+        await Customer.findByIdAndUpdate(oldCustomerId, {
+          $inc: { debit: -oldTotal, closingBalance: -oldTotal, totalBalance: -oldTotal }
+        });
+        console.log(`💰 Reverted old customer balance: -₹${oldTotal}`);
+
+        await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
+          $inc: { debit: newGrandTotal, closingBalance: newGrandTotal, totalBalance: newGrandTotal }
+        });
+        console.log(`💰 Applied new customer balance: +₹${newGrandTotal}`);
+      } else {
+        // Standard Delta for same customer
+        if (difference !== 0 && salesOrder.customer?.customerId) {
+          await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
+            $inc: { debit: difference, closingBalance: difference, totalBalance: difference }
+          });
+          console.log(`💰 Ledger Delta Applied: ₹${difference}`);
+        }
+      }
+
+      // 3. Update Snapshot Logic
+      salesOrder.isReEdited = true;
+      salesOrder.invoiceItems = items || [];
+      salesOrder.invoiceSampleItems = sampleItems || [];
+      salesOrder.invoiceSubtotal = Math.round(Number(subtotal) || 0);
+      salesOrder.invoiceTotalDiscount = Math.round(Number(totalDiscount) || 0);
+      salesOrder.invoiceTotalTax = Math.round(Number(totalTax) || 0);
+      salesOrder.invoiceCommonDiscount = Math.round(Number(commonDiscount) || 0);
+      salesOrder.invoiceGrandTotal = newGrandTotal;
+      
+      salesOrder.lastInvoicedItems = allNewItems;
+      salesOrder.lastInvoicedGrandTotal = newGrandTotal;
     }
 
-    // 3. Update the fields
+    // ─── Update standard fields ──────────────────────────────────────
     salesOrder.items = items || [];
     salesOrder.sampleItems = sampleItems || [];
     salesOrder.extraExpenses = (extraExpenses || []).map((exp) => ({
@@ -1131,86 +1215,63 @@ router.put("/:id", auth, async (req, res) => {
     salesOrder.subtotal = Math.round(Number(subtotal) || 0);
     salesOrder.totalTax = Math.round(Number(totalTax) || 0);
     salesOrder.totalDiscount = Math.round(Number(totalDiscount) || 0);
+    salesOrder.commonDiscount = Math.round(Number(commonDiscount) || 0);
 
     salesOrder.grandTotal = newGrandTotal;
     salesOrder.grandTotalWithMargin = newGrandTotal;
+    salesOrder.roundOff = Number(roundOff) || 0;
 
-    // ─── SYNC INVOICE DATA (IF INVOICED) ──────────────────────────
-    if (salesOrder.invoiceGenerated) {
-      salesOrder.isReEdited = true;
-      
-      // Update internal invoice tracking fields
-      salesOrder.invoiceItems = items || [];
-      salesOrder.invoiceSampleItems = sampleItems || [];
-      salesOrder.invoiceSubtotal = salesOrder.subtotal;
-      salesOrder.invoiceTotalTax = salesOrder.totalTax;
-      salesOrder.invoiceTotalDiscount = salesOrder.totalDiscount;
-      salesOrder.invoiceTransportCharge = salesOrder.transportCharge;
-      salesOrder.invoiceGrandTotal = salesOrder.grandTotal;
-
-      // Update associated Invoice document in the "invoices" collection
+    // Trigger update of separate Invoice document if linked
+    if (salesOrder.salesInvoiceId) {
       try {
-        await Invoice.findOneAndUpdate(
-          { salesOrderId: salesOrder._id },
+        await mongoose.model("Invoice").findOneAndUpdate(
+          { invoiceNumber: salesOrder.salesInvoiceId, branchId: salesOrder.branchId },
           {
             $set: {
               items: items || [],
               sampleItems: sampleItems || [],
-              subtotal: salesOrder.subtotal,
-              totalTax: { total: salesOrder.totalTax }, // Simplified sync
-              totalDiscount: salesOrder.totalDiscount,
-              transportCharge: salesOrder.transportCharge,
-              transportGstPercent: salesOrder.transportGstPercent,
-              transportGstAmount: salesOrder.transportGstAmount,
-              grandTotal: salesOrder.grandTotal,
-              customer: salesOrder.customer,
+              subtotal: Math.round(Number(subtotal) || 0),
+              totalDiscount: Math.round(Number(totalDiscount) || 0),
+              commonDiscount: Math.round(Number(commonDiscount) || 0),
+              totalTax: { total: Math.round(Number(totalTax) || 0) },
+              transportCharge: Math.round(Number(transportCharge) || 0),
+              roundOff: Number(roundOff) || 0,
+              grandTotal: newGrandTotal,
+              customer: salesOrder.customer
             }
-          },
-          { sort: { createdAt: -1 } } // Update the latest invoice for this SO
+          }
         );
-      } catch (invoiceErr) {
-        console.error("⚠️ Error syncing Invoice document:", invoiceErr.message);
-        // Non-blocking error for SO update
+        console.log(`📄 Linked Invoice document updated: ${salesOrder.salesInvoiceId}`);
+      } catch (err) {
+        console.error("⚠️ Error updating linked Invoice document:", err.message);
       }
     }
 
-    if (customer && customer.id && customer.id !== salesOrder.customer?.customerId?.toString()) {
-      salesOrder.closingBalance = salesOrder.openingBalance + newGrandTotal;
-    } else {
-      salesOrder.closingBalance = (salesOrder.closingBalance || 0) + difference;
-    }
-
+    salesOrder.closingBalance = (salesOrder.closingBalance || 0) + difference;
     await salesOrder.save();
 
-    // Log Sales Order update
-    await createAuditLog({
-      userId: req.user.id,
-      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
-      username: req.user.username,
-      branchId: salesOrder.branchId,
-      action: "UPDATE_SO",
-      description: `Updated Sales Order: ${salesOrder.invoiceId}. Total: ₹${salesOrder.grandTotal}`,
-      targetId: salesOrder._id,
-      targetModel: "SalesOrder",
-      changes: {
-        before: beforeState,
-        after: {
-          items: salesOrder.items,
-          grandTotal: salesOrder.grandTotal,
-          subtotal: salesOrder.subtotal,
-          customerName: salesOrder.customer?.name,
-        }
-      }
-    });
+    // 4. Create Audit Log
+    try {
+      const { createAuditLog } = require("../utils/auditLogger");
+      await createAuditLog({
+        userId: req.user.id,
+        userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+        username: req.user.username,
+        branchId: salesOrder.branchId,
+        action: "UPDATE_SALES_ORDER",
+        description: `Updated Sales Order: ${salesOrder.invoiceId}. Net Balance Delta: ₹${difference}`,
+        targetId: salesOrder._id,
+        targetModel: "SalesOrder",
+        changes: { before: beforeState, after: { items: items || [], grandTotal: newGrandTotal, subtotal: subtotal } }
+      });
+    } catch (auditErr) {
+      console.warn("⚠️ Audit log failed (non-blocking):", auditErr.message);
+    }
 
-    res.json({
-      success: true,
-      message: "Sales order updated successfully",
-      data: salesOrder
-    });
-  } catch (err) {
-    console.error("❌ PUT Sales Order Error:", err.message);
-    res.status(500).json({ message: "Failed to update Sales Order" });
+    res.json({ success: true, message: "Sales order updated successfully", data: salesOrder });
+  } catch (error) {
+    console.error("Update Sales Order Error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
