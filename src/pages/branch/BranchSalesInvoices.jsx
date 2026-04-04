@@ -467,22 +467,25 @@ const BranchSalesInvoices = () => {
                                  </button>
                                )}
 
-                               {/* ✅ GENERATE E-INVOICE BUTTON */}
+                               {/* ✅ GENERATE E-INVOICE / E-WAY BILL BUTTON */}
                                <button
                                  onClick={() => handleGenerateEInvoice(inv)}
                                  disabled={requestingAction === inv._id}
                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${
-                                   inv.einvoiceStatus === "GENERATED"
+                                   inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo
                                      ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
                                      : "bg-[#319bab] text-white border-[#319bab] hover:bg-blue-700"
                                  }`}
+                                 title={(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "Generate Standalone E-Way Bill (B2C)" : "Generate E-Invoice & E-Way Bill (B2B)"}
                                >
                                  {requestingAction === inv._id ? (
                                    <FaSync className="animate-spin" />
                                  ) : (
                                    <>
-                                     <FaFileContract />
-                                     {inv.einvoiceStatus === "GENERATED" ? "RE-GENERATE" : "GENERATE E-INV"}
+                                     {(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? <FaSync /> : <FaFileContract />}
+                                     {inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo 
+                                       ? "RE-GENERATE" 
+                                       : ((!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "GEN E-WAY BILL" : "GENERATE E-INV")}
                                    </>
                                  )}
                                </button>

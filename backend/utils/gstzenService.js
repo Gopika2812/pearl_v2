@@ -67,6 +67,7 @@ class GSTZenService {
       const buyerGstin = invoiceData.customer?.gstin || invoiceData.customer?.customerId?.gstin || "URP";
       const buyerStateCode = String(invoiceData.customer?.stateCode || invoiceData.customer?.customerId?.stateCode || "33").padStart(2, "0");
       const isInterState = sellerStateCode !== buyerStateCode;
+      const isB2C = buyerGstin === "URP";
 
       let totalAssVal = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0;
 
@@ -221,7 +222,7 @@ class GSTZenService {
 
       const payload = {
         Version: "1.1",
-        TranDtls: { TaxSch: "GST", SupTyp: "B2B", RegRev: "N", IgstOnIntra: "N" },
+        TranDtls: { TaxSch: "GST", SupTyp: isB2C ? "B2C" : "B2B", RegRev: "N", IgstOnIntra: "N" },
         DocDtls: { Typ: "INV", No: String(invoiceData.invoiceNumber), Dt: this.formatDate(invoiceData.invoiceDate) },
         SellerDtls: {
           Gstin: sellerGstin, LglNm: String(invoiceData.seller?.name || invoiceData.branchId?.name || "Seller"),
@@ -263,12 +264,12 @@ class GSTZenService {
       let endpoint = (process.env.GSTZEN_EINVOICE_ENDPOINT || "/~gstzen/a/post-einvoice-data/einvoice-json/").trim().replace(/^\/+/, "");
       // if (!endpoint) throw new Error("GSTZEN_EINVOICE_ENDPOINT missing in .env");
 
-      console.log(`📡 Sending to: ${this.baseUrl}/${endpoint}`);
+      console.log(`📡 Sending [${isB2C ? "B2C E-Way Bill" : "B2B E-Invoice"}] to: ${this.baseUrl}/${endpoint}`);
       const response = await this.apiClient.post(endpoint, payload);
       const result = response.data;
       console.log("📝 GSTZen SUCCESS Response Keys:", Object.keys(result));
 
-      if (result.status === 1 || result.Irn || result.irn) {
+      if (result.status === 1 || result.Irn || result.irn || result.EwbNo) {
         // ✨ EXHAUSTIVE QR DATA EXTRACTION
         const qrUrl = result.QrCodeImageUrl || result.QrCodeUrl || result.IrnQrCodeUrl || result.irn_qr_code_url || result.qr_code_image_url;
         const signedQr = result.SignedQRCode || result.SignedQrCode || result.signed_qr_code;
