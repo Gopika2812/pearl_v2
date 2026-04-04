@@ -59,9 +59,9 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
 
       setItems(initializedItems);
       setSampleItems(order.sampleItems || []);
-      setTransportCharge(order.transportCharge || 0);
+      setTransportCharge(order.transportCharge || order.invoiceTransportCharge || 0);
       setTransportGstPercent(order.transportGstPercent || 0);
-      setCommonDiscount(order.commonDiscount || 0);
+      setCommonDiscount(order.commonDiscount || order.invoiceCommonDiscount || 0);
       setRoundOff(order.roundOff || 0);
       setSelectedCustomer(order.customer);
       setCustomerSearch(order.customer?.name || "");
