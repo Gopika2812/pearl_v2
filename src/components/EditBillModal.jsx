@@ -39,7 +39,6 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   const [transportCharge, setTransportCharge] = useState(0);
   const [transportGstPercent, setTransportGstPercent] = useState(0);
   const [commonDiscount, setCommonDiscount] = useState(0);
-  const [roundOff, setRoundOff] = useState(0);
 
 
   // Initialize items from order
@@ -62,7 +61,6 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       setTransportCharge(order.transportCharge || order.invoiceTransportCharge || 0);
       setTransportGstPercent(order.transportGstPercent || 0);
       setCommonDiscount(order.commonDiscount || order.invoiceCommonDiscount || 0);
-      setRoundOff(order.roundOff || 0);
       setSelectedCustomer(order.customer);
       setCustomerSearch(order.customer?.name || "");
       fetchProducts();
@@ -193,8 +191,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     const transportGst = (transport * (Number(transportGstPercent) || 0)) / 100;
     const extra = order?.extraExpenseAmount || 0;
     const commDiscount = Number(commonDiscount) || 0;
-    const rOff = Number(roundOff) || 0;
-    return itemsTotal + transport + transportGst + extra - commDiscount + rOff;
+    return itemsTotal + transport + transportGst + extra - commDiscount;
   };
 
   // Handle quantity change
@@ -426,7 +423,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
           return sum + (qty * price * (dPercent / 100));
         }, 0)),
         commonDiscount: Math.round(Number(commonDiscount) || 0),
-        roundOff: Number(roundOff) || 0,
+        roundOff: Math.round(newItemsTotal) - newItemsTotal,
         transportCharge: Math.round(Number(transportCharge) || 0),
         transportGstPercent: Number(transportGstPercent) || 0,
         transportGstAmount: Math.round((Number(transportCharge) || 0) * (Number(transportGstPercent) || 0) / 100),
@@ -1082,20 +1079,6 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                     </span>
                   </div>
                 )}
-                {/* ROUND OFF */}
-                <div className="flex justify-between items-center mb-2 text-sm">
-                  <span className="text-gray-600 font-semibold">ROUND OFF (+/-)</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-400">₹</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="w-24 border border-gray-300 rounded px-2 py-1 text-right focus:ring-2 focus:ring-[#319bab] outline-none font-bold"
-                      value={roundOff}
-                      onChange={(e) => setRoundOff(e.target.value === "" ? 0 : parseFloat(e.target.value))}
-                    />
-                  </div>
-                </div>
 
                 <div className="border-t pt-2 mt-2 flex justify-between items-center">
                   <span className="text-lg font-bold text-[#319bab]">GRAND TOTAL</span>

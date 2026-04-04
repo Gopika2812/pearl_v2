@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaWhatsapp, FaMapMarkerAlt, FaEnvelope, FaUserTie, FaTags } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
@@ -41,6 +41,7 @@ const BranchCustomers = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
   const [exportDate, setExportDate] = useState(new Date().toISOString().split('T')[0]);
+  const fileInputRef = useRef(null);
 
   const handleExportBalances = async () => {
     try {
@@ -198,6 +199,40 @@ const BranchCustomers = () => {
   const totalCredit = baseGlobalCredit;
   const totalDebit = baseGlobalDebit;
 
+  const handleBulkUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("branchId", branchId);
+
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/customers/bulk-upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: formData,
+      });
+
+      const result = await res.json();
+      if (res.ok) {
+        toast.success(`Upload Successful: ${result.insertedCount} inserted, ${result.updatedCount} updated.`);
+        fetchCustomers(1);
+      } else {
+        throw new Error(result.message || "Bulk upload failed");
+      }
+    } catch (err) {
+      console.error("Bulk upload error:", err);
+      toast.error(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = ""; // Reset input
+    }
+  };
+
   if (!branchLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -333,6 +368,20 @@ const BranchCustomers = () => {
               className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
             >
               <FaPlus /> Add Customer
+            </button>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleBulkUpload}
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+            >
+              <FaUpload /> Bulk Upload
             </button>
 
             <button
