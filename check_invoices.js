@@ -14,7 +14,6 @@ async function checkInvoices() {
         console.log(`signedQrCode: ${inv.signedQrCode ? 'YES (Length: ' + inv.signedQrCode.length + ')' : 'EMPTY'}`);
         console.log('---');
     });
-
     process.exit(0);
 }
 checkInvoices();
