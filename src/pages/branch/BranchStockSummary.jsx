@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { 
   FaBookOpen, FaChartBar, FaSearch, FaFilter, FaArrowLeft, 
-  FaChevronRight, FaCalendarAlt, FaSync, FaChartLine 
+  FaChevronRight, FaCalendarAlt, FaSync, FaChartLine, FaDownload 
 } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
+import StockSummaryExportModal from "../../components/branch/StockSummaryExportModal";
 
 const BranchStockSummary = () => {
   const { currentBranch } = useBranch();
@@ -29,6 +30,9 @@ const BranchStockSummary = () => {
   const [stockData, setStockData] = useState([]); // Level 1 & 2
   const [ledgerData, setLedgerData] = useState([]); // Level 3
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [isAllItemsExport, setIsAllItemsExport] = useState(false);
 
   // Fetch Group/Item Summary
   const fetchStockSummary = async () => {
@@ -146,6 +150,15 @@ const BranchStockSummary = () => {
     }
   }, [currentBranch?._id, fromDate, toDate, viewLevel, selectedProduct]);
 
+  // Handle View Change (Reset Search)
+  const changeView = (newLevel, group = null, product = null) => {
+    setViewLevel(newLevel);
+    setSelectedGroup(group);
+    setSelectedProduct(product);
+    setSearchQuery(""); // Reset search on drill-down/up
+    setIsAllItemsExport(false); // Reset export mode
+  };
+
   // Calculations for Level 1 (Groups)
   const groupAggregates = React.useMemo(() => {
     const aggregates = {};
@@ -175,6 +188,32 @@ const BranchStockSummary = () => {
 
     return Object.entries(aggregates).map(([id, data]) => ({ id, ...data }));
   }, [stockData, productGroups]);
+
+  // Filtered Group Aggregates (Search)
+  const filteredGroupAggregates = React.useMemo(() => {
+    if (!searchQuery) return groupAggregates;
+    return groupAggregates.filter(agg => 
+      agg.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [groupAggregates, searchQuery]);
+
+  // Filtered Stock Items (Search)
+  const filteredStockItems = React.useMemo(() => {
+    const baseItems = stockData.filter(item => item.groupId === selectedGroup?._id);
+    if (!searchQuery) return baseItems;
+    return baseItems.filter(item => 
+      item.productName.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [stockData, selectedGroup, searchQuery]);
+
+  // Filtered Ledger Data (Search)
+  const filteredLedgerData = React.useMemo(() => {
+    if (!searchQuery) return ledgerData;
+    return ledgerData.filter(txn => 
+      txn.particulars.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      txn.voucherType.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [ledgerData, searchQuery]);
 
   // Total Summary Stats
   const totalStats = React.useMemo(() => {
@@ -255,7 +294,51 @@ const BranchStockSummary = () => {
             >
               <FaSync className={loading ? "animate-spin" : ""} /> Refresh
             </button>
+
+            <button 
+              onClick={() => setShowExportModal(true)}
+              className="bg-white text-secondary border-2 border-secondary px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-secondary/5 transition flex items-center gap-2"
+            >
+              <FaDownload size={14} /> {viewLevel === "GROUPS" ? "Export Groups" : "Export"}
+            </button>
+
+            {viewLevel === "GROUPS" && (
+              <button 
+                onClick={() => {
+                  // Pre-set viewLevel for export and show all data
+                  setShowExportModal(true);
+                  // We'll use a hack by passing a special prop or just relying on a new state
+                  setIsAllItemsExport(true);
+                }}
+                className="bg-secondary/10 text-secondary border-2 border-secondary/20 px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-secondary/20 transition flex items-center gap-2"
+              >
+                <FaDownload size={14} /> Export All Items
+              </button>
+            )}
           </div>
+        </div>
+
+        {/* SEARCH & FILTERS BAR */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+           <div className="relative w-full md:w-96 group">
+             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+               <FaSearch className="group-focus-within:text-secondary transition-colors" />
+             </div>
+             <input 
+               type="text"
+               placeholder={`Search for ${viewLevel === "GROUPS" ? "Stock Group" : viewLevel === "ITEMS" ? "Product Name" : "Voucher/Particulars"}...`}
+               value={searchQuery}
+               onChange={(e) => setSearchQuery(e.target.value)}
+               className="w-full bg-white border border-gray-100 rounded-2xl py-3 pl-11 pr-4 text-xs font-bold text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-secondary/20 focus:border-secondary transition-all"
+             />
+           </div>
+           
+           {/* Add dynamic count in search if useful */}
+           {searchQuery && (
+              <span className="text-[10px] font-black text-gray-400 uppercase bg-gray-100 px-3 py-1 rounded-full border border-gray-200">
+                Found {viewLevel === "GROUPS" ? filteredGroupAggregates.length : viewLevel === "ITEMS" ? filteredStockItems.length : filteredLedgerData.length} Results
+              </span>
+           )}
         </div>
 
         {/* SUMMARY CARDS (Top Level Only) */}
@@ -290,7 +373,13 @@ const BranchStockSummary = () => {
             </div>
           )}
 
-          {!loading && viewLevel === "GROUPS" && (
+          {!loading && viewLevel === "GROUPS" && filteredGroupAggregates.length === 0 && (
+             <div className="bg-white p-20 rounded-3xl shadow-sm border border-gray-100 text-center">
+               <p className="text-xs font-black text-gray-400 uppercase tracking-widest">No matching groups found.</p>
+             </div>
+          )}
+
+          {!loading && viewLevel === "GROUPS" && filteredGroupAggregates.length > 0 && (
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
                <div className="overflow-x-auto">
                  <table className="w-full text-left text-sm border-collapse">
@@ -304,10 +393,10 @@ const BranchStockSummary = () => {
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-50">
-                     {groupAggregates.map(agg => (
+                     {filteredGroupAggregates.map(agg => (
                        <tr 
                         key={agg.id} 
-                        onClick={() => { setSelectedGroup({ _id: agg.id, name: agg.name }); setViewLevel("ITEMS"); }}
+                        onClick={() => changeView("ITEMS", { _id: agg.id, name: agg.name })}
                         className="hover:bg-blue-50/50 cursor-pointer transition group"
                        >
                          <td className="px-6 py-4 font-bold text-gray-700 flex items-center gap-3">
@@ -328,7 +417,13 @@ const BranchStockSummary = () => {
             </div>
           )}
 
-          {!loading && viewLevel === "ITEMS" && (
+          {!loading && viewLevel === "ITEMS" && filteredStockItems.length === 0 && (
+             <div className="bg-white p-20 rounded-3xl shadow-sm border border-gray-100 text-center">
+               <p className="text-xs font-black text-gray-400 uppercase tracking-widest">No matching products found in this group.</p>
+             </div>
+          )}
+
+          {!loading && viewLevel === "ITEMS" && filteredStockItems.length > 0 && (
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
                <div className="overflow-x-auto">
                  <table className="w-full text-left text-sm border-collapse">
@@ -341,12 +436,12 @@ const BranchStockSummary = () => {
                        <th className="px-6 py-4 text-right">Closing</th>
                        <th className="px-6 py-4 text-right font-black">Value</th>
                      </tr>
-                   </thead>
-                   <tbody className="divide-y divide-gray-50">
-                     {stockData.filter(item => item.groupId === selectedGroup._id).map(item => (
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                     {filteredStockItems.map(item => (
                        <tr 
                         key={item.productId} 
-                        onClick={() => { setSelectedProduct({ id: item.productId, name: item.productName }); setViewLevel("LEDGER"); }}
+                        onClick={() => changeView("LEDGER", selectedGroup, { id: item.productId, name: item.productName })}
                         className="hover:bg-blue-50/50 cursor-pointer transition group"
                        >
                          <td className="px-6 py-4">
@@ -391,7 +486,7 @@ const BranchStockSummary = () => {
                         </td>
                      </tr>
                      
-                     {ledgerData.map((txn, idx) => {
+                     {filteredLedgerData.map((txn, idx) => {
                         // Calculate running balance logic would go here if needed
                         return (
                           <tr key={idx} className="hover:bg-gray-50 transition border-l-4 border-transparent hover:border-secondary">
@@ -431,6 +526,14 @@ const BranchStockSummary = () => {
 
         </div>
       </div>
+
+      <StockSummaryExportModal 
+        isOpen={showExportModal}
+        onClose={() => { setShowExportModal(false); setIsAllItemsExport(false); }}
+        viewLevel={isAllItemsExport ? "ITEMS" : viewLevel}
+        data={isAllItemsExport ? stockData : (viewLevel === "GROUPS" ? filteredGroupAggregates : viewLevel === "ITEMS" ? filteredStockItems : filteredLedgerData)}
+        title={isAllItemsExport ? "All_Products_Summary" : (viewLevel === "GROUPS" ? "Stock Summary" : viewLevel === "ITEMS" ? `Stock_${selectedGroup?.name || 'Group'}` : `Ledger_${selectedProduct?.name || 'Product'}`)}
+      />
     </div>
   );
 };

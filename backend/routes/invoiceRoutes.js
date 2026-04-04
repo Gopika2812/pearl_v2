@@ -175,6 +175,24 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     const tGstPercent = salesOrder.transportGstPercent || 0;
     const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
 
+    // Calculate dynamic opening balance from current customer state
+    const currentCustomer = salesOrder.customer?.customerId;
+    let dynamicOpeningBalance = 0;
+    
+    if (currentCustomer) {
+      const actualBalance = (currentCustomer.debit || 0) - (currentCustomer.credit || 0);
+      
+      // If it's a re-edit (already invoiced once), the current balance already includes the last invoice amount.
+      // So opening balance (before this invoice) = current balance - last grand total.
+      if (salesOrder.invoiceGenerated) {
+        dynamicOpeningBalance = actualBalance - (salesOrder.lastInvoicedGrandTotal || 0);
+      } else {
+        dynamicOpeningBalance = actualBalance;
+      }
+    } else {
+      dynamicOpeningBalance = salesOrder.openingBalance || 0;
+    }
+
     const previewData = {
       invoiceNumber: salesOrder.invoiceId, // Use Sales Order's invoiceId
       salesOrderId,
@@ -204,8 +222,8 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
       commonDiscount: commonDiscount,
       grandTotal: Math.round(grandTotal + tGstAmount),
-      openingBalance: salesOrder.openingBalance || 0,
-      closingBalance: (salesOrder.openingBalance || 0) + grandTotal,
+      openingBalance: dynamicOpeningBalance,
+      closingBalance: dynamicOpeningBalance + Math.round(grandTotal + tGstAmount),
       notes,
       invoiceType,
     };
@@ -400,7 +418,16 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           console.log(`⚠️ Invoice customer change detected: ${invoice.customer.name} -> ${customer.name}`);
         }
 
-        // 🔄 Update existing invoice instead of creating new one to avoid duplicate key error
+        // Calculate dynamic opening balance
+        const actualBalance = (customer.debit || 0) - (customer.credit || 0);
+        let dynamicOpeningBalance = 0;
+        
+        if (salesOrder.invoiceGenerated) {
+          dynamicOpeningBalance = actualBalance - (salesOrder.lastInvoicedGrandTotal || 0);
+        } else {
+          dynamicOpeningBalance = actualBalance;
+        }
+
         invoice.invoiceDate = new Date();
         // Update customer details on the invoice itself
         invoice.customer = {
@@ -424,14 +451,17 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         invoice.extraExpenseAmount = salesOrder.extraExpenseAmount || 0;
         invoice.commonDiscount = commonDiscount;
         invoice.grandTotal = grandTotal;
-        invoice.openingBalance = salesOrder.openingBalance || 0;
-        invoice.closingBalance = (salesOrder.openingBalance || 0) + grandTotal;
+        invoice.openingBalance = dynamicOpeningBalance;
+        invoice.closingBalance = dynamicOpeningBalance + grandTotal;
         invoice.invoiceNotes = notes;
         invoice.invoiceType = invoiceType;
         invoice.status = "FINALIZED";
         
         await invoice.save({ session });
       } else {
+        // Calculate dynamic opening balance
+        const actualBalance = (customer.debit || 0) - (customer.credit || 0);
+        
         // ✨ Create new invoice if it doesn't exist
         invoice = new Invoice({
           invoiceNumber,
@@ -476,8 +506,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
           commonDiscount,
           grandTotal,
-          openingBalance: salesOrder.openingBalance || 0,
-          closingBalance: (salesOrder.openingBalance || 0) + grandTotal,
+          openingBalance: actualBalance,
+          closingBalance: actualBalance + grandTotal,
           invoiceNotes: notes,
           invoiceType,
           status: "FINALIZED",

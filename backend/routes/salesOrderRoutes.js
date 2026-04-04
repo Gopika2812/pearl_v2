@@ -393,7 +393,7 @@ router.post("/", auth, async (req, res) => {
 
     console.log("✅ Customer found:", dbCustomer.name);
 
-    const openingBalance = dbCustomer.closingBalance || dbCustomer.totalBalance || 0;
+    const openingBalance = (dbCustomer.debit || 0) - (dbCustomer.credit || 0);
     const closingBalance = Math.round(openingBalance + grandTotal);
 
     // 🧾 Save Sales Order
