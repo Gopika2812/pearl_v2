@@ -188,7 +188,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         pincode: salesOrder.branchId?.pincode || "627003",
         gstin: salesOrder.branchId?.gstin || "33DULPS2600Q1Z6",
         phone: salesOrder.branchId?.phone || "9429692970",
-        gpayNo: salesOrder.branchId?.phone || "8825847884",
+        gpayNo: salesOrder.branchId?.gpayNo || "8825847884",
         stateCode: salesOrder.branchId?.stateCode || "33",
         logo: salesOrder.branchId?.logo || "/logo.jpeg",
       },

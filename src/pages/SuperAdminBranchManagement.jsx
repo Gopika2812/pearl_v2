@@ -13,6 +13,8 @@ export default function SuperAdminBranchManagement() {
   const [editingBranch, setEditingBranch] = useState(null);
   const [staffMembers, setStaffMembers] = useState([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
+  const [logoFile, setLogoFile] = useState(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   // Check if user is SUPER_ADMIN
   useEffect(() => {
@@ -45,6 +47,7 @@ export default function SuperAdminBranchManagement() {
     state: "Tamil Nadu",
     stateCode: "33",
     pincode: "",
+    gpayNo: "",
   });
 
 
@@ -163,6 +166,42 @@ export default function SuperAdminBranchManagement() {
     }
   };
 
+  const handleLogoUpload = async (branchId) => {
+    if (!logoFile) return;
+    setUploadingLogo(true);
+
+    try {
+      const token = localStorage.getItem("token");
+      const formData = new FormData();
+      formData.append("logo", logoFile);
+
+      const res = await fetch(`${API_BASE}/branches/${branchId}/logo`, {
+        method: "PATCH",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        toast.success("✅ Logo uploaded successfully!");
+        setBranches(branches.map(b => b._id === branchId ? { ...b, logo: data.logo } : b));
+        if (selectedBranch?._id === branchId) {
+          setSelectedBranch({ ...selectedBranch, logo: data.logo });
+        }
+        setLogoFile(null);
+      } else {
+        toast.error(data.message || "Failed to upload logo");
+      }
+    } catch (error) {
+      console.error("Logo upload error:", error);
+      toast.error("Error uploading logo");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
   const resetForm = () => {
     setBranchForm({
       name: "",
@@ -174,9 +213,11 @@ export default function SuperAdminBranchManagement() {
       manager: "",
       isMainBranch: false,
       gstin: "",
+      gpayNo: "",
     });
 
     setEditingBranch(null);
+    setLogoFile(null);
   };
 
   const openEditModal = (branch) => {
@@ -191,6 +232,7 @@ export default function SuperAdminBranchManagement() {
       manager: branch.manager || "",
       isMainBranch: branch.isMainBranch || false,
       gstin: branch.gstin || "",
+      gpayNo: branch.gpayNo || "",
     });
 
     setShowBranchModal(true);
@@ -384,6 +426,10 @@ export default function SuperAdminBranchManagement() {
                     <div>
                       <p className="text-sm text-gray-600 font-semibold">GSTIN</p>
                       <p className="text-gray-900 font-mono">{selectedBranch.gstin || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 font-semibold">GPay Number</p>
+                      <p className="text-gray-900 font-mono">{selectedBranch.gpayNo || "—"}</p>
                     </div>
 
                     <div className="md:col-span-2">
@@ -685,6 +731,58 @@ export default function SuperAdminBranchManagement() {
                     Mark as Main Branch
                   </label>
                 </div>
+
+                <div className="md:col-span-2 border-t pt-4">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Branch GPay / UPI Number
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 8825847884"
+                    value={branchForm.gpayNo}
+                    onChange={(e) => setBranchForm({ ...branchForm, gpayNo: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  />
+                </div>
+
+                {editingBranch && (
+                  <div className="md:col-span-2 border-t pt-4">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Branch Logo (for Invoice Header)
+                    </label>
+                    <div className="flex items-center gap-4">
+                      {editingBranch.logo ? (
+                        <img 
+                          src={editingBranch.logo} 
+                          alt="Logo" 
+                          className="h-16 w-16 object-contain border rounded p-1 bg-gray-50"
+                        />
+                      ) : (
+                        <div className="h-16 w-16 bg-gray-100 flex items-center justify-center text-gray-400 border rounded text-xs text-center p-1">
+                          No Logo
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setLogoFile(e.target.files[0])}
+                          className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-opacity-80"
+                        />
+                        {logoFile && (
+                          <button
+                            type="button"
+                            onClick={() => handleLogoUpload(editingBranch._id)}
+                            disabled={uploadingLogo}
+                            className="mt-2 text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded font-bold transition flex items-center gap-2"
+                          >
+                            {uploadingLogo ? "Uploading..." : "Click to Confirm Upload"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 mt-6 pt-6 border-t">

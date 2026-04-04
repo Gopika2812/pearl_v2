@@ -78,6 +78,11 @@ const branchSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    gpayNo: {
+      type: String,
+      default: "",
+      trim: true,
+    },
 
   },
   { timestamps: true }

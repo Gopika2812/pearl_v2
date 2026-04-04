@@ -2,7 +2,11 @@ import express from "express";
 import mongoose from "mongoose";
 import auth from "../middleware/auth.js";
 import rbac from "../middleware/rbac.js";
+import multer from "multer";
+import cloudinary from "../config/cloudinary.js";
 import Branch from "../models/Branch.js";
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = express.Router();
 
@@ -62,7 +66,7 @@ router.get("/:id", async (req, res) => {
 // POST: Create new branch (SUPER_ADMIN only)
 router.post("/", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
   try {
-    const { name, code, location, address, phone, email, manager, logo, color, isMainBranch } = req.body;
+    const { name, code, location, address, phone, email, manager, logo, color, isMainBranch, gpayNo } = req.body;
 
     if (!name || !code) {
       return res.status(400).json({
@@ -92,6 +96,7 @@ router.post("/", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
       color,
       isMainBranch: isMainBranch || false,
       gstin: req.body.gstin || "",
+      gpayNo: gpayNo || "",
     });
 
 
@@ -164,6 +169,45 @@ router.put("/:id", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
       message: "Failed to update branch",
       error: error.message,
     });
+  }
+});
+
+// PATCH: Update branch logo (SUPER_ADMIN only)
+router.patch("/:id/logo", auth, rbac(["SUPER_ADMIN"]), upload.single("logo"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No logo file uploaded" });
+    }
+
+    const branch = await Branch.findById(id);
+    if (!branch) {
+      return res.status(404).json({ success: false, message: "Branch not found" });
+    }
+
+    // Upload to Cloudinary
+    const result = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        { folder: "pearls-erp/branch-logos" },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      uploadStream.end(req.file.buffer);
+    });
+
+    branch.logo = result.secure_url;
+    await branch.save();
+
+    res.json({
+      success: true,
+      message: "Branch logo updated successfully",
+      logo: branch.logo,
+    });
+  } catch (error) {
+    console.error("Logo Upload Error:", error);
+    res.status(500).json({ success: false, message: "Failed to upload logo", error: error.message });
   }
 });
 
