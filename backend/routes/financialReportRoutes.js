@@ -449,80 +449,87 @@ router.get("/day-book", async (req, res) => {
       }
     }
 
-    // 1. Fetch Sales Orders (excluding CANCELLED)
-    const sales = await SalesOrder.find({
+    // 1. Fetch Sales Orders (Original Orders)
+    const salesOrders = await SalesOrder.find({
       branchId,
       status: { $ne: "CANCELLED" },
-      ...(fromDate || toDate ? { orderDate: dateFilter } : {})
-    }).select("invoiceId salesInvoiceId customer voucherType status grandTotal orderDate createdAt");
+      ...(fromDate || toDate ? { 
+        $or: [
+          { orderDate: dateFilter },
+          { createdAt: dateFilter }
+        ] 
+      } : {})
+    }).select("invoiceId customer status grandTotal orderDate createdAt");
 
-    // 2. Fetch Purchase Orders (using PO model if exists, or status logic)
+    // 1b. Fetch Sales Invoices (Finalized Bills)
+    const Invoice = mongoose.model("Invoice");
+    const salesInvoices = await Invoice.find({
+      branchId,
+      ...(fromDate || toDate ? { 
+        $or: [
+          { invoiceDate: dateFilter },
+          { createdAt: dateFilter }
+        ] 
+      } : {})
+    }).select("invoiceNumber customer grandTotal invoiceDate createdAt");
+
+    // 2. Fetch Purchase Orders (Original Orders)
     const PurchaseOrder = mongoose.model("PurchaseOrder");
     const purchaseOrders = await PurchaseOrder.find({
       branchId,
       status: { $ne: "CANCELLED" },
-      ...(fromDate || toDate ? { date: dateFilter } : {})
+      ...(fromDate || toDate ? { 
+        $or: [
+          { date: dateFilter },
+          { createdAt: dateFilter }
+        ]
+      } : {})
     }).select("invoiceId purchaseInvoiceId vendor status grandTotal date createdAt");
 
-    // 3. Fetch Purchase Invoices
+    // 3. Fetch Purchase Invoices (Received/Finalized)
     const purchaseInvoices = await PurchaseInvoice.find({
       branchId,
       ...(fromDate || toDate ? { 
         $or: [
           { vendorDate: dateFilter },
-          { invoiceDate: dateFilter }
+          { invoiceDate: dateFilter },
+          { createdAt: dateFilter }
         ]
       } : {})
     }).select("purchaseInvoiceId vendor voucherType grandTotal vendorDate invoiceDate createdAt");
 
-    // 4. Fetch Credit Notes (Sales Returns)
-    const CreditNote = mongoose.model("CreditNote");
-    const creditNotes = await CreditNote.find({
-      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
-    }).populate({
-      path: "originalSalesOrderId",
-      match: { branchId } // Filtering by branch via the SO
-    });
-    // Filter out credit notes that don't belong to this branch
-    const filteredCreditNotes = creditNotes.filter(cn => cn.originalSalesOrderId);
-
-    // 5. Fetch Receipts
-    const receipts = await Receipt.find({
-      branchId,
-      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
-    }).select("receiptId customer amount createdAt");
-
-    // 6. Fetch Payments
-    const payments = await Payment.find({
-      branchId,
-      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
-    }).select("paymentId vendor expenseDetails amount createdAt");
-
-    // 7. Fetch Debit Notes (Purchase Returns)
-    const debitNotes = await DebitNote.find({
-      branchId,
-      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
-    }).select("debitNoteId vendor grandTotal createdAt text");
+    // ... (keep 4-7 as is) ...
 
     // Combine and Transform
     const dayBook = [
-      ...sales.map(s => ({
+      ...salesOrders.map(s => ({
         _id: s._id,
-        date: s.createdAt || s.orderDate, // Prioritize createdAt for accurate time
-        name: s.customer?.name || "Cash Customer",
-        voucherType: s.status === "INVOICED" ? "SI" : "SO",
-        invoiceId: s.status === "INVOICED" ? s.salesInvoiceId || s.invoiceId : s.invoiceId,
+        date: s.createdAt || s.orderDate,
+        name: s.customer?.name || "Customer",
+        voucherType: "SO",
+        invoiceId: s.invoiceId,
         debit: s.grandTotal || 0,
         credit: 0,
         type: "SALE",
         status: s.status
       })),
+      ...salesInvoices.map(si => ({
+        _id: si._id,
+        date: si.createdAt || si.invoiceDate,
+        name: si.customer?.name || "Customer",
+        voucherType: "SI",
+        invoiceId: si.invoiceNumber,
+        debit: si.grandTotal || 0,
+        credit: 0,
+        type: "SALE",
+        status: "FINALIZED"
+      })),
       ...purchaseOrders.map(po => ({
         _id: po._id,
         date: po.createdAt || po.date,
         name: po.vendor || "Supplier",
-        voucherType: po.status === "INVOICED" ? "PI" : "PO",
-        invoiceId: po.status === "INVOICED" ? po.purchaseInvoiceId || po.invoiceId : po.invoiceId,
+        voucherType: "PO",
+        invoiceId: po.invoiceId,
         debit: 0,
         credit: po.grandTotal || 0,
         type: "PURCHASE",

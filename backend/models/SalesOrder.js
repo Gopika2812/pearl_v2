@@ -165,6 +165,7 @@ const salesOrderSchema = new mongoose.Schema(
     customerMargin: Number,
     marginAmount: Number,
     grandTotalWithMargin: Number,
+    roundOff: { type: Number, default: 0 },
 
     // Extra Expenses for Sales Order
     extraExpenses: [
@@ -241,6 +242,10 @@ const salesOrderSchema = new mongoose.Schema(
       },
     ],
     lastInvoicedGrandTotal: Number,
+    lastInvoicedCustomerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Customer",
+    },
 
     editHistory: [
       {
@@ -313,20 +318,33 @@ async function revertOrderEffects(doc) {
     console.log(`🗑️ Reverting sales order effects: Invoice ${doc.invoiceId}`);
     
     // 1️⃣ REVERT CUSTOMER BALANCE (Debit and Closing Balance)
-    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
-      const customer = await Customer.findById(customerId);
+    const targetCustomerId = doc.lastInvoicedCustomerId || doc.customer?.customerId;
+    if (targetCustomerId && mongoose.Types.ObjectId.isValid(targetCustomerId)) {
+      const customer = await Customer.findById(targetCustomerId);
       if (customer) {
-        // If invoice was generated, we must revert both debit and closingBalance
-        // In this system, they are kept equal for invoiced orders
-        const amountToRevert = doc.invoiceGrandTotal || orderValue;
-        const newBalance = Math.round((customer.closingBalance || 0) - amountToRevert);
+        // We MUST revert the exact amount that was last applied to the ledger
+        const amountToRevert = doc.lastInvoicedGrandTotal || doc.invoiceGrandTotal || 0;
         
-        await Customer.findByIdAndUpdate(customerId, {
-          debit: newBalance,
-          closingBalance: newBalance,
-          totalBalance: newBalance,
-        });
-        console.log(`✅ Customer ${customer.name} balance reverted: -₹${amountToRevert}. New: ₹${newBalance}`);
+        if (amountToRevert > 0) {
+          let remainingToRevert = amountToRevert;
+          let newDebit = customer.debit || 0;
+          let newCredit = customer.credit || 0;
+
+          if (newDebit >= remainingToRevert) {
+            newDebit -= remainingToRevert;
+          } else {
+            remainingToRevert -= newDebit;
+            newDebit = 0;
+            newCredit += remainingToRevert;
+          }
+
+          await Customer.findByIdAndUpdate(targetCustomerId, {
+            debit: Math.round(newDebit),
+            credit: Math.round(newCredit),
+            $inc: { closingBalance: -amountToRevert, totalBalance: -amountToRevert },
+          });
+          console.log(`✅ Customer ${customer.name} balance reverted: -₹${amountToRevert}.`);
+        }
       }
     }
     

@@ -6,6 +6,7 @@ import CreditNote from "../models/CreditNote.js";
 import Customer from "../models/Customer.js";
 import CustomerCategory from "../models/CustomerCategory.js";
 import CustomerGroup from "../models/CustomerGroup.js";
+import OtherTransaction from "../models/OtherTransaction.js";
 import Receipt from "../models/Receipt.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
@@ -707,7 +708,7 @@ router.get("/:id/ledger", async (req, res) => {
       "customer.customerId": id,
       status: "INVOICED",
       createdAt: { $gte: start }
-    }).select("grandTotal invoiceGrandTotal createdAt invoiceId");
+    }).select("grandTotal invoiceGrandTotal lastInvoicedGrandTotal createdAt invoiceId");
 
     // Credits: Receipts after startDate
     const receiptsAfterStart = await Receipt.find({
@@ -726,7 +727,13 @@ router.get("/:id/ledger", async (req, res) => {
     }).select("grandTotal createdAt creditNoteId reasonForReturn");
 
     // Opening Balance = Current_Balance - (Debits after Start) + (Credits after Start)
-    const totalDebitsAfterStart = salesAfterStart.reduce((sum, s) => sum + (s.invoiceGrandTotal || s.grandTotal || 0), 0);
+    // 🛡️ CRITICAL: We MUST use the LAST FINALIZED amount (lastInvoicedGrandTotal) for ledger stability.
+    // If we use the "Draft" grandTotal, the Opening Balance will shift incorrectly during edits.
+    const totalDebitsAfterStart = salesAfterStart.reduce((sum, s) => {
+      const finalizedAmount = s.lastInvoicedGrandTotal !== undefined ? s.lastInvoicedGrandTotal : (s.invoiceGrandTotal || s.grandTotal || 0);
+      return sum + finalizedAmount;
+    }, 0);
+    
     const totalCreditsAfterStart = 
       receiptsAfterStart.reduce((sum, r) => sum + (r.amount || 0), 0) +
       cnAfterStart.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
@@ -745,7 +752,8 @@ router.get("/:id/ledger", async (req, res) => {
         date: s.createdAt,
         type: "INVOICE",
         particulars: `Sales Invoice: ${s.invoiceId}`,
-        debit: s.invoiceGrandTotal || s.grandTotal || 0,
+        // 🛡️ Use finalized amount for the report line item
+        debit: s.lastInvoicedGrandTotal !== undefined ? s.lastInvoicedGrandTotal : (s.invoiceGrandTotal || s.grandTotal || 0),
         credit: 0
       })),
       ...inRangeReceipts.map(r => ({

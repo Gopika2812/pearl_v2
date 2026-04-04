@@ -776,20 +776,74 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
         }
       }
 
-      // 2. Customer Balance Delta
+      // 2. Financial Deltas (Customer Balance + Customer Swap)
       const oldTotal = salesOrder.lastInvoicedGrandTotal || 0;
       const newTotal = Math.round(Number(invoiceGrandTotal) || salesOrder.grandTotal || 0);
-      const balanceDelta = newTotal - oldTotal;
+      
+      // Determine if customer has changed since last invoice
+      const oldCustomerId = salesOrder.lastInvoicedCustomerId || salesOrder.customer?.customerId;
+      const currentCustomerId = salesOrder.customer?.customerId;
+      const isCustomerSwapped = oldCustomerId && currentCustomerId && oldCustomerId.toString() !== currentCustomerId.toString();
 
-      if (balanceDelta !== 0 && salesOrder.customer?.customerId) {
-        const customer = await Customer.findById(salesOrder.customer.customerId);
+      if (isCustomerSwapped) {
+        console.log(`🔄 Customer Swap detected: ${oldCustomerId} -> ${currentCustomerId}`);
+        
+        // A. Revert entire old total from old customer
+        const oldCustomer = await Customer.findById(oldCustomerId);
+        if (oldCustomer) {
+          let remainingToRevert = oldTotal;
+          let oldDebit = oldCustomer.debit || 0;
+          let oldCredit = oldCustomer.credit || 0;
+
+          if (oldDebit >= remainingToRevert) {
+            oldDebit -= remainingToRevert;
+          } else {
+            remainingToRevert -= oldDebit;
+            oldDebit = 0;
+            oldCredit += remainingToRevert;
+          }
+
+          await Customer.findByIdAndUpdate(oldCustomerId, {
+            debit: oldDebit,
+            credit: oldCredit,
+            $inc: { closingBalance: -oldTotal, totalBalance: -oldTotal }
+          });
+          console.log(`✅ Old customer (${oldCustomer.name}) balance reverted: -₹${oldTotal}`);
+        }
+
+        // B. Apply entire new total to current customer
+        const currentCustomer = await Customer.findById(currentCustomerId);
+        if (currentCustomer) {
+          let remainingToAdd = newTotal;
+          let curDebit = currentCustomer.debit || 0;
+          let curCredit = currentCustomer.credit || 0;
+
+          if (curCredit >= remainingToAdd) {
+            curCredit -= remainingToAdd;
+          } else {
+            remainingToAdd -= curCredit;
+            curCredit = 0;
+            curDebit += remainingToAdd;
+          }
+
+          await Customer.findByIdAndUpdate(currentCustomerId, {
+            debit: curDebit,
+            credit: curCredit,
+            $inc: { closingBalance: newTotal, totalBalance: newTotal }
+          });
+          console.log(`✅ Current customer (${currentCustomer.name}) balance updated: +₹${newTotal}`);
+        }
+      } else if (newTotal !== oldTotal) {
+        // Standard Delta for same customer
+        const balanceDelta = newTotal - oldTotal;
+        const customer = await Customer.findById(currentCustomerId);
         if (customer) {
           let remainingDelta = balanceDelta;
           let currentDebit = customer.debit || 0;
           let currentCredit = customer.credit || 0;
 
           if (balanceDelta > 0) {
-            // Increasing Balance (New Invoice/Addition): Consume credit first
+            // Increasing Balance: Consume credit first
             if (currentCredit >= remainingDelta) {
               currentCredit -= remainingDelta;
               remainingDelta = 0;
@@ -799,7 +853,7 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
               currentDebit += remainingDelta;
             }
           } else {
-            // Decreasing Balance (Reduction): Consume debit first
+            // Decreasing Balance: Consume debit first
             const absDelta = Math.abs(remainingDelta);
             if (currentDebit >= absDelta) {
               currentDebit -= absDelta;
@@ -810,11 +864,12 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
             }
           }
 
-          await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
+          await Customer.findByIdAndUpdate(currentCustomerId, {
             debit: currentDebit,
             credit: currentCredit,
             $inc: { closingBalance: balanceDelta, totalBalance: balanceDelta }
           });
+          console.log(`✅ Ledger Delta Applied for ${customer.name}: ₹${balanceDelta}`);
         }
       }
 
@@ -865,6 +920,7 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
 
       salesOrder.lastInvoicedItems = allNewItems;
       salesOrder.lastInvoicedGrandTotal = newTotal;
+      salesOrder.lastInvoicedCustomerId = currentCustomerId;
       salesOrder.status = "INVOICED";
       salesOrder.reEditRequestStatus = "NONE";
       await salesOrder.save();
@@ -993,6 +1049,7 @@ router.patch("/:id/generate-invoice", auth, async (req, res) => {
     salesOrder.editHistory.push(invoiceSnapshot);
     salesOrder.lastInvoicedItems = allItems;
     salesOrder.lastInvoicedGrandTotal = grandTotalToUse;
+    salesOrder.lastInvoicedCustomerId = salesOrder.customer?.customerId;
     salesOrder.status = "INVOICED";
     salesOrder.salesInvoiceId = siNumber;
     salesOrder.recordType = "SALES INVOICE";
@@ -1109,95 +1166,16 @@ router.put("/:id", auth, async (req, res) => {
           stateCode: dbCustomer.stateCode || "33",
         };
         
-        // Update So's opening/closing for the new customer
-        if (salesOrder.invoiceGenerated) {
-           salesOrder.openingBalance = Math.round(dbCustomer.openingBalance || 0);
-           // Closing will be updated below once newGrandTotal is ready
-        } else {
-           salesOrder.openingBalance = Math.round(dbCustomer.closingBalance || dbCustomer.totalBalance || 0);
-        }
+        // ✨ DRAFT MODE: We DO NOT update openingBalance or closingBalance yet.
+        // These will be updated only when "Generate Invoice" is clicked.
       }
     }
 
+    // ─── DRAFT UPDATE (NO FINANCIAL IMPACT) ───────────────────────────
+    // We only update the document fields. Customer balance and Product stock 
+    // will be updated ONLY when the user clicks "Generate Invoice" (Finalize).
     const newGrandTotal = Math.round(Number(grandTotal) || 0);
     const difference = newGrandTotal - (salesOrder.grandTotal || 0);
-
-    // ─── RE-INVOICING DELTA CALCULATIONS (IF INVOICED) ─────────────
-    if (salesOrder.invoiceGenerated || salesOrder.status === "INVOICED") {
-      // 1. Stock Deltas
-      const oldInvoiceItems = salesOrder.lastInvoicedItems || [];
-      const oldQtyMap = {};
-      oldInvoiceItems.forEach(item => {
-        if (item.productId) oldQtyMap[item.productId.toString()] = item.qty || 0;
-      });
-
-      const newItems = items || [];
-      const newSampleItems = sampleItems || [];
-      const allNewItems = [...newItems, ...newSampleItems];
-
-      for (const item of allNewItems) {
-        if (item.productId) {
-          const pid = item.productId.toString();
-          const oldQty = oldQtyMap[pid] || 0;
-          const deltaQty = (item.qty || 0) - oldQty;
-          
-          if (deltaQty !== 0) {
-            await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -deltaQty } });
-            console.log(`📦 Stock Delta Applied [${item.name}]: ${-deltaQty}`);
-          }
-          
-          // 🛡️ HSN MASTER SYNC: Update Product Master HSN if changed in bill
-          if (item.hsn && item.hsn.length >= 4) {
-             await Product.findByIdAndUpdate(item.productId, { $set: { hsnCode: item.hsn } });
-          }
-
-          delete oldQtyMap[pid];
-        }
-      }
-
-      for (const [pid, oldQty] of Object.entries(oldQtyMap)) {
-        if (oldQty > 0) {
-          await Product.findByIdAndUpdate(pid, { $inc: { totalQty: oldQty } });
-          console.log(`📦 Stock Restored (Item Removed): +${oldQty}`);
-        }
-      }
-
-      // 2. Financial Deltas (Customer Balance)
-      if (customerSwapped) {
-        // ✨ FULL SWAP: Revert old total from old customer, Apply new total to new customer
-        const oldTotal = beforeState.grandTotal || 0;
-        await Customer.findByIdAndUpdate(oldCustomerId, {
-          $inc: { debit: -oldTotal, closingBalance: -oldTotal, totalBalance: -oldTotal }
-        });
-        console.log(`💰 Reverted old customer balance: -₹${oldTotal}`);
-
-        await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
-          $inc: { debit: newGrandTotal, closingBalance: newGrandTotal, totalBalance: newGrandTotal }
-        });
-        console.log(`💰 Applied new customer balance: +₹${newGrandTotal}`);
-      } else {
-        // Standard Delta for same customer
-        if (difference !== 0 && salesOrder.customer?.customerId) {
-          await Customer.findByIdAndUpdate(salesOrder.customer.customerId, {
-            $inc: { debit: difference, closingBalance: difference, totalBalance: difference }
-          });
-          console.log(`💰 Ledger Delta Applied: ₹${difference}`);
-        }
-      }
-
-      // 3. Update Snapshot Logic
-      salesOrder.isReEdited = true;
-      salesOrder.invoiceItems = items || [];
-      salesOrder.invoiceSampleItems = sampleItems || [];
-      salesOrder.invoiceSubtotal = Math.round(Number(subtotal) || 0);
-      salesOrder.invoiceTotalDiscount = Math.round(Number(totalDiscount) || 0);
-      salesOrder.invoiceTotalTax = Math.round(Number(totalTax) || 0);
-      salesOrder.invoiceCommonDiscount = Math.round(Number(commonDiscount) || 0);
-      salesOrder.invoiceGrandTotal = newGrandTotal;
-      
-      salesOrder.lastInvoicedItems = allNewItems;
-      salesOrder.lastInvoicedGrandTotal = newGrandTotal;
-    }
 
     // ─── Update standard fields ──────────────────────────────────────
     salesOrder.items = items || [];
@@ -1223,33 +1201,25 @@ router.put("/:id", auth, async (req, res) => {
     salesOrder.grandTotalWithMargin = newGrandTotal;
     salesOrder.roundOff = Number(roundOff) || 0;
 
-    // Trigger update of separate Invoice document if linked
-    if (salesOrder.salesInvoiceId) {
-      try {
-        await mongoose.model("Invoice").findOneAndUpdate(
-          { invoiceNumber: salesOrder.salesInvoiceId, branchId: salesOrder.branchId },
-          {
-            $set: {
-              items: items || [],
-              sampleItems: sampleItems || [],
-              subtotal: Math.round(Number(subtotal) || 0),
-              totalDiscount: Math.round(Number(totalDiscount) || 0),
-              commonDiscount: Math.round(Number(commonDiscount) || 0),
-              totalTax: { total: Math.round(Number(totalTax) || 0) },
-              transportCharge: Math.round(Number(transportCharge) || 0),
-              roundOff: Number(roundOff) || 0,
-              grandTotal: newGrandTotal,
-              customer: salesOrder.customer
-            }
-          }
-        );
-        console.log(`📄 Linked Invoice document updated: ${salesOrder.salesInvoiceId}`);
-      } catch (err) {
-        console.error("⚠️ Error updating linked Invoice document:", err.message);
-      }
+    // Snapshot this version in history if it was already invoiced (Version tracking)
+    if (salesOrder.invoiceGenerated || salesOrder.status === "INVOICED") {
+      salesOrder.editHistory.push({
+        version: (salesOrder.editHistory.length || 0) + 1,
+        editType: 'PRE_INVOICE_EDIT',
+        items: [...(items || []), ...(sampleItems || [])],
+        subtotal: Math.round(Number(subtotal) || 0),
+        totalTax: { total: Math.round(Number(totalTax) || 0) },
+        grandTotal: newGrandTotal,
+        editedAt: new Date(),
+        note: `Draft Edit (V${(salesOrder.editHistory.length || 0) + 1}) - Balance/Stock not yet affected.`
+      });
+      salesOrder.isReEdited = true;
     }
 
-    salesOrder.closingBalance = (salesOrder.closingBalance || 0) + difference;
+    // ✨ DRAFT MODE: We DO NOT update the Invoice document yet.
+    // The Invoice document will be updated only when the user clicks "Finalize".
+    // This keeps the Ledger (Balance) fixed at the OLD value until confirmed.
+
     await salesOrder.save();
 
     // 4. Create Audit Log

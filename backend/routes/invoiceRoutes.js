@@ -388,7 +388,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       const tGstPercent = salesOrder.transportGstPercent || 0;
       const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
       
-      const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tGstAmount - commonDiscount);
+      const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tCharge + tGstAmount - commonDiscount);
 
       // Note: We already found the invoice object above if it exists
 
@@ -546,22 +546,101 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         }
       }
 
-      // 💰 DELTA-BASED CUSTOMER BALANCE UPDATE 💰
+      // 💰 DELTA-BASED CUSTOMER BALANCE UPDATE (With Customer Swap Support) 💰
       const lastGrandTotal = salesOrder.lastInvoicedGrandTotal || 0;
-      const totalDelta = grandTotal - lastGrandTotal;
+      const lastCustomerId = salesOrder.lastInvoicedCustomerId || (invoice ? invoice.customer?.customerId : salesOrder.customer?.customerId);
+      const currentCustomerId = customer._id;
+      const isCustomerSwapped = lastCustomerId && currentCustomerId && lastCustomerId.toString() !== currentCustomerId.toString();
 
-      if (totalDelta !== 0 && customer) {
-        customer.debit = Math.round((customer.debit || 0) + totalDelta);
-        customer.closingBalance = Math.round((customer.closingBalance || 0) + totalDelta);
+      if (isCustomerSwapped) {
+        console.log(`🔄 Customer Swap detected during finalization: ${lastCustomerId} -> ${currentCustomerId}`);
+        
+        // A. Revert old total from previous customer
+        const oldCustomerObj = await Customer.findById(lastCustomerId).session(session);
+        if (oldCustomerObj) {
+          let remainingToRevert = lastGrandTotal;
+          let oldDebit = oldCustomerObj.debit || 0;
+          let oldCredit = oldCustomerObj.credit || 0;
+
+          if (oldDebit >= remainingToRevert) {
+            oldDebit -= remainingToRevert;
+          } else {
+            remainingToRevert -= oldDebit;
+            oldDebit = 0;
+            oldCredit += remainingToRevert;
+          }
+
+          oldCustomerObj.debit = Math.round(oldDebit);
+          oldCustomerObj.credit = Math.round(oldCredit);
+          oldCustomerObj.closingBalance = Math.round((oldCustomerObj.closingBalance || 0) - lastGrandTotal);
+          oldCustomerObj.totalBalance = oldCustomerObj.closingBalance;
+          await oldCustomerObj.save({ session });
+          console.log(`✅ Old customer (${oldCustomerObj.name}) balance reverted: -₹${lastGrandTotal}`);
+        }
+
+        // B. Apply entire new total to current customer
+        let remainingToAdd = grandTotal;
+        let curDebit = customer.debit || 0;
+        let curCredit = customer.credit || 0;
+
+        if (curCredit >= remainingToAdd) {
+          curCredit -= remainingToAdd;
+        } else {
+          remainingToAdd -= curCredit;
+          curCredit = 0;
+          curDebit += remainingToAdd;
+        }
+
+        customer.debit = Math.round(curDebit);
+        customer.credit = Math.round(curCredit);
+        customer.closingBalance = Math.round((customer.closingBalance || 0) + grandTotal);
+        customer.totalBalance = customer.closingBalance;
         await customer.save({ session });
-        console.log(`💰 Balance Delta for ${customer.name}: ₹${totalDelta} (New: ₹${grandTotal}, Old: ₹${lastGrandTotal})`);
+        console.log(`✅ Current customer (${customer.name}) balance updated: +₹${grandTotal}`);
+      } else {
+        // Standard Delta for same customer
+        const totalDelta = grandTotal - lastGrandTotal;
+        if (totalDelta !== 0) {
+          let remainingDelta = totalDelta;
+          let curDebit = customer.debit || 0;
+          let curCredit = customer.credit || 0;
+
+          if (totalDelta > 0) {
+            // Addition: Consume credit first
+            if (curCredit >= remainingDelta) {
+              curCredit -= remainingDelta;
+              remainingDelta = 0;
+            } else {
+              remainingDelta -= curCredit;
+              curCredit = 0;
+              curDebit += remainingDelta;
+            }
+          } else {
+            // Reduction: Consume debit first
+            const absDelta = Math.abs(remainingDelta);
+            if (curDebit >= absDelta) {
+              curDebit -= absDelta;
+            } else {
+              const excess = absDelta - curDebit;
+              curDebit = 0;
+              curCredit += excess;
+            }
+          }
+
+          customer.debit = Math.round(curDebit);
+          customer.credit = Math.round(curCredit);
+          customer.closingBalance = Math.round((customer.closingBalance || 0) + totalDelta);
+          customer.totalBalance = customer.closingBalance;
+          await customer.save({ session });
+          console.log(`💰 Balance Delta for ${customer.name}: ₹${totalDelta} (New: ₹${grandTotal}, Old: ₹${lastGrandTotal})`);
+        }
       }
 
       // Update sales order
       salesOrder.invoiceGenerated = true;
       salesOrder.status = "INVOICED";
       salesOrder.invoiceNotes = notes;
-      salesOrder.salesInvoiceId = invoiceNumber; // Store the SI link
+      salesOrder.salesInvoiceId = invoiceNumber; 
       salesOrder.recordType = "SALES INVOICE";
       
       // Save snapshot in history
@@ -573,12 +652,13 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         totalTax: totalTax,
         grandTotal: grandTotal,
         editedAt: new Date(),
-        note: `Sales Invoice ${invoiceNumber} ${salesOrder.editHistory.length === 0 ? 'generated' : 'updated'}. Stock Delta applied. Customer Delta: ₹${totalDelta}`
+        note: `Sales Invoice ${invoiceNumber} finalized. ${isCustomerSwapped ? 'Customer Swap Applied.' : 'Balance Delta Applied.'}`
       });
 
       // Update delta references for next time
       salesOrder.lastInvoicedItems = processedItems;
       salesOrder.lastInvoicedGrandTotal = grandTotal;
+      salesOrder.lastInvoicedCustomerId = customer._id;
 
       await salesOrder.save({ session });
 
