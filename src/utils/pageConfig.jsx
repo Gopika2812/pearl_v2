@@ -83,6 +83,7 @@ export const PAGE_CONFIG = [
     category: "Directory",
     items: [
       { id: "product-records", name: "Product Records", path: "/branch/product-records", icon: "box", permissionFields: ["purchasingPrice", "sellingPrice", "grossProfit"] },
+      { id: "product-config", name: "Product Configuration", path: "/branch/product-config", icon: "sync" },
     ]
   },
   {

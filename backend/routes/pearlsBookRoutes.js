@@ -420,10 +420,11 @@ async function generateInvoiceOrderPage(sale, copyTitle = "ORIGINAL INVOICE", is
             </div>
           </div>
           <div class="company-info-box">
-            <p><strong>PEARL AGENCY</strong></p>
-            <p>12/13, South By-Pass Road, Vanarpettai</p>
-            <p>Tirunelveli - 627003, Tamil Nadu</p>
-            <p>Mobile: 9429692970 | GSTIN: 33DULPS2600Q1Z6</p>
+            <p><strong>${sale.branchId?.name || "PEARL AGENCY"}</strong></p>
+            <p>${sale.branchId?.address || "12/13, South By-Pass Road, Vanarpettai"}</p>
+            <p>${sale.branchId?.city || "Tirunelveli"} - ${sale.branchId?.pincode || "627003"}, ${sale.branchId?.state || "Tamil Nadu"}</p>
+            <p>Mobile: ${sale.branchId?.phone || "9429692970"} | GSTIN: ${sale.branchId?.gstin || "33DULPS2600Q1Z6"}</p>
+            <p>GPAY No: ${sale.branchId?.gpayNo || ""}</p>
           </div>
         </div>
 
@@ -431,9 +432,9 @@ async function generateInvoiceOrderPage(sale, copyTitle = "ORIGINAL INVOICE", is
         <div class="sender-buyer">
           <div class="sender-buyer-item">
             <h3>SENDER (FROM)</h3>
-            <p><strong>PEARL AGENCY</strong></p>
-            <p>Tirunelveli - 627003</p>
-            <p>GSTIN: 33DULPS2600Q1Z6</p>
+            <p><strong>${sale.branchId?.name || "PEARL AGENCY"}</strong></p>
+            <p>${sale.branchId?.city || "Tirunelveli"} - ${sale.branchId?.pincode || "627003"}</p>
+            <p>GSTIN: ${sale.branchId?.gstin || "33DULPS2600Q1Z6"}</p>
           </div>
           <div class="sender-buyer-item">
             <h3>BUYER (BILL TO)</h3>
@@ -468,7 +469,11 @@ async function generateInvoiceOrderPage(sale, copyTitle = "ORIGINAL INVOICE", is
         <div class="summary-section">
           <div class="summary-box">
              <div class="summary-row"><span>Subtotal:</span><span>₹${sale.subtotal?.toFixed(2) || '0.00'}</span></div>
-             <div class="summary-row"><span>Tax (GST):</span><span>₹${(sale.totalTax?.total || 0).toFixed(2)}</span></div>
+             ${sale.totalTax?.igst > 0 ? 
+               `<div class="summary-row"><span>IGST:</span><span>₹${(sale.totalTax?.igst || 0).toFixed(2)}</span></div>` : 
+               `<div class="summary-row"><span>CGST:</span><span>₹${(sale.totalTax?.cgst || 0).toFixed(2)}</span></div>
+                <div class="summary-row"><span>SGST:</span><span>₹${(sale.totalTax?.sgst || 0).toFixed(2)}</span></div>`
+             }
              <div class="summary-row"><span>Transport:</span><span>₹${(sale.transportCharge || 0).toFixed(2)}</span></div>
              <div class="summary-row total"><span>GRAND TOTAL:</span><span>₹${sale.grandTotal?.toFixed(2) || '0.00'}</span></div>
           </div>
@@ -563,6 +568,18 @@ async function generateInvoiceTaxPage(sale, copyTitle = "ORIGINAL INVOICE", back
     });
   }
 
+  // 💡 Add transport GST to the common totals (as requested)
+  const tCharge = sale.transportCharge || 0;
+  const tGstPercent = sale.transportGstPercent || 18; // Default 18% if not specified
+  const tGstAmount = (tCharge * tGstPercent) / 100;
+
+  if (totalIGST > 0) {
+    totalIGST += tGstAmount;
+  } else {
+    totalCGST += tGstAmount / 2;
+    totalSGST += tGstAmount / 2;
+  }
+
   const hsnArray = Object.values(hsnSummary);
   let totalTaxableValue = 0, grandTotal = 0;
 
@@ -648,9 +665,9 @@ async function generateInvoiceTaxPage(sale, copyTitle = "ORIGINAL INVOICE", back
             <tr class="total">
               <td>TOTAL</td>
               <td style="text-align: right;">₹${totalTaxableValue.toFixed(2)}</td>
-              <td>₹${totalCGST.toFixed(2)}</td>
-              <td>₹${totalSGST.toFixed(2)}</td>
-              <td style="text-align: right;">₹${grandTotal.toFixed(2)}</td>
+              <td>${totalIGST > 0 ? `IGST: ₹${totalIGST.toFixed(2)}` : `CGST: ₹${totalCGST.toFixed(2)}`}</td>
+              <td>${totalIGST > 0 ? '' : `SGST: ₹${totalSGST.toFixed(2)}`}</td>
+              <td style="text-align: right;">₹${sale.grandTotal.toFixed(2)}</td>
             </tr>
           </tbody>
         </table>
@@ -748,10 +765,11 @@ async function generateBackOrderPage(sale, backOrderSummary, invoiceNotes = "") 
         <div class="header">
           ${logoDataUri ? `<img src="${logoDataUri}" style="max-width: 100px; max-height: 100px; object-fit: contain;">` : ''}
           <div class="company-info">
-            <p><strong>PEARL AGENCY</strong></p>
-            <p>12/13, South By-Pass Road, Vanarpettai</p>
-            <p>Tirunelveli - 627003, Tamil Nadu</p>
-            <p>Mobile: 9429692970 | GSTIN: 33DULPS2600Q1Z6</p>
+            <p><strong>${sale.branchId?.name || "PEARL AGENCY"}</strong></p>
+            <p>${sale.branchId?.address || "12/13, South By-Pass Road, Vanarpettai"}</p>
+            <p>${sale.branchId?.city || "Tirunelveli"} - ${sale.branchId?.pincode || "627003"}, ${sale.branchId?.state || "Tamil Nadu"}</p>
+            <p>Mobile: ${sale.branchId?.phone || "9429692970"} | GSTIN: ${sale.branchId?.gstin || "33DULPS2600Q1Z6"}</p>
+            <p>GPAY No: ${sale.branchId?.gpayNo || ""}</p>
           </div>
         </div>
 
@@ -866,13 +884,13 @@ async function generateEwayBillImage(sale) {
         <div class="sections">
           <div class="section">
             <h3>Supplier (From)</h3>
-            <p><strong>PEARL AGENCY</strong></p>
-            <p>12/13, South By-Pass Road</p>
-            <p>Vanarpettai, Tirunelveli - 627003</p>
-            <p>Mobile No: 9429692970</p>
-            <p>GSTIN/UIN: 33DULPS2600Q1Z6</p>
-            <p>GPAY No: 8825847884</p>
-            <p>State: Tamil Nadu (Code: 33)</p>
+            <p><strong>${sale.branchId?.name || "PEARL AGENCY"}</strong></p>
+            <p>${sale.branchId?.address || "12/13, South By-Pass Road"}</p>
+            <p>${sale.branchId?.city || "Tirunelveli"} - ${sale.branchId?.pincode || "627003"}</p>
+            <p>Mobile No: ${sale.branchId?.phone || "9429692970"}</p>
+            <p>GSTIN/UIN: ${sale.branchId?.gstin || "33DULPS2600Q1Z6"}</p>
+            <p>GPAY No: ${sale.branchId?.gpayNo || ""}</p>
+            <p>State: ${sale.branchId?.state || "Tamil Nadu"} (Code: ${sale.branchId?.stateCode || "33"})</p>
             <p>Warehouse: ${sale.warehouse}</p>
           </div>
           <div class="section">
@@ -969,6 +987,7 @@ router.post("/generate-invoice-preview/:id", async (req, res) => {
     const sale = await SalesOrder.findById(req.params.id)
       .populate('salesMan', 'name')
       .populate('deliveryMan', 'name')
+      .populate('branchId')
       .lean();
 
     if (!sale) {
@@ -1031,16 +1050,38 @@ router.post("/generate-invoice-preview/:id", async (req, res) => {
 
     // Calculate updated totals for invoice
     let newSubtotal = 0;
-    let newTotalTax = 0;
+    const taxBreakdown = { cgst: 0, sgst: 0, igst: 0, total: 0, hasIgst: false };
+    
     invoicedItems.forEach(item => {
       const qty = item.qty;
       const baseAmount = item.sellingPrice * qty;
       newSubtotal += baseAmount;
       const taxable = baseAmount - (item.discountAmount || 0);
-      newTotalTax += (taxable * item.gst) / 100;
+      
+      const itemGst = (taxable * (item.gst || 0)) / 100;
+      if (item.igst) {
+        taxBreakdown.igst += itemGst;
+        taxBreakdown.hasIgst = true;
+      } else {
+        taxBreakdown.cgst += itemGst / 2;
+        taxBreakdown.sgst += itemGst / 2;
+      }
     });
 
-    const newGrandTotal = newSubtotal + newTotalTax + (sale.transportCharge || 0);
+    // 💡 Add transport GST to the breakdown (using transportGstPercent from sale, default 18)
+    const tCharge = sale.transportCharge || 0;
+    const tGstPercent = sale.transportGstPercent || 18;
+    const tGstAmount = (tCharge * tGstPercent) / 100;
+
+    if (taxBreakdown.hasIgst) {
+      taxBreakdown.igst += tGstAmount;
+    } else {
+      taxBreakdown.cgst += tGstAmount / 2;
+      taxBreakdown.sgst += tGstAmount / 2;
+    }
+    taxBreakdown.total = taxBreakdown.igst + taxBreakdown.cgst + taxBreakdown.sgst;
+
+    const newGrandTotal = newSubtotal + taxBreakdown.total + tCharge;
 
     // ✅ 2. CHECK STOCK (WAREHOUSE AWARE)
     await checkStockAvailability(invoicedItems, sale.warehouse);
@@ -1050,7 +1091,7 @@ router.post("/generate-invoice-preview/:id", async (req, res) => {
       ...sale,
       items: invoicedItems,
       subtotal: newSubtotal,
-      totalTax: newTotalTax,
+      totalTax: taxBreakdown,
       grandTotal: newGrandTotal,
       invoiceNotes: notes,
       backOrderSummary: backOrderSummary,
@@ -1112,6 +1153,7 @@ router.post("/confirm-invoice/:id", async (req, res) => {
     const sale = await SalesOrder.findById(req.params.id)
       .populate('salesMan', 'name')
       .populate('deliveryMan', 'name')
+      .populate('branchId')
       .lean();
 
     if (!sale) {

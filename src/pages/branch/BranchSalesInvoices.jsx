@@ -561,6 +561,55 @@ const BranchSalesInvoices = () => {
                                      ))}
                                    </tbody>
                                  </table>
+
+                                 {/* 📊 DYNAMIC TAX SUMMARY (RECALCULATED FOR DISPLAY) */}
+                                 <div className="mt-4 pt-4 border-t-2 border-dashed border-gray-100 space-y-2">
+                                    {(() => {
+                                      let cgst = 0, sgst = 0, igst = 0;
+                                      let hasIgst = false;
+                                      
+                                      // 1. Items Tax
+                                      (inv.items || []).forEach(item => {
+                                        const taxable = (item.sellingPrice * item.qty) - (item.discountAmount || 0);
+                                        if (item.igst) {
+                                          igst += (taxable * (item.gst || 0)) / 100;
+                                          hasIgst = true;
+                                        } else {
+                                          cgst += (taxable * (item.cgst || 0)) / 100;
+                                          sgst += (taxable * (item.sgst || 0)) / 100;
+                                        }
+                                      });
+                                      
+                                      // 2. Transport GST Merge
+                                      const tGst = (inv.transportCharge * (inv.transportGstPercent || 18)) / 100;
+                                      if (hasIgst) igst += tGst;
+                                      else { cgst += tGst / 2; sgst += tGst / 2; }
+                                      
+                                      return hasIgst ? (
+                                        <div className="flex justify-between text-[11px] font-black text-blue-600">
+                                          <span>COMMON IGST (Merged)</span>
+                                          <span>₹{igst.toFixed(2)}</span>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <div className="flex justify-between text-[11px] font-black text-blue-600">
+                                            <span>COMMON CGST (Merged)</span>
+                                            <span>₹{cgst.toFixed(2)}</span>
+                                          </div>
+                                          <div className="flex justify-between text-[11px] font-black text-blue-600">
+                                            <span>COMMON SGST (Merged)</span>
+                                            <span>₹{sgst.toFixed(2)}</span>
+                                          </div>
+                                        </>
+                                      );
+                                    })()}
+                                    {inv.transportCharge > 0 && (
+                                      <div className="flex justify-between text-[11px] font-bold text-orange-600">
+                                        <span>TRANSPORT CHARGE</span>
+                                        <span>₹{(inv.transportCharge || 0).toFixed(2)}</span>
+                                      </div>
+                                    )}
+                                 </div>
                                </div>
 
                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-50">
@@ -568,6 +617,10 @@ const BranchSalesInvoices = () => {
                                     <FaHistory className="text-blue-500" /> Administrative Info
                                  </h4>
                                  <div className="space-y-4 text-xs">
+                                    <div className="flex justify-between border-b border-gray-50 pb-2 text-[11px]">
+                                       <span className="text-gray-500 font-bold uppercase tracking-tighter">Subtotal</span>
+                                       <span className="font-black text-gray-800">₹{(inv.subtotal || 0).toLocaleString()}</span>
+                                    </div>
                                     <div className="flex justify-between border-b border-gray-50 pb-2">
                                        <span className="text-gray-500 font-bold">Billing Person</span>
                                        <span className="font-black text-gray-800">{inv.billingPerson || "N/A"}</span>
@@ -576,9 +629,9 @@ const BranchSalesInvoices = () => {
                                        <span className="text-gray-500 font-bold">Invoice Date</span>
                                        <span className="font-black text-gray-800">{new Date(inv.invoiceDate || inv.createdAt).toLocaleString()}</span>
                                     </div>
-                                    <div className="flex justify-between border-b border-gray-50 pb-2">
-                                       <span className="text-gray-500 font-bold">Financial Year</span>
-                                       <span className="font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{inv.financialYear || "2025-26"}</span>
+                                    <div className="flex justify-between border-b border-gray-50 pb-2 pt-2">
+                                       <span className="text-[#319bab] font-black text-sm uppercase">Grand Total</span>
+                                       <span className="font-black text-blue-700 text-sm">₹{(inv.grandTotal || 0).toLocaleString()}</span>
                                     </div>
                                  </div>
                                </div>

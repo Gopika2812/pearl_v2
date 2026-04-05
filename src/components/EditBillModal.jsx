@@ -58,7 +58,11 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
 
       setItems(initializedItems);
       setSampleItems(order.sampleItems || []);
-      setTransportCharge(order.transportCharge || order.invoiceTransportCharge || 0);
+      
+      // Fix: Ensure transportCharge is picked up from either transportCharge or invoiceTransportCharge
+      const tCharge = order.transportCharge ?? order.invoiceTransportCharge ?? 0;
+      setTransportCharge(tCharge);
+      
       setTransportGstPercent(order.transportGstPercent || 0);
       setCommonDiscount(order.commonDiscount || order.invoiceCommonDiscount || 0);
       setSelectedCustomer(order.customer);
@@ -1026,19 +1030,65 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                       })}
                   </span>
                 </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600">Tax Total:</span>
-                  <span className="font-semibold text-blue-600">
-                    ₹{items.reduce((sum, item) => {
-                      const qty = parseFloat(item.qty) || 0;
-                      const price = parseFloat(item.sellingPrice) || 0;
-                      const dPercent = parseFloat(item.discountPercent) || 0;
-                      const discounted = (qty * price) - (qty * price * (dPercent / 100));
-                      const tax = item.igst ? discounted * (item.gst || 0) / 100 : discounted * ((item.cgst || 0) + (item.sgst || 0)) / 100;
-                      return sum + tax;
-                    }, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
+
+                {/* MERGED TAX CALCULATION */}
+                {(() => {
+                  let cgst = 0;
+                  let sgst = 0;
+                  let igst = 0;
+                  let hasIgst = false;
+
+                  // 1. Calculate tax from items
+                  items.forEach(item => {
+                    const qty = parseFloat(item.qty) || 0;
+                    const price = parseFloat(item.sellingPrice) || 0;
+                    const dPercent = parseFloat(item.discountPercent) || 0;
+                    const discounted = (qty * price) - (qty * price * (dPercent / 100));
+                    
+                    if (item.igst) {
+                      igst += discounted * (item.gst || 0) / 100;
+                      hasIgst = true;
+                    } else {
+                      cgst += discounted * (item.cgst || 0) / 100;
+                      sgst += discounted * (item.sgst || 0) / 100;
+                    }
+                  });
+
+                  // 2. Add transport GST to the common lines
+                  const tCharge = Number(transportCharge) || 0;
+                  const tGstPercent = Number(transportGstPercent) || 0;
+                  const tGstAmount = (tCharge * tGstPercent) / 100;
+
+                  if (hasIgst) {
+                    igst += tGstAmount;
+                  } else {
+                    cgst += tGstAmount / 2;
+                    sgst += tGstAmount / 2;
+                  }
+
+                  if (hasIgst) {
+                    return (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">IGST:</span>
+                        <span className="font-semibold text-blue-600">₹{igst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-gray-600">CGST:</span>
+                          <span className="font-semibold text-blue-600">₹{cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-gray-600">SGST:</span>
+                          <span className="font-semibold text-blue-600">₹{sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </>
+                    );
+                  }
+                })()}
+
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600">Item Discount:</span>
                   <span className="text-red-500 font-semibold">

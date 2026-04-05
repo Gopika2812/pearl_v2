@@ -96,6 +96,13 @@ const InventoryPurchaseOrderEntry = ({
   const [igst, setIgst] = useState(false);
   const [selectedProductData, setSelectedProductData] = useState(null);
 
+  // UNIT CONVERSION STATES
+  const [convValue, setConvValue] = useState("");
+  const [convUnit, setConvUnit] = useState("");
+  const [convAltValue, setConvAltValue] = useState("");
+  const [convAltUnit, setConvAltUnit] = useState("");
+  const [altQty, setAltQty] = useState(0);
+
   // Footer State
   const [extraExpenses, setExtraExpenses] = useState([]);
   const [showExtraExpensesModal, setShowExtraExpensesModal] = useState(false);
@@ -213,11 +220,39 @@ const InventoryPurchaseOrderEntry = ({
     setDiscountPercent("");
     setHsn(product.hsnCode || product.hsncode || "");
     setGst(product.gst || product.tax || 0);
+
+    // Load Unit Conversion from Product Master
+    if (product.unitConversion) {
+      setConvValue(product.unitConversion.value || "");
+      setConvUnit(product.unitConversion.unit || product.units || "");
+      setConvAltValue(product.unitConversion.altValue || "");
+      setConvAltUnit(product.unitConversion.altUnit || "");
+    } else {
+      setConvValue("");
+      setConvUnit(product.units || "");
+      setConvAltValue("");
+      setConvAltUnit("");
+    }
+
     if (!igst) {
       setCgst((product.gst || product.tax || 0) / 2);
       setSgst((product.gst || product.tax || 0) / 2);
     }
   };
+
+  // 🔄 AUTO-CALCULATE ALTERNATE QUANTITY
+  useEffect(() => {
+    const q = Number(qty) || 0;
+    const v = Number(convValue) || 1;
+    const av = Number(convAltValue) || 1;
+
+    if (q > 0 && v > 0) {
+      const calculated = (q / v) * av;
+      setAltQty(Math.round(calculated * 100) / 100);
+    } else {
+      setAltQty(0);
+    }
+  }, [qty, convValue, convAltValue]);
 
   // Add Item
   const addItem = () => {
@@ -243,6 +278,9 @@ const InventoryPurchaseOrderEntry = ({
         name: product.name,
         productGroup: product.productGroup || product.groupId,
         qty,
+        altQty: altQty,
+        altUnit: convAltUnit,
+        unit: convUnit || product.units || "",
         perQty: product.perQty || 1,
         units: product.units || "",
         totalQty: product.totalQty || 0,
@@ -889,7 +927,12 @@ const InventoryPurchaseOrderEntry = ({
                       <td className="px-4 py-3 text-center text-sm">
                         {item.perQty} {item.units}
                       </td>
-                      <td className="px-4 py-3 text-center">{item.qty}</td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="font-bold">{item.qty} {item.unit || "Pcs"}</div>
+                        {item.altQty > 0 && (
+                          <div className="text-[10px] text-[#319bab] font-semibold">({item.altQty} {item.altUnit})</div>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right">₹{item.purchasePrice}</td>
                       <td className="px-4 py-3 text-right text-red-600 font-bold">
                         {item.discountPercent || 0}%

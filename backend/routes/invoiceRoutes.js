@@ -128,18 +128,23 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         qty: item.backOrderQty,
       }));
 
-    // Use the calculated totals from above
+    // Transport GST calculation
+    const tCharge = salesOrder.transportCharge || 0;
+    const tGstPercent = salesOrder.transportGstPercent || 0;
+    const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
+
+    // Use the calculated totals from above and add transport GST
     const totalTax = {
-      cgst: Math.round(cgstTotal * 100) / 100,
-      sgst: Math.round(sgstTotal * 100) / 100,
-      igst: Math.round(igstTotal * 100) / 100,
+      cgst: Math.round((cgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
+      sgst: Math.round((sgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
+      igst: Math.round((igstTotal + (igstTotal > 0 ? tGstAmount : 0)) * 100) / 100,
     };
     totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
     const commonDiscount = customCommonDiscount !== undefined 
       ? Number(customCommonDiscount) 
       : (salesOrder.commonDiscount || 0);
-    const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) - commonDiscount);
+    const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) + (salesOrder.transportCharge || 0) - commonDiscount);
 
     // Fetch billing person name
     let billingPersonName = "-";
@@ -169,11 +174,6 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         deliveryManName = salesOrder.deliveryMan;
       }
     }
-
-    // Transport GST calculation
-    const tCharge = salesOrder.transportCharge || 0;
-    const tGstPercent = salesOrder.transportGstPercent || 0;
-    const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
 
     // Calculate dynamic opening balance from current customer state
     const currentCustomer = salesOrder.customer?.customerId;
@@ -206,7 +206,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         pincode: salesOrder.branchId?.pincode || "627003",
         gstin: salesOrder.branchId?.gstin || "33DULPS2600Q1Z6",
         phone: salesOrder.branchId?.phone || "9429692970",
-        gpayNo: salesOrder.branchId?.gpayNo || "8825847884",
+        gpayNo: salesOrder.branchId?.gpayNo || "",
         stateCode: salesOrder.branchId?.stateCode || "33",
         logo: salesOrder.branchId?.logo || "/logo.jpeg",
       },
@@ -221,9 +221,9 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       extraExpenses: salesOrder.extraExpenses || [],
       extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
       commonDiscount: commonDiscount,
-      grandTotal: Math.round(grandTotal + tGstAmount),
+      grandTotal: grandTotal,
       openingBalance: dynamicOpeningBalance,
-      closingBalance: dynamicOpeningBalance + Math.round(grandTotal + tGstAmount),
+      closingBalance: dynamicOpeningBalance + grandTotal,
       notes,
       invoiceType,
     };
@@ -392,21 +392,22 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         igstTotal += igstAmount;
       });
 
+      const tCharge = salesOrder.transportCharge || 0;
+      const tGstPercent = salesOrder.transportGstPercent || 0;
+      const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
+
       const totalTax = {
-        cgst: Math.round(cgstTotal * 100) / 100,
-        sgst: Math.round(sgstTotal * 100) / 100,
-        igst: Math.round(igstTotal * 100) / 100,
+        cgst: Math.round((cgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
+        sgst: Math.round((sgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
+        igst: Math.round((igstTotal + (igstTotal > 0 ? tGstAmount : 0)) * 100) / 100,
       };
       totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
       const commonDiscount = customCommonDiscount !== undefined 
         ? Number(customCommonDiscount) 
         : (salesOrder.commonDiscount || 0);
-      const tCharge = salesOrder.transportCharge || 0;
-      const tGstPercent = salesOrder.transportGstPercent || 0;
-      const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
       
-      const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tCharge + tGstAmount - commonDiscount);
+      const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tCharge - commonDiscount);
 
       // Note: We already found the invoice object above if it exists
 
@@ -490,7 +491,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
             pincode: branch?.pincode || "627003",
             gstin: branch?.gstin || "33DULPS2600Q1Z6",
             phone: branch?.phone || "9429692970",
-            gpayNo: branch?.phone || "8825847884",
+            gpayNo: branch?.gpayNo || branch?.phone || "",
             stateCode: branch?.stateCode || "33",
             logo: branch?.logo || "/logo.jpeg",
           },

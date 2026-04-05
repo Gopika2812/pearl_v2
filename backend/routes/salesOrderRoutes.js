@@ -146,7 +146,7 @@ router.get("/", async (req, res) => {
     }
 
     const salesOrders = await SalesOrder.find(query)
-      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal commonDiscount closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal")
+      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount")
       .populate('salesOwner', 'name')
       .sort({ createdAt: -1 });
 

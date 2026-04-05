@@ -49,6 +49,8 @@ import BranchStockSummary from "./pages/branch/BranchStockSummary";
 import BranchLedger from "./pages/branch/BranchLedger";
 import BranchExtraExpenseLedger from "./pages/branch/BranchExtraExpenseLedger";
 
+import BranchProductConfig from "./pages/branch/BranchProductConfig";
+
 import BranchLoginPage from "./pages/BranchLoginPage";
 import BranchRegisterPage from "./pages/BranchRegisterPage";
 import UserRegistrationPage from "./pages/UserRegistrationPage";
@@ -248,6 +250,7 @@ function AppContent() {
                   <Route path="/branch/day-book" element={<ProtectedRoute element={<BranchDayBook />} />} />
                   <Route path="/branch/admin-requests" element={<ProtectedRoute element={<BranchAdminRequests />} role={["ADMIN"]} />} />
                   <Route path="/branch/extra-expense-ledger" element={<ProtectedRoute element={<BranchExtraExpenseLedger />} />} />
+                  <Route path="/branch/product-config" element={<ProtectedRoute element={<BranchProductConfig />} />} />
                   <Route path="/branch/ledger" element={<ProtectedRoute element={<BranchLedger />} />} />
 
                   {/* LEGACY ROUTES */}

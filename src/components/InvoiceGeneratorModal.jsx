@@ -378,7 +378,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   <div class="company-address">
                     <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
                     Mobile: ${previewData?.seller?.phone || "9429692970"} | GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
-                    GPAY No: ${previewData?.seller?.gpayNo || "8825847884"} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
+                    GPAY No: ${previewData?.seller?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
               </div>
@@ -491,11 +491,13 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
                 <div class="total-section" style="flex: 1;">
                   <div>Subtotal: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
-                  <div>CGST (${previewData?.items?.[0]?.cgst || 0}%): <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
-                  <div>SGST (${previewData?.items?.[0]?.sgst || 0}%): <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>
+                  ${previewData?.totalTax?.igst > 0 ? 
+                    `<div>IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` : 
+                    `<div>CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
+                     <div>SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
+                  }
                   ${previewData?.commonDiscount > 0 ? `<div>Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
                   ${previewData?.transportCharge > 0 ? `<div>Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
-                  ${previewData?.transportGstAmount > 0 ? `<div>Transport GST (${previewData.transportGstPercent}%): <strong>₹${previewData.transportGstAmount.toFixed(2)}</strong></div>` : ""}
                   ${previewData?.extraExpenseAmount > 0 ? `<div>Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
                   <div class="grand-total">Grand Total: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
                 </div>
@@ -527,7 +529,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   <div class="company-address">
                     <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
                     Mobile: ${previewData?.seller?.phone || "9429692970"} | GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
-                    GPAY No: ${previewData?.seller?.gpayNo || "8825847884"} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
+                    GPAY No: ${previewData?.seller?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
               </div>
@@ -552,20 +554,24 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  ${(() => {
+                   ${(() => {
                     const hsnMap = {};
                     (previewData?.items || []).forEach(item => {
                       const hsn = item.hsn || "N/A";
                       if (!hsnMap[hsn]) {
                         hsnMap[hsn] = { taxable: 0, cgst: 0, sgst: 0, total: 0, cgstRate: item.cgst || 0, sgstRate: item.sgst || 0 };
                       }
-                      const taxable = item.total || 0;
+                      // Base calculation from inclusive total
+                      const totalInclusive = item.total || 0;
+                      const gstRate = (item.gst || 0);
+                      const taxable = totalInclusive / (1 + (gstRate / 100));
                       const cgstAmt = (taxable * (item.cgst || 0)) / 100;
                       const sgstAmt = (taxable * (item.sgst || 0)) / 100;
+                      
                       hsnMap[hsn].taxable += taxable;
                       hsnMap[hsn].cgst += cgstAmt;
                       hsnMap[hsn].sgst += sgstAmt;
-                      hsnMap[hsn].total += taxable + cgstAmt + sgstAmt;
+                      hsnMap[hsn].total += totalInclusive;
                     });
                     return Object.entries(hsnMap).map(([hsn, data]) => `
                       <tr>
@@ -577,16 +583,25 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                       </tr>
                     `).join("");
                   })()}
+                  <tr style="background: #f1f5f9; font-weight: bold;">
+                    <td>TRANSPORT GST</td>
+                    <td style="text-align: right;">₹${(previewData?.transportCharge || 0).toFixed(2)}</td>
+                    <td style="text-align: right;">9% | ₹${((previewData?.transportCharge * 0.18 / 2) || 0).toFixed(2)}</td>
+                    <td style="text-align: right;">9% | ₹${((previewData?.transportCharge * 0.18 / 2) || 0).toFixed(2)}</td>
+                    <td style="text-align: right;">₹${((previewData?.transportCharge * 1.18) || 0).toFixed(2)}</td>
+                  </tr>
                 </tbody>
               </table>
 
               <div class="total-section">
                 <div>Taxable Value: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
-                <div>CGST (${previewData?.items?.[0]?.cgst || 0}%): <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
-                <div>SGST (${previewData?.items?.[0]?.sgst || 0}%): <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>
+                ${previewData?.totalTax?.igst > 0 ? 
+                  `<div>IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` : 
+                  `<div>CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
+                   <div>SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
+                }
                 ${previewData?.commonDiscount > 0 ? `<div>Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
                 ${previewData?.transportCharge > 0 ? `<div>Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
-                ${previewData?.transportGstAmount > 0 ? `<div>Transport GST (${previewData.transportGstPercent}%): <strong>₹${previewData.transportGstAmount.toFixed(2)}</strong></div>` : ""}
                 ${previewData?.extraExpenseAmount > 0 ? `<div>Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
                 <div class="grand-total">TOTAL AMOUNT: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
               </div>

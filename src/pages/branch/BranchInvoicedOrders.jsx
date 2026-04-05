@@ -320,6 +320,102 @@ const BranchInvoicedOrders = () => {
     }
   };
 
+  const handleExportDetailedExcel = () => {
+    try {
+      const invoicedOnly = filteredSalesOrders.filter(order => order.invoiceGenerated || order.status === "CONFIRMED");
+
+      if (invoicedOnly.length === 0) {
+        toast.warn("No data to export for detailed report");
+        return;
+      }
+
+      const rows = [];
+      
+      // Header for the detailed report
+      const headerRow = [
+        "Date", "Invoice No", "Customer", "Product Name", "Price", "Qty", "GST (%)", "Discount (Amt)", "Line Total"
+      ];
+      rows.push(headerRow);
+
+      invoicedOnly.forEach((order) => {
+        const orderDate = new Date(order.createdAt).toLocaleDateString("en-IN");
+        const invoiceNo = order.invoiceId || order.salesInvoiceId || "-";
+        const customerName = order.customer?.name || "-";
+
+        // 1. Add each regular item
+        const items = order.invoiceItems || order.items || [];
+        items.forEach((item) => {
+          rows.push([
+            orderDate,
+            invoiceNo,
+            customerName,
+            item.name,
+            item.sellingPrice || 0,
+            item.qty || 0,
+            `${item.gst || 0}%`,
+            item.discountAmount || 0,
+            item.total || 0
+          ]);
+        });
+
+        // 2. Add sample items if any
+        const samples = order.invoiceSampleItems || order.sampleItems || [];
+        samples.forEach((sample) => {
+          rows.push([
+            orderDate,
+            invoiceNo,
+            customerName,
+            `🎁 (Sample) ${sample.name}`,
+            sample.sellingPrice || 0, // Usually 0 or reduced
+            sample.qty || 0,
+            "0%", // Samples usually exempt or handled separately
+            0,
+            0 // Samples are not billed
+          ]);
+        });
+
+        // 3. Add Transport Charge if applicable
+        if (order.transportCharge > 0) {
+          rows.push([
+            "", "", "", "🚚 Transport Charge", "", "", "", "", order.transportCharge
+          ]);
+        }
+
+        // 4. Add Special/Common Discount if applicable
+        if (order.commonDiscount > 0) {
+          rows.push([
+            "", "", "", "🛡️ Special Discount", "", "", "", "", -order.commonDiscount
+          ]);
+        }
+
+        // 5. Add Grand Total
+        rows.push([
+          "", "", "", "💰 GRAND TOTAL", "", "", "", "", order.grandTotal || 0
+        ]);
+
+        // 6. Add Blank Row for separation
+        rows.push(["", "", "", "", "", "", "", "", ""]);
+      });
+
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      
+      // Styling columns width (approximate)
+      const wscols = [
+        { wch: 12 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 15 }
+      ];
+      worksheet['!cols'] = wscols;
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Detailed Export");
+      XLSX.writeFile(workbook, `Detailed_Sales_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      toast.success("Detailed Excel exported successfully!");
+    } catch (error) {
+      console.error("Detailed export error:", error);
+      toast.error("Failed to generate detailed Excel report");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <ToastContainer
@@ -362,7 +458,15 @@ const BranchInvoicedOrders = () => {
                 disabled={filteredSalesOrders.length === 0}
                 className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition disabled:opacity-50 shadow-sm text-sm font-bold"
               >
-                <FaFileExcel /> Excel
+                <FaFileExcel /> Summary
+              </button>
+              <button
+                onClick={handleExportDetailedExcel}
+                disabled={filteredSalesOrders.length === 0}
+                className="flex items-center gap-2 bg-indigo-700 text-white px-4 py-2 rounded-lg hover:bg-indigo-800 transition disabled:opacity-50 shadow-sm text-sm font-bold"
+                title="Export with individual product lines and totals"
+              >
+                <FaFileExcel /> Detailed Report
               </button>
               <button
                 onClick={() => {
@@ -700,6 +804,68 @@ const BranchInvoicedOrders = () => {
                                       </tbody>
                                     </table>
                                   </div>
+                                  
+                                  {/* 📊 DYNAMIC TAX SUMMARY (RECALCULATED FOR DISPLAY) */}
+                                  <div className="mt-4 flex justify-end">
+                                    <div className="w-full md:w-64 bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-2">
+                                      <div className="flex justify-between text-xs text-gray-500 font-bold uppercase">
+                                        <span>Subtotal</span>
+                                        <span>₹{(order.subtotal || 0).toFixed(2)}</span>
+                                      </div>
+                                      
+                                      {(() => {
+                                        let cgst = 0, sgst = 0, igst = 0;
+                                        let hasIgst = false;
+                                        
+                                        // 1. Items Tax
+                                        (order.items || []).forEach(item => {
+                                          const taxable = (item.sellingPrice * item.qty) - (item.discountAmount || 0);
+                                          if (item.igst) {
+                                            igst += (taxable * (item.gst || 0)) / 100;
+                                            hasIgst = true;
+                                          } else {
+                                            cgst += (taxable * (item.cgst || 0)) / 100;
+                                            sgst += (taxable * (item.sgst || 0)) / 100;
+                                          }
+                                        });
+                                        
+                                        // 2. Transport GST Merge
+                                        const tGst = (order.transportCharge * (order.transportGstPercent || 18)) / 100;
+                                        if (hasIgst) igst += tGst;
+                                        else { cgst += tGst / 2; sgst += tGst / 2; }
+                                        
+                                        return hasIgst ? (
+                                          <div className="flex justify-between text-xs font-black text-blue-600 border-t border-gray-50 pt-2">
+                                            <span>IGST (Merged)</span>
+                                            <span>₹{igst.toFixed(2)}</span>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <div className="flex justify-between text-xs font-black text-blue-600 border-t border-gray-50 pt-2">
+                                              <span>CGST (Merged)</span>
+                                              <span>₹{cgst.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs font-black text-blue-600">
+                                              <span>SGST (Merged)</span>
+                                              <span>₹{sgst.toFixed(2)}</span>
+                                            </div>
+                                          </>
+                                        );
+                                      })()}
+
+                                      {order.transportCharge > 0 && (
+                                        <div className="flex justify-between text-xs text-orange-600 font-bold border-t border-gray-50 pt-2">
+                                          <span>Transport</span>
+                                          <span>₹{(order.transportCharge || 0).toFixed(2)}</span>
+                                        </div>
+                                      )}
+                                      
+                                      <div className="flex justify-between text-sm font-black text-[#319bab] border-t-2 border-dashed border-gray-100 pt-2 mt-2">
+                                        <span>Grand Total</span>
+                                        <span>₹{(order.grandTotal || 0).toFixed(2)}</span>
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
 
@@ -909,6 +1075,68 @@ const BranchInvoicedOrders = () => {
                                       )}
                                     </tbody>
                                   </table>
+                                  
+                                  {/* 📊 DYNAMIC TAX SUMMARY (RECALCULATED FOR DISPLAY) */}
+                                  <div className="mt-4 flex justify-end">
+                                    <div className="w-full bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-2">
+                                      <div className="flex justify-between text-[10px] text-gray-500 font-black uppercase">
+                                        <span>Subtotal</span>
+                                        <span>₹{(inv.subtotal || 0).toFixed(2)}</span>
+                                      </div>
+                                      
+                                      {(() => {
+                                        let cgst = 0, sgst = 0, igst = 0;
+                                        let hasIgst = false;
+                                        
+                                        // 1. Items Tax
+                                        (inv.items || []).forEach(item => {
+                                          const taxable = (item.sellingPrice * item.qty) - (item.discountAmount || 0);
+                                          if (item.igst) {
+                                            igst += (taxable * (item.gst || 0)) / 100;
+                                            hasIgst = true;
+                                          } else {
+                                            cgst += (taxable * (item.cgst || 0)) / 100;
+                                            sgst += (taxable * (item.sgst || 0)) / 100;
+                                          }
+                                        });
+                                        
+                                        // 2. Transport GST Merge
+                                        const tGst = (inv.transportCharge * (inv.transportGstPercent || 18)) / 100;
+                                        if (hasIgst) igst += tGst;
+                                        else { cgst += tGst / 2; sgst += tGst / 2; }
+                                        
+                                        return hasIgst ? (
+                                          <div className="flex justify-between text-xs font-black text-blue-700">
+                                            <span>COMMON IGST</span>
+                                            <span>₹{igst.toFixed(2)}</span>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <div className="flex justify-between text-xs font-black text-blue-700">
+                                              <span>COMMON CGST</span>
+                                              <span>₹{cgst.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs font-black text-blue-700">
+                                              <span>COMMON SGST</span>
+                                              <span>₹{sgst.toFixed(2)}</span>
+                                            </div>
+                                          </>
+                                        );
+                                      })()}
+
+                                      {inv.transportCharge > 0 && (
+                                        <div className="flex justify-between text-[10px] text-orange-700 font-black uppercase border-t border-blue-100 pt-2">
+                                          <span>Transport</span>
+                                          <span>₹{(inv.transportCharge || 0).toFixed(2)}</span>
+                                        </div>
+                                      )}
+                                      
+                                      <div className="flex justify-between text-sm font-black text-blue-900 border-t-2 border-dashed border-blue-200 pt-2 mt-2">
+                                        <span>FINAL TOTAL</span>
+                                        <span>₹{(inv.grandTotal || 0).toFixed(2)}</span>
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             </td>

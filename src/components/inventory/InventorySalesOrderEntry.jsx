@@ -348,6 +348,20 @@ export default function InventorySalesOrderEntry({
     setLocalCustomers(customers || []);
   }, [customers]);
 
+  // 🔄 AUTO-CALCULATE ALTERNATE QUANTITY
+  useEffect(() => {
+    const q = Number(qty) || 0;
+    const v = Number(convValue) || 1;
+    const av = Number(convAltValue) || 1;
+
+    if (q > 0 && v > 0) {
+      const calculated = (q / v) * av;
+      setAltQty(Math.round(calculated * 100) / 100);
+    } else {
+      setAltQty(0);
+    }
+  }, [qty, convValue, convAltValue]);
+
   useEffect(() => {
     setLocalProductGroups(productGroups || []);
   }, [productGroups]);
@@ -1009,21 +1023,48 @@ export default function InventorySalesOrderEntry({
     0
   );
 
-  const totalTax = items.reduce((s, i) => {
-    const base = i.qty * i.sellingPrice;
-    const taxable = base - (i.discountAmount || 0);
-    return s + (taxable * i.gst) / 100;
-  }, 0);
+  const taxBreakdown = useMemo(() => {
+    let cgst = 0;
+    let sgst = 0;
+    let igst = 0;
+    let hasIgst = false;
 
-  // Calculate extra expenses total
+    // 1. Tax from regular items
+    items.forEach(i => {
+      const base = i.qty * i.sellingPrice;
+      const taxable = base - (i.discountAmount || 0);
+      if (i.igst) {
+        igst += (taxable * i.gst) / 100;
+        hasIgst = true;
+      } else {
+        cgst += (taxable * (i.cgst || 0)) / 100;
+        sgst += (taxable * (i.sgst || 0)) / 100;
+      }
+    });
+
+    // 2. Tax from extra expenses (e.g. Transport)
+    extraExpenses.forEach(exp => {
+      if (hasIgst) {
+        igst += exp.gstAmount || 0;
+      } else {
+        cgst += (exp.gstAmount || 0) / 2;
+        sgst += (exp.gstAmount || 0) / 2;
+      }
+    });
+
+    return { cgst, sgst, igst, hasIgst, total: cgst + sgst + igst };
+  }, [items, extraExpenses]);
+
+  const totalTax = taxBreakdown.total;
+
+  // Calculate extra expenses BASE total (excluding GST from the display row if desired, but here we just need grand total)
   const extraExpenseAmount = extraExpenses.reduce(
     (sum, exp) => sum + exp.totalPrice,
     0
   );
 
   const grandTotal =
-    subtotal - totalDiscount - (Number(commonDiscount) || 0) + totalTax + extraExpenseAmount;
-
+    subtotal - totalDiscount - (Number(commonDiscount) || 0) + totalTax + extraExpenses.reduce((sum, exp) => sum + exp.basePrice, 0);
 
   // Round up all item totals and financial values
   const roundedItems = items.map((item) => ({
@@ -1034,14 +1075,14 @@ export default function InventorySalesOrderEntry({
   const roundedSubtotal = Math.ceil(subtotal * 100) / 100;
   const roundedTotalDiscount = Math.ceil(totalDiscount * 100) / 100;
   const roundedTotalTax = Math.ceil(totalTax * 100) / 100;
-  const roundedExtraExpenseAmount = Math.ceil(extraExpenseAmount * 100) / 100;
+  const roundedExtraExpenseAmount = Math.ceil(extraExpenses.reduce((sum, exp) => sum + exp.basePrice, 0) * 100) / 100;
 
   // 📊 CALCULATE MARGIN AMOUNT (margin already applied to item prices)
   const marginAmount = customerMargin > 0
     ? Math.ceil((roundedSubtotal * customerMargin) / (100 + customerMargin) * 100) / 100
     : 0;
 
-  const roundedGrandTotal = Math.round(grandTotal);
+  const roundedGrandTotal = Math.round(subtotal - totalDiscount - (Number(commonDiscount) || 0) + totalTax + extraExpenses.reduce((sum, exp) => sum + exp.basePrice, 0));
   const grandTotalWithMargin = Math.round(roundedGrandTotal + marginAmount);
 
   const payload = {
@@ -2052,13 +2093,26 @@ export default function InventorySalesOrderEntry({
                   />
                 </div>
               </div>
-              <div className="flex justify-between text-sm pt-2">
-                <span className="text-gray-500">Tax Amount</span>
-                <span className="font-bold">₹{totalTax.toFixed(2)}</span>
-              </div>
+              {taxBreakdown.hasIgst ? (
+                <div className="flex justify-between text-sm pt-2">
+                  <span className="text-gray-500">IGST</span>
+                  <span className="font-bold">₹{taxBreakdown.igst.toFixed(2)}</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between text-sm pt-2">
+                    <span className="text-gray-500">CGST</span>
+                    <span className="font-bold">₹{taxBreakdown.cgst.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-1">
+                    <span className="text-gray-500">SGST</span>
+                    <span className="font-bold">₹{taxBreakdown.sgst.toFixed(2)}</span>
+                  </div>
+                </>
+              )}
               {extraExpenses.length > 0 && (
                 <div className="flex justify-between text-sm bg-orange-50 px-3 py-2 rounded-lg">
-                  <span className="text-orange-700 font-semibold">Extra Expenses</span>
+                  <span className="text-orange-700 font-semibold">Extra Expenses / Transport</span>
                   <span className="font-bold text-orange-600">₹{roundedExtraExpenseAmount.toFixed(2)}</span>
                 </div>
               )}
