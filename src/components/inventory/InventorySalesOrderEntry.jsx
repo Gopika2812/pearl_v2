@@ -125,10 +125,7 @@ export default function InventorySalesOrderEntry({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClaim, setIsClaim] = useState(false);
   const [isLocked, setIsLocked] = useState(false); // New state for Lock Price checkbox
-  const [isPriceAuthorized, setIsPriceAuthorized] = useState(false);
-  const [activePriceRequest, setActivePriceRequest] = useState(null);
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split("T")[0]);
-  const pollingRef = useRef(null);
 
   // UNIT CONVERSION STATES
   const [convValue, setConvValue] = useState("");
@@ -144,105 +141,7 @@ export default function InventorySalesOrderEntry({
     return user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   }, [user]);
 
-  // POLLING LOGIC FOR PRICE REQUESTS
-  const startStatusPolling = (reqId, pId) => {
-    if (pollingRef.current) clearInterval(pollingRef.current);
-    
-    pollingRef.current = setInterval(async () => {
-      try {
-        const res = await fetchWithAuth(`${API_BASE}/price-requests/my-status/${pId}`);
-        const data = await res.json();
-        
-        if (data.success && data.data) {
-          const { status } = data.data;
-          setActivePriceRequest(data.data);
-          
-          if (status === "APPROVED") {
-            setIsPriceAuthorized(true);
-            setActivePriceRequest(data.data); // Update with final status
-            clearInterval(pollingRef.current);
-            toast.success("Price change approved by admin!");
-          } else if (status === "REJECTED") {
-            clearInterval(pollingRef.current);
-            toast.error("Price change request rejected by admin.");
-            setActivePriceRequest(null);
-            setIsPriceAuthorized(false);
-          }
-        }
-      } catch (err) {
-        console.error("Polling error:", err);
-      }
-    }, 2000); // Poll every 2 seconds for almost instant updates
-  };
 
-  const checkPriceStatusOnSelect = async (pId) => {
-    if (!pId) return;
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/price-requests/my-status/${pId}`);
-      const data = await res.json();
-      
-      if (data.success && data.data) {
-        const { status } = data.data;
-        setActivePriceRequest(data.data);
-        
-        if (status === "APPROVED") {
-          setIsPriceAuthorized(true);
-        } else if (status === "PENDING") {
-          setIsPriceAuthorized(false);
-          startStatusPolling(data.data._id, pId);
-        } else {
-          setIsPriceAuthorized(false);
-        }
-      } else {
-        setActivePriceRequest(null);
-        setIsPriceAuthorized(false);
-        if (pollingRef.current) clearInterval(pollingRef.current);
-      }
-    } catch (err) {
-      console.error("Check status error:", err);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, []);
-
-  const handlePriceUnlockRequest = async () => {
-    if (!selectedItem) {
-      toast.warning("Please select a product first.");
-      return;
-    }
-    
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/price-requests`, {
-        method: "POST",
-        body: JSON.stringify({
-          productId: selectedItem,
-          productName: itemSearch,
-          originalPrice: sellingPrice
-        })
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        setActivePriceRequest(data.data);
-        if (data.data.status === "APPROVED") {
-          setIsPriceAuthorized(true);
-          toast.success("Price field unlocked!");
-        } else {
-          startStatusPolling(data.data._id, selectedItem);
-          toast.info("Unlock request sent to admin. Please wait...");
-        }
-      } else {
-
-        toast.error(data.message || "Failed to send request.");
-      }
-    } catch (err) {
-      toast.error("Request failed.");
-    }
-  };
 
   const isCreditLimitExceeded = false;
 
@@ -707,10 +606,6 @@ export default function InventorySalesOrderEntry({
     setShowItemDropdown(false);
     setQty(1);
 
-    // 🛡️ CHECK IF PRICE IS ALREADY AUTHORIZED OR PENDING (Persistent logic)
-    if (!isAdmin) {
-      checkPriceStatusOnSelect(id);
-    }
 
     // Auto-select Product Group if not already selected or if different
     const pGroupId = product.productGroup?._id || product.productGroup || product.groupId?._id || product.groupId;
@@ -954,9 +849,6 @@ export default function InventorySalesOrderEntry({
     setIgst(false);
     setHsn("");
     setShowItemDropdown(false);
-    setIsPriceAuthorized(false);
-    setActivePriceRequest(null);
-    if (pollingRef.current) clearInterval(pollingRef.current);
   };
 
   const removeItem = (i) => {
@@ -1714,7 +1606,7 @@ export default function InventorySalesOrderEntry({
                 </div>
                 <div>
                   <label className={labelClass}>
-                    Selling ₹ {isAdmin ? (
+                    Selling ₹ {isAdmin && (
                       <span className="ml-2 inline-flex items-center gap-1 cursor-pointer" onClick={() => setIsLocked(!isLocked)}>
                         <input
                           type="checkbox"
@@ -1724,35 +1616,15 @@ export default function InventorySalesOrderEntry({
                         />
                         <span className="text-[9px] text-[#319bab]">LOCK</span>
                       </span>
-                    ) : (
-                      <button 
-                        onClick={handlePriceUnlockRequest}
-                        disabled={isPriceAuthorized || activePriceRequest?.status === "PENDING"}
-                        className={`ml-2 text-[9px] px-1 rounded font-bold uppercase transition ${
-                          isPriceAuthorized 
-                            ? "bg-green-100 text-green-700" 
-                            : activePriceRequest?.status === "PENDING"
-                              ? "bg-orange-100 text-orange-700 animate-pulse"
-                              : "bg-[#319bab]/10 text-[#319bab] hover:bg-[#319bab]/20"
-                        }`}
-                      >
-                        {isPriceAuthorized ? "Unlocked" : activePriceRequest?.status === "PENDING" ? "Request Sent..." : "Unlock"}
-                      </button>
                     )}
                   </label>
                   <input
                     type="number"
-                    className={`${inputClass} ${(isAdmin || isPriceAuthorized) ? "" : "bg-gray-100 cursor-not-allowed text-gray-500 font-bold"}`}
+                    className={inputClass}
                     value={sellingPrice === 0 ? "" : sellingPrice}
                     onChange={(e) => setSellingPrice(e.target.value === "" ? "" : Number(e.target.value))}
-                    readOnly={!isAdmin && !isPriceAuthorized}
                     placeholder="Price"
                   />
-                  {activePriceRequest?.status === "PENDING" && (
-                    <p className="text-[9px] text-orange-600 font-bold mt-1 italic animate-pulse">
-                      Pending Admin approval...
-                    </p>
-                  )}
                 </div>
               </div>
 
@@ -1902,12 +1774,11 @@ export default function InventorySalesOrderEntry({
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold">
                   <tr>
-                    <th className="px-4 py-3 text-left">Item</th>
+                    <th className="px-4 py-3 text-left">Product Name</th>
                     <th className="px-4 py-3 text-center">Qty</th>
                     <th className="px-4 py-3 text-right">Rate</th>
                     <th className="px-4 py-3 text-right">Discount</th>
-                    <th className="px-4 py-3 text-right">Tax</th>
-                    <th className="px-4 py-3 text-right">Total</th>
+                    <th className="px-4 py-3 text-right">Total Amount (Qty × Rate)</th>
                     <th className="px-4 py-3 text-center">Action</th>
                   </tr>
                 </thead>
@@ -1930,10 +1801,7 @@ export default function InventorySalesOrderEntry({
                         <div className="text-[10px] text-red-500">-₹{item.discountAmount.toFixed(2)}</div>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {item.igst ? `IGST ${item.gst}%` : `CGST ${item.cgst}% + SGST ${item.sgst}%`}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="font-bold text-[#319bab]">₹{item.total.toFixed(2)}</div>
+                        <div className="font-bold text-[#319bab]">₹{(item.qty * item.sellingPrice).toFixed(2)}</div>
                         {item.lockedPrice > 0 && (
                           <div className="text-[10px] text-orange-600 font-bold bg-orange-50 px-1 rounded inline-block mt-0.5" title="Customer Locked Price">
                             Locked: ₹{item.lockedPrice}
@@ -2085,12 +1953,9 @@ export default function InventorySalesOrderEntry({
             <div className="space-y-4">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Subtotal</span>
-                <span className="font-bold">₹{subtotal.toFixed(2)}</span>
+                <span className="font-bold">₹{roundedSubtotal.toFixed(2)}</span>
               </div>
-              {/* <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Discount (Items)</span>
-                <span className="font-bold text-red-500">-₹{totalDiscount.toFixed(2)}</span>
-              </div> */}
+              
               <div className="flex justify-between items-center text-sm border-b pb-2">
                 <span className="text-gray-700 font-semibold tracking-wide">Common Discount</span>
                 <div className="flex items-center gap-1">
@@ -2105,19 +1970,20 @@ export default function InventorySalesOrderEntry({
                   />
                 </div>
               </div>
+
               {taxBreakdown.hasIgst ? (
                 <div className="flex justify-between text-sm pt-2">
-                  <span className="text-gray-500">IGST</span>
+                  <span className="text-gray-500 uppercase font-bold tracking-tighter">IGST</span>
                   <span className="font-bold">₹{taxBreakdown.igst.toFixed(2)}</span>
                 </div>
               ) : (
                 <>
                   <div className="flex justify-between text-sm pt-2">
-                    <span className="text-gray-500">CGST</span>
+                    <span className="text-gray-500 uppercase font-bold tracking-tighter">CGST</span>
                     <span className="font-bold">₹{taxBreakdown.cgst.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm pt-1">
-                    <span className="text-gray-500">SGST</span>
+                    <span className="text-gray-500 uppercase font-bold tracking-tighter">SGST</span>
                     <span className="font-bold">₹{taxBreakdown.sgst.toFixed(2)}</span>
                   </div>
                 </>

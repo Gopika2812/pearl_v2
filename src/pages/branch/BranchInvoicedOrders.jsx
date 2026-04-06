@@ -304,13 +304,28 @@ const BranchInvoicedOrders = () => {
       }
 
       const exportData = invoicedOnly.map((order) => ({
+        "Date": new Date(order.createdAt).toLocaleDateString("en-IN"),
         "Invoice ID": order.invoiceId || "-",
         "Customer Name": order.customer?.name || "-",
         "Customer WhatsApp": order.customer?.whatsapp || "-",
         "Items Count": (order.items || []).length + (order.sampleItems || []).length,
+        "Sub Total": order.subtotal || 0,
         "Grand Total": order.grandTotal || 0,
-        "Date": new Date(order.createdAt).toLocaleDateString("en-IN"),
       }));
+
+      // Add final summary row
+      const totalSub = exportData.reduce((sum, row) => sum + row["Sub Total"], 0);
+      const totalGrand = exportData.reduce((sum, row) => sum + row["Grand Total"], 0);
+      
+      exportData.push({
+        "Date": "TOTAL",
+        "Invoice ID": "",
+        "Customer Name": "",
+        "Customer WhatsApp": "",
+        "Items Count": "",
+        "Sub Total": totalSub,
+        "Grand Total": totalGrand,
+      });
 
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
@@ -391,14 +406,28 @@ const BranchInvoicedOrders = () => {
           ]);
         }
 
-        // 5. Add Grand Total
+        // 5. Add Sub Total
+        rows.push([
+          "", "", "", "📊 SUB TOTAL", "", "", "", "", order.subtotal || 0
+        ]);
+
+        // 6. Add Grand Total
         rows.push([
           "", "", "", "💰 GRAND TOTAL", "", "", "", "", order.grandTotal || 0
         ]);
 
-        // 6. Add Blank Row for separation
+        // 7. Add Blank Row for separation
         rows.push(["", "", "", "", "", "", "", "", ""]);
       });
+
+      // Add Final Summary Row for the entire report
+      const totalSubAll = invoicedOnly.reduce((sum, o) => sum + (o.subtotal || 0), 0);
+      const totalGrandAll = invoicedOnly.reduce((sum, o) => sum + (o.grandTotal || 0), 0);
+      
+      rows.push(["", "", "", "━━━━━━━━━━━━━━━━━━━━━━━━", "", "", "", "", "━━━━━━━━━━"]);
+      rows.push(["", "", "", "🔥 TOTAL (ALL ORDERS)", "", "", "", "", ""]);
+      rows.push(["", "", "", "Total Sub Total", "", "", "", "", totalSubAll]);
+      rows.push(["", "", "", "Total Grand Total", "", "", "", "", totalGrandAll]);
 
       const worksheet = XLSX.utils.aoa_to_sheet(rows);
       

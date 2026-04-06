@@ -1,369 +1,191 @@
-import { useEffect, useState, Fragment } from "react";
-import { FaChevronDown, FaChevronUp, FaFileAlt } from "react-icons/fa";
+import { useEffect, useState } from "react";
+import { FaPlus, FaUndoAlt, FaSearch, FaFileInvoiceDollar, FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { toast } from "react-toastify";
-import CreditNoteModal from "../../components/sales/CreditNoteModal";
+import CustomerCreditNoteModal from "../../components/inventory/CustomerCreditNoteModal"; // Use this for standalone/unified
 import { useBranch } from "../../context/BranchContext";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
+import { API_BASE, fetchWithAuth } from "../../api";
 
 export default function BranchCreditNote() {
-  const { currentBranch, user } = useBranch();
-  const [salesInvoices, setSalesInvoices] = useState([]);
-  const [creditNoteData, setCreditNoteData] = useState({});
+  const { currentBranch } = useBranch();
+  const [creditNotes, setCreditNotes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showCreditNoteModal, setShowCreditNoteModal] = useState(false);
-  const [selectedInvoice, setSelectedInvoice] = useState(null);
-  const [expandedInvoices, setExpandedInvoices] = useState({});
+  const [showModal, setShowModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [expandedCN, setExpandedCN] = useState({});
 
   useEffect(() => {
-    if (currentBranch?._id) fetchSalesInvoices();
+    if (currentBranch?._id) fetchCreditNotes();
   }, [currentBranch]);
 
-  const fetchSalesInvoices = async () => {
+  const fetchCreditNotes = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/sales-orders?branchId=${currentBranch._id}`, {
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await response.json();
-      
-      // Filter: only invoices (invoiceGenerated=true), exclude draft/cancelled
-      let invoices = (data || [])
-        .filter((si) => si.invoiceGenerated && si.status !== "CANCELLED" && si.status !== "DRAFT")
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-      // Apply granular voucher authorization
-      if (user?.allowedVoucherTypes && user.allowedVoucherTypes.length > 0) {
-        invoices = invoices.filter(si => user.allowedVoucherTypes.includes(si.voucherTypeId || si.voucherType?._id || si.voucherType));
-      }
-
-      setSalesInvoices(invoices);
-
-      // Fetch credit notes for each invoice
-      for (const inv of invoices) {
-        fetchCreditNotesForInvoice(inv._id);
+      const response = await fetchWithAuth(`${API_BASE}/credit-notes?branchId=${currentBranch._id}`);
+      const result = await response.json();
+      if (result.success) {
+        setCreditNotes(result.data || []);
       }
     } catch (error) {
-      console.error("Error fetching sales invoices:", error);
-      toast.error("Failed to load sales invoices");
+      console.error("Error fetching credit notes:", error);
+      toast.error("Failed to load credit notes");
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchCreditNotesForInvoice = async (invoiceId) => {
-    try {
-      const response = await fetch(`${API_BASE}/credit-notes/order/${invoiceId}`, {
-        headers: { "Content-Type": "application/json" },
-      });
-      const result = await response.json();
-      const creditNotes = result.data || [];
-
-      const totalReturned = (creditNotes || []).reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
-
-      setCreditNoteData((prev) => ({
-        ...prev,
-        [invoiceId]: {
-          creditNotes: creditNotes || [],
-          totalReturned,
-        },
-      }));
-    } catch (error) {
-      console.error("Error fetching credit notes:", error);
-    }
+  const toggleExpand = (id) => {
+    setExpandedCN(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const toggleExpandInvoice = (invoiceId) => {
-    setExpandedInvoices((prev) => ({
-      ...prev,
-      [invoiceId]: !prev[invoiceId],
-    }));
-  };
+  const filteredCN = creditNotes.filter(cn => 
+    cn.creditNoteId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    cn.customer?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  const handleCreateCreditNote = (invoice) => {
-    setSelectedInvoice(invoice);
-    setShowCreditNoteModal(true);
-  };
-
-  const handleCreditNoteSuccess = () => {
-    setShowCreditNoteModal(false);
-    setSelectedInvoice(null);
-    fetchSalesInvoices();
-  };
-
-  const getCreditNotesForInvoice = (invoiceId) => {
-    return creditNoteData[invoiceId]?.creditNotes || [];
-  };
-
-  const getTotalReturnedAmount = (invoice) => {
-    return creditNoteData[invoice._id]?.totalReturned || 0;
-  };
-
-  const getTotalReturnedQty = (invoice) => {
-    const creditNotes = getCreditNotesForInvoice(invoice._id);
-    return creditNotes.reduce((sum, cn) => {
-      return sum + (cn.items?.reduce((itemSum, item) => itemSum + (item.returnedQty || 0), 0) || 0);
-    }, 0);
-  };
-
-  const getReturnStatus = (invoice) => {
-    const creditNotes = getCreditNotesForInvoice(invoice._id);
-    if (creditNotes.length === 0) return "No Returns";
-    return `${creditNotes.length} Return${creditNotes.length > 1 ? "s" : ""}`;
-  };
-
-  const getStatusColor = (invoice) => {
-    const returned = getTotalReturnedAmount(invoice);
-    if (returned === 0) return "bg-blue-100 text-blue-700";
-    if (returned < invoice.grandTotal / 2) return "bg-orange-100 text-orange-700";
-    return "bg-green-100 text-green-700";
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
+  const formatDate = (date) => new Date(date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4">
-        {/* HEADER */}
-        <div className="bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-2xl shadow-lg p-8 mb-8">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        
+        {/* HEADER SECTION */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div className="flex items-center gap-4">
-            <FaFileAlt className="text-5xl opacity-80" />
+            <div className="p-4 bg-teal-600 rounded-2xl shadow-lg shadow-teal-100 text-white">
+              <FaUndoAlt size={32} />
+            </div>
             <div>
-              <h1 className="text-4xl font-bold">Credit Note Management</h1>
-              <p className="text-teal-100 mt-2">Manage product returns from customers</p>
+              <h1 className="text-3xl font-black text-gray-900 tracking-tight">CREDIT NOTES</h1>
+              <p className="text-gray-500 font-bold text-sm uppercase tracking-widest">Sales Returns & Customer Credits</p>
             </div>
           </div>
+          
+          <button 
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-3 bg-teal-600 hover:bg-teal-700 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl shadow-teal-100 active:scale-95"
+          >
+            <FaPlus /> Create Credit Note
+          </button>
         </div>
 
-        {/* MAIN CONTENT */}
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center">
-              <p className="text-gray-600">Loading sales invoices...</p>
+        {/* SUMMARY CARDS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Notes</p>
+                <p className="text-3xl font-black text-gray-900">{filteredCN.length}</p>
             </div>
-          ) : salesInvoices.length === 0 ? (
-            <div className="p-8 text-center">
-              <p className="text-gray-500">No sales invoices available</p>
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Credit Value</p>
+                <p className="text-3xl font-black text-teal-600">₹{filteredCN.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0).toLocaleString()}</p>
+            </div>
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4 relative overflow-hidden">
+                <FaSearch className="absolute -right-4 -bottom-4 text-8xl text-gray-50 -rotate-12" />
+                <div className="z-10 w-full">
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Search Records</p>
+                    <input 
+                      type="text"
+                      placeholder="CN ID or Customer..."
+                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-teal-500 outline-none transition-all"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </div>
+            </div>
+        </div>
+
+        {/* RECORDS TABLE */}
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+          {loading ? (
+            <div className="p-20 text-center space-y-4">
+              <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">Fetching records...</p>
+            </div>
+          ) : filteredCN.length === 0 ? (
+            <div className="p-20 text-center">
+              <FaFileInvoiceDollar size={64} className="mx-auto text-gray-100 mb-4" />
+              <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">No credit notes found</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gradient-to-r from-teal-50 to-teal-100 border-b">
+                <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Expand</th>
-                    <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Invoice ID</th>
-                    <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Customer</th>
-                    <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Warehouse</th>
-                    <th className="px-4 py-4 text-center text-xs font-bold text-gray-700 uppercase">Items</th>
-                    <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Amount</th>
-                    <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Returned</th>
-                    <th className="px-4 py-4 text-center text-xs font-bold text-gray-700 uppercase">Status</th>
-                    <th className="px-4 py-4 text-center text-xs font-bold text-gray-700 uppercase">Date</th>
-                    <th className="px-4 py-4 text-center text-xs font-bold text-gray-700 uppercase">Action</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">CN ID</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Customer</th>
+                    <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Items</th>
+                    <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Invoice Ref</th>
+                    <th className="px-10 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Details</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
-                  {salesInvoices.map((invoice) => {
-                    const invoiceCreditNotes = getCreditNotesForInvoice(invoice._id);
-                    const isExpanded = expandedInvoices[invoice._id] || false;
-
-                    return (
-                      <Fragment key={invoice._id}>
-                        {/* MAIN INVOICE ROW */}
-                        <tr className="hover:bg-gray-50 transition">
-                          <td className="px-2 py-3 text-center">
-                            <button
-                              onClick={() => toggleExpandInvoice(invoice._id)}
-                              className="text-teal-600 hover:text-teal-700 transition"
-                            >
-                              {isExpanded ? (
-                                <FaChevronUp />
-                              ) : (
-                                <FaChevronDown />
-                              )}
-                            </button>
-                          </td>
-                          <td className="px-4 py-3 font-bold text-teal-600">
-                            {invoice.invoiceId}
-                          </td>
-                          <td className="px-4 py-3">
-                            {typeof invoice.customer === "object"
-                              ? invoice.customer?.name
-                              : invoice.customer}
-                          </td>
-                          <td className="px-4 py-3">
-                            {typeof invoice.warehouse === "object"
-                              ? invoice.warehouse?.name
-                              : invoice.warehouse}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span className="bg-teal-600/10 text-teal-600 px-3 py-1 rounded-full text-xs font-bold">
-                              {invoice.items?.length || 0}
+                <tbody className="divide-y divide-gray-50">
+                  {filteredCN.map((cn) => (
+                    <React.Fragment key={cn._id}>
+                      <tr className="group hover:bg-teal-50/30 transition-all cursor-pointer">
+                        <td className="px-6 py-5 font-black text-teal-600 text-sm whitespace-nowrap">{cn.creditNoteId}</td>
+                        <td className="px-6 py-5 font-bold text-gray-600 text-xs whitespace-nowrap">{formatDate(cn.createdAt)}</td>
+                        <td className="px-6 py-5 font-black text-gray-800 text-xs">{cn.customer?.name}</td>
+                        <td className="px-6 py-5 text-center">
+                            <span className="bg-gray-100 px-2 py-1 rounded-lg text-[10px] font-black text-gray-500">{cn.items?.length || 0} ITEMS</span>
+                        </td>
+                        <td className="px-6 py-5 text-right font-black text-gray-900 text-sm">₹{(cn.grandTotal || 0).toLocaleString()}</td>
+                        <td className="px-6 py-5">
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${cn.originalInvoiceId === 'STANDALONE' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600 uppercase'}`}>
+                                {cn.originalInvoiceId}
                             </span>
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold">
-                            ₹{(invoice.grandTotal || 0).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold text-green-600">
-                            ₹{getTotalReturnedAmount(invoice).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(
-                                invoice
-                              )}`}
+                        </td>
+                        <td className="px-10 py-5 text-center">
+                            <button 
+                              onClick={() => toggleExpand(cn._id)}
+                              className="p-2 hover:bg-white rounded-xl text-teal-600 transition-all shadow-sm group-hover:shadow-md"
                             >
-                              {getReturnStatus(invoice)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center text-gray-600">
-                            {formatDate(invoice.date || invoice.createdAt)}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <button
-                              onClick={() => {
-                                setSelectedInvoice(invoice);
-                                setShowCreditNoteModal(true);
-                              }}
-                              className="inline-flex items-center gap-2 bg-teal-600 text-white px-3 py-1 rounded-lg font-bold text-xs hover:bg-teal-700 transition"
-                              title="Create Credit Note"
-                            >
-                              <FaFileAlt /> Return
+                                {expandedCN[cn._id] ? <FaChevronUp /> : <FaChevronDown />}
                             </button>
+                        </td>
+                      </tr>
+                      {expandedCN[cn._id] && (
+                        <tr className="bg-gray-50/50">
+                          <td colSpan="7" className="px-6 py-4">
+                            <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
+                                <h4 className="text-[10px] font-black text-teal-600 uppercase tracking-widest">Return Item Details</h4>
+                                <div className="space-y-2">
+                                    {cn.items?.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between items-center text-xs border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-[10px] font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">x{item.qty}</span>
+                                                <span className="font-bold text-gray-700">{item.name}</span>
+                                            </div>
+                                            <span className="font-black text-gray-900">₹{(item.total || 0).toLocaleString()}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest truncate max-w-[70%]">Reason: {cn.reasonForReturn || 'Product Return'}</span>
+                                    <span className="text-xs font-black text-teal-700">Total: ₹{(cn.grandTotal || 0).toLocaleString()}</span>
+                                </div>
+                            </div>
                           </td>
                         </tr>
-
-                        {/* PRODUCT DETAILS ROWS */}
-                        {isExpanded && invoice.items && invoice.items.length > 0 && (
-                          <tr>
-                            <td colSpan="10" className="px-4 py-4 bg-gray-50">
-                              <div className="ml-6">
-                                <h4 className="text-teal-600 font-bold text-sm mb-3 uppercase">
-                                  📦 Sales Invoice Items
-                                </h4>
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-xs">
-                                    <thead>
-                                      <tr className="bg-white">
-                                        <th className="px-3 py-2 text-left font-bold text-gray-700">
-                                          Product Name
-                                        </th>
-                                        <th className="px-3 py-2 text-center font-bold text-gray-700">
-                                          Qty
-                                        </th>
-                                        <th className="px-3 py-2 text-center font-bold text-gray-700">
-                                          Package
-                                        </th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">
-                                          Unit Price
-                                        </th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">
-                                          GST
-                                        </th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">
-                                          HSN Code
-                                        </th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">
-                                          Item Total
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y">
-                                      {invoice.items.map((item, idx) => (
-                                        <tr
-                                          key={idx}
-                                          className="bg-white hover:bg-gray-50"
-                                        >
-                                          <td className="px-3 py-2 font-semibold text-gray-800">
-                                            {item.name}
-                                          </td>
-                                          <td className="px-3 py-2 text-center font-bold">
-                                            {item.qty}
-                                          </td>
-                                          <td className="px-3 py-2 text-center text-gray-600">
-                                            {item.perQty || "-"} {item.units || ""}
-                                          </td>
-                                          <td className="px-3 py-2 text-right">
-                                            ₹{item.sellingPrice}
-                                          </td>
-                                          <td className="px-3 py-2 text-right">
-                                            {item.igst
-                                              ? `IGST ${item.gst}%`
-                                              : `CGST ${item.cgst}% + SGST ${item.sgst}%`}
-                                          </td>
-                                          <td className="px-3 py-2 text-right text-gray-600">
-                                            {item.hsn || "-"}
-                                          </td>
-                                          <td className="px-3 py-2 text-right font-bold text-teal-600">
-                                            ₹{item.total}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })}
+                      )}
+                    </React.Fragment>
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
         </div>
-
-        {/* CREDIT NOTE SUMMARY */}
-        {salesInvoices.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-            <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-blue-500">
-              <p className="text-gray-600 text-sm uppercase font-bold mb-2">
-                Total Invoices
-              </p>
-              <p className="text-3xl font-black text-gray-800">
-                {salesInvoices.length}
-              </p>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-green-500">
-              <p className="text-gray-600 text-sm uppercase font-bold mb-2">
-                Total Returned
-              </p>
-              <p className="text-3xl font-black text-green-600">
-                ₹
-                {salesInvoices
-                  .reduce((sum, invoice) => sum + getTotalReturnedAmount(invoice), 0)
-                  .toLocaleString()}
-              </p>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-orange-500">
-              <p className="text-gray-600 text-sm uppercase font-bold mb-2">
-                Total Credit Notes
-              </p>
-              <p className="text-3xl font-black text-orange-600">
-                {Object.values(creditNoteData).reduce((sum, data) => sum + (data.creditNotes?.length || 0), 0)}
-              </p>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* CREDIT NOTE MODAL */}
-      <CreditNoteModal
-        invoice={selectedInvoice}
-        isOpen={showCreditNoteModal}
-        onClose={() => setShowCreditNoteModal(false)}
-        onCreditNoteSuccess={handleCreditNoteSuccess}
+      {/* Standalone/Unified Creation Modal */}
+      <CustomerCreditNoteModal 
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onCreditSuccess={fetchCreditNotes}
+        // No customer passed = allow selection in modal
       />
     </div>
   );
 }
+
+import React from "react";

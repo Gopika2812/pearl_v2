@@ -15,14 +15,36 @@ import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
 
-// GET all credit notes
+// GET all credit notes (strictly filtered by branchId)
 router.get("/", async (req, res) => {
   try {
-    const creditNotes = await CreditNote.find()
+    const { branchId } = req.query;
+    if (!branchId || branchId === "undefined") {
+      return res.status(400).json({ success: false, message: "Valid branchId is required" });
+    }
+
+    // ⚡ LIVE REPAIR: Find any notes for this branch's customers that are missing branchId
+    const legacyNotes = await CreditNote.find({ 
+      branchId: { $exists: false },
+      "customer.customerId": { $exists: true }
+    });
+    
+    if (legacyNotes.length > 0) {
+      console.log(`🔧 Migrating ${legacyNotes.length} legacy credit notes...`);
+      for (const cn of legacyNotes) {
+        const customer = await Customer.findById(cn.customer.customerId);
+        if (customer && customer.branchId) {
+          await CreditNote.findByIdAndUpdate(cn._id, { branchId: customer.branchId });
+        }
+      }
+    }
+
+    const creditNotes = await CreditNote.find({ branchId })
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: creditNotes });
   } catch (error) {
+    console.error("Credit Note Fetch Error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch credit notes" });
   }
 });
@@ -46,25 +68,36 @@ router.post("/", async (req, res) => {
   try {
     const {
       originalSalesOrderId,
+      customerId, // Use this for standalone returns
+      branchId,
       items,
       reasonForReturn,
+      userId,
+      username
     } = req.body;
 
-    // Get original sales order
-    const originalOrder = await SalesOrder.findById(originalSalesOrderId);
-    if (!originalOrder) {
-      return res.status(404).json({ success: false, message: "Sales order not found" });
+    let originalOrder = null;
+    let customer = null;
+    let finalBranchId = branchId;
+
+    if (originalSalesOrderId) {
+      // Get original sales order
+      originalOrder = await SalesOrder.findById(originalSalesOrderId).populate("customer.customerId");
+      if (!originalOrder) {
+        return res.status(404).json({ success: false, message: "Sales order not found" });
+      }
+      customer = await Customer.findById(originalOrder.customer.customerId);
+      finalBranchId = originalOrder.branchId;
+    } else {
+      // Standalone return
+      if (!customerId) {
+        return res.status(400).json({ success: false, message: "CustomerId is required for standalone returns" });
+      }
+      customer = await Customer.findById(customerId);
     }
 
-    // Validate items exist in original order
-    for (const returnItem of items) {
-      const originalItem = originalOrder.items.find(i => i._id.toString() === returnItem._id);
-      if (!originalItem) {
-        return res.status(400).json({ success: false, message: "Item not found in original order" });
-      }
-      if (returnItem.qty > originalItem.qty) {
-        return res.status(400).json({ success: false, message: "Return quantity exceeds original quantity" });
-      }
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
     }
 
     // Calculate returned amounts
@@ -74,11 +107,15 @@ router.post("/", async (req, res) => {
     let grandTotal = 0;
 
     const returnedItems = items.map(item => {
-      const originalItem = originalOrder.items.find(i => i._id.toString() === item._id);
-      const itemSubtotal = originalItem.sellingPrice * item.qty;
-      const itemDiscount = (itemSubtotal * originalItem.discountPercent) / 100;
+      const sPrice = Number(item.sellingPrice || 0);
+      const qty = Number(item.qty || 0);
+      const discountP = Number(item.discountPercent || 0);
+      const gstRate = Number(item.gst || 0);
+
+      const itemSubtotal = sPrice * qty;
+      const itemDiscount = (itemSubtotal * discountP) / 100;
       const itemTaxable = itemSubtotal - itemDiscount;
-      const itemTax = (itemTaxable * originalItem.gst) / 100;
+      const itemTax = (itemTaxable * gstRate) / 100;
       const itemTotal = itemTaxable + itemTax;
 
       subtotal += itemSubtotal;
@@ -87,46 +124,47 @@ router.post("/", async (req, res) => {
       grandTotal += itemTotal;
 
       return {
-        productId: originalItem.productId,
-        name: originalItem.name,
-        qty: item.qty,
-        sellingPrice: originalItem.sellingPrice,
-        discountType: originalItem.discountType,
-        discountPercent: originalItem.discountPercent,
+        productId: item.productId,
+        name: item.name,
+        qty: qty,
+        sellingPrice: sPrice,
+        discountType: item.discountType || "PERCENT",
+        discountPercent: discountP,
         discountAmount: itemDiscount,
-        gst: originalItem.gst,
-        cgst: originalItem.cgst,
-        sgst: originalItem.sgst,
-        igst: originalItem.igst,
+        gst: gstRate,
+        cgst: item.igst ? 0 : gstRate / 2,
+        sgst: item.igst ? 0 : gstRate / 2,
+        igst: item.igst ? gstRate : 0,
         total: itemTotal,
       };
     });
 
-    // Generate Credit Note ID
+    // Generate Credit Note ID (Branch Specific)
     const financialYear = getFinancialYear();
-    const creditNoteDoc = await CreditNote.findOne({ financialYear }).sort({ creditNoteId: -1 });
-    const nextNumber = creditNoteDoc ? parseInt(creditNoteDoc.creditNoteId.split("/")[1]) + 1 : 1;
+    const lastCN = await CreditNote.findOne({ branchId: finalBranchId, financialYear }).sort({ createdAt: -1 });
+    const nextNumber = lastCN ? (parseInt(lastCN.creditNoteId.split("/")[1]) || 0) + 1 : 1;
     const creditNoteId = `CN/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
 
     // Create credit note
     const creditNote = new CreditNote({
       creditNoteId,
-      originalSalesOrderId,
-      originalInvoiceId: originalOrder.invoiceId,
+      originalSalesOrderId: originalSalesOrderId || null,
+      originalInvoiceId: originalOrder?.invoiceId || "STANDALONE",
+      branchId: finalBranchId,
       customer: {
-        customerId: originalOrder.customer.customerId,
-        name: originalOrder.customer.name,
+        customerId: customer._id,
+        name: customer.name,
       },
       items: returnedItems,
       subtotal: Math.round(subtotal),
       totalDiscount: Math.round(totalDiscount),
       totalTax: Math.round(totalTax),
       grandTotal: Math.round(grandTotal),
-      salesOwner: originalOrder.salesOwner,
-      salesMan: originalOrder.salesMan,
-      deliveryMan: originalOrder.deliveryMan,
+      salesOwner: originalOrder?.salesOwner || "Standalone",
+      salesMan: originalOrder?.salesMan || null,
+      deliveryMan: originalOrder?.deliveryMan || null,
       financialYear,
-      reasonForReturn,
+      reasonForReturn: reasonForReturn || "Product Return",
     });
 
     await creditNote.save();
@@ -136,151 +174,85 @@ router.post("/", async (req, res) => {
       await Product.findByIdAndUpdate(item.productId, {
         $inc: { totalQty: item.qty }
       });
-      console.log(`✅ Product inventory restored: +${item.qty} units`);
     }
 
     // 2️⃣ INCREASE CUSTOMER CREDIT (they get money back) - Netted
-    const customerId = originalOrder.customer.customerId;
-    const customer = await Customer.findById(customerId);
-    if (customer) {
-      let amountToReturn = Math.round(grandTotal);
-      let currentDebit = customer.debit || 0;
-      let currentCredit = customer.credit || 0;
+    let amountToReturn = Math.round(grandTotal);
+    let currentDebit = customer.debit || 0;
+    let currentCredit = customer.credit || 0;
 
-      // Reduce existing debt first
-      if (currentDebit >= amountToReturn) {
-        currentDebit -= amountToReturn;
-        amountToReturn = 0;
-      } else {
-        amountToReturn -= currentDebit;
-        currentDebit = 0;
-        currentCredit += amountToReturn;
-      }
-
-      const reducedBalance = Math.round((customer.closingBalance || 0) - Math.round(grandTotal));
-      await Customer.findByIdAndUpdate(customerId, {
-        debit: currentDebit,
-        credit: currentCredit,
-        closingBalance: reducedBalance,
-        totalBalance: reducedBalance,
-      });
-      creditNote.customer.closingBalance = reducedBalance;
-      console.log(`✅ Customer credit adjusted (Netted): debit: ₹${currentDebit}, credit: ₹${currentCredit}`);
+    if (currentDebit >= amountToReturn) {
+      currentDebit -= amountToReturn;
+      amountToReturn = 0;
+    } else {
+      amountToReturn -= currentDebit;
+      currentDebit = 0;
+      currentCredit += amountToReturn;
     }
+
+    const reducedBalance = Math.round((customer.closingBalance || 0) - Math.round(grandTotal));
+    await Customer.findByIdAndUpdate(customer._id, {
+      debit: currentDebit,
+      credit: currentCredit,
+      closingBalance: reducedBalance,
+      totalBalance: reducedBalance,
+    });
 
     // CREATE AUDIT LOG
     await createAuditLog({
-      userId: req.body.userId || "System",
-      username: req.body.username || "System",
-      branchId: originalOrder.branchId,
+      userId: userId || "System",
+      username: username || "System",
+      branchId: finalBranchId,
       action: "CREDIT_NOTE",
-      description: `Created credit note ${creditNoteId} for ${originalOrder.customer.name} - ₹${grandTotal}`,
+      description: `Created credit note ${creditNoteId} for ${customer.name} - ₹${grandTotal}`,
       targetId: creditNote._id,
       targetModel: "CreditNote",
     });
 
-    // 3️⃣ REDUCE COMMISSIONS (proportional to returned amount)
-    console.log(`🔍 Looking for commission for sales order: ${originalSalesOrderId}`);
-
-    // Convert to ObjectId for proper matching
-    const salesOrderObjectId = new mongoose.Types.ObjectId(originalSalesOrderId);
-    let commission = await Commission.findOne({ salesOrderId: salesOrderObjectId });
-    console.log(`📋 Commission found:`, commission ? "YES" : "NO");
-
-    // Fallback: try to find commission by invoice ID
-    if (!commission && originalOrder.invoiceId) {
-      console.log(`🔄 Fallback search by invoiceId: ${originalOrder.invoiceId}`);
-      commission = await Commission.findOne({ invoiceId: originalOrder.invoiceId });
-      console.log(`📋 Commission found (fallback):`, commission ? "YES" : "NO");
-    }
-
-    if (commission) {
-      console.log(`💾 Commission details:`, {
-        salesOwnerId: commission.salesOwnerId,
-        salesOwnerAmount: commission.salesOwnerCommissionAmount,
-        salesManId: commission.salesManId,
-        salesManAmount: commission.salesManCommissionAmount,
-        deliveryManId: commission.deliveryManId,
-        deliveryManAmount: commission.deliveryManCommissionAmount,
-      });
-
-      const proportionReturned = grandTotal / (originalOrder.grandTotalWithMargin || originalOrder.grandTotal);
-      console.log(`📊 Proportion returned: ${proportionReturned.toFixed(2)} (${grandTotal} / ${originalOrder.grandTotalWithMargin})`);
-
-      // Sales Owner Commission
-      if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
-        const commissionReduction = commission.salesOwnerCommissionAmount * proportionReturned;
-        console.log(`🔄 Reducing Sales Owner [${commission.salesOwnerId}] by ₹${commissionReduction.toFixed(2)}`);
-        const updateResult = await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
-          $inc: { commissionAmount: -commissionReduction }
-        });
-        if (updateResult) {
-          console.log(`✅ Sales Owner commission reduced: -₹${commissionReduction.toFixed(2)}`);
-        } else {
-          console.warn(`⚠️ Sales Owner not found with ID: ${commission.salesOwnerId}`);
+    // 3️⃣ REDUCE COMMISSIONS (only for invoice-linked returns)
+    if (originalSalesOrderId && originalOrder) {
+      try {
+        const salesOrderObjectId = new mongoose.Types.ObjectId(originalSalesOrderId);
+        let commission = await Commission.findOne({ salesOrderId: salesOrderObjectId });
+        if (!commission && originalOrder.invoiceId) {
+          commission = await Commission.findOne({ invoiceId: originalOrder.invoiceId });
         }
-      } else {
-        console.warn(`⚠️ Sales Owner ID or commission amount missing`, {
-          salesOwnerId: commission.salesOwnerId,
-          amount: commission.salesOwnerCommissionAmount
-        });
-      }
 
-      // Sales Man Commission
-      if (commission.salesManId && commission.salesManCommissionAmount > 0) {
-        const commissionReduction = commission.salesManCommissionAmount * proportionReturned;
-        console.log(`🔄 Reducing Sales Man [${commission.salesManId}] by ₹${commissionReduction.toFixed(2)}`);
-        const updateResult = await SalesMan.findByIdAndUpdate(commission.salesManId, {
-          $inc: { commissionAmount: -commissionReduction }
-        });
-        if (updateResult) {
-          console.log(`✅ Sales Man commission reduced: -₹${commissionReduction.toFixed(2)}`);
-        } else {
-          console.warn(`⚠️ Sales Man not found with ID: ${commission.salesManId}`);
+        if (commission) {
+          const proportionReturned = grandTotal / (originalOrder.grandTotalWithMargin || originalOrder.grandTotal || 1);
+          
+          if (commission.salesOwnerId && commission.salesOwnerCommissionAmount > 0) {
+            await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, {
+              $inc: { commissionAmount: -(commission.salesOwnerCommissionAmount * proportionReturned) }
+            });
+          }
+          if (commission.salesManId && commission.salesManCommissionAmount > 0) {
+            await SalesMan.findByIdAndUpdate(commission.salesManId, {
+              $inc: { commissionAmount: -(commission.salesManCommissionAmount * proportionReturned) }
+            });
+          }
+          if (commission.deliveryManId && commission.deliveryManCommissionAmount > 0) {
+            await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, {
+              $inc: { commissionAmount: -(commission.deliveryManCommissionAmount * proportionReturned) }
+            });
+          }
         }
-      } else {
-        console.warn(`⚠️ Sales Man ID or commission amount missing`, {
-          salesManId: commission.salesManId,
-          amount: commission.salesManCommissionAmount
-        });
+      } catch (commError) {
+        console.warn("⚠️ Commission update failed:", commError.message);
       }
-
-      // Delivery Man Commission
-      if (commission.deliveryManId && commission.deliveryManCommissionAmount > 0) {
-        const commissionReduction = commission.deliveryManCommissionAmount * proportionReturned;
-        console.log(`🔄 Reducing Delivery Man [${commission.deliveryManId}] by ₹${commissionReduction.toFixed(2)}`);
-        const updateResult = await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, {
-          $inc: { commissionAmount: -commissionReduction }
-        });
-        if (updateResult) {
-          console.log(`✅ Delivery Man commission reduced: -₹${commissionReduction.toFixed(2)}`);
-        } else {
-          console.warn(`⚠️ Delivery Man not found with ID: ${commission.deliveryManId}`);
-        }
-      } else {
-        console.warn(`⚠️ Delivery Man ID or commission amount missing`, {
-          deliveryManId: commission.deliveryManId,
-          amount: commission.deliveryManCommissionAmount
-        });
-      }
-    } else {
-      console.warn(`⚠️ No commission record found for sales order: ${originalSalesOrderId}. Invoice: ${originalOrder.invoiceId}`);
     }
 
     // ✅ POST JOURNAL ENTRY to GL
     try {
-      const journalEntry = await GLService.postCreditNoteJE(creditNote);
-      console.log(`✅ GL Entry posted: ${journalEntry.jeId}`);
+      await GLService.postCreditNoteJE(creditNote);
     } catch (glError) {
       console.warn("⚠️ GL posting failed (non-blocking):", glError.message);
-      // Don't fail the CN creation if GL posting fails
     }
 
     res.status(201).json({
       success: true,
       message: "Credit note created successfully",
       creditNoteId,
-      commissionUpdated: !!commission,
       data: creditNote,
     });
   } catch (error) {

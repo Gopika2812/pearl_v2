@@ -53,6 +53,7 @@ export const PAGE_CONFIG = [
         { id: "create-po", name: "Create PO", path: "/branch/po", icon: "add" },
         { id: "purchase-list", name: "Purchase Order List", path: "/branch/purchase-orders", icon: "list", permissionFields: ["grandTotal", "totalPaid", "status"] },
         { id: "purchase-invoice-list", name: "Purchase Invoice List", path: "/branch/purchase-invoices", icon: "invoice" },
+        { id: "debit-note", name: "Debit Note", path: "/branch/debit-note", icon: "return" },
       ]},
       { id: "restocking", name: "Restocking (Recycling)", path: "/branch/recycling", icon: "sync" },
       { id: "suppliers", name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: "handshake", permissionFields: ["credit", "debit", "gstin"] },
@@ -66,6 +67,7 @@ export const PAGE_CONFIG = [
         { id: "sales-order-list", name: "Sales Order List", path: "/branch/sales-orders", icon: "list" },
         { id: "sales-invoice-list", name: "Sales Invoice List", path: "/branch/sales-invoices", icon: "invoice" },
         { id: "claims", name: "Claims", path: "/branch/claims", icon: "claims" },
+        { id: "credit-note", name: "Credit Note", path: "/branch/credit-note", icon: "return" },
       ]},
       { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["margin", "debit", "credit", "gstin"] },
     ]

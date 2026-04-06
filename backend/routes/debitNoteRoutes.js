@@ -69,13 +69,31 @@ router.get("/next-id", async (req, res) => {
   }
 });
 
-// GET ALL DEBIT NOTES (optionally filtered by branchId)
+// GET ALL DEBIT NOTES (strictly filtered by branchId)
 router.get("/", async (req, res) => {
   try {
     const { branchId } = req.query;
-    const filter = branchId ? { branchId } : {};
+    if (!branchId || branchId === "undefined") {
+      return res.status(400).json({ success: false, message: "Valid branchId is required" });
+    }
 
-    const debitNotes = await DebitNote.find(filter)
+    // ⚡ LIVE REPAIR: Find any notes for this branch's vendors that are missing branchId
+    const legacyNotes = await DebitNote.find({ 
+      branchId: { $exists: false },
+      "vendor.vendorId": { $exists: true }
+    });
+    
+    if (legacyNotes.length > 0) {
+      console.log(`🔧 Migrating ${legacyNotes.length} legacy debit notes...`);
+      for (const dn of legacyNotes) {
+        const vendor = await Vendor.findById(dn.vendor.vendorId);
+        if (vendor && vendor.branchId) {
+          await DebitNote.findByIdAndUpdate(dn._id, { branchId: vendor.branchId });
+        }
+      }
+    }
+
+    const debitNotes = await DebitNote.find({ branchId })
       .populate("vendor.vendorId", "name")
       .populate("originalPurchaseOrderId", "invoiceId")
       .sort({ createdAt: -1 });
@@ -85,7 +103,7 @@ router.get("/", async (req, res) => {
       data: debitNotes,
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: "Failed to fetch debit notes", error: err.message });
   }
 });
 
@@ -171,7 +189,7 @@ router.post("/", async (req, res) => {
 
     // Use the incremented counter - 1 (since we just incremented)
     const counter = voucher.counter;
-    const debitNoteId = `debitnote${String(counter).padStart(3, "0")}/${currentFY}`;
+    const debitNoteId = `DN/${String(counter).padStart(3, "0")}/${currentFY}`;
 
     // Calculate totals - support both general (manual) and invoice-based
     let subtotal = 0;

@@ -1,404 +1,189 @@
 import { useEffect, useState } from "react";
-import { FaChevronDown, FaChevronUp, FaFileAlt, FaSyncAlt } from "react-icons/fa";
+import { FaPlus, FaUndoAlt, FaSearch, FaFileInvoiceDollar, FaChevronDown, FaChevronUp, FaFileContract } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
-import DebitNoteModal from "../../components/inventory/DebitNoteModal";
+import SupplierDebitNoteModal from "../../components/inventory/SupplierDebitNoteModal";
 import { useBranch } from "../../context/BranchContext";
+import { API_BASE, fetchWithAuth } from "../../api";
 
 export default function BranchDebitNote() {
-  const { currentBranch, user } = useBranch();
-  const [purchaseOrders, setPurchaseOrders] = useState([]);
-  const [debitNoteData, setDebitNoteData] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [showDebitNoteModal, setShowDebitNoteModal] = useState(false);
-  const [selectedPO, setSelectedPO] = useState(null);
-  const [expandedPOs, setExpandedPOs] = useState({});
+  const { currentBranch } = useBranch();
+  const [debitNotes, setDebitNotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [expandedDN, setExpandedDN] = useState({});
 
-  // Fetch all purchase orders
-  const fetchPurchaseOrders = async () => {
+  useEffect(() => {
+    if (currentBranch?._id) fetchDebitNotes();
+  }, [currentBranch]);
+
+  const fetchDebitNotes = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/purchase-orders`);
-      const data = await response.json();
-
-      if (data.success || Array.isArray(data.data || data)) {
-        const poData = data.data || data;
-        // Sort by latest first
-        const validPOs = poData.filter((po) => po.status !== "CANCELLED" && po.status !== "DRAFT");
-        let sorted = validPOs.sort((a, b) =>
-          new Date(b.createdAt) - new Date(a.createdAt)
-        );
-
-        // Apply granular voucher authorization
-        if (user?.allowedVoucherTypes && user.allowedVoucherTypes.length > 0) {
-          sorted = sorted.filter(po => user.allowedVoucherTypes.includes(po.voucherTypeId || po.voucherType?._id || po.voucherType));
-        }
-
-        setPurchaseOrders(sorted);
-
-        // Fetch debit notes for each PO
-        for (const po of sorted) {
-          fetchDebitNotesForPO(po._id);
-        }
+      const response = await fetchWithAuth(`${API_BASE}/debit-notes?branchId=${currentBranch._id}`);
+      const result = await response.json();
+      if (result.success) {
+        setDebitNotes(result.data || []);
       }
-    } catch (err) {
-      console.error("Error fetching POs:", err);
-      toast.error("Failed to load purchase orders");
+    } catch (error) {
+      console.error("Error fetching debit notes:", error);
+      toast.error("Failed to load debit notes");
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch debit notes for specific PO
-  const fetchDebitNotesForPO = async (poId) => {
-    try {
-      const response = await fetch(`${API_BASE}/debit-notes`);
-      const data = await response.json();
-      const allDebitNotes = data.data || [];
-
-      // Filter debit notes for this PO
-      const poDebitNotes = allDebitNotes.filter(
-        (dn) => dn.originalPurchaseOrderId === poId || dn.originalPurchaseOrderId?._id === poId
-      );
-
-      const totalReturned = poDebitNotes.reduce((sum, dn) => sum + (dn.grandTotal || 0), 0);
-
-      setDebitNoteData((prev) => ({
-        ...prev,
-        [poId]: {
-          debitNotes: poDebitNotes,
-          totalReturned,
-        },
-      }));
-    } catch (err) {
-      console.error(`Error fetching debit notes for PO ${poId}:`, err);
-    }
+  const toggleExpand = (id) => {
+    setExpandedDN(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  useEffect(() => {
-    fetchPurchaseOrders();
-  }, []);
+  const filteredDN = debitNotes.filter(dn => 
+    dn.debitNoteId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    dn.vendor?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  const handleDebitNoteSuccess = () => {
-    setShowDebitNoteModal(false);
-    setSelectedPO(null);
-    fetchPurchaseOrders();
-  };
-
-  const toggleExpandPO = (poId) => {
-    setExpandedPOs((prev) => ({
-      ...prev,
-      [poId]: !prev[poId],
-    }));
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleDateString("en-IN", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
-
-  const getTotalReturnedQty = (po) => {
-    const debitNotes = debitNoteData[po._id]?.debitNotes || [];
-    let totalQty = 0;
-    debitNotes.forEach((dn) => {
-      (dn.items || []).forEach((item) => {
-        totalQty += item.returnedQty || 0;
-      });
-    });
-    return totalQty;
-  };
-
-  const getTotalReturnedAmount = (po) => {
-    return debitNoteData[po._id]?.totalReturned || 0;
-  };
-
-  const getReturnStatus = (po) => {
-    const debitNotes = debitNoteData[po._id]?.debitNotes || [];
-    if (debitNotes.length === 0) return "No Returns";
-    return `${debitNotes.length} Return${debitNotes.length > 1 ? "s" : ""}`;
-  };
-
-  const getStatusColor = (po) => {
-    const returned = getTotalReturnedAmount(po);
-    if (returned === 0) return "bg-blue-100 text-blue-700";
-    if (returned < po.grandTotal / 2) return "bg-orange-100 text-orange-700";
-    return "bg-red-100 text-red-700";
-  };
+  const formatDate = (date) => new Date(date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4">
-        {/* HEADER */}
-        <div className="bg-gradient-to-r from-red-600 to-red-700 text-white rounded-2xl shadow-lg p-8 mb-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <FaFileAlt className="text-5xl opacity-80" />
-              <h1 className="text-4xl font-bold">Debit Notes 📄</h1>
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        
+        {/* HEADER SECTION */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <div className="p-4 bg-rose-600 rounded-2xl shadow-lg shadow-rose-100 text-white italic">
+              <FaFileContract size={32} />
+            </div>
+            <div>
+              <h1 className="text-3xl font-black text-gray-900 tracking-tight">DEBIT NOTES</h1>
+              <p className="text-gray-500 font-bold text-sm uppercase tracking-widest">Purchase Returns & Vendor Debits</p>
             </div>
           </div>
+          
+          <button 
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-3 bg-rose-600 hover:bg-rose-700 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl shadow-rose-100 active:scale-95"
+          >
+            <FaPlus /> Create Debit Note
+          </button>
         </div>
 
-        {/* LOADING OR RECORDS */}
-        <div className="bg-white rounded-3xl shadow-xl border border-red-100/20 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-red-600 font-black uppercase text-xs tracking-widest border-b pb-2 border-red-600/30">
-              📋 Purchase Orders Management
-            </h2>
-            <button
-              onClick={fetchPurchaseOrders}
-              disabled={loading}
-              className="text-red-600 hover:text-red-700 transition disabled:opacity-50"
-              title="Refresh"
-            >
-              <FaSyncAlt
-                className={`inline-block text-xl ${loading ? "animate-spin" : ""}`}
-              />
-            </button>
-          </div>
-
-          {loading && purchaseOrders.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <p className="text-lg">Loading purchase orders...</p>
+        {/* SUMMARY CARDS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Notes</p>
+                <p className="text-3xl font-black text-gray-900">{filteredDN.length}</p>
             </div>
-          ) : purchaseOrders.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <p className="text-lg">No purchase orders found</p>
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Debit Value</p>
+                <p className="text-3xl font-black text-rose-600">₹{filteredDN.reduce((sum, dn) => sum + (dn.grandTotal || 0), 0).toLocaleString()}</p>
+            </div>
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4 relative overflow-hidden">
+                <FaSearch className="absolute -right-4 -bottom-4 text-8xl text-gray-50 -rotate-12" />
+                <div className="z-10 w-full">
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Search Vendor / ID</p>
+                    <input 
+                      type="text"
+                      placeholder="DN ID or Vendor..."
+                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-rose-500 outline-none transition-all"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </div>
+            </div>
+        </div>
+
+        {/* RECORDS TABLE */}
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+          {loading ? (
+            <div className="p-20 text-center space-y-4">
+              <div className="w-12 h-12 border-4 border-rose-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">Fetching records...</p>
+            </div>
+          ) : filteredDN.length === 0 ? (
+            <div className="p-20 text-center">
+              <FaFileInvoiceDollar size={64} className="mx-auto text-gray-100 mb-4" />
+              <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">No debit notes found</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b-2 border-red-600/20">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="px-2 py-3 text-center font-bold text-red-600"></th>
-                    <th className="px-4 py-3 text-left font-bold text-red-600">
-                      Invoice ID
-                    </th>
-                    <th className="px-4 py-3 text-left font-bold text-red-600">
-                      Vendor
-                    </th>
-                    <th className="px-4 py-3 text-left font-bold text-red-600">
-                      Warehouse
-                    </th>
-                    <th className="px-4 py-3 text-right font-bold text-red-600">
-                      Items
-                    </th>
-                    <th className="px-4 py-3 text-right font-bold text-red-600">
-                      Total Amount
-                    </th>
-                    <th className="px-4 py-3 text-right font-bold text-red-600">
-                      Returned Amount
-                    </th>
-                    <th className="px-4 py-3 text-center font-bold text-red-600">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-center font-bold text-red-600">
-                      PO Date
-                    </th>
-                    <th className="px-4 py-3 text-center font-bold text-red-600">
-                      Actions
-                    </th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">DN ID</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Vendor</th>
+                    <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Items</th>
+                    <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Reference</th>
+                    <th className="px-10 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Details</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
-                  {purchaseOrders.map((po) => {
-                    const returned = getTotalReturnedAmount(po);
-                    const isExpanded = expandedPOs[po._id] || false;
-
-                    return (
-                      <>
-                        {/* MAIN PO ROW */}
-                        <tr key={po._id} className="hover:bg-gray-50 transition">
-                          <td className="px-2 py-3 text-center">
-                            <button
-                              onClick={() => toggleExpandPO(po._id)}
-                              className="text-red-600 hover:text-red-700 transition"
-                            >
-                              {isExpanded ? (
-                                <FaChevronUp />
-                              ) : (
-                                <FaChevronDown />
-                              )}
-                            </button>
-                          </td>
-                          <td className="px-4 py-3 font-bold text-red-600">
-                            {po.invoiceId}
-                          </td>
-                          <td className="px-4 py-3">
-                            {typeof po.vendor === "object"
-                              ? po.vendor?.name
-                              : po.vendor}
-                          </td>
-                          <td className="px-4 py-3">
-                            {typeof po.warehouse === "object"
-                              ? po.warehouse?.name
-                              : po.warehouse}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="bg-red-600/10 text-red-600 px-3 py-1 rounded-full text-xs font-bold">
-                              {po.items?.length || 0}
+                <tbody className="divide-y divide-gray-50">
+                  {filteredDN.map((dn) => (
+                    <React.Fragment key={dn._id}>
+                      <tr className="group hover:bg-rose-50/30 transition-all cursor-pointer">
+                        <td className="px-6 py-5 font-black text-rose-600 text-sm whitespace-nowrap">{dn.debitNoteId}</td>
+                        <td className="px-6 py-5 font-bold text-gray-600 text-xs whitespace-nowrap">{formatDate(dn.createdAt)}</td>
+                        <td className="px-6 py-5 font-black text-gray-800 text-xs">{dn.vendor?.name}</td>
+                        <td className="px-6 py-5 text-center">
+                            <span className="bg-gray-100 px-2 py-1 rounded-lg text-[10px] font-black text-gray-500">{dn.items?.length || 0} ITEMS</span>
+                        </td>
+                        <td className="px-6 py-5 text-right font-black text-gray-900 text-sm">₹{(dn.grandTotal || 0).toLocaleString()}</td>
+                        <td className="px-6 py-5">
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${dn.originalPurchaseOrderId ? 'bg-blue-100 text-blue-600 uppercase' : 'bg-orange-100 text-orange-600'}`}>
+                                {dn.originalPurchaseOrderId ? 'PO LINKED' : 'STANDALONE'}
                             </span>
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold">
-                            ₹{(po.grandTotal || 0).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold text-red-600">
-                            ₹{returned.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(
-                                po
-                              )}`}
+                        </td>
+                        <td className="px-10 py-5 text-center">
+                            <button 
+                              onClick={() => toggleExpand(dn._id)}
+                              className="p-2 hover:bg-white rounded-xl text-rose-600 transition-all shadow-sm group-hover:shadow-md"
                             >
-                              {getReturnStatus(po)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center text-gray-600">
-                            {formatDate(po.date || po.createdAt)}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <button
-                              onClick={() => {
-                                setSelectedPO(po);
-                                setShowDebitNoteModal(true);
-                              }}
-                              className="inline-flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-lg font-bold text-xs hover:bg-red-700 transition"
-                              title="Create Debit Note"
-                            >
-                              <FaFileAlt /> Return
+                                {expandedDN[dn._id] ? <FaChevronUp /> : <FaChevronDown />}
                             </button>
+                        </td>
+                      </tr>
+                      {expandedDN[dn._id] && (
+                        <tr className="bg-gray-50/50">
+                          <td colSpan="7" className="px-6 py-4">
+                            <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
+                                <h4 className="text-[10px] font-black text-rose-600 uppercase tracking-widest">Purchase Return Details</h4>
+                                <div className="space-y-2">
+                                    {dn.items?.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between items-center text-xs border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-[10px] font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">x{item.returnedQty || item.qty}</span>
+                                                <span className="font-bold text-gray-700">{item.name}</span>
+                                            </div>
+                                            <span className="font-black text-gray-900">₹{(item.total || 0).toLocaleString()}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest truncate max-w-[70%] text-italic">Reason: {dn.reason || 'Product Return'}</span>
+                                    <span className="text-xs font-black text-rose-700">Total: ₹{(dn.grandTotal || 0).toLocaleString()}</span>
+                                </div>
+                            </div>
                           </td>
                         </tr>
-
-                        {/* PRODUCT DETAILS ROWS */}
-                        {isExpanded && po.items && po.items.length > 0 && (
-                          <tr>
-                            <td colSpan="10" className="px-4 py-4 bg-gray-50">
-                              <div className="ml-6">
-                                <h4 className="text-red-600 font-bold text-sm mb-3 uppercase">
-                                  📦 Purchase Order Items
-                                </h4>
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-xs">
-                                    <thead>
-                                      <tr className="bg-white">
-                                        <th className="px-3 py-2 text-left font-bold text-gray-700">
-                                          Product Name
-                                        </th>
-                                        <th className="px-3 py-2 text-center font-bold text-gray-700">
-                                          Qty
-                                        </th>
-                                        <th className="px-3 py-2 text-center font-bold text-gray-700">
-                                          Package
-                                        </th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">
-                                          Unit Price
-                                        </th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">
-                                          GST
-                                        </th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">
-                                          HSN Code
-                                        </th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">
-                                          Item Total
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y">
-                                      {po.items.map((item, idx) => (
-                                        <tr
-                                          key={idx}
-                                          className="bg-white hover:bg-gray-50"
-                                        >
-                                          <td className="px-3 py-2 font-semibold text-gray-800">
-                                            {item.name}
-                                          </td>
-                                          <td className="px-3 py-2 text-center font-bold">
-                                            {item.qty}
-                                          </td>
-                                          <td className="px-3 py-2 text-center text-gray-600">
-                                            {item.perQty || "-"} {item.units || ""}
-                                          </td>
-                                          <td className="px-3 py-2 text-right">
-                                            ₹{item.purchasePrice}
-                                          </td>
-                                          <td className="px-3 py-2 text-right">
-                                            {item.igst
-                                              ? `IGST ${item.gst}%`
-                                              : `CGST ${item.cgst}% + SGST ${item.sgst}%`}
-                                          </td>
-                                          <td className="px-3 py-2 text-right text-gray-600">
-                                            {item.hsn || "-"}
-                                          </td>
-                                          <td className="px-3 py-2 text-right font-bold text-red-600">
-                                            ₹{item.total}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </>
-                    );
-                  })}
+                      )}
+                    </React.Fragment>
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
         </div>
-
-        {/* DEBIT NOTE SUMMARY */}
-        {purchaseOrders.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-            <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-blue-500">
-              <p className="text-gray-600 text-sm uppercase font-bold mb-2">
-                Total POs
-              </p>
-              <p className="text-3xl font-black text-gray-800">
-                {purchaseOrders.length}
-              </p>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-red-500">
-              <p className="text-gray-600 text-sm uppercase font-bold mb-2">
-                Total Returned
-              </p>
-              <p className="text-3xl font-black text-red-600">
-                ₹
-                {purchaseOrders
-                  .reduce((sum, po) => sum + getTotalReturnedAmount(po), 0)
-                  .toLocaleString()}
-              </p>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-orange-500">
-              <p className="text-gray-600 text-sm uppercase font-bold mb-2">
-                Total Debit Notes
-              </p>
-              <p className="text-3xl font-black text-orange-600">
-                {Object.values(debitNoteData).reduce((sum, data) => sum + (data.debitNotes?.length || 0), 0)}
-              </p>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* DEBIT NOTE MODAL */}
-      <DebitNoteModal
-        po={selectedPO}
-        isOpen={showDebitNoteModal}
-        onClose={() => setShowDebitNoteModal(false)}
-        onDebitNoteSuccess={handleDebitNoteSuccess}
+      <SupplierDebitNoteModal 
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onSuccess={fetchDebitNotes}
       />
     </div>
   );
 }
+
+import React from "react";

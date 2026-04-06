@@ -8,9 +8,15 @@ const creditNoteSchema = new mongoose.Schema(
     originalSalesOrderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "SalesOrder",
-      required: true,
+      required: false, // Changed from true to allow standalone/migrated returns
     },
     originalInvoiceId: String,
+    
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      required: true,
+    },
     
     // Customer Info
     customer: {

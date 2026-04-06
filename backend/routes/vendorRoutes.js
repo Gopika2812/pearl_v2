@@ -221,13 +221,13 @@ router.post("/", async (req, res) => {
   }
 });
 
-// ✅ GET all vendors (filtered by branchId)
+// ✅ GET all vendors (filtered by branchId and search)
 router.get("/", async (req, res) => {
   try {
-    const { branchId } = req.query;
+    const { branchId, search = "", page = 1, limit = 50 } = req.query;
 
     console.log("🔍 GET /vendors endpoint hit");
-    console.log("Query branchId (string):", branchId);
+    console.log("Query params:", { branchId, search, page, limit });
 
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
@@ -238,17 +238,41 @@ router.get("/", async (req, res) => {
       ? new mongoose.Types.ObjectId(branchId)
       : branchId;
 
-    console.log("Converted branchObjectId:", branchObjectId);
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 50));
+    const skip = (pageNum - 1) * pageSize;
 
-    const vendors = await Vendor.find({ branchId: branchObjectId, isActive: true }).sort({
-      createdAt: -1,
-    });
+    // Build search filter
+    const filter = search
+      ? {
+          branchId: branchObjectId,
+          isActive: true,
+          $or: [
+            { name: { $regex: search, $options: "i" } },
+            { phone: { $regex: search, $options: "i" } },
+            { gstin: { $regex: search, $options: "i" } },
+          ],
+        }
+      : { branchId: branchObjectId, isActive: true };
+
+    const total = await Vendor.countDocuments(filter);
+    const vendors = await Vendor.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(pageSize)
+      .lean();
 
     console.log(`✅ Found ${vendors.length} vendors for branch ${branchObjectId}`);
 
     res.json({
       success: true,
       data: vendors,
+      pagination: {
+        page: pageNum,
+        limit: pageSize,
+        total,
+        pages: Math.ceil(total / pageSize)
+      }
     });
   } catch (err) {
     console.error("❌ Fetch Vendor Error:", err);
