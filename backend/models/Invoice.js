@@ -207,4 +207,9 @@ const invoiceSchema = new mongoose.Schema(
 // Compound unique index: same Invoice number allowed across branches, not within the same branch
 invoiceSchema.index({ branchId: 1, invoiceNumber: 1 }, { unique: true });
 
+// Performance Indexes
+invoiceSchema.index({ branchId: 1, invoiceDate: -1 });
+invoiceSchema.index({ branchId: 1, "customer.customerId": 1 });
+invoiceSchema.index({ salesOrderId: 1 });
+
 export default mongoose.model("Invoice", invoiceSchema);

@@ -167,11 +167,12 @@ router.get("/", async (req, res) => {
       .limit(pageSize)
       .lean();
 
-    // ⚡ Get all PO data aggregated by product in one query
+    // ⚡ Get all PO data aggregated by product in one query (filtered by branch)
     const poData = await PurchaseOrder.aggregate([
       {
         $match: {
-          status: { $in: ["RECEIVED", "PARTIALLY_RETURNED"] }  // Only count received, not PLACED orders
+          branchId: branchObjectId,
+          status: { $in: ["RECEIVED", "PARTIALLY_RETURNED"] }
         }
       },
       { $unwind: "$items" },
@@ -183,8 +184,14 @@ router.get("/", async (req, res) => {
       }
     ]);
 
-    // ⚡ Get all invoiced data aggregated by product in one query
+    // ⚡ Get all invoiced data aggregated by product in one query (filtered by branch)
     const invoicedData = await SalesOrder.aggregate([
+      { 
+        $match: { 
+          branchId: branchObjectId,
+          status: "INVOICED" 
+        } 
+      },
       { $unwind: "$invoiceItems" },
       {
         $group: {

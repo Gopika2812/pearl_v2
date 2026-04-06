@@ -121,7 +121,9 @@ export default function InventorySalesOrderEntry({
   const [showProductGroupDropdown, setShowProductGroupDropdown] = useState(false);
   const [showItemDropdown, setShowItemDropdown] = useState(false);
   const [fetchedCustomers, setFetchedCustomers] = useState([]);
+  const [fetchedProducts, setFetchedProducts] = useState([]);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
+  const [searchingProducts, setSearchingProducts] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClaim, setIsClaim] = useState(false);
   const [isLocked, setIsLocked] = useState(false); // New state for Lock Price checkbox
@@ -405,6 +407,67 @@ export default function InventorySalesOrderEntry({
 
     fetchProductsByGroup();
   }, [productGroup, localProducts]);
+
+  // ⚡ PERFORMANCE: Fetch products from backend when searching by name
+  useEffect(() => {
+    if (!itemSearch.trim()) {
+      // If search is empty and no group, use the initial 50 products
+      if (!productGroup) {
+        setFetchedProducts(localProducts);
+      }
+      return;
+    }
+
+    const fetchProductsFromBackend = async () => {
+      setSearchingProducts(true);
+      try {
+        const res = await fetchWithAuth(
+          `${API_BASE}/products?search=${encodeURIComponent(itemSearch)}&branchId=${branchId}&limit=100`
+        );
+        const data = await res.json();
+
+        if (!res.ok) {
+          console.error("🔴 Product search failed:", data.message);
+          setFetchedProducts([]);
+          return;
+        }
+
+        const productList = Array.isArray(data.data) ? data.data : [];
+        setFetchedProducts(productList);
+      } catch (err) {
+        console.error("❌ Failed to search products:", err);
+        setFetchedProducts([]);
+      } finally {
+        setSearchingProducts(false);
+      }
+    };
+
+    const timer = setTimeout(fetchProductsFromBackend, 300); // Debounce 300ms
+    return () => clearTimeout(timer);
+  }, [itemSearch, branchId, productGroup, localProducts]);
+
+  // Sync available quantity for fetched products
+  useEffect(() => {
+    if (fetchedProducts.length === 0) return;
+
+    const syncAvailableQty = async () => {
+      const newCache = { ...availableQtyCache };
+      for (const p of fetchedProducts) {
+        if (newCache[p._id] === undefined) {
+          try {
+            const res = await fetchWithAuth(`${API_BASE}/products/available/${p._id}`);
+            const data = await res.json();
+            newCache[p._id] = data.data?.availableQty || 0;
+          } catch (err) {
+            newCache[p._id] = p.totalQty || 0;
+          }
+        }
+      }
+      setAvailableQtyCache(newCache);
+    };
+
+    syncAvailableQty();
+  }, [fetchedProducts]);
 
   // Fetch products for SAMPLE PRODUCTS section when sampleProductGroup changes
   useEffect(() => {
@@ -1567,9 +1630,11 @@ export default function InventorySalesOrderEntry({
                 />
 
                 {showItemDropdown && warehouse && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
-                    {productsWithStock
-                      .filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase()))
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto w-full md:w-80">
+                    {searchingProducts && (
+                      <div className="px-3 py-2 text-gray-500 text-sm text-center">🔍 Searching...</div>
+                    )}
+                    {!searchingProducts && fetchedProducts
                       .map((p) => {
                         const availableQty = availableQtyCache[p._id] ?? p.availableQty ?? 0;
                         return (
@@ -1585,7 +1650,7 @@ export default function InventorySalesOrderEntry({
                           </div>
                         );
                       })}
-                    {productsWithStock.filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
+                    {!searchingProducts && fetchedProducts.length === 0 && (
                       <div className="px-3 py-2 text-gray-500 text-sm">No items found</div>
                     )}
                   </div>

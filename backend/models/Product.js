@@ -111,6 +111,11 @@ productSchema.pre("save", function () {
 // Create composite unique index: branchId + name
 productSchema.index({ branchId: 1, name: 1 }, { unique: true });
 
+// Performance Indexes
+productSchema.index({ branchId: 1, productGroup: 1 });
+productSchema.index({ branchId: 1, productCategories: 1 });
+productSchema.index({ branchId: 1, totalQty: -1 });
+
 // Auto-calculate margin on findByIdAndUpdate
 productSchema.pre("findByIdAndUpdate", async function (next) {
   const update = this.getUpdate();

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { API_BASE } from "./api";
 
 import BranchSidebar from "./components/BranchSidebar";
 import BranchTopbar from "./components/BranchTopbar";
@@ -106,6 +107,21 @@ function AppContent() {
     location.pathname === "/super-admin-login" ||
     location.pathname === "/customer-login" ||
     location.pathname === "/pearls-shopping";
+
+  // RBAC Permission Check
+  useEffect(() => {
+    // 📢 PERFORMANCE: Wake up the Render server in the background
+    // This helps avoid the 50s cold start delay on the first real action.
+    const wakeUpServer = async () => {
+      try {
+        await fetch(`${API_BASE}/health`);
+        console.log("🚀 Server wake-up signal sent");
+      } catch (err) {
+        console.warn("⚠️ Server wake-up failed:", err.message);
+      }
+    };
+    wakeUpServer();
+  }, []);
 
   // RBAC Permission Check
   useEffect(() => {

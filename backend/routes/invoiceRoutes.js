@@ -905,6 +905,33 @@ router.post("/:invoiceId/upload-cloudinary", upload.single("file"), async (req, 
   }
 });
 
+// GET - Get all invoices for a specific customer
+router.get("/customer/:customerId", async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const { branchId } = req.query;
+
+    if (!customerId) {
+      return res.status(400).json({ message: "customerId is required" });
+    }
+
+    const query = { "customer.customerId": customerId };
+    if (branchId) {
+      query.branchId = branchId;
+    }
+
+    const invoices = await Invoice.find(query)
+      .populate("salesOrderId")
+      .sort({ invoiceDate: -1 })
+      .lean();
+
+    res.json(invoices);
+  } catch (error) {
+    console.error("Error fetching customer invoices:", error);
+    res.status(500).json({ message: "Failed to fetch invoices" });
+  }
+});
+
 // GET - Get all invoices for a branch
 // GET sales invoices with pagination and filtering (Sales Reports)
 router.get("", async (req, res) => {
@@ -931,7 +958,8 @@ router.get("", async (req, res) => {
       .populate("salesOrderId")
       .sort({ invoiceDate: -1 })
       .skip(skip)
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean();
 
     const total = await Invoice.countDocuments(query);
     const pages = Math.ceil(total / parseInt(limit));

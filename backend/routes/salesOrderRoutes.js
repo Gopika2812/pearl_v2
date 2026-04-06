@@ -123,17 +123,28 @@ router.post("/:id/record-payment", clearCachePrefix("/api/sales-orders"), async 
   }
 });
 
-// GET all sales orders (for OthersSummary)
+// GET all sales orders with filtering and date ranges
 router.get("/", cacheData(60), async (req, res) => {
   try {
-    const { branchId, customerName, status, isClaim } = req.query;
+    const { branchId, customerName, status, isClaim, fromDate, toDate, customerId } = req.query;
     const query = {};
 
-    // Filter by branchId if provided (Inclusive of missing branch IDs for test data)
+    // 1. Branch Filter (Always required)
     if (branchId) {
       query.$or = [{ branchId }, { branchId: { $exists: false } }];
     }
 
+    // 2. Date Filter (Crucial for Speed)
+    // Default to 'Today' if no dates are provided
+    const start = fromDate ? new Date(fromDate) : new Date();
+    start.setHours(0, 0, 0, 0);
+
+    const end = toDate ? new Date(toDate) : new Date();
+    end.setHours(23, 59, 59, 999);
+
+    query.createdAt = { $gte: start, $lte: end };
+
+    // 3. Status & Customer Filters
     if (customerName) {
       query["customer.name"] = { $regex: customerName, $options: "i" };
     }
@@ -142,14 +153,21 @@ router.get("/", cacheData(60), async (req, res) => {
       query.status = status.toUpperCase();
     }
 
+    if (customerId) {
+      query["customer.customerId"] = customerId;
+    }
+
     if (isClaim !== undefined) {
       query.isClaim = isClaim === "true";
     }
 
+    // ⚡ Optimized Fetch
     const salesOrders = await SalesOrder.find(query)
       .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount")
       .populate('salesOwner', 'name')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(200) // Prevent huge lists from crashing the browser
+      .lean();
 
     res.json(salesOrders);
   } catch (error) {

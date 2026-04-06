@@ -31,7 +31,7 @@ export const getAPIEndpoint = (path) => {
 export const createApiClient = (axiosInstance) => {
   const instance = axiosInstance.create({
     baseURL: API_BASE,
-    timeout: 10000,
+    timeout: 60000,
     headers: {
       "Content-Type": "application/json",
     },

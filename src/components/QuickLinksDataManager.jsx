@@ -300,8 +300,8 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
             head: [["Product Name", "Purchasing Price", "Selling Price"]],
             body: products.map(p => [
               p.name,
-              `₹${(p.purchasingPrice || 0).toFixed(2)}`,
-              `₹${(p.sellingPrice || 0).toFixed(2)}`
+              `Rs. ${(p.purchasingPrice || 0).toFixed(2)}`,
+              `Rs. ${(p.sellingPrice || 0).toFixed(2)}`
             ]),
             theme: 'striped',
             headStyles: { fillColor: [190, 18, 60], textColor: 255 }, // Crimson/Adobe Red

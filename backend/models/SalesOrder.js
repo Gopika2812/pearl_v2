@@ -297,6 +297,12 @@ const salesOrderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Performance Indexes
+salesOrderSchema.index({ branchId: 1, createdAt: -1 });
+salesOrderSchema.index({ branchId: 1, "customer.customerId": 1 });
+salesOrderSchema.index({ status: 1, branchId: 1 });
+salesOrderSchema.index({ invoiceId: 1, branchId: 1 });
+
 /**
  * Helper function to revert all financial and inventory impacts when a Sales Order is deleted
  */

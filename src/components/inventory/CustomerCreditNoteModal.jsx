@@ -92,13 +92,20 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
   };
 
   const fetchInvoices = async () => {
+    if (!customer?._id) return;
     setLoading(true);
     try {
-      const response = await fetchWithAuth(`${API_BASE}/sales-orders?customerName=${encodeURIComponent(customer.name)}&status=INVOICED&branchId=${currentBranch._id}`);
+      const response = await fetchWithAuth(`${API_BASE}/invoices/customer/${customer._id}?branchId=${currentBranch._id}`);
       const data = await response.json();
-      if (Array.isArray(data)) setInvoices(data);
-    } catch (error) { console.error(error); }
-    finally { setLoading(false); }
+      // Handle both array and {data: []} formats just in case
+      const invoiceData = Array.isArray(data) ? data : (data.data || []);
+      setInvoices(invoiceData);
+    } catch (error) { 
+      console.error("Error fetching customer invoices:", error);
+      toast.error("Failed to load invoices");
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const addStandaloneItem = (product) => {
@@ -447,15 +454,24 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
             {creditType === "invoice" && (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                        {loading ? <div className="col-span-2 py-10 text-center"><FaSpinner className="animate-spin text-blue-500 mx-auto" /></div> : invoices.map(inv => (
+                        {loading ? (
+                          <div className="col-span-2 py-10 text-center">
+                            <FaSpinner className="animate-spin text-blue-500 mx-auto" />
+                            <p className="text-[10px] text-gray-400 font-bold uppercase mt-2">Fetching Invoices...</p>
+                          </div>
+                        ) : invoices.length === 0 ? (
+                          <div className="col-span-2 py-10 text-center border-2 border-dashed border-gray-100 rounded-2xl">
+                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">No generated invoices found for this customer</p>
+                          </div>
+                        ) : invoices.map(inv => (
                              <div 
                                key={inv._id}
                                onClick={() => { setSelectedInvoice(inv); setSelectedItems([]); }}
                                className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex justify-between items-center ${selectedInvoice?._id === inv._id ? 'border-blue-600 bg-blue-50' : 'border-gray-100 bg-white hover:border-blue-200'}`}
                              >
                                 <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-blue-900 leading-none">{inv.invoiceId}</span>
-                                    <span className="text-[9px] text-gray-400 font-bold uppercase mt-1">{formatDate(inv.createdAt)}</span>
+                                    <span className="text-[10px] font-black text-blue-900 leading-none">{inv.invoiceNumber || inv.invoiceId}</span>
+                                    <span className="text-[9px] text-gray-400 font-bold uppercase mt-1">{inv.invoiceDate ? formatDate(inv.invoiceDate) : formatDate(inv.createdAt)}</span>
                                 </div>
                                 <span className="text-xs font-black text-blue-700">₹{(inv.grandTotal || 0).toLocaleString()}</span>
                              </div>

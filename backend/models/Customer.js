@@ -72,5 +72,10 @@ const customerSchema = new mongoose.Schema(
 // Create composite unique index: branchId + name
 customerSchema.index({ branchId: 1, name: 1 }, { unique: true });
 
+// Performance Indexes
+customerSchema.index({ branchId: 1, salesOwner: 1 });
+customerSchema.index({ branchId: 1, customerCategories: 1 });
+customerSchema.index({ branchId: 1, closingBalance: -1 });
+
 const Customer = mongoose.model("Customer", customerSchema);
 export default Customer;
