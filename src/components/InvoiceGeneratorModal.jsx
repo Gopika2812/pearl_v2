@@ -428,7 +428,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                     <th style="text-align: right;">Rate</th>
                     <th style="text-align: center;">Per</th>
                     <th style="text-align: right;">Discount</th>
-                    <th style="text-align: right;">Total</th>
+                    <th style="text-align: right;">Total Amount (Qty × Rate)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -441,7 +441,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                       <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
                       <td style="text-align: center; text-transform: uppercase;">${item.unit || ""}</td>
                       <td style="text-align: right;">${item.discountPercent || 0}% (-₹${(item.discountAmount || 0).toFixed(2)})</td>
-                      <td style="text-align: right;">₹${item.total?.toFixed(2) || 0}</td>
+                      <td style="text-align: right;">₹${(item.qty * item.sellingPrice).toFixed(2)}</td>
                     </tr>
                   `).join("")}
                 </tbody>
@@ -490,16 +490,24 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 </div>
 
                 <div class="total-section" style="flex: 1;">
-                  <div>Subtotal: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
+                  <div style="font-size: 11px;">Subtotal (Gross): <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
+                  
                   ${previewData?.totalTax?.igst > 0 ? 
-                    `<div>IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` : 
-                    `<div>CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
-                     <div>SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
+                    `<div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` : 
+                    `<div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
+                     <div style="font-size: 11px;">SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
                   }
-                  ${previewData?.commonDiscount > 0 ? `<div>Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
-                  ${previewData?.transportCharge > 0 ? `<div>Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
-                  ${previewData?.extraExpenseAmount > 0 ? `<div>Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
-                  <div class="grand-total">Grand Total: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
+                  
+                  ${previewData?.commonDiscount > 0 ? `<div style="font-size: 11px;">Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
+                  ${previewData?.transportCharge > 0 ? `<div style="font-size: 11px;">Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
+                  ${previewData?.extraExpenseAmount > 0 ? `<div style="font-size: 11px;">Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
+                  
+                  <div class="grand-total">GRAND TOTAL: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
+                  
+                  <div style="margin-top: 10px; border-top: 1px dashed #cbd5e1; padding-top: 5px; font-size: 11px;">
+                    <div>Opening Balance: ₹${previewData?.openingBalance?.toFixed(2) || 0}</div>
+                    <div style="font-weight: bold; color: #1e40af;">Closing Balance: ₹${previewData?.closingBalance?.toFixed(2) || 0}</div>
+                  </div>
                 </div>
               </div>
 
@@ -594,16 +602,21 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
               </table>
 
               <div class="total-section">
-                <div>Taxable Value: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
+                <div style="font-size: 11px;">Subtotal (Gross): <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
                 ${previewData?.totalTax?.igst > 0 ? 
-                  `<div>IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` : 
-                  `<div>CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
-                   <div>SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
+                  `<div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` : 
+                  `<div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
+                   <div style="font-size: 11px;">SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
                 }
-                ${previewData?.commonDiscount > 0 ? `<div>Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
-                ${previewData?.transportCharge > 0 ? `<div>Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
-                ${previewData?.extraExpenseAmount > 0 ? `<div>Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
+                ${previewData?.commonDiscount > 0 ? `<div style="font-size: 11px;">Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
+                ${previewData?.transportCharge > 0 ? `<div style="font-size: 11px;">Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
+                ${previewData?.extraExpenseAmount > 0 ? `<div style="font-size: 11px;">Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
                 <div class="grand-total">TOTAL AMOUNT: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
+                
+                <div style="margin-top: 10px; border-top: 1px dashed #cbd5e1; padding-top: 5px; font-size: 11px;">
+                  <div>Opening Balance: ₹${previewData?.openingBalance?.toFixed(2) || 0}</div>
+                  <div style="font-weight: bold; color: #1e40af;">Closing Balance: ₹${previewData?.closingBalance?.toFixed(2) || 0}</div>
+                </div>
               </div>
 
               <!-- BACK ORDER SECTION (if applicable) -->

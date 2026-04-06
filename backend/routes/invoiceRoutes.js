@@ -76,7 +76,8 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     // Recalculate totals with edited quantities
     // ⚠️ NOTE: item.total already INCLUDES tax, we need to extract pre-tax amount
     
-    let subtotal = 0;
+    let grossSubtotal = 0;
+    let totalItemDiscount = 0;
     let cgstTotal = 0;
     let sgstTotal = 0;
     let igstTotal = 0;
@@ -92,22 +93,29 @@ router.post("/preview/:salesOrderId", async (req, res) => {
 
       // Original item.total already has tax, so scale it proportionally
       const itemTotalWithTax = Math.round(originalItem.total * qtyRatio * 100) / 100;
+      
+      // Values for Gross Subtotal
+      const itemSellingPrice = originalItem.sellingPrice || 0;
+      const itemGrossAmount = Math.round(itemSellingPrice * confirmedQty * 100) / 100;
+      grossSubtotal += itemGrossAmount;
 
       const gstPercent = item.gst || 0;
       const cgstPercent = item.cgst || 0;
       const sgstPercent = item.sgst || 0;
       const igstPercent = item.igst || 0;
 
-      // Extract pre-tax amount
+      // Extract pre-tax amount (Taxable Value)
       const gstFactor = 1 + (gstPercent / 100);
-      const preTaxAmount = Math.round((itemTotalWithTax / gstFactor) * 100) / 100;
+      const taxableAmount = Math.round((itemTotalWithTax / gstFactor) * 100) / 100;
 
-      subtotal += preTaxAmount;
+      // Calculate item discount relative to gross
+      const itemDiscount = Math.round((itemGrossAmount - taxableAmount) * 100) / 100;
+      totalItemDiscount += itemDiscount;
 
-      // Calculate tax components
-      const cgstAmount = Math.round((preTaxAmount * cgstPercent / 100) * 100) / 100;
-      const sgstAmount = Math.round((preTaxAmount * sgstPercent / 100) * 100) / 100;
-      const igstAmount = Math.round((preTaxAmount * igstPercent / 100) * 100) / 100;
+      // Calculate tax components from taxableAmount
+      const cgstAmount = Math.round((taxableAmount * cgstPercent / 100) * 100) / 100;
+      const sgstAmount = Math.round((taxableAmount * sgstPercent / 100) * 100) / 100;
+      const igstAmount = Math.round((taxableAmount * igstPercent / 100) * 100) / 100;
 
       cgstTotal += cgstAmount;
       sgstTotal += sgstAmount;
@@ -213,7 +221,8 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       items: recalculatedItems,
       backOrderItems,
       sampleItems: salesOrder.sampleItems || [],
-      subtotal,
+      subtotal: grossSubtotal,
+      totalDiscount: totalItemDiscount,
       totalTax,
       transportCharge: tCharge,
       transportGstPercent: tGstPercent,
@@ -364,7 +373,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       // ⚠️ NOTE: item.total already INCLUDES tax (calculated as pre_tax × (1 + gst/100))
       // We need to extract the pre-tax amount and recalculate tax properly
       
-      let subtotal = 0;
+      let grossSubtotal = 0;
+      let totalItemDiscount = 0;
       let cgstTotal = 0;
       let sgstTotal = 0;
       let igstTotal = 0;
@@ -375,17 +385,23 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         const sgstPercent = item.sgst || 0;
         const igstPercent = item.igst || 0;
 
-        // Extract pre-tax amount: preTax = itemTotal / (1 + gst/100)
+        // Extract pre-tax amount (Taxable Value): preTax = itemTotal / (1 + gst/100)
         const itemTotalWithTax = item.total || 0;
         const gstFactor = 1 + (gstPercent / 100);
-        const preTaxAmount = Math.round((itemTotalWithTax / gstFactor) * 100) / 100;
+        const taxableAmount = Math.round((itemTotalWithTax / gstFactor) * 100) / 100;
 
-        subtotal += preTaxAmount;
+        // Gross addition
+        const itemSellingPrice = item.sellingPrice || 0;
+        const itemGrossAmount = Math.round(itemSellingPrice * item.qty * 100) / 100;
+        grossSubtotal += itemGrossAmount;
 
-        // Calculate tax components
-        const cgstAmount = Math.round((preTaxAmount * cgstPercent / 100) * 100) / 100;
-        const sgstAmount = Math.round((preTaxAmount * sgstPercent / 100) * 100) / 100;
-        const igstAmount = Math.round((preTaxAmount * igstPercent / 100) * 100) / 100;
+        // Discount addition
+        totalItemDiscount += Math.round((itemGrossAmount - taxableAmount) * 100) / 100;
+
+        // Calculate tax components from taxableAmount
+        const cgstAmount = Math.round((taxableAmount * cgstPercent / 100) * 100) / 100;
+        const sgstAmount = Math.round((taxableAmount * sgstPercent / 100) * 100) / 100;
+        const igstAmount = Math.round((taxableAmount * igstPercent / 100) * 100) / 100;
 
         cgstTotal += cgstAmount;
         sgstTotal += sgstAmount;
@@ -443,7 +459,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         invoice.items = processedItems;
         invoice.backOrderItems = backOrderItems;
         invoice.sampleItems = salesOrder.sampleItems || [];
-        invoice.subtotal = subtotal;
+        invoice.subtotal = grossSubtotal;
+        invoice.totalDiscount = totalItemDiscount;
         invoice.totalTax = totalTax;
         invoice.transportCharge = tCharge;
         invoice.transportGstPercent = tGstPercent;
@@ -498,7 +515,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           items: processedItems,
           backOrderItems,
           sampleItems: salesOrder.sampleItems || [],
-          subtotal,
+          subtotal: grossSubtotal,
+          totalItemDiscount: totalItemDiscount,
           totalTax,
           transportCharge: tCharge,
           transportGstPercent: tGstPercent,
