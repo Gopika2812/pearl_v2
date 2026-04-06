@@ -129,7 +129,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     const { id } = req.params;
     const order = await PurchaseOrder.findById(id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
-    if (order.status === 'INVOICED') return res.status(400).json({ message: 'Order already invoiced' });
+    if (order.status === 'INVOICED' && !order.purchaseInvoiceId) return res.status(400).json({ message: 'Order already invoiced' });
 
     const currentFY = getGlobalFinancialYear();
     const isReInvoice = !!(order.purchaseInvoiceId && order.lastInvoicedItems?.length > 0);
@@ -208,6 +208,10 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
           vendorDate: req.body.vendorDate ? new Date(req.body.vendorDate) : undefined,
         }
       );
+
+      // PERSIST BILL DETAILS TO PO TOO
+      order.vendorBillNo = req.body.vendorBillNo;
+      order.vendorDate = req.body.vendorDate ? new Date(req.body.vendorDate) : undefined;
 
       order.editHistory.push({
         version: (order.editHistory.length || 0) + 1,
@@ -312,6 +316,10 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     await purchaseInvoice.save();
     voucher.counter += 1;
     await voucher.save();
+
+    // PERSIST BILL DETAILS TO PO TOO
+    order.vendorBillNo = req.body.vendorBillNo;
+    order.vendorDate = req.body.vendorDate ? new Date(req.body.vendorDate) : undefined;
 
     // STOCK + VENDOR UPDATES (Simplified for brevity in replacement)
     for (const item of order.items) {
@@ -525,6 +533,9 @@ router.put("/:id", auth, async (req, res) => {
     if (grandTotal !== undefined) order.grandTotal = Math.round(Number(grandTotal));
     if (transportCharge !== undefined) order.transportCharge = Math.round(Number(transportCharge));
 
+    // Ensure status stays PLACED if it was PLACED or was recently approved for edit
+    // (If it was INVOICED, we keep it as is, but allowed editing)
+
     await order.save();
 
     // Log the update
@@ -540,12 +551,25 @@ router.put("/:id", auth, async (req, res) => {
       changes: {
         before: oldState,
         after: {
-          items: order.items.map(i => i.toObject()),
+          items: order.items.map(i => i.toObject ? i.toObject() : i),
           grandTotal: order.grandTotal,
           warehouse: order.warehouse
         }
       }
     });
+
+    // ALSO SNAPSHOT TO EDIT HISTORY
+    order.editHistory.push({
+      version: (order.editHistory.length || 0) + 1,
+      editType: 'PRE_INVOICE_EDIT',
+      items: order.items.map(i => i.toObject ? i.toObject() : i),
+      subtotal: order.subtotal,
+      totalTax: order.totalTax,
+      grandTotal: order.grandTotal,
+      editedAt: new Date(),
+      note: `Manual update via Edit Modal.`
+    });
+    await order.save();
 
     res.json({
       success: true,

@@ -341,7 +341,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         
         @media print { 
           body { margin: 0; padding: 0; } 
-          .page { margin: 0 auto; padding: 5mm; page-break-after: avoid !important; }
+          .page { margin: 0 auto; padding: 5mm; page-break-after: always !important; }
         }
       </style>
     `;
@@ -503,11 +503,6 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   ${previewData?.extraExpenseAmount > 0 ? `<div style="font-size: 11px;">Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
                   
                   <div class="grand-total">GRAND TOTAL: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
-                  
-                  <div style="margin-top: 10px; border-top: 1px dashed #cbd5e1; padding-top: 5px; font-size: 11px;">
-                    <div>Opening Balance: ₹${previewData?.openingBalance?.toFixed(2) || 0}</div>
-                    <div style="font-weight: bold; color: #1e40af;">Closing Balance: ₹${previewData?.closingBalance?.toFixed(2) || 0}</div>
-                  </div>
                 </div>
               </div>
 
@@ -612,11 +607,6 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 ${previewData?.transportCharge > 0 ? `<div style="font-size: 11px;">Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
                 ${previewData?.extraExpenseAmount > 0 ? `<div style="font-size: 11px;">Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
                 <div class="grand-total">TOTAL AMOUNT: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
-                
-                <div style="margin-top: 10px; border-top: 1px dashed #cbd5e1; padding-top: 5px; font-size: 11px;">
-                  <div>Opening Balance: ₹${previewData?.openingBalance?.toFixed(2) || 0}</div>
-                  <div style="font-weight: bold; color: #1e40af;">Closing Balance: ₹${previewData?.closingBalance?.toFixed(2) || 0}</div>
-                </div>
               </div>
 
               <!-- BACK ORDER SECTION (if applicable) -->

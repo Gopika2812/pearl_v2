@@ -41,6 +41,8 @@ const PurchaseOrderSchema = new mongoose.Schema(
       // NOTE: uniqueness enforced per-branch via compound index below
     },
     purchaseInvoiceId: { type: String },
+    vendorBillNo: { type: String },
+    vendorDate: { type: Date },
 
     voucherType: String,
     financialYear: String,

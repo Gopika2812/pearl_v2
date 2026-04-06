@@ -2,6 +2,8 @@ import axios from "axios";
 import React, { useEffect, useState, Fragment } from "react";
 import { FaEdit, FaTrash, FaCheck, FaTimes, FaPlus, FaPlusCircle, FaSync, FaSave, FaExclamationTriangle, FaBox, FaArrowLeft, FaEye, FaArrowRight, FaLink, FaExternalLinkAlt, FaImage, FaChevronDown, FaChevronLeft, FaChevronRight, FaChevronUp, FaSearch, FaFileExport } from "react-icons/fa";
 import * as XLSX from 'xlsx';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { toast } from "react-toastify";
 import { API_BASE, apiWithAuth } from "../api";
 import { QUICK_LINKS_CONFIG } from "../utils/quickLinksConfig";
@@ -246,6 +248,96 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     }
   };
 
+  const handleExportPDF = () => {
+    try {
+      if (!sortedData || sortedData.length === 0) {
+        toast.info("No records to export.");
+        return;
+      }
+
+      const doc = new jsPDF();
+      const branchName = currentBranch?.name || "PEARL AGENCY";
+      const timestamp = new Date().toLocaleString("en-IN");
+
+      // Set Title
+      doc.setFontSize(18);
+      doc.setTextColor(30, 64, 175);
+      doc.text(`${config.label} Report`, 14, 22);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Branch: ${branchName} | Generated: ${timestamp}`, 14, 30);
+      
+      // Horizontal Line
+      doc.setDrawColor(200);
+      doc.line(14, 34, 196, 34);
+
+      if (type === "product") {
+        // Group data by product group name
+        const groupedData = sortedData.reduce((acc, item) => {
+          const groupName = item.productGroup?.name || "Uncategorized";
+          if (!acc[groupName]) acc[groupName] = [];
+          acc[groupName].push(item);
+          return acc;
+        }, {});
+
+        let currentY = 42;
+
+        Object.entries(groupedData).forEach(([groupName, products]) => {
+          // Check for space before adding group header and table
+          if (currentY > 230) {
+            doc.addPage();
+            currentY = 20;
+          }
+
+          doc.setFontSize(11);
+          doc.setTextColor(50);
+          doc.setFont(undefined, 'bold');
+          doc.text(`PRODUCT GROUP: ${groupName.toUpperCase()}`, 14, currentY);
+          
+          autoTable(doc, {
+            startY: currentY + 4,
+            head: [["Product Name", "Purchasing Price", "Selling Price"]],
+            body: products.map(p => [
+              p.name,
+              `₹${(p.purchasingPrice || 0).toFixed(2)}`,
+              `₹${(p.sellingPrice || 0).toFixed(2)}`
+            ]),
+            theme: 'striped',
+            headStyles: { fillColor: [190, 18, 60], textColor: 255 }, // Crimson/Adobe Red
+            styles: { fontSize: 9, cellPadding: 3 },
+            margin: { left: 14, right: 14 },
+          });
+
+          currentY = doc.lastAutoTable.finalY + 12;
+        });
+      } else {
+        // Generic export for other types
+        const headers = config.displayFields.map(f => f.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase()));
+        const body = sortedData.map(item => config.displayFields.map(f => {
+          const val = item[f];
+          if (typeof val === 'object' && val !== null) return val.name || val._id || "-";
+          return val || "-";
+        }));
+
+        autoTable(doc, {
+          startY: 42,
+          head: [headers],
+          body: body,
+          theme: 'grid',
+          headStyles: { fillColor: [30, 64, 175], textColor: 255 },
+          styles: { fontSize: 8 }
+        });
+      }
+
+      doc.save(`${config.label}_Report_${new Date().toLocaleDateString()}.pdf`);
+      toast.success(`${config.label} PDF exported successfully!`);
+    } catch (error) {
+      console.error("PDF Export error:", error);
+      toast.error("Failed to export PDF");
+    }
+  };
+
   const handleExportExcel = () => {
     try {
       if (!sortedData || sortedData.length === 0) {
@@ -398,12 +490,20 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
             <FaFileExport /> Export Excel
           </button>
           {type === "product" && (
-            <button
-              onClick={() => setShowGroupMargin(true)}
-              className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-5 py-2 rounded-lg transition font-semibold shadow-md"
-            >
-              💰 Group Margin
-            </button>
+            <>
+              <button
+                onClick={handleExportPDF}
+                className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-5 py-2 rounded-lg transition font-semibold shadow-md active:scale-95"
+              >
+                <FaFileExport /> Export PDF
+              </button>
+              <button
+                onClick={() => setShowGroupMargin(true)}
+                className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-5 py-2 rounded-lg transition font-semibold shadow-md"
+              >
+                💰 Group Margin
+              </button>
+            </>
           )}
         </div>
       </div>

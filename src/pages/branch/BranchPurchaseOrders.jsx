@@ -619,10 +619,12 @@ const BranchPurchaseOrders = () => {
                                   onClick={() => {
                                     setEditingOrder(order);
                                     setEditItems(order.items.map(i => ({ ...i })));
+                                    setVendorBillNo("");
+                                    setVendorDate("");
                                     setShowInvoiceModal(true);
                                   }}
                                 >
-                                  Invoiced
+                                  ✔ Generate PI
                                 </button>
                               </>
                             ) : (
@@ -640,6 +642,19 @@ const BranchPurchaseOrders = () => {
                                   title="Cancel Invoiced Order"
                                 >
                                   <FaTrash size={12} /> CANCEL
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingOrder(order);
+                                    setEditItems(order.items.map(i => ({ ...i })));
+                                    setVendorBillNo(order.vendorBillNo || "");
+                                    setVendorDate(order.vendorDate ? new Date(order.vendorDate).toISOString().split('T')[0] : "");
+                                    setShowInvoiceModal(true);
+                                  }}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-4 rounded-lg text-xs shadow-md shadow-blue-100 transition uppercase flex items-center gap-1"
+                                  title="Update Existing Invoice"
+                                >
+                                  <FaSync size={10} /> Re-gen PI
                                 </button>
                                 <button
                                   onClick={() => navigate(`/branch/dispatch?type=PO&voucher=${encodeURIComponent(order.voucherType)}&orderId=${order._id}`)}
@@ -792,6 +807,24 @@ const BranchPurchaseOrders = () => {
                                     </p>
                                   </div>
                                 </div>
+
+                                {/* BILL DETAILS */}
+                                {(order.vendorBillNo || order.vendorDate) && (
+                                  <div className="mt-4 pt-4 border-t border-dashed flex gap-8">
+                                    {order.vendorBillNo && (
+                                      <div>
+                                        <span className="text-[10px] uppercase font-black text-gray-400 tracking-widest block mb-1">Vendor Bill No</span>
+                                        <p className="font-bold text-gray-800 text-sm italic">{order.vendorBillNo}</p>
+                                      </div>
+                                    )}
+                                    {order.vendorDate && (
+                                      <div>
+                                        <span className="text-[10px] uppercase font-black text-gray-400 tracking-widest block mb-1">Bill Date</span>
+                                        <p className="font-bold text-gray-800 text-sm">{new Date(order.vendorDate).toLocaleDateString()}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </div>
 
