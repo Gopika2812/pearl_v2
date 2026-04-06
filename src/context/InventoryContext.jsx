@@ -443,7 +443,7 @@ export const InventoryProvider = ({ children }) => {
       value={{
         voucherTypes, productGroups, productCategories, customerCategories, customerGroups, products, locations,
         warehouses, customers, vendors, salesOwners, salesMen, deliveryMen, commissions,
-        drafts, finalOrders, fetchWarehouses, fetchCustomers, fetchCommissions,
+        drafts, finalOrders, fetchWarehouses, fetchCustomers, fetchProducts, fetchCommissions,
         addData, updateData, addLocalVoucher, addLocalWarehouse, addLocalProductCategory, addLocalCustomerCategory, addLocalCustomerGroup, saveToDrafts, placeFinalOrder
       }}
     >

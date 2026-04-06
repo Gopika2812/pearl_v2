@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { FaLock, FaSync, FaSearch, FaUser, FaBox, FaTrash, FaPlus, FaCheckCircle, FaChevronDown } from "react-icons/fa";
+import React, { useState, useEffect, useRef } from "react";
+import { FaLock, FaSync, FaSearch, FaUser, FaBox, FaTrash, FaPlus, FaCheckCircle, FaChevronDown, FaUpload } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -23,6 +23,8 @@ const BranchLockedPrices = () => {
   const [showProductDropdown, setShowProductDropdown] = useState(false);
   const [lockedPrice, setLockedPrice] = useState("");
   const [isLocked, setIsLocked] = useState(true);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (currentBranch?._id) {
@@ -30,6 +32,30 @@ const BranchLockedPrices = () => {
       fetchLockedPrices();
     }
   }, [currentBranch?._id]);
+
+  // 🔒 AUTO-LOOKUP EXISTING PRICE
+  useEffect(() => {
+    const fetchExistingPrice = async () => {
+      if (!selectedCustomerId || !selectedProductId || !currentBranch?._id) return;
+      
+      try {
+        const res = await fetch(`${API_BASE}/customer-locked-prices/${selectedCustomerId}/${selectedProductId}?branchId=${currentBranch._id}`);
+        const data = await res.json();
+        
+        if (data.success && data.data?.lockedPrice) {
+          setLockedPrice(data.data.lockedPrice.toString());
+          console.log(`🔒 Auto-filled Existing Locked Price: ${data.data.lockedPrice}`);
+        } else {
+          setLockedPrice(""); // No existing price, let them set a new one
+        }
+      } catch (err) {
+        console.warn("Existing price lookup failed (likely no record yet)");
+        setLockedPrice("");
+      }
+    };
+
+    fetchExistingPrice();
+  }, [selectedCustomerId, selectedProductId, currentBranch?._id]);
 
   const fetchCustomers = async () => {
     try {
@@ -115,6 +141,37 @@ const BranchLockedPrices = () => {
     }
   };
 
+  const handleBulkUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("branchId", currentBranch._id);
+
+    setBulkLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/customer-locked-prices/bulk-upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message);
+        fetchLockedPrices();
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (err) {
+      console.error("Bulk Upload Error:", err);
+      toast.error(err.message || "Bulk upload failed");
+    } finally {
+      setBulkLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const selectedProduct = products.find(p => p._id === selectedProductId);
   const selectedCustomer = customers.find(c => c._id === selectedCustomerId);
 
@@ -147,12 +204,29 @@ const BranchLockedPrices = () => {
               <p className="text-xs text-gray-500 font-semibold tracking-wider uppercase">Customer-Specific Pricing Rules</p>
             </div>
           </div>
-          <button 
-            onClick={fetchLockedPrices}
-            className="flex items-center gap-2 text-xs font-black uppercase text-[#319bab] hover:bg-[#319bab]/5 px-4 py-2 rounded-lg transition"
-          >
-            <FaSync className={loading ? "animate-spin" : ""} /> Refresh List
-          </button>
+          <div className="flex items-center gap-2">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleBulkUpload} 
+              accept=".xlsx, .xls" 
+              className="hidden" 
+            />
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              disabled={bulkLoading}
+              className="flex items-center gap-2 text-xs font-black uppercase bg-[#319bab] text-white hover:bg-[#257f87] px-4 py-2 rounded-lg transition shadow-sm"
+            >
+              <FaUpload className={bulkLoading ? "animate-spin" : ""} />
+              {bulkLoading ? "Processing..." : "Bulk Upload"}
+            </button>
+            <button 
+              onClick={fetchLockedPrices}
+              className="flex items-center gap-2 text-xs font-black uppercase text-[#319bab] hover:bg-[#319bab]/5 px-4 py-2 rounded-lg transition"
+            >
+              <FaSync className={loading ? "animate-spin" : ""} /> Refresh List
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -179,12 +253,23 @@ const BranchLockedPrices = () => {
                         if(selectedCustomer) setSelectedCustomerId("");
                       }}
                       onFocus={() => setShowCustomerDropdown(true)}
-                      className="w-full pl-9 pr-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/30 transition-all shadow-inner"
+                      className="w-full pl-9 pr-10 py-3 bg-gray-50 border-2 border-transparent rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/30 transition-all shadow-inner"
                     />
+                    {selectedCustomerId && (
+                      <button 
+                        onClick={() => { setSelectedCustomerId(""); setCustSearch(""); }}
+                        className="absolute right-8 top-1/2 -translate-y-1/2 text-red-400 hover:text-red-600 p-1"
+                      >
+                        <FaTrash size={10} />
+                      </button>
+                    )}
                     <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={10} />
                   </div>
-                  {showCustomerDropdown && (custSearch || !selectedCustomerId) && (
-                    <div className="absolute z-20 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                  {showCustomerDropdown && (
+                    <div 
+                      className="absolute z-20 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200"
+                      onMouseLeave={() => setShowCustomerDropdown(false)}
+                    >
                       {filteredCustomers.length > 0 ? filteredCustomers.map(c => (
                         <div 
                           key={c._id}
@@ -199,7 +284,9 @@ const BranchLockedPrices = () => {
                           <span className="text-[9px] text-gray-400 font-black">{c.whatsapp || "No Phone"}</span>
                         </div>
                       )) : (
-                        <div className="p-4 text-center text-gray-400 text-[10px] font-black uppercase">No customers found</div>
+                        <div className="p-4 text-center text-gray-400 text-[10px] font-black uppercase">
+                          No customers found ({customers.length} total)
+                        </div>
                       )}
                     </div>
                   )}
@@ -219,12 +306,23 @@ const BranchLockedPrices = () => {
                         if(selectedProduct) setSelectedProductId("");
                       }}
                       onFocus={() => setShowProductDropdown(true)}
-                      className="w-full pl-9 pr-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/30 transition-all shadow-inner"
+                      className="w-full pl-9 pr-10 py-3 bg-gray-50 border-2 border-transparent rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/30 transition-all shadow-inner"
                     />
+                    {selectedProductId && (
+                      <button 
+                        onClick={() => { setSelectedProductId(""); setProdSearch(""); }}
+                        className="absolute right-8 top-1/2 -translate-y-1/2 text-red-400 hover:text-red-600 p-1"
+                      >
+                        <FaTrash size={10} />
+                      </button>
+                    )}
                     <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={10} />
                   </div>
-                  {showProductDropdown && (prodSearch || !selectedProductId) && (
-                    <div className="absolute z-20 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                  {showProductDropdown && (
+                    <div 
+                      className="absolute z-20 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200"
+                      onMouseLeave={() => setShowProductDropdown(false)}
+                    >
                       {filteredProducts.length > 0 ? filteredProducts.map(p => (
                         <div 
                           key={p._id}
@@ -243,7 +341,9 @@ const BranchLockedPrices = () => {
                           </div>
                         </div>
                       )) : (
-                        <div className="p-4 text-center text-gray-400 text-[10px] font-black uppercase">No products found</div>
+                        <div className="p-4 text-center text-gray-400 text-[10px] font-black uppercase">
+                          No products found ({products.length} total)
+                        </div>
                       )}
                     </div>
                   )}

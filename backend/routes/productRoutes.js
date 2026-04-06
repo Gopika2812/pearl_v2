@@ -322,17 +322,55 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     }
 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { raw: false });
+    
+    let sheetToProcess = null;
+    let headerIndex = -1;
+    let rows = [];
 
-    console.log("📄 TOTAL ROWS:", rows.length);
-    console.log("📄 FIRST ROW RAW:", rows[0]);
+    // ⚡ SMART SHEET & HEADER DETECTION:
+    // Some files have multiple tabs (Summary, Product, etc.). 
+    // We loop through all sheets to find the one with the actual data.
+    for (const sheetName of workbook.SheetNames) {
+      const currentSheet = workbook.Sheets[sheetName];
+      const rawData = XLSX.utils.sheet_to_json(currentSheet, { header: 1, defval: "" });
+      
+      for (let i = 0; i < rawData.length; i++) {
+        const row = rawData[i].map(cell => String(cell || "").trim().toLowerCase());
+        if (row.includes("name") || row.includes("product name") || row.includes("stock item") || row.includes("item name")) {
+          headerIndex = i;
+          sheetToProcess = currentSheet;
+          console.log(`✅ Found valid headers in sheet: "${sheetName}" at row ${i + 1}`);
+          
+          // Parse rows from this sheet
+          rows = XLSX.utils.sheet_to_json(currentSheet, { 
+            range: headerIndex, 
+            raw: false,
+            defval: "" 
+          });
+          break;
+        }
+      }
+      if (sheetToProcess) break;
+    }
+
+    if (!sheetToProcess) {
+      console.error("❌ Could not find a sheet with valid headers (Name/Product Name/Stock Item)");
+      return res.status(400).json({ 
+        success: false, 
+        message: "Could not find a column named 'Name' in any of the sheets. Please check your Excel file." 
+      });
+    }
+
+    console.log("📄 TOTAL ROWS DETECTED:", rows.length);
+    console.log("📄 FIRST DATA ROW RAW:", rows[0]);
+
 
     // ⚡ OPTIMIZATION: Batch load all product groups for this branch ONCE
     const allProductGroups = await ProductGroup.find({ branchId });
     const productGroupMap = new Map(
       allProductGroups.map(group => [group.name.toLowerCase(), group._id])
     );
+
 
     // ⚡ OPTIMIZATION: Batch load all product categories for this branch ONCE
     const allProductCategories = await ProductCategory.find({ branchId });
@@ -375,8 +413,8 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       // Check if product already exists (by name only within branch)
       const existingProductId = existingProductNameMap.get(name.toLowerCase());
 
-      // Prepare data object - only include fields present in normalizedRow
-      let productData = { branchId, name };
+      // Prepare data object - start EMPTY to only include fields present in row
+      let productData = {};
 
       // Product Group logic: only update if group is provided
       if (normalizedRow.stockgroup !== undefined || normalizedRow.productgroup !== undefined || normalizedRow.group !== undefined) {
@@ -465,12 +503,14 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       let marginPercent = undefined;
-      if (normalizedRow.margin !== undefined) {
-        marginPercent = parseFloat(normalizedRow.margin.toString().replace(/[^\d.-]/g, ''));
+      // Added aliases for marginPercentage (like "Margin Percentage" -> "marginpercentage")
+      const mRaw = normalizedRow.marginpercentage || normalizedRow.margin || normalizedRow['margin%'] || normalizedRow.marginpercent;
+      if (mRaw !== undefined) {
+        marginPercent = parseFloat(mRaw.toString().replace(/[^\d.-]/g, ''));
         if (!isNaN(marginPercent)) productData.marginPercentage = Math.round(marginPercent * 100) / 100;
       }
 
-      // Calculate missing price/margin if possible
+      // Calculate/Update consistency between prices and margins
       if (productData.purchasingPrice !== undefined && productData.sellingPrice !== undefined) {
         productData.margin = Math.round((productData.sellingPrice - productData.purchasingPrice) * 100) / 100;
         if (productData.purchasingPrice > 0) {
@@ -479,6 +519,10 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       } else if (productData.purchasingPrice !== undefined && productData.marginPercentage !== undefined) {
         productData.margin = Math.round((productData.purchasingPrice * productData.marginPercentage / 100) * 100) / 100;
         productData.sellingPrice = Math.round((productData.purchasingPrice + productData.margin) * 100) / 100;
+      } else if (productData.sellingPrice !== undefined && productData.marginPercentage !== undefined) {
+        // Back-calculate purchasingPrice: P = S / (1 + M/100)
+        productData.purchasingPrice = Math.round((productData.sellingPrice / (1 + productData.marginPercentage / 100)) * 100) / 100;
+        productData.margin = Math.round((productData.sellingPrice - productData.purchasingPrice) * 100) / 100;
       }
 
       // Warehouse
@@ -519,15 +563,20 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       if (existingProductId) {
-        productsToBulkUpdate.push({
-          updateOne: {
-            filter: { _id: existingProductId },
-            update: { $set: productData }
-          }
-        });
+        // ONLY update if we actually have fields to update
+        if (Object.keys(productData).length > 0) {
+          productsToBulkUpdate.push({
+            updateOne: {
+              filter: { _id: existingProductId },
+              update: { $set: productData }
+            }
+          });
+        }
       } else {
         // Ensure essential defaults for NEW products
         const newProductData = {
+          branchId,
+          name,
           productGroup: productData.productGroup || (await ProductGroup.findOne({ name: "General", branchId }))?._id || (await ProductGroup.create({ name: "General", branchId }))._id,
           perQty: 1,
           units: "kg",
@@ -541,6 +590,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         productsToBulkInsert.push(newProductData);
         existingProductNameMap.set(name.toLowerCase(), "pending_insert");
       }
+
     }
 
     // ⚡ OPTIMIZATION: Bulk insert all at once
