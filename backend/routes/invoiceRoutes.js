@@ -152,7 +152,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     const commonDiscount = customCommonDiscount !== undefined 
       ? Number(customCommonDiscount) 
       : (salesOrder.commonDiscount || 0);
-    const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) + (salesOrder.transportCharge || 0) - commonDiscount);
+    const grandTotal = Math.round(grossSubtotal - totalItemDiscount + totalTax.total + (salesOrder.extraExpenseAmount || 0) + (salesOrder.transportCharge || 0) - commonDiscount);
 
     // Fetch billing person name
     let billingPersonName = "-";
@@ -423,7 +423,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         ? Number(customCommonDiscount) 
         : (salesOrder.commonDiscount || 0);
       
-      const grandTotal = Math.round(subtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tCharge - commonDiscount);
+      const grandTotal = Math.round(grossSubtotal - totalItemDiscount + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tCharge - commonDiscount);
 
       // Note: We already found the invoice object above if it exists
 
@@ -697,7 +697,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         version: (salesOrder.editHistory.length || 0) + 1,
         editType: (salesOrder.editHistory.length === 0) ? 'INVOICED' : 'RE_INVOICED',
         items: processedItems,
-        subtotal: subtotal,
+        subtotal: grossSubtotal,
         totalTax: totalTax,
         grandTotal: grandTotal,
         editedAt: new Date(),
