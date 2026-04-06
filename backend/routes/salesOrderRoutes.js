@@ -10,11 +10,12 @@ import SalesOrder from "../models/SalesOrder.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
+import { cacheData, clearCachePrefix } from "../middleware/cacheMiddleware.js";
 
 const router = express.Router();
 
 // RECORD PAYMENT for sales order
-router.post("/:id/record-payment", async (req, res) => {
+router.post("/:id/record-payment", clearCachePrefix("/api/sales-orders"), async (req, res) => {
   try {
     const { id } = req.params;
     const { amount, paymentMethod, paymentDate, referenceNo, remarks } = req.body;
@@ -123,7 +124,7 @@ router.post("/:id/record-payment", async (req, res) => {
 });
 
 // GET all sales orders (for OthersSummary)
-router.get("/", async (req, res) => {
+router.get("/", cacheData(60), async (req, res) => {
   try {
     const { branchId, customerName, status, isClaim } = req.query;
     const query = {};
@@ -158,7 +159,7 @@ router.get("/", async (req, res) => {
 });
 
 // GET selling history (for Product Records)
-router.get("/history", async (req, res) => {
+router.get("/history", cacheData(120), async (req, res) => {
   try {
     const { branchId, fromDate, toDate, productGroupId, productId } = req.query;
 
@@ -318,7 +319,7 @@ router.get("/preview/:voucherType", async (req, res) => {
   }
 });
 
-router.post("/", auth, async (req, res) => {
+router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
   try {
     const {
       voucherType,
@@ -479,7 +480,7 @@ router.post("/", auth, async (req, res) => {
   }
 });
 
-router.get("/recent", async (req, res) => {
+router.get("/recent", cacheData(60), async (req, res) => {
   try {
     const { customerId, productId, limit = 5 } = req.query;
 
@@ -529,7 +530,7 @@ router.get("/commissions/order/:salesOrderId", async (req, res) => {
 });
 
 // 🗑️ SOFT-CANCEL SALES ORDER (Revert effects, mark CANCELLED, keep in records)
-router.delete("/:id", auth, async (req, res) => {
+router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
   try {
     const { id } = req.params;
     const salesOrder = await SalesOrder.findById(id);
@@ -641,7 +642,7 @@ router.delete("/:id", auth, async (req, res) => {
 });
 
 // 📋 AUTO-APPROVING RE-EDIT (No Admin required as per user request)
-router.patch("/:id/request-reedit", auth, async (req, res) => {
+router.patch("/:id/request-reedit", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
   try {
     const { id } = req.params;
     const { requestedBy } = req.body;
@@ -675,7 +676,7 @@ router.patch("/:id/request-reedit", auth, async (req, res) => {
 });
 
 // ✅ DIRECT RE-EDIT (Admin/Manager can immediately unlock an invoiced order)
-router.patch("/:id/approve-edit", async (req, res) => {
+router.patch("/:id/approve-edit", clearCachePrefix("/api/sales-orders"), async (req, res) => {
   try {
     const { id } = req.params;
     const { editedBy } = req.body;
@@ -708,7 +709,7 @@ router.patch("/:id/approve-edit", async (req, res) => {
 });
 
 // 🎯 GENERATE INVOICE FROM SALES ORDER
-router.patch("/:id/generate-invoice", auth, async (req, res) => {
+router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
   try {
     const { id } = req.params;
     const {
