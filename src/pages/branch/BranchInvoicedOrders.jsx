@@ -122,14 +122,17 @@ const BranchInvoicedOrders = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to update order");
 
-      // Update local state
+      // Use the server-returned order (re-calculated by DB) to update state
+      const serverUpdatedOrder = data.data || data.order || updatedOrder;
+
       setSalesOrders((prev) =>
         prev.map((order) =>
-          order._id === updatedOrder._id ? updatedOrder : order
+          order._id === serverUpdatedOrder._id ? serverUpdatedOrder : order
         )
       );
 
       toast.success("Bill updated successfully!");
+      fetchSalesOrders(); // 🔄 Forced database-wide sync
     } catch (err) {
       console.error("Error updating bill:", err);
       toast.error(err.message || "Failed to update bill");

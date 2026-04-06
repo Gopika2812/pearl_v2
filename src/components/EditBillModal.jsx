@@ -276,8 +276,14 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
 
   // Add new item
   const handleAddItem = () => {
-    if (!newItem.productId || newItem.qty < 1 || newItem.sellingPrice <= 0) {
-      toast.warning("Please fill all required fields");
+    if (!newItem.productId || newItem.qty < 1) {
+      toast.warning("Please select a product and enter quantity");
+      return;
+    }
+
+    // 🛡️ BLOCK ZERO PRICE ADDITION
+    if (Number(newItem.sellingPrice) <= 0) {
+      toast.error("Add Item Blocked: Selling price cannot be ₹0. Please set a price.");
       return;
     }
 
@@ -374,6 +380,11 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
         altUnit: conv?.altUnit || "",
       });
       console.log("✅ New item state updated with price and GST:", { price, gstRate });
+      
+      // 🛡️ ALERT ON ZERO PRICE
+      if (price <= 0) {
+        toast.warning(`Selling Price Alert: "${product.name}" has no selling price (₹0). Please enter it manually.`);
+      }
     }
   };
 

@@ -688,6 +688,12 @@ export default function InventorySalesOrderEntry({
 
     const finalPrice = Math.round(adjustedPrice * 100) / 100;
     setSellingPrice(finalPrice);
+    
+    // 🛡️ ALERT ON ZERO PRICE
+    if (finalPrice <= 0) {
+      toast.warning(`Selling Price Alert: "${product.name}" has no selling price (₹0). Please enter it manually.`);
+    }
+    
     return finalPrice;
   };
 
@@ -834,6 +840,12 @@ export default function InventorySalesOrderEntry({
     }
     if (!qty || Number(qty) <= 0) {
       toast.warning("Quantity must be greater than 0");
+      return;
+    }
+
+    // 🛡️ BLOCK ZERO PRICE ADDITION
+    if (Number(sellingPrice) <= 0) {
+      toast.error("Add Item Blocked: Selling price cannot be ₹0. Please set a price.");
       return;
     }
 
