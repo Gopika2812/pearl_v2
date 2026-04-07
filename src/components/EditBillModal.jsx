@@ -94,11 +94,13 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   // Fetch available products
   const fetchProducts = async () => {
     try {
-      // Get branchId from order or from prop
-      const branch = order?.branchId || branchId;
+      // Priority: 1. branchId prop (passed from parent), 2. order.branchId
+      const branch = branchId || order?.branchId;
+      
+      console.log(`🔍 Product Fetch - branchId prop: ${branchId}, order.branchId: ${order?.branchId}`);
       
       if (!branch) {
-        console.warn("⚠️ branchId not found in order or props");
+        console.warn("⚠️ branchId not found in props or order");
         toast.error("Unable to load products - branch information missing");
         return;
       }
@@ -837,7 +839,16 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                                    setShowProductDropdown(false);
                                  }}
                                >
-                                 {prod.name}
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-semibold">{prod.name}</span>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                                      (prod.availableQty || 0) > 0 
+                                      ? "bg-green-100 text-green-700" 
+                                      : "bg-red-100 text-red-700"
+                                    }`}>
+                                      Qty: {prod.availableQty || 0}
+                                    </span>
+                                  </div>
                                </li>
                              ))
                            ) : (

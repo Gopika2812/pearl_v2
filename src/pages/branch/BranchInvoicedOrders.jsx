@@ -1297,6 +1297,7 @@ const BranchInvoicedOrders = () => {
       {showEditBillModal && editingOrder && (
         <EditBillModal
           order={editingOrder}
+          branchId={currentBranch?._id}
           onClose={() => {
             setShowEditBillModal(false);
             setEditingOrder(null);
