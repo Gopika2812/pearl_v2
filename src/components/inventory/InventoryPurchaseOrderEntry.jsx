@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { FaPlus, FaTrash } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -111,6 +111,13 @@ const InventoryPurchaseOrderEntry = ({
   const [expensePrice, setExpensePrice] = useState("");
   const [expenseGst, setExpenseGst] = useState("");
   const [masterExpenseNames, setMasterExpenseNames] = useState([]);
+
+  // VENDOR SEARCH STATES
+  const [vendorSearch, setVendorSearch] = useState("");
+  const [fetchedVendors, setFetchedVendors] = useState([]);
+  const [searchingVendors, setSearchingVendors] = useState(false);
+  const [showVendorDropdown, setShowVendorDropdown] = useState(false);
+  const vendorDropdownRef = useRef(null);
 
   // Filter products by fetching from API when group changes
   const [filteredProducts, setFilteredProducts] = useState([]);
@@ -240,19 +247,51 @@ const InventoryPurchaseOrderEntry = ({
     }
   };
 
-  // 🔄 AUTO-CALCULATE ALTERNATE QUANTITY
+  // 🔍 ASYNC VENDOR SEARCH
   useEffect(() => {
-    const q = Number(qty) || 0;
-    const v = Number(convValue) || 1;
-    const av = Number(convAltValue) || 1;
-
-    if (q > 0 && v > 0) {
-      const calculated = (q / v) * av;
-      setAltQty(Math.round(calculated * 100) / 100);
-    } else {
-      setAltQty(0);
+    if (!vendorSearch.trim()) {
+      setFetchedVendors(vendors || []);
+      return;
     }
-  }, [qty, convValue, convAltValue]);
+
+    const fetchVendorsFromBackend = async () => {
+      setSearchingVendors(true);
+      try {
+        const branchId = currentBranch?._id || currentBranch?.id;
+        const res = await fetchWithAuth(
+          `${API_BASE}/vendors?search=${encodeURIComponent(vendorSearch)}&branchId=${branchId}&limit=50`
+        );
+        const data = await res.json();
+
+        if (data.success) {
+          setFetchedVendors(data.data || []);
+        } else {
+          setFetchedVendors([]);
+        }
+      } catch (err) {
+        console.error("❌ Vendor search failed:", err);
+        setFetchedVendors([]);
+      } finally {
+        setSearchingVendors(false);
+      }
+    };
+
+    const timer = setTimeout(fetchVendorsFromBackend, 300);
+    return () => clearTimeout(timer);
+  }, [vendorSearch, currentBranch, vendors]);
+
+  // Click Outside logic for Vendor Dropdown
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (vendorDropdownRef.current && !vendorDropdownRef.current.contains(event.target)) {
+        setShowVendorDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // 🔄 AUTO-CALCULATE ALTERNATE QUANTITY
 
   // Add Item
   const addItem = () => {
@@ -563,7 +602,7 @@ const InventoryPurchaseOrderEntry = ({
           />
         </div>
 
-        <div>
+        <div className="relative" ref={vendorDropdownRef}>
           <div className="flex justify-between items-center mb-1">
             <label className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">Vendor</label>
             {canUseQuickLinks && user?.allowedQuickLinks?.includes("vendor") && (
@@ -576,18 +615,41 @@ const InventoryPurchaseOrderEntry = ({
               </button>
             )}
           </div>
-          <select
-            className={selectClass}
-            value={vendor}
-            onChange={(e) => setVendor(e.target.value)}
-          >
-            <option value="">-- Select --</option>
-            {localVendors.map((v) => (
-              <option key={v._id} value={v.name}>
-                {v.name}
-              </option>
-            ))}
-          </select>
+          <input
+            type="text"
+            className={inputClass}
+            placeholder="Type to search vendor..."
+            value={vendorSearch}
+            onChange={(e) => {
+              setVendorSearch(e.target.value);
+              setShowVendorDropdown(true);
+            }}
+            onFocus={() => setShowVendorDropdown(true)}
+          />
+          {showVendorDropdown && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto w-full md:w-80">
+              {searchingVendors && (
+                <div className="px-3 py-2 text-gray-500 text-sm text-center italic">🔍 Searching vendors...</div>
+              )}
+              {!searchingVendors && fetchedVendors.map((v) => (
+                <div
+                  key={v._id}
+                  onClick={() => {
+                    setVendor(v.name);
+                    setVendorSearch(v.name);
+                    setShowVendorDropdown(false);
+                  }}
+                  className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
+                >
+                  <div className="font-semibold">{v.name}</div>
+                  {v.phone && <div className="text-xs text-gray-400">{v.phone}</div>}
+                </div>
+              ))}
+              {!searchingVendors && fetchedVendors.length === 0 && (
+                <div className="px-3 py-2 text-gray-500 text-sm italic">No vendors found</div>
+              )}
+            </div>
+          )}
         </div>
 
         <div>
