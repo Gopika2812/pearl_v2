@@ -8,12 +8,59 @@ import Product from "../models/Product.js";
 import SalesMan from "../models/SalesMan.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
+import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import GLService from "../utils/glService.js";
 
 import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
+
+/**
+ * 🛠️ SHARED CN ID GENERATOR
+ * Generates an atomic, branch-specific ID using the VoucherType system.
+ */
+const generateBranchSpecificCNId = async (branchId, financialYear) => {
+  // 1. Ensure the voucher entry exists for this branch's Credit Notes
+  let voucher = await VoucherType.findOne({
+    branchId,
+    name: "credit_note",
+    orderType: "CN",
+  });
+
+  if (!voucher) {
+    // 💡 LIVE REPAIR: If this is the first time, find the last CN for this branch to initialize accurately
+    const lastCN = await CreditNote.findOne({ branchId, financialYear }).sort({ createdAt: -1 });
+    const lastNum = lastCN ? (parseInt(lastCN.creditNoteId.split("/")[1]) || 0) : 0;
+
+    voucher = await VoucherType.create({
+      branchId,
+      name: "credit_note",
+      orderType: "CN",
+      prefix: "CN",
+      counter: lastNum,
+      financialYear,
+    });
+  }
+
+  // 2. Handle financial year reset
+  if (voucher.financialYear !== financialYear) {
+    voucher = await VoucherType.findByIdAndUpdate(
+      voucher._id,
+      { counter: 0, financialYear },
+      { new: true }
+    );
+  }
+
+  // 3. Increment counter atomically
+  voucher = await VoucherType.findByIdAndUpdate(
+    voucher._id,
+    { $inc: { counter: 1 } },
+    { new: true }
+  );
+
+  return `CN/${String(voucher.counter).padStart(3, "0")}/${financialYear}`;
+};
 
 // GET all credit notes (strictly filtered by branchId)
 router.get("/", async (req, res) => {
@@ -63,7 +110,7 @@ router.get("/order/:salesOrderId", async (req, res) => {
   }
 });
 
-// GET next available credit note ID for preview
+// GET next available credit note ID for preview (Branch-Specific)
 router.get("/next-id", async (req, res) => {
   try {
     const { branchId } = req.query;
@@ -72,10 +119,23 @@ router.get("/next-id", async (req, res) => {
     }
 
     const financialYear = getFinancialYear();
-    const lastCN = await CreditNote.findOne({ financialYear }).sort({ createdAt: -1 });
-    const nextNumber = lastCN ? (parseInt(lastCN.creditNoteId.split("/")[1]) || 0) + 1 : 1;
-    const nextId = `CN/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
+    
+    let voucher = await VoucherType.findOne({
+      branchId,
+      name: "credit_note",
+      orderType: "CN",
+    });
 
+    // If it doesn't exist, we'll peek at the actual branch records for a safe starting point
+    let currentCounter = 0;
+    if (voucher) {
+      currentCounter = voucher.financialYear === financialYear ? voucher.counter : 0;
+    } else {
+      const lastCN = await CreditNote.findOne({ branchId, financialYear }).sort({ createdAt: -1 });
+      currentCounter = lastCN ? (parseInt(lastCN.creditNoteId.split("/")[1]) || 0) : 0;
+    }
+
+    const nextId = `CN/${String(currentCounter + 1).padStart(3, "0")}/${financialYear}`;
     res.json({ success: true, nextId });
   } catch (error) {
     console.error("Next ID Error:", error);
@@ -171,11 +231,8 @@ router.post("/", async (req, res) => {
       };
     });
 
-    // Generate Credit Note ID (Global sequence for entire company)
     const financialYear = getFinancialYear();
-    const lastCN = await CreditNote.findOne({ financialYear }).sort({ createdAt: -1 });
-    const nextNumber = lastCN ? (parseInt(lastCN.creditNoteId.split("/")[1]) || 0) + 1 : 1;
-    const creditNoteId = `CN/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
+    const creditNoteId = await generateBranchSpecificCNId(finalBranchId, financialYear);
 
     // Create credit note
     const creditNote = new CreditNote({
@@ -316,55 +373,27 @@ router.post("/general", async (req, res) => {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
 
-    // Generate Credit Note ID
+    // Generate Credit Note ID (Branch-Specific)
     const financialYear = getFinancialYear();
-    const prefix = "CN";
+    const creditNoteId = await generateBranchSpecificCNId(branchId, financialYear);
 
-    let creditNote;
-    let creditNoteId;
-    let saved = false;
-    let retries = 0;
+    const creditNote = new CreditNote({
+      creditNoteId,
+      branchId,
+      customer: {
+        customerId,
+        name: customer.name,
+      },
+      subtotal: amount,
+      totalTax: 0,
+      grandTotal: amount,
+      reasonForReturn: reasonForReturn || "General Credit",
+      financialYear,
+      status: "Created",
+      items: [] // No items for general CN
+    });
 
-    while (!saved && retries < 5) {
-      try {
-        const lastCN = await CreditNote.findOne({
-          creditNoteId: new RegExp(`^${prefix}/`),
-          financialYear
-        }).sort({ creditNoteId: -1 });
-
-        const nextNumber = lastCN ? parseInt(lastCN.creditNoteId.split("/")[1]) + 1 : 1;
-        creditNoteId = `${prefix}/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
-
-        creditNote = new CreditNote({
-          creditNoteId,
-          branchId,
-          customer: {
-            customerId,
-            name: customer.name,
-          },
-          subtotal: amount,
-          totalTax: 0,
-          grandTotal: amount,
-          reasonForReturn: reasonForReturn || "General Credit",
-          financialYear,
-          status: "Created",
-          items: [] // No items for general CN
-        });
-
-        await creditNote.save();
-        saved = true;
-      } catch (err) {
-        if (err.code === 11000 || (err.message && err.message.includes('E11000'))) {
-          retries++;
-        } else {
-          throw err;
-        }
-      }
-    }
-
-    if (!saved) {
-      return res.status(500).json({ success: false, message: "Could not generate a unique ID. Please try again." });
-    }
+    await creditNote.save();
 
     // Update Customer Balance (Increase Credit) - Netted
     let amountToReturn = amount;

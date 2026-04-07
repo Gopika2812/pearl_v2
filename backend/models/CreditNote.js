@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const creditNoteSchema = new mongoose.Schema(
   {
-    creditNoteId: { type: String, required: true, unique: true },
+    creditNoteId: { type: String, required: true },
     
     // Reference to original sales order
     originalSalesOrderId: {
@@ -78,6 +78,10 @@ const creditNoteSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Branch-specific uniqueness for Credit Note IDs
+creditNoteSchema.index({ branchId: 1, creditNoteId: 1 }, { unique: true });
+
 
 // POST-DELETE HOOK: Reverse the credit note impact
 creditNoteSchema.post("findByIdAndDelete", async function(doc) {

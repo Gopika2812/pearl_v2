@@ -304,7 +304,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           text-align: right; 
           font-weight: 800; 
           color: #dc2626; 
-          font-size: 12px; 
+          font-size: 11px; 
           margin-top: 15px;
           border-top: 1px solid #e5e7eb;
           padding-top: 10px;
@@ -507,7 +507,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
               </div>
 
               <div class="certification">Certified that the particulars given above are true and correct.</div>
-              <div class="copy-label">${copyTitle}</div>
+              <div class="copy-label">${copyTitle} - PAGE 1</div>
               <div class="footer">E. & O.E. | Generated on ${new Date().toLocaleString("en-IN")}</div>
             </div>
           </div>
@@ -640,7 +640,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
     ` : ""}
 
               <div class="certification">Certified that the particulars given above are true and correct.</div>
-              <div class="copy-label">${copyTitle}</div>
+              <div class="copy-label">${copyTitle} - PAGE 2</div>
               <div class="footer">Tax Invoice as per GST regulations | Generated on ${new Date().toLocaleString("en-IN")}</div>
             </div>
           </div>

@@ -18,7 +18,7 @@ const voucherTypeSchema = new mongoose.Schema(
     orderType: {
       type: String,
       required: true,
-      enum: ["SO", "PO", "PI", "SI", "DN", "PM", "EXP"],
+      enum: ["SO", "PO", "PI", "SI", "DN", "CN", "PM", "EXP"],
     },
 
     prefix: {
