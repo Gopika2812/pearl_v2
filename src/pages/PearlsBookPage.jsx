@@ -294,6 +294,81 @@ export default function PearlsBookPage() {
     setDisplayedImageType('invoice');
   };
 
+  /**
+   * ⚡ QUICK PRINT: Directly generates and prints the invoice without modals.
+   * This handles the user request for "direct move to print" and "2 copies".
+   */
+  const handleQuickPrint = async (orderId) => {
+    const order = rows.find(r => r._id === orderId);
+    if (!order) return;
+
+    // Use original quantities by default
+    const defaultAdjustments = {};
+    order.items?.forEach((item, idx) => {
+      defaultAdjustments[idx] = item.qty;
+    });
+
+    setIsGenerating(true);
+    try {
+      // 1. Generate preview (backend now returns exactly 2 pages)
+      const genRes = await axios.post(`${API}/generate-invoice-preview/${orderId}`, {
+        stockAdjustments: defaultAdjustments,
+        invoiceNotes: "",
+      });
+
+      // 2. Automatically confirm and trigger print
+      const confirmRes = await axios.post(`${API}/confirm-invoice/${orderId}`, {
+        stockAdjustments: defaultAdjustments,
+        invoiceNotes: "",
+        printConfirm: true,
+        sendConfirm: false, // Default to print only for quick action
+      });
+
+      // 3. Trigger Print Window Exactly with returned images
+      const invoiceImages = confirmRes.data.invoiceImages || [];
+      if (invoiceImages.length > 0) {
+        const printWindow = window.open('', '_blank');
+        let content = `
+          <html>
+            <head>
+              <title>Invoice - ${order.invoiceId}</title>
+              <style>
+                body { margin: 0; padding: 0; }
+                img { width: 100%; display: block; page-break-after: always; }
+              </style>
+            </head>
+            <body>
+              ${invoiceImages.map(img => `<img src="${img}" />`).join('')}
+              <script>
+                window.onload = function() {
+                  window.print();
+                  setTimeout(() => window.close(), 500);
+                };
+              </script>
+            </body>
+          </html>
+        `;
+        printWindow.document.write(content);
+        printWindow.document.close();
+      }
+
+      // 4. Update UI state
+      setRows(rows.map(r => r._id === orderId ? { ...r, invoiceGenerated: true } : r));
+      
+      // 5. Show alerts if any (e.g. low stock)
+      if (confirmRes.data.lowStockAlerts?.length) {
+        // Optional: toast or minimal alert
+        console.warn("Low stock alerts received during quick print");
+      }
+
+    } catch (err) {
+      console.error("Quick print failed:", err);
+      alert(err.response?.data?.message || "Quick print failed. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
 
 
   return (
@@ -570,11 +645,12 @@ export default function PearlsBookPage() {
                               <FaCheckCircle size={14} />
                             </button>
                           ) : (
-                            // Only show button on ungenerated SALES ORDER
+                            // Trigger Direct Print for ungenerated SALES ORDER
                             <button
-                              onClick={() => openInvoicePreview(r._id)}
-                              className="p-1.5 rounded bg-blue-100 text-blue-600 hover:bg-blue-200 transition"
-                              title="Generate Invoice"
+                              onClick={() => handleQuickPrint(r._id)}
+                              disabled={isGenerating}
+                              className={`p-1.5 rounded bg-blue-100 text-blue-600 hover:bg-blue-200 transition ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              title="Quick Print Invoice"
                             >
                               <FaFileInvoice size={14} />
                             </button>
@@ -675,11 +751,12 @@ export default function PearlsBookPage() {
                     </button>
                   ) : (
                     <button
-                      onClick={() => openInvoicePreview(r._id)}
-                      className="flex-1 bg-primary text-white rounded-lg py-2 text-sm hover:bg-blue-700 transition"
-                      title="Generate Invoice"
+                      onClick={() => handleQuickPrint(r._id)}
+                      disabled={isGenerating}
+                      className={`flex-1 bg-primary text-white rounded-lg py-2 text-sm hover:bg-blue-700 transition ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      title="Quick Print Invoice"
                     >
-                      Generate Invoice
+                      {isGenerating ? "Processing..." : "Generate Invoice"}
                     </button>
                   )}
                 </>

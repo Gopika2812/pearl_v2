@@ -63,6 +63,27 @@ router.get("/order/:salesOrderId", async (req, res) => {
   }
 });
 
+// GET next available credit note ID for preview
+router.get("/next-id", async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    if (!branchId) {
+      return res.status(400).json({ success: false, message: "branchId is required" });
+    }
+
+    const financialYear = getFinancialYear();
+    const lastCN = await CreditNote.findOne({ financialYear }).sort({ createdAt: -1 });
+    const nextNumber = lastCN ? (parseInt(lastCN.creditNoteId.split("/")[1]) || 0) + 1 : 1;
+    const nextId = `CN/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
+
+    res.json({ success: true, nextId });
+  } catch (error) {
+    console.error("Next ID Error:", error);
+    res.status(500).json({ success: false, message: "Failed to generate next ID" });
+  }
+});
+
+
 // CREATE credit note (sales order return)
 router.post("/", async (req, res) => {
   try {
@@ -83,6 +104,16 @@ router.post("/", async (req, res) => {
     if (originalSalesOrderId) {
       // Get original sales order
       originalOrder = await SalesOrder.findById(originalSalesOrderId).populate("customer.customerId");
+      
+      // 💡 FALLBACK: If not found in SalesOrder, check if it's an Invoice ID
+      if (!originalOrder) {
+        const Invoice = mongoose.model("Invoice");
+        const linkedInvoice = await Invoice.findById(originalSalesOrderId);
+        if (linkedInvoice && linkedInvoice.salesOrderId) {
+          originalOrder = await SalesOrder.findById(linkedInvoice.salesOrderId).populate("customer.customerId");
+        }
+      }
+
       if (!originalOrder) {
         return res.status(404).json({ success: false, message: "Sales order not found" });
       }
@@ -132,16 +163,17 @@ router.post("/", async (req, res) => {
         discountPercent: discountP,
         discountAmount: itemDiscount,
         gst: gstRate,
-        cgst: item.igst ? 0 : gstRate / 2,
-        sgst: item.igst ? 0 : gstRate / 2,
-        igst: item.igst ? gstRate : 0,
+        tax: itemTax, // ✨ Added for GL/Accounting consistency
+        cgst: item.igst ? 0 : itemTax / 2,
+        sgst: item.igst ? 0 : itemTax / 2,
+        igst: item.igst ? itemTax : 0,
         total: itemTotal,
       };
     });
 
-    // Generate Credit Note ID (Branch Specific)
+    // Generate Credit Note ID (Global sequence for entire company)
     const financialYear = getFinancialYear();
-    const lastCN = await CreditNote.findOne({ branchId: finalBranchId, financialYear }).sort({ createdAt: -1 });
+    const lastCN = await CreditNote.findOne({ financialYear }).sort({ createdAt: -1 });
     const nextNumber = lastCN ? (parseInt(lastCN.creditNoteId.split("/")[1]) || 0) + 1 : 1;
     const creditNoteId = `CN/${String(nextNumber).padStart(3, "0")}/${financialYear}`;
 
@@ -171,9 +203,11 @@ router.post("/", async (req, res) => {
 
     // 1️⃣ ADD PRODUCTS BACK TO INVENTORY
     for (const item of returnedItems) {
-      await Product.findByIdAndUpdate(item.productId, {
-        $inc: { totalQty: item.qty }
-      });
+      if (item.productId) {
+        await Product.findByIdAndUpdate(item.productId, {
+          $inc: { totalQty: item.qty }
+        });
+      }
     }
 
     // 2️⃣ INCREASE CUSTOMER CREDIT (they get money back) - Netted
@@ -199,18 +233,20 @@ router.post("/", async (req, res) => {
     });
 
     // CREATE AUDIT LOG
-    await createAuditLog({
-      userId: userId || "System",
-      username: username || "System",
-      branchId: finalBranchId,
-      action: "CREDIT_NOTE",
-      description: `Created credit note ${creditNoteId} for ${customer.name} - ₹${grandTotal}`,
-      targetId: creditNote._id,
-      targetModel: "CreditNote",
-    });
+    try {
+      await createAuditLog({
+        userId: userId || "System",
+        username: username || "System",
+        branchId: finalBranchId,
+        action: "CREDIT_NOTE",
+        description: `Created credit note ${creditNoteId} for ${customer.name} - ₹${grandTotal}`,
+        targetId: creditNote._id,
+        targetModel: "CreditNote",
+      });
+    } catch (logErr) { console.warn("Audit log failed"); }
 
     // 3️⃣ REDUCE COMMISSIONS (only for invoice-linked returns)
-    if (originalSalesOrderId && originalOrder) {
+    if (originalSalesOrderId && originalOrder && mongoose.Types.ObjectId.isValid(originalSalesOrderId)) {
       try {
         const salesOrderObjectId = new mongoose.Types.ObjectId(originalSalesOrderId);
         let commission = await Commission.findOne({ salesOrderId: salesOrderObjectId });

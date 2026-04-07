@@ -11,6 +11,7 @@ import Payment from "../models/Payment.js";
 import DebitNote from "../models/DebitNote.js";
 import Receipt from "../models/Receipt.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
+import CreditNote from "../models/CreditNote.js";
 import mongoose from "mongoose";
 
 const router = express.Router();
@@ -498,7 +499,29 @@ router.get("/day-book", async (req, res) => {
       } : {})
     }).select("purchaseInvoiceId vendor voucherType grandTotal vendorDate invoiceDate createdAt");
 
-    // ... (keep 4-7 as is) ...
+    // 4. Fetch Credit Notes
+    const filteredCreditNotes = await CreditNote.find({
+      branchId,
+      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
+    }).select("creditNoteId customer grandTotal createdAt");
+
+    // 5. Fetch Receipts
+    const receipts = await Receipt.find({
+      branchId,
+      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
+    }).select("receiptId customer amount createdAt");
+
+    // 6. Fetch Payments
+    const payments = await Payment.find({
+      branchId,
+      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
+    }).select("paymentId vendor expenseDetails amount createdAt");
+
+    // 7. Fetch Debit Notes
+    const debitNotes = await DebitNote.find({
+      branchId,
+      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
+    }).select("debitNoteId vendor grandTotal createdAt");
 
     // Combine and Transform
     const dayBook = [

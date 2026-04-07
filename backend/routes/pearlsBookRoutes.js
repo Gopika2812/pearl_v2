@@ -957,25 +957,21 @@ async function generateEwayBillImage(sale) {
   }
 }
 
-// Generate both Original and Copy 1
+// Generate both Original and Copy 1 Tax Invoices ONLY (2 items total)
 async function generateInvoiceImage(sale, backOrderSummary = [], invoiceNotes = "") {
-  console.log("📄 Generating Dual Copy Invoices (Original & Copy 1)...");
+  console.log("📄 Generating Dual Copy Tax Invoices (Original & Copy 1)...");
   
   const isReEdited = !!sale.isReEdited || !!sale.invoiceGenerated;
   const copies = isReEdited ? ["RE-EDIT ORIGINAL", "RE-EDIT COPY 1"] : ["ORIGINAL INVOICE", "COPY 1"];
 
-  // ORIGINAL SET
-  const originalOrder = await generateInvoiceOrderPage(sale, copies[0], isReEdited);
+  // ORIGINAL SET - Tax Invoice Only
   const originalTax = await generateInvoiceTaxPage(sale, copies[0], backOrderSummary, invoiceNotes, isReEdited);
 
-  // COPY 1 SET
-  const copy1Order = await generateInvoiceOrderPage(sale, copies[1], isReEdited);
+  // COPY 1 SET - Tax Invoice Only
   const copy1Tax = await generateInvoiceTaxPage(sale, copies[1], backOrderSummary, invoiceNotes, isReEdited);
 
   return [
-    originalOrder,
     originalTax,
-    copy1Order,
     copy1Tax
   ];
 }

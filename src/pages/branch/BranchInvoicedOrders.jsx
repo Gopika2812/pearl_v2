@@ -10,6 +10,7 @@ import EditBillModal from "../../components/EditBillModal";
 import InvoiceGeneratorModal from "../../components/InvoiceGeneratorModal";
 import AggregateSlipModal from "../../components/branch/AggregateSlipModal";
 import { useBranch } from "../../context/BranchContext";
+import { getInvoiceHTML } from "../../utils/invoiceUtils";
 
 const BranchInvoicedOrders = () => {
   const { currentBranch, user } = useBranch();
@@ -33,6 +34,8 @@ const BranchInvoicedOrders = () => {
   const [expandedOrders, setExpandedOrders] = useState({});
   const [invoicesByOrder, setInvoicesByOrder] = useState({}); // New: store invoices for each SO
   const [requestingReEdit, setRequestingReEdit] = useState(null); // ID of order currently requesting re-edit
+  const [showCopyChoice, setShowCopyChoice] = useState(false);
+  const [processingPrint, setProcessingPrint] = useState(false);
 
   // Filter states
   const [filterVoucherType, setFilterVoucherType] = useState("");
@@ -85,7 +88,86 @@ const BranchInvoicedOrders = () => {
 
   const handleGenerateInvoice = (order) => {
     setSelectedOrder(order);
-    setShowModal(true);
+    setShowCopyChoice(true); // Open the small choice modal instead of the large generator
+  };
+
+  /**
+   * ⚡ DIRECT PRINT: Processes the invoice in the background and prints.
+   */
+  const handleDirectPrint = async (numCopies) => {
+    if (!selectedOrder) return;
+    
+    setProcessingPrint(true);
+    setShowCopyChoice(false);
+
+    try {
+      // 1. Generate Invoice Preview with default items (100% quantity)
+      const defaultItems = (selectedOrder.items || []).map(item => ({
+        ...item,
+        confirmedQty: item.qty,
+        backOrderQty: 0
+      }));
+
+      const previewRes = await fetch(`${API_BASE}/invoices/preview/${selectedOrder._id}`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({
+          items: defaultItems,
+          notes: selectedOrder.notes || "",
+          invoiceType: "TAX_INVOICE",
+          commonDiscount: selectedOrder.commonDiscount || 0
+        })
+      });
+
+      const previewData = await previewRes.json();
+      if (!previewRes.ok) throw new Error(previewData.message || "Preview failed");
+
+      // 2. Finalize Invoice
+      const finalizeRes = await fetch(`${API_BASE}/invoices/finalize/${selectedOrder._id}`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({
+          items: defaultItems,
+          notes: selectedOrder.notes || "",
+          invoiceType: "TAX_INVOICE",
+          commonDiscount: selectedOrder.commonDiscount || 0,
+          finalizedBy: user?.id || user?._id,
+          finalizedByUsername: user?.username || user?.fullName || user?.name || "System",
+        })
+      });
+
+      const finalizeData = await finalizeRes.json();
+      if (!finalizeRes.ok) throw new Error(finalizeData.message || "Finalize failed");
+
+      // 3. Trigger Print
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        toast.warning("🔔 Pop-up blocked! Please allow pop-ups to print.");
+      } else {
+        const html = getInvoiceHTML(previewData, numCopies, selectedOrder, finalizeData.invoice);
+        printWindow.document.write(html);
+        printWindow.document.close();
+        setTimeout(() => {
+          printWindow.print();
+          setTimeout(() => printWindow.close(), 1000);
+        }, 500);
+      }
+
+      toast.success("✅ Invoice generated and print triggered!");
+      fetchSalesOrders(); // Refresh list
+    } catch (err) {
+      console.error("Direct print failed:", err);
+      toast.error(err.message || "Failed to generate invoice");
+    } finally {
+      setProcessingPrint(false);
+      setSelectedOrder(null);
+    }
   };
 
   const handleEditBill = (order) => {
@@ -1211,17 +1293,73 @@ const BranchInvoicedOrders = () => {
         />
       )}
 
-      {/* EDIT BILL MODAL */}
+      {/* RE-EDIT BILL MODAL */}
       {showEditBillModal && editingOrder && (
         <EditBillModal
           order={editingOrder}
-          branchId={currentBranch?._id}
           onClose={() => {
             setShowEditBillModal(false);
             setEditingOrder(null);
           }}
           onSave={handleSaveEditedBill}
         />
+      )}
+
+      {/* QUICK COPY CHOICE MODAL */}
+      {showCopyChoice && !processingPrint && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-300">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white text-center">
+              <FaFileInvoice className="text-4xl mx-auto mb-3 opacity-90" />
+              <h3 className="text-xl font-black">Direct Print</h3>
+              <p className="text-xs text-blue-100 mt-1 uppercase tracking-widest font-bold">SO: {selectedOrder?.invoiceId}</p>
+            </div>
+            
+            <div className="p-8">
+              <p className="text-gray-600 text-sm text-center mb-6 font-semibold">How many copies would you like to print?</p>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => handleDirectPrint(1)}
+                  className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-gray-100 hover:border-blue-500 hover:bg-blue-50 transition-all group"
+                >
+                  <span className="text-3xl group-hover:scale-110 transition">📄</span>
+                  <span className="font-bold text-gray-800">1 Copy</span>
+                </button>
+                <button
+                  onClick={() => handleDirectPrint(2)}
+                  className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-gray-100 hover:border-blue-500 hover:bg-blue-50 transition-all group"
+                >
+                  <span className="text-3xl group-hover:scale-110 transition">👥</span>
+                  <span className="font-bold text-gray-800">2 Copies</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 text-center">
+              <button 
+                onClick={() => {
+                  setShowCopyChoice(false);
+                  setSelectedOrder(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 font-bold text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PROCESSING OVERLAY */}
+      {processingPrint && (
+        <div className="fixed inset-0 bg-white/80 backdrop-blur-md z-[9999] flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <h3 className="text-xl font-black text-gray-800">Processing Invoice...</h3>
+            <p className="text-sm text-gray-500 mt-2">Opening print window shortly</p>
+          </div>
+        </div>
       )}
 
       {/* AGGREGATE SLIP MODAL */}

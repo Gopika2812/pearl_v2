@@ -24,6 +24,9 @@ const BranchLockedPrices = () => {
   const [lockedPrice, setLockedPrice] = useState("");
   const [isLocked, setIsLocked] = useState(true);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [searchingCust, setSearchingCust] = useState(false);
+  const [searchingProd, setSearchingProd] = useState(false);
+  const [prodResults, setProdResults] = useState([]);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -56,6 +59,54 @@ const BranchLockedPrices = () => {
 
     fetchExistingPrice();
   }, [selectedCustomerId, selectedProductId, currentBranch?._id]);
+
+  // 🔍 DEBOUNCED CUSTOMER SEARCH
+  useEffect(() => {
+    const searchCustomers = async () => {
+      if (!custSearch.trim() || selectedCustomerId) {
+        if (!custSearch.trim()) fetchCustomers(); // Reset to default list if search is empty
+        return;
+      }
+      
+      setSearchingCust(true);
+      try {
+        const res = await fetch(`${API_BASE}/customers?branchId=${currentBranch._id}&search=${custSearch}&limit=20`);
+        const data = await res.json();
+        setCustomers(data.data || []);
+      } catch (err) {
+        console.error("Search Customers Error:", err);
+      } finally {
+        setSearchingCust(false);
+      }
+    };
+
+    const timer = setTimeout(searchCustomers, 500);
+    return () => clearTimeout(timer);
+  }, [custSearch, currentBranch?._id]);
+
+  // 🔍 DEBOUNCED PRODUCT SEARCH
+  useEffect(() => {
+    const searchProducts = async () => {
+      if (!prodSearch.trim() || selectedProductId) {
+        setProdResults([]); // Clear results if not searching
+        return;
+      }
+      
+      setSearchingProd(true);
+      try {
+        const res = await fetch(`${API_BASE}/products?branchId=${currentBranch._id}&search=${prodSearch}&limit=20`);
+        const data = await res.json();
+        setProdResults(data.data || []);
+      } catch (err) {
+        console.error("Search Products Error:", err);
+      } finally {
+        setSearchingProd(false);
+      }
+    };
+
+    const timer = setTimeout(searchProducts, 500);
+    return () => clearTimeout(timer);
+  }, [prodSearch, currentBranch?._id]);
 
   const fetchCustomers = async () => {
     try {
@@ -172,16 +223,12 @@ const BranchLockedPrices = () => {
     }
   };
 
-  const selectedProduct = products.find(p => p._id === selectedProductId);
+  const selectedProduct = products.find(p => p._id === selectedProductId) || prodResults.find(p => p._id === selectedProductId);
   const selectedCustomer = customers.find(c => c._id === selectedCustomerId);
 
-  const filteredCustomers = customers.filter(c => 
-    c.name.toLowerCase().includes(custSearch.toLowerCase())
-  ).slice(0, 50);
-
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(prodSearch.toLowerCase())
-  ).slice(0, 50);
+  // Dropdown options: If searching, use searching state results. Otherwise use initial fetch results.
+  const displayCustomers = customers.slice(0, 50);
+  const displayProducts = prodSearch.trim() && prodResults.length > 0 ? prodResults : products.slice(0, 50);
 
   // Auto-calculate margin
   const margin = selectedProduct ? (Number(lockedPrice || selectedProduct.sellingPrice) - selectedProduct.purchasingPrice) : 0;
@@ -270,7 +317,11 @@ const BranchLockedPrices = () => {
                       className="absolute z-20 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200"
                       onMouseLeave={() => setShowCustomerDropdown(false)}
                     >
-                      {filteredCustomers.length > 0 ? filteredCustomers.map(c => (
+                      {searchingCust ? (
+                        <div className="p-4 text-center text-gray-400 text-[10px] font-black uppercase flex items-center justify-center gap-2">
+                          <FaSync className="animate-spin text-[#319bab]" /> Searching Database...
+                        </div>
+                      ) : displayCustomers.length > 0 ? displayCustomers.map(c => (
                         <div 
                           key={c._id}
                           onClick={() => {
@@ -285,7 +336,7 @@ const BranchLockedPrices = () => {
                         </div>
                       )) : (
                         <div className="p-4 text-center text-gray-400 text-[10px] font-black uppercase">
-                          No customers found ({customers.length} total)
+                          No customers found
                         </div>
                       )}
                     </div>
@@ -323,7 +374,11 @@ const BranchLockedPrices = () => {
                       className="absolute z-20 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200"
                       onMouseLeave={() => setShowProductDropdown(false)}
                     >
-                      {filteredProducts.length > 0 ? filteredProducts.map(p => (
+                      {searchingProd ? (
+                        <div className="p-4 text-center text-gray-400 text-[10px] font-black uppercase flex items-center justify-center gap-2">
+                          <FaSync className="animate-spin text-[#319bab]" /> Searching Database...
+                        </div>
+                      ) : displayProducts.length > 0 ? displayProducts.map(p => (
                         <div 
                           key={p._id}
                           onClick={() => {
@@ -336,13 +391,13 @@ const BranchLockedPrices = () => {
                         >
                           <span className="font-bold text-gray-700 group-hover:text-[#319bab] transition-colors">{p.name}</span>
                           <div className="text-right">
-                            <div className="text-[9px] text-gray-400 font-black">STOCK: {p.totalQty}</div>
-                            <div className="text-[9px] text-[#319bab] font-black">₹{p.sellingPrice}</div>
+                             <div className="text-[9px] text-gray-400 font-black">STOCK: {p.totalQty}</div>
+                             <div className="text-[9px] text-[#319bab] font-black">₹{p.sellingPrice}</div>
                           </div>
                         </div>
                       )) : (
                         <div className="p-4 text-center text-gray-400 text-[10px] font-black uppercase">
-                          No products found ({products.length} total)
+                          No products found
                         </div>
                       )}
                     </div>
