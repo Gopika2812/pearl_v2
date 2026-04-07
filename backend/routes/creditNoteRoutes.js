@@ -17,11 +17,36 @@ import { createAuditLog } from "../utils/logUtil.js";
 const router = express.Router();
 
 /**
+ * 🏗️ LIVE REPAIR: Drop the legacy global unique index to allow branch-specific numbering
+ * This runs once on server startup to ensure Option B (branch-specific numbering) can work.
+ */
+mongoose.connection.on("connected", async () => {
+  try {
+    const collections = await mongoose.connection.db.listCollections({ name: "creditnotes" }).toArray();
+    if (collections.length > 0) {
+      const db = mongoose.connection.db;
+      const indexes = await db.collection("creditnotes").indexes();
+      const hasLegacyIndex = indexes.some(idx => idx.name === "creditNoteId_1");
+      
+      if (hasLegacyIndex) {
+        await db.collection("creditnotes").dropIndex("creditNoteId_1");
+        console.log("✅ Legacy global CreditNote index 'creditNoteId_1' dropped successfully.");
+      }
+    }
+  } catch (err) {
+    if (err.codeName !== "IndexNotFound") {
+      console.warn("⚠️ Could not drop legacy CreditNote index:", err.message);
+    }
+  }
+});
+
+/**
  * 🛠️ SHARED CN ID GENERATOR
  * Generates an atomic, branch-specific ID using the VoucherType system.
  */
 const generateBranchSpecificCNId = async (branchId, financialYear) => {
   // 1. Ensure the voucher entry exists for this branch's Credit Notes
+  // Use atomic findOneAndUpdate with upsert to prevent race conditions
   let voucher = await VoucherType.findOne({
     branchId,
     name: "credit_note",
@@ -33,14 +58,17 @@ const generateBranchSpecificCNId = async (branchId, financialYear) => {
     const lastCN = await CreditNote.findOne({ branchId, financialYear }).sort({ createdAt: -1 });
     const lastNum = lastCN ? (parseInt(lastCN.creditNoteId.split("/")[1]) || 0) : 0;
 
-    voucher = await VoucherType.create({
-      branchId,
-      name: "credit_note",
-      orderType: "CN",
-      prefix: "CN",
-      counter: lastNum,
-      financialYear,
-    });
+    voucher = await VoucherType.findOneAndUpdate(
+      { branchId, name: "credit_note", orderType: "CN" },
+      { 
+        $setOnInsert: { 
+          prefix: "CN", 
+          counter: lastNum, 
+          financialYear 
+        } 
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
   }
 
   // 2. Handle financial year reset
