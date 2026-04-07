@@ -370,9 +370,9 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
 
     console.log("📤 POST /sales-orders received");
 
-    if (!voucherType || !items?.length || !branchId) {
-      console.error("❌ Missing required fields:", { voucherType, itemsLength: items?.length, branchId });
-      return res.status(400).json({ message: "Invalid sales order data - voucherType, items, and branchId are required" });
+    if (!voucherType || (!items?.length && !sampleItems?.length) || !branchId) {
+      console.error("❌ Missing required fields:", { voucherType, itemsLength: items?.length, sampleItemsLength: sampleItems?.length, branchId });
+      return res.status(400).json({ message: "Invalid sales order data - voucherType, branchId, and at least one item (Regular or Sample) are required" });
     }
 
     const currentFY = getFinancialYear();

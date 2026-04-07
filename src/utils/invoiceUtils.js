@@ -52,6 +52,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
           text-transform: uppercase;
         }
         .balance-info { background: #f8fafc; padding: 10px; margin: 12px 0; font-size: 11px; border-left: 4px solid #000; border-radius: 4px; }
+        .sample-section { background: #fffbeb; padding: 10px; margin: 12px 0; border: 1px solid #fef3c7; border-radius: 6px; }
         
         .sender-buyer { display: flex; gap: 12px; margin: 10px 0; border: 1px solid #000; padding: 10px; border-radius: 6px; background: #f8fafc; color: #000; }
         .sender-buyer-col { flex: 1; font-size: 10px; line-height: 1.4; }
@@ -141,6 +142,33 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                   `).join("")}
                 </tbody>
               </table>
+              
+              <!-- SAMPLE PRODUCTS TABLE -->
+              ${previewData?.sampleItems?.length > 0 ? `
+                <div class="sample-section">
+                  <strong style="font-size: 11px; color: #92400e;">🎁 SAMPLE PRODUCTS (NOT BILLED)</strong>
+                  <table style="margin-top: 5px;">
+                    <thead>
+                      <tr>
+                        <th style="width: 40%; background: #92400e;">Product Name</th>
+                        <th style="background: #92400e;">HSN</th>
+                        <th style="text-align: right; background: #92400e;">Qty</th>
+                        <th style="text-align: right; background: #92400e;">Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${previewData.sampleItems.map(item => `
+                        <tr>
+                          <td>${item.name}</td>
+                          <td>${item.hsn || "-"}</td>
+                          <td style="text-align: right;">${item.qty} ${item.unit || ""}</td>
+                          <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
+                        </tr>
+                      `).join("")}
+                    </tbody>
+                  </table>
+                </div>
+              ` : ""}
 
               <div style="display: flex; gap: 10px; margin-top: 15px;">
                 <div style="flex: 1;">

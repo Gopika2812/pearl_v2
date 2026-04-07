@@ -1210,8 +1210,8 @@ export default function InventorySalesOrderEntry({
   };
 
   const handleFinalAction = async () => {
-    if (!voucherType || !warehouse || items.length === 0) {
-      return toast.error("Fill all required fields");
+    if (!voucherType || !warehouse || (items.length === 0 && sampleItems.length === 0)) {
+      return toast.error("Select a voucher, warehouse, and add at least one item (Regular or Sample)");
     }
 
     if (!customerId) {
