@@ -552,7 +552,13 @@ export default function InventorySalesOrderEntry({
   }, [filteredProducts, productGroup]);
 
   const productsWithStock = useMemo(() => {
-    return filteredProducts.map((p) => {
+    // 🛡️ COMBINE: Use a map to merge filteredProducts (group) and fetchedProducts (search) uniquely
+    const allUniqueProducts = new Map();
+    [...filteredProducts, ...fetchedProducts].forEach(p => {
+      if (p && p._id) allUniqueProducts.set(String(p._id), p);
+    });
+
+    return Array.from(allUniqueProducts.values()).map((p) => {
       // 1️⃣ Get HSN and Prices from product database first
       let hsn = p.hsnCode || "";
       let sPrice = p.sellingPrice || 0;
@@ -580,7 +586,7 @@ export default function InventorySalesOrderEntry({
         hsn,
       };
     });
-  }, [filteredProducts, poItems]);
+  }, [filteredProducts, fetchedProducts, poItems]);
 
   // UNIT CONVERSION CALCULATION
   useEffect(() => {
@@ -1618,7 +1624,7 @@ export default function InventorySalesOrderEntry({
                 </div>
                 <input
                   type="text"
-                  placeholder="Type item name..."
+                  placeholder={!warehouse ? "⚠️ Select Warehouse First..." : "Type item name to search..."}
                   value={itemSearch}
                   onChange={(e) => {
                     setItemSearch(e.target.value);
@@ -1626,7 +1632,7 @@ export default function InventorySalesOrderEntry({
                   }}
                   onFocus={() => setShowItemDropdown(true)}
                   disabled={!warehouse}
-                  className={`${inputClass} ${(!warehouse) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                  className={`${inputClass} ${(!warehouse) ? 'bg-red-50 cursor-not-allowed border-red-200' : ''}`}
                 />
 
                 {showItemDropdown && warehouse && (
