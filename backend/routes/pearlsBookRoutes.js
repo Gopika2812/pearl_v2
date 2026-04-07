@@ -49,7 +49,7 @@ async function generatePlaceholderInvoice(sale, type = "order") {
         <text x="200" y="260" font-size="12" fill="#000">${sale.warehouse || "N/A"}</text>
         
         <text x="50" y="290" font-size="12" font-weight="bold" fill="#000">Date:</text>
-        <text x="200" y="290" font-size="12" fill="#000">${new Date().toLocaleDateString()}</text>
+        <text x="200" y="290" font-size="12" fill="#000">${new Date(sale.orderDate || sale.createdAt || new Date()).toLocaleDateString()}</text>
         
         <!-- Items Header -->
         <rect x="50" y="330" width="700" height="30" fill="#e8e8e8" stroke="black" stroke-width="1"/>
@@ -416,7 +416,7 @@ async function generateInvoiceOrderPage(sale, copyTitle = "ORIGINAL INVOICE", is
             <div>
               <p style="font-size: 10px; font-weight: bold; color: #1e40af; margin-bottom: 4px;">Acknowledgement No:</p>
               <p style="font-size: 11px; font-weight: 900;">${sale.invoiceId}</p>
-              <p style="margin-top: 5px; font-size: 9px;"><strong>Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}</strong></p>
+              <p style="margin-top: 5px; font-size: 9px;"><strong>Date: ${new Date(sale.createdAt || sale.orderDate || new Date()).toLocaleDateString("en-IN")}</strong></p>
             </div>
           </div>
           <div class="company-info-box">
@@ -647,7 +647,7 @@ async function generateInvoiceTaxPage(sale, copyTitle = "ORIGINAL INVOICE", back
         <div style="text-align: center; margin-bottom: 25px; border-bottom: 2px solid #1e40af; padding-bottom: 20px;">
            ${logoDataUri ? `<img src="${logoDataUri}" style="max-width: 100px; margin-bottom: 15px;">` : ''}
            <h1 style="margin: 0; font-size: 20px; color: #1e40af; text-transform: uppercase;">${isReEdited ? "RE-EDIT " : ""}Tax Invoice - HSN Statement</h1>
-           <p style="font-size: 14px; margin-top: 10px;">Invoice No: <strong>${sale.invoiceId}</strong> | Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}</p>
+           <p style="font-size: 14px; margin-top: 10px;">Invoice No: <strong>${sale.invoiceId}</strong> | Date: ${new Date(sale.createdAt || sale.orderDate || new Date()).toLocaleDateString("en-IN")}</p>
         </div>
 
         <table>
@@ -778,7 +778,7 @@ async function generateBackOrderPage(sale, backOrderSummary, invoiceNotes = "") 
         <div class="details">
           <div class="detail-item">
             <strong>Invoice No: ${sale.invoiceId}</strong>
-            <div>Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}</div>
+            <div>Date: ${new Date(sale.orderDate || sale.createdAt).toLocaleDateString("en-IN")}</div>
           </div>
           <div class="detail-item">
             <strong>Customer: ${sale.customer.name}</strong>

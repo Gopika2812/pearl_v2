@@ -163,7 +163,7 @@ router.get("/", cacheData(60), async (req, res) => {
 
     // ⚡ Optimized Fetch
     const salesOrders = await SalesOrder.find(query)
-      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt date invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount")
+      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt orderDate invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount")
       .populate('salesOwner', 'name')
       .sort({ createdAt: -1 })
       .limit(200) // Prevent huge lists from crashing the browser
@@ -1012,7 +1012,7 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
       openingBalance: Math.round(Number(invoiceOpeningBalance) || 0),
       closingBalance: Math.round(Number(invoiceClosingBalance) || 0),
       financialYear: currentFY,
-      invoiceDate: new Date(),
+      invoiceDate: salesOrder.orderDate || salesOrder.createdAt,
       status: "FINALIZED"
     });
     await invoiceDoc.save();

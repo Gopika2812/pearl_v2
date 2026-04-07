@@ -170,7 +170,7 @@ export default function CreditNoteModal({ invoice, isOpen, onClose, onCreditNote
                 <thead className="bg-gray-100 border-b">
                   <tr>
                     <th className="px-4 py-3 text-left font-bold text-gray-700">Product Name</th>
-                    <th className="px-4 py-3 text-center font-bold text-gray-700">Available Qty</th>
+                    <th className="px-4 py-3 text-center font-bold text-gray-700">Total Qty</th>
                     <th className="px-4 py-3 text-right font-bold text-gray-700">Unit Price</th>
                     <th className="px-4 py-3 text-center font-bold text-gray-700">Return Qty</th>
                     <th className="px-4 py-3 text-right font-bold text-gray-700">Return Amount</th>

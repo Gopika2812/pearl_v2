@@ -68,6 +68,7 @@ const purchaseInvoiceSchema = new mongoose.Schema(
       },
     ],
     extraExpenseAmount: { type: Number, default: 0 },
+    totalDiscount: { type: Number, default: 0 },
     grandTotal: Number,
 
     // Metadata

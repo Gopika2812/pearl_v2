@@ -66,6 +66,7 @@ const PurchaseOrderSchema = new mongoose.Schema(
       },
     ],
     extraExpenseAmount: { type: Number, default: 0 },
+    totalDiscount: { type: Number, default: 0 },
     grandTotal: Number,
 
     billingPerson: String,
@@ -93,6 +94,7 @@ const PurchaseOrderSchema = new mongoose.Schema(
         items: [PurchaseItemSchema],
         subtotal: Number,
         totalTax: Number,
+        totalDiscount: { type: Number, default: 0 },
         grandTotal: Number,
         editedAt: { type: Date, default: Date.now },
         editedBy: String,

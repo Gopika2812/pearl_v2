@@ -148,12 +148,19 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       
       // Calculate NEW totals based on newItems
       const subtotal = newItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
+      const totalDiscount = newItems.reduce((acc, i) => acc + (Number(i.discountAmount) || 0), 0);
+      const baseTaxable = subtotal - totalDiscount;
+
       const totalTax = newItems.reduce((acc, i) => {
         const gst = Number(i.gst || 0);
-        const iBase = Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty));
-        return acc + (iBase * gst / 100);
+        const iPrice = Number(i.purchasePrice) || 0;
+        const iQty = Number(i.qty) || 0;
+        const iDisc = Number(i.discountAmount) || 0;
+        const itemTaxable = (iPrice * iQty) - iDisc;
+        return acc + (itemTaxable * gst / 100);
       }, 0);
-      const grandTotal = subtotal + totalTax + (order.extraExpenseAmount || 0);
+      
+      const grandTotal = Math.round(baseTaxable + totalTax + (order.extraExpenseAmount || 0));
 
       const oldGrandTotal = order.lastInvoicedGrandTotal || 0;
       const vendorDelta = Math.round(grandTotal) - Math.round(oldGrandTotal);
@@ -195,6 +202,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       // 4. PERSIST TO PURCHASE ORDER
       order.items = newItems;
       order.subtotal = Math.round(subtotal);
+      order.totalDiscount = Math.round(totalDiscount);
       order.totalTax = Math.round(totalTax);
       order.grandTotal = Math.round(grandTotal);
       order.vendorBillNo = req.body.vendorBillNo;
@@ -206,6 +214,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         {
           items: newItems,
           subtotal: order.subtotal,
+          totalDiscount: order.totalDiscount,
           totalTax: order.totalTax,
           grandTotal: order.grandTotal,
           extraExpenses: order.extraExpenses || [],
@@ -219,6 +228,9 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         version: (order.editHistory.length || 0) + 1,
         editType: 'RE_INVOICED',
         items: order.items.map(i => i.toObject ? i.toObject() : i),
+        subtotal: order.subtotal,
+        totalDiscount: order.totalDiscount,
+        totalTax: order.totalTax,
         grandTotal: order.grandTotal,
         editedAt: new Date(),
         note: `Purchase Invoice ${order.purchaseInvoiceId} updated with delta corrections.`
@@ -284,17 +296,19 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
 
     // If custom items sent, recalculate core totals
     let subtotal = order.subtotal;
+    let totalDiscount = order.totalDiscount || 0;
     let totalTax = order.totalTax;
     let grandTotal = order.grandTotal;
 
     if (bodyItems && bodyItems.length > 0) {
       subtotal = invoiceItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
+      totalDiscount = invoiceItems.reduce((acc, i) => acc + (Number(i.discountAmount) || 0), 0);
       totalTax = invoiceItems.reduce((acc, i) => {
         const gst = Number(i.gst || 0);
-        const iBase = Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty));
-        return acc + (iBase * gst / 100);
+        const itemTaxable = (Number(i.purchasePrice) * Number(i.qty)) - (Number(i.discountAmount) || 0);
+        return acc + (itemTaxable * gst / 100);
       }, 0);
-      grandTotal = subtotal + totalTax + (order.extraExpenseAmount || 0);
+      grandTotal = Math.round(subtotal - totalDiscount + totalTax + (order.extraExpenseAmount || 0));
     }
 
     const purchaseInvoice = new PurchaseInvoice({
@@ -306,6 +320,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       vendor: order.vendor || "Unknown",
       items: invoiceItems,
       subtotal: Math.round(subtotal),
+      totalDiscount: Math.round(totalDiscount),
       totalTax: Math.round(totalTax),
       extraExpenses: order.extraExpenses || [],
       extraExpenseAmount: order.extraExpenseAmount || 0,

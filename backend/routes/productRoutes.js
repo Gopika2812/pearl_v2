@@ -167,64 +167,11 @@ router.get("/", async (req, res) => {
       .limit(pageSize)
       .lean();
 
-    // ⚡ Get all PO data aggregated by product in one query (filtered by branch)
-    const poData = await PurchaseOrder.aggregate([
-      {
-        $match: {
-          branchId: branchObjectId,
-          status: { $in: ["RECEIVED", "PARTIALLY_RETURNED"] }
-        }
-      },
-      { $unwind: "$items" },
-      {
-        $group: {
-          _id: "$items.productId",
-          totalReceivedQty: { $sum: "$items.qty" }
-        }
-      }
-    ]);
-
-    // ⚡ Get all invoiced data aggregated by product in one query (filtered by branch)
-    const invoicedData = await SalesOrder.aggregate([
-      { 
-        $match: { 
-          branchId: branchObjectId,
-          status: "INVOICED" 
-        } 
-      },
-      { $unwind: "$invoiceItems" },
-      {
-        $group: {
-          _id: "$invoiceItems.productId",
-          totalInvoicedQty: { $sum: "$invoiceItems.qty" }
-        }
-      }
-    ]);
-
-    // Create maps for O(1) lookup
-    const poDataMap = new Map();
-    for (const po of poData) {
-      poDataMap.set(po._id.toString(), po.totalReceivedQty);
-    }
-
-    const invoicedDataMap = new Map();
-    for (const invoiced of invoicedData) {
-      invoicedDataMap.set(invoiced._id.toString(), invoiced.totalInvoicedQty);
-    }
-
-    // Enhance products with totalQty and availableQty calculation
+    // ⚡ Return product with current ground-truth totalQty from DB
     const enhancedProducts = products.map((product) => {
-      const productIdStr = product._id.toString();
-      const bulkQty = product.totalQty || 0;
-      const poQty = poDataMap.get(productIdStr) || 0;
-      const invoicedQty = invoicedDataMap.get(productIdStr) || 0;
-      const stockReceived = bulkQty + poQty;
-      const availableQty = Math.max(0, stockReceived - invoicedQty);
-      
       return {
         ...product,
-        totalQty: stockReceived,  // Combined: Bulk + PO (for display as "Total Qty")
-        availableQty: availableQty  // True available: (Bulk + PO) - Invoiced
+        availableQty: product.totalQty || 0  // Use DB ground truth
       };
     });
 
@@ -411,9 +358,10 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         ])
       );
 
-      const name = normalizedRow.stockitem || normalizedRow.productname || normalizedRow.name || "";
+      const name = normalizedRow.stockitem || normalizedRow.productname || normalizedRow.itemname || normalizedRow.name || "";
       if (!name) {
-        skipped.push({ row, reason: "Missing product name" });
+        console.warn("⚠️ Skipping row: Missing product name", { row, normalizedRow });
+        skipped.push({ row, reason: "Missing product name (Ensure your header is 'Item Name' or 'Name')" });
         continue;
       }
 
@@ -424,8 +372,8 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       let productData = {};
 
       // Product Group logic: only update if group is provided
-      if (normalizedRow.stockgroup !== undefined || normalizedRow.productgroup !== undefined || normalizedRow.group !== undefined) {
-        const groupName = normalizedRow.stockgroup || normalizedRow.productgroup || normalizedRow.group || "General";
+      if (normalizedRow.stockgroup !== undefined || normalizedRow.mainstockgroup !== undefined || normalizedRow.productgroup !== undefined || normalizedRow.group !== undefined) {
+        const groupName = normalizedRow.stockgroup || normalizedRow.mainstockgroup || normalizedRow.productgroup || normalizedRow.group || "General";
         let groupId = productGroupMap.get(groupName.toLowerCase());
         if (!groupId) {
           try {
@@ -476,7 +424,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       if (normalizedRow.totalqty !== undefined) productData.totalQty = Math.round(Number(normalizedRow.totalqty) * 100) / 100;
       
       // Handle HSN Code (Check multiple aliases)
-      let hsnVal = normalizedRow.hsncode || normalizedRow.hsn;
+      let hsnVal = normalizedRow.hsncode || normalizedRow.hsnsac || normalizedRow.hsn;
       if (hsnVal !== undefined) {
         const originalHsn = hsnVal;
         // Smart padding: if it's a numeric string of length 7, 5, 3, or 1, pad with leading zero
@@ -490,7 +438,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       // GST Check
-      const gstRaw = normalizedRow['gst%'] || normalizedRow.gst || normalizedRow.gstpercent || normalizedRow['tax%'] || normalizedRow.tax;
+      const gstRaw = normalizedRow['gst%'] || normalizedRow.gst || normalizedRow.gstpercent || normalizedRow.gstrate || normalizedRow['tax%'] || normalizedRow.tax || normalizedRow.taxability;
       if (gstRaw !== undefined) {
         let gst = parseFloat(String(gstRaw).replace(/[^\d.-]/g, ''));
         productData.gst = isNaN(gst) ? 0 : Math.round(gst * 100) / 100;
@@ -809,61 +757,16 @@ router.get("/available/:productId", async (req, res) => {
       });
     }
 
-    // 1️⃣ Get PO qty for this product
-    const poItems = await PurchaseOrder.aggregate([
-      {
-        $match: {
-          status: { $in: ["RECEIVED", "PARTIALLY_RETURNED"] }  // Only count received, not PLACED orders
-        }
-      },
-      { $unwind: "$items" },
-      {
-        $match: {
-          "items.productId": new mongoose.Types.ObjectId(productId)
-        }
-      },
-      {
-        $group: {
-          _id: "$items.productId",
-          totalReceivedQty: { $sum: "$items.qty" }
-        }
-      }
-    ]);
-
-    // 2️⃣ Get invoiced qty from SalesOrders for this product
-    const invoicedItems = await SalesOrder.aggregate([
-      { $unwind: "$invoiceItems" },
-      {
-        $match: {
-          "invoiceItems.productId": new mongoose.Types.ObjectId(productId)
-        }
-      },
-      {
-        $group: {
-          _id: "$invoiceItems.productId",
-          totalInvoicedQty: { $sum: "$invoiceItems.qty" }
-        }
-      }
-    ]);
-
-    const poQty = poItems.length > 0 ? poItems[0].totalReceivedQty : 0;
-    const bulkQty = product.totalQty || 0;
-    const invoicedQty = invoicedItems.length > 0 ? invoicedItems[0].totalInvoicedQty : 0;
-    
-    // 3️⃣ Calculate: Available = (Bulk + PO) - Invoiced
-    const stockReceived = bulkQty + poQty;
-    const availableQty = stockReceived - invoicedQty;
+    // ⚡ Logic: The Product.totalQty field in the DB is already updated by Invoice/Purchase triggers.
+    // Manual aggregation of POs and SalesOrders is redundant and causes discrepancies.
+    const currentStock = product.totalQty || 0;
 
     res.json({
       success: true,
       data: {
         productId,
         productName: product.name,
-        bulkQty,
-        poQty,
-        invoicedQty,
-        stockReceived,
-        availableQty: Math.max(0, availableQty) // Never show negative
+        availableQty: currentStock // Direct ground truth from DB
       }
     });
   } catch (error) {

@@ -573,7 +573,7 @@ export default function PearlsBookPage() {
 
                   <td className="px-2 py-2 sticky left-8 z-10 border-r whitespace-nowrap text-xs"
                       style={{backgroundColor: r.type === "SALES INVOICE" ? "#fffacd" : "white"}}>
-                    {new Date(r.date).toLocaleDateString('en-GB')}
+                    {new Date(r.orderDate || r.createdAt).toLocaleDateString('en-GB')}
                   </td>
 
                   <td className="px-2 py-2 font-semibold text-gray-800 whitespace-nowrap text-xs">

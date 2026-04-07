@@ -290,6 +290,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       formattedClosingBalance: formatBalance(closingBalance),
       notes,
       invoiceType,
+      invoiceDate: salesOrder.orderDate || salesOrder.createdAt,
     };
 
     res.json(previewData);
@@ -531,7 +532,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         // Closing = Opening + New Invoice - Today's Payments - Today's Credit Notes
         const closingBalance = dynamicOpeningBalance + grandTotal - todayReceiptTotal - todayCNTotal;
 
-        invoice.invoiceDate = new Date();
+        // PRESERVE ORIGINAL DATE - Do not overwrite with current date on every edit
+          invoice.invoiceDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
         // Update customer details on the invoice itself
         invoice.customer = {
           customerId: customer._id,
@@ -599,7 +601,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
 
         invoice = new Invoice({
           invoiceNumber,
-          invoiceDate: new Date(),
+          invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
           financialYear,
           salesOrderId: salesOrder._id,
           branchId: salesOrder.branchId,

@@ -122,6 +122,7 @@ const InventoryPurchaseOrderEntry = ({
   // Filter products by fetching from API when group changes
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Fetch products by product group from API
   useEffect(() => {
@@ -163,8 +164,11 @@ const InventoryPurchaseOrderEntry = ({
     fetchProductsByGroup();
   }, [productGroup, products]);
 
-  // Dynamic Row Price
-  useEffect(() => setDisplayPrice(purchasePrice * qty), [qty, purchasePrice]);
+  // Dynamic Row Price (Pre-discount)
+  useEffect(() => {
+    const rawPrice = (parseFloat(purchasePrice) || 0) * (parseFloat(qty) || 0);
+    setDisplayPrice(Math.round(rawPrice * 100) / 100);
+  }, [qty, purchasePrice]);
 
   // Auto CGST / SGST
   useEffect(() => {
@@ -300,9 +304,12 @@ const InventoryPurchaseOrderEntry = ({
       return;
     }
 
+    const rowPrice = displayPrice; // Qty * PurchasePrice
+    const rowDiscount = (rowPrice * (parseFloat(discountPercent) || 0)) / 100;
+    const taxableAmount = rowPrice - rowDiscount;
     const taxRate = igst ? gst : cgst + sgst;
-    const rowTax = (displayPrice * taxRate) / 100;
-    const total = displayPrice + rowTax;
+    const rowTax = (taxableAmount * taxRate) / 100;
+    const total = taxableAmount + rowTax;
     // Search in filteredProducts (from API), not the products prop
     const product = filteredProducts.find((p) => p._id === selectedItem);
     if (!product) {
@@ -326,12 +333,14 @@ const InventoryPurchaseOrderEntry = ({
         purchasePrice,
         sellingPrice,
         discountPercent: parseFloat(discountPercent) || 0,
-        rowPrice: displayPrice,
+        discountAmount: rowDiscount,
+        rowPrice: rowPrice,
+        taxableAmount: taxableAmount,
         hsn,
         gst,
-        cgst,
-        sgst,
-        igst,
+        cgst: taxableAmount * (cgst / 100),
+        sgst: taxableAmount * (sgst / 100),
+        igst: taxableAmount * (igst ? (gst / 100) : 0),
         total: total.toFixed(2),
       },
     ]);
@@ -359,17 +368,21 @@ const InventoryPurchaseOrderEntry = ({
   };
 
   // Totals
-  const subtotal = items.reduce((sum, item) => sum + item.rowPrice, 0);
-  const totalTax = items.reduce((sum, item) => {
-    const rate = item.igst ? item.gst : item.cgst + item.sgst;
-    return sum + (item.rowPrice * rate) / 100;
-  }, 0);
+  const subtotal = items.reduce((sum, item) => sum + (item.rowPrice || 0), 0);
+  const totalDiscount = items.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
+  const baseTaxable = subtotal - totalDiscount;
+
+  const cgstTotal = items.reduce((sum, item) => sum + (item.cgst || 0), 0);
+  const sgstTotal = items.reduce((sum, item) => sum + (item.sgst || 0), 0);
+  const igstTotal = items.reduce((sum, item) => sum + (item.igst || 0), 0);
+  const totalTax = cgstTotal + sgstTotal + igstTotal;
 
   const extraExpenseAmount = extraExpenses.reduce(
     (acc, exp) => acc + (exp.totalPrice || 0),
     0
   );
-  const grandTotal = subtotal + totalTax + extraExpenseAmount;
+  const grandTotal = Math.round(baseTaxable + totalTax + extraExpenseAmount);
+  const roundOff = Math.round((grandTotal - (baseTaxable + totalTax + extraExpenseAmount)) * 100) / 100;
 
   const handleAddExtraExpense = async () => {
     if (!expenseName.trim() || !expensePrice) {
@@ -479,6 +492,7 @@ const InventoryPurchaseOrderEntry = ({
 
     if (items.length === 0) return toast.error("Add at least one product!");
 
+    setSaving(true);
     const orderData = {
       branchId: currentBranch?._id || currentBranch?.id,
       voucherType,
@@ -523,6 +537,8 @@ const InventoryPurchaseOrderEntry = ({
     } catch (err) {
       console.error(err);
       toast.error("Something went wrong!");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -760,7 +776,7 @@ const InventoryPurchaseOrderEntry = ({
                           className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
                         >
                           <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
-                          <div className="text-gray-500 text-xs">Qty: {p.totalQty || 0}</div>
+                          <div className="text-gray-500 text-xs">Total Qty: {p.totalQty || 0}</div>
                         </div>
                       ))}
                     {filteredProducts.filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
@@ -770,7 +786,7 @@ const InventoryPurchaseOrderEntry = ({
                 )}
                 {selectedProductData && (
                   <div className="text-[10px] text-gray-500 mt-1">
-                    Available: {selectedProductData.totalQty || 0} {selectedProductData.units || ""}
+                    Total Qty: {selectedProductData.totalQty || 0} {selectedProductData.units || ""}
                   </div>
                 )}
               </div>
@@ -972,7 +988,6 @@ const InventoryPurchaseOrderEntry = ({
                     <th className="px-4 py-3 text-center">Qty Ordered</th>
                     <th className="px-4 py-3 text-right">Rate</th>
                     <th className="px-4 py-3 text-right text-red-500">Discount</th>
-                    <th className="px-4 py-3 text-right">Tax</th>
                     <th className="px-4 py-3 text-right">Total</th>
                     <th className="px-4 py-3 text-center">Action</th>
                   </tr>
@@ -995,17 +1010,13 @@ const InventoryPurchaseOrderEntry = ({
                           <div className="text-[10px] text-[#319bab] font-semibold">({item.altQty} {item.altUnit})</div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right">₹{item.purchasePrice}</td>
+                      <td className="px-4 py-3 text-right">₹{(item.purchasePrice || 0).toLocaleString()}</td>
                       <td className="px-4 py-3 text-right text-red-600 font-bold">
                         {item.discountPercent || 0}%
+                        <div className="text-[10px]">(-₹{(item.discountAmount || 0).toFixed(2)})</div>
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        {item.igst
-                          ? `IGST ${item.gst}%`
-                          : `CGST ${item.cgst}% + SGST ${item.sgst}%`}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-[#319bab]">
-                        ₹{item.total}
+                      <td className="px-4 py-3 text-right font-black text-gray-800">
+                        ₹{(parseFloat(item.total) || 0).toLocaleString()}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
@@ -1023,43 +1034,62 @@ const InventoryPurchaseOrderEntry = ({
             </div>
           )}
 
-          {/* SUMMARY */}
-          <div className="bg-white p-6 rounded-3xl shadow-xl border border-primary/5 h-fit sticky top-24">
-            <h3 className="text-[#319bab] font-black uppercase text-xs tracking-widest mb-6 border-b pb-2 border-[#319bab]/30">
-              Order Summary
+          {/* ORDER SUMMARY FOOTER (Same as Sales Order) */}
+          <div className="bg-[#319bab] text-white p-6 rounded-3xl shadow-xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform"></div>
+            
+            <h3 className="text-xl font-black mb-4 flex items-center gap-2">
+              <span className="w-8 h-1 bg-white rounded-full"></span>
+              ORDER SUMMARY
             </h3>
-            <div className="space-y-4">
-              <div className="flex justify-between text-sm uppercase tracking-tighter">
-                <span className="text-gray-500 font-bold">Subtotal</span>
-                <span className="font-bold text-gray-800">₹{Math.round(subtotal)}</span>
-              </div>
-              <div className="flex justify-between text-sm uppercase tracking-tighter">
-                <span className="text-gray-500 font-bold">Tax Amount</span>
-                <span className="font-bold text-gray-800">₹{Math.round(totalTax)}</span>
-              </div>
-              <div className="flex justify-between text-sm uppercase tracking-tighter">
-                <span className="text-gray-500 font-bold">Extra</span>
-                <span className="font-bold text-orange-500">
-                  ₹{Math.round(extraExpenseAmount)}
-                </span>
-              </div>
-              <div className="pt-2 border-t border-gray-100 mt-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-800 font-black text-xs uppercase tracking-widest">
-                    Grand Total
-                  </span>
-                  <span className="text-4xl font-black text-[#319bab] tracking-tight">
-                    ₹{Math.round(grandTotal)}
-                  </span>
-                </div>
+
+            <div className="space-y-3 relative z-10">
+              <div className="flex justify-between items-center text-white/80">
+                <span className="text-sm font-medium uppercase tracking-wider">Sub Total</span>
+                <span className="font-bold">₹{subtotal.toLocaleString()}</span>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 mt-8">
-                <button
+              <div className="flex justify-between items-center text-red-200">
+                <span className="text-sm font-medium uppercase tracking-wider">Total Discount</span>
+                <span className="font-bold">-₹{totalDiscount.toLocaleString()}</span>
+              </div>
+
+              <div className="h-px bg-white/20 my-2"></div>
+
+              <div className="grid grid-cols-3 gap-2 text-[10px] font-bold uppercase tracking-wider text-white/60 mb-1">
+                <span>CGST</span>
+                <span>SGST</span>
+                <span>IGST</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-sm font-mono mb-2">
+                <span>₹{cgstTotal.toFixed(2)}</span>
+                <span>₹{sgstTotal.toFixed(2)}</span>
+                <span>₹{igstTotal.toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between items-center text-orange-200">
+                <span className="text-sm font-medium uppercase tracking-wider">Extra Expenses</span>
+                <span className="font-bold">₹{extraExpenseAmount.toLocaleString()}</span>
+              </div>
+
+              {roundOff !== 0 && (
+                 <div className="flex justify-between items-center text-white/60 text-xs italic">
+                  <span>Round Off</span>
+                  <span>₹{roundOff.toFixed(2)}</span>
+                </div>
+              )}
+
+              <div className="pt-4 mt-4 border-t border-white/30 flex justify-between items-end">
+                <div>
+                  <span className="block text-[10px] font-bold uppercase tracking-[0.2em] text-white/60 leading-none mb-1">Grand Total</span>
+                  <span className="text-4xl font-black tracking-tighter">₹{grandTotal.toLocaleString()}</span>
+                </div>
+                <button 
                   onClick={handleFinalAction}
-                  className="w-full bg-[#319bab] text-white py-3 rounded-xl font-bold uppercase text-[10px] hover:bg-[#257f87] transition"
+                  disabled={saving}
+                  className={`px-10 py-4 bg-white text-[#319bab] rounded-2xl font-black hover:bg-gray-100 transition shadow-lg active:scale-95 flex items-center gap-2 ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  Place Purchase Order
+                  {saving ? 'SAVING...' : 'PLACE PURCHASE ORDER'}
                 </button>
               </div>
             </div>

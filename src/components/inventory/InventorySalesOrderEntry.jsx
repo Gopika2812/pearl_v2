@@ -1642,7 +1642,7 @@ export default function InventorySalesOrderEntry({
                     )}
                     {!searchingProducts && fetchedProducts
                       .map((p) => {
-                        const availableQty = availableQtyCache[p._id] ?? p.availableQty ?? 0;
+                        const currentStock = availableQtyCache[p._id] ?? p.totalQty ?? p.availableQty ?? 0;
                         return (
                           <div
                             key={p._id}
@@ -1650,8 +1650,8 @@ export default function InventorySalesOrderEntry({
                             className={`px-3 py-2 border-b text-sm hover:bg-blue-50 cursor-pointer`}
                           >
                             <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
-                            <div className={`text-xs ${availableQty <= 0 ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
-                              Available: {availableQty} {availableQty <= 0 && '(Negative/Zero Stock Allowed)'}
+                            <div className="text-xs text-gray-500">
+                              Total Qty: {currentStock}
                             </div>
                           </div>
                         );
@@ -1929,7 +1929,7 @@ export default function InventorySalesOrderEntry({
                     {!loadingSampleProducts && filteredSampleProducts
                       .filter(p => p.name.toLowerCase().includes(sampleItemSearch.toLowerCase()))
                       .map((p) => {
-                        const availableQty = p.totalQty || 0;
+                        const stockValue = p.totalQty ?? p.availableQty ?? 0;
                         return (
                           <div
                             key={p._id}
@@ -1937,8 +1937,8 @@ export default function InventorySalesOrderEntry({
                             className={`px-3 py-2 border-b text-sm hover:bg-yellow-50 cursor-pointer`}
                           >
                             <div className="font-semibold">{p.name}</div>
-                            <div className={`text-xs ${availableQty <= 0 ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>
-                              Available: {availableQty} {availableQty <= 0 && '(Negative/Zero Stock Allowed)'}
+                            <div className="text-xs text-gray-500">
+                              Total Qty: {stockValue}
                             </div>
                           </div>
                         );
