@@ -45,6 +45,11 @@ mongoose.connection.on("connected", async () => {
  * Generates an atomic, branch-specific ID using the VoucherType system.
  */
 const generateBranchSpecificCNId = async (branchId, financialYear) => {
+  if (!branchId || branchId === "undefined") {
+    console.error("❌ CRITICAL ERROR: generateBranchSpecificCNId called without branchId!");
+    throw new Error("Branch ID is required for Credit Note generation. Please check the request payload.");
+  }
+  
   // 1. Ensure the voucher entry exists for this branch's Credit Notes
   // Use atomic findOneAndUpdate with upsert to prevent race conditions
   let voucher = await VoucherType.findOne({
@@ -164,6 +169,10 @@ router.get("/next-id", async (req, res) => {
     }
 
     const nextId = `CN/${String(currentCounter + 1).padStart(3, "0")}/${financialYear}`;
+    
+    // 💡 LOGGING: Track nextId requests on Render to confirm branch isolation
+    console.log(`🔍 Preview Level: Next ID for branch ${branchId} is ${nextId}`);
+    
     res.json({ success: true, nextId });
   } catch (error) {
     console.error("Next ID Error:", error);
@@ -206,14 +215,23 @@ router.post("/", async (req, res) => {
         return res.status(404).json({ success: false, message: "Sales order not found" });
       }
       customer = await Customer.findById(originalOrder.customer.customerId);
-      finalBranchId = originalOrder.branchId;
+      // 🔥 CRITICAL: Prioritize branchId from the original order to ensure isolation
+      finalBranchId = originalOrder.branchId || branchId;
     } else {
       // Standalone return
       if (!customerId) {
         return res.status(400).json({ success: false, message: "CustomerId is required for standalone returns" });
       }
       customer = await Customer.findById(customerId);
+      // Ensure branchId is set for standalone returns from the customer if missing in body
+      if (!finalBranchId && customer.branchId) finalBranchId = customer.branchId;
     }
+
+    if (!finalBranchId) {
+      return res.status(400).json({ success: false, message: "Branch ID must be provided to create a credit note" });
+    }
+
+    console.log(`🚀 Creating Credit Note for branch: ${finalBranchId} (Incoming: ${branchId})`);
 
     if (!customer) {
       return res.status(404).json({ success: false, message: "Customer not found" });

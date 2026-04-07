@@ -78,6 +78,7 @@ export default function CreditNoteModal({ invoice, isOpen, onClose, onCreditNote
       // Create credit note in database
       // Backend expects: originalSalesOrderId, items (with _id and qty), reasonForReturn
       const creditNotePayload = {
+        branchId: currentBranch?._id, // 🔥 CRITICAL FIX: Categorize this note for this branch only
         originalSalesOrderId: invoice._id,
         items: selectedItems
           .filter((item) => item.returnedQty > 0)
