@@ -122,7 +122,6 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       cgstTotal += cgstAmount;
       sgstTotal += sgstAmount;
       igstTotal += igstAmount;
-      grossSubtotal += itemGrossAmount;
 
       return {
         ...originalItem.toObject(),
