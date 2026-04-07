@@ -8,7 +8,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
     const style = `
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.5; color: #333; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.5; color: #000; }
         .page { width: 148mm; min-height: 210mm; padding: 6mm; margin: 0 auto; page-break-after: always; background: white; border-bottom: 1px solid #eee; }
         .page-content { max-width: 136mm; margin: 0 auto; }
         
@@ -16,13 +16,13 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
         .logo-box { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 6px; flex-shrink: 0; overflow: hidden; }
         .logo-box img { width: 100%; height: 100%; object-fit: contain; }
         .company-header { flex: 1; }
-        .company-name { font-size: 16px; font-weight: bold; color: #1e40af; margin-bottom: 3px; text-transform: uppercase; }
-        .company-address { font-size: 10px; color: #333; line-height: 1.3; margin-bottom: 3px; }
+        .company-name { font-size: 18px; font-weight: bold; color: #1e40af; margin-bottom: 3px; text-transform: uppercase; }
+        .company-address { font-size: 11px; color: #000; line-height: 1.3; margin-bottom: 3px; }
         
-        .order-header { display: flex; justify-content: space-between; margin: 10px 0; font-size: 10px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px; }
+        .order-header { display: flex; justify-content: space-between; margin: 10px 0; font-size: 11px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px; color: #000; }
         .order-header-col { flex: 1; }
         .section-title { 
-          font-size: 12px; 
+          font-size: 13px; 
           font-weight: bold; 
           color: #fff; 
           background: #1e40af; 
@@ -33,12 +33,12 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
           letter-spacing: 0.5px;
         }
         
-        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 9px; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10px; }
         th { background: #1e40af; color: white; padding: 6px; text-align: left; border: 1px solid #1e3a8a; font-weight: 600; }
-        td { border: 1px solid #e5e7eb; padding: 5px 6px; color: #333; }
+        td { border: 1px solid #000; padding: 5px 6px; color: #000; }
         
-        .total-section { text-align: right; margin: 15px 0; font-size: 10px; line-height: 1.5; }
-        .grand-total { font-size: 14px; font-weight: bold; color: #1e40af; margin-top: 8px; border-top: 2px solid #1e40af; padding-top: 4px; }
+        .total-section { text-align: right; margin: 15px 0; font-size: 11px; line-height: 1.5; color: #000; }
+        .grand-total { font-size: 16px; font-weight: bold; color: #1e40af; margin-top: 8px; border-top: 2px solid #1e40af; padding-top: 4px; }
         .footer { text-align: center; font-size: 10px; color: #94a3b8; margin-top: 20px; }
         .copy-label { 
           text-align: right; 
@@ -53,11 +53,11 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
         }
         .balance-info { background: #f8fafc; padding: 10px; margin: 12px 0; font-size: 11px; border-left: 4px solid #1e40af; border-radius: 4px; }
         
-        .sender-buyer { display: flex; gap: 12px; margin: 10px 0; border: 1px solid #e5e7eb; padding: 10px; border-radius: 6px; background: #f8fafc; }
-        .sender-buyer-col { flex: 1; font-size: 9px; line-height: 1.4; }
-        .sender-buyer-col strong { font-size: 10px; display: block; margin-bottom: 3px; color: #1e40af; }
+        .sender-buyer { display: flex; gap: 12px; margin: 10px 0; border: 1px solid #000; padding: 10px; border-radius: 6px; background: #f8fafc; color: #000; }
+        .sender-buyer-col { flex: 1; font-size: 10px; line-height: 1.4; }
+        .sender-buyer-col strong { font-size: 11px; display: block; margin-bottom: 3px; color: #1e40af; }
         
-        .quick-info { font-size: 8px; color: #64748b; margin-bottom: 5px; display: flex; justify-content: space-between; border-bottom: 1px dotted #e2e8f0; padding-bottom: 2px; }
+        .quick-info { font-size: 9px; color: #000; margin-bottom: 5px; display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding-bottom: 2px; }
         
         @media print { 
           body { margin: 0; padding: 0; } 
