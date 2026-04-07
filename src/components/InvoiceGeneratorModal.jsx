@@ -269,11 +269,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         .page { width: 148mm; min-height: 210mm; padding: 6mm; margin: 0 auto; page-break-after: always; background: white; }
         .page-content { max-width: 136mm; margin: 0 auto; }
         
-        .top-header { display: flex; gap: 12px; margin-bottom: 12px; border-bottom: 2px solid #1e40af; padding-bottom: 8px; }
+        .top-header { display: flex; gap: 12px; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
         .logo-box { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 6px; flex-shrink: 0; overflow: hidden; }
         .logo-box img { width: 100%; height: 100%; object-fit: contain; }
         .company-header { flex: 1; }
-        .company-name { font-size: 18px; font-weight: bold; color: #1e40af; margin-bottom: 3px; text-transform: uppercase; }
+        .company-name { font-size: 18px; font-weight: bold; color: #000; margin-bottom: 3px; text-transform: uppercase; }
         .company-address { font-size: 11px; color: #000; line-height: 1.3; margin-bottom: 3px; }
         .company-contact { font-size: 10px; color: #000; }
         
@@ -283,7 +283,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           font-size: 13px; 
           font-weight: bold; 
           color: #fff; 
-          background: #1e40af; 
+          background: #000; 
           padding: 4px 10px; 
           margin: 10px 0 8px 0;
           border-radius: 4px;
@@ -291,14 +291,14 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         
         .row { display: flex; gap: 15px; margin: 8px 0; font-size: 11px; }
         .col { flex: 1; }
-        .label { font-weight: bold; color: #1e40af; }
+        .label { font-weight: bold; color: #000; }
         
         table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10px; }
-        th { background: #1e40af; color: white; padding: 6px; text-align: left; border: 1px solid #1e3a8a; font-weight: 600; }
+        th { background: #000; color: white; padding: 6px; text-align: left; border: 1px solid #1e3a8a; font-weight: 600; }
         td { border: 1px solid #000; padding: 5px 6px; color: #000; }
         
         .total-section { text-align: right; margin: 15px 0; font-size: 11px; line-height: 1.5; color: #000; }
-        .grand-total { font-size: 16px; font-weight: bold; color: #1e40af; margin-top: 8px; border-top: 2px solid #1e40af; padding-top: 4px; }
+        .grand-total { font-size: 16px; font-weight: bold; color: #000; margin-top: 8px; border-top: 2px solid #000; padding-top: 4px; }
         .footer { text-align: center; font-size: 10px; color: #94a3b8; margin-top: 20px; }
         .copy-label { 
           text-align: right; 
@@ -311,13 +311,13 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           letter-spacing: 1.1px;
           text-transform: uppercase;
         }
-        .balance-info { background: #f8fafc; padding: 10px; margin: 12px 0; font-size: 13px; border-left: 4px solid #1e40af; border-radius: 4px; }
+        .balance-info { background: #f8fafc; padding: 10px; margin: 12px 0; font-size: 13px; border-left: 4px solid #000; border-radius: 4px; }
         .sample-section { background: #fffbeb; padding: 12px; margin: 15px 0; border: 1px solid #fef3c7; border-radius: 6px; }
         .back-order-section { background: #fef2f2; padding: 12px; margin: 15px 0; border: 1px solid #fee2e2; border-radius: 6px; }
         
         .sender-buyer { display: flex; gap: 12px; margin: 10px 0; border: 1px solid #000; padding: 10px; border-radius: 6px; background: #f8fafc; color: #000; }
         .sender-buyer-col { flex: 1; font-size: 10px; line-height: 1.4; }
-        .sender-buyer-col strong { font-size: 11px; display: block; margin-bottom: 3px; color: #1e40af; }
+        .sender-buyer-col strong { font-size: 11px; display: block; margin-bottom: 3px; color: #000; }
         
         .certification { 
           font-size: 12px; 
@@ -389,7 +389,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
               <div class="order-header">
                 <div class="order-header-col">
                   <div class="label">Invoice No:</div>
-                  <div style="font-weight: bold; color: #1e40af;">${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</div>
+                  <div style="font-weight: bold; color: #000;">${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</div>
                 </div>
                 <div class="order-header-col">
                   <div class="label">Date:</div>
@@ -612,7 +612,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
               <!-- BACK ORDER SECTION (if applicable) -->
     ${editedItems.some(item => item.backOrderQty > 0) ? `
-      <div style="margin-top: 15px; padding-top: 10px; border-top: 2px solid #1e40af;">
+      <div style="margin-top: 15px; padding-top: 10px; border-top: 2px solid #000;">
         <div class="section-title">📦 BACK ORDER SUMMARY</div>
         <table>
           <thead>
