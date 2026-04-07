@@ -15,6 +15,7 @@ import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
 import Ledger from "../models/Ledger.js";
 import LedgerGroup from "../models/LedgerGroup.js";
+import CreditNote from "../models/CreditNote.js";
 
 
 const router = express.Router();
@@ -920,7 +921,19 @@ router.get("/customer/:customerId", async (req, res) => {
       query.branchId = branchId;
     }
 
-    const invoices = await Invoice.find(query)
+    // 🔥 Filter out invoices that already have a Credit Note
+    const existingCNs = await CreditNote.find({ 
+      "customer.customerId": customerId,
+      status: "Created",
+      originalSalesOrderId: { $ne: null }
+    }).select("originalSalesOrderId");
+    
+    const creditedSalesOrderIds = existingCNs.map(cn => cn.originalSalesOrderId.toString());
+
+    const invoices = await Invoice.find({
+      ...query,
+      salesOrderId: { $nin: creditedSalesOrderIds }
+    })
       .populate("salesOrderId")
       .sort({ invoiceDate: -1 })
       .lean();

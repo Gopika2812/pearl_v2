@@ -143,9 +143,28 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
       ...item,
       productId: item.productId._id || item.productId,
       maxQty: item.qty,
-      returnQty: item.qty // Default to full return, user can edit
+      qty: 0, // Default to 0 for partial returns
+      returnQty: 0 
     }));
     setSelectedItems(populatedItems);
+  };
+
+  const handleReturnAll = () => {
+    if (!selectedInvoice) return;
+    setSelectedItems(selectedItems.map(item => ({
+      ...item,
+      qty: item.maxQty,
+      returnQty: item.maxQty
+    })));
+    toast.info("All items set to full return");
+  };
+
+  const handleClearAll = () => {
+    setSelectedItems(selectedItems.map(item => ({
+      ...item,
+      qty: 0,
+      returnQty: 0
+    })));
   };
 
   const handleQtyChange = (productId, val) => {
@@ -426,7 +445,15 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                     <span className="p-1.5 bg-teal-50 text-teal-600 rounded-lg"><FaLayerGroup size={14} /></span>
                     <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest">Return Inventory Worksheet</h4>
                   </div>
-                  <span className="text-xs font-black text-[#319bab] uppercase bg-[#319bab]/10 px-3 py-1 rounded-full">{selectedItems.length} ITEMS READY</span>
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs font-black text-[#319bab] uppercase bg-[#319bab]/10 px-3 py-1 rounded-full">{selectedItems.length} ITEMS READY</span>
+                    {returnType === "invoice" && (
+                      <div className="flex gap-2">
+                        <button onClick={handleReturnAll} className="text-[10px] font-black text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200 hover:bg-green-100 transition-all uppercase">Return All</button>
+                        <button onClick={handleClearAll} className="text-[10px] font-black text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200 hover:bg-red-100 transition-all uppercase">Reset to 0</button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="divide-y divide-gray-50">
