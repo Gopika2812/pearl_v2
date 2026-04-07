@@ -482,8 +482,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 <div style="flex: 1;">
                    <!-- BALANCE INFO -->
                   <div class="balance-info">
-                    <div><strong>Opening Balance:</strong> ₹${previewData?.openingBalance?.toFixed(2) || 0}</div>
-                    <div><strong>Closing Balance:</strong> ₹${previewData?.closingBalance?.toFixed(2) || 0}</div>
+                    <div><strong>Opening Balance:</strong> ${previewData?.formattedOpeningBalance || (previewData?.openingBalance >= 0 ? '₹' + (previewData?.openingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.openingBalance || 0).toFixed(2) + ' Cr')}</div>
+                    <div><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
                   </div>
                   
                   <!-- NOTES -->
@@ -502,6 +502,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   ${previewData?.commonDiscount > 0 ? `<div style="font-size: 11px;">Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
                   ${previewData?.transportCharge > 0 ? `<div style="font-size: 11px;">Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
                   ${previewData?.extraExpenseAmount > 0 ? `<div style="font-size: 11px;">Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
+                  ${previewData?.roundingOff !== 0 ? `<div style="font-size: 11px;">Rounding Off: <strong>${previewData.roundingOff > 0 ? '+' : ''}₹${previewData.roundingOff.toFixed(2)}</strong></div>` : ""}
                   
                   <div class="grand-total">GRAND TOTAL: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
                 </div>
@@ -607,6 +608,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 ${previewData?.commonDiscount > 0 ? `<div style="font-size: 11px;">Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
                 ${previewData?.transportCharge > 0 ? `<div style="font-size: 11px;">Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
                 ${previewData?.extraExpenseAmount > 0 ? `<div style="font-size: 11px;">Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
+                ${previewData?.roundingOff !== 0 ? `<div style="font-size: 11px;">Rounding Off: <strong>${previewData.roundingOff > 0 ? '+' : ''}₹${previewData.roundingOff.toFixed(2)}</strong></div>` : ""}
                 <div class="grand-total">TOTAL AMOUNT: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
               </div>
 

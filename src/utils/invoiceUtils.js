@@ -173,8 +173,8 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
               <div style="display: flex; gap: 10px; margin-top: 15px;">
                 <div style="flex: 1;">
                   <div class="balance-info">
-                    <div><strong>Opening Balance:</strong> ₹${previewData?.openingBalance?.toFixed(2) || 0}</div>
-                    <div><strong>Closing Balance:</strong> ₹${previewData?.closingBalance?.toFixed(2) || 0}</div>
+                    <div><strong>Opening Balance:</strong> ${previewData?.formattedOpeningBalance || (previewData?.openingBalance >= 0 ? '₹' + (previewData?.openingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.openingBalance || 0).toFixed(2) + ' Cr')}</div>
+                    <div><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
                   </div>
                 </div>
 
@@ -186,6 +186,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                      <div style="font-size: 11px;">SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
                   }
                   ${previewData?.commonDiscount > 0 ? `<div style="font-size: 11px; color: red;">Discount: -₹${previewData.commonDiscount.toFixed(2)}</div>` : ""}
+                  ${previewData?.roundingOff !== 0 ? `<div style="font-size: 11px; color: #666;">Rounding Off: <strong>${previewData.roundingOff > 0 ? '+' : ''}₹${previewData.roundingOff.toFixed(2)}</strong></div>` : ""}
                   <div class="grand-total">GRAND TOTAL: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
                 </div>
               </div>

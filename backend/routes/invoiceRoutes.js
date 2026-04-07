@@ -16,6 +16,7 @@ import { createAuditLog } from "../utils/logUtil.js";
 import Ledger from "../models/Ledger.js";
 import LedgerGroup from "../models/LedgerGroup.js";
 import CreditNote from "../models/CreditNote.js";
+import Receipt from "../models/Receipt.js";
 
 
 const router = express.Router();
@@ -121,6 +122,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       cgstTotal += cgstAmount;
       sgstTotal += sgstAmount;
       igstTotal += igstAmount;
+      grossSubtotal += itemGrossAmount;
 
       return {
         ...originalItem.toObject(),
@@ -142,18 +144,21 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     const tGstPercent = salesOrder.transportGstPercent || 0;
     const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
 
-    // Use the calculated totals from above and add transport GST
+    const commonDiscount = customCommonDiscount !== undefined 
+      ? Number(customCommonDiscount) 
+      : (salesOrder.commonDiscount || 0);
+
     const totalTax = {
       cgst: Math.round((cgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
       sgst: Math.round((sgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
       igst: Math.round((igstTotal + (igstTotal > 0 ? tGstAmount : 0)) * 100) / 100,
     };
     totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
-
-    const commonDiscount = customCommonDiscount !== undefined 
-      ? Number(customCommonDiscount) 
-      : (salesOrder.commonDiscount || 0);
-    const grandTotal = Math.round(grossSubtotal - totalItemDiscount + totalTax.total + (salesOrder.extraExpenseAmount || 0) + (salesOrder.transportCharge || 0) - commonDiscount);
+    
+    // Calculate precise total before rounding
+    const preciseGrandTotal = grossSubtotal - totalItemDiscount + totalTax.total + (salesOrder.extraExpenseAmount || 0) + (salesOrder.transportCharge || 0) - commonDiscount;
+    const grandTotal = Math.round(preciseGrandTotal);
+    const roundingOff = Math.round((grandTotal - preciseGrandTotal) * 100) / 100;
 
     // Fetch billing person name
     let billingPersonName = "-";
@@ -189,18 +194,65 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     let dynamicOpeningBalance = 0;
     
     if (currentCustomer) {
-      const actualBalance = (currentCustomer.debit || 0) - (currentCustomer.credit || 0);
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+
+      // 1. Get Live Balance
+      const currentBalance = (currentCustomer.debit || 0) - (currentCustomer.credit || 0);
       
-      // If it's a re-edit (already invoiced once), the current balance already includes the last invoice amount.
-      // So opening balance (before this invoice) = current balance - last grand total.
-      if (salesOrder.invoiceGenerated) {
-        dynamicOpeningBalance = actualBalance - (salesOrder.lastInvoicedGrandTotal || 0);
-      } else {
-        dynamicOpeningBalance = actualBalance;
-      }
+      // 2. Identify 'Current' instance of THIS invoice if re-editing
+      const thisInvoiceGrandTotal = salesOrder.invoiceGenerated ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
+
+      // 3. Sum all transactions happened TODAY (to subtract them from live balance)
+      const [todayInvoices, todayReceipts, todayCNs] = await Promise.all([
+        Invoice.find({ 
+          "customer.customerId": currentCustomer._id, 
+          invoiceDate: { $gte: startOfToday, $lte: endOfToday },
+          status: "FINALIZED"
+        }).lean(),
+        Receipt.find({
+          "customer.customerId": currentCustomer._id,
+          date: { $gte: startOfToday, $lte: endOfToday }
+        }).lean(),
+        CreditNote.find({
+          "customer.customerId": currentCustomer._id,
+          date: { $gte: startOfToday, $lte: endOfToday },
+          status: "Created"
+        }).lean()
+      ]);
+
+      const todayInvoicedTotal = todayInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
+      const todayReceiptTotal = todayReceipts.reduce((sum, rec) => sum + (rec.amount || 0), 0);
+      const todayCNTotal = todayCNs.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
+
+      // Day Opening = Live Balance - Today's Net Change (Invoices - Receipts - CNs)
+      // But wait, the Live Balance ALREADY includes todayInvoicedTotal.
+      // So Opening = Live Balance - todayInvoicedTotal + todayReceiptTotal + todayCNTotal.
+      
+      // If we are PREVIEWING, the current invoice amount might NOT be in Live Balance yet (if not finalized).
+      // But if it IS finalized (re-edit), it IS in Live Balance.
+      
+      dynamicOpeningBalance = currentBalance - todayInvoicedTotal + todayReceiptTotal + todayCNTotal;
     } else {
       dynamicOpeningBalance = salesOrder.openingBalance || 0;
     }
+
+    const formatBalance = (val) => {
+      const absVal = Math.abs(val).toFixed(2);
+      return val >= 0 ? `₹${absVal} Dr` : `₹${absVal} Cr`;
+    };
+
+    // Closing Balance = Balance AFTER applying this specific invoice correctly.
+    // If we're previewing a NEW invoice: Closing = Current Balance + grandTotal
+    // If we're re-editing: Closing = Current Balance - lastInvoicedGrandTotal + grandTotal
+    let finalActualBalance = 0;
+    if (currentCustomer) {
+      finalActualBalance = (currentCustomer.debit || 0) - (currentCustomer.credit || 0);
+    }
+    const balanceAdjustment = salesOrder.invoiceGenerated ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
+    const closingBalance = finalActualBalance - balanceAdjustment + grandTotal;
 
     const previewData = {
       invoiceNumber: salesOrder.invoiceId, // Use Sales Order's invoiceId
@@ -232,8 +284,11 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
       commonDiscount: commonDiscount,
       grandTotal: grandTotal,
+      roundingOff: roundingOff,
       openingBalance: dynamicOpeningBalance,
-      closingBalance: dynamicOpeningBalance + grandTotal,
+      closingBalance: closingBalance,
+      formattedOpeningBalance: formatBalance(dynamicOpeningBalance),
+      formattedClosingBalance: formatBalance(closingBalance),
       notes,
       invoiceType,
     };
@@ -424,7 +479,9 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         ? Number(customCommonDiscount) 
         : (salesOrder.commonDiscount || 0);
       
-      const grandTotal = Math.round(grossSubtotal - totalItemDiscount + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tCharge - commonDiscount);
+      const preciseGrandTotal = grossSubtotal - totalItemDiscount + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tCharge - commonDiscount;
+      const grandTotal = Math.round(preciseGrandTotal);
+      const roundingOff = Math.round((grandTotal - preciseGrandTotal) * 100) / 100;
 
       // Note: We already found the invoice object above if it exists
 
@@ -436,15 +493,44 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           console.log(`⚠️ Invoice customer change detected: ${invoice.customer.name} -> ${customer.name}`);
         }
 
-        // Calculate dynamic opening balance
-        const actualBalance = (customer.debit || 0) - (customer.credit || 0);
-        let dynamicOpeningBalance = 0;
+        // 🏦 DAY OPENING BALANCE logic: Start of current day (00:00:00)
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const endOfToday = new Date();
+        endOfToday.setHours(23, 59, 59, 999);
+
+        const currentBalance = (customer.debit || 0) - (customer.credit || 0);
+
+        // Sum today's transactions EXCEPT this invoice (if re-editing)
+        const [todayInvoices, todayReceipts, todayCNs] = await Promise.all([
+          Invoice.find({ 
+            "customer.customerId": customer._id, 
+            invoiceDate: { $gte: startOfToday, $lte: endOfToday },
+            status: "FINALIZED",
+            _id: { $ne: invoice?._id } // Exclude current invoice if it exists
+          }).session(session).lean(),
+          Receipt.find({
+            "customer.customerId": customer._id,
+            date: { $gte: startOfToday, $lte: endOfToday }
+          }).session(session).lean(),
+          CreditNote.find({
+            "customer.customerId": customer._id,
+            date: { $gte: startOfToday, $lte: endOfToday },
+            status: "Created"
+          }).session(session).lean()
+        ]);
+
+        const todayInvoicedTotal = todayInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
+        const todayReceiptTotal = todayReceipts.reduce((sum, rec) => sum + (rec.amount || 0), 0);
+        const todayCNTotal = todayCNs.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
+
+        // Opening = Balance before today's net change
+        // Wait, currentBalance ALREADY includes todayInvoicedTotal (if they were finalized).
+        // Opening = currentBalance - todayInvoicedTotal + todayReceiptTotal + todayCNTotal.
+        const dynamicOpeningBalance = currentBalance - todayInvoicedTotal + todayReceiptTotal + todayCNTotal;
         
-        if (salesOrder.invoiceGenerated) {
-          dynamicOpeningBalance = actualBalance - (salesOrder.lastInvoicedGrandTotal || 0);
-        } else {
-          dynamicOpeningBalance = actualBalance;
-        }
+        // Closing = Opening + New Invoice - Today's Payments - Today's Credit Notes
+        const closingBalance = dynamicOpeningBalance + grandTotal - todayReceiptTotal - todayCNTotal;
 
         invoice.invoiceDate = new Date();
         // Update customer details on the invoice itself
@@ -470,18 +556,48 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         invoice.extraExpenseAmount = salesOrder.extraExpenseAmount || 0;
         invoice.commonDiscount = commonDiscount;
         invoice.grandTotal = grandTotal;
+        invoice.roundOff = roundingOff;
         invoice.openingBalance = dynamicOpeningBalance;
-        invoice.closingBalance = dynamicOpeningBalance + grandTotal;
+        invoice.closingBalance = closingBalance;
+        invoice.balanceType = closingBalance >= 0 ? "Dr" : "Cr";
         invoice.invoiceNotes = notes;
         invoice.invoiceType = invoiceType;
         invoice.status = "FINALIZED";
         
         await invoice.save({ session });
       } else {
-        // Calculate dynamic opening balance
-        const actualBalance = (customer.debit || 0) - (customer.credit || 0);
-        
-        // ✨ Create new invoice if it doesn't exist
+        // 🆕 Create new invoice logic
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const endOfToday = new Date();
+        endOfToday.setHours(23, 59, 59, 999);
+
+        const currentBalance = (customer.debit || 0) - (customer.credit || 0);
+
+        const [todayInvoices, todayReceipts, todayCNs] = await Promise.all([
+          Invoice.find({ 
+            "customer.customerId": customer._id, 
+            invoiceDate: { $gte: startOfToday, $lte: endOfToday },
+            status: "FINALIZED"
+          }).session(session).lean(),
+          Receipt.find({
+            "customer.customerId": customer._id,
+            date: { $gte: startOfToday, $lte: endOfToday }
+          }).session(session).lean(),
+          CreditNote.find({
+            "customer.customerId": customer._id,
+            date: { $gte: startOfToday, $lte: endOfToday },
+            status: "Created"
+          }).session(session).lean()
+        ]);
+
+        const todayInvoicedTotal = todayInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
+        const todayReceiptTotal = todayReceipts.reduce((sum, rec) => sum + (rec.amount || 0), 0);
+        const todayCNTotal = todayCNs.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
+
+        const dynamicOpeningBalance = currentBalance - todayInvoicedTotal + todayReceiptTotal + todayCNTotal;
+        const closingBalance = dynamicOpeningBalance + grandTotal - todayReceiptTotal - todayCNTotal;
+
         invoice = new Invoice({
           invoiceNumber,
           invoiceDate: new Date(),
@@ -498,9 +614,9 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
             address: customer.address,
             district: customer.district,
             state: customer.state,
-            stateCode: customer.stateCode || "33", // ✨ NEW: Capture customer state code for E-Invoice
+            stateCode: customer.stateCode || "33", 
             pincode: customer.pincode,
-            gstin: customer.gstin, // ✨ NEW: Capture customer GSTIN for E-Invoice
+            gstin: customer.gstin, 
           },
           seller: {
             name: branch?.name || "PEARL AGENCY",
@@ -526,8 +642,10 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
           commonDiscount,
           grandTotal,
-          openingBalance: actualBalance,
-          closingBalance: actualBalance + grandTotal,
+          roundOff: roundingOff,
+          openingBalance: dynamicOpeningBalance,
+          closingBalance: closingBalance,
+          balanceType: closingBalance >= 0 ? "Dr" : "Cr",
           invoiceNotes: notes,
           invoiceType,
           status: "FINALIZED",
