@@ -138,19 +138,35 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     if (isReInvoice) {
       console.log(`🔄 Re-Invoicing ${order.invoiceId} → updating ${order.purchaseInvoiceId}`);
 
+      // 1. EXTRACT NEW ITEMS AND TOTALS
+      const newItems = (req.body.items && req.body.items.length > 0) ? req.body.items : order.items;
+      
       const oldState = {
-        items: order.lastInvoicedItems.map(i => i.toObject()),
-        grandTotal: order.lastInvoicedGrandTotal
+        items: (order.lastInvoicedItems || []).map(i => i.toObject ? i.toObject() : i),
+        grandTotal: order.lastInvoicedGrandTotal || 0
       };
+      
+      // Calculate NEW totals based on newItems
+      const subtotal = newItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
+      const totalTax = newItems.reduce((acc, i) => {
+        const gst = Number(i.gst || 0);
+        const iBase = Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty));
+        return acc + (iBase * gst / 100);
+      }, 0);
+      const grandTotal = subtotal + totalTax + (order.extraExpenseAmount || 0);
 
+      const oldGrandTotal = order.lastInvoicedGrandTotal || 0;
+      const vendorDelta = Math.round(grandTotal) - Math.round(oldGrandTotal);
+
+      // 2. UPDATE STOCK (DELTA CALCULATION)
       // Build a map of OLD invoiced quantities
       const oldQtyMap = {};
       for (const item of order.lastInvoicedItems) {
         oldQtyMap[item.productId.toString()] = item.qty;
       }
 
-      // Apply DELTA to stock
-      for (const item of order.items) {
+      // Apply DELTA to stock - Use newItems
+      for (const item of newItems) {
         const pid = item.productId.toString();
         const oldQty = oldQtyMap[pid] || 0;
         const deltaQty = item.qty - oldQty;
@@ -160,15 +176,14 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       }
 
       // Handle removed items
+      const newPids = new Set(newItems.map(i => i.productId.toString()));
       for (const oldItem of order.lastInvoicedItems) {
-        const stillExists = order.items.some(i => i.productId.toString() === oldItem.productId.toString());
-        if (!stillExists) {
+        if (!newPids.has(oldItem.productId.toString())) {
           await Product.findByIdAndUpdate(oldItem.productId, { $inc: { totalQty: -oldItem.qty } });
         }
       }
 
-      // VENDOR BALANCE UPDATE
-      const vendorDelta = (order.grandTotal || 0) - (order.lastInvoicedGrandTotal || 0);
+      // 3. VENDOR BALANCE UPDATE
       if (vendorDelta !== 0 && order.vendor) {
         const vendorRecord = await Vendor.findOne({ branchId: order.branchId, name: order.vendor });
         if (vendorRecord) {
@@ -177,46 +192,33 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         }
       }
 
-      // Update separate Invoice document
-      const invoiceItems = (req.body.items && req.body.items.length > 0) ? req.body.items : order.items;
+      // 4. PERSIST TO PURCHASE ORDER
+      order.items = newItems;
+      order.subtotal = Math.round(subtotal);
+      order.totalTax = Math.round(totalTax);
+      order.grandTotal = Math.round(grandTotal);
+      order.vendorBillNo = req.body.vendorBillNo;
+      order.vendorDate = req.body.vendorDate ? new Date(req.body.vendorDate) : undefined;
 
-      // If custom items sent, recalculate core totals
-      let subtotal = order.subtotal;
-      let totalTax = order.totalTax;
-      let grandTotal = order.grandTotal;
-
-      if (req.body.items && req.body.items.length > 0) {
-        subtotal = invoiceItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
-        totalTax = invoiceItems.reduce((acc, i) => {
-          const gst = Number(i.gst || 0);
-          const iBase = Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty));
-          return acc + (iBase * gst / 100);
-        }, 0);
-        grandTotal = subtotal + totalTax + (order.extraExpenseAmount || 0);
-      }
-
+      // 5. UPDATE INVOICE DOCUMENT
       await PurchaseInvoice.findOneAndUpdate(
         { purchaseInvoiceId: order.purchaseInvoiceId, branchId: order.branchId },
         {
-          items: invoiceItems,
-          subtotal: Math.round(subtotal),
-          totalTax: Math.round(totalTax),
-          grandTotal: Math.round(grandTotal),
+          items: newItems,
+          subtotal: order.subtotal,
+          totalTax: order.totalTax,
+          grandTotal: order.grandTotal,
           extraExpenses: order.extraExpenses || [],
           extraExpenseAmount: order.extraExpenseAmount || 0,
-          vendorBillNo: req.body.vendorBillNo,
-          vendorDate: req.body.vendorDate ? new Date(req.body.vendorDate) : undefined,
+          vendorBillNo: order.vendorBillNo,
+          vendorDate: order.vendorDate,
         }
       );
-
-      // PERSIST BILL DETAILS TO PO TOO
-      order.vendorBillNo = req.body.vendorBillNo;
-      order.vendorDate = req.body.vendorDate ? new Date(req.body.vendorDate) : undefined;
 
       order.editHistory.push({
         version: (order.editHistory.length || 0) + 1,
         editType: 'RE_INVOICED',
-        items: order.items.map(i => i.toObject()),
+        items: order.items.map(i => i.toObject ? i.toObject() : i),
         grandTotal: order.grandTotal,
         editedAt: new Date(),
         note: `Purchase Invoice ${order.purchaseInvoiceId} updated with delta corrections.`
@@ -235,13 +237,13 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         changes: {
           before: oldState,
           after: {
-            items: order.items.map(i => i.toObject()),
+            items: order.items.map(i => i.toObject ? i.toObject() : i),
             grandTotal: order.grandTotal
           }
         }
       });
 
-      order.lastInvoicedItems = order.items.map(i => i.toObject());
+      order.lastInvoicedItems = order.items.map(i => i.toObject ? i.toObject() : i);
       order.lastInvoicedGrandTotal = order.grandTotal;
       order.status = 'INVOICED';
       await order.save();
