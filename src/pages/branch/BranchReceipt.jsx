@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaChevronUp, FaFileAlt, FaPlus, FaSearch } from "react-icons/fa";
+import { FaChevronDown, FaChevronUp, FaFileAlt, FaPlus, FaSearch, FaHistory } from "react-icons/fa";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 import CustomerDebitReceiptModal from "../../components/sales/CustomerDebitReceiptModal";
 import ReceiptModal from "../../components/sales/ReceiptModal";
 import BounceChequeModal from "../../components/sales/BounceChequeModal";
@@ -10,9 +11,11 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API
 
 export default function BranchReceipt() {
   const { currentBranch, user } = useBranch();
+  const navigate = useNavigate();
   const [salesInvoices, setSalesInvoices] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [generalReceipts, setGeneralReceipts] = useState([]);
+  const [creditNotes, setCreditNotes] = useState([]);
   const [receiptData, setReceiptData] = useState({});
   const [loading, setLoading] = useState(true);
   
@@ -68,7 +71,15 @@ export default function BranchReceipt() {
       const standalone = rArray.filter(r => !r.originalSalesOrderId);
       setGeneralReceipts(standalone);
 
-      // 4. Multi-Fetch receipts for each SO/Invoice for pending calculation
+      // 4. Fetch Credit Notes
+      const cnResponse = await fetch(`${API_BASE}/credit-notes?branchId=${currentBranch._id}`, {
+        headers: { "Content-Type": "application/json" },
+      });
+      const cnResult = await cnResponse.json();
+      const cnArray = Array.isArray(cnResult) ? cnResult : (cnResult.data || []);
+      setCreditNotes(cnArray);
+
+      // 5. Multi-Fetch receipts for each SO/Invoice for pending calculation
       const allOrderIds = [...new Set([
         ...filteredSOs.map(o => o._id),
         ...invArray.map(i => i.salesOrderId?._id || i.salesOrderId).filter(Boolean)
@@ -167,6 +178,14 @@ export default function BranchReceipt() {
     return receiptData[invoiceId]?.receipts || [];
   };
 
+  const getCreditNoteAmount = (invoice) => {
+    const invoiceId = invoice.invoiceId || invoice._id;
+    // Match by originalInvoiceId or originalSalesOrderId
+    return creditNotes
+      .filter(cn => cn.originalInvoiceId === invoiceId || cn.originalSalesOrderId === invoice._id)
+      .reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
+  };
+
   const getTotalReceivedAmount = (invoice) => {
     return receiptData[invoice._id]?.totalReceived || 0;
   };
@@ -214,13 +233,21 @@ export default function BranchReceipt() {
                 <p className="text-cyan-100 mt-2">Receive payments from customers</p>
               </div>
             </div>
-            <button
-              onClick={() => setShowDebitReceiptModal(true)}
-              className="flex items-center gap-2 bg-white text-cyan-700 px-6 py-3 rounded-lg font-bold hover:bg-gray-100 transition shadow-lg"
-              title="Create Customer Debit Receipt"
-            >
-              <FaPlus /> Debit Receipt
-            </button>
+            <div className="flex gap-4">
+              <button
+                onClick={() => navigate("/branch/receipt-records")}
+                className="flex items-center gap-2 bg-cyan-800 text-white px-6 py-3 rounded-lg font-bold hover:bg-cyan-900 transition shadow-lg border border-cyan-400"
+              >
+                <FaHistory /> View Records
+              </button>
+              <button
+                onClick={() => setShowDebitReceiptModal(true)}
+                className="flex items-center gap-2 bg-white text-cyan-700 px-6 py-3 rounded-lg font-bold hover:bg-gray-100 transition shadow-lg"
+                title="Create Customer Debit Receipt"
+              >
+                <FaPlus /> Debit Receipt
+              </button>
+            </div>
           </div>
         </div>
 
@@ -269,6 +296,7 @@ export default function BranchReceipt() {
                     {isFieldAllowed("amount") && (
                       <>
                         <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Total Amount</th>
+                        <th className="px-4 py-4 text-right text-xs font-bold text-red-600 uppercase font-bold">Returns (CN)</th>
                         <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Received</th>
                         <th className="px-4 py-4 text-right text-xs font-bold text-gray-700 uppercase">Pending</th>
                       </>
@@ -287,8 +315,13 @@ export default function BranchReceipt() {
                     const displayId = item.invoiceNumber || item.invoiceId || item.receiptId;
                     const customerName = typeof item.customer === "object" ? item.customer?.name : item.customer;
                     const totalAmount = isOrder ? (item.grandTotal || 0) : (item.amount || 0);
+                    const credNotes = isOrder ? getCreditNoteAmount(item) : 0;
                     const received = isOrder ? getTotalReceivedAmount(item) : (item.amount || 0);
-                    const pending = isOrder ? Math.max(0, totalAmount - received) : 0;
+                    const pending = isOrder ? Math.max(0, totalAmount - credNotes - received) : 0;
+                    
+                    // LATEST REQUIREMENT: Hide fully settled/credited bills
+                    if (isOrder && pending <= 0 && credNotes > 0) return null;
+
                     const statusText = isOrder ? getReceiptStatus(item) : `Paid via ${item.paymentMethod || 'CASH'}`;
                     const WarehouseName = isOrder ? (item.warehouse?.name || item.warehouse || "N/A") : "Direct Settle";
 
@@ -326,6 +359,9 @@ export default function BranchReceipt() {
                             <>
                               <td className="px-4 py-3 text-right font-bold">
                                 ₹{totalAmount.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-red-500">
+                                {credNotes > 0 ? `- ₹${credNotes.toLocaleString()}` : "-"}
                               </td>
                               <td className="px-4 py-3 text-right font-bold text-green-600">
                                 ₹{received.toLocaleString()}

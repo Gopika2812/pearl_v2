@@ -5,7 +5,6 @@ const paymentSchema = new mongoose.Schema(
     paymentId: {
       type: String,
       required: true,
-      unique: true,
     },
 
     branchId: {
@@ -98,5 +97,7 @@ const paymentSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+paymentSchema.index({ branchId: 1, paymentId: 1 }, { unique: true });
 
 export default mongoose.model("Payment", paymentSchema);

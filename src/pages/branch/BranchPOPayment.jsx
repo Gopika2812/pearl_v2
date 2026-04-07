@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { FaChevronDown, FaChevronUp, FaCreditCard, FaDollarSign, FaPlus, FaSyncAlt } from "react-icons/fa";
+import { FaChevronDown, FaChevronUp, FaCreditCard, FaDollarSign, FaPlus, FaSyncAlt, FaHistory } from "react-icons/fa";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 import { API_BASE } from "../../api";
 import POPaymentModal from "../../components/inventory/POPaymentModal";
 import VendorCreditPaymentModal from "../../components/inventory/VendorCreditPaymentModal";
@@ -8,6 +9,7 @@ import { useBranch } from "../../context/BranchContext";
 
 export default function BranchPOPayment() {
   const { currentBranch, user } = useBranch();
+  const navigate = useNavigate();
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -131,13 +133,21 @@ export default function BranchPOPayment() {
               <FaDollarSign className="text-5xl opacity-80" />
               <h1 className="text-4xl font-bold">PO Payment 💳</h1>
             </div>
-            <button
-              onClick={() => setShowVendorPaymentModal(true)}
-              className="flex items-center gap-2 bg-white text-[#257f87] px-6 py-3 rounded-lg font-bold hover:bg-gray-100 transition shadow-lg"
-              title="Record Vendor Payment"
-            >
-              <FaPlus /> Vendor Payment
-            </button>
+            <div className="flex gap-4">
+              <button
+                onClick={() => navigate("/branch/payment-records")}
+                className="flex items-center gap-2 bg-[#1a5b61] text-white px-6 py-3 rounded-lg font-bold hover:bg-[#13464a] transition shadow-lg border border-[#48c9d1]"
+              >
+                <FaHistory /> View Records
+              </button>
+              <button
+                onClick={() => setShowVendorPaymentModal(true)}
+                className="flex items-center gap-2 bg-white text-[#257f87] px-6 py-3 rounded-lg font-bold hover:bg-gray-100 transition shadow-lg"
+                title="Record Vendor Payment"
+              >
+                <FaPlus /> Vendor Payment
+              </button>
+            </div>
           </div>
         </div>
 

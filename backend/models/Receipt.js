@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const receiptSchema = new mongoose.Schema(
   {
-    receiptId: { type: String, required: true, unique: true },
+    receiptId: { type: String, required: true },
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", required: false },
 
     // Reference to original sales order (Optional for general debit receipts)
@@ -48,6 +48,9 @@ const receiptSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Create composite unique index: branchId + receiptId (Allows duplicates across branches, global uniqueness for (branch + ID))
+receiptSchema.index({ branchId: 1, receiptId: 1 }, { unique: true });
 
 const Receipt = mongoose.model("Receipt", receiptSchema);
 export default Receipt;

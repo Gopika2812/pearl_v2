@@ -115,6 +115,14 @@ export default function ReceiptModal({ invoice, isOpen, onClose, onReceiptSucces
                 <p className="text-gray-600 uppercase text-xs font-bold">Invoice Total</p>
                 <p className="font-bold text-gray-800">₹{invoiceTotal.toLocaleString()}</p>
               </div>
+              {invoice.pendingAmount !== undefined && (
+                <div>
+                  <p className="text-gray-600 uppercase text-xs font-bold text-red-600">Returns (CN)</p>
+                  <p className="font-bold text-red-600">
+                    - ₹{(invoiceTotal - (invoice.pendingAmount + (invoice.totalReceived || 0))).toLocaleString()}
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-gray-600 uppercase text-xs font-bold">Date</p>
                 <p className="font-bold text-gray-800">
@@ -152,7 +160,7 @@ export default function ReceiptModal({ invoice, isOpen, onClose, onReceiptSucces
               </div>
               {amount && (
                 <p className="text-xs text-gray-600 mt-1">
-                  Balance: ₹{(invoiceTotal - receiptAmount).toLocaleString()}
+                  Balance: ₹{(maxAllowed - receiptAmount).toLocaleString()}
                 </p>
               )}
             </div>
@@ -211,17 +219,17 @@ export default function ReceiptModal({ invoice, isOpen, onClose, onReceiptSucces
             <div className="bg-gray-50 p-4 rounded-lg border-2 border-cyan-500">
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Invoice Total:</span>
-                  <span className="font-bold">₹{invoiceTotal.toLocaleString()}</span>
+                  <span className="text-gray-600">Bill Pending:</span>
+                  <span className="font-bold">₹{maxAllowed.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Payment Amount:</span>
                   <span className="font-bold text-green-600">₹{receiptAmount.toLocaleString()}</span>
                 </div>
                 <div className="border-t pt-2 flex justify-between">
-                  <span className="text-gray-800 font-bold">Remaining Balance:</span>
+                  <span className="text-gray-800 font-bold">Remaining After This:</span>
                   <span className="font-black text-cyan-600">
-                    ₹{(invoiceTotal - receiptAmount).toLocaleString()}
+                    ₹{(maxAllowed - receiptAmount).toLocaleString()}
                   </span>
                 </div>
               </div>

@@ -54,6 +54,8 @@ export const PAGE_CONFIG = [
         { id: "purchase-list", name: "Purchase Order List", path: "/branch/purchase-orders", icon: "list", permissionFields: ["grandTotal", "totalPaid", "status"] },
         { id: "purchase-invoice-list", name: "Purchase Invoice List", path: "/branch/purchase-invoices", icon: "invoice" },
         { id: "debit-note", name: "Debit Note", path: "/branch/debit-note", icon: "return" },
+        { id: "payment-po", name: "PO Payment", path: "/branch/po-payment", icon: "payment" },
+        { id: "payment-records", name: "Payment Records", path: "/branch/payment-records", icon: "history" },
       ]},
       { id: "restocking", name: "Restocking (Recycling)", path: "/branch/recycling", icon: "sync" },
       { id: "suppliers", name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: "handshake", permissionFields: ["credit", "debit", "gstin"] },
@@ -68,6 +70,8 @@ export const PAGE_CONFIG = [
         { id: "sales-invoice-list", name: "Sales Invoice List", path: "/branch/sales-invoices", icon: "invoice" },
         { id: "claims", name: "Claims", path: "/branch/claims", icon: "claims" },
         { id: "credit-note", name: "Credit Note", path: "/branch/credit-note", icon: "return" },
+        { id: "receipt", name: "Receipt Management", path: "/branch/receipt", icon: "receipt" },
+        { id: "receipt-records", name: "Receipt Records", path: "/branch/receipt-records", icon: "history" },
       ]},
       { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["margin", "debit", "credit", "gstin"] },
     ]

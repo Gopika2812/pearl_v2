@@ -2,8 +2,33 @@ import express from "express";
 import Payment from "../models/Payment.js";
 import Vendor from "../models/Vendor.js";
 import VoucherType from "../models/VoucherType.js";
+import Branch from "../models/Branch.js";
+import mongoose from "mongoose";
 
 const router = express.Router();
+
+/**
+ * 🏗️ LIVE REPAIR: Drop the legacy global unique index to allow branch-specific numbering
+ */
+mongoose.connection.on("connected", async () => {
+  try {
+    const collections = await mongoose.connection.db.listCollections({ name: "payments" }).toArray();
+    if (collections.length > 0) {
+      const db = mongoose.connection.db;
+      const indexes = await db.collection("payments").indexes();
+      const hasLegacyIndex = indexes.some(idx => idx.name === "paymentId_1");
+      
+      if (hasLegacyIndex) {
+        await db.collection("payments").dropIndex("paymentId_1");
+        console.log("✅ Legacy global Payment index 'paymentId_1' dropped successfully.");
+      }
+    }
+  } catch (err) {
+    if (err.codeName !== "IndexNotFound") {
+      console.warn("⚠️ Could not drop legacy Payment index:", err.message);
+    }
+  }
+});
 
 // Get Financial Year
 const getFinancialYear = () => {
@@ -59,7 +84,9 @@ router.get("/next-id", async (req, res) => {
       );
     }
 
-    const nextId = `pay${String(voucher.counter + 1).padStart(3, "0")}/${currentFY}`;
+    const nextNumber = voucher.counter + 1;
+    // Standard Format as requested: PAY/001/25-26
+    const nextId = `${voucher.prefix}/${String(nextNumber).padStart(3, "0")}/${currentFY}`;
     res.json({ nextId });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -186,9 +213,8 @@ router.post("/", async (req, res) => {
       { new: true }
     );
 
-    // Use the incremented counter
-    const counter = voucher.counter;
-    const paymentId = `pay${String(counter).padStart(3, "0")}/${currentFY}`;
+    // Standard Format as requested: PAY/001/25-26
+    const paymentId = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
 
     // Build description based on payment type
     let finalDescription = description || "";

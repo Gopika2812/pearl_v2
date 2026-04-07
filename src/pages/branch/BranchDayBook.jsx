@@ -15,6 +15,7 @@ const BranchDayBook = () => {
     const [filterInvoiceId, setFilterInvoiceId] = useState("");
     const [fromDate, setFromDate] = useState(new Date().toISOString().split("T")[0]);
     const [toDate, setToDate] = useState(new Date().toISOString().split("T")[0]);
+    const [selectedIds, setSelectedIds] = useState([]);
 
     const fetchDayBook = async () => {
         if (!currentBranch?._id) return;
@@ -38,6 +39,7 @@ const BranchDayBook = () => {
 
     useEffect(() => {
         fetchDayBook();
+        setSelectedIds([]); // Clear selection on fetch/date change
     }, [currentBranch?._id, fromDate, toDate]);
 
     // Filtering logic
@@ -206,6 +208,20 @@ const BranchDayBook = () => {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-gray-50/50 border-b border-gray-100">
+                                    <th className="px-6 py-5 text-center">
+                                        <input 
+                                            type="checkbox"
+                                            className="w-4 h-4 rounded text-[#319bab] focus:ring-[#319bab]"
+                                            checked={filteredEntries.length > 0 && selectedIds.length === filteredEntries.length}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setSelectedIds(filteredEntries.map(e => e._id));
+                                                } else {
+                                                    setSelectedIds([]);
+                                                }
+                                            }}
+                                        />
+                                    </th>
                                     <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400">Date</th>
                                     <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400">Voucher Type</th>
                                     <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400">Invoice ID</th>
@@ -236,7 +252,21 @@ const BranchDayBook = () => {
                                     </tr>
                                 ) : (
                                     filteredEntries.map((entry) => (
-                                        <tr key={entry._id} className="hover:bg-gray-50/80 transition-colors group">
+                                        <tr key={entry._id} className={`hover:bg-gray-50/80 transition-colors group ${selectedIds.includes(entry._id) ? "bg-blue-50/50" : ""}`}>
+                                            <td className="px-6 py-5 text-center">
+                                                <input 
+                                                    type="checkbox"
+                                                    className="w-4 h-4 rounded text-[#319bab] focus:ring-[#319bab]"
+                                                    checked={selectedIds.includes(entry._id)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedIds(prev => [...prev, entry._id]);
+                                                        } else {
+                                                            setSelectedIds(prev => prev.filter(id => id !== entry._id));
+                                                        }
+                                                    }}
+                                                />
+                                            </td>
                                             <td className="px-6 py-5">
                                                 <p className="text-xs font-black text-gray-700">
                                                     {new Date(entry.date).toLocaleDateString("en-IN", {
@@ -305,20 +335,30 @@ const BranchDayBook = () => {
                     </div>
                 </div>
 
-                <div className="mt-8 flex justify-between items-center bg-white p-4 rounded-2xl border border-dashed border-gray-200">
-                    <p className="text-xs text-gray-400 font-bold italic">
-                        * The Day Book only includes finalized and invoiced transactions.
-                    </p>
-                    <div className="flex items-center gap-4">
-                        <div className="flex flex-col items-end">
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Net Total</span>
-                            <span className={`text-xl font-black ${totalDebit - totalCredit >= 0 ? "text-emerald-600" : "text-amber-600"}`}>
-                                ₹{(totalDebit - totalCredit).toLocaleString()}
-                            </span>
+                {/* SELECTED COUNT BAR */}
+                {selectedIds.length > 0 && (
+                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900/90 backdrop-blur-md text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-8 border border-white/10 animate-in fade-in slide-in-from-bottom-4">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">Selection Active</span>
+                            <span className="text-xl font-black">{selectedIds.length} <span className="text-sm font-medium text-gray-400 ml-1">Transactions Selected</span></span>
+                        </div>
+                        <div className="h-10 w-[1px] bg-white/10 mx-2"></div>
+                        <div className="flex items-center gap-3">
+                            <button 
+                                onClick={() => setSelectedIds([])}
+                                className="px-4 py-2 text-xs font-black uppercase hover:bg-white/10 rounded-lg transition"
+                            >
+                                Clear
+                            </button>
+                            <button 
+                                onClick={handleExportExcel} // Export only selected if possible? Or just standard export
+                                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase rounded-lg transition shadow-lg shadow-blue-600/40"
+                            >
+                                Export Selection
+                            </button>
                         </div>
                     </div>
-                </div>
-
+                )}
             </div>
         </div>
     );

@@ -15,8 +15,8 @@ const BranchLockedPrices = () => {
   const [saving, setSaving] = useState(false);
 
   // Form State
-  const [selectedCustomerId, setSelectedCustomerId] = useState("");
-  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const [custSearch, setCustSearch] = useState("");
   const [prodSearch, setProdSearch] = useState("");
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -39,10 +39,10 @@ const BranchLockedPrices = () => {
   // 🔒 AUTO-LOOKUP EXISTING PRICE
   useEffect(() => {
     const fetchExistingPrice = async () => {
-      if (!selectedCustomerId || !selectedProductId || !currentBranch?._id) return;
+      if (!selectedCustomer?._id || !selectedProduct?._id || !currentBranch?._id) return;
       
       try {
-        const res = await fetch(`${API_BASE}/customer-locked-prices/${selectedCustomerId}/${selectedProductId}?branchId=${currentBranch._id}`);
+        const res = await fetch(`${API_BASE}/customer-locked-prices/${selectedCustomer._id}/${selectedProduct._id}?branchId=${currentBranch._id}`);
         const data = await res.json();
         
         if (data.success && data.data?.lockedPrice) {
@@ -58,13 +58,13 @@ const BranchLockedPrices = () => {
     };
 
     fetchExistingPrice();
-  }, [selectedCustomerId, selectedProductId, currentBranch?._id]);
+  }, [selectedCustomer?._id, selectedProduct?._id, currentBranch?._id]);
 
   // 🔍 DEBOUNCED CUSTOMER SEARCH
   useEffect(() => {
     const searchCustomers = async () => {
-      if (!custSearch.trim() || selectedCustomerId) {
-        if (!custSearch.trim()) fetchCustomers(); // Reset to default list if search is empty
+      if (!custSearch.trim() || selectedCustomer) {
+        if (!custSearch.trim() && !selectedCustomer) fetchCustomers(); // Reset to default list if search is empty and nothing selected
         return;
       }
       
@@ -87,8 +87,8 @@ const BranchLockedPrices = () => {
   // 🔍 DEBOUNCED PRODUCT SEARCH
   useEffect(() => {
     const searchProducts = async () => {
-      if (!prodSearch.trim() || selectedProductId) {
-        setProdResults([]); // Clear results if not searching
+      if (!prodSearch.trim() || selectedProduct) {
+        // setProdResults([]); // Clear results if not searching
         return;
       }
       
@@ -141,7 +141,7 @@ const BranchLockedPrices = () => {
   };
 
   const handleSave = async () => {
-    if (!selectedCustomerId || !selectedProductId || !lockedPrice) {
+    if (!selectedCustomer?._id || !selectedProduct?._id || !lockedPrice) {
       return toast.warn("Please select customer, product, and set a price");
     }
 
@@ -152,8 +152,8 @@ const BranchLockedPrices = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           branchId: currentBranch._id,
-          customerId: selectedCustomerId,
-          productId: selectedProductId,
+          customerId: selectedCustomer._id,
+          productId: selectedProduct._id,
           lockedPrice: Number(lockedPrice),
         }),
       });
@@ -162,8 +162,8 @@ const BranchLockedPrices = () => {
       if (data.success) {
         toast.success("Price locked successfully");
         fetchLockedPrices();
-        // Reset form
-        setSelectedProductId("");
+        // Reset form (keep customer for multiple products if wanted, or clear)
+        setSelectedProduct(null);
         setLockedPrice("");
         setProdSearch("");
       } else {
@@ -222,9 +222,6 @@ const BranchLockedPrices = () => {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
-
-  const selectedProduct = products.find(p => p._id === selectedProductId) || prodResults.find(p => p._id === selectedProductId);
-  const selectedCustomer = customers.find(c => c._id === selectedCustomerId);
 
   // Dropdown options: If searching, use searching state results. Otherwise use initial fetch results.
   const displayCustomers = customers.slice(0, 50);
@@ -297,14 +294,17 @@ const BranchLockedPrices = () => {
                       value={selectedCustomer ? selectedCustomer.name : custSearch}
                       onChange={(e) => {
                         setCustSearch(e.target.value);
-                        if(selectedCustomer) setSelectedCustomerId("");
+                        if(selectedCustomer) setSelectedCustomer(null);
                       }}
-                      onFocus={() => setShowCustomerDropdown(true)}
+                      onFocus={() => {
+                        setShowCustomerDropdown(true);
+                        if (!custSearch.trim()) fetchCustomers(); // Refresh on focus
+                      }}
                       className="w-full pl-9 pr-10 py-3 bg-gray-50 border-2 border-transparent rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/30 transition-all shadow-inner"
                     />
-                    {selectedCustomerId && (
+                    {selectedCustomer && (
                       <button 
-                        onClick={() => { setSelectedCustomerId(""); setCustSearch(""); }}
+                        onClick={() => { setSelectedCustomer(null); setCustSearch(""); }}
                         className="absolute right-8 top-1/2 -translate-y-1/2 text-red-400 hover:text-red-600 p-1"
                       >
                         <FaTrash size={10} />
@@ -325,7 +325,7 @@ const BranchLockedPrices = () => {
                         <div 
                           key={c._id}
                           onClick={() => {
-                            setSelectedCustomerId(c._id);
+                            setSelectedCustomer(c);
                             setCustSearch("");
                             setShowCustomerDropdown(false);
                           }}
@@ -354,14 +354,14 @@ const BranchLockedPrices = () => {
                       value={selectedProduct ? selectedProduct.name : prodSearch}
                       onChange={(e) => {
                         setProdSearch(e.target.value);
-                        if(selectedProduct) setSelectedProductId("");
+                        if(selectedProduct) setSelectedProduct(null);
                       }}
                       onFocus={() => setShowProductDropdown(true)}
                       className="w-full pl-9 pr-10 py-3 bg-gray-50 border-2 border-transparent rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/30 transition-all shadow-inner"
                     />
-                    {selectedProductId && (
+                    {selectedProduct && (
                       <button 
-                        onClick={() => { setSelectedProductId(""); setProdSearch(""); }}
+                        onClick={() => { setSelectedProduct(null); setProdSearch(""); }}
                         className="absolute right-8 top-1/2 -translate-y-1/2 text-red-400 hover:text-red-600 p-1"
                       >
                         <FaTrash size={10} />
@@ -382,7 +382,7 @@ const BranchLockedPrices = () => {
                         <div 
                           key={p._id}
                           onClick={() => {
-                            setSelectedProductId(p._id);
+                            setSelectedProduct(p);
                             setProdSearch("");
                             setShowProductDropdown(false);
                             setLockedPrice(""); // Reset price to let them enter new one or see default
