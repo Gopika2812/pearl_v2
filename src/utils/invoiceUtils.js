@@ -90,7 +90,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                   <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
                   <div class="company-address">
                     <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
-                    Mobile: ${previewData?.seller?.phone || "9429692970"} | GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
+                    Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
                   </div>
                 </div>
               </div>
@@ -114,6 +114,8 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                   ${previewData?.customer?.name}<br/>
                   ${previewData?.customer?.address || "N/A"}<br/>
                   ${previewData?.customer?.district ? previewData?.customer?.district + ', ' : ''}${previewData?.customer?.state || ""} ${previewData?.customer?.pincode || ""}<br/>
+                  Mobile: ${previewData?.customer?.whatsapp || previewData?.customer?.customerId?.whatsapp || "-"}<br/>
+                  GSTIN: ${previewData?.customer?.gstin || previewData?.customer?.customerId?.gstin || "N/A"}
                 </div>
               </div>
 
@@ -176,7 +178,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                   <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
                   <div class="company-address">
                     <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
-                    Mobile: ${previewData?.seller?.phone || "9429692970"} | GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
+                    Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
                   </div>
                 </div>
               </div>

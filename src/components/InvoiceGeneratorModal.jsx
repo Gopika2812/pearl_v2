@@ -377,7 +377,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
                   <div class="company-address">
                     <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
-                    Mobile: ${previewData?.seller?.phone || "9429692970"} | GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
+                    Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
                     GPAY No: ${previewData?.seller?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
@@ -412,7 +412,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   ${previewData?.customer?.name}<br/>
                   ${previewData?.customer?.address}<br/>
                   ${previewData?.customer?.district ? previewData?.customer?.district + ', ' : ''}${previewData?.customer?.state || ""} ${previewData?.customer?.pincode || ""}<br/>
-                  Mobile: ${previewData?.customer?.whatsapp || "-"} | GSTIN: ${previewData?.customer?.gstin || "N/A"}
+                  Mobile: ${previewData?.customer?.whatsapp || previewData?.customer?.customerId?.whatsapp || "-"}<br/>
+                  GSTIN: ${previewData?.customer?.gstin || previewData?.customer?.customerId?.gstin || "N/A"}
                 </div>
               </div>
 
@@ -531,7 +532,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
                   <div class="company-address">
                     <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
-                    Mobile: ${previewData?.seller?.phone || "9429692970"} | GSTIN: ${previewData?.seller?.gstin || "33DULPS2600Q1Z6"}<br/>
+                    Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
                     GPAY No: ${previewData?.seller?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
