@@ -43,6 +43,7 @@ export default function InventorySalesOrderEntry({
 
   const [productGroup, setProductGroup] = useState("");
   const [selectedItem, setSelectedItem] = useState("");
+  const [selectedProductData, setSelectedProductData] = useState(null);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [showVoucherModal, setShowVoucherModal] = useState(false);
@@ -671,6 +672,7 @@ export default function InventorySalesOrderEntry({
 
     setIsLocked(false);
     setSelectedItem(id);
+    setSelectedProductData(product);
     setItemSearch(product.name);
     setShowItemDropdown(false);
     setQty(1);
@@ -813,7 +815,9 @@ export default function InventorySalesOrderEntry({
       return;
     }
 
-    const p = productsWithStock.find((x) => x._id === selectedItem);
+    // ✅ FIX: Use selectedProductData directly
+    // This handles the race condition where productsWithStock might refresh and lose the item
+    const p = selectedProductData || productsWithStock.find((x) => x._id === selectedItem);
     if (!p) {
       toast.error("Product not found. Please select again.");
       return;
@@ -909,6 +913,7 @@ export default function InventorySalesOrderEntry({
     setProductGroup("");
     setProductGroupSearch("");
     setSelectedItem("");
+    setSelectedProductData(null);
     setItemSearch("");
     setSellingPrice(0);
     setQty("");

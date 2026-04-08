@@ -353,10 +353,11 @@ const InventoryPurchaseOrderEntry = ({
     const taxRate = igst ? gst : cgst + sgst;
     const rowTax = (taxableAmount * taxRate) / 100;
     const total = taxableAmount + rowTax;
-    // Search in filteredProducts (from API), not the products prop
-    const product = fetchedProducts.find((p) => p._id === selectedItem);
-    if (!product) {
-      toast.error("Product not found!");
+    // ✅ FIX: Use selectedProductData directly instead of searching fetchedProducts
+    // This prevents "Product not found" errors when search results refresh
+    const product = selectedProductData;
+    if (!product || product._id !== selectedItem) {
+      toast.error("Product not found! Please select again.");
       return;
     }
 
