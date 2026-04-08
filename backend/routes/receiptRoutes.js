@@ -70,8 +70,10 @@ const generateBranchSpecificReceiptId = async (branchId, financialYear, prefix =
 router.get("/", async (req, res) => {
   try {
     const { branchId } = req.query;
-    // Inclusive query: matching branch OR no branch (legacy/test data)
-    const query = branchId ? { $or: [{ branchId }, { branchId: { $exists: false } }] } : {};
+    if (!branchId) {
+      return res.json({ success: true, data: [] });
+    }
+    const query = { branchId };
 
     const receipts = await Receipt.find(query)
       .sort({ createdAt: -1 });

@@ -446,7 +446,12 @@ const BranchStockSummary = () => {
                        >
                          <td className="px-6 py-4">
                            <div className="font-bold text-gray-700">{item.productName}</div>
-                           <div className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">ID: {item.productId.slice(-6)}</div>
+                           <div className="flex flex-col gap-0.5">
+                             <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">ID: {item.productId.slice(-6)}</span>
+                             {item.branchId && (
+                               <span className="text-[8px] font-bold text-blue-400 uppercase tracking-tighter">Branch: {String(item.branchId).slice(-6)}</span>
+                             )}
+                           </div>
                          </td>
                          <td className="px-6 py-4 text-center font-bold text-gray-400">{item.opening.qty}</td>
                          <td className="px-6 py-4 text-center font-bold text-green-600">{item.purchasesInPeriod || 0}</td>

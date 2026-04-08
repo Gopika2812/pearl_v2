@@ -119,7 +119,11 @@ const InventoryPurchaseOrderEntry = ({
   const [showVendorDropdown, setShowVendorDropdown] = useState(false);
   const vendorDropdownRef = useRef(null);
 
-  // Filter products by fetching from API when group changes
+  // Item search states
+  const [fetchedProducts, setFetchedProducts] = useState(products || []);
+  const [searchingProducts, setSearchingProducts] = useState(false);
+  const itemDropdownRef = useRef(null);
+  
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -210,9 +214,9 @@ const InventoryPurchaseOrderEntry = ({
     setShowItemDropdown(false);
 
     // Search in filteredProducts (from API), not the products prop
-    const product = filteredProducts.find((p) => p._id === productId);
+    const product = fetchedProducts.find((p) => p._id === productId);
     if (!product) {
-      console.warn("⚠️ Product not found in filtered products:", productId);
+      console.warn("⚠️ Product not found in fetched products:", productId);
       return;
     }
 
@@ -284,11 +288,50 @@ const InventoryPurchaseOrderEntry = ({
     return () => clearTimeout(timer);
   }, [vendorSearch, currentBranch, vendors]);
 
-  // Click Outside logic for Vendor Dropdown
+  // 🔍 ASYNC PRODUCT SEARCH
+  useEffect(() => {
+    if (!itemSearch.trim()) {
+      setFetchedProducts(productGroup ? filteredProducts : products || []);
+      return;
+    }
+
+    const fetchProductsFromBackend = async () => {
+      setSearchingProducts(true);
+      try {
+        const branchId = currentBranch?._id || currentBranch?.id;
+        // Construct search URL with optional product group filter
+        let url = `${API_BASE}/products?search=${encodeURIComponent(itemSearch)}&branchId=${branchId}&limit=50`;
+        if (productGroup) url += `&productGroup=${productGroup}`;
+        
+        const res = await fetchWithAuth(url);
+        const data = await res.json();
+
+        if (data.success || Array.isArray(data)) {
+          const list = Array.isArray(data) ? data : (data.data || []);
+          setFetchedProducts(list);
+        } else {
+          setFetchedProducts([]);
+        }
+      } catch (err) {
+        console.error("❌ Product search failed:", err);
+        setFetchedProducts([]);
+      } finally {
+        setSearchingProducts(false);
+      }
+    };
+
+    const timer = setTimeout(fetchProductsFromBackend, 300);
+    return () => clearTimeout(timer);
+  }, [itemSearch, currentBranch, products, productGroup, filteredProducts]);
+
+  // Click Outside logic for Dropdowns
   useEffect(() => {
     function handleClickOutside(event) {
       if (vendorDropdownRef.current && !vendorDropdownRef.current.contains(event.target)) {
         setShowVendorDropdown(false);
+      }
+      if (itemDropdownRef.current && !itemDropdownRef.current.contains(event.target)) {
+        setShowItemDropdown(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -311,7 +354,7 @@ const InventoryPurchaseOrderEntry = ({
     const rowTax = (taxableAmount * taxRate) / 100;
     const total = taxableAmount + rowTax;
     // Search in filteredProducts (from API), not the products prop
-    const product = filteredProducts.find((p) => p._id === selectedItem);
+    const product = fetchedProducts.find((p) => p._id === selectedItem);
     if (!product) {
       toast.error("Product not found!");
       return;
@@ -336,11 +379,12 @@ const InventoryPurchaseOrderEntry = ({
         discountAmount: rowDiscount,
         rowPrice: rowPrice,
         taxableAmount: taxableAmount,
+        rowTax: rowTax,
         hsn,
         gst,
-        cgst: taxableAmount * (cgst / 100),
-        sgst: taxableAmount * (sgst / 100),
-        igst: taxableAmount * (igst ? (gst / 100) : 0),
+        cgst,
+        sgst,
+        igst: igst ? gst : 0,
         total: total.toFixed(2),
       },
     ]);
@@ -372,9 +416,9 @@ const InventoryPurchaseOrderEntry = ({
   const totalDiscount = items.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
   const baseTaxable = subtotal - totalDiscount;
 
-  const cgstTotal = items.reduce((sum, item) => sum + (item.cgst || 0), 0);
-  const sgstTotal = items.reduce((sum, item) => sum + (item.sgst || 0), 0);
-  const igstTotal = items.reduce((sum, item) => sum + (item.igst || 0), 0);
+  const cgstTotal = items.reduce((sum, item) => sum + ((parseFloat(item.taxableAmount) || 0) * (parseFloat(item.cgst) || 0) / 100), 0);
+  const sgstTotal = items.reduce((sum, item) => sum + ((parseFloat(item.taxableAmount) || 0) * (parseFloat(item.sgst) || 0) / 100), 0);
+  const igstTotal = items.reduce((sum, item) => sum + ((parseFloat(item.taxableAmount) || 0) * (parseFloat(item.igst) || 0) / 100), 0);
   const totalTax = cgstTotal + sgstTotal + igstTotal;
 
   const extraExpenseAmount = extraExpenses.reduce(
@@ -741,7 +785,7 @@ const InventoryPurchaseOrderEntry = ({
           <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 space-y-4">
             {/* ROW 1: Wide Item Name */}
             <div className="grid grid-cols-1 gap-3">
-              <div className="relative">
+              <div className="relative" ref={itemDropdownRef}>
                 <div className="flex justify-between items-center mb-1">
                   <label className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">Item Name</label>
                   {canUseQuickLinks && user?.allowedQuickLinks?.includes("product") && (
@@ -767,19 +811,23 @@ const InventoryPurchaseOrderEntry = ({
                 />
                 {showItemDropdown && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto w-max min-w-full">
-                    {filteredProducts
-                      .filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase()))
-                      .map((p) => (
-                        <div
-                          key={p._id}
-                          onClick={() => handleItemSelection(p._id)}
-                          className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
-                        >
-                          <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
-                          <div className="text-gray-500 text-xs">Total Qty: {p.totalQty || 0}</div>
+                    {searchingProducts && (
+                      <div className="px-3 py-2 text-gray-500 text-sm italic">🔍 Searching products...</div>
+                    )}
+                    {!searchingProducts && fetchedProducts.map((p) => (
+                      <div
+                        key={p._id}
+                        onClick={() => handleItemSelection(p._id)}
+                        className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
+                      >
+                        <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
+                        <div className="text-gray-500 text-xs flex justify-between">
+                          <span>Qty: {p.totalQty || 0}</span>
+                          <span className="text-[#319bab]">₹{p.purchasingPrice || p.rate || 0}</span>
                         </div>
-                      ))}
-                    {filteredProducts.filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase())).length === 0 && (
+                      </div>
+                    ))}
+                    {!searchingProducts && fetchedProducts.length === 0 && (
                       <div className="px-3 py-2 text-gray-500 text-sm">No products available</div>
                     )}
                   </div>

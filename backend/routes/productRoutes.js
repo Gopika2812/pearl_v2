@@ -2,6 +2,8 @@ import express from "express";
 import mongoose from "mongoose";
 import multer from "multer";
 import XLSX from "xlsx";
+import CreditNote from "../models/CreditNote.js";
+import DebitNote from "../models/DebitNote.js";
 import Invoice from "../models/Invoice.js";
 import Product from "../models/Product.js";
 import ProductCategory from "../models/ProductCategory.js";
@@ -9,11 +11,9 @@ import ProductGroup from "../models/ProductGroup.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SalesOrder from "../models/SalesOrder.js";
 import Warehouse from "../models/Warehouse.js";
-import DebitNote from "../models/DebitNote.js";
-import CreditNote from "../models/CreditNote.js";
 
-import { createAuditLog } from "../utils/logUtil.js";
 import auth from "../middleware/auth.js";
+import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
 
@@ -130,7 +130,7 @@ router.post("/", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const { page = 1, limit = 50, search = "", diag = "", branchId } = req.query;
-    
+
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
     }
@@ -146,7 +146,7 @@ router.get("/", async (req, res) => {
     }
 
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 50)); 
+    const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 50));
     const skip = (pageNum - 1) * pageSize;
 
     // Build search filter with branchId (using ObjectId)
@@ -182,7 +182,7 @@ router.get("/", async (req, res) => {
       const withGroup = await Product.countDocuments({ productGroup: { $exists: true, $ne: null } });
       const withoutGroup = await Product.countDocuments({ $or: [{ productGroup: null }, { productGroup: { $exists: false } }] });
       const chicProduct = await Product.findOne({ name: { $regex: "Chick Cheese", $options: "i" } }).lean();
-      
+
       diagnosticData = {
         totalInDB: allProducts,
         withProductGroup: withGroup,
@@ -276,7 +276,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     }
 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    
+
     let sheetToProcess = null;
     let headerIndex = -1;
     let rows = [];
@@ -287,19 +287,19 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     for (const sheetName of workbook.SheetNames) {
       const currentSheet = workbook.Sheets[sheetName];
       const rawData = XLSX.utils.sheet_to_json(currentSheet, { header: 1, defval: "" });
-      
+
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i].map(cell => String(cell || "").trim().toLowerCase());
         if (row.includes("name") || row.includes("product name") || row.includes("stock item") || row.includes("item name")) {
           headerIndex = i;
           sheetToProcess = currentSheet;
           console.log(`✅ Found valid headers in sheet: "${sheetName}" at row ${i + 1}`);
-          
+
           // Parse rows from this sheet
-          rows = XLSX.utils.sheet_to_json(currentSheet, { 
-            range: headerIndex, 
+          rows = XLSX.utils.sheet_to_json(currentSheet, {
+            range: headerIndex,
             raw: false,
-            defval: "" 
+            defval: ""
           });
           break;
         }
@@ -309,9 +309,9 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
     if (!sheetToProcess) {
       console.error("❌ Could not find a sheet with valid headers (Name/Product Name/Stock Item)");
-      return res.status(400).json({ 
-        success: false, 
-        message: "Could not find a column named 'Name' in any of the sheets. Please check your Excel file." 
+      return res.status(400).json({
+        success: false,
+        message: "Could not find a column named 'Name' in any of the sheets. Please check your Excel file."
       });
     }
 
@@ -390,7 +390,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
       // Optional fields logic: only add to productData if present in Excel
       if (normalizedRow.perqty !== undefined) productData.perQty = Math.round(Number(normalizedRow.perqty) * 100) / 100;
-      
+
       // 🔄 Unit Conversion Mapping & Extraction
       const cleanNumber = (val) => {
         if (val === undefined || val === null || val === "") return 1;
@@ -422,7 +422,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       if (normalizedRow.totalqty !== undefined) productData.totalQty = Math.round(Number(normalizedRow.totalqty) * 100) / 100;
-      
+
       // Handle HSN Code (Check multiple aliases)
       let hsnVal = normalizedRow.hsncode || normalizedRow.hsnsac || normalizedRow.hsn;
       if (hsnVal !== undefined) {
@@ -623,7 +623,7 @@ router.put("/:id", auth, async (req, res) => {
 
     // Prepare update object - only include provided fields
     const updateData = {};
-    
+
     if (name !== undefined) updateData.name = name;
     if (productGroup !== undefined) updateData.productGroup = productGroup || null;
     if (productCategories !== undefined) updateData.productCategories = productCategories;
@@ -650,7 +650,7 @@ router.put("/:id", auth, async (req, res) => {
       .populate("warehouse", "name");
 
     // Log price changes if any
-    const priceChanged = 
+    const priceChanged =
       (purchasingPrice !== undefined && Math.round(purchasingPrice * 100) / 100 !== oldProduct.purchasingPrice) ||
       (sellingPrice !== undefined && Math.round(sellingPrice * 100) / 100 !== oldProduct.sellingPrice);
 
@@ -940,7 +940,7 @@ router.get("/stock-journal", async (req, res) => {
       const afterIn = p.afterStart + cn.afterStart;
       const afterOut = s.afterStart + dn.afterStart;
       const openingQty = totalQty - afterIn + afterOut;
-      
+
       // Closing Qty (at End) = Current - (In since End) + (Out since End)
       const endIn = p.afterEnd + cn.afterEnd;
       const endOut = s.afterEnd + dn.afterEnd;
@@ -949,6 +949,7 @@ router.get("/stock-journal", async (req, res) => {
       return {
         productId: pid,
         productName: product.name,
+        branchId: product.branchId, // Inclusion of BranchId for diagnostics
         opening: {
           qty: Math.max(0, openingQty),
           rate: product.purchasingPrice || 0,
@@ -1018,10 +1019,10 @@ router.post("/apply-group-margin", async (req, res) => {
 
     // Fetch updated products to trigger pre-save hooks for calculations
     const updatedProducts = await Product.find(query);
-    
+
     // Round marginPercentage input
     const roundedMargin = Math.round(marginPercentage * 100) / 100;
-    
+
     // Save each product to trigger pre-save hooks
     for (const product of updatedProducts) {
       product.marginPercentage = roundedMargin;

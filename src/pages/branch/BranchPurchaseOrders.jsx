@@ -140,13 +140,23 @@ const BranchPurchaseOrders = () => {
   const handleItemChange = (index, field, value) => {
     const updated = [...editItems];
     updated[index][field] = value;
-    if (field === "qty" || field === "purchasePrice" || field === "gst") {
+    if (field === "qty" || field === "purchasePrice" || field === "gst" || field === "discountPercent") {
       const q = parseFloat(updated[index].qty) || 0;
       const p = parseFloat(updated[index].purchasePrice) || 0;
       const g = parseFloat(updated[index].gst) || 0;
-      const base = q * p;
-      updated[index].rowPrice = base;
-      updated[index].total = base * (1 + g / 100);
+      const dPct = parseFloat(updated[index].discountPercent) || 0;
+      
+      const rowPrice = q * p;
+      const discountAmount = (rowPrice * dPct) / 100;
+      const taxableAmount = rowPrice - discountAmount;
+      const rowTax = (taxableAmount * g) / 100;
+      const total = taxableAmount + rowTax;
+
+      updated[index].rowPrice = rowPrice;
+      updated[index].discountAmount = discountAmount;
+      updated[index].taxableAmount = taxableAmount;
+      updated[index].rowTax = rowTax;
+      updated[index].total = total.toFixed(2);
     }
     setEditItems(updated);
   };
@@ -644,12 +654,24 @@ const BranchPurchaseOrders = () => {
                                   <FaTrash size={12} /> CANCEL
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    setEditingOrder(order);
-                                    setEditItems(order.items.map(i => ({ ...i })));
-                                    setVendorBillNo(order.vendorBillNo || "");
-                                    setVendorDate(order.vendorDate ? new Date(order.vendorDate).toISOString().split('T')[0] : "");
-                                    setShowInvoiceModal(true);
+                                  onClick={async () => {
+                                    try {
+                                      setLoading(true);
+                                      // FORCE FETCH LATEST ORDER TO AVOID STALE DATA OVERWRITING PO
+                                      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${order._id}`);
+                                      const latestOrder = await res.json();
+                                      if (!res.ok) throw new Error("Failed to fetch latest order data");
+                                      
+                                      setEditingOrder(latestOrder);
+                                      setEditItems(latestOrder.items.map(i => ({ ...i })));
+                                      setVendorBillNo(latestOrder.vendorBillNo || "");
+                                      setVendorDate(latestOrder.vendorDate ? new Date(latestOrder.vendorDate).toISOString().split('T')[0] : "");
+                                      setShowInvoiceModal(true);
+                                    } catch (err) {
+                                      toast.error("Error loading fresh data: " + err.message);
+                                    } finally {
+                                      setLoading(false);
+                                    }
                                   }}
                                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-4 rounded-lg text-xs shadow-md shadow-blue-100 transition uppercase flex items-center gap-1"
                                   title="Update Existing Invoice"

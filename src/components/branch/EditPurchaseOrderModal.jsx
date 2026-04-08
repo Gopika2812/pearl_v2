@@ -89,13 +89,14 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
       totalDiscount += dAmount;
     });
 
-    const transport = order?.transportCharge || 0;
-    const grandTotal = subtotal - totalDiscount + totalTax + transport;
+    const extra = order?.extraExpenseAmount || 0;
+    const grandTotal = subtotal - totalDiscount + totalTax + extra;
 
     return {
       subtotal: Math.round(subtotal),
-      totalTax: Math.round(totalTax),
+      totalTax: Math.min(Math.round(totalTax), grandTotal), // Safety cap
       totalDiscount: Math.round(totalDiscount),
+      extraExpenseAmount: Math.round(extra),
       grandTotal: Math.round(grandTotal),
     };
   };

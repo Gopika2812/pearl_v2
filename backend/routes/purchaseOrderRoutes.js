@@ -124,55 +124,56 @@ router.get("/", async (req, res) => {
   }
 });
 
+// GET SINGLE PURCHASE ORDER
+router.get("/:id", auth, async (req, res) => {
+  try {
+    const order = await PurchaseOrder.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Purchase Order not found" });
+    res.json(order);
+  } catch (err) {
+    console.error("Get PO by ID error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.post('/:id/generate-invoice', auth, async (req, res) => {
   try {
     const { id } = req.params;
     const order = await PurchaseOrder.findById(id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
-    if (order.status === 'INVOICED' && !order.purchaseInvoiceId) return res.status(400).json({ message: 'Order already invoiced' });
-
     const currentFY = getGlobalFinancialYear();
-    const isReInvoice = !!(order.purchaseInvoiceId && order.lastInvoicedItems?.length > 0);
+    // Re-invoice if an invoice ID already exists
+    const isReInvoice = !!order.purchaseInvoiceId;
 
     // ─── BRANCH A: RE-INVOICE (delta recalculation) ───────────────────────
     if (isReInvoice) {
-      console.log(`🔄 Re-Invoicing ${order.invoiceId} → updating ${order.purchaseInvoiceId}`);
+      console.log(`[DIAGNOSTIC] Re-Invoicing PO: ${order.invoiceId}`);
+      console.log(`[DIAGNOSTIC] Items in DB before: ${order.items.length}, GrandTotal: ${order.grandTotal}`);
 
-      // 1. EXTRACT NEW ITEMS AND TOTALS
       const newItems = (req.body.items && req.body.items.length > 0) ? req.body.items : order.items;
-      
-      const oldState = {
-        items: (order.lastInvoicedItems || []).map(i => i.toObject ? i.toObject() : i),
-        grandTotal: order.lastInvoicedGrandTotal || 0
-      };
-      
-      // Calculate NEW totals based on newItems
-      const subtotal = newItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
-      const totalDiscount = newItems.reduce((acc, i) => acc + (Number(i.discountAmount) || 0), 0);
-      const baseTaxable = subtotal - totalDiscount;
+      console.log(`[DIAGNOSTIC] Items in Request: ${newItems.length}`);
+      newItems.forEach((it, idx) => console.log(`  Item ${idx}: ${it.name}, Qty: ${it.qty}, Price: ${it.purchasePrice}`));
 
+      const oldGrandTotal = Number(order.lastInvoicedGrandTotal || 0);
+
+      // RECALCULATE NEW TOTALS
+      const subtotal = newItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
+      const totalDiscount = newItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0);
       const totalTax = newItems.reduce((acc, i) => {
         const gst = Number(i.gst || 0);
-        const iPrice = Number(i.purchasePrice) || 0;
-        const iQty = Number(i.qty) || 0;
-        const iDisc = Number(i.discountAmount) || 0;
-        const itemTaxable = (iPrice * iQty) - iDisc;
-        return acc + (itemTaxable * gst / 100);
+        const rowTaxable = (Number(i.purchasePrice) * Number(i.qty)) - (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100)));
+        return acc + (rowTaxable * gst / 100);
       }, 0);
       
-      const grandTotal = Math.round(baseTaxable + totalTax + (order.extraExpenseAmount || 0));
+      const finalGrandTotal = Math.round(subtotal - totalDiscount + totalTax + (order.extraExpenseAmount || 0));
+      const vendorDelta = finalGrandTotal - oldGrandTotal;
 
-      const oldGrandTotal = order.lastInvoicedGrandTotal || 0;
-      const vendorDelta = Math.round(grandTotal) - Math.round(oldGrandTotal);
-
-      // 2. UPDATE STOCK (DELTA CALCULATION)
-      // Build a map of OLD invoiced quantities
+      // 1. UPDATE STOCK (DELTA CALCULATION)
       const oldQtyMap = {};
-      for (const item of order.lastInvoicedItems) {
-        oldQtyMap[item.productId.toString()] = item.qty;
+      for (const item of order.lastInvoicedItems || []) {
+        if (item.productId) oldQtyMap[item.productId.toString()] = item.qty;
       }
 
-      // Apply DELTA to stock - Use newItems
       for (const item of newItems) {
         const pid = item.productId.toString();
         const oldQty = oldQtyMap[pid] || 0;
@@ -182,15 +183,14 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         }
       }
 
-      // Handle removed items
       const newPids = new Set(newItems.map(i => i.productId.toString()));
-      for (const oldItem of order.lastInvoicedItems) {
-        if (!newPids.has(oldItem.productId.toString())) {
+      for (const oldItem of order.lastInvoicedItems || []) {
+        if (oldItem.productId && !newPids.has(oldItem.productId.toString())) {
           await Product.findByIdAndUpdate(oldItem.productId, { $inc: { totalQty: -oldItem.qty } });
         }
       }
 
-      // 3. VENDOR BALANCE UPDATE
+      // 2. VENDOR BALANCE UPDATE
       if (vendorDelta !== 0 && order.vendor) {
         const vendorRecord = await Vendor.findOne({ branchId: order.branchId, name: order.vendor });
         if (vendorRecord) {
@@ -199,16 +199,20 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         }
       }
 
-      // 4. PERSIST TO PURCHASE ORDER
+      // 3. PERSIST TO PO & PI
       order.items = newItems;
       order.subtotal = Math.round(subtotal);
       order.totalDiscount = Math.round(totalDiscount);
       order.totalTax = Math.round(totalTax);
-      order.grandTotal = Math.round(grandTotal);
-      order.vendorBillNo = req.body.vendorBillNo;
-      order.vendorDate = req.body.vendorDate ? new Date(req.body.vendorDate) : undefined;
+      order.grandTotal = finalGrandTotal;
+      order.status = 'INVOICED';
+      order.lastInvoicedItems = newItems.map(i => i.toObject ? i.toObject() : i);
+      order.lastInvoicedGrandTotal = finalGrandTotal;
+      if (req.body.vendorBillNo) order.vendorBillNo = req.body.vendorBillNo;
+      if (req.body.vendorDate) order.vendorDate = new Date(req.body.vendorDate);
 
-      // 5. UPDATE INVOICE DOCUMENT
+      await order.save();
+
       await PurchaseInvoice.findOneAndUpdate(
         { purchaseInvoiceId: order.purchaseInvoiceId, branchId: order.branchId },
         {
@@ -217,48 +221,10 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
           totalDiscount: order.totalDiscount,
           totalTax: order.totalTax,
           grandTotal: order.grandTotal,
-          extraExpenses: order.extraExpenses || [],
-          extraExpenseAmount: order.extraExpenseAmount || 0,
           vendorBillNo: order.vendorBillNo,
           vendorDate: order.vendorDate,
         }
       );
-
-      order.editHistory.push({
-        version: (order.editHistory.length || 0) + 1,
-        editType: 'RE_INVOICED',
-        items: order.items.map(i => i.toObject ? i.toObject() : i),
-        subtotal: order.subtotal,
-        totalDiscount: order.totalDiscount,
-        totalTax: order.totalTax,
-        grandTotal: order.grandTotal,
-        editedAt: new Date(),
-        note: `Purchase Invoice ${order.purchaseInvoiceId} updated with delta corrections.`
-      });
-
-      // Audit Log for Re-Invoice
-      await createAuditLog({
-        userId: req.user.id,
-        userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
-        username: req.user.username,
-        branchId: req.user.branch || order.branchId,
-        action: "RE_INVOICE_PO",
-        description: `Re-Invoiced PO: ${order.invoiceId} (PI: ${order.purchaseInvoiceId}). Delta: ₹${vendorDelta}`,
-        targetId: order._id,
-        targetModel: "PurchaseOrder",
-        changes: {
-          before: oldState,
-          after: {
-            items: order.items.map(i => i.toObject ? i.toObject() : i),
-            grandTotal: order.grandTotal
-          }
-        }
-      });
-
-      order.lastInvoicedItems = order.items.map(i => i.toObject ? i.toObject() : i);
-      order.lastInvoicedGrandTotal = order.grandTotal;
-      order.status = 'INVOICED';
-      await order.save();
 
       return res.json({
         success: true,
@@ -268,11 +234,11 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     }
 
     // ─── BRANCH B: FIRST-TIME INVOICE ─────────────────────────────────────
+    // ─── BRANCH B: FIRST-TIME INVOICE ─────────────────────────────────────
     let voucher = await VoucherType.findOne({ branchId: order.branchId, name: "purchase invoice", orderType: "PI" })
       || await VoucherType.findOne({ branchId: order.branchId, name: "Purchase Invoice" });
 
     if (!voucher) {
-      // Create if doesn't exist
       voucher = await VoucherType.create({
         branchId: order.branchId,
         name: "purchase invoice",
@@ -290,26 +256,22 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
 
     const piNumber = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
 
-    // Prefer items from req.body if provided during conversion
     const { items: bodyItems, vendorBillNo, vendorDate } = req.body;
+    // Use request items if provided (from preview modal), otherwise fallback to current PO items
     const invoiceItems = (bodyItems && bodyItems.length > 0) ? bodyItems : order.items;
 
-    // If custom items sent, recalculate core totals
-    let subtotal = order.subtotal;
-    let totalDiscount = order.totalDiscount || 0;
-    let totalTax = order.totalTax;
-    let grandTotal = order.grandTotal;
-
-    if (bodyItems && bodyItems.length > 0) {
-      subtotal = invoiceItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
-      totalDiscount = invoiceItems.reduce((acc, i) => acc + (Number(i.discountAmount) || 0), 0);
-      totalTax = invoiceItems.reduce((acc, i) => {
-        const gst = Number(i.gst || 0);
-        const itemTaxable = (Number(i.purchasePrice) * Number(i.qty)) - (Number(i.discountAmount) || 0);
-        return acc + (itemTaxable * gst / 100);
-      }, 0);
-      grandTotal = Math.round(subtotal - totalDiscount + totalTax + (order.extraExpenseAmount || 0));
-    }
+    // RECALCULATE ALL TOTALS FROM SCRATCH (BULLETPROOF)
+    const subtotal = invoiceItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
+    const totalDiscount = invoiceItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0);
+    
+    const totalTax = invoiceItems.reduce((acc, i) => {
+      const gst = Number(i.gst || 0);
+      const rowTaxable = (Number(i.purchasePrice) * Number(i.qty)) - (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100)));
+      return acc + (rowTaxable * gst / 100);
+    }, 0);
+    
+    const calculatedGrandTotal = Math.round(subtotal - totalDiscount + totalTax + (order.extraExpenseAmount || 0));
+    console.log(`[STABILITY CHECK] Recalculated GrandTotal: ${calculatedGrandTotal} (Sub: ${subtotal}, Tax: ${totalTax}, Disc: ${totalDiscount})`);
 
     const purchaseInvoice = new PurchaseInvoice({
       purchaseInvoiceId: piNumber,
@@ -324,7 +286,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       totalTax: Math.round(totalTax),
       extraExpenses: order.extraExpenses || [],
       extraExpenseAmount: order.extraExpenseAmount || 0,
-      grandTotal: Math.round(grandTotal),
+      grandTotal: calculatedGrandTotal,
       financialYear: currentFY,
       vendorBillNo: req.body.vendorBillNo,
       vendorDate: req.body.vendorDate ? new Date(req.body.vendorDate) : undefined,
@@ -334,27 +296,32 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     voucher.counter += 1;
     await voucher.save();
 
-    // PERSIST BILL DETAILS TO PO TOO
+    // UPDATE PO TO MATCH PI EXACTLY (FORCE SYNC)
+    order.items = invoiceItems;
+    order.subtotal = Math.round(subtotal);
+    order.totalDiscount = Math.round(totalDiscount);
+    order.totalTax = Math.round(totalTax);
+    order.grandTotal = calculatedGrandTotal;
     order.vendorBillNo = req.body.vendorBillNo;
     order.vendorDate = req.body.vendorDate ? new Date(req.body.vendorDate) : undefined;
+    order.lastInvoicedItems = invoiceItems;
+    order.lastInvoicedGrandTotal = calculatedGrandTotal;
+    order.status = 'INVOICED';
 
-    // STOCK + VENDOR UPDATES (Simplified for brevity in replacement)
-    for (const item of order.items) {
+    // STOCK UPDATES
+    for (const item of invoiceItems) {
       await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty } });
     }
 
-    if (order.vendor && order.grandTotal) {
+    // VENDOR BALANCE UPDATE
+    if (order.vendor) {
       const vendorRecord = await Vendor.findOne({ branchId: order.branchId, name: order.vendor });
       if (vendorRecord) {
-        vendorRecord.credit = (vendorRecord.credit || 0) + order.grandTotal;
+        vendorRecord.credit = (vendorRecord.credit || 0) + calculatedGrandTotal;
         await vendorRecord.save();
       }
     }
 
-    order.status = 'INVOICED';
-    order.purchaseInvoiceId = piNumber;
-    order.lastInvoicedItems = order.items.map(i => i.toObject());
-    order.lastInvoicedGrandTotal = order.grandTotal;
     await order.save();
 
     // 📊 AUTOMATED LEDGER POSTING (Purchase)
@@ -544,14 +511,42 @@ router.put("/:id", auth, async (req, res) => {
     // Update fields
     if (items) order.items = items;
     if (warehouse) order.warehouse = warehouse;
-    if (subtotal !== undefined) order.subtotal = Math.round(Number(subtotal));
-    if (totalTax !== undefined) order.totalTax = Math.round(Number(totalTax));
-    if (totalDiscount !== undefined) order.totalDiscount = Math.round(Number(totalDiscount));
-    if (grandTotal !== undefined) order.grandTotal = Math.round(Number(grandTotal));
-    if (transportCharge !== undefined) order.transportCharge = Math.round(Number(transportCharge));
+    
+    // FORCED SERVER-SIDE RECALCULATION (Do not trust req.body totals)
+    let calcSubtotal = 0;
+    let calcDiscount = 0;
+    let calcTax = 0;
 
-    // Ensure status stays PLACED if it was PLACED or was recently approved for edit
-    // (If it was INVOICED, we keep it as is, but allowed editing)
+    order.items.forEach(i => {
+      const q = Number(i.qty) || 0;
+      const p = Number(i.purchasePrice) || 0;
+      const dPct = Number(i.discountPercent) || 0;
+      const tPct = Number(i.gst) || 0;
+
+      const rowPrice = q * p;
+      const dAmount = (rowPrice * dPct) / 100;
+      const taxable = rowPrice - dAmount;
+      const taxAmount = (taxable * tPct) / 100;
+
+      calcSubtotal += rowPrice;
+      calcDiscount += dAmount;
+      calcTax += taxAmount;
+
+      // Sync the item fields as well
+      i.rowPrice = rowPrice;
+      i.discountAmount = dAmount;
+      i.taxableAmount = taxable;
+      i.rowTax = taxAmount;
+      i.total = taxable + taxAmount;
+    });
+
+    order.subtotal = Math.round(calcSubtotal);
+    order.totalDiscount = Math.round(calcDiscount);
+    order.totalTax = Math.round(calcTax);
+    
+    if (transportCharge !== undefined) order.transportCharge = Math.round(Number(transportCharge));
+    const extra = order.extraExpenseAmount || 0;
+    order.grandTotal = Math.round(calcSubtotal - calcDiscount + calcTax + extra);
 
     await order.save();
 

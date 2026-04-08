@@ -14,6 +14,9 @@ const PurchaseItemSchema = new mongoose.Schema({
   sellingPrice: Number,
   rowPrice: Number,
   discountPercent: { type: Number, default: 0 },
+  discountAmount: { type: Number, default: 0 },
+  taxableAmount: Number,
+  rowTax: Number,
 
   hsn: String,
 

@@ -202,10 +202,17 @@ router.post("/", async (req, res) => {
     } else {
       // Invoice-linked: calculate from items
       for (const item of items) {
-        const itemTotal = (item.returnedQty || 1) * (item.purchasePrice || 0);
-        subtotal += itemTotal;
+        const qty = item.returnedQty || item.qty || 1;
+        const price = item.purchasePrice || 0;
+        const disc = item.discountPercent || 0;
+        
+        const itemBase = qty * price;
+        const taxable = itemBase * (1 - disc / 100);
+        
+        subtotal += taxable;
+        
         // Use gst from item directly if product lookup fails
-        let gstRate = 0;
+        let gstRate = item.gst || 0;
         try {
           if (item.productId && item.productId !== "000000000000000000000000") {
             const product = await Product.findById(item.productId);
@@ -217,8 +224,12 @@ router.post("/", async (req, res) => {
             item.name = item.name || "General Return";
           }
         } catch (e) { /* ignore */ }
-        item.total = itemTotal;
-        totalTax += (itemTotal * gstRate) / 100;
+
+        item.discountPercent = disc;
+        item.taxableAmount = taxable;
+        const itemTax = (taxable * gstRate) / 100;
+        item.total = Math.round(taxable + itemTax);
+        totalTax += itemTax;
       }
     }
 
@@ -238,7 +249,7 @@ router.post("/", async (req, res) => {
       totalTax: Math.round(totalTax),
       grandTotal: finalGrandTotal,
       reason: reason || "General Adjustment",
-      status: "confirmed",
+      status: "Created",
     });
 
     await debitNote.save();
@@ -379,21 +390,49 @@ router.delete("/:id", async (req, res) => {
     }
 
     // ✅ RESTORE PRODUCT INVENTORY
-    for (const item of debitNote.items) {
-      try {
-        const product = await Product.findByIdAndUpdate(
-          item.productId,
-          { $inc: { totalQty: item.returnedQty } },
-          { new: true }
-        );
-        if (product) {
-          console.log(
-            `✅ Product "${product.name}" inventory restored: +${item.returnedQty} units`
-          );
+    if (debitNote.items && debitNote.items.length > 0) {
+      for (const item of debitNote.items) {
+        try {
+          if (item.productId && item.productId !== "000000000000000000000000") {
+            const product = await Product.findByIdAndUpdate(
+              item.productId,
+              { $inc: { totalQty: item.returnedQty || item.qty } },
+              { new: true }
+            );
+            if (product) console.log(`✅ Inventory restored: ${product.name} +${item.returnedQty || item.qty}`);
+          }
+        } catch (err) {
+          console.error(`⚠️ Failed to restore product inventory:`, err.message);
         }
-      } catch (err) {
-        console.error(`⚠️ Failed to restore product ${item.productId}:`, err.message);
       }
+    }
+
+    // ✅ RESTORE VENDOR BALANCE
+    try {
+      const vendorRecord = await Vendor.findById(debitNote.vendor.vendorId);
+      if (vendorRecord) {
+        const returnAmount = debitNote.grandTotal || 0;
+        const currentDebit = vendorRecord.debit || 0;
+        const currentCredit = vendorRecord.credit || 0;
+        let remainder = returnAmount;
+        let newDebit = currentDebit;
+        let newCredit = currentCredit;
+
+        if (currentDebit > 0) {
+          const reduction = Math.min(currentDebit, remainder);
+          newDebit -= reduction;
+          remainder -= reduction;
+        }
+
+        if (remainder > 0) {
+          newCredit += remainder;
+        }
+
+        await Vendor.findByIdAndUpdate(vendorRecord._id, { debit: newDebit, credit: newCredit });
+        console.log(`✅ Vendor balance restored: Credit ₹${newCredit}, Debit ₹${newDebit}`);
+      }
+    } catch (err) {
+      console.error(`⚠️ Failed to restore vendor balance:`, err.message);
     }
 
     res.json({ success: true, message: "Debit note deleted successfully" });

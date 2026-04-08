@@ -46,16 +46,16 @@ export default function BranchDebitNote() {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 font-sans">
         
         {/* HEADER SECTION */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div className="flex items-center gap-4">
             <div className="p-4 bg-rose-600 rounded-2xl shadow-lg shadow-rose-100 text-white italic">
-              <FaFileContract size={32} />
+              <FaUndoAlt size={32} className="-rotate-90" />
             </div>
             <div>
-              <h1 className="text-3xl font-black text-gray-900 tracking-tight">DEBIT NOTES</h1>
+              <h1 className="text-3xl font-black text-gray-900 tracking-tight uppercase">DEBIT NOTES</h1>
               <p className="text-gray-500 font-bold text-sm uppercase tracking-widest">Purchase Returns & Vendor Debits</p>
             </div>
           </div>
@@ -72,20 +72,20 @@ export default function BranchDebitNote() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Notes</p>
-                <p className="text-3xl font-black text-gray-900">{filteredDN.length}</p>
+                <p className="text-3xl font-black text-gray-900 tracking-tighter">{filteredDN.length}</p>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Debit Value</p>
-                <p className="text-3xl font-black text-rose-600">₹{filteredDN.reduce((sum, dn) => sum + (dn.grandTotal || 0), 0).toLocaleString()}</p>
+                <p className="text-3xl font-black text-rose-600 tracking-tighter italic">₹{filteredDN.reduce((sum, dn) => sum + (dn.grandTotal || 0), 0).toLocaleString()}</p>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4 relative overflow-hidden">
                 <FaSearch className="absolute -right-4 -bottom-4 text-8xl text-gray-50 -rotate-12" />
                 <div className="z-10 w-full">
-                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Search Vendor / ID</p>
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Search Records</p>
                     <input 
                       type="text"
                       placeholder="DN ID or Vendor..."
-                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-rose-500 outline-none transition-all"
+                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-rose-500 outline-none transition-all placeholder:text-gray-300"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -115,7 +115,7 @@ export default function BranchDebitNote() {
                     <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Vendor</th>
                     <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Items</th>
                     <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Reference</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Invoice Ref</th>
                     <th className="px-10 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Details</th>
                   </tr>
                 </thead>
@@ -125,14 +125,14 @@ export default function BranchDebitNote() {
                       <tr className="group hover:bg-rose-50/30 transition-all cursor-pointer">
                         <td className="px-6 py-5 font-black text-rose-600 text-sm whitespace-nowrap">{dn.debitNoteId}</td>
                         <td className="px-6 py-5 font-bold text-gray-600 text-xs whitespace-nowrap">{formatDate(dn.createdAt)}</td>
-                        <td className="px-6 py-5 font-black text-gray-800 text-xs">{dn.vendor?.name}</td>
+                        <td className="px-6 py-5 font-black text-gray-800 text-xs uppercase">{dn.vendor?.name}</td>
                         <td className="px-6 py-5 text-center">
                             <span className="bg-gray-100 px-2 py-1 rounded-lg text-[10px] font-black text-gray-500">{dn.items?.length || 0} ITEMS</span>
                         </td>
-                        <td className="px-6 py-5 text-right font-black text-gray-900 text-sm">₹{(dn.grandTotal || 0).toLocaleString()}</td>
+                        <td className="px-6 py-5 text-right font-black text-gray-900 text-sm italic">₹{(dn.grandTotal || 0).toLocaleString()}</td>
                         <td className="px-6 py-5">
-                            <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${dn.originalPurchaseOrderId ? 'bg-blue-100 text-blue-600 uppercase' : 'bg-orange-100 text-orange-600'}`}>
-                                {dn.originalPurchaseOrderId ? 'PO LINKED' : 'STANDALONE'}
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${!dn.originalPurchaseOrderId ? 'bg-orange-100 text-orange-600 truncate max-w-[100px] block' : 'bg-blue-100 text-blue-600 uppercase'}`}>
+                                {dn.originalInvoiceId || 'STANDALONE'}
                             </span>
                         </td>
                         <td className="px-10 py-5 text-center">
@@ -146,23 +146,35 @@ export default function BranchDebitNote() {
                       </tr>
                       {expandedDN[dn._id] && (
                         <tr className="bg-gray-50/50">
-                          <td colSpan="7" className="px-6 py-4">
-                            <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
-                                <h4 className="text-[10px] font-black text-rose-600 uppercase tracking-widest">Purchase Return Details</h4>
+                          <td colSpan="7" className="px-12 py-6">
+                            <div className="bg-white rounded-[2rem] border-2 border-rose-100 p-6 space-y-4 shadow-xl shadow-rose-50 animate-fadeIn">
+                                <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                                  <h4 className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em] italic">Purchase Return Ledger Detail</h4>
+                                  <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest italic">{dn.debitNoteId} / {formatDate(dn.createdAt)}</span>
+                                </div>
                                 <div className="space-y-2">
                                     {dn.items?.map((item, idx) => (
-                                        <div key={idx} className="flex justify-between items-center text-xs border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+                                        <div key={idx} className="flex justify-between items-center text-xs border-b border-gray-50 pb-2 last:border-0 last:pb-0 group/item">
                                             <div className="flex items-center gap-3">
-                                                <span className="text-[10px] font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">x{item.returnedQty || item.qty}</span>
-                                                <span className="font-bold text-gray-700">{item.name}</span>
+                                                <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-1 rounded-lg">x{item.returnedQty || item.qty}</span>
+                                                <span className="font-black text-gray-700 uppercase tracking-tight">{item.name}</span>
                                             </div>
-                                            <span className="font-black text-gray-900">₹{(item.total || 0).toLocaleString()}</span>
+                                            <div className="flex items-center gap-4">
+                                              <span className="text-[9px] text-gray-400 font-bold italic">@ ₹{item.purchasePrice} {item.discountPercent > 0 && <span className="text-rose-400">(-{item.discountPercent}%)</span>}</span>
+                                              <span className="font-black text-gray-900 italic">₹{((item.total || 0)).toLocaleString()}</span>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
-                                <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
-                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest truncate max-w-[70%] text-italic">Reason: {dn.reason || 'Product Return'}</span>
-                                    <span className="text-xs font-black text-rose-700">Total: ₹{(dn.grandTotal || 0).toLocaleString()}</span>
+                                <div className="pt-4 mt-2 border-t border-gray-100 flex justify-between items-end">
+                                    <div className="flex flex-col gap-1">
+                                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Reason for Return</span>
+                                      <p className="text-[11px] font-bold text-gray-600 bg-gray-50 px-3 py-2 rounded-xl italic">"{dn.reason || 'Material Returned to Vendor'}"</p>
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 italic">Note Grand Total</span>
+                                      <span className="text-xl font-black text-rose-700 tracking-tighter italic">₹{(dn.grandTotal || 0).toLocaleString()}</span>
+                                    </div>
                                 </div>
                             </div>
                           </td>
