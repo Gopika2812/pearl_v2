@@ -293,12 +293,12 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         .col { flex: 1; }
         .label { font-weight: bold; color: #000; }
         
-        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10px; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
         th { background: #000; color: white; padding: 6px; text-align: left; border: 1px solid #1e3a8a; font-weight: 600; }
         td { border: 1px solid #000; padding: 5px 6px; color: #000; }
         
-        .total-section { text-align: right; margin: 15px 0; font-size: 11px; line-height: 1.5; color: #000; }
-        .grand-total { font-size: 16px; font-weight: bold; color: #000; margin-top: 8px; border-top: 2px solid #000; padding-top: 4px; }
+        .total-section { text-align: right; margin: 15px 0; font-size: 13px; line-height: 1.5; color: #000; }
+        .grand-total { font-size: 18px; font-weight: bold; color: #000; margin-top: 8px; border-top: 2px solid #000; padding-top: 4px; }
         .footer { text-align: center; font-size: 10px; color: #94a3b8; margin-top: 20px; }
         .copy-label { 
           text-align: right; 

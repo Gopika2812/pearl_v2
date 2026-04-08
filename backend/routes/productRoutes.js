@@ -270,7 +270,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       return res.status(400).json({ message: "Excel file required" });
     }
 
-    const { branchId } = req.body;
+    const { branchId, skipExisting = false } = req.body;
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
     }
@@ -518,14 +518,16 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       if (existingProductId) {
-        // ONLY update if we actually have fields to update
-        if (Object.keys(productData).length > 0) {
+        // ONLY update if we actually have fields to update AND skipExisting is false
+        if (!skipExisting && Object.keys(productData).length > 0) {
           productsToBulkUpdate.push({
             updateOne: {
               filter: { _id: existingProductId },
               update: { $set: productData }
             }
           });
+        } else if (skipExisting) {
+          console.log(`⏩ Skipping existing product: "${name}"`);
         }
       } else {
         // Ensure essential defaults for NEW products

@@ -36,6 +36,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
 
   // State to handle bulk upload results
   const [uploadResult, setUploadResult] = useState(null);
+  const [skipExisting, setSkipExisting] = useState(false);
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -172,6 +173,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     const formData = new FormData();
     formData.append("file", file);
     formData.append("branchId", branchId);
+    formData.append("skipExisting", skipExisting);
 
     try {
       const res = await fetchWithAuth(`${API_BASE}/products/bulk-upload`, {
@@ -333,13 +335,27 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         />
 
         {!uploadResult && (
-          <button
-            type="button"
-            onClick={() => document.getElementById("productBulkUpload").click()}
-            className="w-full bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition"
-          >
-            📤 Bulk Upload Products (Excel)
-          </button>
+          <div className="p-4 bg-blue-50 border-b flex flex-col gap-3">
+            <div className="flex items-center gap-2 px-1">
+              <input
+                type="checkbox"
+                id="skipExistingCheckbox"
+                checked={skipExisting}
+                onChange={(e) => setSkipExisting(e.target.checked)}
+                className="w-4 h-4 text-primary rounded focus:ring-primary cursor-pointer"
+              />
+              <label htmlFor="skipExistingCheckbox" className="text-sm font-bold text-gray-700 cursor-pointer">
+                Skip Existing Products (Check this to only add MISSING products without affecting current ones)
+              </label>
+            </div>
+            <button
+              type="button"
+              onClick={() => document.getElementById("productBulkUpload").click()}
+              className="w-full bg-green-600 text-white px-4 py-2.5 rounded-lg font-bold hover:bg-green-700 transition shadow-md active:scale-95 flex items-center justify-center gap-2"
+            >
+              <span>📤</span> Bulk Upload Products (Excel)
+            </button>
+          </div>
         )}
 
 

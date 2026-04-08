@@ -369,13 +369,13 @@ async function generateInvoiceOrderPage(sale, copyTitle = "ORIGINAL INVOICE", is
   
   const itemsHTML = sale.items.map((item) => `
     <tr>
-      <td style="padding: 10px; border: 1px solid #999; font-size: 9px; color: #000;">${item.name}</td>
-      <td style="padding: 10px; border: 1px solid #999; text-align: center; font-size: 9px; color: #000;">${item.hsn}</td>
-      <td style="padding: 10px; border: 1px solid #999; text-align: center; font-size: 9px; color: #000;">${item.gst}%</td>
-      <td style="padding: 10px; border: 1px solid #999; text-align: center; font-size: 9px; color: #000;">${item.qty}</td>
-      <td style="padding: 10px; border: 1px solid #999; text-align: right; font-size: 9px; color: #000;">₹${item.sellingPrice.toFixed(2)}</td>
-      <td style="padding: 10px; border: 1px solid #999; text-align: center; font-size: 9px; color: #000;">Kg</td>
-      <td style="padding: 10px; border: 1px solid #999; text-align: right; font-size: 9px; color: #000;">₹${(item.total || 0).toFixed(2)}</td>
+      <td style="padding: 10px; border: 1px solid #999; font-size: 11px; color: #000;">${item.name}</td>
+      <td style="padding: 10px; border: 1px solid #999; text-align: center; font-size: 11px; color: #000;">${item.hsn}</td>
+      <td style="padding: 10px; border: 1px solid #999; text-align: center; font-size: 11px; color: #000;">${item.gst}%</td>
+      <td style="padding: 10px; border: 1px solid #999; text-align: center; font-size: 11px; color: #000;">${item.qty}</td>
+      <td style="padding: 10px; border: 1px solid #999; text-align: right; font-size: 11px; color: #000;">₹${item.sellingPrice.toFixed(2)}</td>
+      <td style="padding: 10px; border: 1px solid #999; text-align: center; font-size: 11px; color: #000;">Kg</td>
+      <td style="padding: 10px; border: 1px solid #999; text-align: right; font-size: 11px; color: #000;">₹${(item.total || 0).toFixed(2)}</td>
     </tr>
   `).join('');
 
@@ -424,8 +424,8 @@ async function generateInvoiceOrderPage(sale, copyTitle = "ORIGINAL INVOICE", is
         .sender-buyer-item p { font-size: 12px; line-height: 1.5; }
         .order-details-box { background: #1e40af; color: white; padding: 8px 15px; font-size: 14px; font-weight: bold; margin-bottom: 15px; border-radius: 4px; }
         .order-details { display: flex; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px; }
-        .order-details div { font-size: 13px; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 12px; }
+        .order-details div { font-size: 15px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
         th { background: #1e40af; color: white; padding: 12px; text-align: left; font-weight: 600; border: 1px solid #1e3a8a; }
         td { padding: 10px 12px; border: 1px solid #e5e7eb; }
         .summary-section { display: flex; justify-content: space-between; margin-top: 25px; gap: 30px; }
@@ -486,8 +486,9 @@ async function generateInvoiceOrderPage(sale, copyTitle = "ORIGINAL INVOICE", is
         <table>
           <thead>
             <tr>
-              <th>Description</th>
+              <th style="width: 35%;">Description</th>
               <th style="text-align: center;">HSN</th>
+              <th style="text-align: center;">GST</th>
               <th style="text-align: center;">Qty</th>
               <th style="text-align: right;">Rate</th>
               <th style="text-align: right;">Total</th>
@@ -668,8 +669,8 @@ async function generateInvoiceTaxPage(sale, copyTitle = "ORIGINAL INVOICE", back
         body { font-family: 'Segoe UI', Arial, sans-serif; background: white; padding: 30px; }
         .invoice-container { max-width: 800px; margin: 0 auto; border: 3px solid #1e40af; padding: 30px; }
         table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        th { background-color: #f8fafc; padding: 12px; border: 1px solid #ddd; text-align: left; font-size: 13px; font-weight: bold; color: #1e40af; }
-        td { padding: 10px 12px; border: 1px solid #ddd; font-size: 13px; color: #333; }
+        th { background-color: #f8fafc; padding: 12px; border: 1px solid #ddd; text-align: left; font-size: 15px; font-weight: bold; color: #1e40af; }
+        td { padding: 10px 12px; border: 1px solid #ddd; font-size: 15px; color: #333; }
         tr.total { font-weight: bold; background-color: #f1f5f9; color: #1e40af; }
       </style>
     </head>

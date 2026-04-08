@@ -30,6 +30,7 @@ const BranchSuppliers = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState("table");
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [payments, setPayments] = useState([]);
   const [selectedLedgerSupplier, setSelectedLedgerSupplier] = useState(null);
@@ -41,17 +42,24 @@ const BranchSuppliers = () => {
 
 
   useEffect(() => {
-    if (branchLoaded && branchId) {
-      fetchSuppliers();
-    }
-  }, [branchLoaded, branchId]);
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-  const fetchSuppliers = async () => {
+  useEffect(() => {
+    if (branchLoaded && branchId) {
+      fetchSuppliers(debouncedSearchTerm);
+    }
+  }, [branchLoaded, branchId, debouncedSearchTerm]);
+
+  const fetchSuppliers = async (search = "") => {
     try {
       setLoading(true);
       
-      // Fetch all vendors
-      const vendorUrl = `${API_BASE}/vendors?branchId=${branchId}`;
+      // Fetch vendors with search and a higher limit to ensure visibility
+      const vendorUrl = `${API_BASE}/vendors?branchId=${branchId}&search=${encodeURIComponent(search)}&limit=1000`;
       const vendorResponse = await fetchWithAuth(vendorUrl);
 
       if (!vendorResponse.ok) {
