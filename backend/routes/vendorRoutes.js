@@ -437,13 +437,13 @@ router.get("/:id/ledger", async (req, res) => {
       "vendor.vendorId": id,
       status: "completed",
       paymentDate: { $gte: start }
-    }).select("amount paymentDate paymentId paymentMethod");
+    }).select("amount paymentDate paymentId paymentMethod purchaseOrder.invoiceId");
 
     // Debits: Debit Notes after startDate
     const dnAfterStart = await DebitNote.find({
       branchId: vendor.branchId,
       "vendor.vendorId": id,
-      status: "confirmed",
+      status: "Created",
       createdAt: { $gte: start }
     }).select("grandTotal createdAt debitNoteId reason");
 
@@ -474,7 +474,7 @@ router.get("/:id/ledger", async (req, res) => {
         id: `pay-${p._id}`,
         date: p.paymentDate,
         type: "PAYMENT",
-        particulars: `Payment: ${p.paymentId} (${(p.paymentMethod || "CASH").toUpperCase()})`,
+        particulars: `Payment: ${p.paymentId} (${(p.paymentMethod || "CASH").toUpperCase()})${p.purchaseOrder?.invoiceId ? ` - for Inv: ${p.purchaseOrder.invoiceId}` : ""}`,
         debit: p.amount || 0,
         credit: 0
       })),

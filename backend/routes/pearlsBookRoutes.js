@@ -13,6 +13,8 @@ import PurchaseOrder from "../models/PurchaseOrder.js";
 import SalesMan from "../models/SalesMan.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
+import DebitNote from "../models/DebitNote.js";
+import CreditNote from "../models/CreditNote.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -188,11 +190,13 @@ router.get("/", async (req, res) => {
   try {
     const purchases = await PurchaseOrder.find().lean();
     const sales = await SalesOrder.find().lean();
+    const debitNotes = await DebitNote.find({ status: "Created" }).lean();
+    const creditNotes = await CreditNote.find({ status: "Created" }).lean();
 
     const purchaseMapped = await Promise.all(purchases.map(async (p) => ({
       _id: p._id,
       type: "PURCHASE",
-      date: p.date,
+      date: p.date || p.createdAt,
       invoiceId: p.invoiceId,
       party: p.vendor,
       warehouse: p.warehouse,
@@ -201,6 +205,34 @@ router.get("/", async (req, res) => {
       totalTax: p.totalTax,
       transportCharge: p.transportCharge || 0,
       grandTotal: p.grandTotal,
+    })));
+
+    const debitNoteMapped = await Promise.all(debitNotes.map(async (dn) => ({
+      _id: dn._id,
+      type: "PURCHASE RETURN",
+      date: dn.createdAt,
+      invoiceId: dn.debitNoteId,
+      party: dn.vendor?.name || "Unknown",
+      items: dn.items || [],
+      subtotal: dn.subtotal,
+      totalTax: dn.totalTax,
+      grandTotal: -dn.grandTotal, // Negative because it reduces purchase liability
+      originalInvoiceId: dn.originalInvoiceId,
+      reason: dn.reason,
+    })));
+
+    const salesReturnMapped = await Promise.all(creditNotes.map(async (cn) => ({
+      _id: cn._id,
+      type: "SALES RETURN",
+      date: cn.createdAt,
+      invoiceId: cn.creditNoteId,
+      party: cn.customer?.name || "Unknown",
+      items: cn.items || [],
+      subtotal: cn.subtotal,
+      totalTax: cn.totalTax,
+      grandTotal: -cn.grandTotal, // Negative because it reduces sales receivable
+      originalInvoiceId: cn.originalInvoiceId,
+      reason: cn.reasonForReturn,
     })));
 
     const salesMapped = [];
@@ -256,7 +288,7 @@ router.get("/", async (req, res) => {
       }
     }
 
-    const merged = [...purchaseMapped, ...salesMapped].sort(
+    const merged = [...purchaseMapped, ...debitNoteMapped, ...salesMapped, ...salesReturnMapped].sort(
       (a, b) => new Date(b.date) - new Date(a.date)
     );
 

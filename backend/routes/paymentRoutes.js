@@ -213,8 +213,34 @@ router.post("/", async (req, res) => {
       { new: true }
     );
 
-    // Standard Format as requested: PAY/001/25-26
-    const paymentId = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
+    // 🛡️ SELF-HEALING: Check if this ID already exists
+    let candidatePaymentId = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
+    const exists = await Payment.findOne({ branchId, paymentId: candidatePaymentId });
+
+    if (exists) {
+      console.warn(`🚨 Duplicate Payment ID detected: ${candidatePaymentId}. Auto-healing...`);
+      const latestPayments = await Payment.find({ 
+        branchId, 
+        paymentId: new RegExp(`^${voucher.prefix}/`),
+        // Filter by FY to be safe if records exist across years with same prefix
+        paymentId: new RegExp(`/${currentFY}$`)
+      }).select("paymentId").lean();
+
+      const sequenceNumbers = latestPayments.map(p => {
+        const match = p.paymentId.match(/\/(\d+)\//);
+        return match ? parseInt(match[1]) : 0;
+      });
+
+      const maxSeq = Math.max(0, ...sequenceNumbers);
+      voucher = await VoucherType.findByIdAndUpdate(
+        voucher._id, 
+        { counter: maxSeq + 1 }, 
+        { new: true }
+      );
+      candidatePaymentId = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
+    }
+
+    const paymentId = candidatePaymentId;
 
     // Build description based on payment type
     let finalDescription = description || "";

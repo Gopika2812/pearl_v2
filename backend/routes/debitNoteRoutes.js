@@ -187,9 +187,32 @@ router.post("/", async (req, res) => {
       { new: true }
     );
 
-    // Use the incremented counter - 1 (since we just incremented)
-    const counter = voucher.counter;
-    const debitNoteId = `DN/${String(counter).padStart(3, "0")}/${currentFY}`;
+    // 🛡️ SELF-HEALING: Check if this ID already exists
+    let candidateDNId = `DN/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
+    const exists = await DebitNote.findOne({ branchId, debitNoteId: candidateDNId });
+
+    if (exists) {
+      console.warn(`🚨 Duplicate Debit Note ID detected: ${candidateDNId}. Auto-healing...`);
+      const latestDNs = await DebitNote.find({ 
+        branchId, 
+        debitNoteId: new RegExp(`^DN/`)
+      }).select("debitNoteId").lean();
+
+      const sequenceNumbers = latestDNs.map(dn => {
+        const match = dn.debitNoteId.match(/\/(\d+)\//);
+        return match ? parseInt(match[1]) : 0;
+      });
+
+      const maxSeq = Math.max(0, ...sequenceNumbers);
+      voucher = await VoucherType.findByIdAndUpdate(
+        voucher._id, 
+        { counter: maxSeq + 1 }, 
+        { new: true }
+      );
+      candidateDNId = `DN/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
+    }
+
+    const debitNoteId = candidateDNId;
 
     // Calculate totals - support both general (manual) and invoice-based
     let subtotal = 0;
@@ -287,13 +310,6 @@ router.post("/", async (req, res) => {
 
       for (const returnedItem of items) {
         totalReturnedQty += returnedItem.returnedQty;
-        const poItemIndex = poItems.findIndex(pi =>
-          pi.productId?.toString() === returnedItem.productId?.toString()
-        );
-        if (poItemIndex !== -1) {
-          poItems[poItemIndex].qty = Math.max(0, (poItems[poItemIndex].qty || 0) - returnedItem.returnedQty);
-          console.log(`📦 PO Item "${returnedItem.name}" qty updated: -${returnedItem.returnedQty}`);
-        }
       }
 
       if (totalReturnedQty >= totalOriginalQty) {
@@ -304,7 +320,7 @@ router.post("/", async (req, res) => {
 
       await PurchaseOrder.findByIdAndUpdate(
         originalPO._id,
-        { items: poItems, status: poStatus }
+        { status: poStatus }
       );
       console.log(`✅ PO status updated to: ${poStatus}`);
     }

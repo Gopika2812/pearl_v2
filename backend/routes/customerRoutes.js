@@ -714,9 +714,9 @@ router.get("/:id/ledger", async (req, res) => {
     const receiptsAfterStart = await Receipt.find({
       branchId: customer.branchId,
       "customer.customerId": id,
-      status: "confirmed",
+      status: { $in: ["confirmed", "bounced"] },
       createdAt: { $gte: start }
-    }).select("amount createdAt receiptId paymentMethod");
+    }).select("amount createdAt receiptId paymentMethod originalInvoiceId status");
 
     // Credits: Credit Notes after startDate
     const cnAfterStart = await CreditNote.find({
@@ -735,7 +735,10 @@ router.get("/:id/ledger", async (req, res) => {
     }, 0);
     
     const totalCreditsAfterStart = 
-      receiptsAfterStart.reduce((sum, r) => sum + (r.amount || 0), 0) +
+      receiptsAfterStart.reduce((sum, r) => {
+        // If bounced, it's effectively a debit (removes credit), so we subtract it from credit total
+        return sum + (r.status === "bounced" ? -(r.amount || 0) : (r.amount || 0));
+      }, 0) +
       cnAfterStart.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
 
     const openingBalance = currentBalance - totalDebitsAfterStart + totalCreditsAfterStart;
@@ -759,10 +762,10 @@ router.get("/:id/ledger", async (req, res) => {
       ...inRangeReceipts.map(r => ({
         id: `rcp-${r._id}`,
         date: r.createdAt,
-        type: "RECEIPT",
-        particulars: `Receipt: ${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})`,
-        debit: 0,
-        credit: r.amount || 0
+        type: r.status === "bounced" ? "BOUNCED" : "RECEIPT",
+        particulars: `${r.status === "bounced" ? "BOUNCED: " : "Receipt: "}${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})${r.originalInvoiceId ? ` - for Inv: ${r.originalInvoiceId}` : ""}`,
+        debit: r.status === "bounced" ? (r.amount || 0) : 0,
+        credit: r.status === "bounced" ? 0 : (r.amount || 0)
       })),
       ...inRangeCNs.map(cn => ({
         id: `cn-${cn._id}`,

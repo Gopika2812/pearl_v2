@@ -60,10 +60,41 @@ const generateBranchSpecificReceiptId = async (branchId, financialYear, prefix =
     voucher = await VoucherType.findByIdAndUpdate(voucher._id, { counter: 0, financialYear }, { new: true });
   }
 
+  // Atomic increment
   voucher = await VoucherType.findByIdAndUpdate(voucher._id, { $inc: { counter: 1 } }, { new: true });
 
-  // Standard Format as requested: REC/001/25-26
-  return `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${financialYear}`;
+  // 🛡️ SELF-HEALING: Check if this ID already exists (prevents Duplicate Key Error)
+  let candidateId = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${financialYear}`;
+  const exists = await Receipt.findOne({ branchId, receiptId: candidateId });
+
+  if (exists) {
+    console.warn(`🚨 Duplicate Receipt ID detected: ${candidateId}. Auto-healing counter...`);
+    // Find the actual Maximum in the DB
+    const latestReceipts = await Receipt.find({ 
+      branchId, 
+      financialYear,
+      receiptId: new RegExp(`^${voucher.prefix}/`) 
+    }).select("receiptId").lean();
+
+    const sequenceNumbers = latestReceipts.map(r => {
+      const match = r.receiptId.match(/\/(\d+)\//);
+      return match ? parseInt(match[1]) : 0;
+    });
+
+    const maxSeq = Math.max(0, ...sequenceNumbers);
+    const newCounter = maxSeq + 1;
+
+    // Update the counter to jumping past the duplicates
+    voucher = await VoucherType.findByIdAndUpdate(
+      voucher._id, 
+      { counter: newCounter }, 
+      { new: true }
+    );
+    candidateId = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${financialYear}`;
+    console.log(`✅ Counter healed. New ID: ${candidateId}`);
+  }
+
+  return candidateId;
 };
 
 // GET all receipts (optional branch filtering)

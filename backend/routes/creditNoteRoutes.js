@@ -92,7 +92,32 @@ const generateBranchSpecificCNId = async (branchId, financialYear) => {
     { new: true }
   );
 
-  return `CN/${String(voucher.counter).padStart(3, "0")}/${financialYear}`;
+  // 🛡️ SELF-HEALING: Check if this ID already exists
+  let candidateCNId = `CN/${String(voucher.counter).padStart(3, "0")}/${financialYear}`;
+  const exists = await CreditNote.findOne({ branchId, creditNoteId: candidateCNId });
+
+  if (exists) {
+    console.warn(`🚨 Duplicate Credit Note ID detected: ${candidateCNId}. Auto-healing...`);
+    const latestCNs = await CreditNote.find({ 
+      branchId, 
+      creditNoteId: new RegExp(`^CN/`)
+    }).select("creditNoteId").lean();
+
+    const sequenceNumbers = latestCNs.map(cn => {
+      const match = cn.creditNoteId.match(/\/(\d+)\//);
+      return match ? parseInt(match[1]) : 0;
+    });
+
+    const maxSeq = Math.max(0, ...sequenceNumbers);
+    voucher = await VoucherType.findByIdAndUpdate(
+      voucher._id, 
+      { counter: maxSeq + 1 }, 
+      { new: true }
+    );
+    candidateCNId = `CN/${String(voucher.counter).padStart(3, "0")}/${financialYear}`;
+  }
+
+  return candidateCNId;
 };
 
 // GET all credit notes (strictly filtered by branchId)
