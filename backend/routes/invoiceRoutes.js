@@ -324,6 +324,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         const branch = await Branch.findById(salesOrder.branchId).session(session);
         
         // 🔄 Use swapped customer if provided in body, else fallback to SO customer
+        const bodyCustomerId = req.body.customerId;
         let customerIdToUse = bodyCustomerId || salesOrder.customer?.customerId;
         const customer = await Customer.findById(customerIdToUse).session(session);
         
