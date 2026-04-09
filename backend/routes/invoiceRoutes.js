@@ -199,54 +199,34 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       }
     }
 
-    // Calculate dynamic opening balance from current customer state
-    const currentCustomer = salesOrder.customer?.customerId;
+    // Dynamic balance calculation based on requested customer
+    const bodyCustomerId = req.body.customerId;
+    let customerToUse = salesOrder.customer?.customerId;
+    let isCustomerSwapped = false;
+
+    if (bodyCustomerId && bodyCustomerId !== customerToUse?._id?.toString()) {
+      customerToUse = await Customer.findById(bodyCustomerId).lean();
+      isCustomerSwapped = true;
+    }
+
     let dynamicOpeningBalance = 0;
-    
-    if (currentCustomer) {
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      const endOfToday = new Date();
-      endOfToday.setHours(23, 59, 59, 999);
+    let closingBalance = 0;
 
-      // 1. Get Live Balance
-      const currentBalance = (currentCustomer.debit || 0) - (currentCustomer.credit || 0);
+    if (customerToUse) {
+      // 1. Get Live Balance of the target customer
+      const currentBalance = (customerToUse.debit || 0) - (customerToUse.credit || 0);
       
-      // 2. Identify 'Current' instance of THIS invoice if re-editing
-      const thisInvoiceGrandTotal = salesOrder.invoiceGenerated ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
+      // 2. Already applied amount for THIS order (if re-editing)
+      const balanceAdjustment = salesOrder.invoiceGenerated ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
 
-      // 3. Sum all transactions happened TODAY (to subtract them from live balance)
-      const [todayInvoices, todayReceipts, todayCNs] = await Promise.all([
-        Invoice.find({ 
-          "customer.customerId": currentCustomer._id, 
-          invoiceDate: { $gte: startOfToday, $lte: endOfToday },
-          status: "FINALIZED"
-        }).lean(),
-        Receipt.find({
-          "customer.customerId": currentCustomer._id,
-          date: { $gte: startOfToday, $lte: endOfToday }
-        }).lean(),
-        CreditNote.find({
-          "customer.customerId": currentCustomer._id,
-          date: { $gte: startOfToday, $lte: endOfToday },
-          status: "Created"
-        }).lean()
-      ]);
-
-      const todayInvoicedTotal = todayInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
-      const todayReceiptTotal = todayReceipts.reduce((sum, rec) => sum + (rec.amount || 0), 0);
-      const todayCNTotal = todayCNs.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
-
-      // Day Opening = Live Balance - Today's Net Change (Invoices - Receipts - CNs)
-      // But wait, the Live Balance ALREADY includes todayInvoicedTotal.
-      // So Opening = Live Balance - todayInvoicedTotal + todayReceiptTotal + todayCNTotal.
+      // Opening Balance = Balance BEFORE this specific bill was added
+      dynamicOpeningBalance = currentBalance - balanceAdjustment;
       
-      // If we are PREVIEWING, the current invoice amount might NOT be in Live Balance yet (if not finalized).
-      // But if it IS finalized (re-edit), it IS in Live Balance.
-      
-      dynamicOpeningBalance = currentBalance - todayInvoicedTotal + todayReceiptTotal + todayCNTotal;
+      // Closing Balance = Balance AFTER applying the new grandTotal
+      closingBalance = dynamicOpeningBalance + grandTotal;
     } else {
       dynamicOpeningBalance = salesOrder.openingBalance || 0;
+      closingBalance = dynamicOpeningBalance + grandTotal;
     }
 
     const formatBalance = (val) => {
@@ -254,22 +234,22 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       return val >= 0 ? `₹${absVal} Dr` : `₹${absVal} Cr`;
     };
 
-    // Closing Balance = Balance AFTER applying this specific invoice correctly.
-    // If we're previewing a NEW invoice: Closing = Current Balance + grandTotal
-    // If we're re-editing: Closing = Current Balance - lastInvoicedGrandTotal + grandTotal
-    let finalActualBalance = 0;
-    if (currentCustomer) {
-      finalActualBalance = (currentCustomer.debit || 0) - (currentCustomer.credit || 0);
-    }
-    const balanceAdjustment = salesOrder.invoiceGenerated ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
-    const closingBalance = finalActualBalance - balanceAdjustment + grandTotal;
-
     const previewData = {
-      invoiceNumber: salesOrder.invoiceId, // Use Sales Order's invoiceId
+      invoiceNumber: salesOrder.invoiceId, 
       salesOrderId,
       billingPerson: billingPersonName,
       deliveryMan: deliveryManName,
-      customer: salesOrder.customer,
+      customer: isCustomerSwapped ? {
+        customerId: customerToUse._id,
+        name: customerToUse.name,
+        whatsapp: customerToUse.whatsapp,
+        address: customerToUse.address,
+        district: customerToUse.district,
+        state: customerToUse.state,
+        stateCode: customerToUse.stateCode,
+        pincode: customerToUse.pincode,
+        gstin: customerToUse.gstin,
+      } : salesOrder.customer,
       seller: {
         name: salesOrder.branchId?.name || "PEARL AGENCY",
         address: salesOrder.branchId?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003",
@@ -301,7 +281,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       formattedClosingBalance: formatBalance(closingBalance),
       notes,
       invoiceType,
-      invoiceDate: salesOrder.orderDate || salesOrder.createdAt || (salesOrder.editHistory && salesOrder.editHistory.length > 0 ? salesOrder.editHistory[0].editedAt : new Date()),
+      invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
     };
 
     res.json(previewData);
@@ -342,482 +322,265 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         }
 
         const branch = await Branch.findById(salesOrder.branchId).session(session);
-        const customer = await Customer.findById(
-          salesOrder.customer.customerId
-        ).session(session);
-
-      let oldCustomerId = null;
-      let needsOldCustomerRecalculation = false;
-
-      const financialYear = getFinancialYear();
-
-      // 🏁 Check if invoice already exists for this ORDER (to preserve numbering on re-edit)
-      let invoice = await Invoice.findOne({ salesOrderId: salesOrder._id }).session(session);
-      let invoiceNumber;
-
-      if (invoice) {
-        invoiceNumber = invoice.invoiceNumber;
-        console.log(`♻️ Reusing existing Invoice Number: ${invoiceNumber} for SO: ${salesOrder.invoiceId}`);
-      } else {
-        // 🆕 ABSOLUTE PREFIX SYNC: Derive SI ID 100% from SO ID Prefix (e.g., LOCALLINESSO -> LOCALLINESSI)
-        const rawSoId = salesOrder.invoiceId || "";
-        // Stronger regex to strip "SO REF: ", "SO: ", "SO-", etc.
-        const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, ""); 
-        const soPrefixPrefix = cleanSoId.split('/')[0]; 
         
-        // Replace trailing SO with SI, or just append SI if not present
-        let siPrefix = soPrefixPrefix.endsWith("SO") 
-          ? soPrefixPrefix.replace(/SO$/i, "SI")
-          : `${soPrefixPrefix}SI`;
+        // 🔄 Use swapped customer if provided in body, else fallback to SO customer
+        let customerIdToUse = bodyCustomerId || salesOrder.customer?.customerId;
+        const customer = await Customer.findById(customerIdToUse).session(session);
+        
+        if (!customer) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(404).json({ message: "Customer not found" });
+        }
 
-        console.log(`🔍 Absolute Sync (Finalize): SO [${soPrefixPrefix}] -> Target SI [${siPrefix}]`);
+        const isCustomerSwapped = customer._id.toString() !== salesOrder.customer?.customerId?.toString();
+        const lastCustomerId = salesOrder.lastInvoicedCustomerId || salesOrder.customer?.customerId;
+        const lastGrandTotal = salesOrder.lastInvoicedGrandTotal || 0;
+        const financialYear = getFinancialYear();
 
-        // Generate NEW sequential SI number with COLLISION PROTECTION
-        let siVoucher = await VoucherType.findOne({
-          branchId: salesOrder.branchId,
-          prefix: siPrefix,
-          orderType: "SI",
-          financialYear
-        }).session(session);
+        // ==========================================
+        // 1️⃣ GENERATE OR REUSE INVOICE NUMBER
+        // ==========================================
+        let invoice = await Invoice.findOne({ salesOrderId: salesOrder._id }).session(session);
+        let invoiceNumber;
 
-        // 🆕 AUTO-CREATE SI VOUCHER IF MISSING
-        if (!siVoucher) {
-          console.log(`⚠️ No SI voucher found for prefix '${siPrefix}'. Auto-creating now...`);
-          siVoucher = new VoucherType({
+        if (invoice) {
+          invoiceNumber = invoice.invoiceNumber;
+        } else {
+          // Generate NEW sequential SI number
+          const rawSoId = salesOrder.invoiceId || "";
+          const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, ""); 
+          const soPrefixPrefix = cleanSoId.split('/')[0]; 
+          let siPrefix = soPrefixPrefix.endsWith("SO") ? soPrefixPrefix.replace(/SO$/i, "SI") : `${soPrefixPrefix}SI`;
+
+          let siVoucher = await VoucherType.findOne({
             branchId: salesOrder.branchId,
-            name: soPrefixPrefix.toLowerCase().replace(/so$/i, ""),
-            orderType: "SI",
             prefix: siPrefix,
-            counter: 1,
+            orderType: "SI",
             financialYear
+          }).session(session);
+
+          if (!siVoucher) {
+            siVoucher = new VoucherType({
+              branchId: salesOrder.branchId,
+              name: soPrefixPrefix.toLowerCase().replace(/so$/i, ""),
+              orderType: "SI",
+              prefix: siPrefix,
+              counter: 1,
+              financialYear
+            });
+            await siVoucher.save({ session });
+          }
+
+          const existingInvoices = await Invoice.find({
+            branchId: salesOrder.branchId,
+            invoiceNumber: new RegExp(`^${siPrefix}/`),
+            financialYear
+          }).select('invoiceNumber').session(session).lean();
+
+          let highestNumInDB = 0;
+          existingInvoices.forEach(inv => {
+            const parts = inv.invoiceNumber.split('/');
+            if (parts.length >= 2) {
+              const num = parseInt(parts[1]);
+              if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+            }
           });
+
+          const nextNum = Math.max(siVoucher.counter, highestNumInDB + 1);
+          invoiceNumber = `${siVoucher.prefix}/${String(nextNum).padStart(3, "0")}/${financialYear}`;
+          siVoucher.counter = nextNum + 1;
           await siVoucher.save({ session });
         }
 
-        // 🛡️ SYNC COUNTER WITH DATABASE (Collision check)
-        // We fetch all invoice numbers for this prefix to find the absolute highest number currently in use
-        const existingInvoices = await Invoice.find({
-          branchId: salesOrder.branchId,
-          invoiceNumber: new RegExp(`^${siPrefix}/`),
-          financialYear
-        }).select('invoiceNumber').session(session).lean();
-
-        let highestNumInDB = 0;
-        existingInvoices.forEach(inv => {
-          const parts = inv.invoiceNumber.split('/');
-          if (parts.length >= 2) {
-            const num = parseInt(parts[1]);
-            if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+        // ==========================================
+        // 2️⃣ PROCESS ITEMS & CALCULATE TOTALS
+        // ==========================================
+        const processedItems = items.map((item) => {
+          const originalItem = salesOrder.items.find(so => so._id.toString() === item._id);
+          const confirmedQty = Number(item.confirmedQty || item.qty || 0);
+          const sellingPrice = Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0));
+          const gstPercent = Number(item.gst || (originalItem ? originalItem.gst : 0));
+          
+          if (originalItem) {
+            const qtyRatio = confirmedQty / originalItem.qty;
+            return {
+              ...originalItem.toObject(),
+              qty: confirmedQty,
+              altQty: originalItem.altQty ? Math.round(originalItem.altQty * qtyRatio) : 0,
+              total: Math.round(originalItem.total * qtyRatio * 100) / 100,
+            };
+          } else {
+            const itemGrossAmount = Math.round(sellingPrice * confirmedQty * 100) / 100;
+            const itemTotalWithTax = item.total || Math.round(itemGrossAmount * (1 + gstPercent / 100) * 100) / 100;
+            return { ...item, qty: confirmedQty, sellingPrice, total: itemTotalWithTax };
           }
         });
 
-        const nextNum = Math.max(siVoucher.counter, highestNumInDB + 1);
-        invoiceNumber = `${siVoucher.prefix}/${String(nextNum).padStart(3, "0")}/${financialYear}`;
-        
-        // Sync Voucher counter and increment
-        siVoucher.counter = nextNum + 1;
-        await siVoucher.save({ session });
-        console.log(`✨ Generated NEW Independent Invoice Number: ${invoiceNumber} (Sync'd counter from DB: ${highestNumInDB})`);
-      }
+        // 🧮 Calculate Totals
+        let grossSubtotal = 0;
+        let totalItemDiscount = 0;
+        let cgstTotal = 0, sgstTotal = 0, igstTotal = 0;
 
-      // 🛡️ INVOICE NUMBER LENGTH VALIDATION (GST/E-INVOICE COMPATIBILITY)
-      if (invoiceNumber.length > 16) {
-        await session.abortTransaction();
-        return res.status(400).json({ 
-          message: `Generated Invoice Number "${invoiceNumber}" is too long (${invoiceNumber.length} chars). Max 16 allowed for E-Invoicing. Please shorten the Voucher Prefix.` 
+        processedItems.forEach((item) => {
+          const gstFactor = 1 + ((item.gst || 0) / 100);
+          const taxableAmount = Math.round(((item.total || 0) / gstFactor) * 100) / 100;
+          grossSubtotal += Math.round((item.sellingPrice || 0) * (item.qty || 0) * 100) / 100;
+          totalItemDiscount += Math.round(((item.sellingPrice * item.qty) - taxableAmount) * 100) / 100;
+          cgstTotal += Math.round((taxableAmount * (item.cgst || 0) / 100) * 100) / 100;
+          sgstTotal += Math.round((taxableAmount * (item.sgst || 0) / 100) * 100) / 100;
+          igstTotal += Math.round((taxableAmount * (item.igst || 0) / 100) * 100) / 100;
         });
-      }
 
+        const tCharge = salesOrder.transportCharge || 0;
+        const tGstAmount = Math.round((tCharge * (salesOrder.transportGstPercent || 0) / 100) * 100) / 100;
+        const totalTax = {
+          cgst: Math.round((cgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
+          sgst: Math.round((sgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
+          igst: Math.round((igstTotal + (igstTotal > 0 ? tGstAmount : 0)) * 100) / 100,
+        };
+        totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
 
-      // Process items (Map existing SO items or handle new ones)
-      const processedItems = items.map((item) => {
-        const originalItem = salesOrder.items.find(
-          (so) => so._id.toString() === item._id
-        );
+        const commonDiscount = customCommonDiscount !== undefined ? Number(customCommonDiscount) : (salesOrder.commonDiscount || 0);
+        const preciseGrandTotal = grossSubtotal - totalItemDiscount + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tCharge - commonDiscount;
+        const grandTotal = Math.round(preciseGrandTotal);
+        const roundingOff = Math.round((grandTotal - preciseGrandTotal) * 100) / 100;
 
-        const confirmedQty = Number(item.confirmedQty || item.qty || 0);
-        const sellingPrice = Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0));
-        const gstPercent = Number(item.gst || (originalItem ? originalItem.gst : 0));
-        const cgstPercent = Number(item.cgst || (originalItem ? originalItem.cgst : 0));
-        const sgstPercent = Number(item.sgst || (originalItem ? originalItem.sgst : 0));
-        const igstPercent = Number(item.igst || (originalItem ? originalItem.igst : 0));
+        // ==========================================
+        // 3️⃣ UPDATE STOCK (DELTA-BASED)
+        // ==========================================
+        const lastItems = salesOrder.lastInvoicedItems || [];
+        const allProductIds = new Set([
+          ...processedItems.map(i => i.productId.toString()),
+          ...lastItems.map(i => i.productId.toString())
+        ]);
 
-        if (originalItem) {
-          const qtyRatio = confirmedQty / originalItem.qty;
-          return {
-            ...originalItem.toObject(),
-            qty: confirmedQty,
-            altQty: originalItem.altQty ? Math.round(originalItem.altQty * qtyRatio) : 0,
-            total: Math.round(originalItem.total * qtyRatio * 100) / 100,
-          };
+        for (const pId of allProductIds) {
+          const newItem = processedItems.find(i => i.productId.toString() === pId);
+          const oldItem = lastItems.find(i => i.productId.toString() === pId);
+          const deltaQty = (newItem?.qty || 0) - (oldItem?.qty || 0);
+          if (deltaQty !== 0) {
+            await Product.updateOne({ _id: pId }, { $inc: { totalQty: -deltaQty } }, { session });
+          }
+        }
+
+        // ==========================================
+        // 4️⃣ UPDATE CUSTOMER BALANCE (SINGLE-PASS)
+        // ==========================================
+        if (isCustomerSwapped && salesOrder.invoiceGenerated) {
+          // A. Revert old customer
+          const oldCustomer = await Customer.findById(lastCustomerId).session(session);
+          if (oldCustomer) {
+            let remaining = lastGrandTotal;
+            let d = oldCustomer.debit || 0, c = oldCustomer.credit || 0;
+            if (d >= remaining) d -= remaining;
+            else { remaining -= d; d = 0; c += remaining; }
+            oldCustomer.debit = Math.round(d); oldCustomer.credit = Math.round(c);
+            oldCustomer.closingBalance = Math.round((oldCustomer.closingBalance || 0) - lastGrandTotal);
+            oldCustomer.totalBalance = oldCustomer.closingBalance;
+            await oldCustomer.save({ session });
+          }
+          // B. Apply to new customer
+          let d = customer.debit || 0, c = customer.credit || 0;
+          let remaining = grandTotal;
+          if (c >= remaining) c -= remaining;
+          else { remaining -= c; c = 0; d += remaining; }
+          customer.debit = Math.round(d); customer.credit = Math.round(c);
+          customer.closingBalance = Math.round((customer.closingBalance || 0) + grandTotal);
+          customer.totalBalance = customer.closingBalance;
+          await customer.save({ session });
         } else {
-          // NEW ITEM from workbench
-          const itemGrossAmount = Math.round(sellingPrice * confirmedQty * 100) / 100;
-          const itemTotalWithTax = item.total || Math.round(itemGrossAmount * (1 + gstPercent / 100) * 100) / 100;
-          
-          return {
-            ...item,
-            qty: confirmedQty,
-            sellingPrice: sellingPrice,
-            total: itemTotalWithTax,
-            gst: gstPercent,
-            cgst: cgstPercent,
-            sgst: sgstPercent,
-            igst: igstPercent,
-          };
+          // Standard delta for same customer
+          const totalDelta = salesOrder.invoiceGenerated ? (grandTotal - lastGrandTotal) : grandTotal;
+          if (totalDelta !== 0) {
+            let d = customer.debit || 0, c = customer.credit || 0;
+            let delta = totalDelta;
+            if (delta > 0) {
+              if (c >= delta) c -= delta;
+              else { delta -= c; c = 0; d += delta; }
+            } else {
+              const absDelta = Math.abs(delta);
+              if (d >= absDelta) d -= absDelta;
+              else { const excess = absDelta - d; d = 0; c += excess; }
+            }
+            customer.debit = Math.round(d); customer.credit = Math.round(c);
+            customer.closingBalance = Math.round((customer.closingBalance || 0) + totalDelta);
+            customer.totalBalance = customer.closingBalance;
+            await customer.save({ session });
+          }
         }
-      });
 
-      // Calculate back orders
-      const backOrderItems = items
-        .filter((item) => item.backOrderQty > 0)
-        .map((item) => {
-          const originalItem = salesOrder.items.find(
-            (so) => so._id.toString() === item._id
-          );
-          return {
-            ...originalItem.toObject(),
-            qty: item.backOrderQty,
-          };
-        });
-
-      // Calculate totals
-      // ⚠️ NOTE: item.total already INCLUDES tax (calculated as pre_tax × (1 + gst/100))
-      // We need to extract the pre-tax amount and recalculate tax properly
-      
-      let grossSubtotal = 0;
-      let totalItemDiscount = 0;
-      let cgstTotal = 0;
-      let sgstTotal = 0;
-      let igstTotal = 0;
-
-      processedItems.forEach((item) => {
-        const gstPercent = item.gst || 0;
-        const cgstPercent = item.cgst || 0;
-        const sgstPercent = item.sgst || 0;
-        const igstPercent = item.igst || 0;
-
-        // Extract pre-tax amount (Taxable Value): preTax = itemTotal / (1 + gst/100)
-        const itemTotalWithTax = item.total || 0;
-        const gstFactor = 1 + (gstPercent / 100);
-        const taxableAmount = Math.round((itemTotalWithTax / gstFactor) * 100) / 100;
-
-        // Gross addition
-        const itemSellingPrice = item.sellingPrice || 0;
-        const itemGrossAmount = Math.round(itemSellingPrice * item.qty * 100) / 100;
-        grossSubtotal += itemGrossAmount;
-
-        // Discount addition
-        totalItemDiscount += Math.round((itemGrossAmount - taxableAmount) * 100) / 100;
-
-        // Calculate tax components from taxableAmount
-        const cgstAmount = Math.round((taxableAmount * cgstPercent / 100) * 100) / 100;
-        const sgstAmount = Math.round((taxableAmount * sgstPercent / 100) * 100) / 100;
-        const igstAmount = Math.round((taxableAmount * igstPercent / 100) * 100) / 100;
-
-        cgstTotal += cgstAmount;
-        sgstTotal += sgstAmount;
-        igstTotal += igstAmount;
-      });
-
-      const tCharge = salesOrder.transportCharge || 0;
-      const tGstPercent = salesOrder.transportGstPercent || 0;
-      const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
-
-      const totalTax = {
-        cgst: Math.round((cgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
-        sgst: Math.round((sgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
-        igst: Math.round((igstTotal + (igstTotal > 0 ? tGstAmount : 0)) * 100) / 100,
-      };
-      totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
-
-      const commonDiscount = customCommonDiscount !== undefined 
-        ? Number(customCommonDiscount) 
-        : (salesOrder.commonDiscount || 0);
-      
-      const preciseGrandTotal = grossSubtotal - totalItemDiscount + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tCharge - commonDiscount;
-      const grandTotal = Math.round(preciseGrandTotal);
-      const roundingOff = Math.round((grandTotal - preciseGrandTotal) * 100) / 100;
-
-      // Note: Revert logic removed here as it is handled by the Delta logic at the end of the transaction
-      // to avoid double-modifying documents and causing write conflicts.
-
-      // ==========================================
-      // 🚀 APPLY NEW STATE
-      // ==========================================
-
-      // A. Update Sales Order with NEW items (2-way sync)
-      let soItemsChanged = false;
-      const updatedSOItems = [...salesOrder.items];
-
-      for (const item of items) {
-        const isNewItem = !salesOrder.items.some(so => so._id?.toString() === item._id || so.productId?.toString() === item.productId);
-        if (isNewItem && item.productId) {
-          console.log(`➕ Adding new item to SO: ${item.name}`);
-          updatedSOItems.push({
-            productId: item.productId,
-            name: item.name,
-            hsn: item.hsn,
-            qty: item.qty, // Using full qty as original
-            unit: item.unit,
-            altQty: item.altQty,
-            altUnit: item.altUnit,
-            sellingPrice: item.sellingPrice,
-            discountType: item.discountType,
-            discountPercent: item.discountPercent,
-            discountAmount: item.discountAmount,
-            gst: item.gst,
-            cgst: item.cgst,
-            sgst: item.sgst,
-            igst: item.igst,
-            total: item.total
-          });
-          soItemsChanged = true;
-        }
-      }
-
-      if (soItemsChanged) {
-        salesOrder.items = updatedSOItems;
-      }
-
-      // Note: Direct Apply logic removed here as it is handled by the Delta logic at the end 
-      // of the transaction to avoid double-modifying documents.
-      let cDebit = customer.debit || 0;
-      let cCredit = customer.credit || 0;
-
-      // D. Update or Create Invoice Document
-      if (invoice) {
-        invoice.customer = {
+        // ==========================================
+        // 5️⃣ SAVE INVOICE & SALES ORDER
+        // ==========================================
+        const customerSnapshot = {
           customerId: customer._id,
           name: customer.name,
           whatsapp: customer.whatsapp,
           address: customer.address,
           district: customer.district,
           state: customer.state,
+          stateCode: customer.stateCode,
           pincode: customer.pincode,
+          gstin: customer.gstin,
         };
-        invoice.items = processedItems;
-        invoice.backOrderItems = backOrderItems;
-        invoice.subtotal = grossSubtotal;
-        invoice.totalDiscount = totalItemDiscount;
-        invoice.totalTax = totalTax;
-        invoice.grandTotal = grandTotal;
-        invoice.roundOff = roundingOff;
-        invoice.status = "FINALIZED";
-        await invoice.save({ session });
-      } else {
-        invoice = new Invoice({
-          invoiceNumber,
-          invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
-          financialYear,
-          salesOrderId: salesOrder._id,
-          branchId: salesOrder.branchId,
-          warehouse: salesOrder.warehouse,
-          customer: {
-            customerId: customer._id,
-            name: customer.name,
-            whatsapp: customer.whatsapp,
-            address: customer.address,
-            district: customer.district,
-            state: customer.state,
-            pincode: customer.pincode,
-          },
-          items: processedItems,
-          backOrderItems,
-          subtotal: grossSubtotal,
-          totalDiscount: totalItemDiscount,
-          totalTax,
-          grandTotal,
-          roundOff: roundingOff,
-          status: "FINALIZED",
-        });
-        await invoice.save({ session });
-      }
 
-      // E. Update Sales Order Snapshot
-      salesOrder.invoiceGenerated = true;
-      salesOrder.status = "INVOICED";
-      salesOrder.salesInvoiceId = invoiceNumber;
-      
-      salesOrder.editHistory.push({
-        version: salesOrder.editHistory.length + 1,
-        editType: invoice ? "RE_INVOICED" : "INVOICED",
-        items: salesOrder.items, // Captures stable original + newly added items
-        subtotal: grossSubtotal,
-        totalTax: totalTax,
-        grandTotal: grandTotal,
-        editedAt: new Date(),
-        note: invoice ? `Regenerated Invoice ${invoiceNumber}` : `Generated Invoice ${invoiceNumber}`
-      });
-
-      await salesOrder.save({ session });
-
-      // Log Invoice Finalization
-      await createAuditLog({
-        userId: req.body.finalizedBy || req.body.userId || invoice.billingPerson || "System",
-        username: req.body.finalizedByUsername || req.body.username || "System",
-        branchId: invoice.branchId,
-        action: "FINALIZE_INVOICE",
-        description: `Finalized Invoice: ${invoice.invoiceNumber}. Amount: ₹${invoice.grandTotal}`,
-        targetId: invoice._id,
-        targetModel: "Invoice",
-      });
-
-      // 🔄 DELTA-BASED STOCK UPDATE 🔄 (Consolidated & Atomic)
-      const lastItems = salesOrder.lastInvoicedItems || [];
-      const allProductIds = new Set([
-        ...processedItems.map(i => i.productId.toString()),
-        ...lastItems.map(i => i.productId.toString())
-      ]);
-
-      for (const pId of allProductIds) {
-        const newItem = processedItems.find(i => i.productId.toString() === pId);
-        const oldItem = lastItems.find(i => i.productId.toString() === pId);
-
-        const newQty = newItem?.qty || 0;
-        const oldQty = oldItem?.qty || 0;
-        const deltaQty = newQty - oldQty;
-
-        if (deltaQty !== 0) {
-          // Use atomic decrement to reduce lock contention and prevent conflicts
-          await Product.updateOne(
-            { _id: pId },
-            { $inc: { totalQty: -deltaQty } },
-            { session }
-          );
-          console.log(`📦 Stock Delta Applied for ${pId}: ${-deltaQty}`);
-        }
-      }
-
-      // 💰 DELTA-BASED CUSTOMER BALANCE UPDATE 💰
-      const lastGrandTotal = salesOrder.lastInvoicedGrandTotal || 0;
-      const lastCustomerId = salesOrder.lastInvoicedCustomerId || (invoice ? invoice.customer?.customerId : salesOrder.customer?.customerId);
-      const currentCustomerId = customer._id;
-      const isCustomerSwapped = lastCustomerId && currentCustomerId && lastCustomerId.toString() !== currentCustomerId.toString();
-
-      if (isCustomerSwapped) {
-        console.log(`🔄 Customer Swap detected: ${lastCustomerId} -> ${currentCustomerId}`);
-        
-        // A. Revert old total from previous customer
-        const oldCustomerObj = await Customer.findById(lastCustomerId).session(session);
-        if (oldCustomerObj) {
-          let remainingToRevert = lastGrandTotal;
-          let oldDebit = oldCustomerObj.debit || 0;
-          let oldCredit = oldCustomerObj.credit || 0;
-          if (oldDebit >= remainingToRevert) {
-            oldDebit -= remainingToRevert;
-          } else {
-            remainingToRevert -= oldDebit;
-            oldDebit = 0;
-            oldCredit += remainingToRevert;
-          }
-          oldCustomerObj.debit = Math.round(oldDebit);
-          oldCustomerObj.credit = Math.round(oldCredit);
-          oldCustomerObj.closingBalance = Math.round((oldCustomerObj.closingBalance || 0) - lastGrandTotal);
-          oldCustomerObj.totalBalance = oldCustomerObj.closingBalance;
-          await oldCustomerObj.save({ session });
-        }
-
-        // B. Apply entire new total to current customer
-        let curDebit = customer.debit || 0;
-        let curCredit = customer.credit || 0;
-        let remainingToAdd = grandTotal;
-        if (curCredit >= remainingToAdd) {
-          curCredit -= remainingToAdd;
+        if (invoice) {
+          invoice.customer = customerSnapshot;
+          invoice.items = processedItems;
+          invoice.subtotal = grossSubtotal;
+          invoice.totalTax = totalTax;
+          invoice.grandTotal = grandTotal;
+          await invoice.save({ session });
         } else {
-          remainingToAdd -= curCredit;
-          curCredit = 0;
-          curDebit += remainingToAdd;
+          invoice = new Invoice({
+            invoiceNumber,
+            invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
+            financialYear,
+            salesOrderId: salesOrder._id,
+            branchId: salesOrder.branchId,
+            warehouse: salesOrder.warehouse,
+            customer: customerSnapshot,
+            items: processedItems,
+            subtotal: grossSubtotal,
+            totalTax,
+            grandTotal,
+            status: "FINALIZED",
+          });
+          await invoice.save({ session });
         }
-        customer.debit = Math.round(curDebit);
-        customer.credit = Math.round(curCredit);
-        customer.closingBalance = Math.round((customer.closingBalance || 0) + grandTotal);
-        customer.totalBalance = customer.closingBalance;
-        await customer.save({ session });
-      } else {
-        // Standard Delta for same customer
-        const totalDelta = grandTotal - lastGrandTotal;
-        if (totalDelta !== 0) {
-          let remainingDelta = totalDelta;
-          let curDebit = customer.debit || 0;
-          let curCredit = customer.credit || 0;
 
-          if (totalDelta > 0) {
-            if (curCredit >= remainingDelta) {
-              curCredit -= remainingDelta;
-              remainingDelta = 0;
-            } else {
-              remainingDelta -= curCredit;
-              curCredit = 0;
-              curDebit += remainingDelta;
-            }
-          } else {
-            const absDelta = Math.abs(remainingDelta);
-            if (curDebit >= absDelta) {
-              curDebit -= absDelta;
-            } else {
-              const excess = absDelta - curDebit;
-              curDebit = 0;
-              curCredit += excess;
-            }
-          }
-          customer.debit = Math.round(curDebit);
-          customer.credit = Math.round(curCredit);
-          customer.closingBalance = Math.round((customer.closingBalance || 0) + totalDelta);
-          customer.totalBalance = customer.closingBalance;
-          await customer.save({ session });
+        salesOrder.invoiceGenerated = true;
+        salesOrder.status = "INVOICED";
+        salesOrder.salesInvoiceId = invoiceNumber;
+        salesOrder.lastInvoicedGrandTotal = grandTotal;
+        salesOrder.lastInvoicedCustomerId = customer._id;
+        salesOrder.lastInvoicedItems = processedItems;
+        if (isCustomerSwapped) salesOrder.customer = customerSnapshot;
+
+        salesOrder.editHistory.push({
+          version: salesOrder.editHistory.length + 1,
+          editType: "INVOICED",
+          grandTotal,
+          editedAt: new Date(),
+          note: `Invoice ${invoiceNumber} finalized. ${isCustomerSwapped ? 'Customer Swap Applied.' : ''}`
+        });
+
+        await salesOrder.save({ session });
+
+        await session.commitTransaction();
+        session.endSession();
+        finalizeSuccess = true;
+        return res.json({ success: true, invoiceNumber, invoiceId: invoice._id });
+
+      } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        if (retries > 1 && (error.code === 112 || error.hasErrorLabel?.('TransientTransactionError'))) {
+          retries--; await new Promise(r => setTimeout(r, 100)); continue;
         }
+        throw error;
       }
-
-      // Update Sales Order Snapshots & Meta
-      salesOrder.invoiceGenerated = true;
-      salesOrder.status = "INVOICED";
-      salesOrder.invoiceNotes = notes;
-      salesOrder.salesInvoiceId = invoiceNumber; 
-      salesOrder.recordType = "SALES INVOICE";
-      salesOrder.lastInvoicedItems = processedItems;
-      salesOrder.lastInvoicedGrandTotal = grandTotal;
-      salesOrder.lastInvoicedCustomerId = customer._id;
-
-      salesOrder.editHistory.push({
-        version: salesOrder.editHistory.length + 1,
-        editType: invoice ? "RE_INVOICED" : "INVOICED",
-        items: processedItems,
-        subtotal: grossSubtotal,
-        totalTax: totalTax,
-        grandTotal: grandTotal,
-        editedAt: new Date(),
-        note: `Sales Invoice ${invoiceNumber} finalized. ${isCustomerSwapped ? 'Customer Swap Applied.' : 'Balance Delta Applied.'}`
-      });
-
-      await salesOrder.save({ session });
-
-      await session.commitTransaction();
-      session.endSession();
-      finalizeSuccess = true;
-      return res.json({ 
-        success: true, 
-        invoiceNumber, 
-        invoice: {
-          _id: invoice._id,
-          invoiceNumber: invoice.invoiceNumber,
-          grandTotal: invoice.grandTotal
-        }
-      });
-
-    } catch (error) {
-      await session.abortTransaction();
-      session.endSession();
-      
-      // Retry logic for WriteConflicts in production
-      if (retries > 1 && (error.code === 112 || error.hasErrorLabel?.('TransientTransactionError'))) {
-        console.warn(`⚠️ Write conflict in Finalize (SO: ${salesOrderId}). Retrying... Attempts left: ${retries - 1}`);
-        retries--;
-        await new Promise(r => setTimeout(r, 100));
-        continue;
-      }
-      throw error;
-    }
   }
 } catch (error) {
   console.error("❌ Error during invoice finalization:", error);

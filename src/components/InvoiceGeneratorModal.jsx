@@ -226,6 +226,19 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
     setEditedItems(updated);
   };
 
+  // Handle price changes (Admin/Super Admin only)
+  const handlePriceChange = (index, newPrice) => {
+    const updated = [...editedItems];
+    const price = Math.max(0, newPrice);
+    updated[index].sellingPrice = price;
+    
+    // Recalculate item total
+    const confirmed = updated[index].confirmedQty || 0;
+    updated[index].total = Math.round(price * confirmed * 100) / 100;
+    
+    setEditedItems(updated);
+  };
+
   // Generate preview
   const handleGeneratePreview = async () => {
     try {
@@ -1118,8 +1131,23 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                         <td className="p-3 text-right font-bold text-red-600">
                           {item.backOrderQty} {item.unit}
                         </td>
-                        <td className="p-3 text-right font-mono text-gray-600 bg-gray-50">
-                          ₹{(item.sellingPrice || 0).toFixed(2)}
+                        <td className="p-3 text-right">
+                          {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") ? (
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">₹</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={item.sellingPrice}
+                                onChange={(e) => handlePriceChange(idx, parseFloat(e.target.value) || 0)}
+                                className="w-24 p-2 pl-5 border rounded text-right font-bold text-blue-600 focus:ring-2 focus:ring-blue-400"
+                              />
+                            </div>
+                          ) : (
+                            <div className="font-mono text-gray-600 bg-gray-50 p-2 rounded">
+                              ₹{(item.sellingPrice || 0).toFixed(2)}
+                            </div>
+                          )}
                         </td>
                         <td className="p-3 text-right font-mono font-bold">
                           ₹{(item.total || 0).toFixed(2)}
