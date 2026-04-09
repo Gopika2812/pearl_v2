@@ -1048,8 +1048,12 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                            value={newItem.sellingPrice}
                            onChange={(e) => setNewItem({...newItem, sellingPrice: e.target.value})}
                            onKeyDown={(e) => e.key === 'Enter' && confirmAddItem()}
-                           readOnly
-                           className="w-full p-2.5 pl-7 border-2 border-green-100 rounded-lg bg-gray-50 focus:ring-2 focus:ring-green-500 outline-none font-black text-blue-700 transition-all cursor-not-allowed"
+                           readOnly={!(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN")}
+                           className={`w-full p-2.5 pl-7 border-2 border-green-100 rounded-lg focus:ring-2 focus:ring-green-500 outline-none font-black text-blue-700 transition-all ${
+                             !(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN")
+                               ? "bg-gray-50 cursor-not-allowed"
+                               : "bg-white cursor-text focus:border-green-600"
+                           }`}
                          />
                        </div>
                     </div>
@@ -1132,7 +1136,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                           {item.backOrderQty} {item.unit}
                         </td>
                         <td className="p-3 text-right">
-                          {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") ? (
+                          {(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN") ? (
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">₹</span>
                               <input
