@@ -299,6 +299,7 @@ const salesOrderSchema = new mongoose.Schema(
 
 // Performance Indexes
 salesOrderSchema.index({ branchId: 1, createdAt: -1 });
+salesOrderSchema.index({ branchId: 1, orderDate: -1 });
 salesOrderSchema.index({ branchId: 1, "customer.customerId": 1 });
 salesOrderSchema.index({ status: 1, branchId: 1 });
 salesOrderSchema.index({ invoiceId: 1, branchId: 1 });

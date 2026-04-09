@@ -173,10 +173,8 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
               <div style="display: flex; gap: 10px; margin-top: 15px;">
                 <div style="flex: 1;">
                   <div class="balance-info">
-                    <div><strong>Opening Balance:</strong> ${previewData?.formattedOpeningBalance || (previewData?.openingBalance >= 0 ? '₹' + (previewData?.openingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.openingBalance || 0).toFixed(2) + ' Cr')}</div>
                     <div><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
                   </div>
-                </div>
 
                 <div class="total-section" style="flex: 1;">
                   <div style="font-size: 11px;">Subtotal: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>

@@ -324,21 +324,27 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       finalizedByUsername 
     } = req.body;
 
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    let retries = 3;
+    let finalizeSuccess = false;
+    let lastError = null;
 
-    try {
-      const salesOrder = await SalesOrder.findById(salesOrderId).session(session);
+    while (retries > 0 && !finalizeSuccess) {
+      const session = await mongoose.startSession();
+      session.startTransaction();
 
-      if (!salesOrder) {
-        await session.abortTransaction();
-        return res.status(404).json({ message: "Sales order not found" });
-      }
+      try {
+        const salesOrder = await SalesOrder.findById(salesOrderId).session(session);
 
-      const branch = await Branch.findById(salesOrder.branchId).session(session);
-      const customer = await Customer.findById(
-        salesOrder.customer.customerId
-      ).session(session);
+        if (!salesOrder) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(404).json({ message: "Sales order not found" });
+        }
+
+        const branch = await Branch.findById(salesOrder.branchId).session(session);
+        const customer = await Customer.findById(
+          salesOrder.customer.customerId
+        ).session(session);
 
       let oldCustomerId = null;
       let needsOldCustomerRecalculation = false;
@@ -533,42 +539,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       const grandTotal = Math.round(preciseGrandTotal);
       const roundingOff = Math.round((grandTotal - preciseGrandTotal) * 100) / 100;
 
-      // ==========================================
-      // 🔄 REVERT PREVIOUS EFFECTS (If Regenerating)
-      // ==========================================
-      if (invoice) {
-        console.log(`🔄 Regenerating Invoice ${invoiceNumber}. Reverting previous effects...`);
-        
-        // A. Revert Customer Balance
-        const prevCustomer = await Customer.findById(invoice.customer.customerId).session(session);
-        if (prevCustomer) {
-          const prevAmount = invoice.grandTotal || 0;
-          let pDebit = prevCustomer.debit || 0;
-          let pCredit = prevCustomer.credit || 0;
-
-          if (pDebit >= prevAmount) {
-            pDebit -= prevAmount;
-          } else {
-            const excess = prevAmount - pDebit;
-            pDebit = 0;
-            pCredit += excess;
-          }
-          prevCustomer.debit = Math.round(pDebit);
-          prevCustomer.credit = Math.round(pCredit);
-          prevCustomer.closingBalance = Math.round((prevCustomer.closingBalance || 0) - prevAmount);
-          prevCustomer.totalBalance = prevCustomer.closingBalance;
-          await prevCustomer.save({ session });
-        }
-
-        // B. Revert Stock
-        for (const prevItem of invoice.items) {
-          const product = await Product.findById(prevItem.productId).session(session);
-          if (product) {
-            product.totalQty = (product.totalQty || 0) + (prevItem.qty || 0);
-            await product.save({ session });
-          }
-        }
-      }
+      // Note: Revert logic removed here as it is handled by the Delta logic at the end of the transaction
+      // to avoid double-modifying documents and causing write conflicts.
 
       // ==========================================
       // 🚀 APPLY NEW STATE
@@ -608,32 +580,10 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         salesOrder.items = updatedSOItems;
       }
 
-      // B. Update Customer Balance (Apply New)
+      // Note: Direct Apply logic removed here as it is handled by the Delta logic at the end 
+      // of the transaction to avoid double-modifying documents.
       let cDebit = customer.debit || 0;
       let cCredit = customer.credit || 0;
-      let remainingToAdd = grandTotal;
-
-      if (cCredit >= remainingToAdd) {
-        cCredit -= remainingToAdd;
-      } else {
-        remainingToAdd -= cCredit;
-        cCredit = 0;
-        cDebit += remainingToAdd;
-      }
-      customer.debit = Math.round(cDebit);
-      customer.credit = Math.round(cCredit);
-      customer.closingBalance = Math.round((customer.closingBalance || 0) + grandTotal);
-      customer.totalBalance = customer.closingBalance;
-      await customer.save({ session });
-
-      // C. Update Stock (Apply New)
-      for (const newItem of processedItems) {
-        const product = await Product.findById(newItem.productId).session(session);
-        if (product) {
-          product.totalQty = (product.totalQty || 0) - (newItem.qty || 0);
-          await product.save({ session });
-        }
-      }
 
       // D. Update or Create Invoice Document
       if (invoice) {
@@ -713,8 +663,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         targetModel: "Invoice",
       });
 
-      // 🔄 DELTA-BASED STOCK UPDATE 🔄
-      // We calculate the difference between NEW items and LAST INVOICED items
+      // 🔄 DELTA-BASED STOCK UPDATE 🔄 (Consolidated & Atomic)
       const lastItems = salesOrder.lastInvoicedItems || [];
       const allProductIds = new Set([
         ...processedItems.map(i => i.productId.toString()),
@@ -730,46 +679,24 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         const deltaQty = newQty - oldQty;
 
         if (deltaQty !== 0) {
-          const product = await Product.findById(pId).session(session);
-          if (product) {
-            product.totalQty = (product.totalQty || 0) - deltaQty;
-            
-            // ✅ RECALCULATE selling qty based on configured period (Optional but kept for compatibility)
-            if (product.restockingConfig?.salesPeriodDays) {
-              const days = product.restockingConfig.salesPeriodDays;
-              const endDate = new Date();
-              const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
-              const recentInvoices = await Invoice.find({
-                branchId: salesOrder.branchId,
-                invoiceDate: { $gte: startDate, $lte: endDate },
-                "items.productId": pId,
-              }).session(session).lean();
-
-              let totalSellingQty = 0;
-              recentInvoices.forEach((inv) => {
-                inv.items.forEach((invItem) => {
-                  if (invItem.productId?.toString() === pId.toString()) {
-                    totalSellingQty += invItem.qty || 0;
-                  }
-                });
-              });
-              product.restockingConfig.sellingQtyInPeriod = totalSellingQty;
-              product.restockingConfig.restockingQty = totalSellingQty;
-            }
-            await product.save({ session });
-            console.log(`📦 Stock Delta for ${product.name}: ${-deltaQty} (New: ${newQty}, Old: ${oldQty})`);
-          }
+          // Use atomic decrement to reduce lock contention and prevent conflicts
+          await Product.updateOne(
+            { _id: pId },
+            { $inc: { totalQty: -deltaQty } },
+            { session }
+          );
+          console.log(`📦 Stock Delta Applied for ${pId}: ${-deltaQty}`);
         }
       }
 
-      // 💰 DELTA-BASED CUSTOMER BALANCE UPDATE (With Customer Swap Support) 💰
+      // 💰 DELTA-BASED CUSTOMER BALANCE UPDATE 💰
       const lastGrandTotal = salesOrder.lastInvoicedGrandTotal || 0;
       const lastCustomerId = salesOrder.lastInvoicedCustomerId || (invoice ? invoice.customer?.customerId : salesOrder.customer?.customerId);
       const currentCustomerId = customer._id;
       const isCustomerSwapped = lastCustomerId && currentCustomerId && lastCustomerId.toString() !== currentCustomerId.toString();
 
       if (isCustomerSwapped) {
-        console.log(`🔄 Customer Swap detected during finalization: ${lastCustomerId} -> ${currentCustomerId}`);
+        console.log(`🔄 Customer Swap detected: ${lastCustomerId} -> ${currentCustomerId}`);
         
         // A. Revert old total from previous customer
         const oldCustomerObj = await Customer.findById(lastCustomerId).session(session);
@@ -777,7 +704,6 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           let remainingToRevert = lastGrandTotal;
           let oldDebit = oldCustomerObj.debit || 0;
           let oldCredit = oldCustomerObj.credit || 0;
-
           if (oldDebit >= remainingToRevert) {
             oldDebit -= remainingToRevert;
           } else {
@@ -785,20 +711,17 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
             oldDebit = 0;
             oldCredit += remainingToRevert;
           }
-
           oldCustomerObj.debit = Math.round(oldDebit);
           oldCustomerObj.credit = Math.round(oldCredit);
           oldCustomerObj.closingBalance = Math.round((oldCustomerObj.closingBalance || 0) - lastGrandTotal);
           oldCustomerObj.totalBalance = oldCustomerObj.closingBalance;
           await oldCustomerObj.save({ session });
-          console.log(`✅ Old customer (${oldCustomerObj.name}) balance reverted: -₹${lastGrandTotal}`);
         }
 
         // B. Apply entire new total to current customer
-        let remainingToAdd = grandTotal;
         let curDebit = customer.debit || 0;
         let curCredit = customer.credit || 0;
-
+        let remainingToAdd = grandTotal;
         if (curCredit >= remainingToAdd) {
           curCredit -= remainingToAdd;
         } else {
@@ -806,13 +729,11 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           curCredit = 0;
           curDebit += remainingToAdd;
         }
-
         customer.debit = Math.round(curDebit);
         customer.credit = Math.round(curCredit);
         customer.closingBalance = Math.round((customer.closingBalance || 0) + grandTotal);
         customer.totalBalance = customer.closingBalance;
         await customer.save({ session });
-        console.log(`✅ Current customer (${customer.name}) balance updated: +₹${grandTotal}`);
       } else {
         // Standard Delta for same customer
         const totalDelta = grandTotal - lastGrandTotal;
@@ -822,7 +743,6 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           let curCredit = customer.credit || 0;
 
           if (totalDelta > 0) {
-            // Addition: Consume credit first
             if (curCredit >= remainingDelta) {
               curCredit -= remainingDelta;
               remainingDelta = 0;
@@ -832,7 +752,6 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
               curDebit += remainingDelta;
             }
           } else {
-            // Reduction: Consume debit first
             const absDelta = Math.abs(remainingDelta);
             if (curDebit >= absDelta) {
               curDebit -= absDelta;
@@ -842,27 +761,27 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
               curCredit += excess;
             }
           }
-
           customer.debit = Math.round(curDebit);
           customer.credit = Math.round(curCredit);
           customer.closingBalance = Math.round((customer.closingBalance || 0) + totalDelta);
           customer.totalBalance = customer.closingBalance;
           await customer.save({ session });
-          console.log(`💰 Balance Delta for ${customer.name}: ₹${totalDelta} (New: ₹${grandTotal}, Old: ₹${lastGrandTotal})`);
         }
       }
 
-      // Update sales order
+      // Update Sales Order Snapshots & Meta
       salesOrder.invoiceGenerated = true;
       salesOrder.status = "INVOICED";
       salesOrder.invoiceNotes = notes;
       salesOrder.salesInvoiceId = invoiceNumber; 
       salesOrder.recordType = "SALES INVOICE";
-      
-      // Save snapshot in history
+      salesOrder.lastInvoicedItems = processedItems;
+      salesOrder.lastInvoicedGrandTotal = grandTotal;
+      salesOrder.lastInvoicedCustomerId = customer._id;
+
       salesOrder.editHistory.push({
-        version: (salesOrder.editHistory.length || 0) + 1,
-        editType: (salesOrder.editHistory.length === 0) ? 'INVOICED' : 'RE_INVOICED',
+        version: salesOrder.editHistory.length + 1,
+        editType: invoice ? "RE_INVOICED" : "INVOICED",
         items: processedItems,
         subtotal: grossSubtotal,
         totalTax: totalTax,
@@ -871,88 +790,39 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         note: `Sales Invoice ${invoiceNumber} finalized. ${isCustomerSwapped ? 'Customer Swap Applied.' : 'Balance Delta Applied.'}`
       });
 
-      // Update delta references for next time
-      salesOrder.lastInvoicedItems = processedItems;
-      salesOrder.lastInvoicedGrandTotal = grandTotal;
-      salesOrder.lastInvoicedCustomerId = customer._id;
-
       await salesOrder.save({ session });
 
-      // ♻️ Handle OLD Customer Redistribution
-      if (needsOldCustomerRecalculation && oldCustomerId) {
-        const oldCustomer = await Customer.findById(oldCustomerId).session(session);
-        if (oldCustomer) {
-          const oldCustomerInvoices = await Invoice.find({
-            "customer.customerId": oldCustomerId,
-            status: "FINALIZED"
-          }).session(session);
-          
-          const oldCustomerTotalInvoiced = oldCustomerInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
-          const oldCustomerNewDebit = Math.round(oldCustomerTotalInvoiced);
-          
-          oldCustomer.debit = oldCustomerNewDebit;
-          oldCustomer.closingBalance = oldCustomerNewDebit;
-          await oldCustomer.save({ session });
-          
-          console.log(`♻️ Old customer ${oldCustomer.name} balance recalculated after transfer: ₹${oldCustomerNewDebit}`);
-        }
-      }
-
-      // 📊 AUTOMATED LEDGER POSTING (Sales)
-      const salesAccountGroup = await LedgerGroup.findOneAndUpdate(
-        { branchId: invoice.branchId, name: "Sales Accounts" },
-        { $setOnInsert: { nature: "Income" } },
-        { upsert: true, new: true, session }
-      );
-
-      // Group items by GST% to post to corresponding ledgers
-      const gstSlabs = {};
-      invoice.items.forEach(item => {
-        const gst = item.gst || 0;
-        const gstFactor = 1 + (gst / 100);
-        const taxableValue = Math.round((item.total / gstFactor) * 100) / 100;
-        gstSlabs[gst] = (gstSlabs[gst] || 0) + taxableValue;
-      });
-
-      for (const [gst, amount] of Object.entries(gstSlabs)) {
-        const ledgerName = `Sales ${gst}%`;
-        await Ledger.findOneAndUpdate(
-          { branchId: invoice.branchId, name: ledgerName, groupId: salesAccountGroup._id },
-          { $inc: { currentBalance: amount } }, // Incomes increase with Credit, but here we track simple balance
-          { upsert: true, session }
-        );
-      }
-
       await session.commitTransaction();
-
-
-      res.json({
-        success: true,
+      session.endSession();
+      finalizeSuccess = true;
+      return res.json({ 
+        success: true, 
+        invoiceNumber, 
         invoice: {
           _id: invoice._id,
           invoiceNumber: invoice.invoiceNumber,
-          invoiceType: invoice.invoiceType,
-          grandTotal: invoice.grandTotal,
-          closingBalance: invoice.closingBalance,
-        },
+          grandTotal: invoice.grandTotal
+        }
       });
+
     } catch (error) {
       await session.abortTransaction();
+      session.endSession();
+      
+      // Retry logic for WriteConflicts in production
+      if (retries > 1 && (error.code === 112 || error.hasErrorLabel?.('TransientTransactionError'))) {
+        console.warn(`⚠️ Write conflict in Finalize (SO: ${salesOrderId}). Retrying... Attempts left: ${retries - 1}`);
+        retries--;
+        await new Promise(r => setTimeout(r, 100));
+        continue;
+      }
       throw error;
-    } finally {
-      await session.endSession();
     }
-  } catch (error) {
-    console.error("❌ Error finalizing invoice:", error);
-    
-    // Catch Mongoose Validation Errors (e.g., HSN length, Invoice Number length)
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(val => val.message);
-      return res.status(400).json({ message: `Validation Error: ${messages.join(', ')}` });
-    }
-
-    res.status(500).json({ message: error.message || "Failed to finalize invoice" });
   }
+} catch (error) {
+  console.error("❌ Error during invoice finalization:", error);
+  res.status(500).json({ message: error.message || "Failed to finalize invoice" });
+}
 });
 
 // GET - Retrieve invoice data for display/printing
@@ -1275,82 +1145,208 @@ router.get("/legacy", async (req, res) => {
   }
 });
 
-// DELETE - Delete invoice and revert all changes (Stock & Balance)
-router.delete("/:invoiceId", async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const { invoiceId } = req.params;
-    const { deletedBy, deletedByUsername } = req.query;
+// PUT - Soft Cancel Invoice
+router.put("/:invoiceId/cancel", async (req, res) => {
+  const { invoiceId } = req.params;
+  const { reason, cancelledBy } = req.body;
 
-    const invoice = await Invoice.findById(invoiceId).session(session);
-    if (!invoice) {
-      await session.abortTransaction();
-      return res.status(404).json({ message: "Invoice not found" });
-    }
+  if (!reason) {
+    return res.status(400).json({ message: "Narration/Reason is mandatory for cancellation" });
+  }
 
-    const salesOrder = await SalesOrder.findById(invoice.salesOrderId).session(session);
-    const customer = await Customer.findById(invoice.customer?.customerId).session(session);
-
-    // 1. REVERT STOCK (Put back the items)
-    for (const item of invoice.items) {
-      const product = await Product.findById(item.productId).session(session);
-      if (product) {
-        product.totalQty = (product.totalQty || 0) + (item.qty || 0);
-        await product.save({ session });
-        console.log(`📦 Reverted Stock for ${product.name}: +${item.qty}`);
+  let retries = 3;
+  while (retries > 0) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      const invoice = await Invoice.findById(invoiceId).session(session);
+      if (!invoice || invoice.status === 'CANCELLED') {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({ message: "Invoice not found or already cancelled" });
       }
-    }
 
-    // 2. REVERT CUSTOMER BALANCE
-    if (customer && invoice.grandTotal > 0) {
-      customer.debit = Math.round((customer.debit || 0) - invoice.grandTotal);
-      customer.closingBalance = Math.round((customer.closingBalance || 0) - invoice.grandTotal);
-      await customer.save({ session });
-      console.log(`💰 Reverted Balance for ${customer.name}: -₹${invoice.grandTotal}`);
-    }
+      // 1. Revert Stock Atomically
+      for (const item of invoice.items) {
+        await Product.updateOne(
+          { _id: item.productId },
+          { $inc: { totalQty: item.qty } },
+          { session }
+        );
+      }
 
-    // 3. RESET SALES ORDER
-    if (salesOrder) {
-      salesOrder.status = "PENDING";
-      salesOrder.invoiceGenerated = false;
-      salesOrder.salesInvoiceId = null; // CLEAR THE SI LINK
-      salesOrder.lastInvoicedItems = []; // CLEAR DELTA REF
-      salesOrder.lastInvoicedGrandTotal = 0;
-      salesOrder.recordType = "SALES ORDER"; // Revert type
-      
-      salesOrder.editHistory.push({
-        version: (salesOrder.editHistory.length || 0) + 1,
-        editType: 'INVOICE_CANCELLED',
-        editedAt: new Date(),
-        note: `Invoice ${invoice.invoiceNumber} was deleted. Status reset to PENDING and balances reverted.`
+      // 2. Revert Customer Balance
+      const customerId = invoice.customer?.customerId || invoice.customer;
+      const customer = await Customer.findById(customerId).session(session);
+      if (customer && invoice.grandTotal > 0) {
+          const amountToRevert = invoice.grandTotal;
+          let curDebit = customer.debit || 0;
+          let curCredit = customer.credit || 0;
+          
+          if (curDebit >= amountToRevert) {
+            curDebit -= amountToRevert;
+          } else {
+            const excess = amountToRevert - curDebit;
+            curDebit = 0;
+            curCredit += excess;
+          }
+          
+          customer.debit = Math.round(curDebit);
+          customer.credit = Math.round(curCredit);
+          customer.closingBalance = Math.round((customer.closingBalance || 0) - amountToRevert);
+          customer.totalBalance = customer.closingBalance;
+          await customer.save({ session });
+      }
+
+      // 3. Mark Invoice as Cancelled
+      invoice.status = "CANCELLED";
+      invoice.cancelReason = reason;
+      invoice.cancelledAt = new Date();
+      invoice.cancelledBy = cancelledBy || "System";
+      await invoice.save({ session });
+
+      // 4. Update Sales Order
+      if (invoice.salesOrderId) {
+        const so = await SalesOrder.findById(invoice.salesOrderId).session(session);
+        if (so) {
+          so.status = "CANCELLED"; // Or "PENDING" depending on business rule, user requested "cancelled"
+          so.invoiceGenerated = false;
+          so.editHistory.push({
+            version: so.editHistory.length + 1,
+            editType: "CANCELLED",
+            editedAt: new Date(),
+            note: `Invoice ${invoice.invoiceNumber} Cancelled. Reason: ${reason}`
+          });
+          await so.save({ session });
+        }
+      }
+
+      // 5. Audit Log
+      await createAuditLog({
+        userId: cancelledBy || "System",
+        username: cancelledBy || "System",
+        branchId: invoice.branchId,
+        action: "CANCEL_INVOICE",
+        description: `Cancelled Invoice: ${invoice.invoiceNumber}. Reason: ${reason}`,
+        targetId: invoice._id,
+        targetModel: "Invoice"
       });
-      await salesOrder.save({ session });
+
+      await session.commitTransaction();
+      session.endSession();
+      return res.json({ success: true, message: "Invoice cancelled successfully" });
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      
+      if (retries > 1 && (error.code === 112 || error.hasErrorLabel?.('TransientTransactionError'))) {
+        console.warn(`⚠️ Write conflict in Cancel (INV: ${invoiceId}). Retrying...`);
+        retries--;
+        await new Promise(r => setTimeout(r, 100));
+        continue;
+      }
+      console.error("❌ Error cancelling invoice:", error);
+      return res.status(500).json({ message: error.message || "Failed to cancel invoice" });
     }
+  }
+});
 
-    // 4. Audit Log
-    await createAuditLog({
-      userId: deletedBy || "System",
-      username: deletedByUsername || "System",
-      branchId: invoice.branchId,
-      action: "DELETE_INVOICE",
-      description: `Deleted Invoice: ${invoice.invoiceNumber}. Reverted Stock & Balance.`,
-      targetId: invoice._id,
-      targetModel: "Invoice"
-    });
+// DELETE - Delete invoice and revert all changes (Stock & Balance) - With Retry
+router.delete("/:invoiceId", async (req, res) => {
+  const { invoiceId } = req.params;
+  const { deletedBy } = req.query;
 
-    // 5. DELETE INVOICE DOCUMENT
-    await Invoice.findByIdAndDelete(invoiceId).session(session);
+  let retries = 3;
+  while (retries > 0) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      const invoice = await Invoice.findById(invoiceId).session(session);
+      if (!invoice) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({ message: "Invoice not found" });
+      }
 
-    await session.commitTransaction();
-    res.json({ success: true, message: "Invoice deleted and balances reverted successfully." });
+      // 1. Revert Stock Atomically
+      for (const item of invoice.items) {
+        await Product.updateOne(
+          { _id: item.productId },
+          { $inc: { totalQty: item.qty } },
+          { session }
+        );
+      }
 
-  } catch (error) {
-    await session.abortTransaction();
-    console.error("Error deleting invoice:", error);
-    res.status(500).json({ message: "Failed to delete invoice" });
-  } finally {
-    session.endSession();
+      // 2. Revert Balance
+      const customerId = invoice.customer?.customerId || invoice.customer;
+      const customer = await Customer.findById(customerId).session(session);
+      if (customer && invoice.grandTotal > 0) {
+        let amount = invoice.grandTotal;
+        let curDebit = customer.debit || 0;
+        let curCredit = customer.credit || 0;
+        
+        if (curDebit >= amount) {
+          curDebit -= amount;
+        } else {
+          const excess = amount - curDebit;
+          curDebit = 0;
+          curCredit += excess;
+        }
+        
+        customer.debit = Math.round(curDebit);
+        customer.credit = Math.round(curCredit);
+        customer.closingBalance = Math.round((customer.closingBalance || 0) - amount);
+        customer.totalBalance = customer.closingBalance;
+        await customer.save({ session });
+      }
+
+      // 3. Reset Sales Order
+      if (invoice.salesOrderId) {
+        const so = await SalesOrder.findById(invoice.salesOrderId).session(session);
+        if (so) {
+          so.status = "PENDING";
+          so.invoiceGenerated = false;
+          so.salesInvoiceId = null;
+          so.lastInvoicedItems = [];
+          so.lastInvoicedGrandTotal = 0;
+          so.recordType = "SALES ORDER";
+          so.editHistory.push({
+            version: so.editHistory.length + 1,
+            editType: 'INVOICE_CANCELLED',
+            editedAt: new Date(),
+            note: `Invoice ${invoice.invoiceNumber} deleted. Status reset to PENDING.`
+          });
+          await so.save({ session });
+        }
+      }
+
+      // 4. Audit Log
+      await createAuditLog({
+        userId: deletedBy || "System",
+        username: deletedBy || "System",
+        branchId: invoice.branchId,
+        action: "DELETE_INVOICE",
+        description: `Permanently Deleted Invoice: ${invoice.invoiceNumber}.`,
+        targetId: invoice._id,
+        targetModel: "Invoice"
+      });
+
+      // 5. Delete Document
+      await Invoice.findByIdAndDelete(invoiceId).session(session);
+
+      await session.commitTransaction();
+      session.endSession();
+      return res.json({ success: true, message: "Invoice deleted successfully." });
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      if (retries > 1 && (error.code === 112 || error.hasErrorLabel?.('TransientTransactionError'))) {
+        retries--;
+        await new Promise(r => setTimeout(r, 100));
+        continue;
+      }
+      return res.status(500).json({ message: error.message || "Failed to delete invoice" });
+    }
   }
 });
 

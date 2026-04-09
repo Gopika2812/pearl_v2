@@ -142,7 +142,7 @@ router.get("/", cacheData(60), async (req, res) => {
     const end = toDate ? new Date(toDate) : new Date();
     end.setHours(23, 59, 59, 999);
 
-    query.createdAt = { $gte: start, $lte: end };
+    query.orderDate = { $gte: start, $lte: end };
 
     // 3. Status & Customer Filters
     if (customerName) {
