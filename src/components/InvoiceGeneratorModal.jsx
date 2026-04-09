@@ -1,11 +1,12 @@
-import html2canvas from "html2canvas";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
     FaCheck,
     FaEdit,
+    FaPlus,
     FaPrint,
     FaSpinner,
     FaTimes,
+    FaTrash,
     FaWhatsapp,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -13,7 +14,7 @@ import { API_BASE } from "../api";
 import { useBranch } from "../context/BranchContext";
 
 const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
-  const { user } = useBranch();
+  const { currentBranch, user } = useBranch();
   const [activeTab, setActiveTab] = useState("edit");
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -23,6 +24,39 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   const [notes, setNotes] = useState("");
   const [invoiceType, setInvoiceType] = useState("ORDER_DETAILS");
   const [commonDiscount, setCommonDiscount] = useState(0);
+
+  // Customer Swap state
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [fetchedCustomers, setFetchedCustomers] = useState([]);
+  const [searchingCustomers, setSearchingCustomers] = useState(false);
+
+  // Add Item state
+  const [itemSearch, setItemSearch] = useState("");
+  const [showItemDropdown, setShowItemDropdown] = useState(false);
+  const [fetchedProducts, setFetchedProducts] = useState([]);
+  const [searchingProducts, setSearchingProducts] = useState(false);
+  const qtyInputRef = useRef(null);
+
+  const [newItem, setNewItem] = useState({
+    productId: "",
+    name: "",
+    qty: "",
+    sellingPrice: "",
+    hsn: "",
+    unit: "",
+    gst: 0,
+    mrp: 0
+  });
+
+  // Fetch initial data for dropdowns
+  useEffect(() => {
+    if (order?.branchId) {
+      searchCustomers(""); // Load initial customers
+      searchProducts("");  // Load initial products
+    }
+  }, [order?.branchId]);
 
   // Preview state
   const [previewData, setPreviewData] = useState(null);
@@ -35,29 +69,160 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   const [shouldPrint, setShouldPrint] = useState(false);
   const [shouldWhatsApp, setShouldWhatsApp] = useState(false);
 
-  // Initialize edited items
+  // Initialize data
   useEffect(() => {
-    if (order && order.items) {
-      setEditedItems(
-        order.items.map((item) => ({
-          ...item,
-          _id: item._id?.toString?.() || item._id,
-          confirmedQty: item.qty,
-          backOrderQty: 0,
-        }))
-      );
+    if (order) {
+      if (order.items) {
+        setEditedItems(
+          order.items.map((item) => ({
+            ...item,
+            _id: item._id?.toString?.() || item._id,
+            confirmedQty: item.qty,
+            backOrderQty: 0,
+            originalQty: item.qty, // Keep track of SO original
+          }))
+        );
+      }
       setNotes(order.notes || "");
       setCommonDiscount(order.commonDiscount || 0);
+      setSelectedCustomer(order.customer);
+      setCustomerSearch(order.customer?.name || "");
     }
   }, [order]);
+
+  // Handle Search Customers
+  const searchCustomers = async (query) => {
+    try {
+      setSearchingCustomers(true);
+      const bid = currentBranch?._id || order.branchId?._id || order.branchId;
+      const res = await fetch(`${API_BASE}/customers?branchId=${bid}&search=${query || ""}`);
+      const data = await res.json();
+      setFetchedCustomers(data.data || []);
+    } catch (err) {
+      console.error("error fetching customers:", err);
+    } finally {
+      setSearchingCustomers(false);
+    }
+  };
+
+  // Handle Search Products
+  const searchProducts = async (query) => {
+    try {
+      setSearchingProducts(true);
+      const bid = currentBranch?._id || order.branchId?._id || order.branchId;
+      const res = await fetch(`${API_BASE}/products?branchId=${bid}&search=${query || ""}`);
+      const data = await res.json();
+      setFetchedProducts(data.data || []);
+      // If query is empty, it's an "initial load" - don't force show dropdown yet
+    } catch (err) {
+      console.error("error fetching products:", err);
+    } finally {
+      setSearchingProducts(false);
+    }
+  };
+
+  const handleAddProduct = async (product) => {
+    let price = product.sellingPrice || product.mrp || 0;
+    
+    // FETCH LOCKED PRICE FOR CUSTOMER
+    try {
+      const customerId = selectedCustomer?._id || order.customerId || order.customer?._id;
+      const bid = currentBranch?._id || order.branchId?._id || order.branchId;
+      
+      if (customerId && bid && product._id) {
+        const res = await fetch(`${API_BASE}/customer-locked-prices/${customerId}/${product._id}?branchId=${bid}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.data?.lockedPrice) {
+            price = data.data.lockedPrice;
+            toast.info(`Using locked price for ${selectedCustomer?.name || 'customer'}: ₹${price}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Locked price check failed:", err);
+    }
+
+    setNewItem({
+      productId: product._id,
+      name: product.name,
+      hsn: product.hsnCode || product.hsncode || "",
+      sellingPrice: price,
+      unit: product.unit || product.units || "Kg",
+      gst: product.gst || 0,
+      mrp: product.mrp || 0,
+      qty: 1, 
+    });
+    setItemSearch(product.name);
+    setShowItemDropdown(false);
+    
+    // Focus on Qty input
+    setTimeout(() => {
+        qtyInputRef.current?.focus();
+        qtyInputRef.current?.select();
+    }, 100);
+  };
+
+  const confirmAddItem = () => {
+    if (!newItem.productId || !newItem.qty || newItem.qty <= 0) {
+      toast.warning("Please select a product and enter a valid quantity");
+      return;
+    }
+
+    const itemToAdd = {
+      productId: newItem.productId,
+      name: newItem.name,
+      hsn: newItem.hsn,
+      sellingPrice: newItem.sellingPrice,
+      unit: newItem.unit,
+      gst: newItem.gst,
+      cgst: newItem.gst / 2,
+      sgst: newItem.gst / 2,
+      igst: 0,
+      qty: Number(newItem.qty),
+      confirmedQty: Number(newItem.qty),
+      backOrderQty: 0, 
+      originalQty: Number(newItem.qty), 
+      total: Math.round(newItem.sellingPrice * newItem.qty * 100) / 100,
+    };
+
+    setEditedItems([...editedItems, itemToAdd]);
+    
+    // Reset form
+    setNewItem({
+      productId: "",
+      name: "",
+      qty: "",
+      sellingPrice: "",
+      hsn: "",
+      unit: "",
+      gst: 0,
+      mrp: 0
+    });
+    setItemSearch("");
+    toast.success(`Added ${itemToAdd.name}`);
+  };
+
+  const handleDeleteProduct = (index) => {
+    const updated = editedItems.filter((_, i) => i !== index);
+    setEditedItems(updated);
+  };
 
   // Handle quantity changes
   const handleQtyChange = (index, confirmedQty) => {
     const updated = [...editedItems];
-    const originalQty = order.items[index].qty;
-    const confirmed = Math.max(0, Math.min(originalQty, confirmedQty));
+    const original = updated[index].originalQty || updated[index].qty || 0;
+    const confirmed = Math.max(0, confirmedQty);
     updated[index].confirmedQty = confirmed;
-    updated[index].backOrderQty = originalQty - confirmed;
+    updated[index].qty = confirmed;
+    updated[index].backOrderQty = Math.max(0, original - confirmed);
+    
+    // Recalculate item total
+    const price = updated[index].sellingPrice || 0;
+    updated[index].total = Math.round(price * confirmed * 100) / 100;
+    
     setEditedItems(updated);
   };
 
@@ -75,6 +240,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             notes,
             invoiceType,
             commonDiscount,
+            customerId: selectedCustomer?.customerId || selectedCustomer?._id, // Use swapped customer
           }),
         }
       );
@@ -107,6 +273,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             notes,
             invoiceType,
             commonDiscount,
+            customerId: selectedCustomer?.customerId || selectedCustomer?._id, // Use swapped customer
             finalizedBy: user?.id || user?._id,
             finalizedByUsername: user?.username || user?.fullName || user?.name || "System",
           }),
@@ -393,7 +560,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 </div>
                 <div class="order-header-col">
                   <div class="label">Date:</div>
-                  <div style="font-weight: bold;">${new Date().toLocaleDateString("en-IN")}</div>
+                  <div style="font-weight: bold;">${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}</div>
                 </div>
                 <div class="order-header-col">
                   <div class="label">Billing:</div>
@@ -510,7 +677,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
               <div class="certification">Certified that the particulars given above are true and correct.</div>
               <div class="copy-label">${copyTitle} - PAGE 1</div>
-              <div class="footer">E. & O.E. | Generated on ${new Date().toLocaleString("en-IN")}</div>
+              <div class="footer">E. & O.E. | Generated on ${new Date().toLocaleString("en-IN")} (Original Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")})</div>
             </div>
           </div>
         `;
@@ -542,7 +709,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
               <div class="section-title">🧾 TAX INVOICE - HSN-WISE SUMMARY</div>
 
               <div style="text-align: center; margin-bottom: 20px; font-size: 13px;">
-                <strong>Invoice No: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</strong> | Date: ${new Date().toLocaleDateString("en-IN")}
+                <strong>Invoice No: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</strong> | Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
                 <div style="font-size: 10px; color: #666; margin-top: 5px;">
                   Billing: ${previewData?.billingPerson || "-"} | Delivery: ${previewData?.deliveryMan || "-"}
                 </div>
@@ -644,7 +811,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
               <div class="certification">Certified that the particulars given above are true and correct.</div>
               <div class="copy-label">${copyTitle} - PAGE 2</div>
-              <div class="footer">Tax Invoice as per GST regulations | Generated on ${new Date().toLocaleString("en-IN")}</div>
+              <div class="footer">Tax Invoice as per GST regulations | Generated on ${new Date().toLocaleString("en-IN")} (Original Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")})</div>
             </div>
           </div>
         `;
@@ -656,8 +823,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-white z-[60] flex flex-col overflow-hidden animate-in fade-in duration-300">
+      <div className="w-full flex-1 flex flex-col overflow-hidden">
         {/* HEADER */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 flex items-center justify-between text-white">
           <div>
@@ -684,9 +851,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   : "text-gray-600 hover:text-gray-800"
               }`}
             >
-              {tab === "edit" && "✏️ Edit"}
+              {tab === "edit" && "📦 Back Order / Workbench"}
               {tab === "preview" && "👁️ Preview"}
-              {tab === "success" && "✅ Success"}
+              {tab === "success" && "🖨️ Print / Send"}
             </button>
           ))}
         </div>
@@ -696,7 +863,12 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           {/* EDIT TAB */}
           {activeTab === "edit" && (
             <div>
-              <h3 className="text-lg font-bold mb-4">Edit Order Items</h3>
+              <h3 className="text-xl font-black mb-1 bg-gradient-to-r from-blue-700 to-indigo-700 bg-clip-text text-transparent">
+                📦 Invoicing Workbench & Back Order Management
+              </h3>
+              <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-6">
+                Edit quantities to create back orders | Add new items if required
+              </p>
 
               {/* Invoice Type Selection */}
               <div className="bg-blue-50 p-4 rounded-lg mb-6">
@@ -720,53 +892,246 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {/* Customer Swapping */}
+                <div className="relative">
+                  <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-tight">Billing Customer (Swap Allowed):</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        value={customerSearch}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value);
+                          searchCustomers(e.target.value);
+                        }}
+                        onFocus={() => setShowCustomerDropdown(true)}
+                        onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                        placeholder="Select or search customer..."
+                        className="w-full p-2 border-2 border-blue-100 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none font-semibold transition-all"
+                      />
+                      {showCustomerDropdown && (
+                        <div className="absolute top-full left-0 right-0 bg-white border shadow-2xl z-[60] max-h-60 overflow-auto rounded-b-xl border-t-0 animate-in slide-in-from-top-1 duration-200">
+                          {fetchedCustomers.length > 0 ? (
+                            fetchedCustomers.map((c) => (
+                              <div
+                                key={c._id}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setSelectedCustomer(c);
+                                  setCustomerSearch(c.name);
+                                  setShowCustomerDropdown(false);
+                                  toast.info(`Swapped billing customer to: ${c.name}`);
+                                }}
+                                className="p-4 hover:bg-blue-50 cursor-pointer border-b last:border-0 transition-colors"
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <div className="font-black text-blue-900">{c.name}</div>
+                                    <div className="text-[10px] text-gray-500 font-bold uppercase">{c.address || "No Address Provided"}</div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-xs font-black text-indigo-600">{c.whatsapp}</div>
+                                    {c.debitBalance > 0 && (
+                                      <div className="text-[9px] font-bold text-red-500">Bal: ₹{c.debitBalance.toFixed(2)}</div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="p-4 text-center text-gray-400 text-sm italic">No customers found...</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 p-2 bg-blue-50 rounded border border-blue-100 text-[10px]">
+                    <strong>Currently Billing:</strong> {selectedCustomer?.name || "N/A"}
+                  </div>
+                </div>
+
+                {/* Add Item Workbench Form */}
+                <div className="bg-green-50/50 p-6 rounded-xl border-2 border-green-100 shadow-sm">
+                  <h3 className="text-sm font-black text-green-700 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    Add Product to Invoice
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                    {/* Search Field */}
+                    <div className="md:col-span-5 relative">
+                      <label className="block text-[9px] font-black text-gray-500 uppercase mb-1 tracking-tighter">1. Search Product</label>
+                      <input
+                        type="text"
+                        value={itemSearch}
+                        onChange={(e) => {
+                          setItemSearch(e.target.value);
+                          searchProducts(e.target.value);
+                          if (!e.target.value) {
+                            setNewItem({...newItem, productId: "", name: ""});
+                          }
+                        }}
+                        onFocus={() => setShowItemDropdown(true)}
+                        onBlur={() => setTimeout(() => setShowItemDropdown(false), 200)}
+                        placeholder="Select or search product..."
+                        className="w-full p-2.5 border-2 border-green-100 rounded-lg bg-white focus:ring-2 focus:ring-green-500 outline-none font-bold text-gray-800 transition-all placeholder:text-gray-300"
+                      />
+                      {showItemDropdown && (
+                        <div className="absolute top-full left-0 right-0 bg-white border shadow-2xl z-[60] max-h-60 overflow-auto rounded-b-xl border-t-0 animate-in slide-in-from-top-1 duration-200">
+                          {fetchedProducts.length > 0 ? (
+                            fetchedProducts.map((p) => (
+                              <div
+                                key={p._id}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  handleAddProduct(p);
+                                }}
+                                className="p-4 hover:bg-green-50 cursor-pointer border-b last:border-0 flex justify-between items-center transition-colors"
+                              >
+                                <div className="flex-1">
+                                  <div className="font-black text-green-900">{p.name}</div>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">{p.hsnCode || p.hsncode}</span>
+                                    <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">
+                                      Stock: {p.availableQty || 0} {p.unit || "Units"}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-sm font-black text-blue-600">₹{(p.sellingPrice || 0).toFixed(2)}</div>
+                                  <div className="text-[9px] text-gray-400 font-bold">MRP: ₹{p.mrp || 0}</div>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="p-4 text-center text-gray-400 text-sm italic">No products found...</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Qty Field */}
+                    <div className="md:col-span-2">
+                       <label className="block text-[9px] font-black text-gray-500 uppercase mb-1 tracking-tighter">2. Qty</label>
+                       <input
+                         ref={qtyInputRef}
+                         type="number"
+                         value={newItem.qty}
+                         onChange={(e) => setNewItem({...newItem, qty: e.target.value})}
+                         onKeyDown={(e) => e.key === 'Enter' && confirmAddItem()}
+                         placeholder="0"
+                         className="w-full p-2.5 border-2 border-green-100 rounded-lg bg-white focus:ring-2 focus:ring-green-500 outline-none font-black text-center text-green-700 transition-all"
+                       />
+                    </div>
+
+                    {/* Rate Field */}
+                    <div className="md:col-span-3">
+                       <label className="block text-[9px] font-black text-gray-500 uppercase mb-1 tracking-tighter">3. Selling Rate (₹)</label>
+                       <div className="relative">
+                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
+                         <input
+                           type="number"
+                           value={newItem.sellingPrice}
+                           onChange={(e) => setNewItem({...newItem, sellingPrice: e.target.value})}
+                           onKeyDown={(e) => e.key === 'Enter' && confirmAddItem()}
+                           readOnly
+                           className="w-full p-2.5 pl-7 border-2 border-green-100 rounded-lg bg-gray-50 focus:ring-2 focus:ring-green-500 outline-none font-black text-blue-700 transition-all cursor-not-allowed"
+                         />
+                       </div>
+                    </div>
+
+                    {/* Add Button */}
+                    <div className="md:col-span-2">
+                       <button
+                         onClick={confirmAddItem}
+                         disabled={!newItem.productId}
+                         className="w-full bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 transition-all font-black uppercase text-xs shadow-lg shadow-green-200 flex items-center justify-center gap-2 disabled:opacity-50"
+                       >
+                         <FaPlus /> Add
+                       </button>
+                    </div>
+                  </div>
+                  
+                  {newItem.productId && (
+                    <div className="mt-4 flex gap-4 text-[10px] items-center bg-white/60 p-2 rounded-lg border border-dashed border-green-200">
+                      <span className="font-bold text-gray-500">SELECTED: <span className="text-green-700">{newItem.name}</span></span>
+                      <span className="font-bold text-gray-500 flex items-center gap-1">
+                        UNIT: 
+                        <input 
+                          type="text" 
+                          value={newItem.unit} 
+                          onChange={(e) => setNewItem({...newItem, unit: e.target.value})}
+                          className="w-16 p-1 border rounded bg-white font-black text-gray-700 uppercase outline-none focus:ring-1 focus:ring-green-400"
+                          placeholder="Unit"
+                        />
+                      </span>
+                      <span className="font-bold text-gray-500">HSN: <span className="text-gray-700">{newItem.hsn}</span></span>
+                      <span className="ml-auto font-black text-blue-600">Total: ₹{(Number(newItem.qty || 0) * Number(newItem.sellingPrice || 0)).toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Items Table */}
               <div className="overflow-x-auto mb-6">
-                <table className="w-full border">
-                  <thead className="bg-blue-600 text-white">
-                    <tr>
-                      <th className="border p-3 text-left">Product</th>
-                      <th className="border p-3 text-right">Original Qty</th>
-                      <th className="border p-3 text-right">Confirmed Qty</th>
-                      <th className="border p-3 text-right">Back Order Qty</th>
-                      <th className="border p-3 text-right">Price</th>
-                      <th className="border p-3 text-right">Total</th>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-blue-600 text-white">
+                      <th className="p-3 text-left">Product</th>
+                      <th className="p-3 text-right">Original Qty</th>
+                      <th className="p-3 text-right">Confirmed Qty</th>
+                      <th className="p-3 text-right">Back Order Qty</th>
+                      <th className="p-3 text-right">Price (Locked)</th>
+                      <th className="p-3 text-right">Total</th>
+                      <th className="p-3 text-center">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {editedItems.map((item, idx) => (
-                      <tr key={item._id} className="border hover:bg-gray-50">
-                        <td className="border p-3">{item.name}</td>
-                        <td className="border p-3 text-right font-semibold">
-                          {item.qty} {item.unit || "Units"} <br/>
-                          <span className="text-[10px] text-gray-400">{item.altQty > 0 && `(${item.altQty} ${item.altUnit})`}</span>
-                        </td>
-                        <td className="border p-3">
-                          <div className="flex flex-col items-end">
+                      <tr key={idx} className="border-b hover:bg-gray-50 transition">
+                        <td className="p-3 font-medium">{item.name}</td>
+                        <td className="p-3 text-right text-gray-500">
+                          <div className="flex flex-col items-end gap-1">
+                            <span>{item.originalQty || item.qty}</span>
                             <input
-                              type="number"
-                              min="0"
-                              max={item.qty}
-                              value={item.confirmedQty}
-                              onChange={(e) =>
-                                handleQtyChange(idx, parseInt(e.target.value) || 0)
-                              }
-                              className="w-20 p-2 border rounded text-right bg-blue-50"
+                              type="text"
+                              value={item.unit}
+                              onChange={(e) => {
+                                const updated = [...editedItems];
+                                updated[idx].unit = e.target.value;
+                                setEditedItems(updated);
+                              }}
+                              className="w-16 p-1 text-[10px] border rounded text-right uppercase bg-transparent hover:bg-white focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
                             />
-                            <span className="text-[10px] text-blue-600 font-bold mt-1">
-                              {item.altQty > 0 && `${(item.altQty * (item.confirmedQty / item.qty)).toFixed(1)} ${item.altUnit}`}
-                            </span>
                           </div>
                         </td>
-                        <td className="border p-3 text-right text-red-600 font-bold">
-                          {item.backOrderQty} {item.unit || "Units"} <br/>
-                          <span className="text-[10px] text-red-400 font-normal">
-                             {item.altQty > 0 && `(${(item.altQty * (item.backOrderQty / item.qty)).toFixed(1)} ${item.altUnit})`}
-                          </span>
+                        <td className="p-3">
+                          <input
+                            type="number"
+                            min="0"
+                            value={item.confirmedQty}
+                            onChange={(e) => handleQtyChange(idx, parseFloat(e.target.value) || 0)}
+                            className="w-24 p-2 border rounded text-right font-bold bg-white focus:ring-2 focus:ring-blue-400"
+                          />
                         </td>
-                        <td className="border p-3 text-right">₹{item.sellingPrice}</td>
-                        <td className="border p-3 text-right font-semibold">
-                          ₹{(item.total * (item.confirmedQty / item.qty)).toFixed(2)}
+                        <td className="p-3 text-right font-bold text-red-600">
+                          {item.backOrderQty} {item.unit}
+                        </td>
+                        <td className="p-3 text-right font-mono text-gray-600 bg-gray-50">
+                          ₹{(item.sellingPrice || 0).toFixed(2)}
+                        </td>
+                        <td className="p-3 text-right font-mono font-bold">
+                          ₹{(item.total || 0).toFixed(2)}
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            onClick={() => handleDeleteProduct(idx)}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-full transition"
+                            title="Remove from invoice"
+                          >
+                            <FaTrash />
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -908,15 +1273,15 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             </div>
           )}
 
-          {/* SUCCESS TAB */}
+          {/* SUCCESS (PRINT / SEND) TAB */}
           {activeTab === "success" && generatedInvoice && (
-            <div className="text-center">
-              <div className="text-6xl mb-4">✅</div>
-              <h3 className="text-2xl font-bold text-green-600 mb-2">
-                Invoice Generated Successfully!
+            <div className="text-center py-8">
+              <div className="text-6xl mb-4">🖨️</div>
+              <h3 className="text-2xl font-black text-gray-800 mb-2 uppercase tracking-tight">
+                Ready to Print & Send
               </h3>
-              <p className="text-gray-600 mb-6">
-                Invoice #{generatedInvoice.invoiceNumber}
+              <p className="text-sm text-gray-500 font-bold mb-6">
+                Invoice #{generatedInvoice.invoiceNumber} has been finalized.
               </p>
 
               <div className="bg-green-50 p-6 rounded-lg mb-6">
@@ -979,7 +1344,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             )}
           </div>
         </div>
-      </div>
+    </div>
     </div>
   );
 };

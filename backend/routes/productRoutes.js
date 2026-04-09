@@ -35,6 +35,19 @@ router.post("/", async (req, res) => {
       });
     }
 
+    // Check if product already exists in this branch (Case Insensitive)
+    const existingProduct = await Product.findOne({
+      branchId,
+      name: { $regex: new RegExp(`^${name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") }
+    });
+
+    if (existingProduct) {
+      return res.status(400).json({
+        success: false,
+        message: `A product with the name "${name}" already exists in this branch.`,
+      });
+    }
+
     // Validate productGroup is a valid ObjectId if provided
     if (productGroup && !mongoose.Types.ObjectId.isValid(productGroup)) {
       return res.status(400).json({
@@ -348,6 +361,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     let productsToBulkInsert = [];
     let productsToBulkUpdate = [];
     let skipped = [];
+    let alreadyExistsCount = 0;
 
     // 🔄 First pass: Validate and collect all valid records
     for (const row of rows) {
@@ -528,6 +542,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
           });
         } else if (skipExisting) {
           console.log(`⏩ Skipping existing product: "${name}"`);
+          alreadyExistsCount++;
         }
       } else {
         // Ensure essential defaults for NEW products
@@ -563,13 +578,15 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       updatedCount = result.modifiedCount;
     }
 
-    console.log(`✅ Uploaded: ${insertedCount}, 🔄 Updated: ${updatedCount}, ⚠️ Skipped: ${skipped.length}`);
+    console.log(`✅ Uploaded: ${insertedCount}, 🔄 Updated: ${updatedCount}, ⚠️ Skipped: ${skipped.length}, ⏩ Already Existed: ${alreadyExistsCount}`);
 
     return res.json({
       message: "Bulk product upload completed",
       insertedCount,
       updatedCount,
-      skippedCount: skipped.length,
+      skippedCount: skipped.length + alreadyExistsCount, // Total skipped (errors + exists)
+      alreadyExistsCount,
+      errorCount: skipped.length,
       skipped,
     });
   } catch (err) {

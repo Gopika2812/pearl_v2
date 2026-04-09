@@ -395,12 +395,26 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
       voucher.financialYear = currentFY;
     }
 
-    const invoiceId = `${voucher.prefix}/${String(voucher.counter).padStart(
-      3,
-      "0"
-    )}/${currentFY}`;
+    // 🛡️ SYNC COUNTER WITH DATABASE (Collision Protection)
+    const existingOrders = await SalesOrder.find({
+      branchId,
+      invoiceId: new RegExp(`^${voucher.prefix}/`),
+      financialYear: currentFY
+    }).select('invoiceId').lean();
 
-    console.log("📝 Generated invoiceId:", invoiceId);
+    let highestNumInDB = 0;
+    existingOrders.forEach(order => {
+      const parts = order.invoiceId.split('/');
+      if (parts.length >= 2) {
+        const num = parseInt(parts[1]);
+        if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+      }
+    });
+
+    const nextNum = Math.max(voucher.counter, highestNumInDB + 1);
+    const invoiceId = `${voucher.prefix}/${String(nextNum).padStart(3, "0")}/${currentFY}`;
+
+    console.log("📝 Generated invoiceId:", invoiceId, `(Highest in DB: ${highestNumInDB})`);
 
     // ✅ FETCH CUSTOMER INSIDE ROUTE
     const dbCustomer = await Customer.findById(customer.id);
@@ -469,8 +483,8 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
     await salesOrder.save();
     console.log("✅ SalesOrder saved successfully");
 
-    // ✅ Increment voucher counter
-    voucher.counter += 1;
+    // ✅ Sync and Increment voucher counter
+    voucher.counter = nextNum + 1;
     await voucher.save();
 
     // Log Sales Order creation

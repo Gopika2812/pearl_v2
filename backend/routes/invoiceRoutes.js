@@ -85,26 +85,33 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     let igstTotal = 0;
 
     const recalculatedItems = items.map((item) => {
+      // Find original item if it exists (for existing SO items)
       const originalItem = salesOrder.items.find(
         (so) => so._id.toString() === item._id
       );
-      if (!originalItem) return item;
 
-      const confirmedQty = item.confirmedQty || item.qty;
-      const qtyRatio = confirmedQty / originalItem.qty;
+      const confirmedQty = Number(item.confirmedQty || item.qty || 0);
+      const sellingPrice = Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0));
+      const gstPercent = Number(item.gst || (originalItem ? originalItem.gst : 0));
+      const cgstPercent = Number(item.cgst || (originalItem ? originalItem.cgst : 0));
+      const sgstPercent = Number(item.sgst || (originalItem ? originalItem.sgst : 0));
+      const igstPercent = Number(item.igst || (originalItem ? originalItem.igst : 0));
 
-      // Original item.total already has tax, so scale it proportionally
-      const itemTotalWithTax = Math.round(originalItem.total * qtyRatio * 100) / 100;
-      
-      // Values for Gross Subtotal
-      const itemSellingPrice = originalItem.sellingPrice || 0;
-      const itemGrossAmount = Math.round(itemSellingPrice * confirmedQty * 100) / 100;
+      let itemTotalWithTax = 0;
+      let itemGrossAmount = 0;
+
+      if (originalItem) {
+        const qtyRatio = confirmedQty / originalItem.qty;
+        itemTotalWithTax = Math.round(originalItem.total * qtyRatio * 100) / 100;
+        itemGrossAmount = Math.round(sellingPrice * confirmedQty * 100) / 100;
+      } else {
+        // NEW ITEM from workbench
+        itemGrossAmount = Math.round(sellingPrice * confirmedQty * 100) / 100;
+        itemTotalWithTax = item.total || Math.round(itemGrossAmount * (1 + gstPercent / 100) * 100) / 100;
+      }
+
+      // Values for Global Totals
       grossSubtotal += itemGrossAmount;
-
-      const gstPercent = item.gst || 0;
-      const cgstPercent = item.cgst || 0;
-      const sgstPercent = item.sgst || 0;
-      const igstPercent = item.igst || 0;
 
       // Extract pre-tax amount (Taxable Value)
       const gstFactor = 1 + (gstPercent / 100);
@@ -124,10 +131,14 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       igstTotal += igstAmount;
 
       return {
-        ...originalItem.toObject(),
+        ...(originalItem ? originalItem.toObject() : item),
         qty: confirmedQty,
-        altQty: originalItem.altQty ? Math.round(originalItem.altQty * qtyRatio) : 0,
+        sellingPrice: sellingPrice,
         total: itemTotalWithTax,
+        gst: gstPercent,
+        cgst: cgstPercent,
+        sgst: sgstPercent,
+        igst: igstPercent,
       };
     });
 
@@ -290,7 +301,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       formattedClosingBalance: formatBalance(closingBalance),
       notes,
       invoiceType,
-      invoiceDate: salesOrder.orderDate || salesOrder.createdAt,
+      invoiceDate: salesOrder.orderDate || salesOrder.createdAt || (salesOrder.editHistory && salesOrder.editHistory.length > 0 ? salesOrder.editHistory[0].editedAt : new Date()),
     };
 
     res.json(previewData);
@@ -355,7 +366,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
 
         console.log(`🔍 Absolute Sync (Finalize): SO [${soPrefixPrefix}] -> Target SI [${siPrefix}]`);
 
-        // Generate NEW sequential SI number
+        // Generate NEW sequential SI number with COLLISION PROTECTION
         let siVoucher = await VoucherType.findOne({
           branchId: salesOrder.branchId,
           prefix: siPrefix,
@@ -377,12 +388,30 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           await siVoucher.save({ session });
         }
 
-        invoiceNumber = `${siVoucher.prefix}/${String(siVoucher.counter).padStart(3, "0")}/${financialYear}`;
+        // 🛡️ SYNC COUNTER WITH DATABASE (Collision check)
+        // We fetch all invoice numbers for this prefix to find the absolute highest number currently in use
+        const existingInvoices = await Invoice.find({
+          branchId: salesOrder.branchId,
+          invoiceNumber: new RegExp(`^${siPrefix}/`),
+          financialYear
+        }).select('invoiceNumber').session(session).lean();
+
+        let highestNumInDB = 0;
+        existingInvoices.forEach(inv => {
+          const parts = inv.invoiceNumber.split('/');
+          if (parts.length >= 2) {
+            const num = parseInt(parts[1]);
+            if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+          }
+        });
+
+        const nextNum = Math.max(siVoucher.counter, highestNumInDB + 1);
+        invoiceNumber = `${siVoucher.prefix}/${String(nextNum).padStart(3, "0")}/${financialYear}`;
         
-        // Increment SI counter
-        siVoucher.counter += 1;
+        // Sync Voucher counter and increment
+        siVoucher.counter = nextNum + 1;
         await siVoucher.save({ session });
-        console.log(`✨ Generated NEW Independent Invoice Number: ${invoiceNumber} for SO: ${salesOrder.invoiceId}`);
+        console.log(`✨ Generated NEW Independent Invoice Number: ${invoiceNumber} (Sync'd counter from DB: ${highestNumInDB})`);
       }
 
       // 🛡️ INVOICE NUMBER LENGTH VALIDATION (GST/E-INVOICE COMPATIBILITY)
@@ -394,22 +423,43 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       }
 
 
-      // Process items
+      // Process items (Map existing SO items or handle new ones)
       const processedItems = items.map((item) => {
         const originalItem = salesOrder.items.find(
           (so) => so._id.toString() === item._id
         );
-        if (!originalItem) return item;
 
-        const confirmedQty = item.confirmedQty || item.qty;
-        const qtyRatio = confirmedQty / originalItem.qty;
+        const confirmedQty = Number(item.confirmedQty || item.qty || 0);
+        const sellingPrice = Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0));
+        const gstPercent = Number(item.gst || (originalItem ? originalItem.gst : 0));
+        const cgstPercent = Number(item.cgst || (originalItem ? originalItem.cgst : 0));
+        const sgstPercent = Number(item.sgst || (originalItem ? originalItem.sgst : 0));
+        const igstPercent = Number(item.igst || (originalItem ? originalItem.igst : 0));
 
-        return {
-          ...originalItem.toObject(),
-          qty: confirmedQty,
-          altQty: originalItem.altQty ? Math.round(originalItem.altQty * qtyRatio) : 0,
-          total: Math.round(originalItem.total * qtyRatio * 100) / 100,
-        };
+        if (originalItem) {
+          const qtyRatio = confirmedQty / originalItem.qty;
+          return {
+            ...originalItem.toObject(),
+            qty: confirmedQty,
+            altQty: originalItem.altQty ? Math.round(originalItem.altQty * qtyRatio) : 0,
+            total: Math.round(originalItem.total * qtyRatio * 100) / 100,
+          };
+        } else {
+          // NEW ITEM from workbench
+          const itemGrossAmount = Math.round(sellingPrice * confirmedQty * 100) / 100;
+          const itemTotalWithTax = item.total || Math.round(itemGrossAmount * (1 + gstPercent / 100) * 100) / 100;
+          
+          return {
+            ...item,
+            qty: confirmedQty,
+            sellingPrice: sellingPrice,
+            total: itemTotalWithTax,
+            gst: gstPercent,
+            cgst: cgstPercent,
+            sgst: sgstPercent,
+            igst: igstPercent,
+          };
+        }
       });
 
       // Calculate back orders
@@ -483,58 +533,110 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       const grandTotal = Math.round(preciseGrandTotal);
       const roundingOff = Math.round((grandTotal - preciseGrandTotal) * 100) / 100;
 
-      // Note: We already found the invoice object above if it exists
-
+      // ==========================================
+      // 🔄 REVERT PREVIOUS EFFECTS (If Regenerating)
+      // ==========================================
       if (invoice) {
-        // 🏁 Detect if customer is being changed on an existing invoice
-        if (invoice.customer?.customerId && invoice.customer.customerId.toString() !== customer._id.toString()) {
-          oldCustomerId = invoice.customer.customerId;
-          needsOldCustomerRecalculation = true;
-          console.log(`⚠️ Invoice customer change detected: ${invoice.customer.name} -> ${customer.name}`);
+        console.log(`🔄 Regenerating Invoice ${invoiceNumber}. Reverting previous effects...`);
+        
+        // A. Revert Customer Balance
+        const prevCustomer = await Customer.findById(invoice.customer.customerId).session(session);
+        if (prevCustomer) {
+          const prevAmount = invoice.grandTotal || 0;
+          let pDebit = prevCustomer.debit || 0;
+          let pCredit = prevCustomer.credit || 0;
+
+          if (pDebit >= prevAmount) {
+            pDebit -= prevAmount;
+          } else {
+            const excess = prevAmount - pDebit;
+            pDebit = 0;
+            pCredit += excess;
+          }
+          prevCustomer.debit = Math.round(pDebit);
+          prevCustomer.credit = Math.round(pCredit);
+          prevCustomer.closingBalance = Math.round((prevCustomer.closingBalance || 0) - prevAmount);
+          prevCustomer.totalBalance = prevCustomer.closingBalance;
+          await prevCustomer.save({ session });
         }
 
-        // 🏦 DAY OPENING BALANCE logic: Start of current day (00:00:00)
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
-        const endOfToday = new Date();
-        endOfToday.setHours(23, 59, 59, 999);
+        // B. Revert Stock
+        for (const prevItem of invoice.items) {
+          const product = await Product.findById(prevItem.productId).session(session);
+          if (product) {
+            product.totalQty = (product.totalQty || 0) + (prevItem.qty || 0);
+            await product.save({ session });
+          }
+        }
+      }
 
-        const currentBalance = (customer.debit || 0) - (customer.credit || 0);
+      // ==========================================
+      // 🚀 APPLY NEW STATE
+      // ==========================================
 
-        // Sum today's transactions EXCEPT this invoice (if re-editing)
-        const [todayInvoices, todayReceipts, todayCNs] = await Promise.all([
-          Invoice.find({ 
-            "customer.customerId": customer._id, 
-            invoiceDate: { $gte: startOfToday, $lte: endOfToday },
-            status: "FINALIZED",
-            _id: { $ne: invoice?._id } // Exclude current invoice if it exists
-          }).session(session).lean(),
-          Receipt.find({
-            "customer.customerId": customer._id,
-            date: { $gte: startOfToday, $lte: endOfToday }
-          }).session(session).lean(),
-          CreditNote.find({
-            "customer.customerId": customer._id,
-            date: { $gte: startOfToday, $lte: endOfToday },
-            status: "Created"
-          }).session(session).lean()
-        ]);
+      // A. Update Sales Order with NEW items (2-way sync)
+      let soItemsChanged = false;
+      const updatedSOItems = [...salesOrder.items];
 
-        const todayInvoicedTotal = todayInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
-        const todayReceiptTotal = todayReceipts.reduce((sum, rec) => sum + (rec.amount || 0), 0);
-        const todayCNTotal = todayCNs.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
+      for (const item of items) {
+        const isNewItem = !salesOrder.items.some(so => so._id?.toString() === item._id || so.productId?.toString() === item.productId);
+        if (isNewItem && item.productId) {
+          console.log(`➕ Adding new item to SO: ${item.name}`);
+          updatedSOItems.push({
+            productId: item.productId,
+            name: item.name,
+            hsn: item.hsn,
+            qty: item.qty, // Using full qty as original
+            unit: item.unit,
+            altQty: item.altQty,
+            altUnit: item.altUnit,
+            sellingPrice: item.sellingPrice,
+            discountType: item.discountType,
+            discountPercent: item.discountPercent,
+            discountAmount: item.discountAmount,
+            gst: item.gst,
+            cgst: item.cgst,
+            sgst: item.sgst,
+            igst: item.igst,
+            total: item.total
+          });
+          soItemsChanged = true;
+        }
+      }
 
-        // Opening = Balance before today's net change
-        // Wait, currentBalance ALREADY includes todayInvoicedTotal (if they were finalized).
-        // Opening = currentBalance - todayInvoicedTotal + todayReceiptTotal + todayCNTotal.
-        const dynamicOpeningBalance = currentBalance - todayInvoicedTotal + todayReceiptTotal + todayCNTotal;
-        
-        // Closing = Opening + New Invoice - Today's Payments - Today's Credit Notes
-        const closingBalance = dynamicOpeningBalance + grandTotal - todayReceiptTotal - todayCNTotal;
+      if (soItemsChanged) {
+        salesOrder.items = updatedSOItems;
+      }
 
-        // PRESERVE ORIGINAL DATE - Do not overwrite with current date on every edit
-          invoice.invoiceDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
-        // Update customer details on the invoice itself
+      // B. Update Customer Balance (Apply New)
+      let cDebit = customer.debit || 0;
+      let cCredit = customer.credit || 0;
+      let remainingToAdd = grandTotal;
+
+      if (cCredit >= remainingToAdd) {
+        cCredit -= remainingToAdd;
+      } else {
+        remainingToAdd -= cCredit;
+        cCredit = 0;
+        cDebit += remainingToAdd;
+      }
+      customer.debit = Math.round(cDebit);
+      customer.credit = Math.round(cCredit);
+      customer.closingBalance = Math.round((customer.closingBalance || 0) + grandTotal);
+      customer.totalBalance = customer.closingBalance;
+      await customer.save({ session });
+
+      // C. Update Stock (Apply New)
+      for (const newItem of processedItems) {
+        const product = await Product.findById(newItem.productId).session(session);
+        if (product) {
+          product.totalQty = (product.totalQty || 0) - (newItem.qty || 0);
+          await product.save({ session });
+        }
+      }
+
+      // D. Update or Create Invoice Document
+      if (invoice) {
         invoice.customer = {
           customerId: customer._id,
           name: customer.name,
@@ -546,59 +648,14 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         };
         invoice.items = processedItems;
         invoice.backOrderItems = backOrderItems;
-        invoice.sampleItems = salesOrder.sampleItems || [];
         invoice.subtotal = grossSubtotal;
         invoice.totalDiscount = totalItemDiscount;
         invoice.totalTax = totalTax;
-        invoice.transportCharge = tCharge;
-        invoice.transportGstPercent = tGstPercent;
-        invoice.transportGstAmount = tGstAmount;
-        invoice.extraExpenses = salesOrder.extraExpenses || [],
-        invoice.extraExpenseAmount = salesOrder.extraExpenseAmount || 0;
-        invoice.commonDiscount = commonDiscount;
         invoice.grandTotal = grandTotal;
         invoice.roundOff = roundingOff;
-        invoice.openingBalance = dynamicOpeningBalance;
-        invoice.closingBalance = closingBalance;
-        invoice.balanceType = closingBalance >= 0 ? "Dr" : "Cr";
-        invoice.invoiceNotes = notes;
-        invoice.invoiceType = invoiceType;
         invoice.status = "FINALIZED";
-        
         await invoice.save({ session });
       } else {
-        // 🆕 Create new invoice logic
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
-        const endOfToday = new Date();
-        endOfToday.setHours(23, 59, 59, 999);
-
-        const currentBalance = (customer.debit || 0) - (customer.credit || 0);
-
-        const [todayInvoices, todayReceipts, todayCNs] = await Promise.all([
-          Invoice.find({ 
-            "customer.customerId": customer._id, 
-            invoiceDate: { $gte: startOfToday, $lte: endOfToday },
-            status: "FINALIZED"
-          }).session(session).lean(),
-          Receipt.find({
-            "customer.customerId": customer._id,
-            date: { $gte: startOfToday, $lte: endOfToday }
-          }).session(session).lean(),
-          CreditNote.find({
-            "customer.customerId": customer._id,
-            date: { $gte: startOfToday, $lte: endOfToday },
-            status: "Created"
-          }).session(session).lean()
-        ]);
-
-        const todayInvoicedTotal = todayInvoices.reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
-        const todayReceiptTotal = todayReceipts.reduce((sum, rec) => sum + (rec.amount || 0), 0);
-        const todayCNTotal = todayCNs.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
-
-        const dynamicOpeningBalance = currentBalance - todayInvoicedTotal + todayReceiptTotal + todayCNTotal;
-        const closingBalance = dynamicOpeningBalance + grandTotal - todayReceiptTotal - todayCNTotal;
-
         invoice = new Invoice({
           invoiceNumber,
           invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
@@ -606,8 +663,6 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           salesOrderId: salesOrder._id,
           branchId: salesOrder.branchId,
           warehouse: salesOrder.warehouse,
-          billingPerson: salesOrder.billingPerson,
-          deliveryPerson: salesOrder.deliveryMan,
           customer: {
             customerId: customer._id,
             name: customer.name,
@@ -615,45 +670,37 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
             address: customer.address,
             district: customer.district,
             state: customer.state,
-            stateCode: customer.stateCode || "33", 
             pincode: customer.pincode,
-            gstin: customer.gstin, 
-          },
-          seller: {
-            name: branch?.name || "PEARL AGENCY",
-            address: branch?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003",
-            state: branch?.state || "Tamil Nadu",
-            pincode: branch?.pincode || "627003",
-            gstin: branch?.gstin || "33DULPS2600Q1Z6",
-            phone: branch?.phone || "9429692970",
-            gpayNo: branch?.gpayNo || branch?.phone || "",
-            stateCode: branch?.stateCode || "33",
-            logo: branch?.logo || "/logo.jpeg",
           },
           items: processedItems,
           backOrderItems,
-          sampleItems: salesOrder.sampleItems || [],
           subtotal: grossSubtotal,
-          totalItemDiscount: totalItemDiscount,
+          totalDiscount: totalItemDiscount,
           totalTax,
-          transportCharge: tCharge,
-          transportGstPercent: tGstPercent,
-          transportGstAmount: tGstAmount,
-          extraExpenses: salesOrder.extraExpenses || [],
-          extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
-          commonDiscount,
           grandTotal,
           roundOff: roundingOff,
-          openingBalance: dynamicOpeningBalance,
-          closingBalance: closingBalance,
-          balanceType: closingBalance >= 0 ? "Dr" : "Cr",
-          invoiceNotes: notes,
-          invoiceType,
           status: "FINALIZED",
         });
-        
         await invoice.save({ session });
       }
+
+      // E. Update Sales Order Snapshot
+      salesOrder.invoiceGenerated = true;
+      salesOrder.status = "INVOICED";
+      salesOrder.salesInvoiceId = invoiceNumber;
+      
+      salesOrder.editHistory.push({
+        version: salesOrder.editHistory.length + 1,
+        editType: invoice ? "RE_INVOICED" : "INVOICED",
+        items: salesOrder.items, // Captures stable original + newly added items
+        subtotal: grossSubtotal,
+        totalTax: totalTax,
+        grandTotal: grandTotal,
+        editedAt: new Date(),
+        note: invoice ? `Regenerated Invoice ${invoiceNumber}` : `Generated Invoice ${invoiceNumber}`
+      });
+
+      await salesOrder.save({ session });
 
       // Log Invoice Finalization
       await createAuditLog({
@@ -1061,6 +1108,101 @@ router.get("/customer/:customerId", async (req, res) => {
   } catch (error) {
     console.error("Error fetching customer invoices:", error);
     res.status(500).json({ message: "Failed to fetch invoices" });
+  }
+});
+
+// PUT - Cancel Invoice
+router.put("/:invoiceId/cancel", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { invoiceId } = req.params;
+    const { reason, cancelledBy } = req.body;
+
+    const invoice = await Invoice.findById(invoiceId).session(session);
+    if (!invoice) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Invoice not found" });
+    }
+
+    if (invoice.status === "CANCELLED") {
+      await session.abortTransaction();
+      return res.status(400).json({ message: "Invoice is already cancelled" });
+    }
+
+    // 1. REVERT CUSTOMER BALANCE
+    const customer = await Customer.findById(invoice.customer.customerId).session(session);
+    if (customer) {
+      const amountToRevert = invoice.grandTotal || 0;
+      let curDebit = customer.debit || 0;
+      let curCredit = customer.credit || 0;
+
+      // Reduction: Consume debit first, then increase credit
+      if (curDebit >= amountToRevert) {
+        curDebit -= amountToRevert;
+      } else {
+        const excess = amountToRevert - curDebit;
+        curDebit = 0;
+        curCredit += excess;
+      }
+
+      customer.debit = Math.round(curDebit);
+      customer.credit = Math.round(curCredit);
+      customer.closingBalance = Math.round((customer.closingBalance || 0) - amountToRevert);
+      customer.totalBalance = customer.closingBalance;
+      await customer.save({ session });
+      console.log(`💰 Balance Reverted for ${customer.name}: -₹${amountToRevert}`);
+    }
+
+    // 2. REVERT STOCK
+    for (const item of invoice.items) {
+      const product = await Product.findById(item.productId).session(session);
+      if (product) {
+        product.totalQty = (product.totalQty || 0) + (item.qty || 0);
+        await product.save({ session });
+        console.log(`📦 Stock Reverted for ${product.name}: +${item.qty}`);
+      }
+    }
+
+    // 3. UPDATE INVOICE STATUS
+    invoice.status = "CANCELLED";
+    invoice.cancelReason = reason || "No reason provided";
+    invoice.cancelledAt = new Date();
+    invoice.cancelledBy = cancelledBy || "System";
+    await invoice.save({ session });
+
+    // 4. UPDATE SALES ORDER
+    if (invoice.salesOrderId) {
+      const salesOrder = await SalesOrder.findById(invoice.salesOrderId).session(session);
+      if (salesOrder) {
+        salesOrder.invoiceGenerated = false;
+        salesOrder.salesInvoiceId = null;
+        salesOrder.status = "PLACED"; // Reset to placed so it can be invoiced again
+        
+        // Add cancellation to history
+        salesOrder.editHistory.push({
+          version: (salesOrder.editHistory.length || 0) + 1,
+          editType: "PRE_INVOICE_EDIT",
+          items: salesOrder.items,
+          subtotal: salesOrder.subtotal,
+          totalTax: salesOrder.totalTax,
+          grandTotal: salesOrder.grandTotal,
+          editedAt: new Date(),
+          note: `Invoice ${invoice.invoiceNumber} CANCELLED. Reason: ${reason}`
+        });
+        
+        await salesOrder.save({ session });
+      }
+    }
+
+    await session.commitTransaction();
+    res.json({ success: true, message: "Invoice cancelled successfully" });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("❌ Error cancelling invoice:", error);
+    res.status(500).json({ message: error.message || "Failed to cancel invoice" });
+  } finally {
+    session.endSession();
   }
 });
 

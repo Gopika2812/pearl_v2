@@ -214,8 +214,8 @@ export const InventoryProvider = ({ children }) => {
       }
       
       console.log(`🔌 Fetching Products for branchId: ${branchId}`);
-      // ⚡ PERFORMANCE: Only fetch 100 products initially instead of 10,000
-      const res = await fetchWithAuth(`${API_BASE}/products?branchId=${branchId}&limit=100`);
+      // ⚡ PERFORMANCE: Only fetch 10,000 products instead of 100 to ensure all are loaded for SO/PO
+      const res = await fetchWithAuth(`${API_BASE}/products?branchId=${branchId}&limit=10000`);
       
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);

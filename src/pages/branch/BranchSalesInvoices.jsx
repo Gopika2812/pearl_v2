@@ -522,14 +522,7 @@ const BranchSalesInvoices = () => {
                                 {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaEdit />}
                                 RE-EDIT
                               </button>
-                              <button
-                                onClick={() => handleRequestCancel(inv)}
-                                disabled={requestingAction === inv._id}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white"
-                              >
-                                {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash />}
-                                CANCEL
-                              </button>
+
                            </div>
                         </td>
                       </tr>

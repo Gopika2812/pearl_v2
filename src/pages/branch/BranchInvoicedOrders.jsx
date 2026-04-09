@@ -88,7 +88,7 @@ const BranchInvoicedOrders = () => {
 
   const handleGenerateInvoice = (order) => {
     setSelectedOrder(order);
-    setShowCopyChoice(true); // Open the small choice modal instead of the large generator
+    setShowModal(true); // Open the Back Order Workbench / Generator
   };
 
   /**
@@ -249,36 +249,7 @@ const BranchInvoicedOrders = () => {
     }
   };
 
-  const handleCancelBill = async (order) => {
-    if (!window.confirm(`Cancel bill ${order.invoiceId}? This will revert all stock and customer balance effects but KEEP the record in the database for audit.`)) {
-      return;
-    }
 
-    try {
-      const res = await fetch(`${API_BASE}/sales-orders/${order._id}`, {
-        method: "DELETE",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token")}`
-        },
-        body: JSON.stringify({ 
-          userId: user?.id || user?._id, 
-          username: user?.username || user?.fullName || user?.name || "System" 
-        })
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(data.message || "Bill cancelled successfully");
-        fetchSalesOrders(); // Refresh list
-      } else {
-        toast.error(data.message || "Failed to cancel bill");
-      }
-    } catch (err) {
-      console.error("Error cancelling bill:", err);
-      toast.error("An error occurred while cancelling the bill");
-    }
-  };
 
   const toggleExpanded = (orderId) => {
     setExpandedOrders((prev) => ({
@@ -803,7 +774,7 @@ const BranchInvoicedOrders = () => {
                           )}
                         </td>
                         <td className="px-6 py-4 text-center text-gray-600 text-xs">
-                          {new Date(order.createdAt).toLocaleString("en-IN", {
+                          {new Date(order.orderDate || order.createdAt).toLocaleString("en-IN", {
                             day: "2-digit",
                             month: "2-digit",
                             year: "numeric",
@@ -814,14 +785,6 @@ const BranchInvoicedOrders = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center gap-2 justify-center flex-wrap">
-                            <button
-                              onClick={() => handleEditBill(order)}
-                              className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 shadow-md shadow-orange-500/20"
-                              title="Edit bill items"
-                            >
-                              <FaEdit />
-                              Edit Bill
-                            </button>
                              <button
                                onClick={() => handleGenerateInvoice(order)}
                                className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-md shadow-[#319bab]/20"
@@ -830,16 +793,6 @@ const BranchInvoicedOrders = () => {
                                {order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
                              </button>
 
-                             {(user?.role === "ADMIN" || user?.role === "MANAGER" || user?.role === "SUPER_ADMIN") && (
-                               <button
-                                 onClick={() => handleCancelBill(order)}
-                                 className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-red-500 text-white hover:bg-red-600 shadow-md shadow-red-500/20"
-                                 title="Cancel this bill and revert all changes"
-                               >
-                                 <FaTrash />
-                                 Cancel Bill
-                               </button>
-                             )}
                            </div>
                          </td>
                       </tr>

@@ -160,9 +160,12 @@ const invoiceSchema = new mongoose.Schema(
     // Status
     status: {
       type: String,
-      enum: ["DRAFT", "FINALIZED", "PRINTED", "SENT"],
+      enum: ["DRAFT", "FINALIZED", "PRINTED", "SENT", "CANCELLED"],
       default: "DRAFT",
     },
+    cancelReason: String,
+    cancelledAt: Date,
+    cancelledBy: String,
 
     // Generate Options
     generatedBy: String,

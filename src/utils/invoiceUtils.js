@@ -101,7 +101,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
               <div class="order-header">
                 <div class="order-header-col">
                   <strong>Invoice No:</strong> ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}<br/>
-                  <strong>Date:</strong> ${new Date().toLocaleDateString("en-IN")}
+                  <strong>Date:</strong> ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
                 </div>
                 <div class="order-header-col" style="text-align: right;">
                   <strong>Customer:</strong> ${previewData?.customer?.name || "CASH CUSTOMER"}<br/>
@@ -192,7 +192,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
               </div>
 
               <div class="copy-label">${copyTitle} - PAGE 1</div>
-              <div class="footer">Order details generated on ${new Date().toLocaleString("en-IN")}</div>
+              <div class="footer">Order details generated on ${new Date().toLocaleString("en-IN")} (Original Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")})</div>
             </div>
           </div>
         `;
@@ -219,7 +219,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
               <div class="section-title">🧾 TAX INVOICE - HSN SUMMARY</div>
 
               <div style="text-align: center; margin-bottom: 20px; font-size: 11px;">
-                <strong>Invoice No: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</strong> | Date: ${new Date().toLocaleDateString("en-IN")}
+                <strong>Invoice No: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</strong> | Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
               </div>
 
               <table>
@@ -271,7 +271,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
               </div>
 
               <div class="copy-label">${copyTitle} - PAGE 2</div>
-              <div class="footer">Tax Invoice as per GST regulations | Generated on ${new Date().toLocaleString("en-IN")}</div>
+              <div class="footer">Tax Invoice as per GST regulations | Generated on ${new Date().toLocaleString("en-IN")} (Original Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")})</div>
             </div>
           </div>
         `;
