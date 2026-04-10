@@ -190,15 +190,25 @@ class GSTZenService {
       totalIgst = Number(totalIgst.toFixed(2));
       
       const totalTaxes = Number((totalCgst + totalSgst + totalIgst).toFixed(2));
-      const commonDiscount = Number(invoiceData.commonDiscount || 0);
-      const subtotalWithTaxes = Number((totalAssVal + totalTaxes - commonDiscount).toFixed(2));
+      let commonDiscount = Number(invoiceData.commonDiscount || 0);
+      let subtotalWithTaxes = Number((totalAssVal + totalTaxes - commonDiscount).toFixed(2));
       const billGrandTotal = Number((invoiceData.grandTotal || subtotalWithTaxes).toFixed(2));
 
-      // 5. 🚨 CRITICAL FALLBACK: If mismatch is STILL high (> ₹2.00), add a "Misc Balancing" line
-      // This happens if there are hidden charges in the total not present in items/expenses.
+      // 5. 🚨 CRITICAL FALLBACK: Fix mathematical mismatches (> ₹2.00)
       const initialGap = Number((billGrandTotal - subtotalWithTaxes).toFixed(2));
-      if (Math.abs(initialGap) > 2.00) {
-        console.warn(`⚠️ High mismatch (${initialGap}) detected. Adding balancing line.`);
+      
+      if (initialGap < -2.00) {
+        // 📉 NEGATIVE GAP: Bill Total is LESS than Items + Taxes.
+        // Solution: Instead of a negative line item (prohibited), we increase the Header Discount.
+        console.warn(`⚠️ Negative mismatch (${initialGap}) detected. Absorbing into Header Discount instead of adding a negative line.`);
+        commonDiscount = Number((commonDiscount + Math.abs(initialGap)).toFixed(2));
+        // Recalculate subtotal for rounding logic
+        subtotalWithTaxes = Number((totalAssVal + totalTaxes - commonDiscount).toFixed(2));
+      } 
+      else if (initialGap > 2.00) {
+        // 📈 POSITIVE GAP: Bill Total is MORE than Items + Taxes.
+        // Solution: Add a "Miscellaneous Adjustment" line item.
+        console.warn(`⚠️ Positive mismatch (${initialGap}) detected. Adding balancing line.`);
         const balancingAmt = initialGap;
         totalAssVal += balancingAmt;
         totalAssVal = Number(totalAssVal.toFixed(2));
@@ -212,6 +222,8 @@ class GSTZenService {
           IgstAmt: 0, CgstAmt: 0, SgstAmt: 0,
           TotItemVal: balancingAmt
         });
+        // Recalculate subtotal for rounding logic (balancingAmt was added to totalAssVal)
+        subtotalWithTaxes = Number((totalAssVal + totalTaxes - commonDiscount).toFixed(2));
       }
 
       // Final Rounding calculation for NIC (< ₹1.00)

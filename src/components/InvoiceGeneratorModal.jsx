@@ -675,7 +675,6 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
               <!-- TOTALS AND BALANCE -->
               <div style="display: flex; gap: 10px;">
-                <div style="flex: 1;">
                    <!-- BALANCE INFO -->
                    <div class="balance-info">
                      <div><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
@@ -1338,8 +1337,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 <div className="text-lg mb-4">
                   Total Amount: <span className="font-bold text-2xl text-green-600">₹{previewData?.grandTotal?.toFixed(2)}</span>
                 </div>
-                <div className="text-sm text-gray-600">
-                  Closing Balance: ₹{previewData?.closingBalance?.toFixed(2)}
+                <div className="flex justify-between items-center py-2 border-b">
+                  <span className="text-gray-600 font-medium">Closing Balance</span>
+                  <span className={`font-black ${previewData?.closingBalance >= 0 ? 'text-blue-700' : 'text-red-600'}`}>
+                    {previewData?.formattedClosingBalance}
+                  </span>
                 </div>
               </div>
 

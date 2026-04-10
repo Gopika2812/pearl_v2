@@ -170,13 +170,14 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                 </div>
               ` : ""}
 
-              <div style="display: flex; gap: 10px; margin-top: 15px;">
-                <div style="flex: 1;">
-                  <div class="balance-info">
+              <div class="total-section" style="display: flex; gap: 10px; margin-top: 15px;">
+                <div style="flex: 1; text-align: left;">
+                  <div style="background: #f8fafc; padding: 10px; margin: 12px 0; font-size: 13px; border-left: 4px solid #000; border-radius: 4px;">
                     <div><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
                   </div>
+                </div>
 
-                <div class="total-section" style="flex: 1;">
+                <div style="flex: 1; text-align: right;">
                   <div style="font-size: 11px;">Subtotal: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
                   ${previewData?.totalTax?.igst > 0 ? 
                     `<div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` : 
@@ -187,6 +188,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                   ${previewData?.roundingOff !== 0 ? `<div style="font-size: 11px; color: #666;">Rounding Off: <strong>${previewData.roundingOff > 0 ? '+' : ''}₹${previewData.roundingOff.toFixed(2)}</strong></div>` : ""}
                   <div class="grand-total">GRAND TOTAL: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
                 </div>
+              </div>
               </div>
 
               <div class="copy-label">${copyTitle} - PAGE 1</div>
