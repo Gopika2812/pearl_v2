@@ -407,6 +407,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
             const qtyRatio = confirmedQty / originalItem.qty;
             return {
               ...originalItem.toObject(),
+              name: originalItem.name, // Explicitly keep name
+              hsn: originalItem.hsn, // Explicitly keep hsn
               qty: confirmedQty,
               altQty: originalItem.altQty ? Math.round(originalItem.altQty * qtyRatio) : 0,
               total: Math.round(originalItem.total * qtyRatio * 100) / 100,
@@ -414,7 +416,14 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           } else {
             const itemGrossAmount = Math.round(sellingPrice * confirmedQty * 100) / 100;
             const itemTotalWithTax = item.total || Math.round(itemGrossAmount * (1 + gstPercent / 100) * 100) / 100;
-            return { ...item, qty: confirmedQty, sellingPrice, total: itemTotalWithTax };
+            return { 
+              ...item, 
+              name: item.name, // Explicitly keep name
+              hsn: item.hsn, // Explicitly keep hsn
+              qty: confirmedQty, 
+              sellingPrice, 
+              total: itemTotalWithTax 
+            };
           }
         });
 

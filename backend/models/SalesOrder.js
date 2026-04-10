@@ -233,6 +233,8 @@ const salesOrderSchema = new mongoose.Schema(
     lastInvoicedItems: [
       {
         productId: mongoose.Schema.Types.ObjectId,
+        name: String,
+        hsn: String,
         qty: Number,
         unit: { type: String, default: "" },
         altQty: { type: Number, default: 0 },

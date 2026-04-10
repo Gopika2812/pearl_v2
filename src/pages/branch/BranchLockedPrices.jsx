@@ -29,6 +29,16 @@ const BranchLockedPrices = () => {
   const [prodResults, setProdResults] = useState([]);
   const fileInputRef = useRef(null);
 
+  // Filtration State
+  const [filters, setFilters] = useState({
+    product: "",
+    customer: "",
+    cost: "",
+    stdPrice: "",
+    lockedPrice: "",
+    margin: ""
+  });
+
   useEffect(() => {
     if (currentBranch?._id) {
       fetchCustomers();
@@ -486,6 +496,76 @@ const BranchLockedPrices = () => {
                       <th className="px-6 py-4 text-right">Margin %</th>
                       <th className="px-6 py-4 text-center">Action</th>
                     </tr>
+                    <tr className="bg-gray-50/50 border-b border-gray-100">
+                      <th className="px-2 py-2">
+                        <div className="relative">
+                          <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-300" size={10} />
+                          <input 
+                            type="text"
+                            placeholder="Filter Product..."
+                            value={filters.product}
+                            onChange={(e) => setFilters({ ...filters, product: e.target.value })}
+                            className="w-full pl-7 pr-2 py-1.5 bg-white border border-gray-200 rounded text-[10px] font-bold outline-none focus:border-[#319bab]/50"
+                          />
+                        </div>
+                      </th>
+                      <th className="px-2 py-2">
+                        <div className="relative">
+                          <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-300" size={10} />
+                          <input 
+                            type="text"
+                            placeholder="Filter Customer..."
+                            value={filters.customer}
+                            onChange={(e) => setFilters({ ...filters, customer: e.target.value })}
+                            className="w-full pl-7 pr-2 py-1.5 bg-white border border-gray-200 rounded text-[10px] font-bold outline-none focus:border-[#319bab]/50"
+                          />
+                        </div>
+                      </th>
+                      <th className="px-2 py-2">
+                        <input 
+                          type="text"
+                          placeholder="Cost..."
+                          value={filters.cost}
+                          onChange={(e) => setFilters({ ...filters, cost: e.target.value })}
+                          className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded text-[10px] font-bold text-right outline-none focus:border-[#319bab]/50"
+                        />
+                      </th>
+                      <th className="px-2 py-2">
+                        <input 
+                          type="text"
+                          placeholder="Price..."
+                          value={filters.stdPrice}
+                          onChange={(e) => setFilters({ ...filters, stdPrice: e.target.value })}
+                          className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded text-[10px] font-bold text-right outline-none focus:border-[#319bab]/50"
+                        />
+                      </th>
+                      <th className="px-2 py-2">
+                        <input 
+                          type="text"
+                          placeholder="Locked..."
+                          value={filters.lockedPrice}
+                          onChange={(e) => setFilters({ ...filters, lockedPrice: e.target.value })}
+                          className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded text-[10px] font-bold text-right text-orange-600 outline-none focus:border-orange-200"
+                        />
+                      </th>
+                      <th className="px-2 py-2">
+                        <input 
+                          type="text"
+                          placeholder="Margin..."
+                          value={filters.margin}
+                          onChange={(e) => setFilters({ ...filters, margin: e.target.value })}
+                          className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded text-[10px] font-bold text-right outline-none focus:border-[#319bab]/50"
+                        />
+                      </th>
+                      <th className="px-2 py-2">
+                        <button 
+                          onClick={() => setFilters({ product: "", customer: "", cost: "", stdPrice: "", lockedPrice: "", margin: "" })}
+                          className="text-[9px] font-black text-gray-400 uppercase hover:text-red-500 transition-colors block w-full text-center"
+                        >
+                          Clear
+                        </button>
+                      </th>
+                    </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {loading ? (
@@ -495,8 +575,41 @@ const BranchLockedPrices = () => {
                           <p className="text-[10px] font-bold text-gray-400 uppercase">Fetching records...</p>
                         </td>
                       </tr>
-                    ) : lockedPrices.length > 0 ? (
-                      lockedPrices.map(lp => {
+                    ) : (() => {
+                      const filtered = lockedPrices.filter(lp => {
+                        const productName = lp.productId?.name?.toLowerCase() || "";
+                        const customerName = lp.customerId?.name?.toLowerCase() || "";
+                        const cost = (lp.productId?.purchasingPrice || 0).toString();
+                        const stdPrice = (lp.productId?.sellingPrice || 0).toString();
+                        const lPrice = (lp.lockedPrice || 0).toString();
+                        
+                        const m = (lp.lockedPrice || 0) - (lp.productId?.purchasingPrice || 0);
+                        const mp = lp.productId?.purchasingPrice > 0 ? ((m / lp.productId.purchasingPrice) * 100).toFixed(1) : "0.0";
+
+                        return (
+                          productName.includes(filters.product.toLowerCase()) &&
+                          customerName.includes(filters.customer.toLowerCase()) &&
+                          cost.includes(filters.cost) &&
+                          stdPrice.includes(filters.stdPrice) &&
+                          lPrice.includes(filters.lockedPrice) &&
+                          mp.includes(filters.margin)
+                        );
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan="7" className="px-6 py-20 text-center">
+                              <div className="opacity-20 flex flex-col items-center">
+                                 <FaSearch size={40} className="mb-2" />
+                                 <p className="text-xs font-black uppercase">No matching prices found</p>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return filtered.map(lp => {
                         const productName = lp.productId?.name || "Unknown Product";
                         const customerName = lp.customerId?.name || "Unknown Customer";
                         const purchasingPrice = lp.productId?.purchasingPrice || 0;
@@ -538,16 +651,7 @@ const BranchLockedPrices = () => {
                           </tr>
                         );
                       })
-                    ) : (
-                      <tr>
-                        <td colSpan="6" className="px-6 py-20 text-center">
-                          <div className="opacity-20 flex flex-col items-center">
-                             <FaLock size={40} className="mb-2" />
-                             <p className="text-xs font-black uppercase">No locked prices found</p>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
+                    })()}
                   </tbody>
                 </table>
               </div>

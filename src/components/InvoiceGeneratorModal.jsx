@@ -80,13 +80,23 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       
       if (sourceItems) {
         setEditedItems(
-          sourceItems.map((item) => ({
-            ...item,
-            _id: item._id?.toString?.() || item._id,
-            confirmedQty: item.qty || 0,
-            backOrderQty: 0,
-            originalQty: item.qty || 0, // In recall mode, the "reference" quantity is what you last billed
-          }))
+          sourceItems.map((item) => {
+            // Recover name if missing (common in old local history)
+            let name = item.name || item.productName || "";
+            if (!name && item.productId) {
+              const original = (order.items || []).find(so => so.productId?._id?.toString() === item.productId?.toString() || so.productId?.toString() === item.productId?.toString());
+              if (original) name = original.name;
+            }
+
+            return {
+              ...item,
+              _id: item._id?.toString?.() || item._id,
+              name: name, // Ensure name is always set
+              confirmedQty: item.qty || 0,
+              backOrderQty: 0,
+              originalQty: item.qty || 0, // In recall mode, the "reference" quantity is what you last billed
+            };
+          })
         );
       }
       setNotes(order.notes || "");
@@ -1113,7 +1123,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   <tbody>
                     {editedItems.map((item, idx) => (
                       <tr key={idx} className="border-b hover:bg-gray-50 transition">
-                        <td className="p-3 font-medium">{item.name}</td>
+                        <td className="p-3 font-medium">
+                          {item.name || <span className="text-gray-400 italic text-xs">Product Name Missing</span>}
+                        </td>
                         <td className="p-3 text-right text-gray-500">
                           <div className="flex flex-col items-end gap-1">
                             <span>{item.originalQty || item.qty}</span>
