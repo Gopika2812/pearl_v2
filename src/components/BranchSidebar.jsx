@@ -134,7 +134,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
           </div>
         </button>
         {isOpen && (
-          <div className={`mt-1 ml-4 space-y-1 pl-3 overflow-hidden transition-opacity duration-300 ${!isMobile ? "opacity-0 group-hover:opacity-100 group-hover:border-l-2 group-hover:border-white/20" : "border-l-2 border-white/20"}`}>
+          <div className={`mt-1 ml-4 space-y-1 pl-3 border-l-2 border-white/20 overflow-hidden transition-opacity duration-300 ${!isMobile ? "opacity-0 group-hover:opacity-100" : ""}`}>
             {allowedSubItems.map((sub) => {
               const active = location.pathname === sub.path;
               return (
@@ -164,7 +164,10 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   return (
     <>
       {/* DESKTOP SIDEBAR */}
-      <aside className="hidden md:flex md:flex-col w-20 hover:w-64 transition-all duration-500 ease-in-out h-screen bg-slate-900/95 backdrop-blur-xl text-white shadow-2xl fixed left-0 top-0 group z-50 overflow-x-hidden border-r border-white/5">
+      <aside
+        className="hidden md:flex md:flex-col w-20 hover:w-64 transition-all duration-500 ease-in-out h-screen bg-slate-900/95 backdrop-blur-xl text-white shadow-2xl fixed left-0 top-0 group z-50 overflow-x-hidden border-r border-white/5"
+        onMouseLeave={() => setOpenDropdowns({})}
+      >
         {/* Header with Glass Effect */}
         <div className="px-4 py-8 flex items-center h-[100px] mb-4">
           <div className="flex items-center gap-4 w-full px-2">
@@ -198,21 +201,30 @@ const BranchSidebar = ({ isOpen, onClose }) => {
 
         {/* Viewing-branch indicator for Super Admin */}
         {isSuperAdminViewing && (
-          <div className="mx-3 mb-2 px-3 py-2 bg-orange-500/20 border border-orange-400/40 rounded-lg overflow-hidden">
-            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <FaShieldAlt className="text-orange-300 text-sm flex-shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[10px] text-orange-200 font-semibold uppercase">Admin View</p>
-                <p className="text-xs text-white font-bold truncate">{superAdminViewBranch?.name}</p>
+          <div className="mx-3 mb-2 rounded-lg overflow-hidden">
+            {/* Collapsed: just a shield icon centered */}
+            <div className="flex justify-center group-hover:hidden">
+              <div className="w-10 h-10 flex items-center justify-center bg-orange-500/20 border border-orange-400/40 rounded-lg">
+                <FaShieldAlt className="text-orange-300 text-sm" />
               </div>
             </div>
-            <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-              <button
-                onClick={handleBackToSuperAdmin}
-                className="w-full flex items-center gap-2 text-orange-200 hover:text-white text-xs font-semibold transition"
-              >
-                <FaShieldAlt size={10} /> Back to Super Admin
-              </button>
+            {/* Expanded: full admin view info */}
+            <div className="hidden group-hover:block bg-orange-500/20 border border-orange-400/40 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2">
+                <FaShieldAlt className="text-orange-300 text-sm flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] text-orange-200 font-semibold uppercase">Admin View</p>
+                  <p className="text-xs text-white font-bold truncate">{superAdminViewBranch?.name}</p>
+                </div>
+              </div>
+              <div className="mt-2">
+                <button
+                  onClick={handleBackToSuperAdmin}
+                  className="w-full flex items-center gap-2 text-orange-200 hover:text-white text-xs font-semibold transition"
+                >
+                  <FaShieldAlt size={10} /> Back to Super Admin
+                </button>
+              </div>
             </div>
           </div>
         )}

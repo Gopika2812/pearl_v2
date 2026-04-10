@@ -61,7 +61,10 @@ const Sidebar = ({ isOpen, onClose }) => {
   return (
     <>
       {/* ================= DESKTOP SIDEBAR ================= */}
-      <aside className="hidden md:flex md:flex-col w-20 hover:w-64 transition-all duration-300 h-screen bg-gradient-to-b from-secondary to-secondary/90 text-white shadow-xl fixed left-0 top-0 z-50 overflow-x-hidden group">
+      <aside
+        className="hidden md:flex md:flex-col w-20 hover:w-64 transition-all duration-300 h-screen bg-gradient-to-b from-secondary to-secondary/90 text-white shadow-xl fixed left-0 top-0 z-50 overflow-x-hidden group"
+        onMouseLeave={() => setAdminOpen(false)}
+      >
         <div className="px-4 py-6 border-b border-white/10 flex items-center h-[96px]">
           <div className="flex items-center gap-3 w-full justify-center group-hover:justify-start">
             <img
@@ -112,7 +115,7 @@ const Sidebar = ({ isOpen, onClose }) => {
               </button>
 
               {adminOpen && (
-                <div className="mt-2 ml-4 space-y-1 pl-3 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300 group-hover:border-l-2 group-hover:border-white/20">
+                <div className="mt-2 ml-4 space-y-1 pl-3 border-l-2 border-white/20 overflow-hidden opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                   {adminItems.map((item, idx) => {
                     const active = location.pathname === item.path;
                     return (
