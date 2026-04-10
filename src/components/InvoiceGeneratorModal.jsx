@@ -72,14 +72,20 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   // Initialize data
   useEffect(() => {
     if (order) {
-      if (order.items) {
+      // If the order was already invoiced, load the items exactly as they were invoiced (invoiceItems)
+      // We prefer invoiceItems because it contains the final structure saved to the bill.
+      const sourceItems = order.invoiceGenerated 
+        ? (order.invoiceItems?.length ? order.invoiceItems : (order.lastInvoicedItems || order.items))
+        : order.items;
+      
+      if (sourceItems) {
         setEditedItems(
-          order.items.map((item) => ({
+          sourceItems.map((item) => ({
             ...item,
             _id: item._id?.toString?.() || item._id,
-            confirmedQty: item.qty,
+            confirmedQty: item.qty || 0,
             backOrderQty: 0,
-            originalQty: item.qty, // Keep track of SO original
+            originalQty: item.qty || 0, // In recall mode, the "reference" quantity is what you last billed
           }))
         );
       }

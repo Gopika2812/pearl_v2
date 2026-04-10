@@ -111,12 +111,17 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       // Financials
       const rawDebit = normalizedRow.debit || normalizedRow.debitbalance || normalizedRow["debit(₹)"] || normalizedRow.dr;
       if (rawDebit !== undefined) {
-        customerData.debit = parseFloat(String(rawDebit).replace(/[^0-9.-]+/g, "")) || 0;
+        const val = parseFloat(String(rawDebit).replace(/[^0-9.-]+/g, "")) || 0;
+        customerData.debit = val;
+        customerData.openingBalance = val; // Also set as the starting point for ledgers
       }
 
       const rawCredit = normalizedRow.credit || normalizedRow.creditbalance || normalizedRow["credit(₹)"] || normalizedRow.cr;
       if (rawCredit !== undefined) {
-        customerData.credit = parseFloat(String(rawCredit).replace(/[^0-9.-]+/g, "")) || 0;
+        const val = parseFloat(String(rawCredit).replace(/[^0-9.-]+/g, "")) || 0;
+        customerData.credit = val;
+        // If credit is provided, the net opening balance is debit - credit
+        customerData.openingBalance = (customerData.debit || 0) - val;
       }
 
       if (normalizedRow.margin !== undefined) {
@@ -688,7 +693,6 @@ router.get("/:id/ledger", async (req, res) => {
     if (!customer) {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
-
     // Default dates: This month if not specified
     const now = new Date();
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);

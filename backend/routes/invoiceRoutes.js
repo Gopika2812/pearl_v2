@@ -551,12 +551,22 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           await invoice.save({ session });
         }
 
+        // ➕ Sync New Additions back to the original Sales Order
+        const currentItemIds = new Set(salesOrder.items.map(i => i.productId?.toString()));
+        processedItems.forEach(item => {
+          if (item.productId && !currentItemIds.has(item.productId.toString())) {
+            // Add to original SO items if it is brand new
+            salesOrder.items.push(item);
+          }
+        });
+
         salesOrder.invoiceGenerated = true;
         salesOrder.status = "INVOICED";
         salesOrder.salesInvoiceId = invoiceNumber;
         salesOrder.lastInvoicedGrandTotal = grandTotal;
         salesOrder.lastInvoicedCustomerId = customer._id;
         salesOrder.lastInvoicedItems = processedItems;
+        salesOrder.invoiceItems = processedItems; // Sync to schema field
         if (isCustomerSwapped) salesOrder.customer = customerSnapshot;
 
         salesOrder.editHistory.push({

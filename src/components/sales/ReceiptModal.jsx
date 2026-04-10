@@ -81,6 +81,7 @@ export default function ReceiptModal({ invoice, isOpen, onClose, onReceiptSucces
     typeof invoice.customer === "object" ? invoice.customer.name : invoice.customer;
   const invoiceTotal = invoice.grandTotal || 0;
   const receiptAmount = parseFloat(amount) || 0;
+  const maxAllowed = invoice.pendingAmount !== undefined ? invoice.pendingAmount : invoice.grandTotal || 0;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
