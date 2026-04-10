@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaEdit, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaDownload } from "react-icons/fa";
+import { FaChevronDown, FaEdit, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
-import { useBranch } from "../../context/BranchContext";
 import EInvoicePrintModal from "../../components/branch/EInvoicePrintModal";
+import { useBranch } from "../../context/BranchContext";
 
 const BranchSalesInvoices = () => {
   const { currentBranch, user } = useBranch();
@@ -58,14 +58,14 @@ const BranchSalesInvoices = () => {
     if (!window.confirm(`Request Re-Edit for Invoice ${invoice.invoiceNumber}? This will notify admin for approval.`)) {
       return;
     }
-    
+
     setRequestingAction(invoice._id);
     try {
       // Point to parent SO for re-edit request
       const soId = invoice.salesOrderId?._id || invoice.salesOrderId;
       const res = await fetchWithAuth(`${API_BASE}/sales-orders/${soId}/request-re-edit`, {
         method: "PATCH",
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           username: user?.username || user?.fullName || "Staff",
           userId: user?.id || user?._id
         })
@@ -95,7 +95,7 @@ const BranchSalesInvoices = () => {
       const soId = invoice.salesOrderId?._id || invoice.salesOrderId;
       const res = await fetchWithAuth(`${API_BASE}/sales-orders/${soId}/request-cancel`, {
         method: "PATCH",
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           username: user?.username || user?.fullName || "Staff",
           userId: user?.id || user?._id
         })
@@ -121,7 +121,7 @@ const BranchSalesInvoices = () => {
     try {
       const res = await fetchWithAuth(`${API_BASE}/invoices/${showCancelModal._id}/cancel`, {
         method: "PUT",
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           reason: cancelReason,
           cancelledBy: user?.username || user?.fullName || "Staff"
         })
@@ -238,14 +238,14 @@ const BranchSalesInvoices = () => {
               {isEwbOnly ? "IRN is already generated. Now creating the E-Way Bill." : "Mandatory for E-Way Bill (Invoice > ₹10,000)"}
             </p>
           </div>
-          
+
           <div className="p-8 space-y-5">
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Transport Mode</label>
-                <select 
+                <select
                   value={details.transportMode}
-                  onChange={(e) => setDetails({...details, transportMode: e.target.value})}
+                  onChange={(e) => setDetails({ ...details, transportMode: e.target.value })}
                   className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
                 >
                   <option value="1">Road</option>
@@ -256,11 +256,11 @@ const BranchSalesInvoices = () => {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Vehicle Number</label>
-                <input 
+                <input
                   type="text"
                   placeholder="TN01AB1234"
                   value={details.vehicleNo}
-                  onChange={(e) => setDetails({...details, vehicleNo: e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase()})}
+                  onChange={(e) => setDetails({ ...details, vehicleNo: e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase() })}
                   className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
                 />
               </div>
@@ -269,19 +269,19 @@ const BranchSalesInvoices = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Distance (approx KM)</label>
-                <input 
+                <input
                   type="number"
                   placeholder="50"
                   value={details.transportDistance}
-                  onChange={(e) => setDetails({...details, transportDistance: e.target.value})}
+                  onChange={(e) => setDetails({ ...details, transportDistance: e.target.value })}
                   className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Vehicle Type</label>
-                <select 
+                <select
                   value={details.vehicleType}
-                  onChange={(e) => setDetails({...details, vehicleType: e.target.value})}
+                  onChange={(e) => setDetails({ ...details, vehicleType: e.target.value })}
                   className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
                 >
                   <option value="REGULAR">Regular</option>
@@ -292,23 +292,23 @@ const BranchSalesInvoices = () => {
 
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Transporter GSTIN (Optional)</label>
-              <input 
+              <input
                 type="text"
                 placeholder="33XXXXX..."
                 value={details.transporterId}
-                onChange={(e) => setDetails({...details, transporterId: e.target.value.toUpperCase()})}
+                onChange={(e) => setDetails({ ...details, transporterId: e.target.value.toUpperCase() })}
                 className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
               />
             </div>
 
             <div className="flex items-center gap-3 pt-6 border-t border-gray-50">
-              <button 
+              <button
                 onClick={onClose}
                 className="flex-1 px-6 py-4 rounded-2xl font-black text-xs text-gray-400 hover:bg-gray-50 transition"
               >
                 CANCEL
               </button>
-              <button 
+              <button
                 onClick={() => {
                   if (!details.vehicleNo) return toast.warning("Vehicle Number is required");
                   onConfirm(details);
@@ -337,11 +337,11 @@ const BranchSalesInvoices = () => {
               This will revert stock and customer balance.
             </p>
           </div>
-          
+
           <div className="p-8 space-y-5">
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Cancel Narration (Mandatory)</label>
-              <textarea 
+              <textarea
                 placeholder="Enter reason for cancellation..."
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
@@ -350,13 +350,13 @@ const BranchSalesInvoices = () => {
             </div>
 
             <div className="flex items-center gap-3 pt-6 border-t border-gray-50">
-              <button 
+              <button
                 onClick={onClose}
                 className="flex-1 px-6 py-4 rounded-2xl font-black text-xs text-gray-400 hover:bg-gray-50 transition"
               >
                 NO, KEEP IT
               </button>
-              <button 
+              <button
                 onClick={onConfirm}
                 disabled={!cancelReason.trim()}
                 className="flex-1 bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-xs shadow-xl shadow-red-100 hover:bg-red-700 transition disabled:opacity-50"
@@ -375,7 +375,7 @@ const BranchSalesInvoices = () => {
       <ToastContainer position="top-right" autoClose={2500} theme="colored" />
 
       {showTransportModal && (
-        <TransportDetailsModal 
+        <TransportDetailsModal
           invoice={showTransportModal}
           onClose={() => setShowTransportModal(null)}
           onConfirm={(details) => {
@@ -390,14 +390,14 @@ const BranchSalesInvoices = () => {
 
       {/* 📄 UNIFIED E-INVOICE PRINT MODAL */}
       {showEInvoiceModal && (
-        <EInvoicePrintModal 
+        <EInvoicePrintModal
           invoice={showEInvoiceModal}
           onClose={() => setShowEInvoiceModal(null)}
         />
       )}
 
       {showCancelModal && (
-        <CancelInvoiceModal 
+        <CancelInvoiceModal
           invoice={showCancelModal}
           onClose={() => setShowCancelModal(null)}
           onConfirm={handleDirectCancel}
@@ -444,11 +444,11 @@ const BranchSalesInvoices = () => {
         {/* TABLE */}
         {loading ? (
           <div className="bg-white p-12 text-center rounded-3xl border border-dashed border-gray-200 text-gray-400 font-bold">
-             <FaSync className="animate-spin inline-block mr-2" /> Loadingized SI records...
+            <FaSync className="animate-spin inline-block mr-2" /> Loadingized SI records...
           </div>
         ) : invoices.length === 0 ? (
           <div className="bg-white p-12 text-center rounded-3xl border border-dashed border-gray-200 text-gray-400 font-bold">
-             No finalized Sales Invoices found in this branch.
+            No finalized Sales Invoices found in this branch.
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
@@ -472,8 +472,8 @@ const BranchSalesInvoices = () => {
                         <td className="px-6 py-5">
                           <div className="flex items-center gap-3">
                             <button
-                               onClick={() => toggleExpanded(inv._id)}
-                               className="text-[#319bab] p-2 hover:bg-white rounded-lg shadow-sm transition-all"
+                              onClick={() => toggleExpanded(inv._id)}
+                              className="text-[#319bab] p-2 hover:bg-white rounded-lg shadow-sm transition-all"
                             >
                               <FaChevronDown className={`transition-transform duration-300 ${expandedInvoices[inv._id] ? "rotate-180" : ""}`} />
                             </button>
@@ -482,146 +482,145 @@ const BranchSalesInvoices = () => {
                         </td>
                         <td className="px-6 py-5">
                           <span className="text-[10px] font-black bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                             SO REF: {inv.salesOrderId?.invoiceId || "N/A"}
+                            SO REF: {inv.salesOrderId?.invoiceId || "N/A"}
                           </span>
                         </td>
                         <td className="px-6 py-5">
-                            <div className="font-black text-gray-800 text-xs">{inv.customer?.name}</div>
-                            <div className="text-[10px] text-gray-500 font-bold">{inv.customer?.whatsapp || "No Contact"}</div>
+                          <div className="font-black text-gray-800 text-xs">{inv.customer?.name}</div>
+                          <div className="text-[10px] text-gray-500 font-bold">{inv.customer?.whatsapp || "No Contact"}</div>
                         </td>
                         <td className="px-6 py-5 text-right font-black text-blue-700 tracking-tight text-base">
-                           ₹{(inv.grandTotal || 0).toLocaleString()}
+                          ₹{(inv.grandTotal || 0).toLocaleString()}
                         </td>
                         <td className="px-6 py-5 text-center">
-                           <div className="flex flex-col gap-2 scale-90">
-                              {/* E-INVOICE BADGE */}
-                              {inv.einvoiceStatus === "GENERATED" ? (
-                                <div className="flex flex-col items-center gap-1">
-                                  <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-green-200">
-                                     ✅ IRN READY
-                                  </span>
-                                  <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold truncate w-24" title={inv.irn}>{inv.irn?.substring(0, 12)}...</code>
-                                </div>
-                              ) : (
-                                <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-yellow-200">
-                                   📄 SI PENDING
+                          <div className="flex flex-col gap-2 scale-90">
+                            {/* E-INVOICE BADGE */}
+                            {inv.einvoiceStatus === "GENERATED" ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-green-200">
+                                  ✅ IRN READY
                                 </span>
-                              )}
+                                <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold truncate w-24" title={inv.irn}>{inv.irn?.substring(0, 12)}...</code>
+                              </div>
+                            ) : (
+                              <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-yellow-200">
+                                📄 SI PENDING
+                              </span>
+                            )}
 
-                              {/* E-WAY BILL BADGE */}
-                              {inv.ewayBillNo ? (
-                                <div className="flex flex-col items-center gap-1">
-                                  <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-blue-200">
-                                     🚚 EWB READY
-                                  </span>
-                                  <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold">{inv.ewayBillNo}</code>
-                                </div>
-                              ) : inv.grandTotal > 10000 ? (
-                                <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-orange-200">
-                                   📦 EWB REQD
+                            {/* E-WAY BILL BADGE */}
+                            {inv.ewayBillNo ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-blue-200">
+                                  🚚 EWB READY
                                 </span>
-                              ) : null}
-                           </div>
+                                <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold">{inv.ewayBillNo}</code>
+                              </div>
+                            ) : inv.grandTotal > 10000 ? (
+                              <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-orange-200">
+                                📦 EWB REQD
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-6 py-5 text-center">
-                           {inv.salesOrderId?.reEditRequestStatus === "PENDING" ? (
-                             <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
-                                Re-Edit Requested
-                             </span>
-                           ) : inv.salesOrderId?.cancelRequestStatus === "PENDING" ? (
-                             <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
-                                Cancellation Requested
-                             </span>
-                           ) : (
-                             <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
-                                Finalized
-                             </span>
-                           )}
+                          {inv.salesOrderId?.reEditRequestStatus === "PENDING" ? (
+                            <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
+                              Re-Edit Requested
+                            </span>
+                          ) : inv.salesOrderId?.cancelRequestStatus === "PENDING" ? (
+                            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
+                              Cancellation Requested
+                            </span>
+                          ) : (
+                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+                              Finalized
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-center">
-                           <div className="flex items-center gap-2 justify-center flex-wrap">
-                               {/* ✅ GENERATE E-WAY BILL ONLY BUTTON (Visible if E-Invoice exists but E-Way Bill missing for >50k) */}
-                               {inv.einvoiceStatus === "GENERATED" && !inv.ewayBillNo && inv.grandTotal > 10000 && (
-                                 <button
-                                   onClick={() => handleGenerateEWayBillOnly(inv)}
-                                   disabled={requestingAction === inv._id}
-                                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-600 hover:text-white text-[10px] font-black transition-all"
-                                   title="Only generate E-Way Bill"
-                                 >
-                                   {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <><FaSync /> GEN EWB</>}
-                                 </button>
-                               )}
-
-                               {/* ✅ GENERATE E-INVOICE / E-WAY BILL BUTTON */}
-                               <button
-                                 onClick={() => handleGenerateEInvoice(inv)}
-                                 disabled={requestingAction === inv._id}
-                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${
-                                   inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo
-                                     ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
-                                     : "bg-[#319bab] text-white border-[#319bab] hover:bg-blue-700"
-                                 }`}
-                                 title={(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "Generate Standalone E-Way Bill (B2C)" : "Generate E-Invoice & E-Way Bill (B2B)"}
-                               >
-                                 {requestingAction === inv._id ? (
-                                   <FaSync className="animate-spin" />
-                                 ) : (
-                                   <>
-                                     {(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? <FaSync /> : <FaFileContract />}
-                                     {inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo 
-                                       ? "RE-GENERATE" 
-                                       : ((!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "GEN E-WAY BILL" : "GENERATE E-INV")}
-                                   </>
-                                 )}
-                               </button>
-
-                               {/* SEPARATE DOWNLOAD BUTTONS */}
-                               {inv.einvoiceStatus === "GENERATED" && (
-                                 <div className="flex gap-1">
-                                   <button
-                                     onClick={() => setShowEInvoiceModal(inv)}
-                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#319bab] text-white border border-[#319bab] hover:bg-blue-600 text-[10px] font-black transition-all shadow-sm"
-                                     title="View/Print Custom E-Invoice"
-                                   >
-                                     <FaFileAlt /> PDF
-                                   </button>
-                                   {inv.ewayBillPdfUrl && (
-                                     <a
-                                       href={`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`}
-                                       target="_blank"
-                                       rel="noopener noreferrer"
-                                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all shadow-sm"
-                                       title="Download E-Way Bill (Portal PDF)"
-                                     >
-                                       🚚 EWB
-                                     </a>
-                                   )}
-                                 </div>
-                               )}
-
+                          <div className="flex items-center gap-2 justify-center flex-wrap">
+                            {/* ✅ GENERATE E-WAY BILL ONLY BUTTON (Visible if E-Invoice exists but E-Way Bill missing for >50k) */}
+                            {inv.einvoiceStatus === "GENERATED" && !inv.ewayBillNo && inv.grandTotal > 10000 && (
                               <button
-                                onClick={() => handleRequestEdit(inv)}
-                                disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-600 hover:text-white disabled:opacity-50"
+                                onClick={() => handleGenerateEWayBillOnly(inv)}
+                                disabled={requestingAction === inv._id}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-600 hover:text-white text-[10px] font-black transition-all"
+                                title="Only generate E-Way Bill"
                               >
-                                {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaEdit />}
-                                RE-EDIT
+                                {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <><FaSync /> GEN EWB</>}
                               </button>
+                            )}
 
-                              <button
-                                onClick={() => {
-                                  setCancelReason("");
-                                  setShowCancelModal(inv);
-                                }}
-                                disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white disabled:opacity-50"
-                                title="Cancel Invoice and revert Stock/Balance"
-                              >
-                                {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash />}
-                                CANCEL
-                              </button>
+                            {/* ✅ GENERATE E-INVOICE / E-WAY BILL BUTTON */}
+                            <button
+                              onClick={() => handleGenerateEInvoice(inv)}
+                              disabled={requestingAction === inv._id}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo
+                                  ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
+                                  : "bg-[#319bab] text-white border-[#319bab] hover:bg-blue-700"
+                                }`}
+                              title={(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "Generate Standalone E-Way Bill (B2C)" : "Generate E-Invoice & E-Way Bill (B2B)"}
+                            >
+                              {requestingAction === inv._id ? (
+                                <FaSync className="animate-spin" />
+                              ) : (
+                                <>
+                                  {(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? <FaSync /> : <FaFileContract />}
+                                  {inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo
+                                    ? "RE-GENERATE"
+                                    : ((!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "GEN E-WAY BILL" : "GENERATE E-INV")}
+                                </>
+                              )}
+                            </button>
 
-                           </div>
+                            {/* SEPARATE DOWNLOAD BUTTONS */}
+                            {inv.einvoiceStatus === "GENERATED" && (
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => setShowEInvoiceModal(inv)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#319bab] text-white border border-[#319bab] hover:bg-blue-600 text-[10px] font-black transition-all shadow-sm"
+                                  title="View/Print Custom E-Invoice"
+                                >
+                                  <FaFileAlt /> PDF
+                                </button>
+                                {inv.ewayBillPdfUrl && (
+                                  <a
+                                    href={`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all shadow-sm"
+                                    title="Download E-Way Bill (Portal PDF)"
+                                  >
+                                    🚚 EWB
+                                  </a>
+                                )}
+                              </div>
+                            )}
+
+                            <button
+                              onClick={() => handleRequestEdit(inv)}
+                              disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-600 hover:text-white disabled:opacity-50"
+                            >
+                              {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaEdit />}
+                              RE-EDIT
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setCancelReason("");
+                                setShowCancelModal(inv);
+                              }}
+                              disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white disabled:opacity-50"
+                              title="Cancel Invoice and revert Stock/Balance"
+                            >
+                              {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash />}
+                              CANCEL
+                            </button>
+
+                          </div>
                         </td>
                       </tr>
 
@@ -630,102 +629,102 @@ const BranchSalesInvoices = () => {
                         <tr className="bg-blue-50/20 animate-in fade-in slide-in-from-top-2">
                           <td colSpan="6" className="px-8 py-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                               <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-50">
-                                 <h4 className="font-black text-[10px] uppercase text-gray-400 mb-4 tracking-widest flex items-center gap-2">
-                                    <FaFileAlt className="text-blue-500" /> Billed Items
-                                 </h4>
-                                 <table className="w-full text-[11px]">
-                                   <thead className="border-b border-gray-100">
-                                     <tr className="text-gray-400 font-black">
-                                       <th className="text-left py-3">DESCRIPTION</th>
-                                       <th className="text-center py-3">QTY</th>
-                                       <th className="text-right py-3">TOTAL</th>
-                                     </tr>
-                                   </thead>
-                                   <tbody>
-                                     {inv.items.map((item, idx) => (
-                                       <tr key={idx} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
-                                         <td className="py-3 font-bold text-gray-700">{item.name}</td>
-                                         <td className="py-3 text-center font-black text-blue-600 bg-blue-50/50 rounded-lg">{item.qty} {item.unit || "Units"} {item.altQty > 0 && `(${item.altQty} ${item.altUnit})`}</td>
-                                         <td className="py-3 text-right font-black text-gray-800">₹{item.total?.toLocaleString()}</td>
-                                       </tr>
-                                     ))}
-                                   </tbody>
-                                 </table>
+                              <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-50">
+                                <h4 className="font-black text-[10px] uppercase text-gray-400 mb-4 tracking-widest flex items-center gap-2">
+                                  <FaFileAlt className="text-blue-500" /> Billed Items
+                                </h4>
+                                <table className="w-full text-[11px]">
+                                  <thead className="border-b border-gray-100">
+                                    <tr className="text-gray-400 font-black">
+                                      <th className="text-left py-3">DESCRIPTION</th>
+                                      <th className="text-center py-3">QTY</th>
+                                      <th className="text-right py-3">TOTAL</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {inv.items.map((item, idx) => (
+                                      <tr key={idx} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
+                                        <td className="py-3 font-bold text-gray-700">{item.name}</td>
+                                        <td className="py-3 text-center font-black text-blue-600 bg-blue-50/50 rounded-lg">{item.qty} {item.unit || "Units"} {item.altQty > 0 && `(${item.altQty} ${item.altUnit})`}</td>
+                                        <td className="py-3 text-right font-black text-gray-800">₹{item.total?.toLocaleString()}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
 
-                                 {/* 📊 DYNAMIC TAX SUMMARY (RECALCULATED FOR DISPLAY) */}
-                                 <div className="mt-4 pt-4 border-t-2 border-dashed border-gray-100 space-y-2">
-                                    {(() => {
-                                      let cgst = 0, sgst = 0, igst = 0;
-                                      let hasIgst = false;
-                                      
-                                      // 1. Items Tax
-                                      (inv.items || []).forEach(item => {
-                                        const taxable = (item.sellingPrice * item.qty) - (item.discountAmount || 0);
-                                        if (item.igst) {
-                                          igst += (taxable * (item.gst || 0)) / 100;
-                                          hasIgst = true;
-                                        } else {
-                                          cgst += (taxable * (item.cgst || 0)) / 100;
-                                          sgst += (taxable * (item.sgst || 0)) / 100;
-                                        }
-                                      });
-                                      
-                                      // 2. Transport GST Merge
-                                      const tGst = (inv.transportCharge * (inv.transportGstPercent || 18)) / 100;
-                                      if (hasIgst) igst += tGst;
-                                      else { cgst += tGst / 2; sgst += tGst / 2; }
-                                      
-                                      return hasIgst ? (
-                                        <div className="flex justify-between text-[11px] font-black text-blue-600">
-                                          <span>COMMON IGST (Merged)</span>
-                                          <span>₹{igst.toFixed(2)}</span>
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <div className="flex justify-between text-[11px] font-black text-blue-600">
-                                            <span>COMMON CGST (Merged)</span>
-                                            <span>₹{cgst.toFixed(2)}</span>
-                                          </div>
-                                          <div className="flex justify-between text-[11px] font-black text-blue-600">
-                                            <span>COMMON SGST (Merged)</span>
-                                            <span>₹{sgst.toFixed(2)}</span>
-                                          </div>
-                                        </>
-                                      );
-                                    })()}
-                                    {inv.transportCharge > 0 && (
-                                      <div className="flex justify-between text-[11px] font-bold text-orange-600">
-                                        <span>TRANSPORT CHARGE</span>
-                                        <span>₹{(inv.transportCharge || 0).toFixed(2)}</span>
+                                {/* 📊 DYNAMIC TAX SUMMARY (RECALCULATED FOR DISPLAY) */}
+                                <div className="mt-4 pt-4 border-t-2 border-dashed border-gray-100 space-y-2">
+                                  {(() => {
+                                    let cgst = 0, sgst = 0, igst = 0;
+                                    let hasIgst = false;
+
+                                    // 1. Items Tax
+                                    (inv.items || []).forEach(item => {
+                                      const taxable = (item.sellingPrice * item.qty) - (item.discountAmount || 0);
+                                      if (item.igst) {
+                                        igst += (taxable * (item.gst || 0)) / 100;
+                                        hasIgst = true;
+                                      } else {
+                                        cgst += (taxable * (item.cgst || 0)) / 100;
+                                        sgst += (taxable * (item.sgst || 0)) / 100;
+                                      }
+                                    });
+
+                                    // 2. Transport GST Merge
+                                    const tGst = (inv.transportCharge * (inv.transportGstPercent || 18)) / 100;
+                                    if (hasIgst) igst += tGst;
+                                    else { cgst += tGst / 2; sgst += tGst / 2; }
+
+                                    return hasIgst ? (
+                                      <div className="flex justify-between text-[11px] font-black text-blue-600">
+                                        <span>COMMON IGST (Merged)</span>
+                                        <span>₹{igst.toFixed(2)}</span>
                                       </div>
-                                    )}
-                                 </div>
-                               </div>
+                                    ) : (
+                                      <>
+                                        <div className="flex justify-between text-[11px] font-black text-blue-600">
+                                          <span>COMMON CGST (Merged)</span>
+                                          <span>₹{cgst.toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-[11px] font-black text-blue-600">
+                                          <span>COMMON SGST (Merged)</span>
+                                          <span>₹{sgst.toFixed(2)}</span>
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
+                                  {inv.transportCharge > 0 && (
+                                    <div className="flex justify-between text-[11px] font-bold text-orange-600">
+                                      <span>TRANSPORT CHARGE</span>
+                                      <span>₹{(inv.transportCharge || 0).toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
 
-                               <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-50">
-                                 <h4 className="font-black text-[10px] uppercase text-gray-400 mb-4 tracking-widest flex items-center gap-2">
-                                    <FaHistory className="text-blue-500" /> Administrative Info
-                                 </h4>
-                                 <div className="space-y-4 text-xs">
-                                    <div className="flex justify-between border-b border-gray-50 pb-2 text-[11px]">
-                                       <span className="text-gray-500 font-bold uppercase tracking-tighter">Subtotal</span>
-                                       <span className="font-black text-gray-800">₹{(inv.subtotal || 0).toLocaleString()}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-gray-50 pb-2">
-                                       <span className="text-gray-500 font-bold">Billing Person</span>
-                                       <span className="font-black text-gray-800">{inv.billingPerson || "N/A"}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-gray-50 pb-2">
-                                       <span className="text-gray-500 font-bold">Invoice Date</span>
-                                       <span className="font-black text-gray-800">{new Date(inv.invoiceDate || inv.createdAt).toLocaleString()}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-gray-50 pb-2 pt-2">
-                                       <span className="text-[#319bab] font-black text-sm uppercase">Grand Total</span>
-                                       <span className="font-black text-blue-700 text-sm">₹{(inv.grandTotal || 0).toLocaleString()}</span>
-                                    </div>
-                                 </div>
-                               </div>
+                              <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-50">
+                                <h4 className="font-black text-[10px] uppercase text-gray-400 mb-4 tracking-widest flex items-center gap-2">
+                                  <FaHistory className="text-blue-500" /> Administrative Info
+                                </h4>
+                                <div className="space-y-4 text-xs">
+                                  <div className="flex justify-between border-b border-gray-50 pb-2 text-[11px]">
+                                    <span className="text-gray-500 font-bold uppercase tracking-tighter">Subtotal</span>
+                                    <span className="font-black text-gray-800">₹{(inv.subtotal || 0).toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-gray-50 pb-2">
+                                    <span className="text-gray-500 font-bold">Billing Person</span>
+                                    <span className="font-black text-gray-800">{inv.billingPerson || "N/A"}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-gray-50 pb-2">
+                                    <span className="text-gray-500 font-bold">Invoice Date</span>
+                                    <span className="font-black text-gray-800">{new Date(inv.invoiceDate || inv.createdAt).toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex justify-between border-b border-gray-50 pb-2 pt-2">
+                                    <span className="text-[#319bab] font-black text-sm uppercase">Grand Total</span>
+                                    <span className="font-black text-blue-700 text-sm">₹{(inv.grandTotal || 0).toLocaleString()}</span>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           </td>
                         </tr>

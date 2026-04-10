@@ -1,13 +1,13 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-    FaCheck,
-    FaEdit,
-    FaPlus,
-    FaPrint,
-    FaSpinner,
-    FaTimes,
-    FaTrash,
-    FaWhatsapp,
+  FaCheck,
+  FaEdit,
+  FaPlus,
+  FaPrint,
+  FaSpinner,
+  FaTimes,
+  FaTrash,
+  FaWhatsapp,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -74,14 +74,14 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   useEffect(() => {
     if (order && !initializationRef.current) {
       initializationRef.current = true; // Mark as initialized to prevent overwriting manual edits on re-render
-      
+
       // UNIFIED MERGE LOGIC: SO Items + Invoiced Items
       const originalItems = order.items || [];
       // Use lastInvoicedItems if invoiceGenerated is false but we have history (indicating a re-edit)
-      const invoicedItems = order.invoiceItems?.length 
-        ? order.invoiceItems 
+      const invoicedItems = order.invoiceItems?.length
+        ? order.invoiceItems
         : (order.lastInvoicedItems || []);
-      
+
       const hasPreviousInvoice = invoicedItems.length > 0;
       const mergedMap = new Map();
 
@@ -89,7 +89,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       originalItems.forEach(item => {
         const pId = (item.productId?._id || item.productId)?.toString();
         if (!pId) return;
-        
+
         // If FIRST TIME (no previous invoice), default confirmedQty to full SO quantity
         // If RE-EDIT (has previous invoice), default to 0 and let Step B populate it
         const initialConfirmed = hasPreviousInvoice ? 0 : (item.qty || 0);
@@ -98,7 +98,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           ...item,
           productId: pId,
           name: item.name || item.productName || "",
-          confirmedQty: initialConfirmed, 
+          confirmedQty: initialConfirmed,
           qty: initialConfirmed,
           originalQty: item.qty || 0,
           backOrderQty: hasPreviousInvoice ? (item.qty || 0) : 0,
@@ -114,7 +114,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         if (!pId) return;
 
         const existing = mergedMap.get(pId);
-        
+
         // Re-calculate name safely
         let name = item.name || item.productName || existing?.name || "";
         if (!name) {
@@ -152,7 +152,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         const original = item.originalQty || 0;
         // Use saved backOrderQty if available, otherwise calculate it
         const backOrder = item.backOrderQty !== undefined ? item.backOrderQty : Math.max(0, original - confirmed);
-        
+
         return {
           ...item,
           originalQty: original,
@@ -203,12 +203,12 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
   const handleAddProduct = async (product) => {
     let price = product.sellingPrice || product.mrp || 0;
-    
+
     // FETCH LOCKED PRICE FOR CUSTOMER
     try {
       const customerId = selectedCustomer?._id || order.customerId || order.customer?._id;
       const bid = currentBranch?._id || order.branchId?._id || order.branchId;
-      
+
       if (customerId && bid && product._id) {
         const res = await fetch(`${API_BASE}/customer-locked-prices/${customerId}/${product._id}?branchId=${bid}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
@@ -233,15 +233,15 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       unit: product.unit || product.units || "Kg",
       gst: product.gst || 0,
       mrp: product.mrp || 0,
-      qty: 1, 
+      qty: 1,
     });
     setItemSearch(product.name);
     setShowItemDropdown(false);
-    
+
     // Focus on Qty input
     setTimeout(() => {
-        qtyInputRef.current?.focus();
-        qtyInputRef.current?.select();
+      qtyInputRef.current?.focus();
+      qtyInputRef.current?.select();
     }, 100);
   };
 
@@ -271,13 +271,13 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       igst: 0,
       qty: Number(newItem.qty),
       confirmedQty: Number(newItem.qty),
-      backOrderQty: 0, 
-      originalQty: Number(newItem.qty), 
+      backOrderQty: 0,
+      originalQty: Number(newItem.qty),
       total: Math.round(newItem.sellingPrice * newItem.qty * 100) / 100,
     };
 
     setEditedItems([...editedItems, itemToAdd]);
-    
+
     // Reset form
     setNewItem({
       productId: "",
@@ -303,15 +303,15 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
     const updated = [...editedItems];
     const confirmed = Math.max(0, confirmedQty);
     const original = updated[index].originalQty || 0;
-    
+
     updated[index].confirmedQty = confirmed;
     updated[index].qty = confirmed;
     updated[index].backOrderQty = Math.max(0, original - confirmed);
-    
+
     // Recalculate item total
     const price = updated[index].sellingPrice || 0;
     updated[index].total = Math.round(price * confirmed * 100) / 100;
-    
+
     setEditedItems(updated);
   };
 
@@ -320,11 +320,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
     const updated = [...editedItems];
     const price = Math.max(0, newPrice);
     updated[index].sellingPrice = price;
-    
+
     // Recalculate item total
     const confirmed = updated[index].confirmedQty || 0;
     updated[index].total = Math.round(price * confirmed * 100) / 100;
-    
+
     setEditedItems(updated);
   };
 
@@ -438,7 +438,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   const handleWhatsApp = async () => {
     try {
       const phone = previewData?.customer?.whatsapp?.replace(/\D/g, "");
-      
+
       // Show uploading toast
       const uploadToastId = toast.loading("📤 Uploading invoices to cloud...");
 
@@ -460,7 +460,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
           // Get the page element
           const pageElement = container.querySelector(".page");
-          
+
           // Convert to canvas
           const canvas = await html2canvas(pageElement, {
             scale: 2,
@@ -470,7 +470,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           });
 
           // Convert canvas to blob
-          const blob = await new Promise(resolve => 
+          const blob = await new Promise(resolve =>
             canvas.toBlob(resolve, "image/png", 0.95)
           );
 
@@ -500,7 +500,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       }
 
       toast.dismiss(uploadToastId);
-      
+
       if (Object.keys(cloudinaryUrls).length === 0) {
         throw new Error("No invoices were uploaded successfully");
       }
@@ -622,10 +622,10 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
     // Define copies to generate
     const isReEdited = !!order.isReEdited || !!order.invoiceGenerated;
-    const baseTitles = isReEdited 
-      ? ["RE-EDIT ORIGINAL", "RE-EDIT COPY 1", "RE-EDIT COPY 2"] 
+    const baseTitles = isReEdited
+      ? ["RE-EDIT ORIGINAL", "RE-EDIT COPY 1", "RE-EDIT COPY 2"]
       : ["ORIGINAL INVOICE", "OFFICE COPY", "EXTRA COPY"];
-    
+
     const copiesToGenerate = baseTitles.slice(0, numCopies);
 
     copiesToGenerate.forEach(copyTitle => {
@@ -761,11 +761,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 <div class="total-section" style="flex: 1;">
                   <div style="font-size: 11px;">Subtotal (Gross): <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
                   
-                  ${previewData?.totalTax?.igst > 0 ? 
-                    `<div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` : 
-                    `<div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
+                  ${previewData?.totalTax?.igst > 0 ?
+            `<div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` :
+            `<div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
                      <div style="font-size: 11px;">SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
-                  }
+          }
                   
                   ${previewData?.commonDiscount > 0 ? `<div style="font-size: 11px;">Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
                   ${previewData?.transportCharge > 0 ? `<div style="font-size: 11px;">Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
@@ -828,25 +828,25 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 </thead>
                 <tbody>
                    ${(() => {
-                    const hsnMap = {};
-                    (previewData?.items || []).forEach(item => {
-                      const hsn = item.hsn || "N/A";
-                      if (!hsnMap[hsn]) {
-                        hsnMap[hsn] = { taxable: 0, cgst: 0, sgst: 0, total: 0, cgstRate: item.cgst || 0, sgstRate: item.sgst || 0 };
-                      }
-                      // Base calculation from inclusive total
-                      const totalInclusive = item.total || 0;
-                      const gstRate = (item.gst || 0);
-                      const taxable = totalInclusive / (1 + (gstRate / 100));
-                      const cgstAmt = (taxable * (item.cgst || 0)) / 100;
-                      const sgstAmt = (taxable * (item.sgst || 0)) / 100;
-                      
-                      hsnMap[hsn].taxable += taxable;
-                      hsnMap[hsn].cgst += cgstAmt;
-                      hsnMap[hsn].sgst += sgstAmt;
-                      hsnMap[hsn].total += totalInclusive;
-                    });
-                    return Object.entries(hsnMap).map(([hsn, data]) => `
+            const hsnMap = {};
+            (previewData?.items || []).forEach(item => {
+              const hsn = item.hsn || "N/A";
+              if (!hsnMap[hsn]) {
+                hsnMap[hsn] = { taxable: 0, cgst: 0, sgst: 0, total: 0, cgstRate: item.cgst || 0, sgstRate: item.sgst || 0 };
+              }
+              // Base calculation from inclusive total
+              const totalInclusive = item.total || 0;
+              const gstRate = (item.gst || 0);
+              const taxable = totalInclusive / (1 + (gstRate / 100));
+              const cgstAmt = (taxable * (item.cgst || 0)) / 100;
+              const sgstAmt = (taxable * (item.sgst || 0)) / 100;
+
+              hsnMap[hsn].taxable += taxable;
+              hsnMap[hsn].cgst += cgstAmt;
+              hsnMap[hsn].sgst += sgstAmt;
+              hsnMap[hsn].total += totalInclusive;
+            });
+            return Object.entries(hsnMap).map(([hsn, data]) => `
                       <tr>
                         <td>${hsn}</td>
                         <td style="text-align: right;">₹${data.taxable.toFixed(2)}</td>
@@ -855,7 +855,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                         <td style="text-align: right;">₹${data.total.toFixed(2)}</td>
                       </tr>
                     `).join("");
-                  })()}
+          })()}
                   <tr style="background: #f1f5f9; font-weight: bold;">
                     <td>TRANSPORT GST</td>
                     <td style="text-align: right;">₹${(previewData?.transportCharge || 0).toFixed(2)}</td>
@@ -868,11 +868,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
               <div class="total-section">
                 <div style="font-size: 11px;">Subtotal (Gross): <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
-                ${previewData?.totalTax?.igst > 0 ? 
-                  `<div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` : 
-                  `<div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
+                ${previewData?.totalTax?.igst > 0 ?
+            `<div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` :
+            `<div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
                    <div style="font-size: 11px;">SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
-                }
+          }
                 ${previewData?.commonDiscount > 0 ? `<div style="font-size: 11px;">Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
                 ${previewData?.transportCharge > 0 ? `<div style="font-size: 11px;">Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
                 ${previewData?.extraExpenseAmount > 0 ? `<div style="font-size: 11px;">Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
@@ -946,11 +946,10 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-6 py-3 font-semibold text-sm transition whitespace-nowrap ${
-                activeTab === tab
+              className={`px-6 py-3 font-semibold text-sm transition whitespace-nowrap ${activeTab === tab
                   ? "text-blue-600 border-b-2 border-blue-600 bg-white"
                   : "text-gray-600 hover:text-gray-800"
-              }`}
+                }`}
             >
               {tab === "edit" && "📦 Back Order / Workbench"}
               {tab === "preview" && "👁️ Preview"}
@@ -1058,7 +1057,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                     Add Product to Invoice
                   </h3>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                     {/* Search Field */}
                     <div className="md:col-span-5 relative">
@@ -1070,7 +1069,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                           setItemSearch(e.target.value);
                           searchProducts(e.target.value);
                           if (!e.target.value) {
-                            setNewItem({...newItem, productId: "", name: ""});
+                            setNewItem({ ...newItem, productId: "", name: "" });
                           }
                         }}
                         onFocus={() => setShowItemDropdown(true)}
@@ -1114,59 +1113,58 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
                     {/* Qty Field */}
                     <div className="md:col-span-2">
-                       <label className="block text-[9px] font-black text-gray-500 uppercase mb-1 tracking-tighter">2. Qty</label>
-                       <input
-                         ref={qtyInputRef}
-                         type="number"
-                         value={newItem.qty}
-                         onChange={(e) => setNewItem({...newItem, qty: e.target.value})}
-                         onKeyDown={(e) => e.key === 'Enter' && confirmAddItem()}
-                         placeholder="0"
-                         className="w-full p-2.5 border-2 border-green-100 rounded-lg bg-white focus:ring-2 focus:ring-green-500 outline-none font-black text-center text-green-700 transition-all"
-                       />
+                      <label className="block text-[9px] font-black text-gray-500 uppercase mb-1 tracking-tighter">2. Qty</label>
+                      <input
+                        ref={qtyInputRef}
+                        type="number"
+                        value={newItem.qty}
+                        onChange={(e) => setNewItem({ ...newItem, qty: e.target.value })}
+                        onKeyDown={(e) => e.key === 'Enter' && confirmAddItem()}
+                        placeholder="0"
+                        className="w-full p-2.5 border-2 border-green-100 rounded-lg bg-white focus:ring-2 focus:ring-green-500 outline-none font-black text-center text-green-700 transition-all"
+                      />
                     </div>
 
                     {/* Rate Field */}
                     <div className="md:col-span-3">
-                       <label className="block text-[9px] font-black text-gray-500 uppercase mb-1 tracking-tighter">3. Selling Rate (₹)</label>
-                       <div className="relative">
-                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
-                         <input
-                           type="number"
-                           value={newItem.sellingPrice}
-                           onChange={(e) => setNewItem({...newItem, sellingPrice: e.target.value})}
-                           onKeyDown={(e) => e.key === 'Enter' && confirmAddItem()}
-                           readOnly={!(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN")}
-                           className={`w-full p-2.5 pl-7 border-2 border-green-100 rounded-lg focus:ring-2 focus:ring-green-500 outline-none font-black text-blue-700 transition-all ${
-                             !(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN")
-                               ? "bg-gray-50 cursor-not-allowed"
-                               : "bg-white cursor-text focus:border-green-600"
-                           }`}
-                         />
-                       </div>
+                      <label className="block text-[9px] font-black text-gray-500 uppercase mb-1 tracking-tighter">3. Selling Rate (₹)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
+                        <input
+                          type="number"
+                          value={newItem.sellingPrice}
+                          onChange={(e) => setNewItem({ ...newItem, sellingPrice: e.target.value })}
+                          onKeyDown={(e) => e.key === 'Enter' && confirmAddItem()}
+                          readOnly={!(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN")}
+                          className={`w-full p-2.5 pl-7 border-2 border-green-100 rounded-lg focus:ring-2 focus:ring-green-500 outline-none font-black text-blue-700 transition-all ${!(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN")
+                              ? "bg-gray-50 cursor-not-allowed"
+                              : "bg-white cursor-text focus:border-green-600"
+                            }`}
+                        />
+                      </div>
                     </div>
 
                     {/* Add Button */}
                     <div className="md:col-span-2">
-                       <button
-                         onClick={confirmAddItem}
-                         disabled={!newItem.productId}
-                         className="w-full bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 transition-all font-black uppercase text-xs shadow-lg shadow-green-200 flex items-center justify-center gap-2 disabled:opacity-50"
-                       >
-                         <FaPlus /> Add
-                       </button>
+                      <button
+                        onClick={confirmAddItem}
+                        disabled={!newItem.productId}
+                        className="w-full bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 transition-all font-black uppercase text-xs shadow-lg shadow-green-200 flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        <FaPlus /> Add
+                      </button>
                     </div>
                   </div>
-                  
+
                   {newItem.productId && (
                     <div className="mt-4 flex gap-4 text-[10px] items-center bg-white/60 p-2 rounded-lg border border-dashed border-green-200">
                       <span className="font-bold text-gray-500">SELECTED: <span className="text-green-700">{newItem.name}</span></span>
                       <span className="font-bold text-gray-500 flex items-center gap-1">
-                        UNIT: 
-                        <input 
-                          type="text" 
-                          value={newItem.unit} 
-                          onChange={(e) => setNewItem({...newItem, unit: e.target.value})}
+                        UNIT:
+                        <input
+                          type="text"
+                          value={newItem.unit}
+                          onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
                           className="w-16 p-1 border rounded bg-white font-black text-gray-700 uppercase outline-none focus:ring-1 focus:ring-green-400"
                           placeholder="Unit"
                         />
@@ -1389,8 +1387,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
               {/* All Invoices Preview */}
               <div className="border-2 border-gray-300 rounded-lg p-4 bg-gray-50 max-h-96 overflow-y-auto">
-                <div dangerouslySetInnerHTML={{ __html: getInvoiceHTML() }} 
-                     style={{ zoom: '0.75', transformOrigin: 'top left', width: '133.33%' }} />
+                <div dangerouslySetInnerHTML={{ __html: getInvoiceHTML() }}
+                  style={{ zoom: '0.75', transformOrigin: 'top left', width: '133.33%' }} />
               </div>
             </div>
           )}
@@ -1469,7 +1467,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             )}
           </div>
         </div>
-    </div>
+      </div>
     </div>
   );
 };
