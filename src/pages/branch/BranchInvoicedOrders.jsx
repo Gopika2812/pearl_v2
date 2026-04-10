@@ -298,9 +298,11 @@ const BranchInvoicedOrders = () => {
     const matchesCustomerName = filterCustomerName === "" || 
       (order.customer?.name && order.customer.name.toLowerCase().includes(filterCustomerName.toLowerCase()));
     
-    const orderDate = new Date(order.orderDate || order.createdAt);
-    const orderDateStr = orderDate.toISOString().split('T')[0];
-    const orderTimeStr = new Date(order.createdAt).toTimeString().slice(0, 5);
+    const od = order.orderDate ? new Date(order.orderDate) : null;
+    const ct = new Date(order.createdAt);
+    const displayDate = od ? od : ct;
+    const orderDateStr = `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, "0")}-${String(displayDate.getDate()).padStart(2, "0")}`;
+    const orderTimeStr = `${String(ct.getHours()).padStart(2, "0")}:${String(ct.getMinutes()).padStart(2, "0")}`;
     
     const matchesFromDate = filterFromDate === "" || orderDateStr >= filterFromDate;
     const matchesToDate = filterToDate === "" || orderDateStr <= filterToDate;
@@ -774,14 +776,16 @@ const BranchInvoicedOrders = () => {
                           )}
                         </td>
                         <td className="px-6 py-4 text-center text-gray-600 text-xs">
-                          {new Date(order.orderDate || order.createdAt).toLocaleString("en-IN", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            hour12: true,
-                          })}
+                          {(() => {
+                            const od = order.orderDate ? new Date(order.orderDate) : null;
+                            const ct = new Date(order.createdAt);
+                            const d = od ? od : ct;
+                            const day = String(d.getDate()).padStart(2, "0");
+                            const month = String(d.getMonth() + 1).padStart(2, "0");
+                            const year = d.getFullYear();
+                            const time = ct.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+                            return `${day}-${month}-${year}, ${time}`;
+                          })()}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center gap-2 justify-center flex-wrap">
