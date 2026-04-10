@@ -14,6 +14,8 @@ const BranchSalesInvoices = () => {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [requestingAction, setRequestingAction] = useState(null); // ID of invoice currently requesting
   const [showEInvoiceModal, setShowEInvoiceModal] = useState(null);
+  const [showCancelModal, setShowCancelModal] = useState(null); // Invoice to be cancelled
+  const [cancelReason, setCancelReason] = useState("");
 
   // Search debounce logic
   useEffect(() => {
@@ -111,6 +113,35 @@ const BranchSalesInvoices = () => {
       setRequestingAction(null);
     }
   };
+
+  const handleDirectCancel = async () => {
+    if (!showCancelModal || !cancelReason.trim()) return;
+
+    setRequestingAction(showCancelModal._id);
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/invoices/${showCancelModal._id}/cancel`, {
+        method: "PUT",
+        body: JSON.stringify({ 
+          reason: cancelReason,
+          cancelledBy: user?.username || user?.fullName || "Staff"
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("✅ Invoice cancelled. Stock & Balance reverted.");
+        setShowCancelModal(null);
+        setCancelReason("");
+        fetchInvoices();
+      } else {
+        toast.error(data.message || "Failed to cancel invoice");
+      }
+    } catch (err) {
+      toast.error("Error cancelling invoice");
+    } finally {
+      setRequestingAction(null);
+    }
+  };
+
   // ✅ GENERATE E-INVOICE FUNCTION
   const handleGenerateEInvoice = async (invoice, transportDetails = null) => {
     // 🚀 Check if transport details are required (>10k and not provided yet)
@@ -293,6 +324,52 @@ const BranchSalesInvoices = () => {
     );
   };
 
+  // 🔴 CANCEL INVOICE MODAL
+  const CancelInvoiceModal = ({ invoice, onClose, onConfirm }) => {
+    return (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="p-6 bg-red-600 text-white text-center">
+            <h3 className="text-xl font-black uppercase tracking-tight flex items-center justify-center gap-2">
+              <FaTrash /> Cancel Invoice
+            </h3>
+            <p className="text-xs opacity-90 mt-1 font-bold">
+              This will revert stock and customer balance.
+            </p>
+          </div>
+          
+          <div className="p-8 space-y-5">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Cancel Narration (Mandatory)</label>
+              <textarea 
+                placeholder="Enter reason for cancellation..."
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-red-500 min-h-[100px]"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 pt-6 border-t border-gray-50">
+              <button 
+                onClick={onClose}
+                className="flex-1 px-6 py-4 rounded-2xl font-black text-xs text-gray-400 hover:bg-gray-50 transition"
+              >
+                NO, KEEP IT
+              </button>
+              <button 
+                onClick={onConfirm}
+                disabled={!cancelReason.trim()}
+                className="flex-1 bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-xs shadow-xl shadow-red-100 hover:bg-red-700 transition disabled:opacity-50"
+              >
+                YES, CANCEL NOW
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <ToastContainer position="top-right" autoClose={2500} theme="colored" />
@@ -316,6 +393,14 @@ const BranchSalesInvoices = () => {
         <EInvoicePrintModal 
           invoice={showEInvoiceModal}
           onClose={() => setShowEInvoiceModal(null)}
+        />
+      )}
+
+      {showCancelModal && (
+        <CancelInvoiceModal 
+          invoice={showCancelModal}
+          onClose={() => setShowCancelModal(null)}
+          onConfirm={handleDirectCancel}
         />
       )}
 
@@ -516,11 +601,24 @@ const BranchSalesInvoices = () => {
 
                               <button
                                 onClick={() => handleRequestEdit(inv)}
-                                disabled={requestingAction === inv._id}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-600 hover:text-white"
+                                disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-600 hover:text-white disabled:opacity-50"
                               >
                                 {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaEdit />}
                                 RE-EDIT
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setCancelReason("");
+                                  setShowCancelModal(inv);
+                                }}
+                                disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white disabled:opacity-50"
+                                title="Cancel Invoice and revert Stock/Balance"
+                              >
+                                {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash />}
+                                CANCEL
                               </button>
 
                            </div>

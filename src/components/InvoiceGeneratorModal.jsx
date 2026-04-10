@@ -77,57 +77,73 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       
       // UNIFIED MERGE LOGIC: SO Items + Invoiced Items
       const originalItems = order.items || [];
-      const invoicedItems = order.invoiceGenerated 
-        ? (order.invoiceItems?.length ? order.invoiceItems : (order.lastInvoicedItems || []))
-        : [];
+      // Use lastInvoicedItems if invoiceGenerated is false but we have history (indicating a re-edit)
+      const invoicedItems = order.invoiceItems?.length 
+        ? order.invoiceItems 
+        : (order.lastInvoicedItems || []);
       
+      const hasPreviousInvoice = invoicedItems.length > 0;
       const mergedMap = new Map();
 
-      // Step A: Load original SO items as the base (these are the "Back Orders")
+      // Step A: Load original SO items as the base (Baseline)
       originalItems.forEach(item => {
         const pId = (item.productId?._id || item.productId)?.toString();
         if (!pId) return;
         
+        // If FIRST TIME (no previous invoice), default confirmedQty to full SO quantity
+        // If RE-EDIT (has previous invoice), default to 0 and let Step B populate it
+        const initialConfirmed = hasPreviousInvoice ? 0 : (item.qty || 0);
+
         mergedMap.set(pId, {
           ...item,
           productId: pId,
           name: item.name || item.productName || "",
-          confirmedQty: 0, 
-          qty: 0,
+          confirmedQty: initialConfirmed, 
+          qty: initialConfirmed,
           originalQty: item.qty || 0,
-          backOrderQty: item.qty || 0,
+          backOrderQty: hasPreviousInvoice ? (item.qty || 0) : 0,
           total: 0,
           sellingPrice: item.sellingPrice || item.rate || 0,
           hsn: item.hsn || item.hsnCode || ""
         });
       });
 
-      // Step B: Overlay already invoiced items (if any exist they take precedence for the "current" billed state)
+      // Step B: Overlay already invoiced items (History)
       invoicedItems.forEach(item => {
         const pId = (item.productId?._id || item.productId)?.toString();
         if (!pId) return;
 
         const existing = mergedMap.get(pId);
         
-        // Recover name if missing
+        // Re-calculate name safely
         let name = item.name || item.productName || existing?.name || "";
         if (!name) {
           const found = originalItems.find(oi => (oi.productId?._id || oi.productId)?.toString() === pId);
           if (found) name = found.name;
         }
 
-        mergedMap.set(pId, {
-          ...(existing || {}),
-          ...item,
-          productId: pId,
-          name: name,
-          confirmedQty: item.confirmedQty || item.qty || 0,
-          qty: item.qty || item.confirmedQty || 0,
-          originalQty: item.originalQty || existing?.originalQty || item.qty || item.originalQty || 0,
-          backOrderQty: item.backOrderQty !== undefined ? item.backOrderQty : undefined,
-          sellingPrice: item.sellingPrice || existing?.sellingPrice || 0,
-          hsn: item.hsn || existing?.hsn || ""
-        });
+        // UPDATE existing record instead of spreading to avoid overwriting originalQty (qty from item is confirmed qty)
+        if (existing) {
+          existing.confirmedQty = item.confirmedQty || item.qty || 0;
+          existing.qty = item.qty || item.confirmedQty || 0;
+          existing.backOrderQty = item.backOrderQty !== undefined ? item.backOrderQty : undefined;
+          existing.sellingPrice = item.sellingPrice || existing.sellingPrice || 0;
+          existing.hsn = item.hsn || existing.hsn || "";
+          existing.name = name;
+        } else {
+          // New item added directly to invoice (not in SO)
+          mergedMap.set(pId, {
+            ...item,
+            productId: pId,
+            name: name,
+            confirmedQty: item.confirmedQty || item.qty || 0,
+            qty: item.qty || item.confirmedQty || 0,
+            originalQty: item.originalQty || item.qty || 0,
+            backOrderQty: item.backOrderQty || 0,
+            sellingPrice: item.sellingPrice || 0,
+            hsn: item.hsn || ""
+          });
+        }
       });
 
       // Step C: Finalize the list for state (Array.from(mergedMap.values()))

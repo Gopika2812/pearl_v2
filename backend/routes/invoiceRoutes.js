@@ -1000,8 +1000,9 @@ router.put("/:invoiceId/cancel", async (req, res) => {
       if (invoice.salesOrderId) {
         const so = await SalesOrder.findById(invoice.salesOrderId).session(session);
         if (so) {
-          so.status = "CANCELLED"; // Or "PENDING" depending on business rule, user requested "cancelled"
+          so.status = "PLACED"; // Reset to enabled so it can be re-invoiced
           so.invoiceGenerated = false;
+          so.salesInvoiceId = null; // Clear SI reference
           so.editHistory.push({
             version: so.editHistory.length + 1,
             editType: "CANCELLED",
