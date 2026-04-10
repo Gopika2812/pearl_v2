@@ -45,7 +45,7 @@ const BranchInvoicedOrders = () => {
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterFromTime, setFilterFromTime] = useState("");
   const [filterToTime, setFilterToTime] = useState("");
-  
+
   // Selection state for multi-select loading slip
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const selectedOrders = salesOrders.filter(so => selectedOrderIds.includes(so._id));
@@ -96,7 +96,7 @@ const BranchInvoicedOrders = () => {
    */
   const handleDirectPrint = async (numCopies) => {
     if (!selectedOrder) return;
-    
+
     setProcessingPrint(true);
     setShowCopyChoice(false);
 
@@ -110,7 +110,7 @@ const BranchInvoicedOrders = () => {
 
       const previewRes = await fetch(`${API_BASE}/invoices/preview/${selectedOrder._id}`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${localStorage.getItem("token")}`
         },
@@ -128,7 +128,7 @@ const BranchInvoicedOrders = () => {
       // 2. Finalize Invoice
       const finalizeRes = await fetch(`${API_BASE}/invoices/finalize/${selectedOrder._id}`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${localStorage.getItem("token")}`
         },
@@ -179,7 +179,7 @@ const BranchInvoicedOrders = () => {
     try {
       const res = await fetch(`${API_BASE}/sales-orders/${updatedOrder._id}`, {
         method: "PUT",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${localStorage.getItem("token")}`
         },
@@ -229,7 +229,7 @@ const BranchInvoicedOrders = () => {
     try {
       const res = await fetch(`${API_BASE}/sales-orders/${orderId}/approve-edit`, {
         method: "PATCH",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${localStorage.getItem("token")}`
         },
@@ -275,7 +275,7 @@ const BranchInvoicedOrders = () => {
         }
       );
       const data = await res.json();
-      
+
       setInvoicesByOrder((prev) => ({
         ...prev,
         [salesOrderId]: data || [],
@@ -288,20 +288,23 @@ const BranchInvoicedOrders = () => {
   // Filter sales orders based on criteria
   const filteredSalesOrders = salesOrders.filter((order) => {
     // 🚩 REMOVED FILTER - ALL ORDERS SHOULD BE VISIBLE AS RECORDS
-    
-    const matchesVoucherType = filterVoucherType === "" || 
+
+    const matchesVoucherType = filterVoucherType === "" ||
       (order.voucherType && order.voucherType.toLowerCase().includes(filterVoucherType.toLowerCase()));
-    
-    const matchesInvoiceId = filterInvoiceId === "" || 
+
+    const matchesInvoiceId = filterInvoiceId === "" ||
       (order.invoiceId && order.invoiceId.toLowerCase().includes(filterInvoiceId.toLowerCase()));
-    
-    const matchesCustomerName = filterCustomerName === "" || 
+
+    const matchesCustomerName = filterCustomerName === "" ||
       (order.customer?.name && order.customer.name.toLowerCase().includes(filterCustomerName.toLowerCase()));
-    
-    const orderDate = new Date(order.orderDate || order.createdAt);
-    const orderDateStr = orderDate.toISOString().split('T')[0];
-    const orderTimeStr = new Date(order.createdAt).toTimeString().slice(0, 5);
-    
+
+
+    const od = order.orderDate ? new Date(order.orderDate) : null;
+    const ct = new Date(order.createdAt);
+    const displayDate = od ? od : ct;
+    const orderDateStr = `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, "0")}-${String(displayDate.getDate()).padStart(2, "0")}`;
+    const orderTimeStr = `${String(ct.getHours()).padStart(2, "0")}:${String(ct.getMinutes()).padStart(2, "0")}`;
+
     const matchesFromDate = filterFromDate === "" || orderDateStr >= filterFromDate;
     const matchesToDate = filterToDate === "" || orderDateStr <= filterToDate;
     const matchesFromTime = filterFromTime === "" || filterFromDate === "" || orderDateStr > filterFromDate || (orderDateStr === filterFromDate && orderTimeStr >= filterFromTime);
@@ -312,7 +315,7 @@ const BranchInvoicedOrders = () => {
 
   const handleExportPDF = () => {
     const doc = new jsPDF();
-    
+
     const tableColumn = ["Invoice ID", "Customer", "Grand Total"];
     const tableRows = [];
 
@@ -369,7 +372,7 @@ const BranchInvoicedOrders = () => {
       // Add final summary row
       const totalSub = exportData.reduce((sum, row) => sum + row["Sub Total"], 0);
       const totalGrand = exportData.reduce((sum, row) => sum + row["Grand Total"], 0);
-      
+
       exportData.push({
         "Date": "TOTAL",
         "Invoice ID": "",
@@ -401,7 +404,7 @@ const BranchInvoicedOrders = () => {
       }
 
       const rows = [];
-      
+
       // Header for the detailed report
       const headerRow = [
         "Date", "Invoice No", "Customer", "Product Name", "Price", "Qty", "GST (%)", "Discount (Amt)", "Line Total"
@@ -476,14 +479,14 @@ const BranchInvoicedOrders = () => {
       // Add Final Summary Row for the entire report
       const totalSubAll = invoicedOnly.reduce((sum, o) => sum + (o.subtotal || 0), 0);
       const totalGrandAll = invoicedOnly.reduce((sum, o) => sum + (o.grandTotal || 0), 0);
-      
+
       rows.push(["", "", "", "━━━━━━━━━━━━━━━━━━━━━━━━", "", "", "", "", "━━━━━━━━━━"]);
       rows.push(["", "", "", "🔥 TOTAL (ALL ORDERS)", "", "", "", "", ""]);
       rows.push(["", "", "", "Total Sub Total", "", "", "", "", totalSubAll]);
       rows.push(["", "", "", "Total Grand Total", "", "", "", "", totalGrandAll]);
 
       const worksheet = XLSX.utils.aoa_to_sheet(rows);
-      
+
       // Styling columns width (approximate)
       const wscols = [
         { wch: 12 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 15 }
@@ -493,7 +496,7 @@ const BranchInvoicedOrders = () => {
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Detailed Export");
       XLSX.writeFile(workbook, `Detailed_Sales_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
-      
+
       toast.success("Detailed Excel exported successfully!");
     } catch (error) {
       console.error("Detailed export error:", error);
@@ -529,7 +532,7 @@ const BranchInvoicedOrders = () => {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3">
               <button
                 onClick={handleExportPDF}
@@ -561,11 +564,10 @@ const BranchInvoicedOrders = () => {
                     toast.warn("Please select at least one order to generate a consolidated slip");
                   }
                 }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-sm text-sm font-bold ${
-                  selectedOrderIds.length > 0 
-                  ? "bg-indigo-600 text-white hover:bg-indigo-700" 
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-sm text-sm font-bold ${selectedOrderIds.length > 0
+                  ? "bg-indigo-600 text-white hover:bg-indigo-700"
                   : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                }`}
+                  }`}
               >
                 <FaTruck />
                 Generate Consolidated Slip ({selectedOrderIds.length})
@@ -586,7 +588,7 @@ const BranchInvoicedOrders = () => {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
           <h3 className="text-lg font-bold text-gray-800 mb-4">Filters</h3>
           <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
-            
+
             <div>
               <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Invoice ID</label>
               <input
@@ -667,7 +669,7 @@ const BranchInvoicedOrders = () => {
                 <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold border-b">
                   <tr>
                     <th className="px-6 py-4 text-center">
-                      <input 
+                      <input
                         type="checkbox"
                         className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
                         onChange={(e) => {
@@ -694,7 +696,7 @@ const BranchInvoicedOrders = () => {
                     <React.Fragment key={order._id}>
                       <tr className={`hover:bg-gray-50 transition ${order.status === "CANCELLED" ? "opacity-60 bg-red-50/50" : ""}`}>
                         <td className="px-6 py-4 text-center">
-                          <input 
+                          <input
                             type="checkbox"
                             className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
                             checked={selectedOrderIds.includes(order._id)}
@@ -714,11 +716,10 @@ const BranchInvoicedOrders = () => {
                               className="text-[#319bab] hover:bg-gray-200 p-1 rounded transition"
                             >
                               <FaChevronDown
-                                className={`text-xs transition-transform ${
-                                  expandedOrders[order._id]
-                                    ? "rotate-180"
-                                    : ""
-                                }`}
+                                className={`text-xs transition-transform ${expandedOrders[order._id]
+                                  ? "rotate-180"
+                                  : ""
+                                  }`}
                               />
                             </button>
                             <div className="flex flex-col">
@@ -756,17 +757,17 @@ const BranchInvoicedOrders = () => {
                         )}
                         <td className="px-6 py-4 text-center">
                           {order.status === "CANCELLED" ? (
-                             <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-bold line-through uppercase tracking-wider">
-                                Cancelled
-                             </span>
+                            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-bold line-through uppercase tracking-wider">
+                              Cancelled
+                            </span>
                           ) : order.editHistory?.some(h => h.editType === 'RE_INVOICED') ? (
-                             <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-indigo-200">
-                                ✓ Re-Invoiced (V2)
-                             </span>
+                            <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-indigo-200">
+                              ✓ Re-Invoiced (V2)
+                            </span>
                           ) : order.invoiceGenerated ? (
-                             <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                                ✓ Invoiced (V1)
-                             </span>
+                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                              ✓ Invoiced (V1)
+                            </span>
                           ) : (
                             <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
                               Pending Order
@@ -774,27 +775,29 @@ const BranchInvoicedOrders = () => {
                           )}
                         </td>
                         <td className="px-6 py-4 text-center text-gray-600 text-xs">
-                          {new Date(order.orderDate || order.createdAt).toLocaleString("en-IN", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            hour12: true,
-                          })}
+                          {(() => {
+                            const od = order.orderDate ? new Date(order.orderDate) : null;
+                            const ct = new Date(order.createdAt);
+                            const d = od ? od : ct;
+                            const day = String(d.getDate()).padStart(2, "0");
+                            const month = String(d.getMonth() + 1).padStart(2, "0");
+                            const year = d.getFullYear();
+                            const time = ct.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+                            return `${day}-${month}-${year}, ${time}`;
+                          })()}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center gap-2 justify-center flex-wrap">
-                             <button
-                               onClick={() => handleGenerateInvoice(order)}
-                               className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-md shadow-[#319bab]/20"
-                             >
-                               <FaFileInvoice />
-                               {order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
-                             </button>
+                            <button
+                              onClick={() => handleGenerateInvoice(order)}
+                              className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-md shadow-[#319bab]/20"
+                            >
+                              <FaFileInvoice />
+                              {order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
+                            </button>
 
-                           </div>
-                         </td>
+                          </div>
+                        </td>
                       </tr>
 
                       {/* EXPANDED ITEMS ROW */}
@@ -871,7 +874,7 @@ const BranchInvoicedOrders = () => {
                                       </tbody>
                                     </table>
                                   </div>
-                                  
+
                                   {/* 📊 DYNAMIC TAX SUMMARY (RECALCULATED FOR DISPLAY) */}
                                   <div className="mt-4 flex justify-end">
                                     <div className="w-full md:w-64 bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-2">
@@ -879,11 +882,11 @@ const BranchInvoicedOrders = () => {
                                         <span>Subtotal</span>
                                         <span>₹{(order.subtotal || 0).toFixed(2)}</span>
                                       </div>
-                                      
+
                                       {(() => {
                                         let cgst = 0, sgst = 0, igst = 0;
                                         let hasIgst = false;
-                                        
+
                                         // 1. Items Tax
                                         (order.items || []).forEach(item => {
                                           const taxable = (item.sellingPrice * item.qty) - (item.discountAmount || 0);
@@ -895,12 +898,12 @@ const BranchInvoicedOrders = () => {
                                             sgst += (taxable * (item.sgst || 0)) / 100;
                                           }
                                         });
-                                        
+
                                         // 2. Transport GST Merge
                                         const tGst = (order.transportCharge * (order.transportGstPercent || 18)) / 100;
                                         if (hasIgst) igst += tGst;
                                         else { cgst += tGst / 2; sgst += tGst / 2; }
-                                        
+
                                         return hasIgst ? (
                                           <div className="flex justify-between text-xs font-black text-blue-600 border-t border-gray-50 pt-2">
                                             <span>IGST (Merged)</span>
@@ -926,7 +929,7 @@ const BranchInvoicedOrders = () => {
                                           <span>₹{(order.transportCharge || 0).toFixed(2)}</span>
                                         </div>
                                       )}
-                                      
+
                                       <div className="flex justify-between text-sm font-black text-[#319bab] border-t-2 border-dashed border-gray-100 pt-2 mt-2">
                                         <span>Grand Total</span>
                                         <span>₹{(order.grandTotal || 0).toFixed(2)}</span>
@@ -989,53 +992,53 @@ const BranchInvoicedOrders = () => {
                               )}
 
                               {/* 🕓 EDIT HISTORY (Audit Trail) */}
-                               <div className="mt-4 pt-4 border-t border-gray-200">
-                                  <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                    <FaSync className="text-gray-400 text-xs" />
-                                    Edit History (Audit Trail)
-                                  </h4>
-                                  <div className="space-y-3">
-                                    {order.editHistory && order.editHistory.length > 0 ? (
-                                      order.editHistory.map((history, idx) => (
-                                        <div key={idx} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm relative overflow-hidden">
-                                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500"></div>
-                                          <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                              <span className="text-[10px] font-bold uppercase bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded mr-2">
-                                                Version {history.version}
-                                              </span>
-                                              <span className="text-[10px] font-bold text-gray-500 uppercase">
-                                                {history.editType?.replace(/_/g, ' ')}
-                                              </span>
-                                            </div>
-                                            <span className="text-[10px] text-gray-400 font-mono">
-                                              {new Date(history.editedAt).toLocaleString()}
+                              <div className="mt-4 pt-4 border-t border-gray-200">
+                                <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                                  <FaSync className="text-gray-400 text-xs" />
+                                  Edit History (Audit Trail)
+                                </h4>
+                                <div className="space-y-3">
+                                  {order.editHistory && order.editHistory.length > 0 ? (
+                                    order.editHistory.map((history, idx) => (
+                                      <div key={idx} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm relative overflow-hidden">
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500"></div>
+                                        <div className="flex justify-between items-start mb-2">
+                                          <div>
+                                            <span className="text-[10px] font-bold uppercase bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded mr-2">
+                                              Version {history.version}
+                                            </span>
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase">
+                                              {history.editType?.replace(/_/g, ' ')}
                                             </span>
                                           </div>
-                                          <div className="flex flex-wrap gap-x-6 gap-y-2 text-[11px]">
-                                            <div className="flex gap-2">
-                                              <span className="text-gray-500 text-right">Items:</span>
-                                              <span className="font-bold text-gray-800">{(history.items || []).length} items</span>
-                                            </div>
-                                            <div className="flex gap-2">
-                                              <span className="text-gray-500">Grand Total:</span>
-                                              <span className="font-bold text-indigo-600">₹{(history.grandTotal || 0).toLocaleString()}</span>
-                                            </div>
-                                            {history.note && (
-                                              <div className="w-full mt-1 italic text-gray-600 border-t border-gray-50 pt-1">
-                                                Note: {history.note}
-                                              </div>
-                                            )}
-                                          </div>
+                                          <span className="text-[10px] text-gray-400 font-mono">
+                                            {new Date(history.editedAt).toLocaleString()}
+                                          </span>
                                         </div>
-                                      ))
-                                    ) : (
-                                       <div className="bg-gray-50 p-4 rounded-lg border border-dashed border-gray-300 text-center text-gray-500 text-xs italic">
-                                          No previous edits recorded for this order. History starts after the first modification or re-invoice.
-                                       </div>
-                                    )}
-                                  </div>
+                                        <div className="flex flex-wrap gap-x-6 gap-y-2 text-[11px]">
+                                          <div className="flex gap-2">
+                                            <span className="text-gray-500 text-right">Items:</span>
+                                            <span className="font-bold text-gray-800">{(history.items || []).length} items</span>
+                                          </div>
+                                          <div className="flex gap-2">
+                                            <span className="text-gray-500">Grand Total:</span>
+                                            <span className="font-bold text-indigo-600">₹{(history.grandTotal || 0).toLocaleString()}</span>
+                                          </div>
+                                          {history.note && (
+                                            <div className="w-full mt-1 italic text-gray-600 border-t border-gray-50 pt-1">
+                                              Note: {history.note}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="bg-gray-50 p-4 rounded-lg border border-dashed border-gray-300 text-center text-gray-500 text-xs italic">
+                                      No previous edits recorded for this order. History starts after the first modification or re-invoice.
+                                    </div>
+                                  )}
                                 </div>
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -1104,15 +1107,15 @@ const BranchInvoicedOrders = () => {
                                                   <td className="py-2 px-3 text-center text-gray-600">
                                                     {itemIdx === 0
                                                       ? new Date(
-                                                          invoice.invoiceDate
-                                                        ).toLocaleString("en-IN", {
-                                                          day: "2-digit",
-                                                          month: "2-digit",
-                                                          year: "numeric",
-                                                          hour: "2-digit",
-                                                          minute: "2-digit",
-                                                          hour12: true,
-                                                        })
+                                                        invoice.invoiceDate
+                                                      ).toLocaleString("en-IN", {
+                                                        day: "2-digit",
+                                                        month: "2-digit",
+                                                        year: "numeric",
+                                                        hour: "2-digit",
+                                                        minute: "2-digit",
+                                                        hour12: true,
+                                                      })
                                                       : ""}
                                                   </td>
                                                   <td className="py-2 px-3 font-semibold">
@@ -1142,7 +1145,7 @@ const BranchInvoicedOrders = () => {
                                       )}
                                     </tbody>
                                   </table>
-                                  
+
                                   {/* 📊 DYNAMIC TAX SUMMARY (RECALCULATED FOR DISPLAY) */}
                                   <div className="mt-4 flex justify-end">
                                     <div className="w-full bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-2">
@@ -1150,11 +1153,11 @@ const BranchInvoicedOrders = () => {
                                         <span>Subtotal</span>
                                         <span>₹{(inv.subtotal || 0).toFixed(2)}</span>
                                       </div>
-                                      
+
                                       {(() => {
                                         let cgst = 0, sgst = 0, igst = 0;
                                         let hasIgst = false;
-                                        
+
                                         // 1. Items Tax
                                         (inv.items || []).forEach(item => {
                                           const taxable = (item.sellingPrice * item.qty) - (item.discountAmount || 0);
@@ -1166,12 +1169,12 @@ const BranchInvoicedOrders = () => {
                                             sgst += (taxable * (item.sgst || 0)) / 100;
                                           }
                                         });
-                                        
+
                                         // 2. Transport GST Merge
                                         const tGst = (inv.transportCharge * (inv.transportGstPercent || 18)) / 100;
                                         if (hasIgst) igst += tGst;
                                         else { cgst += tGst / 2; sgst += tGst / 2; }
-                                        
+
                                         return hasIgst ? (
                                           <div className="flex justify-between text-xs font-black text-blue-700">
                                             <span>COMMON IGST</span>
@@ -1197,7 +1200,7 @@ const BranchInvoicedOrders = () => {
                                           <span>₹{(inv.transportCharge || 0).toFixed(2)}</span>
                                         </div>
                                       )}
-                                      
+
                                       <div className="flex justify-between text-sm font-black text-blue-900 border-t-2 border-dashed border-blue-200 pt-2 mt-2">
                                         <span>FINAL TOTAL</span>
                                         <span>₹{(inv.grandTotal || 0).toFixed(2)}</span>
@@ -1268,10 +1271,10 @@ const BranchInvoicedOrders = () => {
               <h3 className="text-xl font-black">Direct Print</h3>
               <p className="text-xs text-blue-100 mt-1 uppercase tracking-widest font-bold">SO: {selectedOrder?.invoiceId}</p>
             </div>
-            
+
             <div className="p-8">
               <p className="text-gray-600 text-sm text-center mb-6 font-semibold">How many copies would you like to print?</p>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={() => handleDirectPrint(1)}
@@ -1291,7 +1294,7 @@ const BranchInvoicedOrders = () => {
             </div>
 
             <div className="bg-gray-50 p-4 text-center">
-              <button 
+              <button
                 onClick={() => {
                   setShowCopyChoice(false);
                   setSelectedOrder(null);
