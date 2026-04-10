@@ -20,6 +20,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   const [generating, setGenerating] = useState(false);
 
   // Edit state
+  const initializationRef = useRef(false);
   const [editedItems, setEditedItems] = useState([]);
   const [notes, setNotes] = useState("");
   const [invoiceType, setInvoiceType] = useState("ORDER_DETAILS");
@@ -71,34 +72,81 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
   // Initialize data
   useEffect(() => {
-    if (order) {
-      // If the order was already invoiced, load the items exactly as they were invoiced (invoiceItems)
-      // We prefer invoiceItems because it contains the final structure saved to the bill.
-      const sourceItems = order.invoiceGenerated 
-        ? (order.invoiceItems?.length ? order.invoiceItems : (order.lastInvoicedItems || order.items))
-        : order.items;
+    if (order && !initializationRef.current) {
+      initializationRef.current = true; // Mark as initialized to prevent overwriting manual edits on re-render
       
-      if (sourceItems) {
-        setEditedItems(
-          sourceItems.map((item) => {
-            // Recover name if missing (common in old local history)
-            let name = item.name || item.productName || "";
-            if (!name && item.productId) {
-              const original = (order.items || []).find(so => so.productId?._id?.toString() === item.productId?.toString() || so.productId?.toString() === item.productId?.toString());
-              if (original) name = original.name;
-            }
+      // UNIFIED MERGE LOGIC: SO Items + Invoiced Items
+      const originalItems = order.items || [];
+      const invoicedItems = order.invoiceGenerated 
+        ? (order.invoiceItems?.length ? order.invoiceItems : (order.lastInvoicedItems || []))
+        : [];
+      
+      const mergedMap = new Map();
 
-            return {
-              ...item,
-              _id: item._id?.toString?.() || item._id,
-              name: name, // Ensure name is always set
-              confirmedQty: item.qty || 0,
-              backOrderQty: 0,
-              originalQty: item.qty || 0, // In recall mode, the "reference" quantity is what you last billed
-            };
-          })
-        );
-      }
+      // Step A: Load original SO items as the base (these are the "Back Orders")
+      originalItems.forEach(item => {
+        const pId = (item.productId?._id || item.productId)?.toString();
+        if (!pId) return;
+        
+        mergedMap.set(pId, {
+          ...item,
+          productId: pId,
+          name: item.name || item.productName || "",
+          confirmedQty: 0, 
+          qty: 0,
+          originalQty: item.qty || 0,
+          backOrderQty: item.qty || 0,
+          total: 0,
+          sellingPrice: item.sellingPrice || item.rate || 0,
+          hsn: item.hsn || item.hsnCode || ""
+        });
+      });
+
+      // Step B: Overlay already invoiced items (if any exist they take precedence for the "current" billed state)
+      invoicedItems.forEach(item => {
+        const pId = (item.productId?._id || item.productId)?.toString();
+        if (!pId) return;
+
+        const existing = mergedMap.get(pId);
+        
+        // Recover name if missing
+        let name = item.name || item.productName || existing?.name || "";
+        if (!name) {
+          const found = originalItems.find(oi => (oi.productId?._id || oi.productId)?.toString() === pId);
+          if (found) name = found.name;
+        }
+
+        mergedMap.set(pId, {
+          ...(existing || {}),
+          ...item,
+          productId: pId,
+          name: name,
+          confirmedQty: item.confirmedQty || item.qty || 0,
+          qty: item.qty || item.confirmedQty || 0,
+          originalQty: item.originalQty || existing?.originalQty || item.qty || item.originalQty || 0,
+          backOrderQty: item.backOrderQty !== undefined ? item.backOrderQty : undefined,
+          sellingPrice: item.sellingPrice || existing?.sellingPrice || 0,
+          hsn: item.hsn || existing?.hsn || ""
+        });
+      });
+
+      // Step C: Finalize the list for state (Array.from(mergedMap.values()))
+      const finalItems = Array.from(mergedMap.values()).map(item => {
+        const confirmed = item.confirmedQty || 0;
+        const original = item.originalQty || 0;
+        // Use saved backOrderQty if available, otherwise calculate it
+        const backOrder = item.backOrderQty !== undefined ? item.backOrderQty : Math.max(0, original - confirmed);
+        
+        return {
+          ...item,
+          originalQty: original,
+          confirmedQty: confirmed,
+          backOrderQty: backOrder,
+          total: Math.round((item.sellingPrice || 0) * confirmed * 100) / 100
+        };
+      });
+
+      setEditedItems(finalItems);
       setNotes(order.notes || "");
       setCommonDiscount(order.commonDiscount || 0);
       setSelectedCustomer(order.customer);
@@ -187,9 +235,17 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       return;
     }
 
+    let productName = newItem.name;
+    // Safety check: if name is missing (async race condition), try to find it in search results or current text
+    if (!productName && newItem.productId) {
+      const found = fetchedProducts.find(p => p._id === newItem.productId);
+      if (found) productName = found.name;
+      else productName = itemSearch; // Last resort
+    }
+
     const itemToAdd = {
       productId: newItem.productId,
-      name: newItem.name,
+      name: productName,
       hsn: newItem.hsn,
       sellingPrice: newItem.sellingPrice,
       unit: newItem.unit,
@@ -229,8 +285,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   // Handle quantity changes
   const handleQtyChange = (index, confirmedQty) => {
     const updated = [...editedItems];
-    const original = updated[index].originalQty || updated[index].qty || 0;
     const confirmed = Math.max(0, confirmedQty);
+    const original = updated[index].originalQty || 0;
+    
     updated[index].confirmedQty = confirmed;
     updated[index].qty = confirmed;
     updated[index].backOrderQty = Math.max(0, original - confirmed);

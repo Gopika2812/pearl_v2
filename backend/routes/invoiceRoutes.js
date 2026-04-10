@@ -400,15 +400,24 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         const processedItems = items.map((item) => {
           const originalItem = salesOrder.items.find(so => so._id.toString() === item._id);
           const confirmedQty = Number(item.confirmedQty || item.qty || 0);
+          const originalQty = Number(item.originalQty || (originalItem ? originalItem.qty : confirmedQty));
+          const backOrderQty = Number(item.backOrderQty || Math.max(0, originalQty - confirmedQty));
           const sellingPrice = Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0));
           const gstPercent = Number(item.gst || (originalItem ? originalItem.gst : 0));
           
+          const coreFields = {
+            originalQty,
+            confirmedQty,
+            backOrderQty,
+            name: item.name || (originalItem ? originalItem.name : "Unknown Product"),
+            hsn: item.hsn || (originalItem ? originalItem.hsn : "")
+          };
+
           if (originalItem) {
             const qtyRatio = confirmedQty / originalItem.qty;
             return {
               ...originalItem.toObject(),
-              name: originalItem.name, // Explicitly keep name
-              hsn: originalItem.hsn, // Explicitly keep hsn
+              ...coreFields,
               qty: confirmedQty,
               altQty: originalItem.altQty ? Math.round(originalItem.altQty * qtyRatio) : 0,
               total: Math.round(originalItem.total * qtyRatio * 100) / 100,
@@ -417,9 +426,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
             const itemGrossAmount = Math.round(sellingPrice * confirmedQty * 100) / 100;
             const itemTotalWithTax = item.total || Math.round(itemGrossAmount * (1 + gstPercent / 100) * 100) / 100;
             return { 
-              ...item, 
-              name: item.name, // Explicitly keep name
-              hsn: item.hsn, // Explicitly keep hsn
+              ...item,
+              ...coreFields,
               qty: confirmedQty, 
               sellingPrice, 
               total: itemTotalWithTax 

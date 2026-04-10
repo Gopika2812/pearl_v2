@@ -63,7 +63,10 @@ const salesOrderSchema = new mongoose.Schema(
         igst: Number,
 
         total: Number,
-        isNegativeStockBilled: { type: Boolean, default: false }
+        isNegativeStockBilled: { type: Boolean, default: false },
+        originalQty: { type: Number, default: 0 },
+        confirmedQty: { type: Number, default: 0 },
+        backOrderQty: { type: Number, default: 0 }
       },
     ],
 
@@ -117,6 +120,9 @@ const salesOrderSchema = new mongoose.Schema(
         igst: Number,
 
         total: Number,
+        originalQty: { type: Number, default: 0 },
+        confirmedQty: { type: Number, default: 0 },
+        backOrderQty: { type: Number, default: 0 }
       },
     ],
 
@@ -241,6 +247,9 @@ const salesOrderSchema = new mongoose.Schema(
         altUnit: { type: String, default: "" },
         sellingPrice: Number,
         total: Number,
+        originalQty: { type: Number, default: 0 },
+        confirmedQty: { type: Number, default: 0 },
+        backOrderQty: { type: Number, default: 0 }
       },
     ],
     lastInvoicedGrandTotal: Number,
