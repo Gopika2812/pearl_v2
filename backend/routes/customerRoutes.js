@@ -389,16 +389,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // Optional: prevent duplicate WhatsApp if provided
-    if (whatsapp) {
-      const existing = await Customer.findOne({ branchId, whatsapp });
-      if (existing) {
-        return res.status(409).json({
-          success: false,
-          message: "Customer already exists with this WhatsApp number in this branch",
-        });
-      }
-    }
+
 
     const customer = new Customer({
       branchId,
