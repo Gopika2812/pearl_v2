@@ -11,10 +11,10 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
   if (invoice.qrCodeUrl) {
     qrImage = invoice.qrCodeUrl.startsWith('http') ? invoice.qrCodeUrl : `https://my.gstzen.in${invoice.qrCodeUrl}`;
   } else if (invoice.signedQrCodeImgUrl) {
-    // Direct Base64 Image from GSTZen
     qrImage = invoice.signedQrCodeImgUrl.startsWith('data:image') 
       ? invoice.signedQrCodeImgUrl 
       : `data:image/png;base64,${invoice.signedQrCodeImgUrl}`;
+  } else if (invoice.signedQrCode) {
     qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(invoice.signedQrCode)}`;
   }
 
