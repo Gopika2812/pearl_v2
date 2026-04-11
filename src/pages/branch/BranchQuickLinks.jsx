@@ -14,18 +14,18 @@ import InventoryAddVoucherTypeModal from "../../components/inventory/InventoryAd
 import QuickLinksDataManager from "../../components/QuickLinksDataManager";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
-import { 
-  FaBox, FaBuilding, FaChevronRight, FaFileAlt, FaHandshake, 
+import {
+  FaBox, FaBuilding, FaChevronRight, FaFileAlt, FaHandshake,
   FaLink, FaPlus, FaShoppingCart, FaTruck, FaUsers, FaWarehouse, FaTags, FaStore, FaUserLock,
   FaUserTie, FaUserTag, FaLayerGroup, FaMapMarkerAlt, FaFileInvoice, FaShieldAlt
 } from "react-icons/fa";
 import { QUICK_LINKS_CONFIG, QUICK_LINKS_CATEGORIES } from "../../utils/quickLinksConfig";
 
 export default function BranchQuickLinks() {
-  const { 
-    productGroups, productCategories, customerCategories, 
+  const {
+    productGroups, productCategories, customerCategories,
     customerGroups, warehouses, updateData, addData,
-    addLocalVoucher, addLocalWarehouse, salesOwners 
+    addLocalVoucher, addLocalWarehouse, salesOwners
   } = useInventory();
   const { currentBranch, user } = useBranch();
   const [activeModal, setActiveModal] = useState(null);
@@ -84,43 +84,43 @@ export default function BranchQuickLinks() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20 px-4 md:px-8 pb-10">
+    <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20 px-3 md:px-6 pb-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-white/70 backdrop-blur-md rounded-[2rem] shadow-sm border border-white/50 p-6 mb-10 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-6">
-            <div className="bg-gradient-to-tr from-primary to-blue-600 p-4 rounded-2xl shadow-lg shadow-primary/20">
-              <FaLink className="text-2xl text-white" />
+        <div className="bg-white/70 backdrop-blur-md rounded-2xl shadow-sm border border-white/50 p-4 mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-gradient-to-tr from-primary to-blue-600 p-3 rounded-xl shadow-lg shadow-primary/20">
+              <FaLink className="text-lg text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-black text-gray-900 tracking-tight">Master Data Hub</h1>
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-[0.3em] mt-1 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              <h1 className="text-2xl font-black text-gray-900 tracking-tight">Master Data Hub</h1>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.3em] mt-0.5 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
                 System Configuration Center
               </p>
             </div>
           </div>
           {viewingData ? (
-             <button
+            <button
               onClick={() => setViewingData(null)}
               className="bg-gray-900 hover:bg-gray-800 text-white px-8 py-3 rounded-2xl font-black uppercase tracking-widest transition-all flex items-center gap-2 text-xs shadow-xl shadow-gray-200"
             >
               <FaChevronRight className="rotate-180" /> Back to Overview
             </button>
           ) : (
-             <div className="flex items-center gap-3 bg-gray-50/50 p-2 rounded-2xl border border-gray-100">
-               <div className="px-4 py-2 bg-white rounded-xl shadow-sm border border-gray-100 flex items-center gap-2">
-                 <FaShieldAlt className="text-primary text-xs" />
-                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Admin Access Only</span>
-               </div>
-             </div>
+            <div className="flex items-center gap-3 bg-gray-50/50 p-2 rounded-2xl border border-gray-100">
+              <div className="px-4 py-2 bg-white rounded-xl shadow-sm border border-gray-100 flex items-center gap-2">
+                <FaShieldAlt className="text-primary text-xs" />
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Admin Access Only</span>
+              </div>
+            </div>
           )}
         </div>
 
         {/* Main Content */}
         {viewingData ? (
           <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <QuickLinksDataManager 
+            <QuickLinksDataManager
               type={viewingData}
               onCancel={() => setViewingData(null)}
               onEdit={(item) => {
@@ -130,54 +130,54 @@ export default function BranchQuickLinks() {
             />
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {filteredCategories.map((cat, idx) => (
-              <div 
-                key={idx} 
-                className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl hover:shadow-primary/5 transition-all duration-300 group/card"
+              <div
+                key={idx}
+                className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 group/card"
               >
-                <div className={`bg-gradient-to-br ${cat.color} p-8 text-white flex items-center justify-between relative overflow-hidden`}>
-                  <div className="relative z-10 flex items-center gap-5">
-                    <div className="bg-white/20 backdrop-blur-md p-4 rounded-2xl shadow-inner group-hover/card:scale-110 transition-transform duration-500">
-                      <span className="text-3xl">{cat.icon}</span>
+                <div className={`bg-gradient-to-br ${cat.color} px-5 py-4 text-white flex items-center justify-between relative overflow-hidden`}>
+                  <div className="relative z-10 flex items-center gap-3">
+                    <div className="bg-white/20 backdrop-blur-md p-2.5 rounded-xl shadow-inner group-hover/card:scale-110 transition-transform duration-500">
+                      <span className="text-xl">{cat.icon}</span>
                     </div>
                     <div>
-                      <h2 className="text-2xl font-black tracking-tight">{cat.title}</h2>
-                      <p className="text-white/70 text-[10px] font-bold uppercase tracking-[0.2em] mt-1">{cat.items.length} Master Modules</p>
+                      <h2 className="text-base font-black tracking-tight text-white">{cat.title}</h2>
+                      <p className="text-white/70 text-[10px] font-bold uppercase tracking-[0.2em] mt-0.5">{cat.items.length} Master Modules</p>
                     </div>
                   </div>
-                  <div className="absolute -right-4 -bottom-4 text-white/10 text-8xl font-black rotate-12 pointer-events-none select-none">
+                  <div className="absolute -right-3 -bottom-3 text-white/10 text-6xl font-black rotate-12 pointer-events-none select-none">
                     {cat.icon}
                   </div>
                 </div>
-                
-                <div className="p-4">
-                  <div className="grid grid-cols-1 gap-2">
+
+                <div className="p-3">
+                  <div className="grid grid-cols-1 gap-1">
                     {cat.items.map((item) => (
-                      <div 
-                        key={item.id} 
-                        className="p-4 rounded-2xl hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-all flex items-center justify-between group/item"
+                      <div
+                        key={item.id}
+                        className="px-3 py-3 rounded-xl hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-all flex items-center justify-between group/item"
                       >
-                        <div className="flex items-center gap-4 flex-1 min-w-0">
-                          <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 group-hover/item:bg-primary/10 group-hover/item:text-primary transition-all shadow-sm">
-                            <span className="text-lg">{item.icon}</span>
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 group-hover/item:bg-primary/10 group-hover/item:text-primary transition-all shadow-sm">
+                            <span className="text-base">{item.icon}</span>
                           </div>
-                          <div className="flex-1 min-w-0 mr-4">
+                          <div className="flex-1 min-w-0 mr-3">
                             <h3 className="font-bold text-gray-800 text-sm group-hover/item:text-primary transition-colors">{item.label}</h3>
                             <p className="text-[10px] text-gray-400 truncate mt-0.5 font-medium">{QUICK_LINKS_CONFIG[item.id]?.desc || "Technical configuration"}</p>
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => setActiveModal(item.id)}
-                            className="bg-white border border-gray-200 hover:border-primary hover:text-primary text-gray-600 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-sm"
+                            className="bg-white border border-gray-200 hover:border-primary hover:text-primary text-gray-600 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
                           >
-                            <FaPlus size={8} /> Add
+                            <FaPlus size={7} /> Add
                           </button>
                           <button
                             onClick={() => setViewingData(item.id)}
-                            className="bg-primary hover:bg-primary/90 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-primary/20"
+                            className="bg-primary hover:bg-primary/90 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all active:scale-95 shadow-lg shadow-primary/20"
                           >
                             Manage
                           </button>
