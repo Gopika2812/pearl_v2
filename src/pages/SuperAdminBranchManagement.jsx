@@ -48,6 +48,8 @@ export default function SuperAdminBranchManagement() {
     stateCode: "33",
     pincode: "",
     gpayNo: "",
+    gstzenClientId: "",
+    gstzenClientSecret: "",
   });
 
 
@@ -214,6 +216,8 @@ export default function SuperAdminBranchManagement() {
       isMainBranch: false,
       gstin: "",
       gpayNo: "",
+      gstzenClientId: "",
+      gstzenClientSecret: "",
     });
 
     setEditingBranch(null);
@@ -233,6 +237,8 @@ export default function SuperAdminBranchManagement() {
       isMainBranch: branch.isMainBranch || false,
       gstin: branch.gstin || "",
       gpayNo: branch.gpayNo || "",
+      gstzenClientId: branch.gstzenClientId || "",
+      gstzenClientSecret: branch.gstzenClientSecret || "",
     });
 
     setShowBranchModal(true);
@@ -428,8 +434,15 @@ export default function SuperAdminBranchManagement() {
                       <p className="text-gray-900 font-mono">{selectedBranch.gstin || "—"}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600 font-semibold">GPay Number</p>
                       <p className="text-gray-900 font-mono">{selectedBranch.gpayNo || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 font-semibold">GSTZen Client ID</p>
+                      <p className="text-gray-900 font-mono">{selectedBranch.gstzenClientId || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 font-semibold">GSTZen Client Secret</p>
+                      <p className="text-gray-900 font-mono">{selectedBranch.gstzenClientSecret ? "••••••••" : "—"}</p>
                     </div>
 
                     <div className="md:col-span-2">
@@ -743,6 +756,41 @@ export default function SuperAdminBranchManagement() {
                     onChange={(e) => setBranchForm({ ...branchForm, gpayNo: e.target.value })}
                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
                   />
+                </div>
+
+                <div className="md:col-span-2 border-t pt-4 bg-blue-50/30 p-4 rounded-xl">
+                  <h3 className="text-blue-900 font-bold mb-3 flex items-center gap-2">
+                    🛡️ GSTZen API Credentials (PER BRANCH)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-blue-400 mb-1 tracking-widest">
+                        GSP Client ID
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Required for Multi-GSTIN accounts"
+                        value={branchForm.gstzenClientId}
+                        onChange={(e) => setBranchForm({ ...branchForm, gstzenClientId: e.target.value })}
+                        className="w-full px-4 py-2 border border-blue-100 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-blue-400 mb-1 tracking-widest">
+                        GSP Client Secret
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="NIC Dashboard Password/ID"
+                        value={branchForm.gstzenClientSecret}
+                        onChange={(e) => setBranchForm({ ...branchForm, gstzenClientSecret: e.target.value })}
+                        className="w-full px-4 py-2 border border-blue-100 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-blue-400 mt-2 italic font-medium">
+                    * Found in your GSTZen Dashboard under "API Integration &gt; GSP Credentials" for this GSTIN.
+                  </p>
                 </div>
 
                 {editingBranch && (

@@ -277,7 +277,15 @@ class GSTZenService {
       // if (!endpoint) throw new Error("GSTZEN_EINVOICE_ENDPOINT missing in .env");
 
       console.log(`📡 Sending [${isB2C ? "B2C E-Way Bill" : "B2B E-Invoice"}] to: ${this.baseUrl}/${endpoint}`);
-      const response = await this.apiClient.post(endpoint, payload);
+      
+      // 🛠️ DYNAMIC HEADERS (Per Branch GSP Credentials)
+      const headers = {};
+      if (invoiceData.branchId?.gstzenClientId) {
+        headers["Client-Id"] = invoiceData.branchId.gstzenClientId;
+        headers["Client-Secret"] = invoiceData.branchId.gstzenClientSecret;
+      }
+
+      const response = await this.apiClient.post(endpoint, payload, { headers });
       const result = response.data;
       console.log("📝 GSTZen SUCCESS Response Keys:", Object.keys(result));
 
@@ -351,7 +359,14 @@ class GSTZenService {
       console.log(`📡 Sending [Transport Update] to: ${fullUrl}`);
       console.log(`📦 EWB REQUEST: Veh=[${cleanVehNo}], Distance=[${distance}]`);
 
-      const response = await this.apiClient.post(endpoint, payload);
+      // 🛠️ DYNAMIC HEADERS (Per Branch GSP Credentials)
+      const headers = {};
+      if (invoiceData.branchId?.gstzenClientId) {
+        headers["Client-Id"] = invoiceData.branchId.gstzenClientId;
+        headers["Client-Secret"] = invoiceData.branchId.gstzenClientSecret;
+      }
+
+      const response = await this.apiClient.post(endpoint, payload, { headers });
       const result = response.data;
       console.log("📝 GSTZen [Transport Update] Response:", JSON.stringify(result, null, 2));
 

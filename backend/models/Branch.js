@@ -83,6 +83,16 @@ const branchSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    gstzenClientId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    gstzenClientSecret: {
+      type: String,
+      default: "",
+      trim: true,
+    },
 
   },
   { timestamps: true }

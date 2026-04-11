@@ -23,7 +23,7 @@ const PurchaseItemSchema = new mongoose.Schema({
   gst: Number,
   cgst: Number,
   sgst: Number,
-  igst: Boolean,
+  igst: Number,
   unit: { type: String, default: "" },
   altQty: { type: Number, default: 0 },
   altUnit: { type: String, default: "" },
