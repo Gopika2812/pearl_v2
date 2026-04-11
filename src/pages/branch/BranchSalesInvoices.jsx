@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaEdit, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash } from "react-icons/fa";
+import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import EInvoicePrintModal from "../../components/branch/EInvoicePrintModal";
@@ -16,9 +16,15 @@ const BranchSalesInvoices = () => {
   const [showEInvoiceModal, setShowEInvoiceModal] = useState(null);
   const [showCancelModal, setShowCancelModal] = useState(null); // Invoice to be cancelled
   const [cancelReason, setCancelReason] = useState("");
-  const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split("T")[0]);
+  const [filterFromDate, setFilterFromDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split("T")[0];
+  });
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split("T")[0]);
   const [fetchingDetails, setFetchingDetails] = useState({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, pages: 1 });
   const [voucherTypes, setVoucherTypes] = useState([]);
   const [filterVoucherPrefix, setFilterVoucherPrefix] = useState("");
   const [filterEinvoiceStatus, setFilterEinvoiceStatus] = useState("");
@@ -50,7 +56,7 @@ const BranchSalesInvoices = () => {
     setLoading(true);
     try {
       // Build query string
-      let url = `${API_BASE}/invoices?branchId=${currentBranch._id}`;
+      let url = `${API_BASE}/invoices?branchId=${currentBranch._id}&page=${currentPage}`;
       
       if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
       if (filterFromDate) url += `&fromDate=${filterFromDate}`;
@@ -61,7 +67,10 @@ const BranchSalesInvoices = () => {
       const res = await fetchWithAuth(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch invoices");
-      setInvoices(data.data || data || []);
+      setInvoices(data.data || []);
+      if (data.pagination) {
+        setPagination(data.pagination);
+      }
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -71,7 +80,7 @@ const BranchSalesInvoices = () => {
 
   useEffect(() => {
     fetchInvoices();
-  }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate, filterVoucherPrefix, filterEinvoiceStatus]);
+  }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate, filterVoucherPrefix, filterEinvoiceStatus, currentPage]);
 
   const fetchVoucherTypes = async () => {
     if (!currentBranch?._id) return;
@@ -109,9 +118,13 @@ const BranchSalesInvoices = () => {
             try {
                 const res = await fetchWithAuth(`${API_BASE}/invoices/${invoiceId}`);
                 const data = await res.json();
-                if (data.success) {
+                
+                // Allow both wrapped {success, data} and direct object response
+                const invoiceData = data.success ? data.data : data;
+                
+                if (invoiceData && invoiceData.items) {
                     // Update the local invoices array with the full data
-                    setInvoices(prev => prev.map(i => i._id === invoiceId ? data.data : i));
+                    setInvoices(prev => prev.map(i => i._id === invoiceId ? invoiceData : i));
                 }
             } catch (err) {
                 console.error("Failed to fetch invoice details:", err);
@@ -123,35 +136,6 @@ const BranchSalesInvoices = () => {
     }
   };
 
-  const handleRequestEdit = async (invoice) => {
-    if (!window.confirm(`Request Re-Edit for Invoice ${invoice.invoiceNumber}? This will notify admin for approval.`)) {
-      return;
-    }
-
-    setRequestingAction(invoice._id);
-    try {
-      // Point to parent SO for re-edit request
-      const soId = invoice.salesOrderId?._id || invoice.salesOrderId;
-      const res = await fetchWithAuth(`${API_BASE}/sales-orders/${soId}/request-re-edit`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          username: user?.username || user?.fullName || "Staff",
-          userId: user?.id || user?._id
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success("Re-Edit request submitted to Admin");
-        fetchInvoices();
-      } else {
-        toast.error(data.message || "Failed to submit request");
-      }
-    } catch (err) {
-      toast.error("Error submitting request");
-    } finally {
-      setRequestingAction(null);
-    }
-  };
 
   const handleRequestCancel = async (invoice) => {
     if (!window.confirm(`Request CANCELLATION for Invoice ${invoice.invoiceNumber}? This requires admin approval.`)) {
@@ -284,160 +268,6 @@ const BranchSalesInvoices = () => {
 
   const [showTransportModal, setShowTransportModal] = useState(null);
 
-  // 🚚 TRANSPORT DETAILS MODAL COMPONENT
-  const TransportDetailsModal = ({ invoice, onClose, onConfirm }) => {
-    const isEwbOnly = invoice.isEwbOnly;
-    const [details, setDetails] = useState({
-      vehicleNo: invoice.vehicleNo || "",
-      transportMode: invoice.transportMode || "1",
-      transportDistance: invoice.transportDistance || 50, // Default to 50 for safety
-      vehicleType: invoice.vehicleType || "REGULAR",
-      transporterId: invoice.transporterId || "",
-      transporterName: invoice.transporterName || ""
-    });
-
-    return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-          <div className={`p-6 text-white text-center ${isEwbOnly ? "bg-blue-600" : "bg-[#319bab]"}`}>
-            <h3 className="text-xl font-black uppercase tracking-tight flex items-center justify-center gap-2">
-              <FaFileContract /> {isEwbOnly ? "Generate E-Way Bill" : "Transport Details Required"}
-            </h3>
-            <p className="text-xs opacity-90 mt-1 font-bold">
-              {isEwbOnly ? "IRN is already generated. Now creating the E-Way Bill." : "Mandatory for E-Way Bill (Invoice > ₹10,000)"}
-            </p>
-          </div>
-
-          <div className="p-8 space-y-5">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Transport Mode</label>
-                <select
-                  value={details.transportMode}
-                  onChange={(e) => setDetails({ ...details, transportMode: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
-                >
-                  <option value="1">Road</option>
-                  <option value="2">Rail</option>
-                  <option value="3">Air</option>
-                  <option value="4">Ship</option>
-                </select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Vehicle Number</label>
-                <input
-                  type="text"
-                  placeholder="TN01AB1234"
-                  value={details.vehicleNo}
-                  onChange={(e) => setDetails({ ...details, vehicleNo: e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase() })}
-                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Distance (approx KM)</label>
-                <input
-                  type="number"
-                  placeholder="50"
-                  value={details.transportDistance}
-                  onChange={(e) => setDetails({ ...details, transportDistance: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Vehicle Type</label>
-                <select
-                  value={details.vehicleType}
-                  onChange={(e) => setDetails({ ...details, vehicleType: e.target.value })}
-                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
-                >
-                  <option value="REGULAR">Regular</option>
-                  <option value="OVERSIZED">Oversized</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Transporter GSTIN (Optional)</label>
-              <input
-                type="text"
-                placeholder="33XXXXX..."
-                value={details.transporterId}
-                onChange={(e) => setDetails({ ...details, transporterId: e.target.value.toUpperCase() })}
-                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
-              />
-            </div>
-
-            <div className="flex items-center gap-3 pt-6 border-t border-gray-50">
-              <button
-                onClick={onClose}
-                className="flex-1 px-6 py-4 rounded-2xl font-black text-xs text-gray-400 hover:bg-gray-50 transition"
-              >
-                CANCEL
-              </button>
-              <button
-                onClick={() => {
-                  if (!details.vehicleNo) return toast.warning("Vehicle Number is required");
-                  onConfirm(details);
-                }}
-                className={`flex-1 text-white px-6 py-4 rounded-2xl font-black text-xs shadow-xl transition ${isEwbOnly ? "bg-blue-600 shadow-blue-100 hover:bg-blue-700" : "bg-[#319bab] shadow-blue-100 hover:bg-blue-700"}`}
-              >
-                {isEwbOnly ? "GENERATE E-WAY BILL" : "GENERATE NOW"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // 🔴 CANCEL INVOICE MODAL
-  const CancelInvoiceModal = ({ invoice, onClose, onConfirm }) => {
-    return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-          <div className="p-6 bg-red-600 text-white text-center">
-            <h3 className="text-xl font-black uppercase tracking-tight flex items-center justify-center gap-2">
-              <FaTrash /> Cancel Invoice
-            </h3>
-            <p className="text-xs opacity-90 mt-1 font-bold">
-              This will revert stock and customer balance.
-            </p>
-          </div>
-
-          <div className="p-8 space-y-5">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Cancel Narration (Mandatory)</label>
-              <textarea
-                placeholder="Enter reason for cancellation..."
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-red-500 min-h-[100px]"
-              />
-            </div>
-
-            <div className="flex items-center gap-3 pt-6 border-t border-gray-50">
-              <button
-                onClick={onClose}
-                className="flex-1 px-6 py-4 rounded-2xl font-black text-xs text-gray-400 hover:bg-gray-50 transition"
-              >
-                NO, KEEP IT
-              </button>
-              <button
-                onClick={onConfirm}
-                disabled={!cancelReason.trim()}
-                className="flex-1 bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-xs shadow-xl shadow-red-100 hover:bg-red-700 transition disabled:opacity-50"
-              >
-                YES, CANCEL NOW
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
@@ -476,6 +306,8 @@ const BranchSalesInvoices = () => {
           invoice={showCancelModal}
           onClose={() => setShowCancelModal(null)}
           onConfirm={handleDirectCancel}
+          cancelReason={cancelReason}
+          setCancelReason={setCancelReason}
         />
       )}
 
@@ -528,7 +360,10 @@ const BranchSalesInvoices = () => {
                   placeholder="Invoice ID, Customer name..."
                   className="w-full bg-slate-50/50 border border-slate-100 rounded-xl pl-11 pr-4 py-3 text-sm font-bold focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/50 transition-all outline-none"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1); // Reset to page 1 on search
+                  }}
                 />
               </div>
             </div>
@@ -538,7 +373,10 @@ const BranchSalesInvoices = () => {
               <select
                 className="w-full bg-slate-50/50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/50 transition-all outline-none"
                 value={filterVoucherPrefix}
-                onChange={(e) => setFilterVoucherPrefix(e.target.value)}
+                onChange={(e) => {
+                    setFilterVoucherPrefix(e.target.value);
+                    setCurrentPage(1);
+                }}
               >
                 <option value="">ALL SERIES</option>
                 {voucherTypes.map((v) => (
@@ -578,7 +416,10 @@ const BranchSalesInvoices = () => {
                 type="date"
                 className="w-full bg-slate-50/50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-black focus:bg-white focus:border-indigo-500 transition-all outline-none"
                 value={filterToDate}
-                onChange={(e) => setFilterToDate(e.target.value)}
+                onChange={(e) => {
+                    setFilterToDate(e.target.value);
+                    setCurrentPage(1);
+                }}
               />
             </div>
           </div>
@@ -717,10 +558,31 @@ const BranchSalesInvoices = () => {
                             {inv.einvoiceStatus === "GENERATED" && (
                               <div className="flex gap-1">
                                 <button
-                                  onClick={() => setShowEInvoiceModal(inv)}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    let fullInv = inv;
+                                    if (!inv.items || inv.items.length === 0) {
+                                      try {
+                                        setFetchingDetails(prev => ({ ...prev, [inv._id]: true }));
+                                        const res = await fetchWithAuth(`${API_BASE}/invoices/${inv._id}`);
+                                        const data = await res.json();
+                                        fullInv = data.success ? data.data : data;
+                                        // Also update main list so we don't have to fetch again
+                                        setInvoices(prev => prev.map(i => i._id === inv._id ? fullInv : i));
+                                      } catch (err) {
+                                        toast.error("Failed to load full invoice details");
+                                        return;
+                                      } finally {
+                                        setFetchingDetails(prev => ({ ...prev, [inv._id]: false }));
+                                      }
+                                    }
+                                    setShowEInvoiceModal(fullInv);
+                                  }}
                                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white border border-indigo-600 hover:bg-indigo-700 text-[10px] font-black transition-all shadow-sm"
+                                  disabled={fetchingDetails[inv._id]}
                                 >
-                                  <FaFileAlt size={12} /> PDF
+                                  {fetchingDetails[inv._id] ? <FaSync className="animate-spin" size={12} /> : <FaFileAlt size={12} />}
+                                  PDF
                                 </button>
                                 {inv.ewayBillPdfUrl && (
                                   <a
@@ -734,14 +596,6 @@ const BranchSalesInvoices = () => {
                                 )}
                               </div>
                             )}
-                            <button
-                              onClick={() => handleRequestEdit(inv)}
-                              disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-600 hover:text-white disabled:opacity-50"
-                            >
-                              {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaEdit size={12} />}
-                              RE-EDIT
-                            </button>
                             <button
                               onClick={() => {
                                 setCancelReason("");
@@ -800,12 +654,12 @@ const BranchSalesInvoices = () => {
                                         <span className="font-black text-slate-800">₹{(inv.subtotal || 0).toLocaleString()}</span>
                                       </div>
                                       <div className="flex justify-between border-b border-slate-50 pb-2">
-                                        <span className="text-slate-500 font-bold">Billing Person</span>
-                                        <span className="font-black text-slate-800">{inv.billingPerson || "N/A"}</span>
+                                        <span className="text-slate-500 font-bold uppercase tracking-tighter">Generated At</span>
+                                        <span className="font-black text-slate-800">{formatIST(inv.createdAt || inv.invoiceDate)}</span>
                                       </div>
                                       <div className="flex justify-between">
-                                        <span className="text-slate-500 font-bold">Invoice Date</span>
-                                        <span className="font-black text-slate-800">{formatIST(inv.invoiceDate || inv.createdAt)}</span>
+                                        <span className="text-slate-500 font-bold uppercase tracking-tighter">Inventory Date</span>
+                                        <span className="font-black text-slate-800">{new Date(inv.invoiceDate).toLocaleDateString("en-IN")}</span>
                                       </div>
                                     </div>
                                   </div>
@@ -826,6 +680,205 @@ const BranchSalesInvoices = () => {
             </div>
           </div>
         )}
+
+        {/* PAGINATION CONTROLS */}
+        {!loading && pagination.pages > 1 && (
+            <div className="flex items-center justify-center gap-4 py-8">
+                <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-white border border-slate-200 text-slate-600 font-black text-xs hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                >
+                    PREVIOUS
+                </button>
+                <div className="flex items-center gap-1">
+                    {[...Array(pagination.pages)].map((_, i) => {
+                        const pageNum = i + 1;
+                        // Only show first, last, and pages around current
+                        if (pageNum === 1 || pageNum === pagination.pages || (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)) {
+                            return (
+                                <button
+                                    key={pageNum}
+                                    onClick={() => setCurrentPage(pageNum)}
+                                    className={`w-10 h-10 rounded-xl font-black text-xs transition-all ${
+                                        currentPage === pageNum 
+                                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" 
+                                        : "bg-white text-slate-400 border border-slate-100 hover:bg-slate-50"
+                                    }`}
+                                >
+                                    {pageNum}
+                                </button>
+                            );
+                        } else if (pageNum === currentPage - 2 || pageNum === currentPage + 2) {
+                            return <span key={pageNum} className="text-slate-300 px-1">...</span>;
+                        }
+                        return null;
+                    })}
+                </div>
+                <button
+                    onClick={() => setCurrentPage(prev => Math.min(pagination.pages, prev + 1))}
+                    disabled={currentPage === pagination.pages}
+                    className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-white border border-slate-200 text-slate-600 font-black text-xs hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                >
+                    NEXT
+                </button>
+            </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// 🚚 TRANSPORT DETAILS MODAL COMPONENT (Defined outside to prevent re-mounting/input lag)
+const TransportDetailsModal = ({ invoice, onClose, onConfirm }) => {
+  const isEwbOnly = invoice.isEwbOnly;
+  const [details, setDetails] = useState({
+    vehicleNo: invoice.vehicleNo || "",
+    transportMode: invoice.transportMode || "1",
+    transportDistance: invoice.transportDistance || 50, // Default to 50 for safety
+    vehicleType: invoice.vehicleType || "REGULAR",
+    transporterId: invoice.transporterId || "",
+    transporterName: invoice.transporterName || ""
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className={`p-6 text-white text-center ${isEwbOnly ? "bg-blue-600" : "bg-[#319bab]"}`}>
+          <h3 className="text-xl font-black uppercase tracking-tight flex items-center justify-center gap-2">
+            <FaFileContract /> {isEwbOnly ? "Generate E-Way Bill" : "Transport Details Required"}
+          </h3>
+          <p className="text-xs opacity-90 mt-1 font-bold">
+            {isEwbOnly ? "IRN is already generated. Now creating the E-Way Bill." : "Mandatory for E-Way Bill (Invoice > ₹10,000)"}
+          </p>
+        </div>
+
+        <div className="p-8 space-y-5">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Transport Mode</label>
+              <select
+                value={details.transportMode}
+                onChange={(e) => setDetails({ ...details, transportMode: e.target.value })}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
+              >
+                <option value="1">Road</option>
+                <option value="2">Rail</option>
+                <option value="3">Air</option>
+                <option value="4">Ship</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Vehicle Number</label>
+              <input
+                type="text"
+                placeholder="TN01AB1234"
+                value={details.vehicleNo}
+                onChange={(e) => setDetails({ ...details, vehicleNo: e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase() })}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Distance (approx KM)</label>
+              <input
+                type="number"
+                placeholder="50"
+                value={details.transportDistance}
+                onChange={(e) => setDetails({ ...details, transportDistance: e.target.value })}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Vehicle Type</label>
+              <select
+                value={details.vehicleType}
+                onChange={(e) => setDetails({ ...details, vehicleType: e.target.value })}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
+              >
+                <option value="REGULAR">Regular</option>
+                <option value="OVERSIZED">Oversized</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Transporter GSTIN (Optional)</label>
+            <input
+              type="text"
+              placeholder="33XXXXX..."
+              value={details.transporterId}
+              onChange={(e) => setDetails({ ...details, transporterId: e.target.value.toUpperCase() })}
+              className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 pt-6 border-t border-gray-50">
+            <button
+              onClick={onClose}
+              className="flex-1 px-6 py-4 rounded-2xl font-black text-xs text-gray-400 hover:bg-gray-50 transition"
+            >
+              CANCEL
+            </button>
+            <button
+              onClick={() => {
+                if (!details.vehicleNo) return toast.warning("Vehicle Number is required");
+                onConfirm(details);
+              }}
+              className={`flex-1 text-white px-6 py-4 rounded-2xl font-black text-xs shadow-xl transition ${isEwbOnly ? "bg-blue-600 shadow-blue-100 hover:bg-blue-700" : "bg-[#319bab] shadow-blue-100 hover:bg-blue-700"}`}
+            >
+              {isEwbOnly ? "GENERATE E-WAY BILL" : "GENERATE NOW"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 🔴 CANCEL INVOICE MODAL (Defined outside to prevent re-mounting/input lag)
+const CancelInvoiceModal = ({ invoice, onClose, onConfirm, cancelReason, setCancelReason }) => {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="p-6 bg-red-600 text-white text-center">
+          <h3 className="text-xl font-black uppercase tracking-tight flex items-center justify-center gap-2">
+            <FaTrash /> Cancel Invoice
+          </h3>
+          <p className="text-xs opacity-90 mt-1 font-bold">
+            This will revert stock and customer balance.
+          </p>
+        </div>
+
+        <div className="p-8 space-y-5">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Cancel Narration (Mandatory)</label>
+            <textarea
+              placeholder="Enter reason for cancellation..."
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-red-500 min-h-[100px]"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 pt-6 border-t border-gray-50">
+            <button
+              onClick={onClose}
+              className="flex-1 px-6 py-4 rounded-2xl font-black text-xs text-gray-400 hover:bg-gray-50 transition"
+            >
+              NO, KEEP IT
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={!cancelReason.trim()}
+              className="flex-1 bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-xs shadow-xl shadow-red-100 hover:bg-red-700 transition disabled:opacity-50"
+            >
+              YES, CANCEL NOW
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

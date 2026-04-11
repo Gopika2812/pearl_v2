@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import multer from "multer";
 import cloudinary from "../config/cloudinary.js";
 import Branch from "../models/Branch.js";
+import CreditNote from "../models/CreditNote.js";
 import Customer from "../models/Customer.js";
 import DeliveryMan from "../models/DeliveryMan.js";
 import Invoice from "../models/Invoice.js";
@@ -13,10 +14,6 @@ import SalesOwner from "../models/SalesOwner.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
-import Ledger from "../models/Ledger.js";
-import LedgerGroup from "../models/LedgerGroup.js";
-import CreditNote from "../models/CreditNote.js";
-import Receipt from "../models/Receipt.js";
 
 
 const router = express.Router();
@@ -58,13 +55,13 @@ router.get("/prepare/:salesOrderId", async (req, res) => {
 router.post("/preview/:salesOrderId", async (req, res) => {
   try {
     const { salesOrderId } = req.params;
-    const { 
-      items, 
-      notes, 
-      invoiceType = "ORDER_DETAILS", 
+    const {
+      items,
+      notes,
+      invoiceType = "ORDER_DETAILS",
       commonDiscount: customCommonDiscount,
-      finalizedBy, 
-      finalizedByUsername 
+      finalizedBy,
+      finalizedByUsername
     } = req.body;
 
     const salesOrder = await SalesOrder.findById(salesOrderId)
@@ -75,17 +72,13 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       return res.status(404).json({ message: "Sales order not found" });
     }
 
-    // Recalculate totals with edited quantities
-    // ⚠️ NOTE: item.total already INCLUDES tax, we need to extract pre-tax amount
-    
     let grossSubtotal = 0;
-    let totalItemDiscount = 0;
+    let totalTaxAmount = 0;
     let cgstTotal = 0;
     let sgstTotal = 0;
     let igstTotal = 0;
 
     const recalculatedItems = items.map((item) => {
-      // Find original item if it exists (for existing SO items)
       const originalItem = salesOrder.items.find(
         (so) => so._id.toString() === item._id
       );
@@ -97,38 +90,24 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       const sgstPercent = Number(item.sgst || (originalItem ? originalItem.sgst : 0));
       const igstPercent = Number(item.igst || (originalItem ? originalItem.igst : 0));
 
-      let itemTotalWithTax = 0;
-      let itemGrossAmount = 0;
+      // 1. Calculate Taxable Amount (assuming sellingPrice is Exclusive)
+      const taxableAmount = Math.round(sellingPrice * confirmedQty * 100) / 100;
 
-      if (originalItem) {
-        const qtyRatio = confirmedQty / originalItem.qty;
-        itemTotalWithTax = Math.round(originalItem.total * qtyRatio * 100) / 100;
-        itemGrossAmount = Math.round(sellingPrice * confirmedQty * 100) / 100;
-      } else {
-        // NEW ITEM from workbench
-        itemGrossAmount = Math.round(sellingPrice * confirmedQty * 100) / 100;
-        itemTotalWithTax = item.total || Math.round(itemGrossAmount * (1 + gstPercent / 100) * 100) / 100;
-      }
-
-      // Values for Global Totals
-      grossSubtotal += itemGrossAmount;
-
-      // Extract pre-tax amount (Taxable Value)
-      const gstFactor = 1 + (gstPercent / 100);
-      const taxableAmount = Math.round((itemTotalWithTax / gstFactor) * 100) / 100;
-
-      // Calculate item discount relative to gross
-      const itemDiscount = Math.round((itemGrossAmount - taxableAmount) * 100) / 100;
-      totalItemDiscount += itemDiscount;
-
-      // Calculate tax components from taxableAmount
+      // 2. Calculate GST components
       const cgstAmount = Math.round((taxableAmount * cgstPercent / 100) * 100) / 100;
       const sgstAmount = Math.round((taxableAmount * sgstPercent / 100) * 100) / 100;
       const igstAmount = Math.round((taxableAmount * igstPercent / 100) * 100) / 100;
+      const totalGST = cgstAmount + sgstAmount + igstAmount;
 
+      // 3. Item total (Inclusive)
+      const itemTotalWithTax = taxableAmount + totalGST;
+
+      // Update global totals
+      grossSubtotal += taxableAmount;
       cgstTotal += cgstAmount;
       sgstTotal += sgstAmount;
       igstTotal += igstAmount;
+      totalTaxAmount += totalGST;
 
       return {
         ...(originalItem ? originalItem.toObject() : item),
@@ -139,6 +118,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         cgst: cgstPercent,
         sgst: sgstPercent,
         igst: igstPercent,
+        hsn: item.hsn || (originalItem ? originalItem.hsn : "")
       };
     });
 
@@ -154,8 +134,8 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     const tGstPercent = salesOrder.transportGstPercent || 0;
     const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
 
-    const commonDiscount = customCommonDiscount !== undefined 
-      ? Number(customCommonDiscount) 
+    const commonDiscount = customCommonDiscount !== undefined
+      ? Number(customCommonDiscount)
       : (salesOrder.commonDiscount || 0);
 
     const totalTax = {
@@ -163,10 +143,10 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       sgst: Math.round((sgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
       igst: Math.round((igstTotal + (igstTotal > 0 ? tGstAmount : 0)) * 100) / 100,
     };
-    totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
-    
+    totalTax.total = Math.round((totalTax.cgst + totalTax.sgst + totalTax.igst) * 100) / 100;
+
     // Calculate precise total before rounding
-    const preciseGrandTotal = grossSubtotal - totalItemDiscount + totalTax.total + (salesOrder.extraExpenseAmount || 0) + (salesOrder.transportCharge || 0) - commonDiscount;
+    const preciseGrandTotal = grossSubtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) + (salesOrder.transportCharge || 0) - commonDiscount;
     const grandTotal = Math.round(preciseGrandTotal);
     const roundingOff = Math.round((grandTotal - preciseGrandTotal) * 100) / 100;
 
@@ -215,13 +195,13 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     if (customerToUse) {
       // 1. Get Live Balance of the target customer
       const currentBalance = (customerToUse.debit || 0) - (customerToUse.credit || 0);
-      
+
       // 2. Already applied amount for THIS order (if re-editing)
       const balanceAdjustment = salesOrder.invoiceGenerated ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
 
       // Opening Balance = Balance BEFORE this specific bill was added
       dynamicOpeningBalance = currentBalance - balanceAdjustment;
-      
+
       // Closing Balance = Balance AFTER applying the new grandTotal
       closingBalance = dynamicOpeningBalance + grandTotal;
     } else {
@@ -235,7 +215,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     };
 
     const previewData = {
-      invoiceNumber: salesOrder.invoiceId, 
+      invoiceNumber: salesOrder.invoiceId,
       salesOrderId,
       billingPerson: billingPersonName,
       deliveryMan: deliveryManName,
@@ -265,7 +245,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       backOrderItems,
       sampleItems: salesOrder.sampleItems || [],
       subtotal: grossSubtotal,
-      totalDiscount: totalItemDiscount,
+      totalDiscount: 0,
       totalTax,
       transportCharge: tCharge,
       transportGstPercent: tGstPercent,
@@ -295,13 +275,13 @@ router.post("/preview/:salesOrderId", async (req, res) => {
 router.post("/finalize/:salesOrderId", async (req, res) => {
   try {
     const { salesOrderId } = req.params;
-    const { 
-      items, 
-      notes, 
-      invoiceType = "ORDER_DETAILS", 
+    const {
+      items,
+      notes,
+      invoiceType = "ORDER_DETAILS",
       commonDiscount: customCommonDiscount,
-      finalizedBy, 
-      finalizedByUsername 
+      finalizedBy,
+      finalizedByUsername
     } = req.body;
 
     let retries = 3;
@@ -322,12 +302,12 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         }
 
         const branch = await Branch.findById(salesOrder.branchId).session(session);
-        
+
         // 🔄 Use swapped customer if provided in body, else fallback to SO customer
         const bodyCustomerId = req.body.customerId;
         let customerIdToUse = bodyCustomerId || salesOrder.customer?.customerId;
         const customer = await Customer.findById(customerIdToUse).session(session);
-        
+
         if (!customer) {
           await session.abortTransaction();
           session.endSession();
@@ -350,8 +330,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         } else {
           // Generate NEW sequential SI number
           const rawSoId = salesOrder.invoiceId || "";
-          const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, ""); 
-          const soPrefixPrefix = cleanSoId.split('/')[0]; 
+          const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
+          const soPrefixPrefix = cleanSoId.split('/')[0];
           let siPrefix = soPrefixPrefix.endsWith("SO") ? soPrefixPrefix.replace(/SO$/i, "SI") : `${soPrefixPrefix}SI`;
 
           let siVoucher = await VoucherType.findOne({
@@ -404,7 +384,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           const backOrderQty = Number(item.backOrderQty || Math.max(0, originalQty - confirmedQty));
           const sellingPrice = Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0));
           const gstPercent = Number(item.gst || (originalItem ? originalItem.gst : 0));
-          
+
           const coreFields = {
             originalQty,
             confirmedQty,
@@ -425,29 +405,33 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           } else {
             const itemGrossAmount = Math.round(sellingPrice * confirmedQty * 100) / 100;
             const itemTotalWithTax = item.total || Math.round(itemGrossAmount * (1 + gstPercent / 100) * 100) / 100;
-            return { 
+            return {
               ...item,
               ...coreFields,
-              qty: confirmedQty, 
-              sellingPrice, 
-              total: itemTotalWithTax 
+              qty: confirmedQty,
+              sellingPrice,
+              total: itemTotalWithTax
             };
           }
         });
 
         // 🧮 Calculate Totals
         let grossSubtotal = 0;
-        let totalItemDiscount = 0;
         let cgstTotal = 0, sgstTotal = 0, igstTotal = 0;
 
         processedItems.forEach((item) => {
-          const gstFactor = 1 + ((item.gst || 0) / 100);
-          const taxableAmount = Math.round(((item.total || 0) / gstFactor) * 100) / 100;
-          grossSubtotal += Math.round((item.sellingPrice || 0) * (item.qty || 0) * 100) / 100;
-          totalItemDiscount += Math.round(((item.sellingPrice * item.qty) - taxableAmount) * 100) / 100;
-          cgstTotal += Math.round((taxableAmount * (item.cgst || 0) / 100) * 100) / 100;
-          sgstTotal += Math.round((taxableAmount * (item.sgst || 0) / 100) * 100) / 100;
-          igstTotal += Math.round((taxableAmount * (item.igst || 0) / 100) * 100) / 100;
+          const taxableAmount = Math.round((item.sellingPrice || 0) * (item.qty || 0) * 100) / 100;
+          const cgstAmt = Math.round((taxableAmount * (item.cgst || 0) / 100) * 100) / 100;
+          const sgstAmt = Math.round((taxableAmount * (item.sgst || 0) / 100) * 100) / 100;
+          const igstAmt = Math.round((taxableAmount * (item.igst || 0) / 100) * 100) / 100;
+
+          grossSubtotal += taxableAmount;
+          cgstTotal += cgstAmt;
+          sgstTotal += sgstAmt;
+          igstTotal += igstAmt;
+
+          // Ensure item total is synced with fresh counts
+          item.total = Math.round((taxableAmount + cgstAmt + sgstAmt + igstAmt) * 100) / 100;
         });
 
         const tCharge = salesOrder.transportCharge || 0;
@@ -457,10 +441,10 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           sgst: Math.round((sgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
           igst: Math.round((igstTotal + (igstTotal > 0 ? tGstAmount : 0)) * 100) / 100,
         };
-        totalTax.total = totalTax.cgst + totalTax.sgst + totalTax.igst;
+        totalTax.total = Math.round((totalTax.cgst + totalTax.sgst + totalTax.igst) * 100) / 100;
 
         const commonDiscount = customCommonDiscount !== undefined ? Number(customCommonDiscount) : (salesOrder.commonDiscount || 0);
-        const preciseGrandTotal = grossSubtotal - totalItemDiscount + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tCharge - commonDiscount;
+        const preciseGrandTotal = grossSubtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tCharge - commonDiscount;
         const grandTotal = Math.round(preciseGrandTotal);
         const roundingOff = Math.round((grandTotal - preciseGrandTotal) * 100) / 100;
 
@@ -543,8 +527,21 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           gstin: customer.gstin,
         };
 
+        // Fetch Branch details for seller info
+        const branch = await Branch.findById(salesOrder.branchId).session(session);
+        const sellerSnapshot = branch ? {
+          name: branch.name,
+          address: branch.address,
+          state: branch.state,
+          pincode: branch.pincode,
+          gstin: branch.gstin,
+          phone: branch.phone || branch.contactNumber,
+          stateCode: branch.stateCode || "33",
+        } : {};
+
         if (invoice) {
           invoice.customer = customerSnapshot;
+          invoice.seller = sellerSnapshot;
           invoice.items = processedItems;
           invoice.subtotal = grossSubtotal;
           invoice.totalTax = totalTax;
@@ -558,6 +555,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
             salesOrderId: salesOrder._id,
             branchId: salesOrder.branchId,
             warehouse: salesOrder.warehouse,
+            seller: sellerSnapshot,
             customer: customerSnapshot,
             items: processedItems,
             subtotal: grossSubtotal,
@@ -568,14 +566,39 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           await invoice.save({ session });
         }
 
-        // ➕ Sync New Additions back to the original Sales Order
-        const currentItemIds = new Set(salesOrder.items.map(i => i.productId?.toString()));
-        processedItems.forEach(item => {
-          if (item.productId && !currentItemIds.has(item.productId.toString())) {
-            // Add to original SO items if it is brand new
-            salesOrder.items.push(item);
+        // ==========================================
+        // 5️⃣ SYNC MASTER SALES ORDER ITEMS (Handle additions, updates, and DELETIONS)
+        // ==========================================
+        const updatedMasterItems = items.map(item => {
+          const originalItem = salesOrder.items.find(so => (so._id && item._id && so._id.toString() === item._id.toString()));
+          if (originalItem) {
+            // Update existing master item
+            return {
+              ...originalItem.toObject(),
+              sellingPrice: Number(item.sellingPrice),
+              unit: item.unit,
+              qty: Number(item.originalQty || item.qty), // Keep the requirement in sync
+            };
+          } else {
+            // brand new item added via workbench
+            return {
+              productId: item.productId,
+              name: item.name,
+              hsn: item.hsn,
+              sellingPrice: Number(item.sellingPrice),
+              unit: item.unit,
+              qty: Number(item.originalQty || item.qty),
+              gst: Number(item.gst),
+              cgst: Number(item.cgst),
+              sgst: Number(item.sgst),
+              igst: Number(item.igst || 0),
+              total: Number(item.total)
+            };
           }
         });
+        
+        // IMPORTANT: This replaces the list, effectively removing any items the user deleted in the workbench
+        salesOrder.items = updatedMasterItems;
 
         salesOrder.invoiceGenerated = true;
         salesOrder.status = "INVOICED";
@@ -609,33 +632,13 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         }
         throw error;
       }
-  }
-} catch (error) {
-  console.error("❌ Error during invoice finalization:", error);
-  res.status(500).json({ message: error.message || "Failed to finalize invoice" });
-}
-});
-
-// GET - Retrieve invoice data for display/printing
-router.get("/:invoiceId", async (req, res) => {
-  try {
-    const { invoiceId } = req.params;
-
-    const invoice = await Invoice.findById(invoiceId)
-      .populate("salesOrderId")
-      .populate("branchId")
-      .populate("customer.customerId");
-
-    if (!invoice) {
-      return res.status(404).json({ message: "Invoice not found" });
     }
-
-    res.json(invoice);
   } catch (error) {
-    console.error("Error fetching invoice:", error);
-    res.status(500).json({ message: "Failed to fetch invoice" });
+    console.error("❌ Error during invoice finalization:", error);
+    res.status(500).json({ message: error.message || "Failed to finalize invoice" });
   }
 });
+
 
 // PUT - Mark as printed
 router.put("/:invoiceId/print", async (req, res) => {
@@ -749,12 +752,12 @@ router.get("/customer/:customerId", async (req, res) => {
     }
 
     // 🔥 Filter out invoices that already have a Credit Note
-    const existingCNs = await CreditNote.find({ 
+    const existingCNs = await CreditNote.find({
       "customer.customerId": customerId,
       status: "Created",
       originalSalesOrderId: { $ne: null }
     }).select("originalSalesOrderId");
-    
+
     const creditedSalesOrderIds = existingCNs.map(cn => cn.originalSalesOrderId.toString());
 
     const invoices = await Invoice.find({
@@ -839,7 +842,7 @@ router.put("/:invoiceId/cancel", async (req, res) => {
         salesOrder.invoiceGenerated = false;
         salesOrder.salesInvoiceId = null;
         salesOrder.status = "PLACED"; // Reset to placed so it can be invoiced again
-        
+
         // Add cancellation to history
         salesOrder.editHistory.push({
           version: (salesOrder.editHistory.length || 0) + 1,
@@ -851,7 +854,7 @@ router.put("/:invoiceId/cancel", async (req, res) => {
           editedAt: new Date(),
           note: `Invoice ${invoice.invoiceNumber} CANCELLED. Reason: ${reason}`
         });
-        
+
         await salesOrder.save({ session });
       }
     }
@@ -901,20 +904,20 @@ router.get("", async (req, res) => {
     // 5. Date Filtering (Cumulative – applies unless dates are explicitly cleared or searching all-time)
     // In this dashboard, if fromDate/toDate are passed, we stick to them.
     if (fromDate || toDate) {
-        const start = fromDate ? new Date(fromDate) : new Date();
-        if (!fromDate) start.setHours(0, 0, 0, 0);
+      const start = fromDate ? new Date(fromDate) : new Date();
+      if (!fromDate) start.setHours(0, 0, 0, 0);
 
-        const end = toDate ? new Date(toDate) : new Date(start);
-        end.setHours(23, 59, 59, 999);
+      const end = toDate ? new Date(toDate) : new Date(start);
+      end.setHours(23, 59, 59, 999);
 
-        query.invoiceDate = { $gte: start, $lte: end };
+      query.invoiceDate = { $gte: start, $lte: end };
     } else if (!search && !vPrefix && !einvoiceStatus) {
-        // Fallback default: Today only if completely unfiltered list
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const endOfToday = new Date();
-        endOfToday.setHours(23, 59, 59, 999);
-        query.invoiceDate = { $gte: today, $lte: endOfToday };
+      // Fallback default: Today only if completely unfiltered list
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      query.invoiceDate = { $gte: today, $lte: endOfToday };
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -946,12 +949,14 @@ router.get("", async (req, res) => {
   }
 });
 
-// GET - Get single invoice details (with items) for Lazy Loading
+// GET - Get single invoice details (with items) for Lazy Loading & Printing
 router.get("/:id", async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id)
       .populate("customer.customerId")
       .populate("salesOrderId")
+      .populate("branchId")
+      .select("+items") // Explicitly include items if they were globally excluded
       .lean();
 
     if (!invoice) return res.status(404).json({ success: false, message: "Invoice not found" });
@@ -1018,23 +1023,23 @@ router.put("/:invoiceId/cancel", async (req, res) => {
       const customerId = invoice.customer?.customerId || invoice.customer;
       const customer = await Customer.findById(customerId).session(session);
       if (customer && invoice.grandTotal > 0) {
-          const amountToRevert = invoice.grandTotal;
-          let curDebit = customer.debit || 0;
-          let curCredit = customer.credit || 0;
-          
-          if (curDebit >= amountToRevert) {
-            curDebit -= amountToRevert;
-          } else {
-            const excess = amountToRevert - curDebit;
-            curDebit = 0;
-            curCredit += excess;
-          }
-          
-          customer.debit = Math.round(curDebit);
-          customer.credit = Math.round(curCredit);
-          customer.closingBalance = Math.round((customer.closingBalance || 0) - amountToRevert);
-          customer.totalBalance = customer.closingBalance;
-          await customer.save({ session });
+        const amountToRevert = invoice.grandTotal;
+        let curDebit = customer.debit || 0;
+        let curCredit = customer.credit || 0;
+
+        if (curDebit >= amountToRevert) {
+          curDebit -= amountToRevert;
+        } else {
+          const excess = amountToRevert - curDebit;
+          curDebit = 0;
+          curCredit += excess;
+        }
+
+        customer.debit = Math.round(curDebit);
+        customer.credit = Math.round(curCredit);
+        customer.closingBalance = Math.round((customer.closingBalance || 0) - amountToRevert);
+        customer.totalBalance = customer.closingBalance;
+        await customer.save({ session });
       }
 
       // 3. Mark Invoice as Cancelled
@@ -1078,7 +1083,7 @@ router.put("/:invoiceId/cancel", async (req, res) => {
     } catch (error) {
       await session.abortTransaction();
       session.endSession();
-      
+
       if (retries > 1 && (error.code === 112 || error.hasErrorLabel?.('TransientTransactionError'))) {
         console.warn(`⚠️ Write conflict in Cancel (INV: ${invoiceId}). Retrying...`);
         retries--;
@@ -1124,7 +1129,7 @@ router.delete("/:invoiceId", async (req, res) => {
         let amount = invoice.grandTotal;
         let curDebit = customer.debit || 0;
         let curCredit = customer.credit || 0;
-        
+
         if (curDebit >= amount) {
           curDebit -= amount;
         } else {
@@ -1132,7 +1137,7 @@ router.delete("/:invoiceId", async (req, res) => {
           curDebit = 0;
           curCredit += excess;
         }
-        
+
         customer.debit = Math.round(curDebit);
         customer.credit = Math.round(curCredit);
         customer.closingBalance = Math.round((customer.closingBalance || 0) - amount);

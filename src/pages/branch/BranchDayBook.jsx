@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { FaBookOpen, FaCalendarAlt, FaFileAlt, FaFileExcel, FaFilter, FaSearch, FaSync, FaUser } from "react-icons/fa";
+import { FaBookOpen, FaCalendarAlt, FaFileAlt, FaFileExcel, FaFilePdf, FaFilter, FaSearch, FaSync, FaUser, FaCheckCircle } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 const BranchDayBook = () => {
@@ -11,11 +13,25 @@ const BranchDayBook = () => {
 
     // Filters
     const [searchTerm, setSearchTerm] = useState("");
-    const [filterVoucherType, setFilterVoucherType] = useState("");
+    const [selectedVoucherTypes, setSelectedVoucherTypes] = useState([]); // Array for multi-select
+    const [selectedSiSeries, setSelectedSiSeries] = useState("ALL"); // ALL, Z-1, Z-2, CS, LS
     const [filterInvoiceId, setFilterInvoiceId] = useState("");
     const [fromDate, setFromDate] = useState(new Date().toISOString().split("T")[0]);
     const [toDate, setToDate] = useState(new Date().toISOString().split("T")[0]);
     const [selectedIds, setSelectedIds] = useState([]);
+
+    const VOUCHER_OPTIONS = [
+        { label: "SO", value: "SO", color: "bg-blue-50 text-blue-600 border-blue-200" },
+        { label: "PO", value: "PO", color: "bg-orange-50 text-orange-600 border-orange-200" },
+        { label: "SI (Sales)", value: "SI", color: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+        { label: "PI (Purch)", value: "PI", color: "bg-amber-50 text-amber-600 border-amber-200" },
+        { label: "REC", value: "REC", color: "bg-purple-50 text-purple-600 border-purple-200" },
+        { label: "PAYMENT", value: "PAY", color: "bg-rose-50 text-rose-600 border-rose-200" },
+        { label: "Credit Note", value: "CN", color: "bg-cyan-50 text-cyan-600 border-cyan-200" },
+        { label: "Debit Note", value: "DN", color: "bg-red-50 text-red-600 border-red-200" }
+    ];
+
+    const SI_SERIES_OPTIONS = ["ALL", "CS", "LS", "Z-1", "Z-2"];
 
     const fetchDayBook = async () => {
         if (!currentBranch?._id) return;
@@ -47,21 +63,44 @@ const BranchDayBook = () => {
         const matchesSearch = 
             entry.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
             entry.invoiceId.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesVoucher = !filterVoucherType || entry.voucherType.toLowerCase().includes(filterVoucherType.toLowerCase());
+        
+        // Match Voucher Types (Multiple selection)
+        const matchesVoucher = selectedVoucherTypes.length === 0 || selectedVoucherTypes.includes(entry.voucherType);
+        
+        // Match SI Series if SI is selected or if we are filtering globally by prefix
+        let matchesSeries = true;
+        if (selectedSiSeries !== "ALL") {
+            const id = entry.invoiceId || "";
+            // Special case: if filtering for a specific series, and it's SI, it must match.
+            // If it's another type, we might want to hide it or keep it? 
+            // The user said "SI - Z-1 , Z-2, CS, LS" so we apply it strictly when SI is in focus.
+            if (entry.voucherType === "SI") {
+                matchesSeries = id.startsWith(selectedSiSeries);
+            } else {
+                // If filtering by series but the entry isn't an SI, hide it
+                matchesSeries = false;
+            }
+        }
+
         const matchesInvoice = !filterInvoiceId || entry.invoiceId.toLowerCase().includes(filterInvoiceId.toLowerCase());
-        return matchesSearch && matchesVoucher && matchesInvoice;
+        
+        return matchesSearch && matchesVoucher && matchesInvoice && matchesSeries;
     });
 
     const totalDebit = filteredEntries.reduce((sum, e) => sum + (e.debit || 0), 0);
     const totalCredit = filteredEntries.reduce((sum, e) => sum + (e.credit || 0), 0);
 
     const handleExportExcel = () => {
-        if (filteredEntries.length === 0) {
+        const dataToExport = selectedIds.length > 0 
+            ? filteredEntries.filter(e => selectedIds.includes(e._id))
+            : filteredEntries;
+
+        if (dataToExport.length === 0) {
             toast.warn("No transactions to export");
             return;
         }
 
-        const exportData = filteredEntries.map((entry) => ({
+        const exportData = dataToExport.map((entry) => ({
             "Date": new Date(entry.date).toLocaleDateString("en-IN", {
                 day: "2-digit",
                 month: "2-digit",
@@ -79,33 +118,88 @@ const BranchDayBook = () => {
             "Credit (Purchase)": entry.credit || 0
         }));
 
-        // Add a totals row at the bottom
+        // Totals for export
+        const expDebit = dataToExport.reduce((sum, e) => sum + (e.debit || 0), 0);
+        const expCredit = dataToExport.reduce((sum, e) => sum + (e.credit || 0), 0);
+
         exportData.push({
             "Date": "TOTAL",
             "Time": "",
             "Voucher Type": "",
             "Invoice ID": "",
             "Account Name": "",
-            "Debit (Sales)": totalDebit,
-            "Credit (Purchase)": totalCredit
+            "Debit (Sales)": expDebit,
+            "Credit (Purchase)": expCredit
         });
 
         const worksheet = XLSX.utils.json_to_sheet(exportData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Daybook Report");
 
-        // Auto-size columns (rough approximation)
-        const maxLen = exportData.reduce((acc, row) => {
-            Object.keys(row).forEach((key, i) => {
-                const len = row[key] ? row[key].toString().length : 5;
-                if (!acc[i] || len > acc[i]) acc[i] = len;
-            });
-            return acc;
-        }, []);
-        worksheet["!cols"] = maxLen.map(len => ({ wch: len + 5 }));
+        const wscols = [
+            { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 40 }, { wch: 15 }, { wch: 15 }
+        ];
+        worksheet["!cols"] = wscols;
 
         XLSX.writeFile(workbook, `Daybook_${fromDate}_to_${toDate}.xlsx`);
         toast.success("Excel report exported successfully");
+    };
+
+    const handleExportPDF = () => {
+        const dataToExport = selectedIds.length > 0 
+            ? filteredEntries.filter(e => selectedIds.includes(e._id))
+            : filteredEntries;
+
+        if (dataToExport.length === 0) {
+            toast.warn("No transactions to export");
+            return;
+        }
+
+        const doc = new jsPDF();
+        
+        // Header
+        doc.setFontSize(20);
+        doc.text("DAY BOOK REPORT", 105, 15, { align: "center" });
+        doc.setFontSize(10);
+        doc.text(`Branch: ${currentBranch?.name || "Global"}`, 14, 25);
+        doc.text(`Period: ${fromDate} to ${toDate}`, 14, 30);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 35);
+
+        const tableColumn = ["Date", "Voucher", "Invoice ID", "Account Name", "Debit", "Credit"];
+        const tableRows = [];
+
+        dataToExport.forEach(entry => {
+            tableRows.push([
+                new Date(entry.date).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" }),
+                entry.voucherType,
+                entry.invoiceId,
+                entry.name,
+                entry.debit > 0 ? entry.debit.toLocaleString() : "-",
+                entry.credit > 0 ? entry.credit.toLocaleString() : "-"
+            ]);
+        });
+
+        // Totals
+        const expDebit = dataToExport.reduce((sum, e) => sum + (e.debit || 0), 0);
+        const expCredit = dataToExport.reduce((sum, e) => sum + (e.credit || 0), 0);
+        tableRows.push([
+            { content: "GRAND TOTAL", colSpan: 4, styles: { fontStyle: "bold", halign: "right" } },
+            { content: expDebit.toLocaleString(), styles: { fontStyle: "bold" } },
+            { content: expCredit.toLocaleString(), styles: { fontStyle: "bold" } }
+        ]);
+
+        doc.autoTable({
+            startY: 45,
+            head: [tableColumn],
+            body: tableRows,
+            theme: "grid",
+            headStyles: { fillColor: [49, 155, 171], fontSize: 9, fontStyle: "bold" },
+            bodyStyles: { fontSize: 8 },
+            alternateRowStyles: { fillColor: [245, 245, 245] }
+        });
+
+        doc.save(`Daybook_${fromDate}_to_${toDate}.pdf`);
+        toast.success("PDF report exported successfully");
     };
 
     return (
@@ -162,44 +256,105 @@ const BranchDayBook = () => {
                                 title="Export to Excel"
                             >
                                 <FaFileExcel />
-                                <span>EXPORT</span>
+                                <span className="hidden sm:inline">EXCEL</span>
+                            </button>
+                            <button
+                                onClick={handleExportPDF}
+                                className="flex items-center gap-2 px-5 py-3 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition shadow-lg shadow-rose-600/20 text-xs font-bold"
+                                title="Export to PDF"
+                            >
+                                <FaFilePdf />
+                                <span className="hidden sm:inline">PDF</span>
                             </button>
                         </div>
                     </div>
                 </div>
 
                 {/* FILTERS SECTION */}
-                <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="relative">
-                        <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Search Customer/Supplier..."
-                            className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#319bab] outline-none text-sm font-medium transition"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6 space-y-6">
+                    {/* Search & ID Filter */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="relative">
+                            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Search Name or Invoice ID..."
+                                className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-transparent focus:bg-white focus:border-[#319bab]/30 rounded-2xl focus:ring-4 focus:ring-[#319bab]/5 outline-none text-sm font-medium transition-all"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <div className="relative">
+                            <FaFilter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Advanced Invoice ID Filter..."
+                                className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-transparent focus:bg-white focus:border-[#319bab]/30 rounded-2xl focus:ring-4 focus:ring-[#319bab]/5 outline-none text-sm font-medium transition-all"
+                                value={filterInvoiceId}
+                                onChange={(e) => setFilterInvoiceId(e.target.value)}
+                            />
+                        </div>
                     </div>
-                    <div className="relative">
-                        <FaFilter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Filter Voucher Type (SI, PI...)"
-                            className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#319bab] outline-none text-sm font-medium transition"
-                            value={filterVoucherType}
-                            onChange={(e) => setFilterVoucherType(e.target.value)}
-                        />
+
+                    {/* Voucher Type Tags */}
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-black uppercase tracking-[2px] text-gray-400">Transaction Type</label>
+                            <button 
+                                onClick={() => setSelectedVoucherTypes([])}
+                                className="text-[10px] font-black text-[#319bab] hover:underline"
+                            >
+                                RESET ALL
+                            </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {VOUCHER_OPTIONS.map((opt) => {
+                                const isActive = selectedVoucherTypes.includes(opt.value);
+                                return (
+                                    <button
+                                        key={opt.value}
+                                        onClick={() => {
+                                            setSelectedVoucherTypes(prev => 
+                                                prev.includes(opt.value) 
+                                                    ? prev.filter(v => v !== opt.value)
+                                                    : [...prev, opt.value]
+                                            );
+                                        }}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                                            isActive 
+                                                ? `${opt.color} shadow-sm scale-105` 
+                                                : "bg-white text-gray-400 border-gray-100 hover:border-gray-200"
+                                        }`}
+                                    >
+                                        {isActive && <FaCheckCircle className="text-[10px]" />}
+                                        {opt.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
-                    <div className="relative">
-                        <FaFileAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Filter Invoice ID..."
-                            className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#319bab] outline-none text-sm font-medium transition"
-                            value={filterInvoiceId}
-                            onChange={(e) => setFilterInvoiceId(e.target.value)}
-                        />
-                    </div>
+
+                    {/* SI Series Selection (Conditional) */}
+                    {(selectedVoucherTypes.length === 0 || selectedVoucherTypes.includes("SI")) && (
+                        <div className="space-y-3 pt-4 border-t border-gray-50 animate-in fade-in slide-in-from-top-2 duration-300">
+                            <label className="text-[10px] font-black uppercase tracking-[2px] text-gray-400">Sales Invoice Series</label>
+                            <div className="flex flex-wrap gap-2">
+                                {SI_SERIES_OPTIONS.map((series) => (
+                                    <button
+                                        key={series}
+                                        onClick={() => setSelectedSiSeries(series)}
+                                        className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                                            selectedSiSeries === series
+                                                ? "bg-[#319bab] text-white border-[#319bab] shadow-md shadow-[#319bab]/20 scale-105"
+                                                : "bg-white text-gray-400 border-gray-100 hover:border-gray-200"
+                                        }`}
+                                    >
+                                        {series === "ALL" ? "ALL SERIES" : series}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* MAIN TABLE SECTION */}
@@ -351,10 +506,16 @@ const BranchDayBook = () => {
                                 Clear
                             </button>
                             <button 
-                                onClick={handleExportExcel} // Export only selected if possible? Or just standard export
-                                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase rounded-lg transition shadow-lg shadow-blue-600/40"
+                                onClick={handleExportExcel}
+                                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase rounded-lg transition shadow-lg shadow-emerald-600/40"
                             >
-                                Export Selection
+                                Excel
+                            </button>
+                            <button 
+                                onClick={handleExportPDF}
+                                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase rounded-lg transition shadow-lg shadow-rose-600/40"
+                            >
+                                PDF
                             </button>
                         </div>
                     </div>
