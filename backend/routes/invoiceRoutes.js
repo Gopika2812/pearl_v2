@@ -527,8 +527,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           gstin: customer.gstin,
         };
 
-        // Fetch Branch details for seller info
-        const branch = await Branch.findById(salesOrder.branchId).session(session);
+        // Seller details snapshot (uses 'branch' variable fetched earlier)
         const sellerSnapshot = branch ? {
           name: branch.name,
           address: branch.address,
@@ -536,6 +535,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           pincode: branch.pincode,
           gstin: branch.gstin,
           phone: branch.phone || branch.contactNumber,
+          gpayNo: branch.gpayNo || "",
           stateCode: branch.stateCode || "33",
         } : {};
 

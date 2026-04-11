@@ -15,10 +15,19 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
     qrImage = invoice.signedQrCodeImgUrl.startsWith('data:image') 
       ? invoice.signedQrCodeImgUrl 
       : `data:image/png;base64,${invoice.signedQrCodeImgUrl}`;
-  } else if (invoice.signedQrCode) {
-    // Fallback: Generate QR from Signed Tax String
     qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(invoice.signedQrCode)}`;
   }
+
+  // 🏪 ROBUST SELLER DATA (Fallback to BranchId if Seller Snapshot is missing)
+  const seller = {
+    name: invoice.seller?.name || invoice.branchId?.name || "PEARL AGENCY",
+    address: invoice.seller?.address || invoice.branchId?.address || "Address Not Provided",
+    gstin: invoice.seller?.gstin || invoice.branchId?.gstin || "N/A",
+    phone: invoice.seller?.phone || invoice.branchId?.phone || "N/A",
+    gpayNo: invoice.seller?.gpayNo || invoice.branchId?.gpayNo || "",
+    state: invoice.seller?.state || invoice.branchId?.state || "Tamil Nadu",
+    stateCode: invoice.seller?.stateCode || invoice.branchId?.stateCode || "33",
+  };
 
   // Print function
   const handlePrint = () => {
@@ -116,11 +125,11 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
       <div class="page">
         <div class="header">
           <div class="company-info">
-            <h1 class="company-name">${invoice.seller?.name || "PEARL AGENCY"}</h1>
+            <h1 class="company-name">${seller.name}</h1>
             <div class="company-details">
-              ${invoice.seller?.address || "Address Not Provided"} <br/>
-              GSTIN: <strong>${invoice.seller?.gstin || "N/A"}</strong> | Mobile: ${invoice.seller?.phone || "N/A"} <br/>
-              State: ${invoice.seller?.state || "Tamil Nadu"} (Code: ${invoice.seller?.stateCode || "33"})
+              ${seller.address} <br/>
+              GSTIN: <strong>${seller.gstin}</strong> | Mobile: ${seller.phone}${seller.gpayNo ? ` | GPay: ${seller.gpayNo}` : ""} <br/>
+              State: ${seller.state} (Code: ${seller.stateCode})
             </div>
             
             <div style="margin-top: 4mm; display: flex; gap: 8mm;">
@@ -220,14 +229,14 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
               </table>
               
               <div style="margin-top: 10mm; text-align: center;">
-                 <div style="font-size: 10px; font-weight: 800; color: #1e293b; margin-bottom: 12mm;">For ${invoice.seller?.name || "PEARL AGENCY"}</div>
+                 <div style="font-size: 10px; font-weight: 800; color: #1e293b; margin-bottom: 12mm;">For ${seller.name}</div>
                  <div style="border-top: 1px solid #000; display: inline-block; padding-top: 1mm; width: 40mm; font-size: 9px; font-weight: 700;">Authorized Signature</div>
               </div>
            </div>
         </div>
 
         <div class="certification">This is a system generated e-invoice authorized by Govt of India GST Tax Portal. No physical signature is required.</div>
-        <div class="footer">Powered by PEARL ERP | ${invoice.seller?.name} | Generated on ${new Date().toLocaleString()}</div>
+        <div class="footer">Powered by PEARL ERP | ${seller.name} | Generated on ${new Date().toLocaleString()}</div>
       </div>
     `;
 
@@ -260,8 +269,8 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
            <div className="bg-white shadow-xl rounded-lg p-8 w-full max-w-[210mm] border border-gray-100 transform origin-top scale-[0.85]">
               <div className="flex justify-between items-start border-b-2 pb-4 mb-4">
                 <div>
-                  <div className="text-2xl font-black text-gray-800 uppercase tracking-tighter">{invoice.seller?.name || "PEARL AGENCY"}</div>
-                  <div className="text-xs text-gray-500 font-bold mt-1 max-w-xs">{invoice.seller?.address}</div>
+                  <div className="text-2xl font-black text-gray-800 uppercase tracking-tighter">{seller.name}</div>
+                  <div className="text-xs text-gray-500 font-bold mt-1 max-w-xs">{seller.address}</div>
                 </div>
                 
                 <div className="w-24 h-24 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
