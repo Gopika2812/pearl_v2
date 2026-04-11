@@ -29,22 +29,26 @@ const BranchLockedPrices = () => {
   const [prodResults, setProdResults] = useState([]);
   const fileInputRef = useRef(null);
 
-  // Filtration State
+  // Filtration & Pagination State
   const [filters, setFilters] = useState({
     product: "",
     customer: "",
-    cost: "",
-    stdPrice: "",
-    lockedPrice: "",
-    margin: ""
   });
+  const [sortField, setSortField] = useState("updatedAt");
+  const [sortOrder, setSortOrder] = useState(-1);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
 
   useEffect(() => {
     if (currentBranch?._id) {
       fetchCustomers();
-      fetchLockedPrices();
     }
   }, [currentBranch?._id]);
+
+  useEffect(() => {
+    fetchLockedPrices();
+  }, [currentBranch?._id, page, sortField, sortOrder, filters.product, filters.customer]);
 
   // 🔒 AUTO-LOOKUP EXISTING PRICE
   useEffect(() => {
@@ -133,12 +137,18 @@ const BranchLockedPrices = () => {
     if (!currentBranch?._id) return;
     setLoading(true);
     try {
-      console.log("🔍 Fetching Locked Prices for Branch:", currentBranch._id);
-      const res = await fetch(`${API_BASE}/customer-locked-prices/branch/${currentBranch._id}`);
+      let url = `${API_BASE}/customer-locked-prices/branch/${currentBranch._id}?page=${page}&limit=50&sortField=${sortField}&sortOrder=${sortOrder}`;
+      if (filters.product) url += `&productName=${encodeURIComponent(filters.product)}`;
+      if (filters.customer) url += `&customerName=${encodeURIComponent(filters.customer)}`;
+
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
       const data = await res.json();
       if (data.success) {
         setLockedPrices(data.data || []);
-        console.log(`✅ Fetched ${data.data?.length || 0} locked prices`);
+        setTotalPages(data.pagination?.totalPages || 1);
+        setTotalRecords(data.pagination?.totalRecords || 0);
       } else {
         throw new Error(data.message || "Failed to fetch");
       }
@@ -148,6 +158,16 @@ const BranchLockedPrices = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 1 ? -1 : 1);
+    } else {
+      setSortField(field);
+      setSortOrder(1);
+    }
+    setPage(1); // Reset to first page on sort
   };
 
   const handleSave = async () => {
@@ -485,175 +505,180 @@ const BranchLockedPrices = () => {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
+                <table className="w-full text-left">
                   <thead>
-                    <tr className="bg-gray-50 text-gray-500 font-black uppercase text-[9px] tracking-widest border-b border-gray-100">
-                      <th className="px-6 py-4">Product Info</th>
-                      <th className="px-6 py-4">Customer</th>
-                      <th className="px-6 py-4 text-right">Cost</th>
-                      <th className="px-6 py-4 text-right">Std. Price</th>
-                      <th className="px-6 py-4 text-right text-orange-600">Locked ₹</th>
-                      <th className="px-6 py-4 text-right">Margin %</th>
-                      <th className="px-6 py-4 text-center">Action</th>
+                    <tr className="bg-slate-50 text-slate-500 font-black uppercase text-[10px] tracking-widest border-b border-slate-100">
+                      <th 
+                        className="px-6 py-5 cursor-pointer hover:bg-slate-100 transition-colors group"
+                        onClick={() => handleSort("productName")}
+                      >
+                        <div className="flex items-center gap-2">
+                           Product Info
+                           {sortField === "productName" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                           {!sortField === "productName" && <FaChevronDown className="opacity-0 group-hover:opacity-30" />}
+                        </div>
+                      </th>
+                      <th 
+                        className="px-6 py-5 cursor-pointer hover:bg-slate-100 transition-colors group"
+                        onClick={() => handleSort("customerName")}
+                      >
+                        <div className="flex items-center gap-2">
+                           Customer
+                           {sortField === "customerName" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                        </div>
+                      </th>
+                      <th 
+                        className="px-6 py-5 text-right cursor-pointer hover:bg-slate-100 transition-colors group"
+                        onClick={() => handleSort("purchasingPrice")}
+                      >
+                         <div className="flex items-center justify-end gap-2">
+                            Cost
+                            {sortField === "purchasingPrice" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                         </div>
+                      </th>
+                      <th 
+                        className="px-6 py-5 text-right cursor-pointer hover:bg-slate-100 transition-colors group"
+                        onClick={() => handleSort("sellingPrice")}
+                      >
+                        <div className="flex items-center justify-end gap-2">
+                           Std. Price
+                           {sortField === "sellingPrice" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                        </div>
+                      </th>
+                      <th 
+                        className="px-6 py-5 text-right text-orange-600 cursor-pointer hover:bg-slate-100 transition-colors group"
+                        onClick={() => handleSort("lockedPrice")}
+                      >
+                        <div className="flex items-center justify-end gap-2">
+                           Locked ₹
+                           {sortField === "lockedPrice" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                        </div>
+                      </th>
+                      <th 
+                        className="px-6 py-5 text-right cursor-pointer hover:bg-slate-100 transition-colors group"
+                        onClick={() => handleSort("marginPercent")}
+                      >
+                        <div className="flex items-center justify-end gap-2">
+                           Margin %
+                           {sortField === "marginPercent" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                        </div>
+                      </th>
+                      <th className="px-6 py-5 text-center">Action</th>
                     </tr>
-                    <tr className="bg-gray-50/50 border-b border-gray-100">
-                      <th className="px-2 py-2">
+                    <tr className="bg-white border-b border-slate-50">
+                      <th className="px-4 py-3">
                         <div className="relative">
-                          <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-300" size={10} />
+                          <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
                           <input 
                             type="text"
-                            placeholder="Filter Product..."
+                            placeholder="Find Product..."
                             value={filters.product}
                             onChange={(e) => setFilters({ ...filters, product: e.target.value })}
-                            className="w-full pl-7 pr-2 py-1.5 bg-white border border-gray-200 rounded text-[10px] font-bold outline-none focus:border-[#319bab]/50"
+                            className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/40 transition-all"
                           />
                         </div>
                       </th>
-                      <th className="px-2 py-2">
+                      <th className="px-4 py-3">
                         <div className="relative">
-                          <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-300" size={10} />
+                          <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
                           <input 
                             type="text"
-                            placeholder="Filter Customer..."
+                            placeholder="Find Customer..."
                             value={filters.customer}
                             onChange={(e) => setFilters({ ...filters, customer: e.target.value })}
-                            className="w-full pl-7 pr-2 py-1.5 bg-white border border-gray-200 rounded text-[10px] font-bold outline-none focus:border-[#319bab]/50"
+                            className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/40 transition-all"
                           />
                         </div>
                       </th>
-                      <th className="px-2 py-2">
-                        <input 
-                          type="text"
-                          placeholder="Cost..."
-                          value={filters.cost}
-                          onChange={(e) => setFilters({ ...filters, cost: e.target.value })}
-                          className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded text-[10px] font-bold text-right outline-none focus:border-[#319bab]/50"
-                        />
-                      </th>
-                      <th className="px-2 py-2">
-                        <input 
-                          type="text"
-                          placeholder="Price..."
-                          value={filters.stdPrice}
-                          onChange={(e) => setFilters({ ...filters, stdPrice: e.target.value })}
-                          className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded text-[10px] font-bold text-right outline-none focus:border-[#319bab]/50"
-                        />
-                      </th>
-                      <th className="px-2 py-2">
-                        <input 
-                          type="text"
-                          placeholder="Locked..."
-                          value={filters.lockedPrice}
-                          onChange={(e) => setFilters({ ...filters, lockedPrice: e.target.value })}
-                          className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded text-[10px] font-bold text-right text-orange-600 outline-none focus:border-orange-200"
-                        />
-                      </th>
-                      <th className="px-2 py-2">
-                        <input 
-                          type="text"
-                          placeholder="Margin..."
-                          value={filters.margin}
-                          onChange={(e) => setFilters({ ...filters, margin: e.target.value })}
-                          className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded text-[10px] font-bold text-right outline-none focus:border-[#319bab]/50"
-                        />
-                      </th>
-                      <th className="px-2 py-2">
-                        <button 
-                          onClick={() => setFilters({ product: "", customer: "", cost: "", stdPrice: "", lockedPrice: "", margin: "" })}
-                          className="text-[9px] font-black text-gray-400 uppercase hover:text-red-500 transition-colors block w-full text-center"
-                        >
-                          Clear
-                        </button>
-                      </th>
+                      <th colSpan="5"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                   <tbody className="divide-y divide-slate-50">
                     {loading ? (
                       <tr>
-                        <td colSpan="6" className="px-6 py-20 text-center">
-                          <FaSync className="animate-spin text-[#319bab] mx-auto mb-2" size={24} />
-                          <p className="text-[10px] font-bold text-gray-400 uppercase">Fetching records...</p>
+                        <td colSpan="7" className="px-6 py-20 text-center">
+                          <FaSync className="animate-spin text-[#319bab] mx-auto mb-2" size={32} />
+                          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Optimizing Data Stream...</p>
                         </td>
                       </tr>
-                    ) : (() => {
-                      const filtered = lockedPrices.filter(lp => {
-                        const productName = lp.productId?.name?.toLowerCase() || "";
-                        const customerName = lp.customerId?.name?.toLowerCase() || "";
-                        const cost = (lp.productId?.purchasingPrice || 0).toString();
-                        const stdPrice = (lp.productId?.sellingPrice || 0).toString();
-                        const lPrice = (lp.lockedPrice || 0).toString();
-                        
-                        const m = (lp.lockedPrice || 0) - (lp.productId?.purchasingPrice || 0);
-                        const mp = lp.productId?.purchasingPrice > 0 ? ((m / lp.productId.purchasingPrice) * 100).toFixed(1) : "0.0";
-
-                        return (
-                          productName.includes(filters.product.toLowerCase()) &&
-                          customerName.includes(filters.customer.toLowerCase()) &&
-                          cost.includes(filters.cost) &&
-                          stdPrice.includes(filters.stdPrice) &&
-                          lPrice.includes(filters.lockedPrice) &&
-                          mp.includes(filters.margin)
-                        );
-                      });
-
-                      if (filtered.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan="7" className="px-6 py-20 text-center">
-                              <div className="opacity-20 flex flex-col items-center">
-                                 <FaSearch size={40} className="mb-2" />
-                                 <p className="text-xs font-black uppercase">No matching prices found</p>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      }
-
-                      return filtered.map(lp => {
+                    ) : lockedPrices.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="px-6 py-20 text-center">
+                          <div className="opacity-20 flex flex-col items-center">
+                             <FaSearch size={48} className="mb-3 text-slate-300" />
+                             <p className="text-sm font-black uppercase text-slate-400 tracking-tighter">No Locked Records Found</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      lockedPrices.map(lp => {
                         const productName = lp.productId?.name || "Unknown Product";
                         const customerName = lp.customerId?.name || "Unknown Customer";
                         const purchasingPrice = lp.productId?.purchasingPrice || 0;
                         const sellingPrice = lp.productId?.sellingPrice || 0;
-                        
-                        const m = (lp.lockedPrice || 0) - purchasingPrice;
-                        const mp = purchasingPrice > 0 ? (m / purchasingPrice) * 100 : 0;
+                        const mp = lp.marginPercent || 0;
+
                         return (
-                          <tr key={lp._id} className="hover:bg-gray-50/50 transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="font-bold text-gray-800 text-xs">{productName}</div>
-                              <div className="text-[9px] text-gray-400 font-bold italic">Source: Direct/SalesOrder</div>
+                          <tr key={lp._id} className="hover:bg-slate-50 transition-colors group">
+                            <td className="px-6 py-5">
+                              <div className="font-black text-slate-800 text-sm leading-tight">{productName}</div>
+                              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">Ref: {lp._id.substring(18).toUpperCase()}</div>
                             </td>
-                            <td className="px-6 py-4">
-                              <div className="font-bold text-[#319bab] text-xs">{customerName}</div>
+                            <td className="px-6 py-5">
+                              <div className="font-black text-[#319bab] text-sm">{customerName}</div>
                             </td>
-                            <td className="px-6 py-4 text-right text-gray-400 text-[10px] font-black italic">
+                            <td className="px-6 py-5 text-right font-bold text-slate-400 text-xs">
                               ₹{purchasingPrice.toFixed(2)}
                             </td>
-                            <td className="px-6 py-4 text-right text-gray-500 text-xs font-bold">
+                            <td className="px-6 py-5 text-right font-black text-slate-700 text-sm">
                               ₹{sellingPrice.toFixed(2)}
                             </td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="bg-orange-50 text-orange-700 font-black px-2 py-1 rounded border border-orange-100 inline-block text-xs">
+                            <td className="px-6 py-5 text-right">
+                              <div className="bg-orange-50 text-orange-700 font-black px-3 py-1.5 rounded-lg border border-orange-100 inline-block text-sm shadow-sm">
                                 ₹{lp.lockedPrice?.toFixed(2)}
                               </div>
                             </td>
-                            <td className={`px-6 py-4 text-right text-xs font-black ${mp >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            <td className={`px-6 py-5 text-right text-sm font-black ${mp >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                               {mp.toFixed(1)}%
                             </td>
-                            <td className="px-6 py-4 text-center">
+                            <td className="px-6 py-5 text-center">
                               <button 
                                 onClick={() => handleDelete(lp._id)}
-                                className="text-red-400 hover:text-red-600 p-2 transition"
+                                className="text-slate-300 hover:text-red-500 p-2 transition-all hover:bg-red-50 rounded-lg"
                               >
-                                <FaTrash size={12} />
+                                <FaTrash size={14} />
                               </button>
                             </td>
                           </tr>
                         );
                       })
-                    })()}
+                    )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* PAGINATION FOOTER */}
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
+                    Total Records: {totalRecords}
+                 </div>
+                 <div className="flex items-center gap-3">
+                    <button 
+                      disabled={page === 1}
+                      onClick={() => setPage(page - 1)}
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase hover:bg-slate-50 disabled:opacity-50 transition shadow-sm"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs font-black text-slate-600">PAGE {page} OF {totalPages}</span>
+                    <button 
+                      disabled={page === totalPages}
+                      onClick={() => setPage(page + 1)}
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase hover:bg-slate-50 disabled:opacity-50 transition shadow-sm"
+                    >
+                      Next
+                    </button>
+                 </div>
               </div>
             </div>
           </div>

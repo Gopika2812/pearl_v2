@@ -185,29 +185,123 @@ router.post("/", async (req, res) => {
 });
 
 /**
- * GET: Fetch All Customer Locked Prices for a Branch
+ * GET: Fetch All Customer Locked Prices for a Branch (Optimized with Sort & Pagination)
  */
 router.get("/branch/:branchId", async (req, res) => {
   try {
     const { branchId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    const sortField = req.query.sortField || "updatedAt";
+    const sortOrder = parseInt(req.query.sortOrder) || -1;
+
+    const filterProduct = req.query.productName || "";
+    const filterCustomer = req.query.customerName || "";
 
     if (!branchId) {
-      return res.status(400).json({
-        success: false,
-        message: "branchId is required",
-      });
+      return res.status(400).json({ success: false, message: "branchId is required" });
     }
 
-    const lockedPrices = await CustomerLockedPrice.find({ 
-        branchId: new mongoose.Types.ObjectId(branchId) 
-      })
-      .populate("customerId", "name")
-      .populate("productId", "name purchasingPrice sellingPrice")
-      .sort({ updatedAt: -1 });
+    const matchStage = { branchId: new mongoose.Types.ObjectId(branchId) };
+
+    const pipeline = [
+      { $match: matchStage },
+      // Join Customer
+      {
+        $lookup: {
+          from: "customers",
+          localField: "customerId",
+          foreignField: "_id",
+          as: "customer",
+        },
+      },
+      { $unwind: "$customer" },
+      // Join Product
+      {
+        $lookup: {
+          from: "products",
+          localField: "productId",
+          foreignField: "_id",
+          as: "product",
+        },
+      },
+      { $unwind: "$product" },
+      // Apply filters if any
+      {
+        $match: {
+          "customer.name": { $regex: filterCustomer, $options: "i" },
+          "product.name": { $regex: filterProduct, $options: "i" },
+        },
+      },
+      // Calculate Margin %
+      {
+        $addFields: {
+          margin: { $subtract: ["$lockedPrice", "$product.purchasingPrice"] },
+          marginPercent: {
+            $cond: [
+              { $gt: ["$product.purchasingPrice", 0] },
+              {
+                $multiply: [
+                  { $divide: [{ $subtract: ["$lockedPrice", "$product.purchasingPrice"] }, "$product.purchasingPrice"] },
+                  100,
+                ],
+              },
+              0,
+            ],
+          },
+          // Standardize fields for sorting
+          productName: "$product.name",
+          customerName: "$customer.name",
+          purchasingPrice: "$product.purchasingPrice",
+          sellingPrice: "$product.sellingPrice"
+        },
+      },
+    ];
+
+    // Get Total Count before pagination
+    const countPipeline = [...pipeline, { $count: "total" }];
+    const countResult = await CustomerLockedPrice.aggregate(countPipeline);
+    const totalRecords = countResult.length > 0 ? countResult[0].total : 0;
+
+    // Apply Sorting & Pagination
+    const sortObj = {};
+    sortObj[sortField] = sortOrder;
+
+    pipeline.push({ $sort: sortObj });
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: limit });
+
+    // Project fields to match the expected format (productId/customerId as objects)
+    pipeline.push({
+      $project: {
+        _id: 1,
+        lockedPrice: 1,
+        updatedAt: 1,
+        marginPercent: 1,
+        margin: 1,
+        customerId: { _id: "$customer._id", name: "$customer.name" },
+        productId: { 
+          _id: "$product._id", 
+          name: "$product.name", 
+          purchasingPrice: "$product.purchasingPrice",
+          sellingPrice: "$product.sellingPrice"
+        }
+      }
+    });
+
+    const lockedPrices = await CustomerLockedPrice.aggregate(pipeline);
 
     res.status(200).json({
       success: true,
       data: lockedPrices,
+      pagination: {
+        totalRecords,
+        totalPages: Math.ceil(totalRecords / limit),
+        currentPage: page,
+        limit
+      }
     });
   } catch (error) {
     console.error("Fetch Branch Locked Prices Error:", error);

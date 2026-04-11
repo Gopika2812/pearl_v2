@@ -36,15 +36,26 @@ const BranchInvoicedOrders = () => {
   const [requestingReEdit, setRequestingReEdit] = useState(null); // ID of order currently requesting re-edit
   const [showCopyChoice, setShowCopyChoice] = useState(false);
   const [processingPrint, setProcessingPrint] = useState(false);
+  const [voucherTypes, setVoucherTypes] = useState([]);
 
   // Filter states
   const [filterVoucherType, setFilterVoucherType] = useState("");
+  const [filterGenerated, setFilterGenerated] = useState(""); // ALL, GENERATED, NOT_GENERATED
   const [filterInvoiceId, setFilterInvoiceId] = useState("");
   const [filterCustomerName, setFilterCustomerName] = useState("");
   const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterFromTime, setFilterFromTime] = useState("");
   const [filterToTime, setFilterToTime] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Search debounce logic
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch((filterInvoiceId || filterCustomerName || "").trim());
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [filterInvoiceId, filterCustomerName]);
 
   // Selection state for multi-select loading slip
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
@@ -60,8 +71,12 @@ const BranchInvoicedOrders = () => {
 
     setLoading(true);
     try {
+      const searchParam = debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : "";
+      const voucherParam = filterVoucherType ? `&voucherType=${encodeURIComponent(filterVoucherType)}` : "";
+      const generatedParam = filterGenerated ? `&generated=${filterGenerated === "GENERATED"}` : "";
+
       const res = await fetch(
-        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isClaim=false&fromDate=${filterFromDate}&toDate=${filterToDate}`,
+        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isClaim=false&fromDate=${filterFromDate}&toDate=${filterToDate}${searchParam}${voucherParam}${generatedParam}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -82,9 +97,40 @@ const BranchInvoicedOrders = () => {
     }
   };
 
+  const fetchVoucherTypes = async () => {
+    if (!currentBranch?._id) return;
+    try {
+      const res = await fetch(`${API_BASE}/voucher-types?branchId=${currentBranch._id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        // 🎯 FILTER: Only show types meant for Sales Orders (SO)
+        const relevantTypes = (data.data || []).filter(v => v.orderType === "SO");
+        setVoucherTypes(relevantTypes);
+      }
+    } catch (err) {
+      console.error("Error fetching voucher types:", err);
+    }
+  };
+
   useEffect(() => {
     fetchSalesOrders();
-  }, [currentBranch?._id, filterFromDate, filterToDate]);
+  }, [currentBranch?._id, filterFromDate, filterToDate, debouncedSearch, filterVoucherType, filterGenerated]);
+
+  useEffect(() => {
+    fetchVoucherTypes();
+  }, [currentBranch?._id]);
+
+  const resetFilters = () => {
+    setFilterInvoiceId("");
+    setFilterCustomerName("");
+    setFilterFromDate(new Date().toISOString().split('T')[0]);
+    setFilterToDate(new Date().toISOString().split('T')[0]);
+    setFilterVoucherType("");
+    setFilterGenerated("");
+    toast.info("Filters reset to Today");
+  };
 
   const handleGenerateInvoice = (order) => {
     setSelectedOrder(order);
@@ -515,7 +561,7 @@ const BranchInvoicedOrders = () => {
         theme="colored"
       />
 
-      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4">
+      <div className="w-full mx-auto px-4 sm:px-8 py-4">
         {/* HEADER */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
           <div className="flex items-center justify-between">
@@ -585,9 +631,19 @@ const BranchInvoicedOrders = () => {
         </div>
 
         {/* FILTERS */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
-          <h3 className="text-lg font-bold text-gray-800 mb-4">Filters</h3>
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6 relative overflow-hidden">
+          {debouncedSearch && (
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#319bab] via-indigo-500 to-[#319bab] animate-pulse"></div>
+          )}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-800">Filters</h3>
+            {debouncedSearch && (
+              <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full uppercase tracking-widest animate-bounce">
+                🌍 Searching Globally (All Dates)
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-8 gap-4">
 
             <div>
               <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Invoice ID</label>
@@ -647,6 +703,42 @@ const BranchInvoicedOrders = () => {
                 disabled={!filterToDate}
               />
             </div>
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Voucher Type</label>
+              <select
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 outline-none text-sm bg-white font-bold"
+                value={filterVoucherType}
+                onChange={(e) => setFilterVoucherType(e.target.value)}
+              >
+                <option value="">ALL TYPES</option>
+                {voucherTypes.map((v) => (
+                  <option key={v._id} value={v.name}>
+                    {v.name.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Generation</label>
+              <select
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 outline-none text-sm bg-white font-bold"
+                value={filterGenerated}
+                onChange={(e) => setFilterGenerated(e.target.value)}
+              >
+                <option value="">ALL STATUS</option>
+                <option value="GENERATED" className="text-green-600">GENERATED</option>
+                <option value="NOT_GENERATED" className="text-red-500">NOT GENERATED</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={resetFilters}
+                className="w-full bg-slate-100 text-slate-600 px-4 py-2 rounded-lg hover:bg-slate-200 transition text-sm font-bold flex items-center justify-center gap-2 border border-slate-200 h-[38px]"
+                title="Reset to Today"
+              >
+                <FaSync className="text-xs" /> Reset
+              </button>
+            </div>
           </div>
           <div className="mt-3 text-xs text-gray-500">
             Showing {filteredSalesOrders.length} of {salesOrders.length} orders
@@ -683,6 +775,7 @@ const BranchInvoicedOrders = () => {
                       />
                     </th>
                     <th className="px-6 py-4 text-left">Invoice ID</th>
+                    <th className="px-6 py-4 text-left">Voucher Type</th>
                     <th className="px-6 py-4 text-left">Customer</th>
                     {isFieldAllowed("itemsCount") && <th className="px-6 py-4 text-center">Items</th>}
                     {isFieldAllowed("grandTotal") && <th className="px-6 py-4 text-right">Grand Total</th>}
@@ -723,20 +816,28 @@ const BranchInvoicedOrders = () => {
                               />
                             </button>
                             <div className="flex flex-col">
-                              <span className="font-bold text-[#319bab] text-xs">
-                                SO: {order.invoiceId}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <div className={`p-1 w-2 h-2 rounded-full ${order.invoiceGenerated ? 'bg-green-500 animate-pulse' : 'bg-amber-400'}`} title={order.invoiceGenerated ? "Invoice Generated" : "Pending Invoice"}></div>
+                                <span className="font-bold text-[#319bab] text-xs">
+                                  SO: {order.invoiceId}
+                                </span>
+                              </div>
                               {order.salesInvoiceId && (
-                                <span className="font-black text-blue-600 text-[10px]">
+                                <span className="font-black text-blue-600 text-[10px] ml-4">
                                   SI: {order.salesInvoiceId}
                                 </span>
                               )}
                             </div>
                           </div>
                         </td>
+                        <td className="px-6 py-4 font-black">
+                           <span className="bg-slate-100 px-2 py-1 rounded text-[10px] text-slate-600 border border-slate-200 uppercase tracking-tighter">
+                             {order.voucherType || "GE"}
+                           </span>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="font-semibold text-gray-800">
-                            {order.customer?.name}
+    {order.customer?.name}
                           </div>
                           <div className="text-[11px] text-gray-500">
                             {order.customer?.whatsapp}

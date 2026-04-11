@@ -871,19 +871,50 @@ router.put("/:invoiceId/cancel", async (req, res) => {
 // GET sales invoices with pagination and filtering (Sales Reports)
 router.get("", async (req, res) => {
   try {
-    const { branchId, page = 1, limit = 100, search } = req.query;
-
+    const { branchId, fromDate, toDate, search, page = 1, limit = 20, vPrefix, einvoiceStatus } = req.query;
     const query = {};
-    if (branchId) {
-      query.$or = [{ branchId }, { branchId: { $exists: false } }];
+
+    // 1. Branch Filter
+    if (branchId) query.branchId = branchId;
+
+    // 2. Voucher Prefix Filter (⚡ High Performance Indexed Regex)
+    if (vPrefix) {
+      query.invoiceNumber = { $regex: `^${vPrefix}`, $options: "i" };
     }
 
-    // Search by customer name or invoice number
+    // 3. E-Invoice Status Filter (Fix: Handle nulls for PENDING)
+    if (einvoiceStatus === "NOT_GENERATED") {
+      query.einvoiceStatus = { $in: ["NOT_GENERATED", null, ""] };
+    } else if (einvoiceStatus) {
+      query.einvoiceStatus = einvoiceStatus;
+    }
+
+    // 4. Search (Customer or Number)
     if (search) {
       query.$or = [
         { invoiceNumber: { $regex: search, $options: "i" } },
         { "customer.name": { $regex: search, $options: "i" } },
+        { "customer.whatsapp": { $regex: search, $options: "i" } },
       ];
+    }
+
+    // 5. Date Filtering (Cumulative – applies unless dates are explicitly cleared or searching all-time)
+    // In this dashboard, if fromDate/toDate are passed, we stick to them.
+    if (fromDate || toDate) {
+        const start = fromDate ? new Date(fromDate) : new Date();
+        if (!fromDate) start.setHours(0, 0, 0, 0);
+
+        const end = toDate ? new Date(toDate) : new Date(start);
+        end.setHours(23, 59, 59, 999);
+
+        query.invoiceDate = { $gte: start, $lte: end };
+    } else if (!search && !vPrefix && !einvoiceStatus) {
+        // Fallback default: Today only if completely unfiltered list
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const endOfToday = new Date();
+        endOfToday.setHours(23, 59, 59, 999);
+        query.invoiceDate = { $gte: today, $lte: endOfToday };
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -891,6 +922,7 @@ router.get("", async (req, res) => {
     const invoices = await Invoice.find(query)
       .populate("customer.customerId", "name whatsapp")
       .populate("salesOrderId")
+      .select("-items -__v") // ⚡ THIN FETCHING: Skip heavy items array for the main list
       .sort({ invoiceDate: -1 })
       .skip(skip)
       .limit(parseInt(limit))
@@ -911,6 +943,22 @@ router.get("", async (req, res) => {
   } catch (error) {
     console.error("Error fetching sales invoices:", error);
     res.status(500).json({ message: "Failed to fetch sales invoices" });
+  }
+});
+
+// GET - Get single invoice details (with items) for Lazy Loading
+router.get("/:id", async (req, res) => {
+  try {
+    const invoice = await Invoice.findById(req.params.id)
+      .populate("customer.customerId")
+      .populate("salesOrderId")
+      .lean();
+
+    if (!invoice) return res.status(404).json({ success: false, message: "Invoice not found" });
+
+    res.json({ success: true, data: invoice });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 

@@ -16,6 +16,26 @@ const BranchSalesInvoices = () => {
   const [showEInvoiceModal, setShowEInvoiceModal] = useState(null);
   const [showCancelModal, setShowCancelModal] = useState(null); // Invoice to be cancelled
   const [cancelReason, setCancelReason] = useState("");
+  const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split("T")[0]);
+  const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split("T")[0]);
+  const [fetchingDetails, setFetchingDetails] = useState({});
+  const [voucherTypes, setVoucherTypes] = useState([]);
+  const [filterVoucherPrefix, setFilterVoucherPrefix] = useState("");
+  const [filterEinvoiceStatus, setFilterEinvoiceStatus] = useState("");
+
+  // 🌍 Helper to format date in Indian Standard Time (IST)
+  const formatIST = (dateStr) => {
+    if (!dateStr) return "N/A";
+    return new Date(dateStr).toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
 
   // Search debounce logic
   useEffect(() => {
@@ -29,10 +49,16 @@ const BranchSalesInvoices = () => {
     if (!currentBranch?._id) return;
     setLoading(true);
     try {
-      // In this system, Sales Invoices are stored in the "Invoice" collection
-      const res = await fetchWithAuth(
-        `${API_BASE}/invoices?branchId=${currentBranch._id}${debouncedSearch ? `&search=${debouncedSearch}` : ""}`
-      );
+      // Build query string
+      let url = `${API_BASE}/invoices?branchId=${currentBranch._id}`;
+      
+      if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
+      if (filterFromDate) url += `&fromDate=${filterFromDate}`;
+      if (filterToDate) url += `&toDate=${filterToDate}`;
+      if (filterVoucherPrefix) url += `&vPrefix=${encodeURIComponent(filterVoucherPrefix)}`;
+      if (filterEinvoiceStatus) url += `&einvoiceStatus=${filterEinvoiceStatus}`;
+
+      const res = await fetchWithAuth(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch invoices");
       setInvoices(data.data || data || []);
@@ -45,13 +71,56 @@ const BranchSalesInvoices = () => {
 
   useEffect(() => {
     fetchInvoices();
-  }, [currentBranch?._id, debouncedSearch]);
+  }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate, filterVoucherPrefix, filterEinvoiceStatus]);
 
-  const toggleExpanded = (invoiceId) => {
+  const fetchVoucherTypes = async () => {
+    if (!currentBranch?._id) return;
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/voucher-types?branchId=${currentBranch._id}`);
+      const data = await res.json();
+      if (data.success) {
+        // Filter only Sales Invoice (SI) types
+        const siTypes = (data.data || []).filter(v => v.orderType === "SI");
+        setVoucherTypes(siTypes);
+      }
+    } catch (err) {
+      console.error("Error fetching voucher types:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchVoucherTypes();
+  }, [currentBranch?._id]);
+
+  const toggleExpanded = async (invoiceId) => {
+    const isExpanding = !expandedInvoices[invoiceId];
+    
+    // Toggle first
     setExpandedInvoices((prev) => ({
       ...prev,
-      [invoiceId]: !prev[invoiceId],
+      [invoiceId]: isExpanding,
     }));
+
+    // If expanding and items are missing (due to Thin Fetching), fetch them now!
+    if (isExpanding) {
+        const inv = invoices.find(i => i._id === invoiceId);
+        if (inv && (!inv.items || inv.items.length === 0)) {
+            setFetchingDetails(prev => ({ ...prev, [invoiceId]: true }));
+            try {
+                const res = await fetchWithAuth(`${API_BASE}/invoices/${invoiceId}`);
+                const data = await res.json();
+                if (data.success) {
+                    // Update the local invoices array with the full data
+                    setInvoices(prev => prev.map(i => i._id === invoiceId ? data.data : i));
+                }
+            } catch (err) {
+                console.error("Failed to fetch invoice details:", err);
+                toast.error("Failed to load invoice items");
+            } finally {
+                setFetchingDetails(prev => ({ ...prev, [invoiceId]: false }));
+            }
+        }
+    }
   };
 
   const handleRequestEdit = async (invoice) => {
@@ -372,7 +441,14 @@ const BranchSalesInvoices = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <ToastContainer position="top-right" autoClose={2500} theme="colored" />
+      <ToastContainer
+        position="top-right"
+        autoClose={2500}
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+        theme="colored"
+      />
 
       {showTransportModal && (
         <TransportDetailsModal
@@ -388,7 +464,6 @@ const BranchSalesInvoices = () => {
         />
       )}
 
-      {/* 📄 UNIFIED E-INVOICE PRINT MODAL */}
       {showEInvoiceModal && (
         <EInvoicePrintModal
           invoice={showEInvoiceModal}
@@ -404,57 +479,135 @@ const BranchSalesInvoices = () => {
         />
       )}
 
-      <div className="w-full">
+      <div className="w-full mx-auto px-4 sm:px-8 py-4">
         {/* HEADER */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#319bab] to-blue-700 rounded-xl flex items-center justify-center text-white">
-                <FaFileAlt size={24} />
+              <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100">
+                <FaHistory className="text-white text-xl" />
               </div>
               <div>
-                <h1 className="text-2xl font-black text-gray-800 uppercase tracking-tighter">Sales Invoice Record</h1>
-                <p className="text-[10px] text-gray-500 uppercase font-black tracking-widest flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                  Finalized SI Records
+                <h1 className="text-2xl font-black text-slate-800">
+                  Sales Invoices
+                  <span className="text-indigo-600 ml-1">History</span>
+                </h1>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                  Manage & Monitor branch-level realizations
                 </p>
               </div>
             </div>
-            <button
-              onClick={fetchInvoices}
-              className="flex items-center gap-2 bg-[#319bab] text-white px-5 py-2.5 rounded-xl hover:bg-blue-700 transition font-black text-xs shadow-lg shadow-blue-200"
-            >
-              <FaSync className={loading ? "animate-spin" : ""} /> REFRESH LIST
-            </button>
+            <div className="flex items-center gap-4">
+              <div className="text-right hidden sm:block">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Date Range</p>
+                <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 font-black text-xs text-slate-600">
+                  <span>{new Date(filterFromDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                  <span className="text-slate-300">to</span>
+                  <span>{new Date(filterToDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                </div>
+              </div>
+              <button
+                onClick={fetchInvoices}
+                className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-slate-50 transition shadow-sm"
+              >
+                <FaSync className={loading ? "animate-spin" : ""} />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* SEARCH */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 relative">
-          <FaSearch className="absolute left-8 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-          <input
-            type="text"
-            placeholder="Search by Invoice ID (SI...), Customer, or Order Ref..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-[#319bab] text-sm font-medium"
-          />
+        {/* FILTERS & SEARCH */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+            <div className="lg:col-span-2">
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Search History</label>
+              <div className="relative group">
+                <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                <input
+                  type="text"
+                  placeholder="Invoice ID, Customer name..."
+                  className="w-full bg-slate-50/50 border border-slate-100 rounded-xl pl-11 pr-4 py-3 text-sm font-bold focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/50 transition-all outline-none"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Voucher Prefix</label>
+              <select
+                className="w-full bg-slate-50/50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/50 transition-all outline-none"
+                value={filterVoucherPrefix}
+                onChange={(e) => setFilterVoucherPrefix(e.target.value)}
+              >
+                <option value="">ALL SERIES</option>
+                {voucherTypes.map((v) => (
+                  <option key={v._id} value={v.prefix}> {v.name.toUpperCase()} SERIES </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">E-Inv Status</label>
+              <select
+                className="w-full bg-slate-50/50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/50 transition-all outline-none"
+                value={filterEinvoiceStatus}
+                onChange={(e) => setFilterEinvoiceStatus(e.target.value)}
+              >
+                <option value="">ALL STATUS</option>
+                <option value="NOT_GENERATED">PENDING</option>
+                <option value="GENERATED">IRN READY</option>
+                <option value="FAILED">FAILED</option>
+                <option value="CANCELLED">CANCELLED</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">From</label>
+              <input
+                type="date"
+                className="w-full bg-slate-50/50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-black focus:bg-white focus:border-indigo-500 transition-all outline-none"
+                value={filterFromDate}
+                onChange={(e) => setFilterFromDate(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">To Date</label>
+              <input
+                type="date"
+                className="w-full bg-slate-50/50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-black focus:bg-white focus:border-indigo-500 transition-all outline-none"
+                value={filterToDate}
+                onChange={(e) => setFilterToDate(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {(debouncedSearch || filterVoucherPrefix || filterEinvoiceStatus) && (
+            <div className="mt-4 flex items-center gap-2">
+              <div className="animate-pulse w-2 h-2 bg-indigo-500 rounded-full"></div>
+              <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Advanced Search Active: Defaulting to all-time match</span>
+            </div>
+          )}
         </div>
 
-        {/* TABLE */}
+        {/* DATA SECTION */}
         {loading ? (
           <div className="bg-white p-12 text-center rounded-3xl border border-dashed border-gray-200 text-gray-400 font-bold">
-            <FaSync className="animate-spin inline-block mr-2" /> Loadingized SI records...
+            <div className="flex flex-col items-center gap-3">
+              <FaSync className="animate-spin text-4xl text-indigo-500" />
+              <p className="uppercase tracking-widest text-[11px] font-black">Fetching SI Records...</p>
+            </div>
           </div>
         ) : invoices.length === 0 ? (
           <div className="bg-white p-12 text-center rounded-3xl border border-dashed border-gray-200 text-gray-400 font-bold">
-            No finalized Sales Invoices found in this branch.
+            No finalized Sales Invoices found for this period.
           </div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] font-black border-b tracking-wider">
+                <thead className="bg-slate-50/80 text-slate-500 uppercase text-[10px] font-black border-b border-slate-100 tracking-wider">
                   <tr>
                     <th className="px-6 py-5 text-left">Invoice ID (SI)</th>
                     <th className="px-6 py-5 text-left">Order Ref (SO)</th>
@@ -465,36 +618,35 @@ const BranchSalesInvoices = () => {
                     <th className="px-6 py-5 text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
+                <tbody className="divide-y divide-slate-50">
                   {invoices.map((inv) => (
                     <React.Fragment key={inv._id}>
-                      <tr className="hover:bg-blue-50/30 transition group">
+                      <tr className="hover:bg-indigo-50/30 transition group">
                         <td className="px-6 py-5">
                           <div className="flex items-center gap-3">
                             <button
                               onClick={() => toggleExpanded(inv._id)}
-                              className="text-[#319bab] p-2 hover:bg-white rounded-lg shadow-sm transition-all"
+                              className="text-indigo-600 p-2 hover:bg-white rounded-lg shadow-sm transition-all border border-transparent hover:border-indigo-100"
                             >
                               <FaChevronDown className={`transition-transform duration-300 ${expandedInvoices[inv._id] ? "rotate-180" : ""}`} />
                             </button>
-                            <span className="font-black text-[#319bab] tracking-tight">{inv.invoiceNumber}</span>
+                            <span className="font-black text-indigo-700 tracking-tight">{inv.invoiceNumber}</span>
                           </div>
                         </td>
                         <td className="px-6 py-5">
-                          <span className="text-[10px] font-black bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                          <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-1 rounded">
                             SO REF: {inv.salesOrderId?.invoiceId || "N/A"}
                           </span>
                         </td>
                         <td className="px-6 py-5">
-                          <div className="font-black text-gray-800 text-xs">{inv.customer?.name}</div>
-                          <div className="text-[10px] text-gray-500 font-bold">{inv.customer?.whatsapp || "No Contact"}</div>
+                          <div className="font-black text-slate-800 text-xs">{inv.customer?.name}</div>
+                          <div className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-0.5">{inv.customer?.whatsapp || "No Contact"}</div>
                         </td>
-                        <td className="px-6 py-5 text-right font-black text-blue-700 tracking-tight text-base">
+                        <td className="px-6 py-5 text-right font-black text-indigo-700 tracking-tight text-base">
                           ₹{(inv.grandTotal || 0).toLocaleString()}
                         </td>
                         <td className="px-6 py-5 text-center">
                           <div className="flex flex-col gap-2 scale-90">
-                            {/* E-INVOICE BADGE */}
                             {inv.einvoiceStatus === "GENERATED" ? (
                               <div className="flex flex-col items-center gap-1">
                                 <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-green-200">
@@ -507,8 +659,6 @@ const BranchSalesInvoices = () => {
                                 📄 SI PENDING
                               </span>
                             )}
-
-                            {/* E-WAY BILL BADGE */}
                             {inv.ewayBillNo ? (
                               <div className="flex flex-col items-center gap-1">
                                 <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-blue-200">
@@ -540,49 +690,37 @@ const BranchSalesInvoices = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center gap-2 justify-center flex-wrap">
-                            {/* ✅ GENERATE E-WAY BILL ONLY BUTTON (Visible if E-Invoice exists but E-Way Bill missing for >50k) */}
                             {inv.einvoiceStatus === "GENERATED" && !inv.ewayBillNo && inv.grandTotal > 10000 && (
                               <button
                                 onClick={() => handleGenerateEWayBillOnly(inv)}
                                 disabled={requestingAction === inv._id}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-600 hover:text-white text-[10px] font-black transition-all"
-                                title="Only generate E-Way Bill"
                               >
-                                {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <><FaSync /> GEN EWB</>}
+                                {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <><FaSync size={12} /> GEN EWB</>}
                               </button>
                             )}
-
-                            {/* ✅ GENERATE E-INVOICE / E-WAY BILL BUTTON */}
                             <button
                               onClick={() => handleGenerateEInvoice(inv)}
                               disabled={requestingAction === inv._id}
                               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo
-                                  ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
-                                  : "bg-[#319bab] text-white border-[#319bab] hover:bg-blue-700"
+                                ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
+                                : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
                                 }`}
-                              title={(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "Generate Standalone E-Way Bill (B2C)" : "Generate E-Invoice & E-Way Bill (B2B)"}
                             >
-                              {requestingAction === inv._id ? (
-                                <FaSync className="animate-spin" />
-                              ) : (
+                              {requestingAction === inv._id ? <FaSync className="animate-spin" /> : (
                                 <>
-                                  {(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? <FaSync /> : <FaFileContract />}
-                                  {inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo
-                                    ? "RE-GENERATE"
-                                    : ((!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "GEN E-WAY BILL" : "GENERATE E-INV")}
+                                  {(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? <FaSync size={12} /> : <FaFileContract size={12} />}
+                                  {inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo ? "RE-GENERATE" : ((!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "GEN E-WAY BILL" : "GENERATE E-INV")}
                                 </>
                               )}
                             </button>
-
-                            {/* SEPARATE DOWNLOAD BUTTONS */}
                             {inv.einvoiceStatus === "GENERATED" && (
                               <div className="flex gap-1">
                                 <button
                                   onClick={() => setShowEInvoiceModal(inv)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#319bab] text-white border border-[#319bab] hover:bg-blue-600 text-[10px] font-black transition-all shadow-sm"
-                                  title="View/Print Custom E-Invoice"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white border border-indigo-600 hover:bg-indigo-700 text-[10px] font-black transition-all shadow-sm"
                                 >
-                                  <FaFileAlt /> PDF
+                                  <FaFileAlt size={12} /> PDF
                                 </button>
                                 {inv.ewayBillPdfUrl && (
                                   <a
@@ -590,23 +728,20 @@ const BranchSalesInvoices = () => {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all shadow-sm"
-                                    title="Download E-Way Bill (Portal PDF)"
                                   >
                                     🚚 EWB
                                   </a>
                                 )}
                               </div>
                             )}
-
                             <button
                               onClick={() => handleRequestEdit(inv)}
                               disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-600 hover:text-white disabled:opacity-50"
                             >
-                              {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaEdit />}
+                              {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaEdit size={12} />}
                               RE-EDIT
                             </button>
-
                             <button
                               onClick={() => {
                                 setCancelReason("");
@@ -614,118 +749,73 @@ const BranchSalesInvoices = () => {
                               }}
                               disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white disabled:opacity-50"
-                              title="Cancel Invoice and revert Stock/Balance"
                             >
-                              {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash />}
+                              {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash size={12} />}
                               CANCEL
                             </button>
-
                           </div>
                         </td>
                       </tr>
-
-                      {/* EXPANDED SECTION */}
                       {expandedInvoices[inv._id] && (
-                        <tr className="bg-blue-50/20 animate-in fade-in slide-in-from-top-2">
-                          <td colSpan="6" className="px-8 py-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                              <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-50">
-                                <h4 className="font-black text-[10px] uppercase text-gray-400 mb-4 tracking-widest flex items-center gap-2">
-                                  <FaFileAlt className="text-blue-500" /> Billed Items
-                                </h4>
-                                <table className="w-full text-[11px]">
-                                  <thead className="border-b border-gray-100">
-                                    <tr className="text-gray-400 font-black">
-                                      <th className="text-left py-3">DESCRIPTION</th>
-                                      <th className="text-center py-3">QTY</th>
-                                      <th className="text-right py-3">TOTAL</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {inv.items.map((item, idx) => (
-                                      <tr key={idx} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
-                                        <td className="py-3 font-bold text-gray-700">{item.name}</td>
-                                        <td className="py-3 text-center font-black text-blue-600 bg-blue-50/50 rounded-lg">{item.qty} {item.unit || "Units"} {item.altQty > 0 && `(${item.altQty} ${item.altUnit})`}</td>
-                                        <td className="py-3 text-right font-black text-gray-800">₹{item.total?.toLocaleString()}</td>
+                        <tr className="bg-indigo-50/20 animate-in fade-in slide-in-from-top-2">
+                          <td colSpan="7" className="px-8 py-6">
+                            {fetchingDetails[inv._id] ? (
+                              <div className="flex flex-col items-center justify-center p-12 bg-white rounded-2xl border border-dashed border-indigo-200">
+                                <FaSync className="animate-spin text-3xl text-indigo-500 mb-2" />
+                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Loading Items Details...</p>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-50">
+                                  <h4 className="font-black text-[10px] uppercase text-slate-400 mb-4 tracking-widest flex items-center gap-2">
+                                    <FaFileAlt className="text-indigo-500" /> Billed Items
+                                  </h4>
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="text-slate-400 font-black border-b border-slate-50">
+                                        <th className="text-left py-3">DESCRIPTION</th>
+                                        <th className="text-center py-3">QTY</th>
+                                        <th className="text-right py-3">TOTAL</th>
                                       </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-
-                                {/* 📊 DYNAMIC TAX SUMMARY (RECALCULATED FOR DISPLAY) */}
-                                <div className="mt-4 pt-4 border-t-2 border-dashed border-gray-100 space-y-2">
-                                  {(() => {
-                                    let cgst = 0, sgst = 0, igst = 0;
-                                    let hasIgst = false;
-
-                                    // 1. Items Tax
-                                    (inv.items || []).forEach(item => {
-                                      const taxable = (item.sellingPrice * item.qty) - (item.discountAmount || 0);
-                                      if (item.igst) {
-                                        igst += (taxable * (item.gst || 0)) / 100;
-                                        hasIgst = true;
-                                      } else {
-                                        cgst += (taxable * (item.cgst || 0)) / 100;
-                                        sgst += (taxable * (item.sgst || 0)) / 100;
-                                      }
-                                    });
-
-                                    // 2. Transport GST Merge
-                                    const tGst = (inv.transportCharge * (inv.transportGstPercent || 18)) / 100;
-                                    if (hasIgst) igst += tGst;
-                                    else { cgst += tGst / 2; sgst += tGst / 2; }
-
-                                    return hasIgst ? (
-                                      <div className="flex justify-between text-[11px] font-black text-blue-600">
-                                        <span>COMMON IGST (Merged)</span>
-                                        <span>₹{igst.toFixed(2)}</span>
+                                    </thead>
+                                    <tbody>
+                                      {(inv.items || []).map((item, idx) => (
+                                        <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition">
+                                          <td className="py-3 font-bold text-slate-700">{item.name}</td>
+                                          <td className="py-3 text-center font-black text-indigo-600 bg-indigo-50/50 rounded-lg">{item.qty} {item.unit || "Units"}</td>
+                                          <td className="py-3 text-right font-black text-slate-800">₹{(item.total || 0).toLocaleString()}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-50 flex flex-col justify-between">
+                                  <div>
+                                    <h4 className="font-black text-[10px] uppercase text-slate-400 mb-4 tracking-widest flex items-center gap-2">
+                                      <FaHistory className="text-indigo-500" /> Administrative Info
+                                    </h4>
+                                    <div className="space-y-3 text-xs">
+                                      <div className="flex justify-between border-b border-slate-50 pb-2">
+                                        <span className="text-slate-500 font-bold uppercase tracking-tighter">Subtotal</span>
+                                        <span className="font-black text-slate-800">₹{(inv.subtotal || 0).toLocaleString()}</span>
                                       </div>
-                                    ) : (
-                                      <>
-                                        <div className="flex justify-between text-[11px] font-black text-blue-600">
-                                          <span>COMMON CGST (Merged)</span>
-                                          <span>₹{cgst.toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-[11px] font-black text-blue-600">
-                                          <span>COMMON SGST (Merged)</span>
-                                          <span>₹{sgst.toFixed(2)}</span>
-                                        </div>
-                                      </>
-                                    );
-                                  })()}
-                                  {inv.transportCharge > 0 && (
-                                    <div className="flex justify-between text-[11px] font-bold text-orange-600">
-                                      <span>TRANSPORT CHARGE</span>
-                                      <span>₹{(inv.transportCharge || 0).toFixed(2)}</span>
+                                      <div className="flex justify-between border-b border-slate-50 pb-2">
+                                        <span className="text-slate-500 font-bold">Billing Person</span>
+                                        <span className="font-black text-slate-800">{inv.billingPerson || "N/A"}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-slate-500 font-bold">Invoice Date</span>
+                                        <span className="font-black text-slate-800">{formatIST(inv.invoiceDate || inv.createdAt)}</span>
+                                      </div>
                                     </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-50">
-                                <h4 className="font-black text-[10px] uppercase text-gray-400 mb-4 tracking-widest flex items-center gap-2">
-                                  <FaHistory className="text-blue-500" /> Administrative Info
-                                </h4>
-                                <div className="space-y-4 text-xs">
-                                  <div className="flex justify-between border-b border-gray-50 pb-2 text-[11px]">
-                                    <span className="text-gray-500 font-bold uppercase tracking-tighter">Subtotal</span>
-                                    <span className="font-black text-gray-800">₹{(inv.subtotal || 0).toLocaleString()}</span>
                                   </div>
-                                  <div className="flex justify-between border-b border-gray-50 pb-2">
-                                    <span className="text-gray-500 font-bold">Billing Person</span>
-                                    <span className="font-black text-gray-800">{inv.billingPerson || "N/A"}</span>
-                                  </div>
-                                  <div className="flex justify-between border-b border-gray-50 pb-2">
-                                    <span className="text-gray-500 font-bold">Invoice Date</span>
-                                    <span className="font-black text-gray-800">{new Date(inv.invoiceDate || inv.createdAt).toLocaleString()}</span>
-                                  </div>
-                                  <div className="flex justify-between border-b border-gray-50 pb-2 pt-2">
-                                    <span className="text-[#319bab] font-black text-sm uppercase">Grand Total</span>
-                                    <span className="font-black text-blue-700 text-sm">₹{(inv.grandTotal || 0).toLocaleString()}</span>
+                                  <div className="mt-6 p-4 bg-indigo-50 rounded-xl flex items-center justify-between border border-indigo-100">
+                                    <span className="text-indigo-900 font-black text-sm uppercase tracking-tighter">Grand Total</span>
+                                    <span className="font-black text-indigo-700 text-xl tracking-tight">₹{(inv.grandTotal || 0).toLocaleString()}</span>
                                   </div>
                                 </div>
                               </div>
-                            </div>
+                            )}
                           </td>
                         </tr>
                       )}

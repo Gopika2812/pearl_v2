@@ -124,27 +124,50 @@ router.post("/:id/record-payment", clearCachePrefix("/api/sales-orders"), async 
 });
 
 // GET all sales orders with filtering and date ranges
-router.get("/", cacheData(60), async (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    const { branchId, customerName, status, isClaim, fromDate, toDate, customerId } = req.query;
+    const { branchId, customerName, status, isClaim, fromDate, toDate, customerId, search, voucherType, generated } = req.query;
     const query = {};
 
     // 1. Branch Filter (Always required)
     if (branchId) {
-      query.$or = [{ branchId }, { branchId: { $exists: false } }];
+      query.branchId = branchId;
     }
 
-    // 2. Date Filter (Crucial for Speed)
-    // Default to 'Today' if no dates are provided
-    const start = fromDate ? new Date(fromDate) : new Date();
-    start.setHours(0, 0, 0, 0);
+    // 2. Voucher Type Filter
+    if (voucherType) {
+      query.voucherType = voucherType;
+    }
 
-    const end = toDate ? new Date(toDate) : new Date();
-    end.setHours(23, 59, 59, 999);
+    // 3. Invoice Generation Filter
+    if (generated !== undefined && generated !== "") {
+      query.invoiceGenerated = generated === "true";
+    }
 
-    query.orderDate = { $gte: start, $lte: end };
+    // 4. Global Search (Overrides strict date filter if provided)
+    if (search) {
+      const searchCriteria = {
+        $or: [
+          { invoiceId: { $regex: search, $options: "i" } },
+          { "customer.name": { $regex: search, $options: "i" } }
+        ]
+      };
+      query.$and = [searchCriteria];
+    }
 
-    // 3. Status & Customer Filters
+    // 5. Date Filter
+    // Apply default 'Today' ONLY if no specific dates AND no search term are provided
+    if (fromDate || toDate || (!search && !voucherType && !generated)) {
+      const start = fromDate ? new Date(fromDate) : new Date();
+      start.setHours(0, 0, 0, 0);
+
+      const end = toDate ? new Date(toDate) : new Date();
+      end.setHours(23, 59, 59, 999);
+
+      query.orderDate = { $gte: start, $lte: end };
+    }
+
+    // 6. Status & Customer Filters
     if (customerName) {
       query["customer.name"] = { $regex: customerName, $options: "i" };
     }
@@ -166,7 +189,7 @@ router.get("/", cacheData(60), async (req, res) => {
       .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt orderDate invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount invoiceItems lastInvoicedItems invoiceSubtotal invoiceTotalTax invoiceGrandTotal invoiceOpeningBalance invoiceClosingBalance")
       .populate('salesOwner', 'name')
       .sort({ createdAt: -1 })
-      .limit(200) // Prevent huge lists from crashing the browser
+      .limit(search ? 1000 : 200) // Increase limit for searches
       .lean();
 
     res.json(salesOrders);
@@ -1112,6 +1135,16 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
   } catch (error) {
     console.error("❌ Sales Invoice generation error:", error.message);
     res.status(500).json({ message: error.message || "Failed to generate sales invoice" });
+  }
+});
+
+// CREATE NEW SALES ORDER
+router.post("/", clearCachePrefix("/api/sales-orders"), async (req, res) => {
+  try {
+    const { customer, items, ...rest } = req.body;
+    // ... implementation
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
