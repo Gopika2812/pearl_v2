@@ -16,7 +16,7 @@ const router = express.Router();
 // Configure multer with 50MB limit for bulk uploads
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }, 
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
 // Escape special regex characters
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -247,7 +247,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const { page = 1, limit = 50, search = "", branchId } = req.query;
-    
+
     console.log("🔍 GET /customers endpoint hit");
     console.log("Query params:", { page, limit, search, branchId });
 
@@ -271,14 +271,14 @@ router.get("/", async (req, res) => {
     // Build search filter with branchId
     const filter = search
       ? {
-          branchId: branchObjectId,
-          $or: [
-            { name: { $regex: search, $options: "i" } },
-            { whatsapp: { $regex: search, $options: "i" } },
-            { email: { $regex: search, $options: "i" } },
-            { gstin: { $regex: search, $options: "i" } },
-          ],
-        }
+        branchId: branchObjectId,
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { whatsapp: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+          { gstin: { $regex: search, $options: "i" } },
+        ],
+      }
       : { branchId: branchObjectId };
 
     // ⚡ Get total count
@@ -296,16 +296,16 @@ router.get("/", async (req, res) => {
       {
         $group: {
           _id: null,
-          totalGlobalDebit: { 
-            $sum: { $cond: [{ $gt: ["$netBalance", 0] }, "$netBalance", 0] } 
+          totalGlobalDebit: {
+            $sum: { $cond: [{ $gt: ["$netBalance", 0] }, "$netBalance", 0] }
           },
-          totalGlobalCredit: { 
-            $sum: { $cond: [{ $lt: ["$netBalance", 0] }, { $abs: "$netBalance" }, 0] } 
+          totalGlobalCredit: {
+            $sum: { $cond: [{ $lt: ["$netBalance", 0] }, { $abs: "$netBalance" }, 0] }
           }
         }
       }
     ]);
-    
+
     const totalGlobalDebit = totalsAggregation.length > 0 ? totalsAggregation[0].totalGlobalDebit : 0;
     const totalGlobalCredit = totalsAggregation.length > 0 ? totalsAggregation[0].totalGlobalCredit : 0;
 
@@ -388,8 +388,6 @@ router.post("/", async (req, res) => {
         message: "Invalid branchId format",
       });
     }
-
-
 
     const customer = new Customer({
       branchId,
@@ -696,7 +694,7 @@ router.get("/:id/ledger", async (req, res) => {
     const currentBalance = (customer.debit || 0) - (customer.credit || 0);
 
     // 2. Fetch ALL transactions after startDate to determine the opening balance
-    
+
     // Debits: Sales Invoices after startDate
     const salesAfterStart = await SalesOrder.find({
       branchId: customer.branchId,
@@ -728,8 +726,8 @@ router.get("/:id/ledger", async (req, res) => {
       const finalizedAmount = s.lastInvoicedGrandTotal !== undefined ? s.lastInvoicedGrandTotal : (s.invoiceGrandTotal || s.grandTotal || 0);
       return sum + finalizedAmount;
     }, 0);
-    
-    const totalCreditsAfterStart = 
+
+    const totalCreditsAfterStart =
       receiptsAfterStart.reduce((sum, r) => {
         // If bounced, it's effectively a debit (removes credit), so we subtract it from credit total
         return sum + (r.status === "bounced" ? -(r.amount || 0) : (r.amount || 0));
@@ -848,15 +846,15 @@ router.get("/export/opening-closing", async (req, res) => {
     }
 
     const branchObjectId = new mongoose.Types.ObjectId(branchId);
-    
+
     // Parse input date (it comes in as YYYY-MM-DD from the frontend picker)
     // To get the opening balance of March 1st IST, we need all transactions 
     // from March 1st 00:00 IST onwards.
     // IST is UTC + 5:30. So March 1st 00:00 IST = Feb 28th 18:30 UTC.
     const dateArr = date.split("-").map(Number); // [2026, 3, 1]
-    const startIST = new Date(Date.UTC(dateArr[0], dateArr[1]-1, dateArr[2], 0, 0, 0));
+    const startIST = new Date(Date.UTC(dateArr[0], dateArr[1] - 1, dateArr[2], 0, 0, 0));
     // Subtract 5.5 hours to align UTC with IST midnight
-    startIST.setMinutes(startIST.getMinutes() - 330); 
+    startIST.setMinutes(startIST.getMinutes() - 330);
 
     // 1. Get ALL customers for this branch
     const customers = await Customer.find({ branchId: branchObjectId }).lean();
@@ -931,7 +929,7 @@ router.get("/export/opening-closing", async (req, res) => {
     const results = customers.map(c => {
       const cid = c._id.toString();
       const currentBalance = (c.debit || 0) - (c.credit || 0);
-      
+
       const debitsAfter = (salesMap[cid] || 0) + (otherPaymentsMap[cid] || 0);
       const creditsAfter = (receiptsMap[cid] || 0) + (cnMap[cid] || 0) + (otherReceiptsMap[cid] || 0);
 
