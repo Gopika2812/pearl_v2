@@ -1240,6 +1240,9 @@ const BranchInvoicedOrders = () => {
                                           Pending ⚠️
                                         </th>
                                         <th className="text-right py-2 px-3">
+                                          Discount
+                                        </th>
+                                        <th className="text-right py-2 px-3">
                                           Amount
                                         </th>
                                       </tr>
@@ -1297,6 +1300,10 @@ const BranchInvoicedOrders = () => {
                                                     {backOrderQty > 0
                                                       ? backOrderQty
                                                       : "0"}
+                                                  </td>
+                                                  <td className="py-2 px-3 text-right">
+                                                    <div className="text-[10px] font-bold text-gray-400">{invoiceItem.discountPercent || 0}%</div>
+                                                    <div className="text-[9px] text-red-500 font-bold">-₹{(invoiceItem.discountAmount || 0).toFixed(2)}</div>
                                                   </td>
                                                   <td className="py-2 px-3 text-right font-bold text-[#319bab]">
                                                     ₹

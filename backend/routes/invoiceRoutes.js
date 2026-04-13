@@ -92,9 +92,12 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       const cgstPercent = Number(item.cgst || (originalItem ? originalItem.cgst : 0));
       const sgstPercent = Number(item.sgst || (originalItem ? originalItem.sgst : 0));
       const igstPercent = Number(item.igst || (originalItem ? originalItem.igst : 0));
+      const discountPercent = Number(item.discountPercent || 0);
+      const discountAmount = Number(item.discountAmount || 0);
 
-      // 1. Calculate Taxable Amount (assuming sellingPrice is Exclusive)
-      const taxableAmount = Math.round(sellingPrice * confirmedQty * 100) / 100;
+      // 1. Calculate Taxable Amount (subtracting product-level discount)
+      const grossAmount = sellingPrice * confirmedQty;
+      const taxableAmount = Math.round((grossAmount - discountAmount) * 100) / 100;
 
       // 2. Calculate GST components
       const cgstAmount = Math.round((taxableAmount * cgstPercent / 100) * 100) / 100;
@@ -116,6 +119,8 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         ...(originalItem ? originalItem.toObject() : item),
         qty: confirmedQty,
         sellingPrice: sellingPrice,
+        discountPercent,
+        discountAmount,
         total: itemTotalWithTax,
         gst: gstPercent,
         cgst: cgstPercent,
@@ -399,11 +404,17 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           const backOrderQty = Number(item.backOrderQty || Math.max(0, originalQty - confirmedQty));
           const sellingPrice = Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0));
           const gstPercent = Number(item.gst || (originalItem ? originalItem.gst : 0));
+          const discountPercent = Number(item.discountPercent || 0);
+          const discountAmount = Number(item.discountAmount || 0);
 
           const coreFields = {
             originalQty,
             confirmedQty,
             backOrderQty,
+            discountPercent,
+            discountAmount,
+            sellingPrice,
+            gst: gstPercent,
             name: item.name || (originalItem ? originalItem.name : "Unknown Product"),
             hsn: item.hsn || (originalItem ? originalItem.hsn : "")
           };
@@ -435,7 +446,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         let cgstTotal = 0, sgstTotal = 0, igstTotal = 0;
 
         processedItems.forEach((item) => {
-          const taxableAmount = Math.round((item.sellingPrice || 0) * (item.qty || 0) * 100) / 100;
+          const grossAmount = (item.sellingPrice || 0) * (item.qty || 0);
+          const taxableAmount = Math.round((grossAmount - (item.discountAmount || 0)) * 100) / 100;
           const cgstAmt = Math.round((taxableAmount * (item.cgst || 0) / 100) * 100) / 100;
           const sgstAmt = Math.round((taxableAmount * (item.sgst || 0) / 100) * 100) / 100;
           const igstAmt = Math.round((taxableAmount * (item.igst || 0) / 100) * 100) / 100;
@@ -619,6 +631,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
               sellingPrice: Number(item.sellingPrice),
               unit: item.unit,
               qty: Number(item.originalQty || item.qty),
+              discountPercent: Number(item.discountPercent || 0),
+              discountAmount: Number(item.discountAmount || 0),
               gst: Number(item.gst),
               cgst: Number(item.cgst),
               sgst: Number(item.sgst),

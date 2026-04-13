@@ -629,6 +629,7 @@ const BranchSalesInvoices = () => {
                                       <tr className="text-slate-400 font-black border-b border-slate-50">
                                         <th className="text-left py-3">DESCRIPTION</th>
                                         <th className="text-center py-3">QTY</th>
+                                        <th className="text-right py-3">DISCOUNT</th>
                                         <th className="text-right py-3">TOTAL</th>
                                       </tr>
                                     </thead>
@@ -639,6 +640,10 @@ const BranchSalesInvoices = () => {
                                           <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition">
                                             <td className="py-3 font-bold text-slate-700">{item.name}</td>
                                             <td className="py-3 text-center font-black text-indigo-600 bg-indigo-50/50 rounded-lg">{item.qty} {item.unit || "Units"}</td>
+                                            <td className="py-3 text-right">
+                                              <div className="text-xs font-bold text-slate-400">{item.discountPercent || 0}%</div>
+                                              <div className="text-[10px] text-red-500 font-black">-₹{(item.discountAmount || 0).toLocaleString()}</div>
+                                            </td>
                                             <td className="py-3 text-right font-black text-slate-800">₹{(item.total || 0).toLocaleString()}</td>
                                           </tr>
                                         ))}

@@ -50,25 +50,22 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
     hsn: "",
     unit: "",
     gst: 0,
-    mrp: 0
+    mrp: 0,
+    discountPercent: 0
   });
 
-  // Fetch initial data for dropdowns
   useEffect(() => {
     if (order?._id) {
-      // Re-fetch the order to ensure we have the freshest data (transport, discount, etc.)
       const fetchLatestOrder = async () => {
         try {
           const res = await fetch(`${API_BASE}/sales-orders/${order._id}`);
           if (res.ok) {
             const freshOrder = await res.json();
-            // Only update financial fields if they were 0/missing in the prop
-            if (!initializationRef.current) {
-               setCommonDiscount(freshOrder.commonDiscount || 0);
-               setTransportCharge(freshOrder.transportCharge || 0);
-               setTransportGstPercent(freshOrder.transportGstPercent || 18);
-               setNotes(freshOrder.notes || "");
-            }
+            // Sync financial fields even if initializationRef is true, provided they are default
+            setCommonDiscount(prev => prev === 0 ? (freshOrder.commonDiscount || 0) : prev);
+            setTransportCharge(prev => prev === 0 ? (freshOrder.transportCharge || 0) : prev);
+            setTransportGstPercent(prev => (prev === 18 || prev === 0) ? (freshOrder.transportGstPercent || 18) : prev);
+            setNotes(prev => !prev ? (freshOrder.notes || "") : prev);
           }
         } catch (err) {
           console.error("Failed to re-sync order data:", err);
@@ -76,8 +73,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       };
 
       fetchLatestOrder();
-      searchCustomers(""); 
-      searchProducts("");  
+      searchCustomers("");
+      searchProducts("");
     }
   }, [order?._id]);
 
@@ -126,6 +123,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           backOrderQty: hasPreviousInvoice ? (item.qty || 0) : 0,
           total: 0,
           sellingPrice: item.sellingPrice || item.rate || 0,
+          discountPercent: item.discountPercent || 0,
+          discountAmount: item.discountAmount || 0,
           hsn: item.hsn || item.hsnCode || ""
         });
       });
@@ -151,6 +150,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           existing.backOrderQty = item.backOrderQty !== undefined ? item.backOrderQty : undefined;
           existing.sellingPrice = item.sellingPrice || existing.sellingPrice || 0;
           existing.hsn = item.hsn || existing.hsn || "";
+          existing.discountPercent = item.discountPercent || existing.discountPercent || 0;
+          existing.discountAmount = item.discountAmount || existing.discountAmount || 0;
           existing.name = name;
         } else {
           // New item added directly to invoice (not in SO)
@@ -163,6 +164,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             originalQty: item.originalQty || item.qty || 0,
             backOrderQty: item.backOrderQty || 0,
             sellingPrice: item.sellingPrice || 0,
+            discountPercent: item.discountPercent || 0,
+            discountAmount: item.discountAmount || 0,
             hsn: item.hsn || ""
           });
         }
@@ -175,12 +178,16 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         // Use saved backOrderQty if available, otherwise calculate it
         const backOrder = item.backOrderQty !== undefined ? item.backOrderQty : Math.max(0, original - confirmed);
 
+        const discountAmt = item.discountAmount || 0;
+        const subtotal = (item.sellingPrice || 0) * confirmed;
+        const total = Math.round((subtotal - discountAmt) * 100) / 100;
+
         return {
           ...item,
           originalQty: original,
           confirmedQty: confirmed,
           backOrderQty: backOrder,
-          total: Math.round((item.sellingPrice || 0) * confirmed * 100) / 100
+          total: total
         };
       });
 
@@ -283,6 +290,10 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       else productName = itemSearch; // Last resort
     }
 
+    const disc = Number(newItem.discountPercent || 0);
+    const gross = newItem.sellingPrice * Number(newItem.qty);
+    const discAmount = Math.round(gross * disc / 100 * 100) / 100;
+
     const itemToAdd = {
       productId: newItem.productId,
       name: productName,
@@ -297,7 +308,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       confirmedQty: Number(newItem.qty),
       backOrderQty: 0,
       originalQty: Number(newItem.qty),
-      total: Math.round(newItem.sellingPrice * newItem.qty * 100) / 100,
+      discountPercent: disc,
+      discountAmount: discAmount,
+      total: Math.round((gross - discAmount) * 100) / 100,
     };
 
     setEditedItems([...editedItems, itemToAdd]);
@@ -311,7 +324,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       hsn: "",
       unit: "",
       gst: 0,
-      mrp: 0
+      mrp: 0,
+      discountPercent: 0
     });
     setItemSearch("");
     toast.success(`Added ${itemToAdd.name}`);
@@ -739,31 +753,32 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
               </div>
 
               <!-- PRODUCT DETAILS TABLE -->
-              <div class="section-title">📦 PRODUCT DETAILS</div>
+              <div class="section-title" style="background: #2563eb; color: #fff;">📦 PRODUCT DETAILS</div>
               <table>
                 <thead>
                   <tr>
-                    <th style="width: 30%;">Product Name</th>
+                    <th style="width: 25%;">Product Name</th>
                     <th>HSN</th>
                     <th>GST</th>
                     <th style="text-align: right;">Qty</th>
                     <th style="text-align: right;">Rate</th>
-                    <th style="text-align: center;">Per</th>
                     <th style="text-align: right;">Discount</th>
-                    <th style="text-align: right;">Total Amount (Qty × Rate)</th>
+                    <th style="text-align: right;">Total Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0).map(item => `
                     <tr>
-                      <td>${item.name}</td>
-                      <td>${item.hsn || "-"}</td>
-                      <td style="text-align: center;">${item.gst || 0}%</td>
-                      <td style="text-align: right;">${item.qty || item.confirmedQty} ${item.unit || ""} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
+                      <td style="font-weight: bold; color: #1e293b;">${item.name}</td>
+                      <td style="text-align: center; color: #475569;">${item.hsn || "-"}</td>
+                      <td style="text-align: center; color: #475569;">${item.gst || 0}%</td>
+                      <td style="text-align: right; font-weight: bold; color: #1e293b;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
                       <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
-                      <td style="text-align: center; text-transform: uppercase;">${item.unit || ""}</td>
-                      <td style="text-align: right;">${item.discountPercent || 0}% (-₹${(item.discountAmount || 0).toFixed(2)})</td>
-                      <td style="text-align: right;">₹${((item.qty || item.confirmedQty) * item.sellingPrice).toFixed(2)}</td>
+                      <td style="text-align: right;">
+                        <div style="font-weight: bold; color: #b91c1c;">${item.discountPercent || 0}%</div>
+                        <div style="font-size: 8px; color: #64748b;">-₹${(item.discountAmount || 0).toFixed(2)}</div>
+                      </td>
+                      <td style="text-align: right; font-weight: bold; color: #000;">₹${(item.total || ((item.qty || item.confirmedQty) * item.sellingPrice - (item.discountAmount || 0))).toFixed(2)}</td>
                     </tr>
                   `).join("")}
                 </tbody>
@@ -859,8 +874,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 </div>
               </div>
 
-              <div class="section-title">🧾 TAX INVOICE - HSN-WISE SUMMARY</div>
-
+              <div class="section-title" style="background: #1e293b; color: #fff;">📊 HSN-WISE TAX SUMMARY</div>
               <div style="text-align: center; margin-bottom: 20px; font-size: 13px;">
                 <strong>Invoice No: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</strong> | Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
                 <div style="font-size: 10px; color: #666; margin-top: 5px;">
@@ -868,46 +882,50 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 </div>
               </div>
 
-              <table>
-                <thead>
-                  <tr>
-                    <th>HSN Code</th>
-                    <th style="text-align: right;">Taxable Value</th>
-                    <th style="text-align: right;">CGST (Rate | Amt)</th>
-                    <th style="text-align: right;">SGST (Rate | Amt)</th>
-                    <th style="text-align: right;">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                   ${(() => {
-            const hsnMap = {};
-            (previewData?.items || []).forEach(item => {
-              const hsn = item.hsn || "N/A";
-              if (!hsnMap[hsn]) {
-                hsnMap[hsn] = { taxable: 0, cgst: 0, sgst: 0, total: 0, cgstRate: item.cgst || 0, sgstRate: item.sgst || 0 };
-              }
-              // Base calculation from inclusive total
-              const totalInclusive = item.total || 0;
-              const gstRate = (item.gst || 0);
-              const taxable = totalInclusive / (1 + (gstRate / 100));
-              const cgstAmt = (taxable * (item.cgst || 0)) / 100;
-              const sgstAmt = (taxable * (item.sgst || 0)) / 100;
-
-              hsnMap[hsn].taxable += taxable;
-              hsnMap[hsn].cgst += cgstAmt;
-              hsnMap[hsn].sgst += sgstAmt;
-              hsnMap[hsn].total += totalInclusive;
-            });
-            return Object.entries(hsnMap).map(([hsn, data]) => `
-                      <tr>
-                        <td>${hsn}</td>
-                        <td style="text-align: right;">₹${data.taxable.toFixed(2)}</td>
-                        <td style="text-align: right;">${data.cgstRate}% | ₹${data.cgst.toFixed(2)}</td>
-                        <td style="text-align: right;">${data.sgstRate}% | ₹${data.sgst.toFixed(2)}</td>
-                        <td style="text-align: right;">₹${data.total.toFixed(2)}</td>
-                      </tr>
-                    `).join("");
-          })()}
+               <table>
+                 <thead>
+                   <tr>
+                     <th>HSN Code</th>
+                     <th style="text-align: right;">Taxable Value</th>
+                     ${previewData?.totalTax?.igst > 0 ? 
+                       `<th style="text-align: right;">IGST (Rate | Amt)</th>` :
+                       `<th style="text-align: right;">CGST (Rate | Amt)</th>
+                        <th style="text-align: right;">SGST (Rate | Amt)</th>`
+                     }
+                     <th style="text-align: right;">Total</th>
+                   </tr>
+                 </thead>
+                 <tbody>
+                    ${(() => {
+             const hsnMap = {};
+             (previewData?.items || []).forEach(item => {
+               const hsn = item.hsn || "N/A";
+               if (!hsnMap[hsn]) {
+                 hsnMap[hsn] = { taxable: 0, cgst: 0, sgst: 0, igst: 0, total: 0, cgstRate: item.cgst || 0, sgstRate: item.sgst || 0, igstRate: item.igst || 0 };
+               }
+               const totalInclusive = item.total || 0;
+               const gstRate = (item.gst || 0);
+               const taxable = totalInclusive / (1 + (gstRate / 100));
+               
+               hsnMap[hsn].taxable += taxable;
+               hsnMap[hsn].cgst += (taxable * (item.cgst || 0)) / 100;
+               hsnMap[hsn].sgst += (taxable * (item.sgst || 0)) / 100;
+               hsnMap[hsn].igst += (taxable * (item.igst || 0)) / 100;
+               hsnMap[hsn].total += totalInclusive;
+             });
+             return Object.entries(hsnMap).map(([hsn, data]) => `
+                       <tr>
+                         <td>${hsn}</td>
+                         <td style="text-align: right;">₹${data.taxable.toFixed(2)}</td>
+                         ${previewData?.totalTax?.igst > 0 ?
+                           `<td style="text-align: right;">${data.igstRate}% | ₹${data.igst.toFixed(2)}</td>` :
+                           `<td style="text-align: right;">${data.cgstRate}% | ₹${data.cgst.toFixed(2)}</td>
+                            <td style="text-align: right;">${data.sgstRate}% | ₹${data.sgst.toFixed(2)}</td>`
+                         }
+                         <td style="text-align: right;">₹${data.total.toFixed(2)}</td>
+                       </tr>
+                     `).join("");
+           })()}
                   <!-- Removed TRANSPORT GST row as requested -->
                 </tbody>
               </table>
@@ -993,8 +1011,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-3 font-semibold text-sm transition whitespace-nowrap ${activeTab === tab
-                  ? "text-blue-600 border-b-2 border-blue-600 bg-white"
-                  : "text-gray-600 hover:text-gray-800"
+                ? "text-blue-600 border-b-2 border-blue-600 bg-white"
+                : "text-gray-600 hover:text-gray-800"
                 }`}
             >
               {tab === "edit" && "📦 Back Order / Workbench"}
@@ -1172,22 +1190,34 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                     </div>
 
                     {/* Rate Field */}
-                    <div className="md:col-span-3">
-                      <label className="block text-[9px] font-black text-gray-500 uppercase mb-1 tracking-tighter">3. Selling Rate (₹)</label>
+                    <div className="md:col-span-2">
+                      <label className="block text-[9px] font-black text-gray-500 uppercase mb-1 tracking-tighter">3. Rate (₹)</label>
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-[10px]">₹</span>
                         <input
                           type="number"
                           value={newItem.sellingPrice}
                           onChange={(e) => setNewItem({ ...newItem, sellingPrice: e.target.value })}
-                          onKeyDown={(e) => e.key === 'Enter' && confirmAddItem()}
-                          readOnly={!(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN")}
-                          className={`w-full p-2.5 pl-7 border-2 border-green-100 rounded-lg focus:ring-2 focus:ring-green-500 outline-none font-black text-blue-700 transition-all ${!(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN")
-                              ? "bg-gray-50 cursor-not-allowed"
-                              : "bg-white cursor-text focus:border-green-600"
+                          className={`w-full p-2.5 pl-6 border-2 border-green-100 rounded-lg focus:ring-2 focus:ring-green-500 outline-none font-black text-blue-700 transition-all text-xs ${!(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN")
+                            ? "bg-gray-50 cursor-not-allowed"
+                            : "bg-white cursor-text focus:border-green-600"
                             }`}
                         />
                       </div>
+                    </div>
+
+                    {/* Discount Field */}
+                    <div className="md:col-span-1">
+                      <label className="block text-[9px] font-black text-gray-500 uppercase mb-1 tracking-tighter">4. Disc %</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={newItem.discountPercent}
+                        onChange={(e) => setNewItem({ ...newItem, discountPercent: e.target.value })}
+                        className="w-full p-2.5 border-2 border-orange-100 rounded-lg bg-white focus:ring-2 focus:ring-orange-500 outline-none font-black text-center text-orange-600 transition-all text-xs"
+                        placeholder="0"
+                      />
                     </div>
 
                     {/* Add Button */}
@@ -1230,10 +1260,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                       <th className="p-3 text-left">Product</th>
                       <th className="p-3 text-right">Original Qty</th>
                       <th className="p-3 text-right">Confirmed Qty</th>
-                      <th className="p-3 text-right">Back Order Qty</th>
-                      <th className="p-3 text-center">Disc %</th>
-                      <th className="p-3 text-right">Price (Locked)</th>
-                      <th className="p-3 text-right">Total</th>
+                      <th className="p-3 text-right text-[10px] uppercase">Back Order</th>
+                      <th className="p-3 text-center text-[10px] uppercase">Disc %</th>
+                      <th className="p-3 text-right text-[10px] uppercase">Disc Amount</th>
+                      <th className="p-3 text-right text-[10px] uppercase">Price</th>
+                      <th className="p-3 text-right text-[10px] uppercase">Total</th>
                       <th className="p-3 text-center">Action</th>
                     </tr>
                   </thead>
@@ -1270,7 +1301,6 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                         <td className="p-3 text-right font-bold text-red-600">
                           {item.backOrderQty} {item.unit}
                         </td>
-                        {/* Discount % Column */}
                         <td className="p-3">
                           <div className="flex items-center justify-center gap-0.5">
                             <input
@@ -1284,6 +1314,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                             />
                             <span className="text-xs font-bold text-orange-500">%</span>
                           </div>
+                        </td>
+                        <td className="p-3 text-right font-bold text-orange-600">
+                          -₹{(item.discountAmount || 0).toFixed(2)}
                         </td>
                         <td className="p-3 text-right">
                           {(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN") ? (
