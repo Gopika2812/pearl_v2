@@ -227,12 +227,13 @@ export default function InventorySalesOrderEntry({
     };
 
     // Reset product selection when voucher type changes
-    setProductGroup("");
-    setProductGroupSearch("");
-    setSelectedItem("");
-    setItemSearch("");
-    setQty("");
-    setItems([]);
+    // Replaced: No longer clearing items/selection on voucher type change to prevent data loss.
+    // setProductGroup("");
+    // setProductGroupSearch("");
+    // setSelectedItem("");
+    // setItemSearch("");
+    // setQty("");
+    // setItems([]);
 
     fetchPreview();
   }, [voucherType]);

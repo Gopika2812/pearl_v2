@@ -157,7 +157,9 @@ router.get("/", async (req, res) => {
 
     // 5. Date Filter
     // Apply default 'Today' ONLY if no specific dates AND no search term are provided
-    if (fromDate || toDate || (!search && !voucherType && !generated)) {
+    // 📅 Date Filtering: Respect specific dates if provided, or default to "Today" if no global search is active.
+    // Status filters (voucherType, generated) should NOT disable the date filter.
+    if (fromDate || toDate || !search) {
       const start = fromDate ? new Date(fromDate) : new Date();
       start.setHours(0, 0, 0, 0);
 

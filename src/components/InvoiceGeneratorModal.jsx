@@ -726,16 +726,16 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  ${previewData?.items?.map(item => `
+                  ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0).map(item => `
                     <tr>
                       <td>${item.name}</td>
                       <td>${item.hsn || "-"}</td>
                       <td style="text-align: center;">${item.gst || 0}%</td>
-                      <td style="text-align: right;">${item.qty} ${item.unit || ""} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
+                      <td style="text-align: right;">${item.qty || item.confirmedQty} ${item.unit || ""} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
                       <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
                       <td style="text-align: center; text-transform: uppercase;">${item.unit || ""}</td>
                       <td style="text-align: right;">${item.discountPercent || 0}% (-₹${(item.discountAmount || 0).toFixed(2)})</td>
-                      <td style="text-align: right;">₹${(item.qty * item.sellingPrice).toFixed(2)}</td>
+                      <td style="text-align: right;">₹${((item.qty || item.confirmedQty) * item.sellingPrice).toFixed(2)}</td>
                     </tr>
                   `).join("")}
                 </tbody>
@@ -880,13 +880,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                       </tr>
                     `).join("");
           })()}
-                  <tr style="background: #f1f5f9; font-weight: bold;">
-                    <td>TRANSPORT GST</td>
-                    <td style="text-align: right;">₹${(previewData?.transportCharge || 0).toFixed(2)}</td>
-                    <td style="text-align: right;">9% | ₹${((previewData?.transportCharge * 0.18 / 2) || 0).toFixed(2)}</td>
-                    <td style="text-align: right;">9% | ₹${((previewData?.transportCharge * 0.18 / 2) || 0).toFixed(2)}</td>
-                    <td style="text-align: right;">₹${((previewData?.transportCharge * 1.18) || 0).toFixed(2)}</td>
-                  </tr>
+                  <!-- Removed TRANSPORT GST row as requested -->
                 </tbody>
               </table>
 
@@ -922,9 +916,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             ${editedItems.map((item, idx) => item.backOrderQty > 0 ? `
               <tr>
                 <td>${item.name}</td>
-                <td style="text-align: right;">${item.qty} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
-                <td style="text-align: right;">${item.confirmedQty} ${item.altQty > 0 ? `(${(item.altQty * (item.confirmedQty / item.qty)).toFixed(0)} ${item.altUnit})` : ""}</td>
-                <td style="text-align: right; color: red; font-weight: bold;">${item.backOrderQty} ${item.altQty > 0 ? `(${(item.altQty * (item.backOrderQty / item.qty)).toFixed(0)} ${item.altUnit})` : ""}</td>
+                <td style="text-align: right;">${item.originalQty || item.qty} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
+                <td style="text-align: right;">${item.confirmedQty} ${item.altQty > 0 && (item.originalQty || item.qty) > 0 ? `(${(item.altQty * (item.confirmedQty / (item.originalQty || item.qty))).toFixed(0)} ${item.altUnit})` : (item.altQty > 0 ? `(0 ${item.altUnit})` : "")}</td>
+                <td style="text-align: right; color: red; font-weight: bold;">${item.backOrderQty} ${item.altQty > 0 && (item.originalQty || item.qty) > 0 ? `(${(item.altQty * (item.backOrderQty / (item.originalQty || item.qty))).toFixed(0)} ${item.altUnit})` : (item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : "")}</td>
                 <td style="text-align: center; text-transform: uppercase;">${item.unit || ""}</td>
               </tr>
             ` : "").join("")}

@@ -131,7 +131,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                   </tr>
                 </thead>
                 <tbody>
-                  ${(previewData?.items || []).map(item => `
+                  ${(previewData?.items || []).filter(item => item.qty > 0).map(item => `
                     <tr>
                       <td>${item.name}</td>
                       <td>${item.hsn || "-"}</td>

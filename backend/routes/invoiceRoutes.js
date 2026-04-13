@@ -60,6 +60,8 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       notes,
       invoiceType = "ORDER_DETAILS",
       commonDiscount: customCommonDiscount,
+      transportCharge: customTransportCharge,
+      extraExpenseAmount: customExtraExpenseAmount,
       finalizedBy,
       finalizedByUsername
     } = req.body;
@@ -130,13 +132,20 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       }));
 
     // Transport GST calculation
-    const tCharge = salesOrder.transportCharge || 0;
-    const tGstPercent = salesOrder.transportGstPercent || 0;
-    const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
-
     const commonDiscount = customCommonDiscount !== undefined
       ? Number(customCommonDiscount)
       : (salesOrder.commonDiscount || 0);
+
+    const tCharge = customTransportCharge !== undefined
+      ? Number(customTransportCharge)
+      : (salesOrder.transportCharge || 0);
+
+    const extraExpenseAmount = customExtraExpenseAmount !== undefined
+      ? Number(customExtraExpenseAmount)
+      : (salesOrder.extraExpenseAmount || 0);
+
+    const tGstPercent = salesOrder.transportGstPercent || 0;
+    const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
 
     const totalTax = {
       cgst: Math.round((cgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
@@ -146,7 +155,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     totalTax.total = Math.round((totalTax.cgst + totalTax.sgst + totalTax.igst) * 100) / 100;
 
     // Calculate precise total before rounding
-    const preciseGrandTotal = grossSubtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) + (salesOrder.transportCharge || 0) - commonDiscount;
+    const preciseGrandTotal = grossSubtotal + totalTax.total + extraExpenseAmount + tCharge - commonDiscount;
     const grandTotal = Math.round(preciseGrandTotal);
     const roundingOff = Math.round((grandTotal - preciseGrandTotal) * 100) / 100;
 
@@ -251,7 +260,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       transportGstPercent: tGstPercent,
       transportGstAmount: tGstAmount,
       extraExpenses: salesOrder.extraExpenses || [],
-      extraExpenseAmount: salesOrder.extraExpenseAmount || 0,
+      extraExpenseAmount: extraExpenseAmount,
       commonDiscount: commonDiscount,
       grandTotal: grandTotal,
       roundingOff: roundingOff,
@@ -280,6 +289,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       notes,
       invoiceType = "ORDER_DETAILS",
       commonDiscount: customCommonDiscount,
+      transportCharge: customTransportCharge,
+      extraExpenseAmount: customExtraExpenseAmount,
       finalizedBy,
       finalizedByUsername
     } = req.body;
@@ -434,7 +445,10 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           item.total = Math.round((taxableAmount + cgstAmt + sgstAmt + igstAmt) * 100) / 100;
         });
 
-        const tCharge = salesOrder.transportCharge || 0;
+        const commonDiscount = customCommonDiscount !== undefined ? Number(customCommonDiscount) : (salesOrder.commonDiscount || 0);
+        const tCharge = customTransportCharge !== undefined ? Number(customTransportCharge) : (salesOrder.transportCharge || 0);
+        const extraExpenseAmount = customExtraExpenseAmount !== undefined ? Number(customExtraExpenseAmount) : (salesOrder.extraExpenseAmount || 0);
+        
         const tGstAmount = Math.round((tCharge * (salesOrder.transportGstPercent || 0) / 100) * 100) / 100;
         const totalTax = {
           cgst: Math.round((cgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
@@ -443,8 +457,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         };
         totalTax.total = Math.round((totalTax.cgst + totalTax.sgst + totalTax.igst) * 100) / 100;
 
-        const commonDiscount = customCommonDiscount !== undefined ? Number(customCommonDiscount) : (salesOrder.commonDiscount || 0);
-        const preciseGrandTotal = grossSubtotal + totalTax.total + (salesOrder.extraExpenseAmount || 0) + tCharge - commonDiscount;
+        const preciseGrandTotal = grossSubtotal + totalTax.total + extraExpenseAmount + tCharge - commonDiscount;
         const grandTotal = Math.round(preciseGrandTotal);
         const roundingOff = Math.round((grandTotal - preciseGrandTotal) * 100) / 100;
 
