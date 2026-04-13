@@ -3,6 +3,7 @@ import InventorySalesOrderEntry from "../../components/inventory/InventorySalesO
 import InventorySalesOrderHeader from "../../components/inventory/InventorySalesOrderHeader";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
+import TokenSidePanel from "../../components/inventory/TokenSidePanel";
 
 const BranchSalesOrder = () => {
   const { voucherTypes, productGroups, productCategories, products, warehouses, customers, salesMen, deliveryMen, salesOwners, customerGroups, customerCategories } = useInventory();
@@ -40,6 +41,9 @@ const BranchSalesOrder = () => {
           />
         </div>
       </div>
+      
+      {/* Tokenization Integration */}
+      <TokenSidePanel branchId={currentBranch?._id} user={user} />
     </div>
   );
 };

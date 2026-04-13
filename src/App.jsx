@@ -37,6 +37,7 @@ import BranchPurchaseInvoices from "./pages/branch/BranchPurchaseInvoices";
 import BranchQuickLinks from "./pages/branch/BranchQuickLinks";
 import BranchReceipt from "./pages/branch/BranchReceipt";
 import BranchRecycling from "./pages/branch/BranchRecycling";
+import Tokenization from "./pages/branch/Tokenization";
 import BranchSalesOrder from "./pages/branch/BranchSalesOrder";
 import BranchSummary from "./pages/branch/BranchSummary";
 import BranchSuppliers from "./pages/branch/BranchSuppliers";
@@ -230,6 +231,7 @@ function AppContent() {
                   <Route path="/branch/other-payment" element={<BranchOtherPayment />} />
                   <Route path="/branch/other-receipt" element={<BranchOtherReceipt />} />
                   <Route path="/branch/recycling" element={<BranchRecycling />} />
+                  <Route path="/branch/tokenization" element={<Tokenization />} />
                   <Route path="/branch-login" element={<BranchLoginPage />} />
                   <Route path="/branch-register" element={<BranchRegisterPage />} />
                   <Route path="/user-register" element={<UserRegistrationPage />} />

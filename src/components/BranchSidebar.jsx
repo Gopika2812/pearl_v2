@@ -254,7 +254,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
 
       {/* MOBILE SIDEBAR */}
       <aside
-        className={`md:hidden fixed top-0 left-0 h-full w-72 bg-gradient-to-b from-secondary to-secondary/90 text-white shadow-2xl z-50 transform transition-transform duration-300 ${
+        className={`md:hidden fixed top-0 left-0 h-full w-[280px] bg-slate-900 shadow-2xl z-50 transform transition-transform duration-500 ease-in-out ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -269,16 +269,16 @@ const BranchSidebar = ({ isOpen, onClose }) => {
         </div>
 
         {/* Header */}
-        <div className="px-6 py-4 border-b border-white/20">
-          <div className="flex flex-col gap-2">
+        <div className="px-6 py-6 border-b border-white/5 bg-white/5 backdrop-blur-md">
+          <div className="flex items-center gap-4">
             <img
               src="/logo.jpeg"
               alt="Pearls ERP Logo"
-              className="h-10 object-contain rounded-lg"
+              className="h-10 w-10 object-contain rounded-xl shadow-lg"
             />
-            <div className="text-xs text-white/80">
-              <p className="font-bold text-white">{branch?.name}</p>
-              <p>{branch?.location}</p>
+            <div className="min-w-0">
+              <p className="font-black text-sm text-white uppercase italic truncate">Pearls <span className="text-emerald-400 not-italic">ERP</span></p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase truncate tracking-widest">{branch?.name}</p>
             </div>
           </div>
         </div>

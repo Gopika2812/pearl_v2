@@ -5,7 +5,7 @@ import {
   FaBook, FaHistory, FaCheckCircle, FaMoneyBillWave, 
   FaDownload, FaLock, FaBookOpen, FaShieldAlt, FaPlusCircle,
   FaFileInvoice, FaList, FaUndo, FaMoneyCheckAlt, FaReceipt,
-  FaBoxes, FaHandHoldingUsd, FaPlus, FaSync
+  FaBoxes, FaHandHoldingUsd, FaPlus, FaSync, FaTicketAlt
 } from "react-icons/fa";
 
 export const ICON_MAP = {
@@ -36,7 +36,8 @@ export const ICON_MAP = {
   receipt: <FaReceipt />,
   inventory: <FaBoxes />,
   claims: <FaHandHoldingUsd />,
-  sync: <FaSync />
+  sync: <FaSync />,
+  token: <FaTicketAlt />
 };
 
 export const PAGE_CONFIG = [
@@ -72,6 +73,7 @@ export const PAGE_CONFIG = [
         { id: "credit-note", name: "Credit Note", path: "/branch/credit-note", icon: "return" },
         { id: "receipt", name: "Receipt Management", path: "/branch/receipt", icon: "receipt" },
         { id: "receipt-records", name: "Receipt Records", path: "/branch/receipt-records", icon: "history" },
+        { id: "tokenization", name: "Tokenization", path: "/branch/tokenization", icon: "token" },
       ]},
       { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["margin", "debit", "credit", "gstin"] },
     ]

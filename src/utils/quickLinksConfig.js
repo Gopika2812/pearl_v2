@@ -105,6 +105,14 @@ export const QUICK_LINKS_CONFIG = {
     displayFields: ["name", "phone", "email", "vehicleNumber"],
     editableFields: ["name", "phone", "email"],
     permissionFields: ["phone", "vehicleNumber"]
+  },
+  token: {
+    label: "Order Token",
+    desc: "Create and track order workflow tokens",
+    endpoint: "/tokens",
+    displayFields: ["tokenId", "status", "customer", "assignedTo", "createdAt"],
+    editableFields: ["status"],
+    permissionFields: []
   }
 };
 

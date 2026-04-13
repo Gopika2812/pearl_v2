@@ -396,7 +396,11 @@ const BranchInvoicedOrders = () => {
     const matchesFromTime = filterFromTime === "" || filterFromDate === "" || orderDateStr > filterFromDate || (orderDateStr === filterFromDate && orderTimeStr >= filterFromTime);
     const matchesToTime = filterToTime === "" || filterToDate === "" || orderDateStr < filterToDate || (orderDateStr === filterToDate && orderTimeStr <= filterToTime);
 
-    return matchesVoucherType && matchesInvoiceId && matchesCustomerName && matchesFromDate && matchesToDate && matchesFromTime && matchesToTime;
+    const matchesGenerated = filterGenerated === "" ||
+      (filterGenerated === "GENERATED" && order.invoiceGenerated) ||
+      (filterGenerated === "NOT_GENERATED" && !order.invoiceGenerated);
+
+    return matchesVoucherType && matchesInvoiceId && matchesCustomerName && matchesFromDate && matchesToDate && matchesFromTime && matchesToTime && matchesGenerated;
   });
 
   const handleExportPDF = () => {
