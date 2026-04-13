@@ -15,10 +15,9 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-// ✅ BULK UPLOAD Vendors from Excel
+// ✅ BULK UPLOAD Vendors from Excel (REFINED MODE - MAR 31 OPENING)
 router.post("/bulk-upload", upload.single("file"), async (req, res) => {
-  console.log("🔥 VENDOR BULK UPLOAD HIT");
-  console.log("📋 Request body:", req.body);
+  console.log("🔥 VENDOR BULK UPLOAD HIT (REFINED MODE - MAR 31 OPENING)");
 
   try {
     if (!req.file) {
@@ -26,22 +25,8 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     }
 
     const { branchId } = req.body;
-    console.log("🔍 Received branchId:", branchId);
-    
-    if (!branchId || branchId === "undefined" || String(branchId).trim() === "") {
-      return res.status(400).json({ 
-        message: "branchId is required", 
-        received: branchId,
-        type: typeof branchId 
-      });
-    }
-
-    // Validate branchId is a valid ObjectId
-    if (!mongoose.Types.ObjectId.isValid(branchId)) {
-      return res.status(400).json({ 
-        message: "Invalid branchId format",
-        received: branchId 
-      });
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
     }
 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
@@ -49,29 +34,66 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     const rows = XLSX.utils.sheet_to_json(sheet, { raw: false });
 
     console.log("📄 TOTAL ROWS:", rows.length);
-    console.log("📄 FIRST ROW RAW:", rows[0]);
-    
-    // Debug: Show normalized column names
-    if (rows[0]) {
-      const normalizedKeys = Object.keys(Object.fromEntries(
-        Object.entries(rows[0]).map(([k, v]) => [
-          k.replace(/[\s"\n\r]+/g, "").toLowerCase(),
-          String(v || "").trim(),
-        ])
-      ));
-      console.log("📄 NORMALIZED KEYS:", normalizedKeys);
-    }
 
-    const existingVendors = await Vendor.find({ branchId }, { name: 1 });
-    const existingVendorsMap = new Map(
-      existingVendors.map(v => [v.name.toLowerCase(), v._id])
-    );
+    // 📅 DEFINE CUTOFF: Everything after March 31, 2026
+    const startOfApril = new Date("2026-04-01T00:00:00.000Z");
+
+    // 🚀 STEP 1: CALCULATE APRIL MOVEMENTS PER VENDOR
+    
+    // 1.1 April Purchases (Credits for us, increases liability)
+    const aprilPurchases = await PurchaseOrder.find({
+      branchId,
+      status: "INVOICED",
+      date: { $gte: startOfApril }
+    }).select("vendor lastInvoicedGrandTotal grandTotal");
+
+    const purchaseMap = {};
+    aprilPurchases.forEach(po => {
+      const vName = String(po.vendor || "").toLowerCase();
+      if (!vName) return;
+      const amt = po.lastInvoicedGrandTotal !== undefined ? po.lastInvoicedGrandTotal : (po.grandTotal || 0);
+      purchaseMap[vName] = (purchaseMap[vName] || 0) + amt;
+    });
+
+    // 1.2 April Payments (Debits for us, decreases liability)
+    const aprilPayments = await Payment.find({
+      branchId,
+      status: "completed",
+      paymentDate: { $gte: startOfApril }
+    }).select("vendor amount");
+
+    const paymentMap = {};
+    aprilPayments.forEach(p => {
+      const vId = p.vendor?.vendorId?.toString();
+      const vName = String(p.vendor?.name || "").toLowerCase();
+      if (vId) paymentMap[vId] = (paymentMap[vId] || 0) + (p.amount || 0);
+      if (vName) paymentMap[vName] = (paymentMap[vName] || 0) + (p.amount || 0);
+    });
+
+    // 1.3 April Debit Notes (Debits for us, decreases liability)
+    const aprilDNs = await DebitNote.find({
+      branchId,
+      status: "Created",
+      date: { $gte: startOfApril }
+    }).select("vendor grandTotal");
+
+    const dnMap = {};
+    aprilDNs.forEach(dn => {
+      const vId = dn.vendor?.vendorId?.toString();
+      const vName = String(dn.vendor?.name || "").toLowerCase();
+      if (vId) dnMap[vId] = (dnMap[vId] || 0) + (dn.grandTotal || 0);
+      if (vName) dnMap[vName] = (dnMap[vName] || 0) + (dn.grandTotal || 0);
+    });
+
+    // 🏗️ STEP 2: PREPARE MASTER DATA
+    const existingVendors = await Vendor.find({ branchId }, { name: 1, phone: 1 });
+    const nameMap = new Map(existingVendors.map(v => [v.name.toLowerCase(), v._id]));
 
     let vendorsToBulkInsert = [];
     let vendorsToBulkUpdate = [];
     let skipped = [];
 
-    // 🔄 First pass: Validate and collect all valid records
+    // 🔄 STEP 3: PROCESS ROWS
     for (const row of rows) {
       const normalized = Object.fromEntries(
         Object.entries(row).map(([k, v]) => [
@@ -80,110 +102,172 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         ])
       );
 
-      // Try to find vendor name from multiple possible column names
       const name = normalized.vendorname || normalized.suppliers || normalized.suppliername || normalized.name || normalized.vendor || "";
-      const phone = String(normalized.phone || normalized.whatsapp || normalized.mobilenumber || "").trim();
-      const email = normalized.email || "";
-      const address = normalized.address || "";
-      const stateName = normalized.statename || normalized.state || "";
-      const gstRegistrationType = (normalized.gstregistrationtype || normalized.registrationtype || "Regular").toLowerCase().includes("unreg") ? "Unregistered/Consumer" : "Regular";
-      
-      // Try to find GSTIN from multiple possible column names
-      const gstin = normalized.gstin || normalized.gstin_uin || normalized.gstinuin || normalized["gstin/uin"] || "";
-      
-      // Parse debit/credit fields more robustly
-      const rawDebit = normalized.debit || normalized.debitbalance || normalized["debit(₹)"] || normalized.dr || normalized.openingdebit || "";
-      const rawCredit = normalized.credit || normalized.creditbalance || normalized["credit(₹)"] || normalized.cr || normalized.openingcredit || "";
-      
-      const debit = parseFloat(String(rawDebit).replace(/[^0-9.-]+/g, "")) || 0;
-      const credit = parseFloat(String(rawCredit).replace(/[^0-9.-]+/g, "")) || 0;
-
-      // ❌ Validation checks
       if (!name) {
-        skipped.push({ row, reason: "Missing vendor name (Checked: vendorname, suppliers, suppliername, name, vendor)" });
+        skipped.push({ row, reason: "Missing vendor name" });
         continue;
       }
 
-      // Check if vendor already exists (case-insensitive)
-      const existingVendorId = existingVendorsMap.get(name.toLowerCase());
+      let existingVendorId = nameMap.get(name.toLowerCase());
+      let vendorData = { branchId, name };
 
-      const vendorData = {
-        branchId: new mongoose.Types.ObjectId(branchId),
-        name,
-        phone: phone || undefined,
-        email: email || undefined,
-        address: address || undefined,
-        stateName: stateName || undefined,
-        gstRegistrationType,
-        gstin: gstin || undefined,
-        debit: Math.round(debit * 100) / 100,
-        credit: Math.round(credit * 100) / 100,
-        isActive: true,
-      };
+      // Basic info
+      if (normalized.phone !== undefined) vendorData.phone = normalized.phone;
+      if (normalized.email !== undefined) vendorData.email = normalized.email;
+      if (normalized.address !== undefined) vendorData.address = normalized.address;
+      if (normalized.statename !== undefined) vendorData.stateName = normalized.statename;
+      if (normalized.gstin !== undefined) vendorData.gstin = normalized.gstin;
 
-      if (existingVendorId && existingVendorId !== "pending_insert") {
-        // Queue for update
+      // 💰 FINANCIAL CALCULATIONS (SPECIALIZED FOR MAR 31 OPENING)
+      const rawDebit = normalized.debit || normalized.dr || normalized.openingdebit || "";
+      const rawCredit = normalized.credit || normalized.cr || normalized.openingcredit || "";
+      
+      if (rawDebit !== "" || rawCredit !== "") {
+        const excelDebit = parseFloat(String(rawDebit || 0).replace(/[^0-9.-]+/g, "")) || 0;
+        const excelCredit = parseFloat(String(rawCredit || 0).replace(/[^0-9.-]+/g, "")) || 0;
+
+        // Calculate movements for this specific vendor
+        const vKey = name.toLowerCase();
+        const vIdStr = existingVendorId?.toString();
+        
+        const aprPurchases = purchaseMap[vKey] || 0;
+        const aprPayments = (vIdStr ? paymentMap[vIdStr] : 0) || paymentMap[vKey] || 0;
+        const aprDNs = (vIdStr ? dnMap[vIdStr] : 0) || dnMap[vKey] || 0;
+
+        // Current totals = Excel Opening + April movements
+        vendorData.debit = excelDebit + aprPayments + aprDNs;
+        vendorData.credit = excelCredit + aprPurchases;
+        
+        // Fix opening balance field for snapshot logic
+        // For creditors, Credit - Debit is the standard balance
+        vendorData.openingBalance = excelCredit - excelDebit;
+        vendorData.manualOpeningDate = new Date("2026-03-31T23:59:59.999Z");
+        
+        console.log(`📊 Adj Balance for ${name}: Excel[Cr:${excelCredit}/Dr:${excelDebit}] + April[Cr:${aprPurchases}/Dr:${aprPayments+aprDNs}] = Final[Cr:${vendorData.credit}/Dr:${vendorData.debit}]`);
+      }
+
+      if (existingVendorId) {
         vendorsToBulkUpdate.push({
           updateOne: {
             filter: { _id: existingVendorId },
             update: { $set: vendorData }
           }
         });
-        console.log(`🔄 Queued for update: "${name}"`);
       } else {
-        // Queue for insert
         vendorsToBulkInsert.push(vendorData);
-        // Add to map to prevent duplicates in same batch creating multiple inserts
-        existingVendorsMap.set(name.toLowerCase(), "pending_insert");
+        nameMap.set(name.toLowerCase(), "pending_insert");
       }
     }
 
-    // 🔄 Second pass: Bulk insert all valid new records
     let insertedCount = 0;
     if (vendorsToBulkInsert.length > 0) {
-      console.log(`🔄 Attempting to insert ${vendorsToBulkInsert.length} new vendors...`);
-      try {
-        const result = await Vendor.insertMany(vendorsToBulkInsert, { ordered: false });
-        insertedCount = result.length;
-        console.log(`✅ Successfully inserted ${insertedCount} vendors`);
-      } catch (err) {
-        console.error("Bulk insert error:", err.message);
-        if (err.insertedDocs && err.insertedDocs.length > 0) {
-          insertedCount = err.insertedDocs.length;
-          console.log(`⚠️  Partially inserted ${insertedCount} vendors before error`);
-        }
-      }
+      const result = await Vendor.insertMany(vendorsToBulkInsert, { ordered: false });
+      insertedCount = result.length;
     }
 
-    // 🔄 Third pass: Bulk update all existing records
     let updatedCount = 0;
     if (vendorsToBulkUpdate.length > 0) {
-      console.log(`🔄 Attempting to update ${vendorsToBulkUpdate.length} existing vendors...`);
-      try {
-        const result = await Vendor.bulkWrite(vendorsToBulkUpdate, { ordered: false });
-        updatedCount = result.modifiedCount;
-        console.log(`✅ Successfully updated ${updatedCount} vendors`);
-      } catch (err) {
-        console.error("Bulk update error:", err.message);
-      }
+      const result = await Vendor.bulkWrite(vendorsToBulkUpdate, { ordered: false });
+      updatedCount = result.modifiedCount;
     }
 
-    console.log(`\n📊 UPLOAD SUMMARY:\n   ✅ Inserted: ${insertedCount}\n   🔄 Updated: ${updatedCount}\n   ⚠️  Skipped: ${skipped.length}`);
-    console.log("Skipped reasons:", skipped.map(s => `${s.row} - ${s.reason}`).join(", "));
-
-    res.status(201).json({
-      message: "Bulk vendor upload completed",
+    res.json({
+      message: "Bulk vendor upload (Opening Balance mode) completed successfully",
       insertedCount,
       updatedCount,
       skippedCount: skipped.length,
       skipped,
-      timestamp: new Date().toISOString(),
+      info: "Balances adjusted as of March 31st cutoff. April transactions were preserved."
     });
   } catch (err) {
     console.error("Bulk upload error:", err);
     res.status(500).json({ message: err.message });
   }
 });
+
+/**
+ * GET: Export a clean Snapshot of March 31st Balances only
+ * DYNAMICALLY CALCULATED: Current - April Movements
+ */
+router.get("/export/snapshot-mar31", async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    if (!branchId) return res.status(400).json({ success: false, message: "branchId is required" });
+
+    const startOfApril = new Date("2026-04-01T00:00:00.000Z");
+    const vendors = await Vendor.find({ branchId }).sort({ name: 1 }).lean();
+    const vendorIds = vendors.map(v => v._id);
+
+    // 1. Fetch April Purchases (Credits)
+    const aprilPurchases = await PurchaseOrder.find({
+      branchId,
+      status: "INVOICED",
+      date: { $gte: startOfApril }
+    }).select("vendor lastInvoicedGrandTotal grandTotal").lean();
+
+    const purchaseMap = {};
+    aprilPurchases.forEach(po => {
+      const vName = String(po.vendor || "").toLowerCase();
+      const amt = po.lastInvoicedGrandTotal !== undefined ? po.lastInvoicedGrandTotal : (po.grandTotal || 0);
+      purchaseMap[vName] = (purchaseMap[vName] || 0) + amt;
+    });
+
+    // 2. Fetch April Payments (Debits)
+    const aprilPayments = await Payment.find({
+      branchId,
+      status: "completed",
+      paymentDate: { $gte: startOfApril }
+    }).select("vendor amount").lean();
+
+    const paymentMap = {};
+    aprilPayments.forEach(p => {
+      const vId = p.vendor?.vendorId?.toString();
+      const vName = String(p.vendor?.name || "").toLowerCase();
+      if (vId) paymentMap[vId] = (paymentMap[vId] || 0) + (p.amount || 0);
+      if (vName) paymentMap[vName] = (paymentMap[vName] || 0) + (p.amount || 0);
+    });
+
+    // 3. Fetch April Debit Notes (Debits)
+    const aprilDNs = await DebitNote.find({
+      branchId,
+      status: "Created",
+      date: { $gte: startOfApril }
+    }).select("vendor grandTotal").lean();
+
+    const dnMap = {};
+    aprilDNs.forEach(dn => {
+      const vId = dn.vendor?.vendorId?.toString();
+      const vName = String(dn.vendor?.name || "").toLowerCase();
+      if (vId) dnMap[vId] = (dnMap[vId] || 0) + (dn.grandTotal || 0);
+      if (vName) dnMap[vName] = (dnMap[vName] || 0) + (dn.grandTotal || 0);
+    });
+
+    const results = vendors.map(v => {
+      const vKey = v.name.toLowerCase();
+      const vIdStr = v._id.toString();
+
+      const aprCr = purchaseMap[vKey] || 0;
+      const aprDr = (paymentMap[vIdStr] || 0) + (paymentMap[vKey] || 0) + (dnMap[vIdStr] || 0) + (dnMap[vKey] || 0);
+
+      // Snapshot = Current - (April Credits) + (April Debits)
+      const snapshotBal = (v.credit - v.debit) - aprCr + aprDr;
+
+      return {
+        "Supplier Name": v.name,
+        "GSTIN": v.gstin || "-",
+        "Phone": v.phone || "-",
+        "Debit (31-Mar-2026)": snapshotBal < 0 ? Math.abs(snapshotBal) : 0,
+        "Credit (31-Mar-2026)": snapshotBal > 0 ? snapshotBal : 0
+      };
+    });
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error("Vendor March 31 Snapshot Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 
 // ✅ CREATE vendor
 router.post("/", async (req, res) => {
@@ -509,5 +593,6 @@ router.get("/:id/ledger", async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+
 
 export default router;

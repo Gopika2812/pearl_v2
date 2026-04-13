@@ -16,6 +16,8 @@ const vendorSchema = new mongoose.Schema(
     gstin: { type: String },
     debit: { type: Number, default: 0 },
     credit: { type: Number, default: 0 },
+    openingBalance: { type: Number, default: 0 },
+    manualOpeningDate: { type: Date, default: null },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }

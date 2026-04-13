@@ -47,7 +47,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
     // 🚀 STEP 1: CALCULATE APRIL MOVEMENTS PER CUSTOMER
     // This ensures that if we upload Mar 31 balances, we don't lose April sales/receipts.
-    
+
     // 1.1 April Sales (Debits)
     const aprilSales = await SalesOrder.find({
       branchId,
@@ -123,15 +123,15 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
       const name = normalizedRow.customername || normalizedRow.name;
       const whatsapp = normalizedRow.whatsapp ? normalizedRow.whatsapp.replace(/\D/g, "") : "";
-      
+
       if (!name) {
         skipped.push({ row, reason: "Missing customer name" });
         continue;
       }
 
       // MATCHING LOGIC: WhatsApp first (if provided), then Name
-      let existingCustomerId = (whatsapp && whatsappMap.has(whatsapp)) 
-        ? whatsappMap.get(whatsapp) 
+      let existingCustomerId = (whatsapp && whatsappMap.has(whatsapp))
+        ? whatsappMap.get(whatsapp)
         : nameMap.get(name.toLowerCase());
 
       let customerData = { branchId, name };
@@ -163,12 +163,12 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         // Current totals = Excel Opening + April movements
         customerData.debit = excelDebit + aprSales + aprBounced;
         customerData.credit = excelCredit + aprConfirmed + aprCNs;
-        
+
         // Fix opening balance field for ledger stability
         customerData.openingBalance = excelDebit - excelCredit;
         customerData.manualOpeningDate = new Date("2026-03-31T23:59:59.999Z");
-        
-        console.log(`📊 Adj Balance for ${name}: Excel[Dr:${excelDebit}/Cr:${excelCredit}] + April[Dr:${aprSales+aprBounced}/Cr:${aprConfirmed+aprCNs}] = Final[Dr:${customerData.debit}/Cr:${customerData.credit}]`);
+
+        console.log(`📊 Adj Balance for ${name}: Excel[Dr:${excelDebit}/Cr:${excelCredit}] + April[Dr:${aprSales + aprBounced}/Cr:${aprConfirmed + aprCNs}] = Final[Dr:${customerData.debit}/Cr:${customerData.credit}]`);
       }
 
       // Sales Owner, Categories, Groups mapping
@@ -227,8 +227,195 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     });
   }
 });
+/**
+ * GET: Export Opening and Closing Balances for All Customers (Bulk)
+ */
+router.get("/export/opening-closing", async (req, res) => {
+  try {
+    const { branchId, date } = req.query;
 
+    if (!branchId || !date) {
+      return res.status(400).json({ success: false, message: "branchId and date are required" });
+    }
 
+    const branchObjectId = new mongoose.Types.ObjectId(branchId);
+
+    const dateArr = date.split("-").map(Number);
+    const startIST = new Date(Date.UTC(dateArr[0], dateArr[1] - 1, dateArr[2], 0, 0, 0));
+    startIST.setMinutes(startIST.getMinutes() - 330);
+
+    const customers = await Customer.find({ branchId: branchObjectId }).lean();
+    const customerIds = customers.map(c => c._id);
+
+    const salesAfterStart = await SalesOrder.find({
+      branchId: branchObjectId,
+      "customer.customerId": { $in: customerIds },
+      status: "INVOICED",
+      createdAt: { $gte: startIST }
+    }).select("invoiceGrandTotal grandTotal customer.customerId createdAt").lean();
+
+    const receiptsAfterStart = await Receipt.find({
+      branchId: branchObjectId,
+      "customer.customerId": { $in: customerIds },
+      status: "confirmed",
+      createdAt: { $gte: startIST }
+    }).select("amount customer.customerId createdAt").lean();
+
+    const cnAfterStart = await CreditNote.find({
+      branchId: branchObjectId,
+      "customer.customerId": { $in: customerIds },
+      status: "Created",
+      createdAt: { $gte: startIST }
+    }).select("grandTotal customer.customerId createdAt").lean();
+
+    const otherTxnsAfterStart = await OtherTransaction.find({
+      branchId: branchObjectId,
+      "customer.customerId": { $in: customerIds },
+      createdAt: { $gte: startIST }
+    }).select("amount type customer.customerId createdAt").lean();
+
+    const salesMap = {};
+    const receiptsMap = {};
+    const cnMap = {};
+
+    salesAfterStart.forEach(s => {
+      const cid = s.customer.customerId.toString();
+      salesMap[cid] = (salesMap[cid] || 0) + (s.invoiceGrandTotal || s.grandTotal || 0);
+    });
+
+    receiptsAfterStart.forEach(r => {
+      const cid = r.customer.customerId.toString();
+      receiptsMap[cid] = (receiptsMap[cid] || 0) + (r.amount || 0);
+    });
+
+    cnAfterStart.forEach(cn => {
+      const cid = cn.customer.customerId.toString();
+      cnMap[cid] = (cnMap[cid] || 0) + (cn.grandTotal || 0);
+    });
+
+    const otherReceiptsMap = {};
+    const otherPaymentsMap = {};
+
+    otherTxnsAfterStart.forEach(o => {
+      const cid = o.customer.customerId.toString();
+      if (o.type === "RECEIPT") {
+        otherReceiptsMap[cid] = (otherReceiptsMap[cid] || 0) + (o.amount || 0);
+      } else {
+        otherPaymentsMap[cid] = (otherPaymentsMap[cid] || 0) + (o.amount || 0);
+      }
+    });
+
+    const results = customers.map(c => {
+      const cid = c._id.toString();
+      const currentBalance = (c.debit || 0) - (c.credit || 0);
+
+      const debitsAfter = (salesMap[cid] || 0) + (otherPaymentsMap[cid] || 0);
+      const creditsAfter = (receiptsMap[cid] || 0) + (cnMap[cid] || 0) + (otherReceiptsMap[cid] || 0);
+
+      const openingBalance = currentBalance - debitsAfter + creditsAfter;
+
+      return {
+        _id: c._id,
+        name: c.name,
+        gstin: c.gstin || "-",
+        whatsapp: c.whatsapp || "-",
+        openingBalance: Math.round(openingBalance * 100) / 100,
+        closingBalance: Math.round(currentBalance * 100) / 100,
+      };
+    });
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error("Export Opening Balances Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET: Export a clean Snapshot of March 31st Balances only
+ * DYNAMICALLY CALCULATED: Current - April Movements
+ */
+router.get("/export/snapshot-mar31", async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    if (!branchId) return res.status(400).json({ success: false, message: "branchId is required" });
+
+    const startOfApril = new Date("2026-04-01T00:00:00.000Z");
+    const customers = await Customer.find({ branchId }).sort({ name: 1 }).lean();
+    const customerIds = customers.map(c => c._id);
+
+    // 1. April Sales (Debits)
+    const aprilSales = await SalesOrder.find({
+      branchId,
+      status: "INVOICED",
+      createdAt: { $gte: startOfApril }
+    }).select("customer.customerId lastInvoicedGrandTotal invoiceGrandTotal grandTotal").lean();
+
+    const salesMap = {};
+    aprilSales.forEach(s => {
+      const cid = s.customer?.customerId?.toString();
+      if (!cid) return;
+      const amt = s.lastInvoicedGrandTotal !== undefined ? s.lastInvoicedGrandTotal : (s.invoiceGrandTotal || s.grandTotal || 0);
+      salesMap[cid] = (salesMap[cid] || 0) + amt;
+    });
+
+    // 2. April Receipts (Credits)
+    const aprilReceipts = await Receipt.find({
+      branchId,
+      status: { $in: ["confirmed", "bounced"] },
+      createdAt: { $gte: startOfApril }
+    }).select("customer.customerId amount status").lean();
+
+    const receiptMap = { credit: {}, debit: {} };
+    aprilReceipts.forEach(r => {
+      const cid = r.customer?.customerId?.toString();
+      if (!cid) return;
+      if (r.status === "bounced") {
+        receiptMap.debit[cid] = (receiptMap.debit[cid] || 0) + (r.amount || 0);
+      } else {
+        receiptMap.credit[cid] = (receiptMap.credit[cid] || 0) + (r.amount || 0);
+      }
+    });
+
+    // 3. April Credit Notes (Credits)
+    const aprilCNs = await CreditNote.find({
+      branchId,
+      status: "Created",
+      createdAt: { $gte: startOfApril }
+    }).select("customer.customerId grandTotal").lean();
+
+    const cnMap = {};
+    aprilCNs.forEach(cn => {
+      const cid = cn.customer?.customerId?.toString();
+      if (!cid) return;
+      cnMap[cid] = (cnMap[cid] || 0) + (cn.grandTotal || 0);
+    });
+    const results = customers.map(c => {
+      const cid = c._id.toString();
+      // Customer Balance = Debit - Credit
+      const currentBal = (c.debit || 0) - (c.credit || 0);
+
+      const aprDr = (salesMap[cid] || 0) + (receiptMap.debit[cid] || 0);
+      const aprCr = (receiptMap.credit[cid] || 0) + (cnMap[cid] || 0);
+
+      // Snapshot = Current - (April Debits) + (April Credits)
+      const snapshotsBal = currentBal - aprDr + aprCr;
+
+      return {
+        "Customer Name": c.name,
+        "GSTIN": c.gstin || "-",
+        "WhatsApp": c.whatsapp || "-",
+        "Debit (31-Mar-2026)": snapshotsBal > 0 ? snapshotsBal : 0,
+        "Credit (31-Mar-2026)": snapshotsBal < 0 ? Math.abs(snapshotsBal) : 0
+      };
+    });
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error("Customer March 31 Snapshot Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 
 /**
@@ -824,123 +1011,5 @@ router.post("/login", async (req, res) => {
   }
 });
 
-/**
- * GET: Export Opening and Closing Balances for All Customers (Bulk)
- */
-router.get("/export/opening-closing", async (req, res) => {
-  try {
-    const { branchId, date } = req.query;
-
-    if (!branchId || !date) {
-      return res.status(400).json({ success: false, message: "branchId and date are required" });
-    }
-
-    const branchObjectId = new mongoose.Types.ObjectId(branchId);
-
-    // Parse input date (it comes in as YYYY-MM-DD from the frontend picker)
-    // To get the opening balance of March 1st IST, we need all transactions 
-    // from March 1st 00:00 IST onwards.
-    // IST is UTC + 5:30. So March 1st 00:00 IST = Feb 28th 18:30 UTC.
-    const dateArr = date.split("-").map(Number); // [2026, 3, 1]
-    const startIST = new Date(Date.UTC(dateArr[0], dateArr[1] - 1, dateArr[2], 0, 0, 0));
-    // Subtract 5.5 hours to align UTC with IST midnight
-    startIST.setMinutes(startIST.getMinutes() - 330);
-
-    // 1. Get ALL customers for this branch
-    const customers = await Customer.find({ branchId: branchObjectId }).lean();
-    const customerIds = customers.map(c => c._id);
-
-    // 2. Fetch ALL transactions after 'startIST' for ALL relevant customers at once
-
-    // Debits: Sales Invoices after 'startIST'
-    const salesAfterStart = await SalesOrder.find({
-      branchId: branchObjectId,
-      "customer.customerId": { $in: customerIds },
-      status: "INVOICED",
-      createdAt: { $gte: startIST }
-    }).select("invoiceGrandTotal grandTotal customer.customerId createdAt").lean();
-
-    // Credits: Receipts after 'startIST'
-    const receiptsAfterStart = await Receipt.find({
-      branchId: branchObjectId,
-      "customer.customerId": { $in: customerIds },
-      status: "confirmed",
-      createdAt: { $gte: startIST }
-    }).select("amount customer.customerId createdAt").lean();
-
-    // Credits: Credit Notes after 'startIST'
-    const cnAfterStart = await CreditNote.find({
-      branchId: branchObjectId,
-      "customer.customerId": { $in: customerIds },
-      status: "Created",
-      createdAt: { $gte: startIST }
-    }).select("grandTotal customer.customerId createdAt").lean();
-
-    // 2.5 Credits/Debits: Other Transactions (Receipts/Payments) after 'startIST'
-    const otherTxnsAfterStart = await OtherTransaction.find({
-      branchId: branchObjectId,
-      "customer.customerId": { $in: customerIds },
-      createdAt: { $gte: startIST }
-    }).select("amount type customer.customerId createdAt").lean();
-
-    // 3. Map transactions to customers for quick lookup
-    const salesMap = {};
-    const receiptsMap = {};
-    const cnMap = {};
-
-    salesAfterStart.forEach(s => {
-      const cid = s.customer.customerId.toString();
-      salesMap[cid] = (salesMap[cid] || 0) + (s.invoiceGrandTotal || s.grandTotal || 0);
-    });
-
-    receiptsAfterStart.forEach(r => {
-      const cid = r.customer.customerId.toString();
-      receiptsMap[cid] = (receiptsMap[cid] || 0) + (r.amount || 0);
-    });
-
-    cnAfterStart.forEach(cn => {
-      const cid = cn.customer.customerId.toString();
-      cnMap[cid] = (cnMap[cid] || 0) + (cn.grandTotal || 0);
-    });
-
-    const otherReceiptsMap = {};
-    const otherPaymentsMap = {};
-
-    otherTxnsAfterStart.forEach(o => {
-      const cid = o.customer.customerId.toString();
-      if (o.type === "RECEIPT") {
-        otherReceiptsMap[cid] = (otherReceiptsMap[cid] || 0) + (o.amount || 0);
-      } else {
-        otherPaymentsMap[cid] = (otherPaymentsMap[cid] || 0) + (o.amount || 0);
-      }
-    });
-
-    // 4. Calculate balances
-    const results = customers.map(c => {
-      const cid = c._id.toString();
-      const currentBalance = (c.debit || 0) - (c.credit || 0);
-
-      const debitsAfter = (salesMap[cid] || 0) + (otherPaymentsMap[cid] || 0);
-      const creditsAfter = (receiptsMap[cid] || 0) + (cnMap[cid] || 0) + (otherReceiptsMap[cid] || 0);
-
-      // Opening Balance = Current - (Debits after) + (Credits after)
-      const openingBalance = currentBalance - debitsAfter + creditsAfter;
-
-      return {
-        _id: c._id,
-        name: c.name,
-        gstin: c.gstin || "-",
-        whatsapp: c.whatsapp || "-",
-        openingBalance: Math.round(openingBalance * 100) / 100,
-        closingBalance: Math.round(currentBalance * 100) / 100, // Re-mapped to current as 'Closing'
-      };
-    });
-
-    res.json({ success: true, data: results });
-  } catch (error) {
-    console.error("Export Opening Balances Error:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 
 export default router;

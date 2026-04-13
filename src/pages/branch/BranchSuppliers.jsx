@@ -246,11 +246,43 @@ const BranchSuppliers = () => {
       ];
       worksheet['!cols'] = wscols;
 
-      XLSX.writeFile(workbook, `Suppliers_Report_${new Date().toLocaleDateString()}.xlsx`);
-      toast.success("Excel exported successfully!");
+      XLSX.writeFile(workbook, `Suppliers_List.xlsx`);
     } catch (error) {
       console.error("Export error:", error);
-      toast.error("Failed to export Excel");
+      toast.error("Failed to export suppliers");
+    }
+  };
+
+  const handleExportSnapshot = async () => {
+    try {
+      setLoading(true);
+      const url = `${API_BASE}/vendors/export/snapshot-mar31?branchId=${branchId}`;
+      const response = await fetchWithAuth(url);
+      const result = await response.json();
+
+      if (!result.success) throw new Error(result.message || "Export failed");
+
+      const worksheet = XLSX.utils.json_to_sheet(result.data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Vendor_March_31_Balances");
+      
+      // Auto-width adjustment
+      const wscols = [
+        { wch: 35 }, // Name
+        { wch: 20 }, // GSTIN
+        { wch: 20 }, // Phone
+        { wch: 20 }, // Debit
+        { wch: 20 }  // Credit
+      ];
+      worksheet['!cols'] = wscols;
+
+      XLSX.writeFile(workbook, `Creditors_Balances_Snapshot_31Mar2026.xlsx`);
+      toast.success("March 31st snapshot exported successfully!");
+    } catch (error) {
+      console.error("Snapshot export error:", error);
+      toast.error(`Export failed: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -307,9 +339,15 @@ const BranchSuppliers = () => {
 
             <button
               onClick={handleExportExcel}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
             >
-              <FaFileExport /> Export Excel
+              <FaFileExport /> Export
+            </button>
+            <button
+              onClick={handleExportSnapshot}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+            >
+              <FaFileExport /> 31st Mar Snapshot
             </button>
             
             <div className="flex bg-gray-100 p-1 rounded-xl items-center">
