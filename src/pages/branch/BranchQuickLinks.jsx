@@ -150,7 +150,6 @@ export default function BranchQuickLinks() {
                     {cat.icon}
                   </div>
                 </div>
-
                 <div className="p-3">
                   <div className="grid grid-cols-1 gap-1">
                     {cat.items.map((item) => (
