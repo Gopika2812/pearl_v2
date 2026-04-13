@@ -588,6 +588,8 @@ router.get("/commissions/order/:salesOrderId", async (req, res) => {
 router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
   try {
     const { id } = req.params;
+    const { narration } = req.body; // ✅ Accept cancellation reason
+
     const salesOrder = await SalesOrder.findById(id);
 
     if (!salesOrder) {
@@ -616,7 +618,6 @@ router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, r
           let currentCredit = customer.credit || 0;
           let currentDebit = customer.debit || 0;
 
-          // Reverting a Debit (Invoice): First reduce debit, then increase credit
           if (currentDebit >= remainingToRevert) {
             currentDebit -= remainingToRevert;
             remainingToRevert = 0;
@@ -634,7 +635,7 @@ router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, r
             closingBalance: newClosingBalance,
             totalBalance: newClosingBalance
           });
-          console.log(`✅ Customer balance reverted for cancellation (Netted): -₹${amountToRevert}`);
+          console.log(`✅ Customer balance reverted for cancellation: -₹${amountToRevert}`);
         }
       }
 
@@ -664,14 +665,17 @@ router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, r
     // Snapshot into editHistory before cancelling
     salesOrder.editHistory.push({
       version: (salesOrder.editHistory.length || 0) + 1,
-      editType: 'RE_EDIT_STARTED', // reuse for cancel marker
+      editType: 'RE_EDIT_STARTED',
       items: salesOrder.items,
       grandTotal: salesOrder.grandTotal,
       editedAt: new Date(),
-      note: `Order CANCELLED. All stock and customer balance effects reverted.`
+      note: `Order CANCELLED by ${req.user.username || "Admin"}. Reason: ${narration || "No narration provided"}. All stock and customer balance effects reverted.`
     });
 
     salesOrder.status = "CANCELLED";
+    salesOrder.cancelNarration = narration || "";
+    salesOrder.cancelledBy = req.user.username || req.user.id;
+    salesOrder.cancelledAt = new Date();
     await salesOrder.save();
 
     // Log the cancellation
@@ -681,7 +685,7 @@ router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, r
       username: req.user.username,
       branchId: salesOrder.branchId,
       action: "CANCEL_SO",
-      description: `Cancelled Sales Order: ${salesOrder.invoiceId} (Customer: ${salesOrder.customer.name})`,
+      description: `Cancelled Sales Order: ${salesOrder.invoiceId} (Customer: ${salesOrder.customer.name}). Reason: ${narration || "No reason given"}`,
       targetId: salesOrder._id,
       targetModel: "SalesOrder",
     });

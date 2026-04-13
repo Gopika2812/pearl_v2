@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaEdit, FaFileInvoice, FaSync, FaTrash, FaFilePdf, FaFileExcel, FaTruck } from "react-icons/fa";
+import { FaChevronDown, FaEdit, FaFileInvoice, FaSync, FaTrash, FaFilePdf, FaFileExcel, FaTruck, FaBan } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -37,6 +37,12 @@ const BranchInvoicedOrders = () => {
   const [showCopyChoice, setShowCopyChoice] = useState(false);
   const [processingPrint, setProcessingPrint] = useState(false);
   const [voucherTypes, setVoucherTypes] = useState([]);
+
+  // Cancel SO state
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancellingOrder, setCancellingOrder] = useState(null);
+  const [cancelNarration, setCancelNarration] = useState("");
+  const [cancelling, setCancelling] = useState(false);
 
   // Filter states
   const [filterVoucherType, setFilterVoucherType] = useState("");
@@ -292,6 +298,40 @@ const BranchInvoicedOrders = () => {
       toast.error("Error unlocking bill");
     } finally {
       setRequestingReEdit(null);
+    }
+  };
+
+  const handleOpenCancelModal = (order) => {
+    setCancellingOrder(order);
+    setCancelNarration("");
+    setShowCancelModal(true);
+  };
+
+  const handleCancelOrder = async () => {
+    if (!cancelNarration.trim()) {
+      toast.warning("Please enter a narration / reason for cancellation");
+      return;
+    }
+    setCancelling(true);
+    try {
+      const res = await fetch(`${API_BASE}/sales-orders/${cancellingOrder._id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({ narration: cancelNarration }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to cancel");
+      toast.success(`✅ ${cancellingOrder.invoiceId} cancelled successfully`);
+      setShowCancelModal(false);
+      setCancellingOrder(null);
+      fetchSalesOrders();
+    } catch (err) {
+      toast.error(err.message || "Failed to cancel order");
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -892,11 +932,23 @@ const BranchInvoicedOrders = () => {
                             <button
                               onClick={() => handleGenerateInvoice(order)}
                               className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-md shadow-[#319bab]/20"
+                              disabled={order.status === "CANCELLED"}
                             >
                               <FaFileInvoice />
                               {order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
                             </button>
 
+                            {/* Cancel Button — Admin & Super Admin only */}
+                            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.status !== "CANCELLED" && (
+                              <button
+                                onClick={() => handleOpenCancelModal(order)}
+                                className="flex items-center gap-1 px-3 py-2 rounded-lg transition text-xs font-semibold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-200 hover:border-red-600 shadow-sm"
+                                title="Cancel this Sales Order"
+                              >
+                                <FaBan className="text-xs" />
+                                Cancel
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1428,6 +1480,85 @@ const BranchInvoicedOrders = () => {
           orders={selectedOrders}
           branch={currentBranch}
         />
+      )}
+
+      {/* ══ CANCEL ORDER MODAL (Admin / Super Admin only) ══ */}
+      {showCancelModal && cancellingOrder && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-red-100">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-red-600 to-red-700 px-6 py-5 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                <FaBan className="text-white text-lg" />
+              </div>
+              <div>
+                <h2 className="text-white font-black text-lg">Cancel Sales Order</h2>
+                <p className="text-red-100 text-xs mt-0.5">This action will revert stock and customer balance</p>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              {/* Order Info */}
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-5">
+                <div className="flex justify-between items-center text-sm mb-1">
+                  <span className="text-gray-500 font-bold">Order ID</span>
+                  <span className="font-black text-red-700">{cancellingOrder.invoiceId}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm mb-1">
+                  <span className="text-gray-500 font-bold">Customer</span>
+                  <span className="font-bold text-gray-800">{cancellingOrder.customer?.name}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500 font-bold">Grand Total</span>
+                  <span className="font-black text-gray-800">₹{(cancellingOrder.grandTotal || 0).toLocaleString()}</span>
+                </div>
+                {cancellingOrder.status === "INVOICED" && (
+                  <div className="mt-3 text-xs text-red-600 font-bold bg-red-100 rounded-lg px-3 py-2">
+                    ⚠️ This order is INVOICED. Stock and customer balance will be fully reverted.
+                  </div>
+                )}
+              </div>
+
+              {/* Narration Input */}
+              <div className="mb-5">
+                <label className="block text-sm font-black text-gray-700 mb-2">
+                  Cancellation Reason / Narration <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={cancelNarration}
+                  onChange={(e) => setCancelNarration(e.target.value)}
+                  placeholder="Enter reason for cancellation (e.g. Customer request, Wrong order, Duplicate entry...)"
+                  className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-red-400 focus:outline-none resize-none text-sm text-gray-800 font-medium placeholder:text-gray-300 transition"
+                  rows={3}
+                  autoFocus
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowCancelModal(false); setCancellingOrder(null); }}
+                  className="flex-1 py-3 border-2 border-gray-200 text-gray-600 rounded-xl font-bold hover:bg-gray-50 transition text-sm"
+                  disabled={cancelling}
+                >
+                  Go Back
+                </button>
+                <button
+                  onClick={handleCancelOrder}
+                  disabled={cancelling || !cancelNarration.trim()}
+                  className="flex-1 py-3 bg-red-600 text-white rounded-xl font-black hover:bg-red-700 transition text-sm disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-red-200"
+                >
+                  {cancelling ? (
+                    <><FaSync className="animate-spin text-xs" /> Cancelling...</>
+                  ) : (
+                    <><FaBan className="text-xs" /> Confirm Cancel</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

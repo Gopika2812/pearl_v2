@@ -308,9 +308,13 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
     updated[index].qty = confirmed;
     updated[index].backOrderQty = Math.max(0, original - confirmed);
 
-    // Recalculate item total
+    // Recalculate item total accounting for per-item discount
     const price = updated[index].sellingPrice || 0;
-    updated[index].total = Math.round(price * confirmed * 100) / 100;
+    const disc = updated[index].discountPercent || 0;
+    const gross = price * confirmed;
+    const discountAmount = Math.round(gross * disc / 100 * 100) / 100;
+    updated[index].discountAmount = discountAmount;
+    updated[index].total = Math.round((gross - discountAmount) * 100) / 100;
 
     setEditedItems(updated);
   };
@@ -321,9 +325,29 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
     const price = Math.max(0, newPrice);
     updated[index].sellingPrice = price;
 
-    // Recalculate item total
+    // Recalculate item total accounting for per-item discount
     const confirmed = updated[index].confirmedQty || 0;
-    updated[index].total = Math.round(price * confirmed * 100) / 100;
+    const disc = updated[index].discountPercent || 0;
+    const gross = price * confirmed;
+    const discountAmount = Math.round(gross * disc / 100 * 100) / 100;
+    updated[index].discountAmount = discountAmount;
+    updated[index].total = Math.round((gross - discountAmount) * 100) / 100;
+
+    setEditedItems(updated);
+  };
+
+  // Handle per-item discount % changes
+  const handleDiscountChange = (index, discountPercent) => {
+    const updated = [...editedItems];
+    const disc = Math.max(0, Math.min(100, discountPercent));
+    updated[index].discountPercent = disc;
+
+    const price = updated[index].sellingPrice || 0;
+    const confirmed = updated[index].confirmedQty || 0;
+    const gross = price * confirmed;
+    const discountAmount = Math.round(gross * disc / 100 * 100) / 100;
+    updated[index].discountAmount = discountAmount;
+    updated[index].total = Math.round((gross - discountAmount) * 100) / 100;
 
     setEditedItems(updated);
   };
@@ -1185,6 +1209,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                       <th className="p-3 text-right">Original Qty</th>
                       <th className="p-3 text-right">Confirmed Qty</th>
                       <th className="p-3 text-right">Back Order Qty</th>
+                      <th className="p-3 text-center">Disc %</th>
                       <th className="p-3 text-right">Price (Locked)</th>
                       <th className="p-3 text-right">Total</th>
                       <th className="p-3 text-center">Action</th>
@@ -1223,6 +1248,21 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                         <td className="p-3 text-right font-bold text-red-600">
                           {item.backOrderQty} {item.unit}
                         </td>
+                        {/* Discount % Column */}
+                        <td className="p-3">
+                          <div className="flex items-center justify-center gap-0.5">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              value={item.discountPercent || 0}
+                              onChange={(e) => handleDiscountChange(idx, parseFloat(e.target.value) || 0)}
+                              className="w-14 p-1.5 border-2 border-orange-200 rounded text-center font-black text-orange-600 focus:ring-2 focus:ring-orange-400 outline-none text-sm bg-orange-50"
+                            />
+                            <span className="text-xs font-bold text-orange-500">%</span>
+                          </div>
+                        </td>
                         <td className="p-3 text-right">
                           {(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN") ? (
                             <div className="relative">
@@ -1259,6 +1299,88 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                 </table>
               </div>
 
+              {/* ══ LIVE INVOICE SUMMARY ══ */}
+              {(() => {
+                const liveSubtotal = editedItems.reduce((sum, item) => {
+                  const gross = (item.sellingPrice || 0) * (item.confirmedQty || 0);
+                  const disc = gross * (item.discountPercent || 0) / 100;
+                  return sum + (gross - disc);
+                }, 0);
+                const itemTax = editedItems.reduce((sum, item) => {
+                  const gross = (item.sellingPrice || 0) * (item.confirmedQty || 0);
+                  const disc = gross * (item.discountPercent || 0) / 100;
+                  const taxable = gross - disc;
+                  return sum + (taxable * (item.gst || 0) / 100);
+                }, 0);
+                // Transport charge + its GST (default 18% if not specified)
+                const transport = Number(order.transportCharge || 0);
+                const transportGstPercent = Number(order.transportGstPercent || 18);
+                const transportGst = Math.round((transport * transportGstPercent / 100) * 100) / 100;
+                // Total tax = item taxes + transport GST
+                const liveTax = Math.round((itemTax + transportGst) * 100) / 100;
+                const specialDisc = Number(commonDiscount) || 0;
+                // Grand total = subtotal + item taxes + transport base + transport gst - discount
+                const grandTotal = Math.round(liveSubtotal + itemTax + transport + transportGst - specialDisc);
+
+                return (
+                  <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 mb-6 shadow-xl border border-slate-700">
+                    <h3 className="text-white font-black uppercase tracking-widest text-sm mb-4 flex items-center gap-2">
+                      <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                      Invoice Summary
+                    </h3>
+                    <div className="space-y-0">
+                      {/* Subtotal */}
+                      <div className="flex justify-between items-center py-2.5 border-b border-slate-700">
+                        <span className="text-sm text-gray-400 font-bold">Subtotal (after item discounts)</span>
+                        <span className="font-black text-blue-300 text-base">₹{liveSubtotal.toFixed(2)}</span>
+                      </div>
+                      {/* Tax — items + transport GST combined */}
+                      <div className="flex justify-between items-center py-2.5 border-b border-slate-700">
+                        <span className="text-sm text-gray-400 font-bold">
+                          Tax (GST)
+                          {transport > 0 && (
+                            <span className="ml-2 text-[10px] text-yellow-500/70 font-normal">
+                              incl. Transport GST ({transportGstPercent}% on ₹{transport.toFixed(0)}) = +₹{transportGst.toFixed(2)}
+                            </span>
+                          )}
+                        </span>
+                        <span className="font-black text-yellow-300 text-base">₹{liveTax.toFixed(2)}</span>
+                      </div>
+                      {/* Transport base charge (without GST — GST is in Tax above) */}
+                      {transport > 0 && (
+                        <div className="flex justify-between items-center py-2.5 border-b border-slate-700">
+                          <span className="text-sm text-gray-400 font-bold">
+                            Transport Charge (base)
+                            <span className="ml-2 text-[10px] text-purple-400/70 font-normal">GST {transportGstPercent}% added in Tax above</span>
+                          </span>
+                          <span className="font-black text-purple-300 text-base">₹{transport.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {/* Special Discount — editable inline */}
+                      <div className="flex justify-between items-center py-2.5 border-b border-slate-700">
+                        <span className="text-sm text-gray-400 font-bold">Special Discount (₹)</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-orange-400 font-black text-sm">–₹</span>
+                          <input
+                            type="number"
+                            value={commonDiscount}
+                            onChange={(e) => setCommonDiscount(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                            placeholder="0"
+                            className="w-28 p-1.5 bg-slate-700 border border-orange-500/50 rounded-lg text-right font-black text-orange-300 outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                            min="0"
+                          />
+                        </div>
+                      </div>
+                      {/* Grand Total */}
+                      <div className="flex justify-between items-center pt-4 mt-2 border-t-2 border-white/20">
+                        <span className="text-white font-black text-base uppercase tracking-wide">Grand Total</span>
+                        <span className="font-black text-white text-2xl">₹{grandTotal.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Notes */}
               <div className="mb-6">
                 <label className="block font-semibold mb-2">Invoice Notes:</label>
@@ -1267,24 +1389,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Add any notes or special instructions..."
                   className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
-                  rows="4"
+                  rows="3"
                 />
-              </div>
-
-              {/* Special Discount */}
-              <div className="mb-6">
-                <label className="block font-semibold mb-2">Special Discount (₹):</label>
-                <div className="flex items-center gap-2">
-                  <span className="text-xl text-gray-400 font-bold">₹</span>
-                  <input
-                    type="number"
-                    value={commonDiscount}
-                    onChange={(e) => setCommonDiscount(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                    placeholder="Enter special discount amount..."
-                    className="flex-1 p-3 border-2 border-red-200 rounded-lg focus:border-red-500 focus:outline-none font-bold text-red-600 bg-red-50/30"
-                    min="0"
-                  />
-                </div>
               </div>
 
               {/* Options */}

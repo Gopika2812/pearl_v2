@@ -142,8 +142,33 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     const order = await PurchaseOrder.findById(id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
     const currentFY = getGlobalFinancialYear();
-    // Re-invoice if an invoice ID already exists
-    const isReInvoice = !!order.purchaseInvoiceId;
+
+    // ─── SAFETY: Always check the PI collection directly ─────────────────────────
+    // This prevents creating duplicate PIs even if order.purchaseInvoiceId is missing
+    const existingPI = await PurchaseInvoice.findOne({ purchaseOrderId: order._id });
+
+    // Triple safety check: PO flag  OR  existing PI in DB  OR  PO is already INVOICED status
+    const isReInvoice = !!(order.purchaseInvoiceId || existingPI || order.status === 'INVOICED');
+
+    // Auto-sync purchaseInvoiceId on PO if it was somehow missing
+    if (!order.purchaseInvoiceId && existingPI) {
+      console.warn(`[SYNC] PO ${order.invoiceId} missing purchaseInvoiceId. Found PI: ${existingPI.purchaseInvoiceId}. Syncing now...`);
+      order.purchaseInvoiceId = existingPI.purchaseInvoiceId;
+      order.lastInvoicedItems = (order.lastInvoicedItems?.length > 0) ? order.lastInvoicedItems : existingPI.items;
+      order.lastInvoicedGrandTotal = order.lastInvoicedGrandTotal || existingPI.grandTotal;
+      await order.save();
+    }
+
+    // If INVOICED but no PI found (orphaned state), block with clear error
+    if (order.status === 'INVOICED' && !existingPI && !order.purchaseInvoiceId) {
+      console.error(`[INVOICE] ⚠️ PO ${order.invoiceId} is INVOICED but no PI found in DB. Blocking duplicate creation.`);
+      return res.status(409).json({
+        success: false,
+        message: `This Purchase Order is already invoiced but the linked Purchase Invoice could not be found. Please contact admin to resolve the data inconsistency.`
+      });
+    }
+
+    console.log(`[INVOICE] PO: ${order.invoiceId} | isReInvoice: ${isReInvoice} | existingPI: ${existingPI?.purchaseInvoiceId || 'none'} | status: ${order.status}`);
 
     // ─── BRANCH A: RE-INVOICE (delta recalculation) ───────────────────────
     if (isReInvoice) {
@@ -213,18 +238,24 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
 
       await order.save();
 
-      await PurchaseInvoice.findOneAndUpdate(
-        { purchaseInvoiceId: order.purchaseInvoiceId, branchId: order.branchId },
-        {
-          items: newItems,
-          subtotal: order.subtotal,
-          totalDiscount: order.totalDiscount,
-          totalTax: order.totalTax,
-          grandTotal: order.grandTotal,
-          vendorBillNo: order.vendorBillNo,
-          vendorDate: order.vendorDate,
-        }
-      );
+      // Update the EXISTING PI directly using its _id (most reliable — no field matching)
+      const piToUpdate = existingPI;
+      if (piToUpdate) {
+        await PurchaseInvoice.findByIdAndUpdate(piToUpdate._id, {
+          $set: {
+            items: newItems,
+            subtotal: order.subtotal,
+            totalDiscount: order.totalDiscount,
+            totalTax: order.totalTax,
+            grandTotal: order.grandTotal,
+            vendorBillNo: order.vendorBillNo,
+            vendorDate: order.vendorDate,
+          }
+        });
+        console.log(`[INVOICE] ✅ PI Updated: ${piToUpdate.purchaseInvoiceId} (same PI, no duplicate)`);
+      } else {
+        console.error(`[INVOICE] ❌ Could not find PI to update for PO: ${order.invoiceId}`);
+      }
 
       return res.json({
         success: true,
@@ -306,6 +337,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     order.vendorDate = req.body.vendorDate ? new Date(req.body.vendorDate) : undefined;
     order.lastInvoicedItems = invoiceItems;
     order.lastInvoicedGrandTotal = calculatedGrandTotal;
+    order.purchaseInvoiceId = piNumber;  // ✅ CRITICAL FIX: Link PO to PI so re-edits are detected
     order.status = 'INVOICED';
 
     // STOCK UPDATES
