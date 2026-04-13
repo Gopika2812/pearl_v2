@@ -845,45 +845,45 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                    <tr>
                      <th>HSN Code</th>
                      <th style="text-align: right;">Taxable Value</th>
-                     ${previewData?.totalTax?.igst > 0 ? 
-                       `<th style="text-align: right;">IGST (Rate | Amt)</th>` :
-                       `<th style="text-align: right;">CGST (Rate | Amt)</th>
+                     ${previewData?.totalTax?.igst > 0 ?
+            `<th style="text-align: right;">IGST (Rate | Amt)</th>` :
+            `<th style="text-align: right;">CGST (Rate | Amt)</th>
                         <th style="text-align: right;">SGST (Rate | Amt)</th>`
-                     }
+          }
                      <th style="text-align: right;">Total</th>
                    </tr>
                  </thead>
                  <tbody>
                     ${(() => {
-             const hsnMap = {};
-             (previewData?.items || []).forEach(item => {
-               const hsn = item.hsn || "N/A";
-               if (!hsnMap[hsn]) {
-                 hsnMap[hsn] = { taxable: 0, cgst: 0, sgst: 0, igst: 0, total: 0, cgstRate: item.cgst || 0, sgstRate: item.sgst || 0, igstRate: item.igst || 0 };
-               }
-               const totalInclusive = item.total || 0;
-               const gstRate = (item.gst || 0);
-               const taxable = totalInclusive / (1 + (gstRate / 100));
-               
-               hsnMap[hsn].taxable += taxable;
-               hsnMap[hsn].cgst += (taxable * (item.cgst || 0)) / 100;
-               hsnMap[hsn].sgst += (taxable * (item.sgst || 0)) / 100;
-               hsnMap[hsn].igst += (taxable * (item.igst || 0)) / 100;
-               hsnMap[hsn].total += totalInclusive;
-             });
-             return Object.entries(hsnMap).map(([hsn, data]) => `
+            const hsnMap = {};
+            (previewData?.items || []).forEach(item => {
+              const hsn = item.hsn || "N/A";
+              if (!hsnMap[hsn]) {
+                hsnMap[hsn] = { taxable: 0, cgst: 0, sgst: 0, igst: 0, total: 0, cgstRate: item.cgst || 0, sgstRate: item.sgst || 0, igstRate: item.igst || 0 };
+              }
+              const totalInclusive = item.total || 0;
+              const gstRate = (item.gst || 0);
+              const taxable = totalInclusive / (1 + (gstRate / 100));
+
+              hsnMap[hsn].taxable += taxable;
+              hsnMap[hsn].cgst += (taxable * (item.cgst || 0)) / 100;
+              hsnMap[hsn].sgst += (taxable * (item.sgst || 0)) / 100;
+              hsnMap[hsn].igst += (taxable * (item.igst || 0)) / 100;
+              hsnMap[hsn].total += totalInclusive;
+            });
+            return Object.entries(hsnMap).map(([hsn, data]) => `
                        <tr>
                          <td>${hsn}</td>
                          <td style="text-align: right;">₹${data.taxable.toFixed(2)}</td>
                          ${previewData?.totalTax?.igst > 0 ?
-                           `<td style="text-align: right;">${data.igstRate}% | ₹${data.igst.toFixed(2)}</td>` :
-                           `<td style="text-align: right;">${data.cgstRate}% | ₹${data.cgst.toFixed(2)}</td>
+                `<td style="text-align: right;">${data.igstRate}% | ₹${data.igst.toFixed(2)}</td>` :
+                `<td style="text-align: right;">${data.cgstRate}% | ₹${data.cgst.toFixed(2)}</td>
                             <td style="text-align: right;">${data.sgstRate}% | ₹${data.sgst.toFixed(2)}</td>`
-                         }
+              }
                          <td style="text-align: right;">₹${data.total.toFixed(2)}</td>
                        </tr>
                      `).join("");
-           })()}
+          })()}
                   <!-- Removed TRANSPORT GST row as requested -->
                 </tbody>
               </table>

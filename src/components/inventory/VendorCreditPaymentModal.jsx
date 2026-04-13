@@ -51,16 +51,7 @@ export default function VendorCreditPaymentModal({
   const [invoicePayments, setInvoicePayments] = useState({}); // poId → paid total
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (isOpen && currentBranch?._id) {
-      if (!preselectedVendor) fetchVendors();
-      else { setVendors([]); setSelectedVendor(preselectedVendor); setSearchQuery(preselectedVendor.name); }
-      fetchNextPayId();
-    }
-  }, [isOpen, currentBranch]);
-
-  useEffect(() => {
-    if (!isOpen) return;
+  const handleReset = () => {
     setMode("general");
     setPaymentAmount("");
     setPaymentMethod("cash");
@@ -69,8 +60,22 @@ export default function VendorCreditPaymentModal({
     setSelectedInvoice(null);
     setInvoicePayAmount("");
     setInvoices([]);
-    if (!preselectedVendor) { setSelectedVendor(null); setSearchQuery(""); }
-  }, [isOpen]);
+    if (!preselectedVendor) {
+      setSelectedVendor(null);
+      setSearchQuery("");
+    } else {
+      setSelectedVendor(preselectedVendor);
+      setSearchQuery(preselectedVendor.name);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && currentBranch?._id) {
+      handleReset();
+      fetchNextPayId();
+      if (!preselectedVendor) fetchVendors();
+    }
+  }, [isOpen, currentBranch?._id]);
 
   useEffect(() => {
     if (selectedVendor && mode === "invoice") fetchInvoicesForVendor();
@@ -520,16 +525,22 @@ export default function VendorCreditPaymentModal({
           <div className="flex gap-3 pt-2 border-t">
             <button
               onClick={onClose}
-              className="flex-1 py-2.5 border-2 border-gray-200 text-gray-600 font-bold rounded-xl hover:bg-gray-50 transition text-sm"
+              className="px-4 py-2.5 border-2 border-gray-200 text-gray-600 font-bold rounded-xl hover:bg-gray-50 transition text-sm"
             >
               Cancel
+            </button>
+            <button
+              onClick={handleReset}
+              className="px-4 py-2.5 bg-gray-100 border-2 border-transparent text-gray-500 font-bold rounded-xl hover:bg-gray-200 transition text-sm flex items-center gap-2"
+            >
+              <FaTimes size={10} /> Clear
             </button>
             <button
               onClick={handleSubmit}
               disabled={saving || !selectedVendor ||
                 (mode === "general" && !paymentAmount) ||
                 (mode === "invoice" && (!selectedInvoice || !invoicePayAmount))}
-              className="flex-2 flex-grow py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed text-sm"
             >
               {saving ? "Processing..." : "✅ Record Payment"}
             </button>

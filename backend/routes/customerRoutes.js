@@ -24,7 +24,7 @@ const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * POST: Bulk Upload Customers
  */
 router.post("/bulk-upload", upload.single("file"), async (req, res) => {
-  console.log("🔥 CUSTOMER BULK UPLOAD HIT");
+  console.log("🔥 CUSTOMER BULK UPLOAD HIT (REFINED MODE - MAR 31 OPENING)");
 
   try {
     if (!req.file) {
@@ -41,35 +41,79 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     const rows = XLSX.utils.sheet_to_json(sheet, { raw: false });
 
     console.log("📄 TOTAL ROWS:", rows.length);
-    console.log("📄 FIRST ROW RAW:", rows[0]);
 
+    // 📅 DEFINE CUTOFF: Everything after March 31, 2026
+    const startOfApril = new Date("2026-04-01T00:00:00.000Z");
+
+    // 🚀 STEP 1: CALCULATE APRIL MOVEMENTS PER CUSTOMER
+    // This ensures that if we upload Mar 31 balances, we don't lose April sales/receipts.
+    
+    // 1.1 April Sales (Debits)
+    const aprilSales = await SalesOrder.find({
+      branchId,
+      status: "INVOICED",
+      createdAt: { $gte: startOfApril }
+    }).select("customer.customerId lastInvoicedGrandTotal invoiceGrandTotal grandTotal");
+
+    const salesMap = {};
+    aprilSales.forEach(s => {
+      const cId = s.customer?.customerId?.toString();
+      if (!cId) return;
+      const amt = s.lastInvoicedGrandTotal !== undefined ? s.lastInvoicedGrandTotal : (s.invoiceGrandTotal || s.grandTotal || 0);
+      salesMap[cId] = (salesMap[cId] || 0) + amt;
+    });
+
+    // 1.2 April Receipts (Credits/Bounced)
+    const aprilReceipts = await Receipt.find({
+      branchId,
+      status: { $in: ["confirmed", "bounced"] },
+      createdAt: { $gte: startOfApril }
+    }).select("customer.customerId amount status");
+
+    const receiptMap = { credit: {}, debit: {} };
+    aprilReceipts.forEach(r => {
+      const cId = r.customer?.customerId?.toString();
+      if (!cId) return;
+      if (r.status === "bounced") {
+        receiptMap.debit[cId] = (receiptMap.debit[cId] || 0) + (r.amount || 0);
+      } else {
+        receiptMap.credit[cId] = (receiptMap.credit[cId] || 0) + (r.amount || 0);
+      }
+    });
+
+    // 1.3 April Credit Notes (Credits)
+    const aprilCNs = await CreditNote.find({
+      branchId,
+      status: "Created",
+      createdAt: { $gte: startOfApril }
+    }).select("customer.customerId grandTotal");
+
+    const cnMap = {};
+    aprilCNs.forEach(cn => {
+      const cId = cn.customer?.customerId?.toString();
+      if (!cId) return;
+      cnMap[cId] = (cnMap[cId] || 0) + (cn.grandTotal || 0);
+    });
+
+    // 🏗️ STEP 2: PREPARE MASTER DATA MAPS
     const allSalesOwners = await SalesOwner.find({});
-    const salesOwnerMap = new Map(
-      allSalesOwners.map(owner => [owner.name.toLowerCase(), owner._id])
-    );
-
+    const salesOwnerMap = new Map(allSalesOwners.map(owner => [owner.name.toLowerCase(), owner._id]));
     const allCustomerCategories = await CustomerCategory.find({});
-    const customerCategoryMap = new Map(
-      allCustomerCategories.map(cat => [cat.name.toLowerCase(), cat._id])
-    );
-
+    const customerCategoryMap = new Map(allCustomerCategories.map(cat => [cat.name.toLowerCase(), cat._id]));
     const allCustomerGroups = await CustomerGroup.find({});
-    const customerGroupMap = new Map(
-      allCustomerGroups.map(group => [group.name.toLowerCase(), group._id])
-    );
+    const customerGroupMap = new Map(allCustomerGroups.map(group => [group.name.toLowerCase(), group._id]));
 
-    const existingCustomers = await Customer.find({ branchId }, { name: 1 });
-    const existingCustomersMap = new Map(
-      existingCustomers.map(c => [c.name.toLowerCase(), c._id])
-    );
+    // Fetch existing customers to match by Name or WhatsApp
+    const existingCustomers = await Customer.find({ branchId }, { name: 1, whatsapp: 1 });
+    const nameMap = new Map(existingCustomers.map(c => [c.name.toLowerCase(), c._id]));
+    const whatsappMap = new Map(existingCustomers.filter(c => c.whatsapp).map(c => [c.whatsapp.replace(/\D/g, ""), c._id]));
 
     let customersToBulkInsert = [];
     let customersToBulkUpdate = [];
     let skipped = [];
 
-    // 🔄 First pass: Validate and collect all valid records
+    // 🔄 STEP 3: PROCESS ROWS
     for (const row of rows) {
-      const normalizedKeys = Object.keys(row).map(k => k.replace(/[\s"\n\r]+/g, "").toLowerCase());
       const normalizedRow = Object.fromEntries(
         Object.entries(row).map(([k, v]) => [
           k.replace(/[\s"\n\r]+/g, "").toLowerCase(),
@@ -77,121 +121,65 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         ])
       );
 
-      const name = normalizedRow.customername || normalizedRow.name || normalizedRow.debtorname;
+      const name = normalizedRow.customername || normalizedRow.name;
+      const whatsapp = normalizedRow.whatsapp ? normalizedRow.whatsapp.replace(/\D/g, "") : "";
+      
       if (!name) {
         skipped.push({ row, reason: "Missing customer name" });
         continue;
       }
 
-      // Check if customer already exists (case-insensitive)
-      const existingCustomerId = existingCustomersMap.get(name.toLowerCase());
+      // MATCHING LOGIC: WhatsApp first (if provided), then Name
+      let existingCustomerId = (whatsapp && whatsappMap.has(whatsapp)) 
+        ? whatsappMap.get(whatsapp) 
+        : nameMap.get(name.toLowerCase());
 
-      // Prepare data object - only include fields present in normalizedRow
       let customerData = { branchId, name };
 
-      // Optional fields logic: only add to customerData if present in Excel
+      // Field normalization
       if (normalizedRow.whatsapp !== undefined) customerData.whatsapp = normalizedRow.whatsapp;
       if (normalizedRow.email !== undefined) customerData.email = normalizedRow.email;
       if (normalizedRow.address !== undefined) customerData.address = normalizedRow.address;
       if (normalizedRow.district !== undefined) customerData.district = normalizedRow.district;
       if (normalizedRow.state !== undefined) customerData.state = normalizedRow.state;
-      if (normalizedRow.country !== undefined) customerData.country = normalizedRow.country || "India";
-      if (normalizedRow.pincode !== undefined) customerData.pincode = normalizedRow.pincode;
-      if (normalizedRow.statecode !== undefined) {
-        let sc = normalizedRow.statecode || "33";
-        // Ensure state code is at least 2 digits (e.g., "7" -> "07")
-        if (/^\d{1}$/.test(sc)) sc = sc.padStart(2, '0');
-        customerData.stateCode = sc;
-      }
       if (normalizedRow.gstin !== undefined) customerData.gstin = normalizedRow.gstin;
-      if (normalizedRow.registrationtype !== undefined) {
-        customerData.registrationType = (normalizedRow.registrationtype.toLowerCase() === "unregistered" ? "unregistered" : "regular");
+      if (normalizedRow.creditlimit !== undefined) customerData.creditLimit = parseFloat(normalizedRow.creditlimit) || 200000;
+
+      // 💰 FINANCIAL CALCULATIONS (SPECIALIZED FOR MAR 31 OPENING)
+      const rawDebit = normalizedRow.debit || normalizedRow.debitbalance || normalizedRow.dr;
+      const rawCredit = normalizedRow.credit || normalizedRow.creditbalance || normalizedRow.cr;
+
+      if (rawDebit !== undefined || rawCredit !== undefined) {
+        const excelDebit = parseFloat(String(rawDebit || 0).replace(/[^0-9.-]+/g, "")) || 0;
+        const excelCredit = parseFloat(String(rawCredit || 0).replace(/[^0-9.-]+/g, "")) || 0;
+
+        // Calculate movements for this specific customer
+        const cIdStr = existingCustomerId?.toString();
+        const aprSales = salesMap[cIdStr] || 0;
+        const aprBounced = receiptMap.debit[cIdStr] || 0;
+        const aprConfirmed = receiptMap.credit[cIdStr] || 0;
+        const aprCNs = cnMap[cIdStr] || 0;
+
+        // Current totals = Excel Opening + April movements
+        customerData.debit = excelDebit + aprSales + aprBounced;
+        customerData.credit = excelCredit + aprConfirmed + aprCNs;
+        
+        // Fix opening balance field for ledger stability
+        customerData.openingBalance = excelDebit - excelCredit;
+        customerData.manualOpeningDate = new Date("2026-03-31T23:59:59.999Z");
+        
+        console.log(`📊 Adj Balance for ${name}: Excel[Dr:${excelDebit}/Cr:${excelCredit}] + April[Dr:${aprSales+aprBounced}/Cr:${aprConfirmed+aprCNs}] = Final[Dr:${customerData.debit}/Cr:${customerData.credit}]`);
       }
 
-      // Financials
-      const rawDebit = normalizedRow.debit || normalizedRow.debitbalance || normalizedRow["debit(₹)"] || normalizedRow.dr;
-      if (rawDebit !== undefined) {
-        const val = parseFloat(String(rawDebit).replace(/[^0-9.-]+/g, "")) || 0;
-        customerData.debit = val;
-        customerData.openingBalance = val; // Also set as the starting point for ledgers
+      // Sales Owner, Categories, Groups mapping
+      if (normalizedRow.salesowner && salesOwnerMap.has(normalizedRow.salesowner.toLowerCase())) {
+        customerData.salesOwner = salesOwnerMap.get(normalizedRow.salesowner.toLowerCase());
       }
-
-      const rawCredit = normalizedRow.credit || normalizedRow.creditbalance || normalizedRow["credit(₹)"] || normalizedRow.cr;
-      if (rawCredit !== undefined) {
-        const val = parseFloat(String(rawCredit).replace(/[^0-9.-]+/g, "")) || 0;
-        customerData.credit = val;
-        // If credit is provided, the net opening balance is debit - credit
-        customerData.openingBalance = (customerData.debit || 0) - val;
+      if (normalizedRow.customercategory && customerCategoryMap.has(normalizedRow.customercategory.toLowerCase())) {
+        customerData.customerCategories = [customerCategoryMap.get(normalizedRow.customercategory.toLowerCase())];
       }
-
-      if (normalizedRow.margin !== undefined) {
-        let margin = parseFloat(String(normalizedRow.margin).replace(/[^0-9.-]+/g, "")) || 0;
-        if (margin !== 0 && Math.abs(margin) < 1) {
-          margin = margin * 100;
-        }
-        customerData.margin = Math.round(margin * 100) / 100;
-      }
-
-      // Sales Owner
-      if (normalizedRow.salesowner !== undefined) {
-        const salesOwnerName = normalizedRow.salesowner;
-        if (salesOwnerName) {
-          const salesOwnerId = salesOwnerMap.get(salesOwnerName.toLowerCase());
-          if (salesOwnerId) {
-            customerData.salesOwner = salesOwnerId;
-          } else {
-            skipped.push({ row, reason: `Sales Owner "${salesOwnerName}" not found` });
-            continue;
-          }
-        } else {
-          customerData.salesOwner = null;
-        }
-      }
-
-      // Categories & Groups (Comma separated)
-      if (normalizedRow.customercategories !== undefined || normalizedRow.customercategory !== undefined) {
-        const catStr = normalizedRow.customercategories || normalizedRow.customercategory || "";
-        const catNames = catStr.split(",").map(c => c.trim().toLowerCase()).filter(c => c);
-        let categoryIds = [];
-        let catMissing = false;
-        for (const cName of catNames) {
-          const cId = customerCategoryMap.get(cName);
-          if (!cId) { catMissing = true; break; }
-          categoryIds.push(cId);
-        }
-        if (catMissing) {
-          skipped.push({ row, reason: `One or more customer categories not found` });
-          continue;
-        }
-        customerData.customerCategories = categoryIds;
-      }
-
-      if (normalizedRow.customergroups !== undefined || normalizedRow.customergroup !== undefined) {
-        const grpStr = normalizedRow.customergroups || normalizedRow.customergroup || "";
-        const grpNames = grpStr.split(",").map(g => g.trim().toLowerCase()).filter(g => g);
-        let groupIds = [];
-        let grpMissing = false;
-        for (const gName of grpNames) {
-          const gId = customerGroupMap.get(gName);
-          if (!gId) { grpMissing = true; break; }
-          groupIds.push(gId);
-        }
-        if (grpMissing) {
-          skipped.push({ row, reason: `One or more customer groups not found` });
-          continue;
-        }
-        customerData.customerGroups = groupIds;
-      }
-
-      // Bank Details
-      if (normalizedRow.accountholder !== undefined) customerData.accountHolder = normalizedRow.accountholder;
-      if (normalizedRow.accountnumber !== undefined) customerData.accountNumber = normalizedRow.accountnumber;
-      if (normalizedRow.ifsc !== undefined) customerData.ifsc = normalizedRow.ifsc;
-      if (normalizedRow.branch !== undefined) customerData.branch = normalizedRow.branch;
-      if (normalizedRow.upi !== undefined) customerData.upi = normalizedRow.upi;
 
       if (existingCustomerId) {
-        // Queue for update
         customersToBulkUpdate.push({
           updateOne: {
             filter: { _id: existingCustomerId },
@@ -199,7 +187,6 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
           }
         });
       } else {
-        // Queue for insert (for new, ensure essential defaults)
         const newCustomerData = {
           ...customerData,
           stateCode: customerData.stateCode || "33",
@@ -207,18 +194,17 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
           registrationType: customerData.registrationType || "regular",
         };
         customersToBulkInsert.push(newCustomerData);
-        existingCustomersMap.set(name.toLowerCase(), "pending_insert");
+        // Avoid duplicate inserts for same name in same file
+        nameMap.set(name.toLowerCase(), "pending_insert");
       }
     }
 
-    // ⚡ OPTIMIZATION: Bulk insert all at once instead of one-by-one
     let insertedCount = 0;
     if (customersToBulkInsert.length > 0) {
       const inserted = await Customer.insertMany(customersToBulkInsert, { ordered: false });
       insertedCount = inserted.length;
     }
 
-    // 🔄 Third pass: Bulk update all existing records
     let updatedCount = 0;
     if (customersToBulkUpdate.length > 0) {
       const result = await Customer.bulkWrite(customersToBulkUpdate, { ordered: false });
@@ -226,11 +212,12 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     }
 
     return res.json({
-      message: "Bulk customer upload completed",
+      message: "Bulk upload (Opening Balance mode) completed successfully",
       insertedCount,
       updatedCount,
       skippedCount: skipped.length,
       skipped,
+      info: "Balances adjusted as of March 31st cutoff. April transactions were preserved."
     });
   } catch (err) {
     console.error("Customer bulk upload error:", err);
@@ -240,6 +227,9 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     });
   }
 });
+
+
+
 
 /**
  * GET: Fetch All Customers with Pagination

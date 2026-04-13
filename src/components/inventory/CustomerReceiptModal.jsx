@@ -18,12 +18,28 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess }) =
   });
 
   const [submitting, setSubmitting] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  const resetForm = () => {
+    setIsResetting(true);
+    setFormData({
+      amount: "",
+      paymentMethod: "CASH",
+      paymentDate: new Date().toISOString().split("T")[0],
+      reference: "",
+      notes: ""
+    });
+    setPaymentType("general");
+    setSelectedInvoice(null);
+    setTimeout(() => setIsResetting(false), 50);
+  };
 
   useEffect(() => {
     if (isOpen && customer?._id) {
+      resetForm();
       fetchUnpaidInvoices();
     }
-  }, [isOpen, customer]);
+  }, [isOpen, customer?._id]);
 
   const fetchUnpaidInvoices = async () => {
     setLoading(true);
@@ -248,21 +264,30 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess }) =
             />
           </div>
 
-          <button 
-            type="submit"
-            disabled={submitting}
-            className={`w-full py-5 rounded-2xl text-base font-black uppercase tracking-widest text-white shadow-xl transition-all active:scale-[0.98] mt-4 flex items-center justify-center gap-3 ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'}`}
-          >
-            {submitting ? (
-              <>
-                <FaSpinner className="animate-spin" /> Finalizing Receipt...
-              </>
-            ) : (
-              <>
-                <FaCheckCircle /> Confirm Receipt (REC)
-              </>
-            )}
-          </button>
+          <div className="flex gap-4 mt-4">
+            <button 
+              type="button"
+              onClick={resetForm}
+              className="flex-1 py-4 rounded-2xl text-sm font-black uppercase tracking-widest text-gray-500 bg-gray-100 hover:bg-gray-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <FaTimes className="text-[10px]" /> Clear Form
+            </button>
+            <button 
+              type="submit"
+              disabled={submitting || isResetting}
+              className={`flex-[2] py-4 rounded-2xl text-base font-black uppercase tracking-widest text-white shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 ${submitting || isResetting ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'}`}
+            >
+              {submitting ? (
+                <>
+                  <FaSpinner className="animate-spin" /> Finalizing...
+                </>
+              ) : (
+                <>
+                  <FaCheckCircle /> Confirm Receipt
+                </>
+              )}
+            </button>
+          </div>
         </form>
       </div>
     </div>
