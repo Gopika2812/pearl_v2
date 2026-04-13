@@ -96,100 +96,58 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
       // UNIFIED MERGE LOGIC: SO Items + Invoiced Items
       const originalItems = order.items || [];
-      // Use lastInvoicedItems if invoiceGenerated is false but we have history (indicating a re-edit)
       const invoicedItems = order.invoiceItems?.length
         ? order.invoiceItems
         : (order.lastInvoicedItems || []);
 
       const hasPreviousInvoice = invoicedItems.length > 0;
-      const mergedMap = new Map();
+      const finalItems = [];
 
-      // Step A: Load original SO items as the base (Baseline)
-      originalItems.forEach(item => {
-        const pId = (item.productId?._id || item.productId)?.toString();
-        if (!pId) return;
+      if (hasPreviousInvoice) {
+        // Option 1: Load STRICTLY from the previous invoice history (Workbench Source of Truth)
+        // This ensures deleted items STAY deleted, and discounts/prices STAY edited.
+        invoicedItems.forEach(item => {
+          const pId = (item.productId?._id || item.productId)?.toString();
+          const subtotal = (item.sellingPrice || 0) * (item.qty || item.confirmedQty || 0);
+          const total = Math.round((subtotal - (item.discountAmount || 0)) * 100) / 100;
 
-        // If FIRST TIME (no previous invoice), default confirmedQty to full SO quantity
-        // If RE-EDIT (has previous invoice), default to 0 and let Step B populate it
-        const initialConfirmed = hasPreviousInvoice ? 0 : (item.qty || 0);
-
-        mergedMap.set(pId, {
-          ...item,
-          productId: pId,
-          name: item.name || item.productName || "",
-          confirmedQty: initialConfirmed,
-          qty: initialConfirmed,
-          originalQty: item.qty || 0,
-          backOrderQty: hasPreviousInvoice ? (item.qty || 0) : 0,
-          total: 0,
-          sellingPrice: item.sellingPrice || item.rate || 0,
-          discountPercent: item.discountPercent || 0,
-          discountAmount: item.discountAmount || 0,
-          hsn: item.hsn || item.hsnCode || ""
-        });
-      });
-
-      // Step B: Overlay already invoiced items (History)
-      invoicedItems.forEach(item => {
-        const pId = (item.productId?._id || item.productId)?.toString();
-        if (!pId) return;
-
-        const existing = mergedMap.get(pId);
-
-        // Re-calculate name safely
-        let name = item.name || item.productName || existing?.name || "";
-        if (!name) {
-          const found = originalItems.find(oi => (oi.productId?._id || oi.productId)?.toString() === pId);
-          if (found) name = found.name;
-        }
-
-        // UPDATE existing record instead of spreading to avoid overwriting originalQty (qty from item is confirmed qty)
-        if (existing) {
-          existing.confirmedQty = item.confirmedQty || item.qty || 0;
-          existing.qty = item.qty || item.confirmedQty || 0;
-          existing.backOrderQty = item.backOrderQty !== undefined ? item.backOrderQty : undefined;
-          existing.sellingPrice = item.sellingPrice || existing.sellingPrice || 0;
-          existing.hsn = item.hsn || existing.hsn || "";
-          existing.discountPercent = item.discountPercent || existing.discountPercent || 0;
-          existing.discountAmount = item.discountAmount || existing.discountAmount || 0;
-          existing.name = name;
-        } else {
-          // New item added directly to invoice (not in SO)
-          mergedMap.set(pId, {
+          finalItems.push({
             ...item,
             productId: pId,
-            name: name,
-            confirmedQty: item.confirmedQty || item.qty || 0,
+            name: item.name || "",
+            confirmedQty: item.qty || item.confirmedQty || 0,
             qty: item.qty || item.confirmedQty || 0,
             originalQty: item.originalQty || item.qty || 0,
             backOrderQty: item.backOrderQty || 0,
             sellingPrice: item.sellingPrice || 0,
             discountPercent: item.discountPercent || 0,
             discountAmount: item.discountAmount || 0,
-            hsn: item.hsn || ""
+            hsn: item.hsn || "",
+            total: total
           });
-        }
-      });
+        });
+      } else {
+        // Option 2: FIRST TIME - Load from the stable Sales Order baseline
+        originalItems.forEach(item => {
+          const pId = (item.productId?._id || item.productId)?.toString();
+          if (!pId) return;
 
-      // Step C: Finalize the list for state (Array.from(mergedMap.values()))
-      const finalItems = Array.from(mergedMap.values()).map(item => {
-        const confirmed = item.confirmedQty || 0;
-        const original = item.originalQty || 0;
-        // Use saved backOrderQty if available, otherwise calculate it
-        const backOrder = item.backOrderQty !== undefined ? item.backOrderQty : Math.max(0, original - confirmed);
-
-        const discountAmt = item.discountAmount || 0;
-        const subtotal = (item.sellingPrice || 0) * confirmed;
-        const total = Math.round((subtotal - discountAmt) * 100) / 100;
-
-        return {
-          ...item,
-          originalQty: original,
-          confirmedQty: confirmed,
-          backOrderQty: backOrder,
-          total: total
-        };
-      });
+          finalItems.push({
+            ...item,
+            productId: pId,
+            name: item.name || item.productName || "",
+            confirmedQty: item.qty || 0,
+            qty: item.qty || 0,
+            originalQty: item.qty || 0,
+            backOrderQty: 0,
+            sellingPrice: item.sellingPrice || item.rate || 0,
+            discountPercent: item.discountPercent || 0,
+            discountAmount: item.discountAmount || 0,
+            hsn: item.hsn || item.hsnCode || "",
+            total: Math.round((item.sellingPrice || 0) * (item.qty || 0) * 100) / 100
+          });
+        });
+      }
 
       setEditedItems(finalItems);
       setNotes(order.notes || "");

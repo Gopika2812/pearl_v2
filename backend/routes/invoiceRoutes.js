@@ -610,48 +610,50 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         }
 
         // ==========================================
-        // 5️⃣ SYNC MASTER SALES ORDER ITEMS (Handle additions, updates, and DELETIONS)
+        // 5️⃣ UPDATE INVOICE HISTORY & APPEND NEW ITEMS
         // ==========================================
-        const updatedMasterItems = items.map(item => {
-          const originalItem = salesOrder.items.find(so => (so._id && item._id && so._id.toString() === item._id.toString()));
-          if (originalItem) {
-            // Update existing master item
-            return {
-              ...originalItem.toObject(),
-              sellingPrice: Number(item.sellingPrice),
-              unit: item.unit,
-              qty: Number(item.originalQty || item.qty), // Keep the requirement in sync
-            };
-          } else {
-            // brand new item added via workbench
-            return {
-              productId: item.productId,
-              name: item.name,
-              hsn: item.hsn,
-              sellingPrice: Number(item.sellingPrice),
-              unit: item.unit,
-              qty: Number(item.originalQty || item.qty),
-              discountPercent: Number(item.discountPercent || 0),
-              discountAmount: Number(item.discountAmount || 0),
-              gst: Number(item.gst),
-              cgst: Number(item.cgst),
-              sgst: Number(item.sgst),
-              igst: Number(item.igst || 0),
-              total: Number(item.total)
-            };
-          }
-        });
-        
-        // IMPORTANT: This replaces the list, effectively removing any items the user deleted in the workbench
-        salesOrder.items = updatedMasterItems;
+        // 1. Identify and append BRAND NEW items added directly in the workbench
+        // Items with an _id are from the original SO. Items without _id are new.
+        const newItemsFromWorkbench = items.filter(item => !item._id);
+        if (newItemsFromWorkbench.length > 0) {
+          newItemsFromWorkbench.forEach(ni => {
+            salesOrder.items.push({
+              productId: ni.productId,
+              name: ni.name,
+              hsn: ni.hsn,
+              sellingPrice: Number(ni.sellingPrice),
+              unit: ni.unit,
+              qty: Number(ni.originalQty || ni.qty),
+              discountPercent: Number(ni.discountPercent || 0),
+              discountAmount: Number(ni.discountAmount || 0),
+              gst: Number(ni.gst),
+              cgst: Number(ni.cgst),
+              sgst: Number(ni.sgst),
+              igst: Number(ni.igst || 0),
+              total: Number(ni.total)
+            });
+          });
+        }
+
+        // 2. Store the FULL Workbench State as the source of truth for re-edits
+        // This includes all discounts, corrected prices, and excludes deleted items.
+        salesOrder.invoiceItems = processedItems;
+        salesOrder.invoiceGrandTotal = grandTotal;
+        salesOrder.invoiceSubtotal = grossSubtotal;
+        salesOrder.invoiceTotalTax = totalTax.total;
+        salesOrder.invoiceTransportCharge = tCharge;
+        salesOrder.invoiceCommonDiscount = commonDiscount;
+
+        // DONT overwrite salesOrder.items. Keep the baseline stable.
+        // salesOrder.items = updatedMasterItems; // REMOVED to keep SO stable
         salesOrder.subtotal = grossSubtotal;
         salesOrder.totalTax = totalTax.total;
         salesOrder.transportCharge = tCharge;
         salesOrder.transportGstPercent = tGstPercent;
         salesOrder.transportGstAmount = tGstAmount;
         salesOrder.commonDiscount = commonDiscount;
-        salesOrder.extraExpenseAmount = extraExpenseAmount;
-        salesOrder.grandTotal = grandTotal;
+        // master grandTotal stays related to original SO or updates with new items if needed
+        // For simplicity and user request, we focus financial tracking on the Invoice documents
         salesOrder.notes = notes;
         salesOrder.invoiceGenerated = true;
         salesOrder.status = "INVOICED";
