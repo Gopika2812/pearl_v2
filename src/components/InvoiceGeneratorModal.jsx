@@ -25,6 +25,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   const [notes, setNotes] = useState("");
   const [invoiceType, setInvoiceType] = useState("ORDER_DETAILS");
   const [commonDiscount, setCommonDiscount] = useState(0);
+  const [transportCharge, setTransportCharge] = useState(0);
+  const [transportGstPercent, setTransportGstPercent] = useState(18);
 
   // Customer Swap state
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -53,11 +55,31 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
   // Fetch initial data for dropdowns
   useEffect(() => {
-    if (order?.branchId) {
-      searchCustomers(""); // Load initial customers
-      searchProducts("");  // Load initial products
+    if (order?._id) {
+      // Re-fetch the order to ensure we have the freshest data (transport, discount, etc.)
+      const fetchLatestOrder = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/sales-orders/${order._id}`);
+          if (res.ok) {
+            const freshOrder = await res.json();
+            // Only update financial fields if they were 0/missing in the prop
+            if (!initializationRef.current) {
+               setCommonDiscount(freshOrder.commonDiscount || 0);
+               setTransportCharge(freshOrder.transportCharge || 0);
+               setTransportGstPercent(freshOrder.transportGstPercent || 18);
+               setNotes(freshOrder.notes || "");
+            }
+          }
+        } catch (err) {
+          console.error("Failed to re-sync order data:", err);
+        }
+      };
+
+      fetchLatestOrder();
+      searchCustomers(""); 
+      searchProducts("");  
     }
-  }, [order?.branchId]);
+  }, [order?._id]);
 
   // Preview state
   const [previewData, setPreviewData] = useState(null);
@@ -165,6 +187,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
       setEditedItems(finalItems);
       setNotes(order.notes || "");
       setCommonDiscount(order.commonDiscount || 0);
+      setTransportCharge(order.transportCharge || 0);
+      setTransportGstPercent(order.transportGstPercent || 18);
       setSelectedCustomer(order.customer);
       setCustomerSearch(order.customer?.name || "");
     }
@@ -365,7 +389,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             items: editedItems,
             notes,
             invoiceType,
-            commonDiscount,
+            commonDiscount: Number(commonDiscount) || 0,
+            transportCharge: Number(transportCharge) || 0,
+            transportGstPercent: Number(transportGstPercent) || 18,
             customerId: selectedCustomer?.customerId || selectedCustomer?._id, // Use swapped customer
           }),
         }
@@ -398,7 +424,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             items: editedItems,
             notes,
             invoiceType,
-            commonDiscount,
+            commonDiscount: Number(commonDiscount) || 0,
+            transportCharge: Number(transportCharge) || 0,
+            transportGstPercent: Number(transportGstPercent) || 18,
             customerId: selectedCustomer?.customerId || selectedCustomer?._id, // Use swapped customer
             finalizedBy: user?.id || user?._id,
             finalizedByUsername: user?.username || user?.fullName || user?.name || "System",
@@ -1307,9 +1335,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   return sum + (taxable * (item.gst || 0) / 100);
                 }, 0);
                 // Transport charge + its GST (default 18% if not specified)
-                const transport = Number(order.transportCharge || 0);
-                const transportGstPercent = Number(order.transportGstPercent || 18);
-                const transportGst = Math.round((transport * transportGstPercent / 100) * 100) / 100;
+                const transport = Number(transportCharge || 0);
+                const tGstPercent = Number(transportGstPercent || 18);
+                const transportGst = Math.round((transport * tGstPercent / 100) * 100) / 100;
                 // Total tax = item taxes + transport GST
                 const liveTax = Math.round((itemTax + transportGst) * 100) / 100;
                 const specialDisc = Number(commonDiscount) || 0;
@@ -1334,7 +1362,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                           Tax (GST)
                           {transport > 0 && (
                             <span className="ml-2 text-[10px] text-yellow-500/70 font-normal">
-                              incl. Transport GST ({transportGstPercent}% on ₹{transport.toFixed(0)}) = +₹{transportGst.toFixed(2)}
+                              incl. Transport GST ({tGstPercent}% on ₹{transport.toFixed(0)}) = +₹{transportGst.toFixed(2)}
                             </span>
                           )}
                         </span>
@@ -1357,12 +1385,36 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                           <span className="text-orange-400 font-black text-sm">–₹</span>
                           <input
                             type="number"
-                            value={commonDiscount}
+                            value={commonDiscount || ""}
                             onChange={(e) => setCommonDiscount(e.target.value === "" ? "" : parseFloat(e.target.value))}
                             placeholder="0"
                             className="w-28 p-1.5 bg-slate-700 border border-orange-500/50 rounded-lg text-right font-black text-orange-300 outline-none focus:ring-2 focus:ring-orange-500 text-sm"
                             min="0"
                           />
+                        </div>
+                      </div>
+                      {/* Transport Charge — editable inline */}
+                      <div className="flex justify-between items-center py-2.5 border-b border-slate-700">
+                        <span className="text-sm text-gray-400 font-bold">Transport Charge (₹)</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-purple-400 font-black text-sm">₹</span>
+                          <input
+                            type="number"
+                            value={transportCharge || ""}
+                            onChange={(e) => setTransportCharge(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                            placeholder="0"
+                            className="w-28 p-1.5 bg-slate-700 border border-purple-500/50 rounded-lg text-right font-black text-purple-300 outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                            min="0"
+                          />
+                          <div className="flex flex-col gap-0.5 ml-2">
+                            <span className="text-[8px] text-gray-500 uppercase font-black">GST %</span>
+                            <input
+                              type="number"
+                              value={transportGstPercent}
+                              onChange={(e) => setTransportGstPercent(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                              className="w-12 p-1 bg-slate-800 border-b border-slate-600 text-center text-[10px] text-purple-200 focus:outline-none"
+                            />
+                          </div>
                         </div>
                       </div>
                       {/* Grand Total */}

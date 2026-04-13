@@ -61,6 +61,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       invoiceType = "ORDER_DETAILS",
       commonDiscount: customCommonDiscount,
       transportCharge: customTransportCharge,
+      transportGstPercent: customTransportGstPercent,
       extraExpenseAmount: customExtraExpenseAmount,
       finalizedBy,
       finalizedByUsername
@@ -144,7 +145,9 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       ? Number(customExtraExpenseAmount)
       : (salesOrder.extraExpenseAmount || 0);
 
-    const tGstPercent = salesOrder.transportGstPercent || 0;
+    const tGstPercent = customTransportGstPercent !== undefined
+      ? Number(customTransportGstPercent)
+      : (salesOrder.transportGstPercent || 0);
     const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
 
     const totalTax = {
@@ -290,6 +293,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
       invoiceType = "ORDER_DETAILS",
       commonDiscount: customCommonDiscount,
       transportCharge: customTransportCharge,
+      transportGstPercent: customTransportGstPercent,
       extraExpenseAmount: customExtraExpenseAmount,
       finalizedBy,
       finalizedByUsername
@@ -449,7 +453,10 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         const tCharge = customTransportCharge !== undefined ? Number(customTransportCharge) : (salesOrder.transportCharge || 0);
         const extraExpenseAmount = customExtraExpenseAmount !== undefined ? Number(customExtraExpenseAmount) : (salesOrder.extraExpenseAmount || 0);
         
-        const tGstAmount = Math.round((tCharge * (salesOrder.transportGstPercent || 0) / 100) * 100) / 100;
+        const tGstPercent = customTransportGstPercent !== undefined 
+          ? Number(customTransportGstPercent) 
+          : (salesOrder.transportGstPercent || 0);
+        const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
         const totalTax = {
           cgst: Math.round((cgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
           sgst: Math.round((sgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
@@ -558,6 +565,11 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           invoice.items = processedItems;
           invoice.subtotal = grossSubtotal;
           invoice.totalTax = totalTax;
+          invoice.transportCharge = tCharge;
+          invoice.transportGstPercent = tGstPercent;
+          invoice.transportGstAmount = tGstAmount;
+          invoice.commonDiscount = commonDiscount;
+          invoice.extraExpenseAmount = extraExpenseAmount;
           invoice.grandTotal = grandTotal;
           await invoice.save({ session });
         } else {
@@ -571,8 +583,14 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
             seller: sellerSnapshot,
             customer: customerSnapshot,
             items: processedItems,
+            sampleItems: salesOrder.sampleItems || [],
             subtotal: grossSubtotal,
             totalTax,
+            transportCharge: tCharge,
+            transportGstPercent: tGstPercent,
+            transportGstAmount: tGstAmount,
+            commonDiscount: commonDiscount,
+            extraExpenseAmount: extraExpenseAmount,
             grandTotal,
             status: "FINALIZED",
           });
@@ -612,7 +630,15 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         
         // IMPORTANT: This replaces the list, effectively removing any items the user deleted in the workbench
         salesOrder.items = updatedMasterItems;
-
+        salesOrder.subtotal = grossSubtotal;
+        salesOrder.totalTax = totalTax.total;
+        salesOrder.transportCharge = tCharge;
+        salesOrder.transportGstPercent = tGstPercent;
+        salesOrder.transportGstAmount = tGstAmount;
+        salesOrder.commonDiscount = commonDiscount;
+        salesOrder.extraExpenseAmount = extraExpenseAmount;
+        salesOrder.grandTotal = grandTotal;
+        salesOrder.notes = notes;
         salesOrder.invoiceGenerated = true;
         salesOrder.status = "INVOICED";
         salesOrder.salesInvoiceId = invoiceNumber;

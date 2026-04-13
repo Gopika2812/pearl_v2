@@ -71,8 +71,9 @@ class GSTZenService {
 
       let totalAssVal = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0;
 
-      // 1. Add Regular Items
-      const itemList = invoiceData.items.map((item, idx) => {
+      // 1. Add Regular Items (Filter out items with zero quantity i.e. Back Orders)
+      const billedItems = (invoiceData.items || []).filter(item => Number(item.qty || 0) > 0);
+      const itemList = billedItems.map((item, idx) => {
         const qty = Number(item.qty || 0);
         const rate = Number(item.sellingPrice || 0);
         const discount = Number(item.discountAmount || 0);

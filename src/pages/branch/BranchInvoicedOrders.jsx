@@ -1081,9 +1081,16 @@ const BranchInvoicedOrders = () => {
                                       })()}
 
                                       {order.transportCharge > 0 && (
-                                        <div className="flex justify-between text-xs text-orange-600 font-bold border-t border-gray-50 pt-2">
-                                          <span>Transport</span>
+                                        <div className="flex justify-between text-xs text-purple-600 font-bold border-t border-gray-50 pt-2">
+                                          <span>Transport Charge (+)</span>
                                           <span>₹{(order.transportCharge || 0).toFixed(2)}</span>
+                                        </div>
+                                      )}
+
+                                      {order.commonDiscount > 0 && (
+                                        <div className="flex justify-between text-xs text-orange-600 font-bold border-t border-gray-50 pt-2">
+                                          <span>Special Discount (-)</span>
+                                          <span>-₹{(order.commonDiscount || 0).toFixed(2)}</span>
                                         </div>
                                       )}
 
@@ -1238,18 +1245,20 @@ const BranchInvoicedOrders = () => {
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y">
-                                      {(invoicesByOrder[order._id] || []).map(
+                                      {(invoicesByOrder[order._id] || []).flatMap(
                                         (invoice) =>
-                                          invoice.items.map(
-                                            (invoiceItem, itemIdx) => {
-                                              const originalItem = order.items.find(
-                                                (i) =>
-                                                  i.productId?.toString() ===
-                                                  invoiceItem.productId?.toString()
-                                              );
-                                              const backOrderQty =
-                                                (originalItem?.qty || 0) -
-                                                invoiceItem.qty;
+                                          (invoice.items || [])
+                                            .filter(invoiceItem => Number(invoiceItem.qty || 0) > 0)
+                                            .map(
+                                              (invoiceItem, itemIdx) => {
+                                                const originalItem = (order.items || []).find(
+                                                  (i) =>
+                                                    (i.productId?._id || i.productId)?.toString() ===
+                                                    (invoiceItem.productId?._id || invoiceItem.productId)?.toString()
+                                                );
+                                                const backOrderQty =
+                                                  (originalItem?.qty || 0) -
+                                                  invoiceItem.qty;
 
                                               return (
                                                 <tr
@@ -1352,9 +1361,16 @@ const BranchInvoicedOrders = () => {
                                       })()}
 
                                       {inv.transportCharge > 0 && (
-                                        <div className="flex justify-between text-[10px] text-orange-700 font-black uppercase border-t border-blue-100 pt-2">
-                                          <span>Transport</span>
+                                        <div className="flex justify-between text-[10px] text-purple-700 font-black uppercase border-t border-blue-100 pt-2">
+                                          <span>Transport Charge (+)</span>
                                           <span>₹{(inv.transportCharge || 0).toFixed(2)}</span>
+                                        </div>
+                                      )}
+
+                                      {inv.commonDiscount > 0 && (
+                                        <div className="flex justify-between text-[10px] text-orange-600 font-black uppercase border-t border-blue-100 pt-2">
+                                          <span>Special Discount (-)</span>
+                                          <span>-₹{(inv.commonDiscount || 0).toFixed(2)}</span>
                                         </div>
                                       )}
 

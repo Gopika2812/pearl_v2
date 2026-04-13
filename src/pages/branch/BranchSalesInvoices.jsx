@@ -633,13 +633,15 @@ const BranchSalesInvoices = () => {
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {(inv.items || []).map((item, idx) => (
-                                        <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition">
-                                          <td className="py-3 font-bold text-slate-700">{item.name}</td>
-                                          <td className="py-3 text-center font-black text-indigo-600 bg-indigo-50/50 rounded-lg">{item.qty} {item.unit || "Units"}</td>
-                                          <td className="py-3 text-right font-black text-slate-800">₹{(item.total || 0).toLocaleString()}</td>
-                                        </tr>
-                                      ))}
+                                      {(inv.items || [])
+                                        .filter(item => Number(item.qty || 0) > 0)
+                                        .map((item, idx) => (
+                                          <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition">
+                                            <td className="py-3 font-bold text-slate-700">{item.name}</td>
+                                            <td className="py-3 text-center font-black text-indigo-600 bg-indigo-50/50 rounded-lg">{item.qty} {item.unit || "Units"}</td>
+                                            <td className="py-3 text-right font-black text-slate-800">₹{(item.total || 0).toLocaleString()}</td>
+                                          </tr>
+                                        ))}
                                     </tbody>
                                   </table>
                                 </div>
@@ -657,6 +659,25 @@ const BranchSalesInvoices = () => {
                                         <span className="text-slate-500 font-bold uppercase tracking-tighter">Generated At</span>
                                         <span className="font-black text-slate-800">{formatIST(inv.createdAt || inv.invoiceDate)}</span>
                                       </div>
+                                      {inv.commonDiscount > 0 && (
+                                        <div className="flex justify-between border-b border-slate-50 pb-2">
+                                          <span className="text-orange-600 font-bold uppercase tracking-tighter italic">Special Discount (-)</span>
+                                          <span className="font-black text-orange-600">-₹{inv.commonDiscount.toLocaleString()}</span>
+                                        </div>
+                                      )}
+                                      {inv.transportCharge > 0 && (
+                                        <div className="flex justify-between border-b border-slate-50 pb-2">
+                                          <span className="text-purple-600 font-bold uppercase tracking-tighter italic">Transport Charge (+)</span>
+                                          <span className="font-black text-purple-600">
+                                            ₹{inv.transportCharge.toLocaleString()}
+                                            {inv.transportGstAmount > 0 && (
+                                              <span className="text-[9px] ml-1 text-purple-400">
+                                                (incl. ₹{inv.transportGstAmount.toFixed(2)} GST)
+                                              </span>
+                                            )}
+                                          </span>
+                                        </div>
+                                      )}
                                       <div className="flex justify-between">
                                         <span className="text-slate-500 font-bold uppercase tracking-tighter">Inventory Date</span>
                                         <span className="font-black text-slate-800">{new Date(inv.invoiceDate).toLocaleDateString("en-IN")}</span>
