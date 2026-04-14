@@ -214,8 +214,8 @@ export const InventoryProvider = ({ children }) => {
       }
       
       console.log(`🔌 Fetching Products for branchId: ${branchId}`);
-      // ⚡ PERFORMANCE: Only fetch 10,000 products instead of 100 to ensure all are loaded for SO/PO
-      const res = await fetchWithAuth(`${API_BASE}/products?branchId=${branchId}&limit=10000`);
+      // ⚡ PERFORMANCE: Load only 100 products initially to prevent server crash
+      const res = await fetchWithAuth(`${API_BASE}/products?branchId=${branchId}&limit=100`);
       
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
@@ -232,6 +232,34 @@ export const InventoryProvider = ({ children }) => {
     } catch (err) {
       console.error("❌ Product fetch failed", err);
       setProducts([]);
+    }
+  };
+
+  // New Optimized Product Search for Modals/Autocomplete
+  const searchProducts = async (q) => {
+    try {
+      const branchId = currentBranch?._id;
+      if (!branchId) return [];
+      const res = await fetchWithAuth(`${API_BASE}/products?branchId=${branchId}&search=${encodeURIComponent(q)}&limit=50`);
+      const json = await res.json();
+      return Array.isArray(json) ? json : (json.data || []);
+    } catch (err) {
+      console.error("Search failed", err);
+      return [];
+    }
+  };
+
+  // New Optimized Customer Search
+  const searchCustomers = async (q) => {
+    try {
+      const branchId = currentBranch?._id;
+      if (!branchId) return [];
+      const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${branchId}&search=${encodeURIComponent(q)}&limit=50`);
+      const json = await res.json();
+      return json.data || [];
+    } catch (err) {
+      console.error("Customer search failed", err);
+      return [];
     }
   };
 
@@ -446,7 +474,8 @@ export const InventoryProvider = ({ children }) => {
         voucherTypes, productGroups, productCategories, customerCategories, customerGroups, products, locations,
         warehouses, customers, vendors, salesOwners, salesMen, deliveryMen, commissions,
         drafts, finalOrders, fetchWarehouses, fetchCustomers, fetchProducts, fetchCommissions,
-        addData, updateData, addLocalVoucher, addLocalWarehouse, addLocalProductCategory, addLocalCustomerCategory, addLocalCustomerGroup, saveToDrafts, placeFinalOrder
+        addData, updateData, addLocalVoucher, addLocalWarehouse, addLocalProductCategory, addLocalCustomerCategory, addLocalCustomerGroup, saveToDrafts, 
+        placeFinalOrder, searchProducts, searchCustomers
       }}
     >
       {children}

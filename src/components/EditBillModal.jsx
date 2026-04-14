@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { FaPlus, FaSave, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../api";
+import { API_BASE, fetchWithAuth } from "../api";
+import { useInventory } from "../context/InventoryContext";
 
 const EditBillModal = ({ order, branchId, onClose, onSave }) => {
+  const { searchProducts, searchCustomers } = useInventory();
   const [items, setItems] = useState([]);
   const [sampleItems, setSampleItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -91,44 +93,9 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   };
 
 
-  // Fetch available products
+  // Fetch available products (LEGACY - but kept as empty shell for now to avoid breaking other parts)
   const fetchProducts = async () => {
-    try {
-      // Priority: 1. branchId prop (passed from parent), 2. order.branchId
-      const branch = branchId || order?.branchId;
-      
-      console.log(`🔍 Product Fetch - branchId prop: ${branchId}, order.branchId: ${order?.branchId}`);
-      
-      if (!branch) {
-        console.warn("⚠️ branchId not found in props or order");
-        toast.error("Unable to load products - branch information missing");
-        return;
-      }
-
-      const url = `${API_BASE}/products?branchId=${branch}&limit=10000`;
-      console.log(`📦 Fetching products from: ${url}`);
-      
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
-      
-      if (!res.ok) {
-        const errorData = await res.text();
-        console.error(`❌ Product fetch failed with status ${res.status}:`, errorData);
-        throw new Error(`Server error: ${res.status}`);
-      }
-      
-      const data = await res.json();
-      const productList = data.data || data.products || (Array.isArray(data) ? data : []);
-      console.log(`✅ Fetched ${productList.length} products`);
-      setProducts(productList);
-    } catch (err) {
-      console.error("❌ Error fetching products:", err);
-      toast.error("Failed to load products. Check console for details.");
-      setProducts([]);
-    }
+    // We now use searchProducts live
   };
 
   // Save Product Conversion from Modal
@@ -390,10 +357,29 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
     }
   };
 
-  // Filter products based on search term
-  const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes((productSearch || "").toLowerCase())
-  );
+  // Debounced Search for Products
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(async () => {
+      if (productSearch.length >= 2) {
+        const results = await searchProducts(productSearch);
+        setProducts(results);
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [productSearch]);
+
+  // Debounced Search for Customers
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(async () => {
+      if (customerSearch.length >= 2) {
+        const results = await searchCustomers(customerSearch);
+        setCustomers(results);
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [customerSearch]);
 
   // Save changes
   const handleSave = async () => {
@@ -509,7 +495,6 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
               {showCustomerDropdown && (
                 <ul className="absolute z-20 w-full md:w-1/2 bg-white border border-gray-300 rounded-lg mt-1 max-h-60 overflow-y-auto shadow-xl">
                   {customers
-                    .filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase()))
                     .map((c) => (
                       <li
                         key={c._id}
@@ -827,8 +812,8 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                        />
                        {showProductDropdown && (
                          <ul className="absolute z-10 w-full bg-white border border-gray-300 rounded mt-1 max-h-48 overflow-y-auto shadow-lg">
-                           {filteredProducts.length > 0 ? (
-                             filteredProducts.map((prod) => (
+                            {products.length > 0 ? (
+                              products.map((prod) => (
                                <li
                                  key={prod._id}
                                  className="px-3 py-2 hover:bg-green-50 cursor-pointer text-sm"

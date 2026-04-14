@@ -28,8 +28,10 @@ export default function BranchSalesReports() {
 
     setLoading(true);
     try {
-      // Fetch all sales invoices for this branch
-      const url = `${API_BASE}/sales-invoices?branchId=${branchId}&limit=10000`;
+      // Fetch invoices with server-side filters and items included
+      let url = `${API_BASE}/sales-invoices?branchId=${branchId}&limit=2000&includeItems=true`;
+      if (startDate) url += `&fromDate=${startDate}`;
+      if (endDate) url += `&toDate=${endDate}`;
       const res = await fetchWithAuth(url);
       if (!res.ok) throw new Error("Failed to fetch invoices");
 
@@ -49,10 +51,8 @@ export default function BranchSalesReports() {
       const customerReport = {};
 
       invoices.forEach((invoice) => {
-        // Check date filter
-        const invoiceDate = new Date(invoice.invoiceDate || invoice.createdAt);
-        if (startDate && invoiceDate < new Date(startDate)) return;
-        if (endDate && invoiceDate > new Date(endDate)) return;
+        // Data is now pre-filtered by the server for dates
+
 
         // Process items in invoice
         if (Array.isArray(invoice.items)) {

@@ -863,8 +863,6 @@ const BranchCustomers = () => {
         onClose={() => setSelectedLedgerCustomer(null)}
         customer={selectedLedgerCustomer}
         branch={branch}
-        salesOrders={salesOrders}
-        customerPayments={customerPayments}
         onBalanceUpdate={() => fetchCustomers(currentPage)}
       />
 

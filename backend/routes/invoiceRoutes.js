@@ -929,7 +929,7 @@ router.put("/:invoiceId/cancel", async (req, res) => {
 // GET sales invoices with pagination and filtering (Sales Reports)
 router.get("", async (req, res) => {
   try {
-    const { branchId, fromDate, toDate, search, page = 1, limit = 20, vPrefix, einvoiceStatus } = req.query;
+    const { branchId, fromDate, toDate, search, page = 1, limit = 20, vPrefix, einvoiceStatus, includeItems } = req.query;
     const query = {};
 
     // 1. Branch Filter
@@ -966,21 +966,20 @@ router.get("", async (req, res) => {
       end.setHours(23, 59, 59, 999);
 
       query.invoiceDate = { $gte: start, $lte: end };
-    } else if (!search && !vPrefix && !einvoiceStatus) {
-      // Fallback default: Today only if completely unfiltered list
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const endOfToday = new Date();
-      endOfToday.setHours(23, 59, 59, 999);
-      query.invoiceDate = { $gte: today, $lte: endOfToday };
-    }
+    } 
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const invoices = await Invoice.find(query)
+    let queryExec = Invoice.find(query)
       .populate("customer.customerId", "name whatsapp")
-      .populate("salesOrderId")
-      .select("-items -__v") // ⚡ THIN FETCHING: Skip heavy items array for the main list
+      .populate("salesOrderId");
+
+    // ⚡ THIN FETCHING: Skip heavy items array unless explicitly requested for reports
+    if (includeItems !== "true") {
+      queryExec = queryExec.select("-items -__v");
+    }
+
+    const invoices = await queryExec
       .sort({ invoiceDate: -1 })
       .skip(skip)
       .limit(parseInt(limit))
