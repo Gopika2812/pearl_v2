@@ -140,6 +140,29 @@ const BranchProductRecords = () => {
             >
               <FaFileExport /> Export Excel
             </button>
+            <button
+              onClick={async () => {
+                if (!window.confirm("This will scan all past Purchase Invoices and update your price history. Proceed?")) return;
+                try {
+                  setLoading(true);
+                  const res = await fetchWithAuth(`${API_BASE}/products/sync-past-prices?branchId=${currentBranch._id}`, {
+                    method: "POST"
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.message);
+                  toast.success(data.message);
+                  fetchProducts();
+                } catch (err) {
+                  toast.error(err.message);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className="flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-2 rounded-lg hover:bg-orange-200 transition shadow-sm font-bold text-sm"
+            >
+              <FaSync className={loading ? "animate-spin" : ""} />
+              Reconcile Past Prices
+            </button>
             <button 
               onClick={fetchHistory}
               disabled={loading}

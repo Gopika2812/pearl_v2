@@ -112,7 +112,15 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
   // Handle price change
   const handlePriceChange = (index, price) => {
     const updated = [...items];
-    updated[index].purchasePrice = price === "" ? "" : parseFloat(price);
+    const val = price === "" ? "" : parseFloat(price);
+    updated[index].purchasePrice = val;
+    
+    // ⚡ AUTO-RECALCULATE SELLING PRICE (using margin from products list)
+    const product = products.find(p => p._id === updated[index].productId);
+    if (product && product.marginPercentage > 0 && val > 0) {
+      updated[index].sellingPrice = Math.round((val + (val * product.marginPercentage / 100)) * 100) / 100;
+    }
+
     updated[index].total = calculateItemTotal(updated[index]);
     setItems(updated);
   };
@@ -285,15 +293,48 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
                         />
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex items-center gap-1 justify-end">
-                          <span className="text-gray-400">₹</span>
-                          <input
-                            type="number"
-                            value={item.purchasePrice}
-                            onChange={(e) => handlePriceChange(idx, e.target.value)}
-                            className="w-full border border-gray-200 rounded px-2 py-1 text-right font-bold text-[#319bab]"
-                            step="0.01"
-                          />
+                        <div className="relative group">
+                          {/* 🚩 Price Intelligence Tooltip/Badge */}
+                          {(() => {
+                            const product = products.find(p => p._id === item.productId);
+                            if (!product) return null;
+                            const prev = product.purchasingPrice || 0;
+                            const curr = Number(item.purchasePrice) || 0;
+                            if (prev === 0 || curr === prev) return null;
+                            return (
+                              <div className={`absolute -top-6 right-0 text-[8px] font-black uppercase px-2 py-0.5 rounded shadow-sm whitespace-nowrap z-10 ${
+                                curr > prev ? "bg-red-500 text-white" : "bg-green-500 text-white"
+                              }`}>
+                                {curr > prev ? `📈 Increase (+₹${(curr-prev).toFixed(0)})` : `📉 Decrease (-₹${(prev-curr).toFixed(0)})`}
+                              </div>
+                            );
+                          })()}
+
+                          <div className="flex items-center gap-1 justify-end">
+                            <span className="text-gray-400">₹</span>
+                            <input
+                              type="number"
+                              value={item.purchasePrice}
+                              onChange={(e) => handlePriceChange(idx, e.target.value)}
+                              className={`w-full border rounded px-2 py-1 text-right font-bold transition-all ${
+                                (() => {
+                                  const prod = products.find(p => p._id === item.productId);
+                                  const p = prod?.purchasingPrice || 0;
+                                  const c = Number(item.purchasePrice) || 0;
+                                  if (p > 0 && c > p) return "border-red-300 bg-red-50 text-red-700";
+                                  if (p > 0 && c < p) return "border-green-300 bg-green-50 text-green-700";
+                                  return "border-gray-200 text-[#319bab]";
+                                })()
+                              }`}
+                              step="0.01"
+                            />
+                          </div>
+                          {(() => {
+                            const product = products.find(p => p._id === item.productId);
+                            if (product && product.purchasingPrice) {
+                              return <div className="text-[9px] text-gray-400 mt-0.5">Prev: ₹{product.purchasingPrice}</div>;
+                            }
+                          })()}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -383,13 +424,52 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Purchase Price</label>
-                    <input
-                      type="number"
-                      value={newItem.purchasePrice}
-                      onChange={(e) => setNewItem({ ...newItem, purchasePrice: e.target.value })}
-                      className="w-full border border-gray-200 rounded-lg px-4 py-2 text-sm outline-none focus:border-green-500 font-bold text-[#319bab]"
-                    />
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-xs font-bold text-gray-500 uppercase">Purchase Price</label>
+                      {(() => {
+                        const product = products.find(p => p._id === newItem.productId);
+                        if (product) return <span className="text-[9px] text-gray-400">Prev: ₹{product.purchasingPrice}</span>;
+                      })()}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={newItem.purchasePrice}
+                        onChange={(e) => {
+                          const val = e.target.value === "" ? "" : parseFloat(e.target.value);
+                          const product = products.find(p => p._id === newItem.productId);
+                          let newS = newItem.sellingPrice;
+                          if (product && product.marginPercentage > 0 && val > 0) {
+                            newS = Math.round((val + (val * product.marginPercentage / 100)) * 100) / 100;
+                          }
+                          setNewItem({ ...newItem, purchasePrice: val, sellingPrice: newS });
+                        }}
+                        className={`w-full border rounded-lg px-4 py-2 text-sm outline-none transition-all font-bold ${
+                          (() => {
+                            const prod = products.find(p => p._id === newItem.productId);
+                            const p = prod?.purchasingPrice || 0;
+                            const c = Number(newItem.purchasePrice) || 0;
+                            if (p > 0 && c > p) return "border-red-300 bg-red-50 text-red-700";
+                            if (p > 0 && c < p) return "border-green-300 bg-green-50 text-green-700";
+                            return "border-gray-200 text-[#319bab]";
+                          })()
+                        }`}
+                      />
+                      {(() => {
+                        const prod = products.find(p => p._id === newItem.productId);
+                        const p = prod?.purchasingPrice || 0;
+                        const c = Number(newItem.purchasePrice) || 0;
+                        if (p > 0 && c !== p) {
+                          return (
+                            <div className={`absolute -top-6 right-0 text-[8px] font-black uppercase px-2 py-0.5 rounded shadow-sm ${
+                              c > p ? "bg-red-500 text-white" : "bg-green-500 text-white"
+                            }`}>
+                              {c > p ? "📈 Rate Increased" : "📉 Rate Decreased"}
+                            </div>
+                          );
+                        }
+                      })()}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Discount %</label>

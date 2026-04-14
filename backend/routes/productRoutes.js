@@ -531,19 +531,23 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         productData.productCategories = categoryIds;
       }
 
+      // 💰 STOCK AUDIT LOGIC (SIMPLE REPLACE MODE)
+      const rawQty = normalizedRow.totalqty || normalizedRow.qty || normalizedRow.openingquantity || normalizedRow.openingstock || "";
+      if (rawQty !== "") {
+        const qty = parseFloat(String(rawQty).replace(/[^0-9.-]+/g, "")) || 0;
+        productData.totalQty = Math.round(qty * 100) / 100;
+        productData.openingQty = productData.totalQty;
+        productData.manualOpeningDate = new Date("2026-03-31T23:59:59.999Z");
+      }
+
       if (existingProductId) {
-        // ONLY update if we actually have fields to update AND skipExisting is false
-        if (!skipExisting && Object.keys(productData).length > 0) {
-          productsToBulkUpdate.push({
-            updateOne: {
-              filter: { _id: existingProductId },
-              update: { $set: productData }
-            }
-          });
-        } else if (skipExisting) {
-          console.log(`⏩ Skipping existing product: "${name}"`);
-          alreadyExistsCount++;
-        }
+        // Queue for update
+        productsToBulkUpdate.push({
+          updateOne: {
+            filter: { _id: existingProductId },
+            update: { $set: productData }
+          }
+        });
       } else {
         // Ensure essential defaults for NEW products
         const newProductData = {
@@ -584,7 +588,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       message: "Bulk product upload completed",
       insertedCount,
       updatedCount,
-      skippedCount: skipped.length + alreadyExistsCount, // Total skipped (errors + exists)
+      skippedCount: skipped.length + alreadyExistsCount,
       alreadyExistsCount,
       errorCount: skipped.length,
       skipped,
@@ -595,6 +599,128 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       message: "Bulk upload failed",
       error: err.message,
     });
+  }
+});
+
+// ✅ Snapshot Export of March 31st Stock Balances
+// Calculated as: (Live Stock) - (April Inwards) + (April Outwards)
+router.get("/export/snapshot-mar31", async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    if (!branchId) return res.status(400).json({ success: false, message: "branchId is required" });
+
+    const startOfApril = new Date("2026-04-01T00:00:00.000Z");
+    const products = await Product.find({ branchId }).sort({ name: 1 }).lean();
+    const branchOid = new mongoose.Types.ObjectId(branchId);
+
+    // 1. April Inwards (Purchases + Sales Returns)
+    const purchases = await PurchaseOrder.aggregate([
+      { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "INVOICED"] }, createdAt: { $gte: startOfApril } } },
+      { $unwind: "$items" },
+      { $group: { _id: "$items.productId", qty: { $sum: "$items.qty" } } }
+    ]);
+    const pMap = new Map(purchases.map(p => [p._id.toString(), p.qty]));
+
+    const creditNotes = await CreditNote.aggregate([
+      { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gte: startOfApril } } },
+      { $unwind: "$items" },
+      { $group: { _id: "$items.productId", qty: { $sum: "$items.qty" } } }
+    ]);
+    const cnMap = new Map(creditNotes.map(cn => [cn._id.toString(), cn.qty]));
+
+    // 2. April Outwards (Sales + Purchase Returns)
+    const sales = await SalesOrder.aggregate([
+      { $match: { branchId: branchOid, invoiceGenerated: true, createdAt: { $gte: startOfApril } } },
+      { $unwind: "$invoiceItems" },
+      { $group: { _id: "$invoiceItems.productId", qty: { $sum: "$invoiceItems.qty" } } }
+    ]);
+    const sMap = new Map(sales.map(s => [s._id.toString(), s.qty]));
+
+    const debitNotes = await DebitNote.aggregate([
+      { $match: { branchId: branchOid, status: "confirmed", createdAt: { $gte: startOfApril } } },
+      { $unwind: "$items" },
+      { $group: { _id: "$items.productId", qty: { $sum: "$items.returnedQty" } } }
+    ]);
+    const dnMap = new Map(debitNotes.map(dn => [dn._id.toString(), dn.qty]));
+
+    const results = products.map(p => {
+      const pid = p._id.toString();
+      const aprIn = (pMap.get(pid) || 0) + (cnMap.get(pid) || 0);
+      const aprOut = (sMap.get(pid) || 0) + (dnMap.get(pid) || 0);
+      
+      // If openingQty was manually uploaded, use it. Otherwise calculate backwards.
+      const snapshotQty = p.manualOpeningDate ? p.openingQty : (p.totalQty - aprIn + aprOut);
+
+      return {
+        "Item Name": p.name,
+        "HSN": p.hsnCode || "-",
+        "Unit": p.units || "-",
+        "Stock (31-Mar-2026)": Math.max(0, snapshotQty)
+      };
+    });
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error("Stock March 31 Snapshot Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 🔄 RETROACTIVE PRICE SYNC: Rebuild price history from past Invoices
+router.post("/sync-past-prices", auth, async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    if (!branchId) return res.status(400).json({ message: "branchId required" });
+
+    // Using dynamic import for the model to ensure it's loaded
+    const PurchaseInvoice = (await import("../models/PurchaseInvoice.js")).default;
+    const invoices = await PurchaseInvoice.find({ branchId }).sort({ invoiceDate: 1, createdAt: 1 });
+    
+    let updateCount = 0;
+    let historyCount = 0;
+
+    for (const inv of invoices) {
+      if (!inv.items) continue;
+      
+      for (const item of inv.items) {
+        const product = await Product.findById(item.productId);
+        if (product) {
+          const newPPrice = Number(item.purchasePrice) || 0;
+          const oldPPrice = Number(product.purchasingPrice) || 0;
+
+          if (newPPrice > 0) {
+            const oldSPrice = product.sellingPrice || 0;
+            
+            // Check if this invoice is already in history to avoid duplicates
+            const alreadyLogged = (product.priceHistory || []).some(h => h.sourceVoucher === inv.purchaseInvoiceId);
+            
+            if (!alreadyLogged) {
+              product.purchasingPrice = newPPrice;
+              await product.save(); // Triggers margin calculation
+              
+              product.priceHistory.push({
+                oldPurchasingPrice: oldPPrice,
+                newPurchasingPrice: newPPrice,
+                oldSellingPrice: oldSPrice,
+                newSellingPrice: product.sellingPrice,
+                effectiveDate: inv.invoiceDate || inv.createdAt,
+                sourceVoucher: inv.purchaseInvoiceId,
+                type: oldPPrice === 0 ? "INITIAL" : (newPPrice > oldPPrice ? "INCREASE" : "DECREASE"),
+                note: `Synced from past Purchase Invoice ${inv.purchaseInvoiceId}`
+              });
+              await product.save();
+              historyCount++;
+            }
+            updateCount++;
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, message: `Successfully synced ${updateCount} item entries and created ${historyCount} history records.` });
+  } catch (err) {
+    console.error("Sync Error:", err);
+    res.status(500).json({ message: err.message });
   }
 });
 
@@ -817,125 +943,44 @@ router.get("/stock-journal", async (req, res) => {
 
     console.log(`📊 Generating Stock Journal: ${branchId} | ${start.toDateString()} - ${end.toDateString()}`);
 
-    // 1️⃣ Fetch All Products for the Branch
-    const products = await Product.find({ branchId }).lean();
+    // 1️⃣ Fetch All Products for the Branch (Optimized with Select and Lean)
+    const products = await Product.find({ branchId })
+      .select("name totalQty branchId purchasingPrice sellingPrice manualOpeningDate openingQty")
+      .lean();
+
     if (!products.length) {
       return res.json({ success: true, data: [] });
     }
 
     const branchOid = new mongoose.Types.ObjectId(branchId);
 
-    // 2️⃣ Aggregate Purchase Orders (Inbound)
-    const purchases = await PurchaseOrder.aggregate([
-      {
-        $match: {
-          branchId: branchOid,
-          status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] },
-          // We need everything created AFTER the start date to back-calculate opening
-          createdAt: { $gte: start },
-        },
-      },
-      { $unwind: "$items" },
-      {
-        $group: {
-          _id: "$items.productId",
-          afterStart: { $sum: "$items.qty" },
-          afterEnd: {
-            $sum: {
-              $cond: [{ $gt: ["$createdAt", end] }, "$items.qty", 0],
-            },
-          },
-          duringPeriod: {
-            $sum: {
-              $cond: [{ $lte: ["$createdAt", end] }, "$items.qty", 0],
-            },
-          },
-        },
-      },
-    ]);
-
-    // 3️⃣ Aggregate Sales Orders (Outbound)
-    const sales = await SalesOrder.aggregate([
-      {
-        $match: {
-          branchId: branchOid,
-          invoiceGenerated: true,
-          createdAt: { $gte: start },
-        },
-      },
-      { $unwind: "$invoiceItems" },
-      {
-        $group: {
-          _id: "$invoiceItems.productId",
-          afterStart: { $sum: "$invoiceItems.qty" },
-          afterEnd: {
-            $sum: {
-              $cond: [{ $gt: ["$createdAt", end] }, "$invoiceItems.qty", 0],
-            },
-          },
-          duringPeriod: {
-            $sum: {
-              $cond: [{ $lte: ["$createdAt", end] }, "$invoiceItems.qty", 0],
-            },
-          },
-        },
-      },
-    ]);
-
-    // 4️⃣ Aggregate Debit Notes (Outbound - Purchase Return)
-    const debitNotes = await DebitNote.aggregate([
-      {
-        $match: {
-          branchId: branchOid,
-          status: "confirmed",
-          createdAt: { $gte: start },
-        },
-      },
-      { $unwind: "$items" },
-      {
-        $group: {
-          _id: "$items.productId",
-          afterStart: { $sum: "$items.returnedQty" },
-          afterEnd: {
-            $sum: {
-              $cond: [{ $gt: ["$createdAt", end] }, "$items.returnedQty", 0],
-            },
-          },
-          duringPeriod: {
-            $sum: {
-              $cond: [{ $lte: ["$createdAt", end] }, "$items.returnedQty", 0],
-            },
-          },
-        },
-      },
-    ]);
-
-    // 5️⃣ Aggregate Credit Notes (Inbound - Sales Return)
-    const creditNotes = await CreditNote.aggregate([
-      {
-        $match: {
-          branchId: branchOid,
-          status: { $in: ["Created", "confirmed"] },
-          createdAt: { $gte: start },
-        },
-      },
-      { $unwind: "$items" },
-      {
-        $group: {
-          _id: "$items.productId",
-          afterStart: { $sum: "$items.qty" },
-          afterEnd: {
-            $sum: {
-              $cond: [{ $gt: ["$createdAt", end] }, "$items.qty", 0],
-            },
-          },
-          duringPeriod: {
-            $sum: {
-              $cond: [{ $lte: ["$createdAt", end] }, "$items.qty", 0],
-            },
-          },
-        },
-      },
+    // 2️⃣ Parallel Aggregation for Inbound/Outbound movements
+    // Switch to parallel execution to significantly speed up the report
+    const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
+      // Inbound: Purchases
+      PurchaseOrder.aggregate([
+        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, createdAt: { $gte: start } } },
+        { $unwind: "$items" },
+        { $group: { _id: "$items.productId", afterStart: { $sum: "$items.qty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$items.qty", 0] } }, duringPeriod: { $sum: { $cond: [{ $lte: ["$createdAt", end] }, "$items.qty", 0] } } } }
+      ]),
+      // Outbound: Sales
+      SalesOrder.aggregate([
+        { $match: { branchId: branchOid, invoiceGenerated: true, createdAt: { $gte: start } } },
+        { $unwind: "$invoiceItems" },
+        { $group: { _id: "$invoiceItems.productId", afterStart: { $sum: "$invoiceItems.qty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$invoiceItems.qty", 0] } }, duringPeriod: { $sum: { $cond: [{ $lte: ["$createdAt", end] }, "$invoiceItems.qty", 0] } } } }
+      ]),
+      // Outbound: Purchase Returns (Debit Notes)
+      DebitNote.aggregate([
+        { $match: { branchId: branchOid, status: "confirmed", createdAt: { $gte: start } } },
+        { $unwind: "$items" },
+        { $group: { _id: "$items.productId", afterStart: { $sum: "$items.returnedQty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$items.returnedQty", 0] } }, duringPeriod: { $sum: { $cond: [{ $lte: ["$createdAt", end] }, "$items.returnedQty", 0] } } } }
+      ]),
+      // Inbound: Sales Returns (Credit Notes)
+      CreditNote.aggregate([
+        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gte: start } } },
+        { $unwind: "$items" },
+        { $group: { _id: "$items.productId", afterStart: { $sum: "$items.qty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$items.qty", 0] } }, duringPeriod: { $sum: { $cond: [{ $lte: ["$createdAt", end] }, "$items.qty", 0] } } } }
+      ])
     ]);
 
     // Maps for O(1) lookup
@@ -954,16 +999,38 @@ router.get("/stock-journal", async (req, res) => {
 
       const totalQty = product.totalQty || 0;
 
-      // 🔄 BACK-CALCULATION LOGIC:
-      // Opening Qty (at Start) = Current - (In since Start) + (Out since Start)
+      // ⚓ MANUAL ANCHOR LOGIC
+      // If the product has a manual stock snapshot (openingQty),
+      // we use it as the anchor for that date instead of calculating backwards.
+      const hasManualSnapshot = product.manualOpeningDate && product.openingQty !== undefined;
+      const manualDateStr = hasManualSnapshot ? product.manualOpeningDate.toISOString().split("T")[0] : null;
+
+      // Calculate movement totals relative to report dates
       const afterIn = p.afterStart + cn.afterStart;
       const afterOut = s.afterStart + dn.afterStart;
-      const openingQty = totalQty - afterIn + afterOut;
-
-      // Closing Qty (at End) = Current - (In since End) + (Out since End)
       const endIn = p.afterEnd + cn.afterEnd;
       const endOut = s.afterEnd + dn.afterEnd;
-      const closingQty = totalQty - endIn + endOut;
+
+      // Default Back-Calculation
+      let openingQty = totalQty - afterIn + afterOut;
+      let closingQty = totalQty - endIn + endOut;
+
+      // If the report starts on the manual snapshot date, we override the baseline
+      if (hasManualSnapshot) {
+        if (startDate === manualDateStr) {
+          // If viewing exactly from the snapshot date, Opening is the snapshot value
+          openingQty = product.openingQty;
+          
+          // Closing becomes Opening + movements during this specific period
+          const inDuring = p.duringPeriod + cn.duringPeriod;
+          const outDuring = s.duringPeriod + dn.duringPeriod;
+          closingQty = openingQty + inDuring - outDuring;
+        } else if (startDate > manualDateStr) {
+          // If viewing AFTER the snapshot date, we should ideally anchor to the snapshot
+          // but for now, back-calculation is still safe as long as we don't cross the reset point.
+          // (Adding more complex chaining can be done if needed later)
+        }
+      }
 
       return {
         productId: pid,
@@ -984,6 +1051,20 @@ router.get("/stock-journal", async (req, res) => {
       };
     });
 
+    // ⚡ SELF-HEALING SYNC: If ?sync=true, update the database totalQty
+    if (req.query.sync === "true") {
+      const bulkOps = journalData.map(item => ({
+        updateOne: {
+          filter: { _id: item.productId },
+          update: { $set: { totalQty: item.closing.qty } }
+        }
+      }));
+      if (bulkOps.length > 0) {
+        await Product.bulkWrite(bulkOps);
+        console.log(`✅ Synced ${bulkOps.length} products with stock journal calculations`);
+      }
+    }
+
     res.json({
       success: true,
       data: journalData,
@@ -995,6 +1076,37 @@ router.get("/stock-journal", async (req, res) => {
       message: "Failed to generate stock journal",
       error: error.message,
     });
+  }
+});
+
+// GET: Unified Product Ledger (High Speed Merge)
+router.get("/:id/ledger", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { branchId, fromDate, toDate } = req.query;
+    const start = new Date(fromDate);
+    const end = new Date(toDate);
+    end.setHours(23, 59, 59, 999);
+
+    const [sales, purchases] = await Promise.all([
+      SalesOrder.aggregate([
+        { $match: { branchId: new mongoose.Types.ObjectId(branchId), invoiceGenerated: true, createdAt: { $gte: start, $lte: end } } },
+        { $unwind: "$invoiceItems" },
+        { $match: { "invoiceItems.productId": new mongoose.Types.ObjectId(id) } },
+        { $project: { type: "OUTWARD", date: "$createdAt", voucherType: "$voucherType", invoiceId: 1, particulars: "$customer.name", qty: "$invoiceItems.qty", rate: "$invoiceItems.sellingPrice", value: { $multiply: ["$invoiceItems.qty", "$invoiceItems.sellingPrice"] } } }
+      ]),
+      PurchaseOrder.aggregate([
+        { $match: { branchId: new mongoose.Types.ObjectId(branchId), status: "INVOICED", createdAt: { $gte: start, $lte: end } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": new mongoose.Types.ObjectId(id) } },
+        { $project: { type: "INWARD", date: "$createdAt", voucherType: { $ifNull: ["$voucherType", "Purchase"] }, invoiceId: 1, particulars: { $ifNull: ["$vendor", "Supplier"] }, qty: "$items.qty", rate: "$items.purchasePrice", value: { $multiply: ["$items.qty", "$items.purchasePrice"] } } }
+      ])
+    ]);
+
+    const unified = [...sales, ...purchases].sort((a, b) => new Date(a.date) - new Date(b.date));
+    res.json({ success: true, data: unified });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
@@ -1173,6 +1285,61 @@ router.put("/:productId/restocking-config", async (req, res) => {
       success: false,
       message: "Failed to update restocking configuration"
     });
+  }
+});
+
+// 🔄 RETROACTIVE PRICE SYNC: Rebuild price history from past Invoices (MOVED TO END FOR STABILITY)
+router.post("/sync-past-prices", auth, async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    if (!branchId) return res.status(400).json({ message: "branchId required" });
+
+    const PurchaseInvoice = (await import("../models/PurchaseInvoice.js")).default;
+    const invoices = await PurchaseInvoice.find({ branchId }).sort({ invoiceDate: 1, createdAt: 1 });
+    
+    let updateCount = 0;
+    let historyCount = 0;
+
+    for (const inv of invoices) {
+      if (!inv.items) continue;
+      
+      for (const item of inv.items) {
+        const product = await Product.findById(item.productId);
+        if (product) {
+          const newPPrice = Number(item.purchasePrice) || 0;
+          const oldPPrice = Number(product.purchasingPrice) || 0;
+
+          if (newPPrice > 0) {
+            const oldSPrice = product.sellingPrice || 0;
+            const alreadyLogged = (product.priceHistory || []).some(h => h.sourceVoucher === inv.purchaseInvoiceId);
+            
+            if (!alreadyLogged) {
+              product.purchasingPrice = newPPrice;
+              await product.save();
+              
+              product.priceHistory.push({
+                oldPurchasingPrice: oldPPrice,
+                newPurchasingPrice: newPPrice,
+                oldSellingPrice: oldSPrice,
+                newSellingPrice: product.sellingPrice,
+                effectiveDate: inv.invoiceDate || inv.createdAt,
+                sourceVoucher: inv.purchaseInvoiceId,
+                type: oldPPrice === 0 ? "INITIAL" : (newPPrice > oldPPrice ? "INCREASE" : "DECREASE"),
+                note: `Synced from past Purchase Invoice ${inv.purchaseInvoiceId}`
+              });
+              await product.save();
+              historyCount++;
+            }
+            updateCount++;
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, message: `Successfully synced ${updateCount} item entries and created ${historyCount} history records.` });
+  } catch (err) {
+    console.error("Sync Error:", err);
+    res.status(500).json({ message: err.message });
   }
 });
 

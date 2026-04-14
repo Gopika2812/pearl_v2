@@ -39,8 +39,9 @@ export default function BranchProductConfig() {
   const [selectedGroup, setSelectedGroup] = useState("");
   const [showEditModal, setShowEditModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [loading, setLoading] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyProduct, setHistoryProduct] = useState(null);
 
   // Search debounce logic
   useEffect(() => {
@@ -270,9 +271,25 @@ export default function BranchProductConfig() {
                                   )}
                               </td>
                               <td className="px-4 py-5 whitespace-nowrap">
-                                  <div className="flex items-center gap-6 text-[12px] font-bold">
-                                      <div className="text-slate-400">P: <span className="text-slate-800 text-sm">₹{(p.purchasingPrice || 0).toFixed(2)}</span></div>
-                                      <div className="text-emerald-500">S: <span className="text-emerald-700 text-sm font-black">₹{(p.sellingPrice || 0).toFixed(2)}</span></div>
+                                  <div className="flex items-center gap-4">
+                                      <div className="flex flex-col text-[12px] font-bold">
+                                          <div className="text-slate-400 font-black uppercase text-[9px] mb-0.5 tracking-widest">Master Rates</div>
+                                          <div className="flex items-center gap-4">
+                                            <div className="text-slate-400">P: <span className="text-slate-800 text-sm">₹{(p.purchasingPrice || 0).toFixed(2)}</span></div>
+                                            <div className="text-emerald-500">S: <span className="text-emerald-700 text-sm font-black">₹{(p.sellingPrice || 0).toFixed(2)}</span></div>
+                                          </div>
+                                      </div>
+                                      
+                                      <button 
+                                        onClick={() => {
+                                          setHistoryProduct(p);
+                                          setShowHistoryModal(true);
+                                        }}
+                                        className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:bg-[#319bab]/10 hover:text-[#319bab] transition border border-transparent hover:border-[#319bab]/20 group/icon"
+                                        title="View Price Timeline"
+                                      >
+                                        <FaChartLine size={14} className="group-hover/icon:scale-110 transition-transform" />
+                                      </button>
                                   </div>
                               </td>
                               <td className="px-8 py-5 text-right">
@@ -428,6 +445,85 @@ export default function BranchProductConfig() {
                     </button>
                 </div>
             </div>
+        </div>
+      )}
+      {/* PRICE HISTORY TIMELINE MODAL */}
+      {showHistoryModal && historyProduct && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300 max-h-[85vh] flex flex-col border border-slate-100">
+             {/* Header */}
+             <div className="bg-[#319bab] p-6 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-white/20 rounded-2xl"><FaChartLine size={20} /></div>
+                  <div>
+                    <h2 className="text-xl font-black">{historyProduct.name}</h2>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white/70">Historical Price Timeline</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowHistoryModal(false)} className="p-2 hover:bg-white/10 rounded-xl transition"><FaTimes size={20} /></button>
+             </div>
+
+             {/* Content */}
+             <div className="p-8 overflow-y-auto flex-1 bg-slate-50/50 custom-scrollbar">
+                {(!historyProduct.priceHistory || historyProduct.priceHistory.length === 0) ? (
+                   <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-100">
+                      <FaChartLine size={48} className="mx-auto text-slate-200 mb-4" />
+                      <p className="text-slate-400 font-bold uppercase text-[11px] tracking-widest">No detailed history found yet.<br/>Changes will appear here after your next sync/invoice.</p>
+                   </div>
+                ) : (
+                  <div className="relative border-l-2 border-[#319bab]/20 ml-4 space-y-8 pl-8">
+                    {historyProduct.priceHistory.sort((a,b) => new Date(b.effectiveDate || b.createdAt) - new Date(a.effectiveDate || a.createdAt)).map((log, idx) => (
+                      <div key={idx} className="relative">
+                        {/* Dot */}
+                        <div className={`absolute -left-[41px] top-1 h-4 w-4 rounded-full border-4 border-white shadow-sm ${
+                          log.type === 'INCREASE' ? 'bg-red-500' : log.type === 'DECREASE' ? 'bg-green-500' : 'bg-[#319bab]'
+                        }`} />
+                        
+                        <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+                           <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                  log.type === 'INCREASE' ? 'bg-red-100 text-red-600' : log.type === 'DECREASE' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'
+                                }`}>
+                                  {log.type}
+                                </span>
+                                <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">{new Date(log.effectiveDate || log.createdAt).toLocaleString()}</div>
+                              </div>
+                              <div className="text-[10px] font-black text-[#319bab] uppercase bg-[#319bab]/5 px-3 py-1 rounded-lg border border-[#319bab]/10">
+                                {log.sourceVoucher || "Manual Update"}
+                              </div>
+                           </div>
+
+                           <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Purchase Rate Shift</label>
+                                <div className="flex items-center gap-2 font-black">
+                                   <span className="text-slate-400 text-xs">₹{log.oldPurchasingPrice?.toFixed(2)}</span>
+                                   <span className={log.type === 'INCREASE' ? 'text-red-500' : log.type === 'DECREASE' ? 'text-green-500' : 'text-[#319bab]'}>→</span>
+                                   <span className="text-slate-800 text-sm">₹{log.newPurchasingPrice?.toFixed(2)}</span>
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Auto-Selling Sync</label>
+                                <div className="flex items-center gap-2 font-black">
+                                   <span className="text-slate-400 text-xs">₹{log.oldSellingPrice?.toFixed(2)}</span>
+                                   <span className="text-emerald-500 italic">→</span>
+                                   <span className="text-emerald-700 text-sm">₹{log.newSellingPrice?.toFixed(2)}</span>
+                                </div>
+                              </div>
+                           </div>
+                           {log.note && <div className="mt-3 pt-3 border-t border-slate-50 text-[10px] font-medium text-slate-500 italic">"{log.note}"</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+             </div>
+
+             <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
+                <button onClick={() => setShowHistoryModal(false)} className="px-10 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition">Close Timeline</button>
+             </div>
+          </div>
         </div>
       )}
     </div>

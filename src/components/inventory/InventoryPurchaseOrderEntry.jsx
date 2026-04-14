@@ -844,13 +844,43 @@ const InventoryPurchaseOrderEntry = ({
             {/* ROW 2: Prices, Qty, HSN */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
-                <label className={labelClass}>Purchase ₹</label>
-                <input
-                  type="number"
-                  className={inputClass}
-                  value={purchasePrice}
-                  onChange={(e) => setPurchasePrice(+e.target.value)}
-                />
+                <div className="flex justify-between items-center mb-1">
+                  <label className={labelClass}>Purchase ₹</label>
+                  {selectedProductData && (
+                    <span className="text-[9px] font-black text-gray-400">
+                      Prev: ₹{selectedProductData.purchasingPrice || 0}
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    className={`${inputClass} ${
+                      selectedProductData && purchasePrice > (selectedProductData.purchasingPrice || 0) 
+                        ? "border-red-300 bg-red-50" 
+                        : selectedProductData && purchasePrice < (selectedProductData.purchasingPrice || 0)
+                        ? "border-green-300 bg-green-50"
+                        : ""
+                    }`}
+                    value={purchasePrice}
+                    onChange={(e) => {
+                      const val = +e.target.value;
+                      setPurchasePrice(val);
+                      // ⚡ AUTO-RECALCULATE SELLING PRICE
+                      if (selectedProductData && selectedProductData.marginPercentage > 0) {
+                        const newSelling = Math.round((val + (val * selectedProductData.marginPercentage / 100)) * 100) / 100;
+                        setSellingPrice(newSelling);
+                      }
+                    }}
+                  />
+                  {selectedProductData && purchasePrice !== (selectedProductData.purchasingPrice || 0) && (
+                    <div className={`absolute -top-6 right-0 text-[10px] font-black uppercase px-2 py-0.5 rounded-md shadow-sm ${
+                      purchasePrice > (selectedProductData.purchasingPrice || 0) ? "bg-red-500 text-white" : "bg-green-500 text-white"
+                    }`}>
+                      {purchasePrice > (selectedProductData.purchasingPrice || 0) ? "📈 Internal Rate Increased" : "📉 Rate Decreased"}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>

@@ -112,7 +112,7 @@ router.get("/", async (req, res) => {
     }
 
     console.log("🔍 GET /api/purchase-orders - query:", JSON.stringify(query));
-    const orders = await PurchaseOrder.find(query).sort({ createdAt: -1 });
+    const orders = await PurchaseOrder.find(query).sort({ createdAt: -1 }).lean();
     console.log(`✅ Found ${orders.length} purchase orders`);
 
     res.json(orders);
@@ -193,18 +193,42 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       const finalGrandTotal = Math.round(subtotal - totalDiscount + totalTax + (order.extraExpenseAmount || 0));
       const vendorDelta = finalGrandTotal - oldGrandTotal;
 
-      // 1. UPDATE STOCK (DELTA CALCULATION)
+      // 1. UPDATE STOCK & SYNC PRICES (DELTA CALCULATION)
       const oldQtyMap = {};
       for (const item of order.lastInvoicedItems || []) {
         if (item.productId) oldQtyMap[item.productId.toString()] = item.qty;
       }
 
       for (const item of newItems) {
-        const pid = item.productId.toString();
-        const oldQty = oldQtyMap[pid] || 0;
-        const deltaQty = item.qty - oldQty;
-        if (deltaQty !== 0) {
-          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: deltaQty } });
+        const product = await Product.findById(item.productId);
+        if (product) {
+          // A. Delta Stock Update
+          const pid = item.productId.toString();
+          const oldQty = oldQtyMap[pid] || 0;
+          const deltaQty = item.qty - oldQty;
+          if (deltaQty !== 0) {
+            product.totalQty = (product.totalQty || 0) + deltaQty;
+          }
+
+          // B. Price Sync Logic (Re-Invoice)
+          const newPPrice = Number(item.purchasePrice) || 0;
+          const oldPPrice = Number(product.purchasingPrice) || 0;
+          if (newPPrice !== oldPPrice && newPPrice > 0) {
+            const oldSPrice = product.sellingPrice;
+            product.purchasingPrice = newPPrice;
+            await product.save(); // Triggers margin recalculation
+            
+            product.priceHistory.push({
+              oldPurchasingPrice: oldPPrice,
+              newPurchasingPrice: newPPrice,
+              oldSellingPrice: oldSPrice,
+              newSellingPrice: product.sellingPrice,
+              sourceVoucher: order.purchaseInvoiceId || existingPI?.purchaseInvoiceId,
+              type: newPPrice > oldPPrice ? 'INCREASE' : 'DECREASE',
+              note: `Updated via Re-Invoice of ${order.invoiceId}`
+            });
+          }
+          await product.save();
         }
       }
 
@@ -340,9 +364,34 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     order.purchaseInvoiceId = piNumber;  // ✅ CRITICAL FIX: Link PO to PI so re-edits are detected
     order.status = 'INVOICED';
 
-    // STOCK UPDATES
+    // STOCK & PRICE UPDATES
     for (const item of invoiceItems) {
-      await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty } });
+      const product = await Product.findById(item.productId);
+      if (product) {
+        // A. Price Sync Logic
+        const newPPrice = Number(item.purchasePrice) || 0;
+        const oldPPrice = Number(product.purchasingPrice) || 0;
+
+        if (newPPrice !== oldPPrice && newPPrice > 0) {
+          const oldSPrice = product.sellingPrice;
+          product.purchasingPrice = newPPrice;
+          await product.save(); // Triggers margin recalculation
+          
+          product.priceHistory.push({
+            oldPurchasingPrice: oldPPrice,
+            newPurchasingPrice: newPPrice,
+            oldSellingPrice: oldSPrice,
+            newSellingPrice: product.sellingPrice,
+            sourceVoucher: piNumber,
+            type: newPPrice > oldPPrice ? 'INCREASE' : 'DECREASE',
+            note: `Updated via Purchase Invoice ${piNumber}`
+          });
+        }
+
+        // B. Stock Update
+        product.totalQty = (product.totalQty || 0) + (Number(item.qty) || 0);
+        await product.save();
+      }
     }
 
     // VENDOR BALANCE UPDATE

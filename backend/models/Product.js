@@ -74,7 +74,23 @@ const productSchema = new mongoose.Schema(
       unit: { type: String, default: "" },
       altValue: { type: Number, default: 1 },
       altUnit: { type: String, default: "" }
-    }
+    },
+
+    // 📅 Snapshot / Audit tracking
+    openingQty: { type: Number, default: 0 },
+    manualOpeningDate: { type: Date, default: null },
+
+    // 📈 Price History Timeline
+    priceHistory: [{
+      oldPurchasingPrice: Number,
+      newPurchasingPrice: Number,
+      oldSellingPrice: Number,
+      newSellingPrice: Number,
+      effectiveDate: { type: Date, default: Date.now },
+      sourceVoucher: String, // PI Number
+      type: { type: String, enum: ['INCREASE', 'DECREASE', 'INITIAL'] },
+      note: String
+    }]
   },
   { timestamps: true }
 );
