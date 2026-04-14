@@ -147,7 +147,9 @@ export default function BranchProductConfig() {
       unitConversion: p.unitConversion || { value: 1, unit: p.units || "pcs", altValue: 1, altUnit: "box" },
       sellingPrice: p.sellingPrice || 0,
       purchasingPrice: p.purchasingPrice || 0,
-      availableQty: p.totalQty || 0
+      availableQty: p.totalQty || 0,
+      openingQty: p.openingQty || 0,
+      manualOpeningDate: p.manualOpeningDate ? new Date(p.manualOpeningDate).toISOString().split('T')[0] : "2026-03-31"
     });
   };
 
@@ -161,7 +163,9 @@ export default function BranchProductConfig() {
         body: JSON.stringify({
           productGroup: config.productGroup,
           productCategories: config.productCategories,
-          unitConversion: config.unitConversion
+          unitConversion: config.unitConversion,
+          openingQty: Number(config.openingQty),
+          manualOpeningDate: config.manualOpeningDate
         })
       });
 
@@ -375,6 +379,38 @@ export default function BranchProductConfig() {
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* STOCK ANCHOR SECTION */}
+                <div className="bg-orange-50/50 border-2 border-orange-100 p-6 rounded-3xl space-y-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FaSync className="text-orange-500" />
+                    <h3 className="font-bold text-xs uppercase tracking-widest text-orange-700">Stock Ground Truth (Anchor)</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-orange-600 uppercase">Opening Qty (31st Mar)</label>
+                      <input
+                        type="number"
+                        className={`${inputClass} border-orange-200 focus:border-orange-500 font-black`}
+                        value={config.openingQty}
+                        onChange={(e) => setConfig({ ...config, openingQty: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-orange-600 uppercase">Snapshot Date</label>
+                      <input
+                        type="date"
+                        className={`${inputClass} border-orange-200 focus:border-orange-500 font-bold`}
+                        value={config.manualOpeningDate}
+                        onChange={(e) => setConfig({ ...config, manualOpeningDate: e.target.value })}
+                        disabled // Locked to prevent accidental shifts
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-orange-600/70 font-medium italic italic">
+                    Note: Changing 'Opening Qty' will automatically recalculate your 'Available Stock' based on April transactions.
+                  </p>
                 </div>
               </div>
 

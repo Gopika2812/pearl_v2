@@ -11,6 +11,7 @@ const COLUMNS_CONFIG = {
     { label: "Closing Value", key: "closingValue" },
   ],
   ITEMS: [
+    { label: "Stock Group", key: "groupName" },
     { label: "Product Name", key: "productName" },
     { label: "Opening Qty", key: "openingQty" },
     { label: "Inwards", key: "purchasesInPeriod" },
@@ -49,7 +50,8 @@ const StockSummaryExportModal = ({ isOpen, onClose, viewLevel, data, title }) =>
     }
 
     // Prepare data for XLSX
-    const exportData = data.map(item => {
+    const normalizedData = Array.isArray(data) ? data : Object.values(data);
+    const exportData = normalizedData.map(item => {
       const row = {};
       columns.forEach(col => {
         if (selectedKeys.includes(col.key)) {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
 import {
   FaBookOpen, FaChartBar, FaSearch, FaFilter, FaArrowLeft,
   FaChevronRight, FaCalendarAlt, FaSync, FaChartLine, FaDownload, FaUpload
@@ -28,11 +29,13 @@ const BranchStockSummary = () => {
 
   // Data
   const [stockData, setStockData] = useState([]); // Level 1 & 2
-  const [ledgerData, setLedgerData] = useState([]); // Level 3
+  const [ledgerData, setLedgerData] = useState({ transactions: [], openingBalance: 0 }); // Level 3
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showExportModal, setShowExportModal] = useState(false);
   const [isAllItemsExport, setIsAllItemsExport] = useState(false);
+  const [exportItemsData, setExportItemsData] = useState([]);
+  const [isExportLoading, setIsExportLoading] = useState(false);
 
   // Fetch Group/Item Summary
   const fetchStockSummary = async () => {
@@ -82,11 +85,10 @@ const BranchStockSummary = () => {
       const result = await response.json();
 
       if (result.success) {
-        const formattedData = result.data.map(txn => ({
-          ...txn,
-          date: new Date(txn.date)
-        }));
-        setLedgerData(formattedData);
+        setLedgerData({
+          transactions: result.data.map(txn => ({ ...txn, date: new Date(txn.date) })),
+          openingBalance: result.openingBalance || 0
+        });
       } else {
         throw new Error(result.message || "Failed to fetch ledger");
       }
@@ -230,8 +232,9 @@ const BranchStockSummary = () => {
 
   // Filtered Ledger Data (Search)
   const filteredLedgerData = React.useMemo(() => {
-    if (!searchQuery) return ledgerData;
-    return ledgerData.filter(txn =>
+    const txns = ledgerData?.transactions || [];
+    if (!searchQuery) return txns;
+    return txns.filter(txn =>
       txn.particulars.toLowerCase().includes(searchQuery.toLowerCase()) ||
       txn.voucherType.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -254,6 +257,8 @@ const BranchStockSummary = () => {
       valuation: acc.valuation + (item.closing?.amount || 0)
     }), { inwards: 0, outwards: 0, valuation: 0 });
   }, [stockData, viewLevel]);
+
+  let runningBalance = 0;
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-6 md:pl-24 px-4 md:px-8 pb-12 font-sans">
@@ -327,6 +332,33 @@ const BranchStockSummary = () => {
             </button>
 
             <button
+              onClick={async () => {
+                if (!window.confirm("CRITICAL: This will force ALL 'Available Qty' to match your 31st March Anchor + April Trades. Proceed?")) return;
+                setLoading(true);
+                try {
+                  const res = await fetchWithAuth(`${API_BASE}/products/reconcile-stock`, {
+                    method: "POST",
+                    body: JSON.stringify({ branchId: currentBranch._id })
+                  });
+                  const result = await res.json();
+                  if (result.success) {
+                    toast.success(result.message);
+                    fetchStockSummary();
+                  } else {
+                    throw new Error(result.message);
+                  }
+                } catch (err) {
+                  toast.error(err.message || "Sync failed");
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className="bg-orange-500 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-orange-200 hover:bg-orange-600 transition flex items-center gap-2"
+            >
+              <FaSync className={loading ? "animate-spin" : ""} /> Sync Live Stock
+            </button>
+
+            <button
               onClick={handleExportSnapshot}
               className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition flex items-center gap-2"
             >
@@ -357,15 +389,32 @@ const BranchStockSummary = () => {
 
             {viewLevel === "GROUPS" && (
               <button
-                onClick={() => {
-                  // Pre-set viewLevel for export and show all data
-                  setShowExportModal(true);
-                  // We'll use a hack by passing a special prop or just relying on a new state
-                  setIsAllItemsExport(true);
+                disabled={isExportLoading}
+                onClick={async () => {
+                  try {
+                    setIsExportLoading(true);
+                    const res = await fetchWithAuth(
+                      `${API_BASE}/products/stock-journal?branchId=${currentBranch._id}&startDate=${fromDate}&endDate=${toDate}&productGroupId=all`
+                    );
+                    const result = await res.json();
+                    if (result.success) {
+                      setExportItemsData(result.data || []);
+                      setIsAllItemsExport(true);
+                      setShowExportModal(true);
+                    } else {
+                      toast.error("Failed to fetch all items for export");
+                    }
+                  } catch (err) {
+                    console.error(err);
+                    toast.error("Error preparing export data");
+                  } finally {
+                    setIsExportLoading(false);
+                  }
                 }}
                 className="bg-secondary/10 text-secondary border-2 border-secondary/20 px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-secondary/20 transition flex items-center gap-2"
               >
-                <FaDownload size={14} /> Export All Items
+                {isExportLoading ? <FaSync className="animate-spin" /> : <FaDownload size={14} />} 
+                Export All Items
               </button>
             )}
           </div>
@@ -439,6 +488,7 @@ const BranchStockSummary = () => {
                   <thead>
                     <tr className="bg-gray-50/50 text-gray-400 uppercase text-[10px] font-black tracking-widest border-b">
                       <th className="px-6 py-4">Stock Group Name</th>
+                      <th className="px-6 py-4 text-center">Opening</th>
                       <th className="px-6 py-4 text-center">Inwards</th>
                       <th className="px-6 py-4 text-center">Outwards</th>
                       <th className="px-6 py-4 text-right">Closing Qty</th>
@@ -458,6 +508,7 @@ const BranchStockSummary = () => {
                           </div>
                           {agg.name}
                         </td>
+                        <td className="px-6 py-4 text-center font-bold text-gray-400">{Math.round(agg.openingQty || 0)}</td>
                         <td className="px-6 py-4 text-center font-bold text-green-600">{agg.inwards || 0}</td>
                         <td className="px-6 py-4 text-center font-bold text-red-500">{agg.outwards || 0}</td>
                         <td className="px-6 py-4 text-right font-black text-gray-600">{agg.closingQty}</td>
@@ -540,12 +591,15 @@ const BranchStockSummary = () => {
                       <td className="px-6 py-3"></td>
                       <td className="px-6 py-3"></td>
                       <td className="px-6 py-3 text-right font-black text-gray-700">
-                        {stockData.find(s => s.productId === selectedProduct.id)?.opening.qty || 0}
+                        {ledgerData.openingBalance.toLocaleString()}
                       </td>
                     </tr>
 
                     {filteredLedgerData.map((txn, idx) => {
-                      // Calculate running balance logic would go here if needed
+                      if (idx === 0) runningBalance = ledgerData.openingBalance;
+                      if (txn.type === "INWARD") runningBalance += txn.qty;
+                      else runningBalance -= txn.qty;
+
                       return (
                         <tr key={idx} className="hover:bg-gray-50 transition border-l-4 border-transparent hover:border-secondary">
                           <td className="px-6 py-4">
@@ -560,15 +614,13 @@ const BranchStockSummary = () => {
                             {txn.type === "OUTWARD" ? txn.qty : ""}
                           </td>
                           <td className="px-6 py-4 text-right font-black text-gray-800 underline decoration-secondary/30 decoration-2">
-                            {/* Actual running balance is complex with filtered views, showing row qty for context 
-                                   or we can calculate it above. For now showing row impact. */}
-                            {txn.type === "INWARD" ? `+${txn.qty}` : `-${txn.qty}`}
+                            {runningBalance.toLocaleString()}
                           </td>
                         </tr>
                       );
                     })}
 
-                    {ledgerData.length === 0 && (
+                    {(ledgerData.transactions || []).length === 0 && (
                       <tr>
                         <td colSpan="5" className="px-6 py-20 text-center text-gray-400 flex flex-col items-center">
                           <FaChartLine size={40} className="mb-2 opacity-20" />
@@ -587,9 +639,9 @@ const BranchStockSummary = () => {
 
       <StockSummaryExportModal
         isOpen={showExportModal}
-        onClose={() => { setShowExportModal(false); setIsAllItemsExport(false); }}
+        onClose={() => { setShowExportModal(false); setIsAllItemsExport(false); setExportItemsData([]); }}
         viewLevel={isAllItemsExport ? "ITEMS" : viewLevel}
-        data={isAllItemsExport ? stockData : (viewLevel === "GROUPS" ? filteredGroupAggregates : viewLevel === "ITEMS" ? filteredStockItems : filteredLedgerData)}
+        data={isAllItemsExport ? exportItemsData : (viewLevel === "GROUPS" ? filteredGroupAggregates : viewLevel === "ITEMS" ? filteredStockItems : filteredLedgerData)}
         title={isAllItemsExport ? "All_Products_Summary" : (viewLevel === "GROUPS" ? "Stock Summary" : viewLevel === "ITEMS" ? `Stock_${selectedGroup?.name || 'Group'}` : `Ledger_${selectedProduct?.name || 'Product'}`)}
       />
     </div>

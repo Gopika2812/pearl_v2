@@ -127,6 +127,7 @@ const InventoryPurchaseOrderEntry = ({
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [availableQtyCache, setAvailableQtyCache] = useState({});
 
   // Fetch products by product group from API
   useEffect(() => {
@@ -323,6 +324,38 @@ const InventoryPurchaseOrderEntry = ({
     const timer = setTimeout(fetchProductsFromBackend, 300);
     return () => clearTimeout(timer);
   }, [itemSearch, currentBranch, products, productGroup, filteredProducts]);
+
+  // 🔄 SYNC LIVE STOCK LEVELS (Anchor-Aware)
+  useEffect(() => {
+    if (!fetchedProducts.length) return;
+
+    const syncAvailableQty = async () => {
+      const newCache = { ...availableQtyCache };
+      let changed = false;
+
+      for (const p of fetchedProducts) {
+        // Fetch if not in cache OR if it's the specific searched item
+        if (newCache[p._id] === undefined || (itemSearch && p.name.toLowerCase().includes(itemSearch.toLowerCase()))) {
+          try {
+            const res = await fetchWithAuth(`${API_BASE}/products/available/${p._id}`);
+            const data = await res.json();
+            if (data.success) {
+              newCache[p._id] = data.data?.availableQty || 0;
+              changed = true;
+            }
+          } catch (err) {
+            console.error(`Failed to sync stock for ${p._id}:`, err);
+          }
+        }
+      }
+
+      if (changed) {
+        setAvailableQtyCache(newCache);
+      }
+    };
+
+    syncAvailableQty();
+  }, [fetchedProducts, itemSearch]);
 
   // Click Outside logic for Dropdowns
   useEffect(() => {
@@ -815,19 +848,22 @@ const InventoryPurchaseOrderEntry = ({
                     {searchingProducts && (
                       <div className="px-3 py-2 text-gray-500 text-sm italic">🔍 Searching products...</div>
                     )}
-                    {!searchingProducts && fetchedProducts.map((p) => (
-                      <div
-                        key={p._id}
-                        onClick={() => handleItemSelection(p._id)}
-                        className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
-                      >
-                        <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
-                        <div className="text-gray-500 text-xs flex justify-between">
-                          <span>Qty: {p.totalQty || 0}</span>
-                          <span className="text-[#319bab]">₹{p.purchasingPrice || p.rate || 0}</span>
+                    {!searchingProducts && fetchedProducts.map((p) => {
+                      const currentStock = availableQtyCache[p._id] ?? p.totalQty ?? 0;
+                      return (
+                        <div
+                          key={p._id}
+                          onClick={() => handleItemSelection(p._id)}
+                          className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
+                        >
+                          <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
+                          <div className="text-gray-500 text-xs flex justify-between">
+                            <span>Available Qty: {currentStock}</span>
+                            <span className="text-[#319bab]">₹{p.purchasingPrice || p.rate || 0}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {!searchingProducts && fetchedProducts.length === 0 && (
                       <div className="px-3 py-2 text-gray-500 text-sm">No products available</div>
                     )}
@@ -835,7 +871,7 @@ const InventoryPurchaseOrderEntry = ({
                 )}
                 {selectedProductData && (
                   <div className="text-[10px] text-gray-500 mt-1">
-                    Total Qty: {selectedProductData.totalQty || 0} {selectedProductData.units || ""}
+                    Live Balance: {availableQtyCache[selectedProductData._id] ?? selectedProductData.totalQty ?? 0} {selectedProductData.units || ""}
                   </div>
                 )}
               </div>

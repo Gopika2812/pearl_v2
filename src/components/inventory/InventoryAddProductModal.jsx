@@ -32,6 +32,26 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     mrp: "",
     hsnCode: "",
     gst: "",
+    openingQty: "",
+    manualOpeningDate: "2026-03-31",
+    reorderLevel: 10,
+    reorderQty: 20,
+    leadTime: 7,
+    minStockQty: 10,
+    maxStockQty: 50,
+    totalQtyUnit: "",
+    preferredVendor: "",
+    restockingConfig: {
+      salesPeriodDays: 7,
+      threshold: 30,
+      restockingQty: 150
+    },
+    unitConversion: {
+      value: 1,
+      unit: "",
+      altValue: 1,
+      altUnit: ""
+    }
   });
 
   // State to handle bulk upload results
@@ -86,6 +106,26 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         mrp: editingItem.mrp || "",
         hsnCode: editingItem.hsnCode || "",
         gst: editingItem.gst || "",
+        openingQty: editingItem.openingQty || "",
+        manualOpeningDate: editingItem.manualOpeningDate ? new String(editingItem.manualOpeningDate).split('T')[0] : "2026-03-31",
+        reorderLevel: editingItem.reorderLevel || 10,
+        reorderQty: editingItem.reorderQty || 20,
+        leadTime: editingItem.leadTime || 7,
+        minStockQty: editingItem.minStockQty || 10,
+        maxStockQty: editingItem.maxStockQty || 50,
+        totalQtyUnit: editingItem.totalQtyUnit || "",
+        preferredVendor: editingItem.preferredVendor || "",
+        restockingConfig: editingItem.restockingConfig || {
+          salesPeriodDays: 7,
+          threshold: 30,
+          restockingQty: 150
+        },
+        unitConversion: editingItem.unitConversion || {
+          value: 1,
+          unit: "",
+          altValue: 1,
+          altUnit: ""
+        }
       });
     } else {
       setProduct({
@@ -104,6 +144,26 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         mrp: "",
         hsnCode: "",
         gst: "",
+        openingQty: "",
+        manualOpeningDate: "2026-03-31",
+        reorderLevel: 10,
+        reorderQty: 20,
+        leadTime: 7,
+        minStockQty: 10,
+        maxStockQty: 50,
+        totalQtyUnit: "",
+        preferredVendor: "",
+        restockingConfig: {
+          salesPeriodDays: 7,
+          threshold: 30,
+          restockingQty: 150
+        },
+        unitConversion: {
+          value: 1,
+          unit: "",
+          altValue: 1,
+          altUnit: ""
+        }
       });
     }
   }, [editingItem]);
@@ -262,6 +322,16 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
       mrp: Math.round(Number(product.mrp || 0) * 100) / 100,
       hsnCode: product.hsnCode || "0000",
       gst: Math.round(Number(product.gst || 0) * 100) / 100,
+      openingQty: product.openingQty !== "" ? Number(product.openingQty) : 0,
+      manualOpeningDate: product.manualOpeningDate || "2026-03-31",
+      reorderLevel: Number(product.reorderLevel),
+      reorderQty: Number(product.reorderQty),
+      leadTime: Number(product.leadTime),
+      minStockQty: Number(product.minStockQty),
+      maxStockQty: Number(product.maxStockQty),
+      preferredVendor: product.preferredVendor,
+      restockingConfig: product.restockingConfig,
+      unitConversion: product.unitConversion
     };
 
     try {
@@ -481,6 +551,48 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
             )}
           </div>
 
+          {/* Current Stock / Total Qty - NEW Section */}
+          <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-xl mb-4">
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-emerald-100">
+               <div>
+                  <label className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Opening Ground Truth (31-Mar-2026)</label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <input 
+                      type="number"
+                      className="w-32 p-2 border-2 border-orange-200 rounded-lg font-black text-orange-600 focus:border-orange-500"
+                      value={product.openingQty}
+                      onChange={(e) => setProduct({...product, openingQty: e.target.value})}
+                      placeholder="Anchor Qty"
+                    />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">March 31st Anchor</span>
+                  </div>
+               </div>
+               <div className="text-right">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Last Snap Date</label>
+                  <p className="text-xs font-bold text-slate-500">{product.manualOpeningDate}</p>
+               </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+               <div>
+                  <label className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Current Calculated Stock</label>
+                  <p className="text-2xl font-black text-emerald-700">{product.totalQty || 0} {product.units}</p>
+               </div>
+               <div className="text-right">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic block mb-1">Total Qty Override</label>
+                  <input 
+                    type="number"
+                    className="w-24 p-2 text-right border rounded-lg font-black text-emerald-600 bg-white"
+                    value={product.totalQty}
+                    onChange={(e) => setProduct({...product, totalQty: e.target.value})}
+                  />
+               </div>
+            </div>
+            <p className="text-[9px] text-emerald-600/70 font-bold mt-2 italic px-1">
+              Note: Changing 'Opening Qty' will automatically recalculate your 'Closing Stock' based on April records.
+            </p>
+          </div>
+
           {/* 2-Column Grid */}
           <div className="grid grid-cols-2 gap-4 mb-4">
             {/* Per Qty */}
@@ -608,6 +720,83 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
                 onChange={(e) => setProduct({ ...product, gst: e.target.value })}
               />
             </div>
+          </div>
+
+          {/* INVENTORY OPTIMIZATION - NEW SECTION */}
+          <div className="border-t pt-4 mb-4">
+             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Inventory Alerts & Thresholds</h4>
+             <div className="grid grid-cols-3 gap-3">
+                <div>
+                   <label className="text-[9px] font-bold text-gray-500 uppercase">Reorder Level</label>
+                   <input 
+                     type="number" 
+                     className={inputClass}
+                     value={product.reorderLevel}
+                     onChange={(e) => setProduct({...product, reorderLevel: e.target.value})}
+                   />
+                </div>
+                <div>
+                   <label className="text-[9px] font-bold text-gray-500 uppercase">Reorder Qty</label>
+                   <input 
+                     type="number" 
+                     className={inputClass}
+                     value={product.reorderQty}
+                     onChange={(e) => setProduct({...product, reorderQty: e.target.value})}
+                   />
+                </div>
+                <div>
+                   <label className="text-[9px] font-bold text-gray-500 uppercase">Lead Time (Days)</label>
+                   <input 
+                     type="number" 
+                     className={inputClass}
+                     value={product.leadTime}
+                     onChange={(e) => setProduct({...product, leadTime: e.target.value})}
+                   />
+                </div>
+             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mb-4 border-t pt-4">
+              <div>
+                <label className="text-[9px] font-bold text-gray-500 uppercase">Min Stock Qty</label>
+                <input 
+                  type="number" 
+                  className={inputClass}
+                  value={product.minStockQty}
+                  onChange={(e) => setProduct({...product, minStockQty: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-gray-500 uppercase">Max Stock Qty</label>
+                <input 
+                  type="number" 
+                  className={inputClass}
+                  value={product.maxStockQty}
+                  onChange={(e) => setProduct({...product, maxStockQty: e.target.value})}
+                />
+              </div>
+          </div>
+
+          {/* UNIT CONVERSION - NEW SECTION */}
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-4">
+              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Unit Rules (Packaging)</h4>
+              <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-gray-500">Billing Ratio</label>
+                      <div className="flex gap-2">
+                          <input type="number" className="w-1/2 p-2 border rounded-lg" value={product.unitConversion.value} onChange={(e) => setProduct({...product, unitConversion: {...product.unitConversion, value: e.target.value}})} />
+                          <input type="text" className="w-1/2 p-2 border rounded-lg bg-gray-100" placeholder="Unit (pcs)" value={product.unitConversion.unit} onChange={(e) => setProduct({...product, unitConversion: {...product.unitConversion, unit: e.target.value}})} />
+                      </div>
+                  </div>
+                  <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-gray-500">Pack Ratio</label>
+                      <div className="flex gap-2">
+                          <input type="number" className="w-1/2 p-2 border rounded-lg" value={product.unitConversion.altValue} onChange={(e) => setProduct({...product, unitConversion: {...product.unitConversion, altValue: e.target.value}})} />
+                          <input type="text" className="w-1/2 p-2 border rounded-lg bg-gray-100" placeholder="Alt Unit (box)" value={product.unitConversion.altUnit} onChange={(e) => setProduct({...product, unitConversion: {...product.unitConversion, altUnit: e.target.value}})} />
+                      </div>
+                  </div>
+              </div>
+              <p className="text-[9px] text-emerald-600 font-bold mt-2 italic">Result: 1 {product.unitConversion.unit || 'unit'} = {product.unitConversion.altValue} {product.unitConversion.altUnit || 'alt-unit'}</p>
           </div>
 
           {/* Action Buttons - Sticky Bottom */}

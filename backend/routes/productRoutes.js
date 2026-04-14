@@ -11,6 +11,7 @@ import ProductGroup from "../models/ProductGroup.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SalesOrder from "../models/SalesOrder.js";
 import Warehouse from "../models/Warehouse.js";
+import moment from "moment-timezone";
 
 import auth from "../middleware/auth.js";
 import { createAuditLog } from "../utils/logUtil.js";
@@ -728,7 +729,13 @@ router.post("/sync-past-prices", auth, async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, productGroup, productCategories = [], perQty, units, totalQty, purchasingPrice, sellingPrice, adminMargin, marginPercentage, lockedPrice, margin, hsnCode, gst, branchId, unitConversion } = req.body;
+    const { 
+      name, productGroup, productCategories = [], perQty, units, totalQty, 
+      purchasingPrice, sellingPrice, adminMargin, marginPercentage, lockedPrice, margin, 
+      hsnCode, gst, branchId, unitConversion, openingQty, manualOpeningDate,
+      totalQtyUnit, mrp, reorderLevel, reorderQty, leadTime, checkPeriod,
+      preferredVendor, minStockQty, maxStockQty, restockingDays, restockingConfig
+    } = req.body;
 
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -774,7 +781,6 @@ router.put("/:id", auth, async (req, res) => {
     if (productCategories !== undefined) updateData.productCategories = productCategories;
     if (perQty !== undefined) updateData.perQty = Math.round(Number(perQty) * 100) / 100;
     if (units !== undefined) updateData.units = units;
-    if (totalQty !== undefined) updateData.totalQty = Math.round(Number(totalQty) * 100) / 100;
     if (hsnCode !== undefined) updateData.hsnCode = hsnCode;
     if (gst !== undefined) updateData.gst = Math.round(Number(gst) * 100) / 100;
     if (purchasingPrice !== undefined) updateData.purchasingPrice = Math.round(Number(purchasingPrice) * 100) / 100;
@@ -784,6 +790,64 @@ router.put("/:id", auth, async (req, res) => {
     if (lockedPrice !== undefined) updateData.lockedPrice = Math.round(Number(lockedPrice) * 100) / 100;
     if (margin !== undefined) updateData.margin = Math.round(Number(margin) * 100) / 100;
     if (unitConversion !== undefined) updateData.unitConversion = unitConversion;
+    if (openingQty !== undefined) updateData.openingQty = Number(openingQty);
+    if (manualOpeningDate !== undefined) updateData.manualOpeningDate = manualOpeningDate;
+
+    // Advanced Inventory Fields
+    if (totalQtyUnit !== undefined) updateData.totalQtyUnit = totalQtyUnit;
+    if (mrp !== undefined) updateData.mrp = Math.round(Number(mrp) * 100) / 100;
+    if (reorderLevel !== undefined) updateData.reorderLevel = Number(reorderLevel);
+    if (reorderQty !== undefined) updateData.reorderQty = Number(reorderQty);
+    if (leadTime !== undefined) updateData.leadTime = Number(leadTime);
+    if (checkPeriod !== undefined) updateData.checkPeriod = checkPeriod;
+    if (preferredVendor !== undefined) updateData.preferredVendor = preferredVendor;
+    if (minStockQty !== undefined) updateData.minStockQty = Number(minStockQty);
+    if (maxStockQty !== undefined) updateData.maxStockQty = Number(maxStockQty);
+    if (restockingDays !== undefined) updateData.restockingDays = restockingDays;
+    if (restockingConfig !== undefined) updateData.restockingConfig = restockingConfig;
+
+    // ⚡ AUTO-RECONCILE: If openingQty or totalQty needs sync
+    if (openingQty !== undefined || totalQty !== undefined) {
+      const bid = branchId || oldProduct.branchId;
+      const branchOid = new mongoose.Types.ObjectId(bid);
+      const HARD_ANCHOR_DATE = new Date("2026-03-31T23:59:59Z");
+
+      // Calculate movements for this product ONLY
+      const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
+        PurchaseOrder.aggregate([
+          { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, "items.productId": oldProduct._id, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+          { $unwind: "$items" },
+          { $match: { "items.productId": oldProduct._id } },
+          { $group: { _id: null, total: { $sum: "$items.qty" } } }
+        ]),
+        SalesOrder.aggregate([
+          { $match: { branchId: branchOid, invoiceGenerated: true, "invoiceItems.productId": oldProduct._id, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+          { $unwind: "$invoiceItems" },
+          { $match: { "invoiceItems.productId": oldProduct._id } },
+          { $group: { _id: null, total: { $sum: "$invoiceItems.qty" } } }
+        ]),
+        DebitNote.aggregate([
+          { $match: { branchId: branchOid, status: "confirmed", "items.productId": oldProduct._id, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+          { $unwind: "$items" },
+          { $match: { "items.productId": oldProduct._id } },
+          { $group: { _id: null, total: { $sum: "$items.returnedQty" } } }
+        ]),
+        CreditNote.aggregate([
+          { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, "items.productId": oldProduct._id, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+          { $unwind: "$items" },
+          { $match: { "items.productId": oldProduct._id } },
+          { $group: { _id: null, total: { $sum: "$items.qty" } } }
+        ])
+      ]);
+
+      const tIn = (purchases[0]?.total || 0) + (creditNotes[0]?.total || 0);
+      const tOut = (sales[0]?.total || 0) + (debitNotes[0]?.total || 0);
+      const anchor = openingQty !== undefined ? Number(openingQty) : (oldProduct.openingQty || 0);
+      
+      updateData.totalQty = anchor + tIn - tOut;
+    } else if (totalQty !== undefined) {
+      updateData.totalQty = Math.round(Number(totalQty) * 100) / 100;
+    }
 
     const updatedProduct = await Product.findByIdAndUpdate(
       id,
@@ -889,36 +953,75 @@ router.delete("/:id", async (req, res) => {
 });
 
 // GET: Fetch available qty for a specific product (for Sales Order)
-// Formula: Available = (Product.totalQty + PO qty) - SalesOrder invoiced qty
+// Formula: Closing Stock = Opening Qty (Anchor) + Total Inwards - Total Outwards
 router.get("/available/:productId", async (req, res) => {
   try {
     const { productId } = req.params;
+    const { branchId } = req.query;
 
+    const pOid = new mongoose.Types.ObjectId(productId);
     const product = await Product.findById(productId).lean();
     if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
+      return res.status(404).json({ success: false, message: "Product not found" });
     }
 
-    // ⚡ Logic: The Product.totalQty field in the DB is already updated by Invoice/Purchase triggers.
-    // Manual aggregation of POs and SalesOrders is redundant and causes discrepancies.
-    const currentStock = product.totalQty || 0;
+    const branchOid = product.branchId || new mongoose.Types.ObjectId(branchId);
+    if (!branchOid) {
+       return res.status(400).json({ success: false, message: "branchId is required" });
+    }
+
+    // ⚓ ANCHOR POINT: March 31st, 2026 (IST)
+    const HARD_ANCHOR_DATE = moment.tz("2026-03-31 23:59:59", "Asia/Kolkata").toDate();
+
+    // 🧮 Calculate ALL movements after the anchor for this specific product
+    const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
+      PurchaseOrder.aggregate([
+        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, "items.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": pOid } },
+        { $group: { _id: null, total: { $sum: "$items.qty" } } }
+      ]),
+      SalesOrder.aggregate([
+        { $match: { branchId: branchOid, invoiceGenerated: true, "invoiceItems.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$invoiceItems" },
+        { $match: { "invoiceItems.productId": pOid } },
+        { $group: { _id: null, total: { $sum: "$invoiceItems.qty" } } }
+      ]),
+      DebitNote.aggregate([
+        { $match: { branchId: branchOid, status: "confirmed", "items.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": pOid } },
+        { $group: { _id: null, total: { $sum: "$items.returnedQty" } } }
+      ]),
+      CreditNote.aggregate([
+        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, "items.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": pOid } },
+        { $group: { _id: null, total: { $sum: "$items.qty" } } }
+      ])
+    ]);
+
+    const inwards = (purchases[0]?.total || 0) + (creditNotes[0]?.total || 0);
+    const outwards = (sales[0]?.total || 0) + (debitNotes[0]?.total || 0);
+    
+    // Final Live Closing Stock
+    const availableQty = (product.openingQty || 0) + inwards - outwards;
 
     res.json({
       success: true,
       data: {
         productId,
         productName: product.name,
-        availableQty: currentStock // Direct ground truth from DB
+        availableQty: availableQty,
+        excelAnchor: product.openingQty || 0,
+        movements: { inwards, outwards }
       }
     });
   } catch (error) {
     console.error("Fetch available qty Error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to fetch available qty"
+      message: "Failed to fetch live available qty"
     });
   }
 });
@@ -929,36 +1032,61 @@ router.get("/available/:productId", async (req, res) => {
 router.get("/stock-group-summary", async (req, res) => {
   try {
     const { branchId, startDate, endDate } = req.query;
-    if (!branchId || !startDate || !endDate) return res.status(400).json({ success: false, message: "Missing parameters" });
+    if (!branchId || !startDate || !endDate) {
+      return res.status(400).json({ success: false, message: "Missing required parameters" });
+    }
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
     const branchOid = new mongoose.Types.ObjectId(branchId);
+    
+    // 🌍 LOCAL TIMEZONE LOCK: Asia/Kolkata
+    // Start of Day IST converted to UTC for DB query
+    const reportStart = moment.tz(startDate, "Asia/Kolkata").startOf('day').toDate();
+    // End of Day IST converted to UTC
+    const reportEnd = moment.tz(endDate, "Asia/Kolkata").endOf('day').toDate();
+    
+    // Hard cutoff at the start of original Excel implementation (April 1st IST)
+    // Mar 31, 2026 23:59:59 IST = 2026-03-31T18:29:59.999Z
+    const HARD_ANCHOR_DATE = moment.tz("2026-03-31 23:59:59", "Asia/Kolkata").toDate();
 
     // ⚡ Execute group-level math directly in MongoDB
     const products = await Product.find({ branchId }).select("productGroup totalQty purchasingPrice manualOpeningDate openingQty").lean();
 
     const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
       PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, createdAt: { $gte: start } } },
+        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
-        { $group: { _id: "$items.productId", afterStart: { $sum: "$items.qty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$items.qty", 0] } } } }
+        { $group: { 
+            _id: "$items.productId", 
+            inBeforeReport: { $sum: { $cond: [{ $lt: ["$createdAt", reportStart] }, "$items.qty", 0] } },
+            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$createdAt", reportStart] }, { $lte: ["$createdAt", reportEnd] }] }, "$items.qty", 0] } }
+        } }
       ]),
       SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, createdAt: { $gte: start } } },
+        { $match: { branchId: branchOid, invoiceGenerated: true, createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$invoiceItems" },
-        { $group: { _id: "$invoiceItems.productId", afterStart: { $sum: "$invoiceItems.qty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$invoiceItems.qty", 0] } } } }
+        { $group: { 
+            _id: "$invoiceItems.productId", 
+            outBeforeReport: { $sum: { $cond: [{ $lt: ["$createdAt", reportStart] }, "$invoiceItems.qty", 0] } },
+            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$createdAt", reportStart] }, { $lte: ["$createdAt", reportEnd] }] }, "$invoiceItems.qty", 0] } }
+        } }
       ]),
       DebitNote.aggregate([
-        { $match: { branchId: branchOid, status: "confirmed", createdAt: { $gte: start } } },
+        { $match: { branchId: branchOid, status: "confirmed", createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
-        { $group: { _id: "$items.productId", afterStart: { $sum: "$items.returnedQty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$items.returnedQty", 0] } } } }
+        { $group: { 
+            _id: "$items.productId", 
+            outBeforeReport: { $sum: { $cond: [{ $lt: ["$createdAt", reportStart] }, "$items.returnedQty", 0] } },
+            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$createdAt", reportStart] }, { $lte: ["$createdAt", reportEnd] }] }, "$items.returnedQty", 0] } }
+        } }
       ]),
       CreditNote.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gte: start } } },
+        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
-        { $group: { _id: "$items.productId", afterStart: { $sum: "$items.qty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$items.qty", 0] } } } }
+        { $group: { 
+            _id: "$items.productId", 
+            inBeforeReport: { $sum: { $cond: [{ $lt: ["$createdAt", reportStart] }, "$items.qty", 0] } },
+            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$createdAt", reportStart] }, { $lte: ["$createdAt", reportEnd] }] }, "$items.qty", 0] } }
+        } }
       ])
     ]);
 
@@ -971,24 +1099,35 @@ router.get("/stock-group-summary", async (req, res) => {
     products.forEach(product => {
       const gid = (product.productGroup || "uncategorized").toString();
       const pid = product._id.toString();
-      const p = pMap.get(pid) || { afterStart: 0, afterEnd: 0 };
-      const s = sMap.get(pid) || { afterStart: 0, afterEnd: 0 };
-      const dn = dnMap.get(pid) || { afterStart: 0, afterEnd: 0 };
-      const cn = cnMap.get(pid) || { afterStart: 0, afterEnd: 0 };
+      
+      const ps = pMap.get(pid) || { inBeforeReport: 0, inDuringPeriod: 0 };
+      const ss = sMap.get(pid) || { outBeforeReport: 0, outDuringPeriod: 0 };
+      const dns = dnMap.get(pid) || { outBeforeReport: 0, outDuringPeriod: 0 };
+      const cns = cnMap.get(pid) || { inBeforeReport: 0, inDuringPeriod: 0 };
 
-      const afterIn = p.afterStart + cn.afterStart;
-      const afterOut = s.afterStart + dn.afterStart;
-      const endIn = p.afterEnd + cn.afterEnd;
-      const endOut = s.afterEnd + dn.afterEnd;
+      // ⚓ CHAIN-LINKED MATH
+      // 1. Opening = Excel Anchor + ∑In(Before report but after Apr 1) - ∑Out(Before report but after Apr 1)
+      const excelAnchor = product.openingQty || 0;
+      const inBefore = ps.inBeforeReport + cns.inBeforeReport;
+      const outBefore = ss.outBeforeReport + dns.outBeforeReport;
+      
+      const openingQty = excelAnchor + inBefore - outBefore;
+      
+      // 2. Movements during the selected report period
+      const inwards = ps.inDuringPeriod + cns.inDuringPeriod;
+      const outwards = ss.outDuringPeriod + dns.outDuringPeriod;
+      
+      // 3. Closing = Opening + Inwards - Outwards
+      const closingQty = openingQty + inwards - outwards;
 
-      const opening = Math.max(0, product.totalQty - afterIn + afterOut);
-      const closing = Math.max(0, product.totalQty - endIn + endOut);
-
-      if (!groupTotals[gid]) groupTotals[gid] = { inwards: 0, outwards: 0, closingQty: 0, closingValue: 0 };
-      groupTotals[gid].inwards += (p.afterStart - p.afterEnd) + (cn.afterStart - cn.afterEnd);
-      groupTotals[gid].outwards += (s.afterStart - s.afterEnd) + (dn.afterStart - dn.afterEnd);
-      groupTotals[gid].closingQty += closing;
-      groupTotals[gid].closingValue += (closing * (product.purchasingPrice || 0));
+      if (!groupTotals[gid]) groupTotals[gid] = { openingQty: 0, openingValue: 0, inwards: 0, outwards: 0, closingQty: 0, closingValue: 0 };
+      
+      groupTotals[gid].openingQty += openingQty;
+      groupTotals[gid].openingValue += (openingQty * (product.purchasingPrice || 0));
+      groupTotals[gid].inwards += inwards;
+      groupTotals[gid].outwards += outwards;
+      groupTotals[gid].closingQty += closingQty;
+      groupTotals[gid].closingValue += (closingQty * (product.purchasingPrice || 0));
     });
 
     res.json({ success: true, data: groupTotals });
@@ -1009,11 +1148,14 @@ router.get("/stock-journal", async (req, res) => {
       });
     }
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999); // End of the day
+    const branchOid = new mongoose.Types.ObjectId(branchId);
+    
+    // 🌍 LOCAL TIMEZONE LOCK: Asia/Kolkata
+    const reportStart = moment.tz(startDate, "Asia/Kolkata").startOf('day').toDate();
+    const reportEnd = moment.tz(endDate, "Asia/Kolkata").endOf('day').toDate();
+    const HARD_ANCHOR_DATE = moment.tz("2026-03-31 23:59:59", "Asia/Kolkata").toDate();
 
-    console.log(`📊 Generating Stock Journal: ${branchId} | Group: ${productGroupId || 'ALL'} | ${start.toDateString()} - ${end.toDateString()}`);
+    console.log(`📊 Generating Stock Journal: ${branchId} | Group: ${productGroupId || 'ALL'} | ${reportStart.toDateString()} - ${reportEnd.toDateString()}`);
 
     // 1️⃣ Build Filter for Products
     const productFilter = { branchId };
@@ -1024,40 +1166,49 @@ router.get("/stock-journal", async (req, res) => {
     // 2️⃣ Fetch Products (Optimized with Select and Lean)
     const products = await Product.find(productFilter)
       .select("name totalQty branchId purchasingPrice sellingPrice manualOpeningDate openingQty productGroup")
+      .populate("productGroup", "name")
       .lean();
 
     if (!products.length) {
       return res.json({ success: true, data: [] });
     }
 
-    const branchOid = new mongoose.Types.ObjectId(branchId);
-
-    // 2️⃣ Parallel Aggregation for Inbound/Outbound movements
-    // Switch to parallel execution to significantly speed up the report
     const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
-      // Inbound: Purchases
       PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, createdAt: { $gte: start } } },
+        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
-        { $group: { _id: "$items.productId", afterStart: { $sum: "$items.qty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$items.qty", 0] } }, duringPeriod: { $sum: { $cond: [{ $lte: ["$createdAt", end] }, "$items.qty", 0] } } } }
+        { $group: { 
+            _id: "$items.productId", 
+            inBeforeReport: { $sum: { $cond: [{ $lt: ["$createdAt", reportStart] }, "$items.qty", 0] } },
+            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$createdAt", reportStart] }, { $lte: ["$createdAt", reportEnd] }] }, "$items.qty", 0] } }
+        } }
       ]),
-      // Outbound: Sales
       SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, createdAt: { $gte: start } } },
+        { $match: { branchId: branchOid, invoiceGenerated: true, createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$invoiceItems" },
-        { $group: { _id: "$invoiceItems.productId", afterStart: { $sum: "$invoiceItems.qty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$invoiceItems.qty", 0] } }, duringPeriod: { $sum: { $cond: [{ $lte: ["$createdAt", end] }, "$invoiceItems.qty", 0] } } } }
+        { $group: { 
+            _id: "$invoiceItems.productId", 
+            outBeforeReport: { $sum: { $cond: [{ $lt: ["$createdAt", reportStart] }, "$invoiceItems.qty", 0] } },
+            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$createdAt", reportStart] }, { $lte: ["$createdAt", reportEnd] }] }, "$invoiceItems.qty", 0] } }
+        } }
       ]),
-      // Outbound: Purchase Returns (Debit Notes)
       DebitNote.aggregate([
-        { $match: { branchId: branchOid, status: "confirmed", createdAt: { $gte: start } } },
+        { $match: { branchId: branchOid, status: "confirmed", createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
-        { $group: { _id: "$items.productId", afterStart: { $sum: "$items.returnedQty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$items.returnedQty", 0] } }, duringPeriod: { $sum: { $cond: [{ $lte: ["$createdAt", end] }, "$items.returnedQty", 0] } } } }
+        { $group: { 
+            _id: "$items.productId", 
+            outBeforeReport: { $sum: { $cond: [{ $lt: ["$createdAt", reportStart] }, "$items.returnedQty", 0] } },
+            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$createdAt", reportStart] }, { $lte: ["$createdAt", reportEnd] }] }, "$items.returnedQty", 0] } }
+        } }
       ]),
-      // Inbound: Sales Returns (Credit Notes)
       CreditNote.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gte: start } } },
+        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
-        { $group: { _id: "$items.productId", afterStart: { $sum: "$items.qty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$items.qty", 0] } }, duringPeriod: { $sum: { $cond: [{ $lte: ["$createdAt", end] }, "$items.qty", 0] } } } }
+        { $group: { 
+            _id: "$items.productId", 
+            inBeforeReport: { $sum: { $cond: [{ $lt: ["$createdAt", reportStart] }, "$items.qty", 0] } },
+            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$createdAt", reportStart] }, { $lte: ["$createdAt", reportEnd] }] }, "$items.qty", 0] } }
+        } }
       ])
     ]);
 
@@ -1070,62 +1221,47 @@ router.get("/stock-journal", async (req, res) => {
     // 6️⃣ Calculate Journal for each Product
     const journalData = products.map((product) => {
       const pid = product._id.toString();
-      const p = pMap.get(pid) || { afterStart: 0, afterEnd: 0, duringPeriod: 0 };
-      const s = sMap.get(pid) || { afterStart: 0, afterEnd: 0, duringPeriod: 0 };
-      const dn = dnMap.get(pid) || { afterStart: 0, afterEnd: 0, duringPeriod: 0 };
-      const cn = cnMap.get(pid) || { afterStart: 0, afterEnd: 0, duringPeriod: 0 };
+      const ps = pMap.get(pid) || { inBeforeReport: 0, inDuringPeriod: 0 };
+      const ss = sMap.get(pid) || { outBeforeReport: 0, outDuringPeriod: 0 };
+      const dns = dnMap.get(pid) || { outBeforeReport: 0, outDuringPeriod: 0 };
+      const cns = cnMap.get(pid) || { inBeforeReport: 0, inDuringPeriod: 0 };
 
-      const totalQty = product.totalQty || 0;
+      const hasAnchor = product.openingQty !== undefined;
+      let openingQty, closingQty;
 
-      // ⚓ MANUAL ANCHOR LOGIC
-      // If the product has a manual stock snapshot (openingQty),
-      // we use it as the anchor for that date instead of calculating backwards.
-      const hasManualSnapshot = product.manualOpeningDate && product.openingQty !== undefined;
-      const manualDateStr = hasManualSnapshot ? product.manualOpeningDate.toISOString().split("T")[0] : null;
-
-      // Calculate movement totals relative to report dates
-      const afterIn = p.afterStart + cn.afterStart;
-      const afterOut = s.afterStart + dn.afterStart;
-      const endIn = p.afterEnd + cn.afterEnd;
-      const endOut = s.afterEnd + dn.afterEnd;
-
-      // Default Back-Calculation
-      let openingQty = totalQty - afterIn + afterOut;
-      let closingQty = totalQty - endIn + endOut;
-
-      // If the report starts on the manual snapshot date, we override the baseline
-      if (hasManualSnapshot) {
-        if (startDate === manualDateStr) {
-          // If viewing exactly from the snapshot date, Opening is the snapshot value
-          openingQty = product.openingQty;
-
-          // Closing becomes Opening + movements during this specific period
-          const inDuring = p.duringPeriod + cn.duringPeriod;
-          const outDuring = s.duringPeriod + dn.duringPeriod;
-          closingQty = openingQty + inDuring - outDuring;
-        } else if (startDate > manualDateStr) {
-          // If viewing AFTER the snapshot date, we should ideally anchor to the snapshot
-          // but for now, back-calculation is still safe as long as we don't cross the reset point.
-          // (Adding more complex chaining can be done if needed later)
-        }
+      if (hasAnchor) {
+        // Opening = Anchor (Mar 31) + Movements BEFORE Report Start
+        openingQty = product.openingQty + ps.inBeforeReport + cns.inBeforeReport - ss.outBeforeReport - dns.outBeforeReport;
+        // Closing = Opening + Movements DURING Report Period
+        closingQty = openingQty + ps.inDuringPeriod + cns.inDuringPeriod - ss.outDuringPeriod - dns.outDuringPeriod;
+      } else {
+        // Fallback if no anchor (Back-calculation from totalQty)
+        const totalInSinceReport = ps.inDuringPeriod + cns.inDuringPeriod;
+        const totalOutSinceReport = ss.outDuringPeriod + dns.outDuringPeriod;
+        openingQty = Math.max(0, product.totalQty - totalInSinceReport + totalOutSinceReport);
+        closingQty = product.totalQty;
       }
+
+      const inwards = ps.inDuringPeriod + cns.inDuringPeriod;
+      const outwards = ss.outDuringPeriod + dns.outDuringPeriod;
 
       return {
         productId: pid,
         productName: product.name,
-        branchId: product.branchId, // Inclusion of BranchId for diagnostics
+        groupName: product.productGroup?.name || "Uncategorized",
+        branchId: product.branchId,
         opening: {
-          qty: Math.max(0, openingQty),
+          qty: openingQty,
           rate: product.purchasingPrice || 0,
-          amount: Math.round(Math.max(0, openingQty) * (product.purchasingPrice || 0) * 100) / 100,
+          amount: Math.round(openingQty * (product.purchasingPrice || 0) * 100) / 100,
         },
         closing: {
-          qty: Math.max(0, closingQty),
+          qty: closingQty,
           rate: product.sellingPrice || 0,
-          amount: Math.round(Math.max(0, closingQty) * (product.sellingPrice || 0) * 100) / 100,
+          amount: Math.round(closingQty * (product.sellingPrice || 0) * 100) / 100,
         },
-        purchasesInPeriod: p.duringPeriod + cn.duringPeriod, // Total "In" (Purchases + Returns to us)
-        salesInPeriod: s.duringPeriod + dn.duringPeriod,    // Total "Out" (Sales + Returns to supplier)
+        purchasesInPeriod: inwards,
+        salesInPeriod: outwards,
       };
     });
 
@@ -1157,33 +1293,96 @@ router.get("/stock-journal", async (req, res) => {
   }
 });
 
-// GET: Unified Product Ledger (High Speed Merge)
-router.get("/:id/ledger", async (req, res) => {
+// GET: Unified Product Ledger (High Speed Merge with Anchor-Aware Opening Balance)
+router.get("/:id/ledger", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { branchId, fromDate, toDate } = req.query;
-    const start = new Date(fromDate);
-    const end = new Date(toDate);
-    end.setHours(23, 59, 59, 999);
+    if (!branchId || !fromDate || !toDate) {
+      return res.status(400).json({ success: false, message: "Missing required parameters" });
+    }
 
-    const [sales, purchases] = await Promise.all([
-      SalesOrder.aggregate([
-        { $match: { branchId: new mongoose.Types.ObjectId(branchId), invoiceGenerated: true, createdAt: { $gte: start, $lte: end } } },
-        { $unwind: "$invoiceItems" },
-        { $match: { "invoiceItems.productId": new mongoose.Types.ObjectId(id) } },
-        { $project: { type: "OUTWARD", date: "$createdAt", voucherType: "$voucherType", invoiceId: 1, particulars: "$customer.name", qty: "$invoiceItems.qty", rate: "$invoiceItems.sellingPrice", value: { $multiply: ["$invoiceItems.qty", "$invoiceItems.sellingPrice"] } } }
-      ]),
+    const branchOid = new mongoose.Types.ObjectId(branchId);
+    const productOid = new mongoose.Types.ObjectId(id);
+
+    // 🌍 LOCAL TIMEZONE LOCK: Asia/Kolkata
+    const start = moment.tz(fromDate, "Asia/Kolkata").startOf('day').toDate();
+    const end = moment.tz(toDate, "Asia/Kolkata").endOf('day').toDate();
+    const HARD_ANCHOR_DATE = moment.tz("2026-03-31 23:59:59", "Asia/Kolkata").toDate();
+
+    // 🔗 Fetch Ground Truth (Anchor)
+    const product = await Product.findById(id).select("openingQty manualOpeningDate").lean();
+    if (!product) return res.status(404).json({ success: false, message: "Product not found" });
+
+    // 🧮 1. Calculate Movements BEFORE Report Start (Post-Anchor)
+    const [pBefore, sBefore, dnBefore, cnBefore] = await Promise.all([
       PurchaseOrder.aggregate([
-        { $match: { branchId: new mongoose.Types.ObjectId(branchId), status: "INVOICED", createdAt: { $gte: start, $lte: end } } },
+        { $match: { branchId: branchOid, status: "INVOICED", createdAt: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
         { $unwind: "$items" },
-        { $match: { "items.productId": new mongoose.Types.ObjectId(id) } },
-        { $project: { type: "INWARD", date: "$createdAt", voucherType: { $ifNull: ["$voucherType", "Purchase"] }, invoiceId: 1, particulars: { $ifNull: ["$vendor", "Supplier"] }, qty: "$items.qty", rate: "$items.purchasePrice", value: { $multiply: ["$items.qty", "$items.purchasePrice"] } } }
+        { $match: { "items.productId": productOid } },
+        { $group: { _id: null, total: { $sum: "$items.qty" } } }
+      ]),
+      SalesOrder.aggregate([
+        { $match: { branchId: branchOid, invoiceGenerated: true, createdAt: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
+        { $unwind: "$invoiceItems" },
+        { $match: { "invoiceItems.productId": productOid } },
+        { $group: { _id: null, total: { $sum: "$invoiceItems.qty" } } }
+      ]),
+      DebitNote.aggregate([
+        { $match: { branchId: branchOid, status: "confirmed", createdAt: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": productOid } },
+        { $group: { _id: null, total: { $sum: "$items.returnedQty" } } }
+      ]),
+      CreditNote.aggregate([
+        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": productOid } },
+        { $group: { _id: null, total: { $sum: "$items.qty" } } }
       ])
     ]);
 
-    const unified = [...sales, ...purchases].sort((a, b) => new Date(a.date) - new Date(b.date));
-    res.json({ success: true, data: unified });
+    const openingBalance = (product.openingQty || 0) + 
+                          (pBefore[0]?.total || 0) + (cnBefore[0]?.total || 0) - 
+                          (sBefore[0]?.total || 0) - (dnBefore[0]?.total || 0);
+
+    // 💸 2. Fetch Movements DURING Report Period
+    const [sales, purchases, debitNotes, creditNotes] = await Promise.all([
+      SalesOrder.aggregate([
+        { $match: { branchId: branchOid, invoiceGenerated: true, createdAt: { $gte: start, $lte: end } } },
+        { $unwind: "$invoiceItems" },
+        { $match: { "invoiceItems.productId": productOid } },
+        { $project: { type: "OUTWARD", date: "$createdAt", voucherType: "$voucherType", invoiceId: 1, particulars: "$customer.name", qty: "$invoiceItems.qty", rate: "$invoiceItems.sellingPrice", value: { $multiply: ["$invoiceItems.qty", "$invoiceItems.sellingPrice"] } } }
+      ]),
+      PurchaseOrder.aggregate([
+        { $match: { branchId: branchOid, status: "INVOICED", createdAt: { $gte: start, $lte: end } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": productOid } },
+        { $project: { type: "INWARD", date: "$createdAt", voucherType: { $ifNull: ["$voucherType", "Purchase"] }, invoiceId: 1, particulars: { $ifNull: ["$vendor", "Supplier"] }, qty: "$items.qty", rate: "$items.purchasePrice", value: { $multiply: ["$items.qty", "$items.purchasePrice"] } } }
+      ]),
+      DebitNote.aggregate([
+        { $match: { branchId: branchOid, status: "confirmed", createdAt: { $gte: start, $lte: end } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": productOid } },
+        { $project: { type: "OUTWARD", date: "$createdAt", voucherType: { $literal: "Debit Note" }, invoiceId: 1, particulars: { $literal: "Pur. Return" }, qty: "$items.returnedQty", rate: { $literal: 0 }, value: { $literal: 0 } } }
+      ]),
+      CreditNote.aggregate([
+        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gte: start, $lte: end } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": productOid } },
+        { $project: { type: "INWARD", date: "$createdAt", voucherType: { $literal: "Credit Note" }, invoiceId: 1, particulars: { $literal: "Sal. Return" }, qty: "$items.qty", rate: { $literal: 0 }, value: { $literal: 0 } } }
+      ])
+    ]);
+
+    const unified = [...sales, ...purchases, ...debitNotes, ...creditNotes].sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    res.json({ 
+      success: true, 
+      openingBalance, 
+      data: unified 
+    });
   } catch (err) {
+    console.error("Ledger Error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
@@ -1418,6 +1617,75 @@ router.post("/sync-past-prices", auth, async (req, res) => {
   } catch (err) {
     console.error("Sync Error:", err);
     res.status(500).json({ message: err.message });
+  }
+});
+
+// POST: Reconcile Live Stock with Anchor-Aware Math
+router.post("/reconcile-stock", async (req, res) => {
+  try {
+    const { branchId } = req.body;
+    if (!branchId) return res.status(400).json({ success: false, message: "branchId is required" });
+
+    const branchOid = new mongoose.Types.ObjectId(branchId);
+    const HARD_ANCHOR_DATE = new Date("2026-03-31T23:59:59Z");
+
+    // 1. Fetch all products for the branch
+    const products = await Product.find({ branchId }).select("name openingQty totalQty").lean();
+
+    // 2. Fetch ALL movements after the anchor
+    const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
+      PurchaseOrder.aggregate([
+        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $group: { _id: "$items.productId", totalQty: { $sum: "$items.qty" } } }
+      ]),
+      SalesOrder.aggregate([
+        { $match: { branchId: branchOid, invoiceGenerated: true, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$invoiceItems" },
+        { $group: { _id: "$invoiceItems.productId", totalQty: { $sum: "$invoiceItems.qty" } } }
+      ]),
+      DebitNote.aggregate([
+        { $match: { branchId: branchOid, status: "confirmed", createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $group: { _id: "$items.productId", totalQty: { $sum: "$items.returnedQty" } } }
+      ]),
+      CreditNote.aggregate([
+        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $group: { _id: "$items.productId", totalQty: { $sum: "$items.qty" } } }
+      ])
+    ]);
+
+    const pMap = new Map(purchases.map(x => [x._id.toString(), x.totalQty]));
+    const sMap = new Map(sales.map(x => [x._id.toString(), x.totalQty]));
+    const dnMap = new Map(debitNotes.map(x => [x._id.toString(), x.totalQty]));
+    const cnMap = new Map(creditNotes.map(x => [x._id.toString(), x.totalQty]));
+
+    // 3. Prepare Bulk Operations
+    const bulkOps = products.map(product => {
+      const pid = product._id.toString();
+      const excelAnchor = product.openingQty || 0;
+      const tIn = (pMap.get(pid) || 0) + (cnMap.get(pid) || 0);
+      const tOut = (sMap.get(pid) || 0) + (dnMap.get(pid) || 0);
+      
+      const correctedQty = excelAnchor + tIn - tOut;
+
+      return {
+        updateOne: {
+          filter: { _id: product._id },
+          update: { $set: { totalQty: correctedQty } }
+        }
+      };
+    });
+
+    if (bulkOps.length > 0) {
+      await Product.bulkWrite(bulkOps);
+    }
+
+    res.json({ success: true, message: `Successfully synchronized ${bulkOps.length} products with anchor-based math.` });
+  } catch (err) {
+    console.error("Reconciliation Error:", err);
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
