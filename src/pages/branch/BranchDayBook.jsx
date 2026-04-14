@@ -3,7 +3,7 @@ import { FaBookOpen, FaCalendarAlt, FaFileAlt, FaFileExcel, FaFilePdf, FaFilter,
 import { toast, ToastContainer } from "react-toastify";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 const BranchDayBook = () => {
@@ -188,7 +188,7 @@ const BranchDayBook = () => {
             { content: expCredit.toLocaleString(), styles: { fontStyle: "bold" } }
         ]);
 
-        doc.autoTable({
+        autoTable(doc, {
             startY: 45,
             head: [tableColumn],
             body: tableRows,

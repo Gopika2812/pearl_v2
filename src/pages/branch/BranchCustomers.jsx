@@ -23,8 +23,8 @@ const BranchCustomers = () => {
     return user.fieldPermissions?.[key] !== false; // Default to true
   };
 
-  const { 
-    customerCategories, customerGroups, salesOwners, addData, updateData 
+  const {
+    customerCategories, customerGroups, salesOwners, addData, updateData
   } = useInventory();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -84,7 +84,7 @@ const BranchCustomers = () => {
       const worksheet = XLSX.utils.json_to_sheet(result.data);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "March_31_Balances");
-      
+
       // Auto-width adjustment
       const wscols = [
         { wch: 35 }, // Name
@@ -112,7 +112,7 @@ const BranchCustomers = () => {
     console.log("branchLoaded:", branchLoaded);
     console.log("branch:", branch);
     console.log("branchId:", branchId);
-    
+
     if (branchLoaded && branchId) {
       fetchCustomers(1);
     }
@@ -128,7 +128,7 @@ const BranchCustomers = () => {
       )}`;
       console.log("Fetching customers from:", url);
       console.log("Branch ID:", branchId);
-      
+
       const response = await fetchWithAuth(url);
 
       const result = await response.json();
@@ -146,7 +146,7 @@ const BranchCustomers = () => {
       setCustomers(customersData);
       setPagination(result.pagination || {});
       setCurrentPage(page);
-      
+
       if (!customersData || customersData.length === 0) {
         toast.info("No customers found for this branch");
       }
@@ -255,7 +255,7 @@ const BranchCustomers = () => {
   const getSortedCustomers = (data) => {
     return [...data].sort((a, b) => {
       const { key, direction } = sortConfig;
-      
+
       if (key === "name") {
         const valA = a.name.toLowerCase();
         const valB = b.name.toLowerCase();
@@ -263,17 +263,17 @@ const BranchCustomers = () => {
         if (valA > valB) return direction === "asc" ? 1 : -1;
         return 0;
       }
-      
+
       if (key === "margin" || key === "debit" || key === "credit") {
         const valA = a[key] || 0;
         const valB = b[key] || 0;
         return direction === "asc" ? valA - valB : valB - valA;
       }
-      
+
       return 0;
     });
   };
- 
+
   const toggleRow = (id) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
@@ -395,7 +395,7 @@ const BranchCustomers = () => {
             </button>
 
             <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-              <input 
+              <input
                 type="date"
                 value={exportDate}
                 onChange={(e) => setExportDate(e.target.value)}
@@ -415,25 +415,23 @@ const BranchCustomers = () => {
             >
               <FaFileExport /> 31st Mar Snapshot
             </button>
-            
+
             <div className="flex bg-gray-100 p-1 rounded-xl items-center">
               <button
                 onClick={() => setViewMode("table")}
-                className={`p-2 rounded-lg transition-all ${
-                  viewMode === "table"
+                className={`p-2 rounded-lg transition-all ${viewMode === "table"
                     ? "bg-white text-primary shadow-sm"
                     : "text-gray-400 hover:text-gray-600"
-                }`}
+                  }`}
               >
                 <FaList size={18} />
               </button>
               <button
                 onClick={() => setViewMode("card")}
-                className={`p-2 rounded-lg transition-all ${
-                  viewMode === "card"
+                className={`p-2 rounded-lg transition-all ${viewMode === "card"
                     ? "bg-white text-primary shadow-sm"
                     : "text-gray-400 hover:text-gray-600"
-                }`}
+                  }`}
               >
                 <FaThLarge size={18} />
               </button>
@@ -503,21 +501,19 @@ const BranchCustomers = () => {
             <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
               <button
                 onClick={() => setViewMode("table")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
-                  viewMode === "table"
+                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${viewMode === "table"
                     ? "bg-white text-blue-600 shadow-md"
                     : "text-gray-600 hover:text-blue-600"
-                }`}
+                  }`}
               >
                 <FaList size={16} /> Table
               </button>
               <button
                 onClick={() => setViewMode("card")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
-                  viewMode === "card"
+                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${viewMode === "card"
                     ? "bg-white text-blue-600 shadow-md"
                     : "text-gray-600 hover:text-blue-600"
-                }`}
+                  }`}
               >
                 <FaThLarge size={16} /> Card
               </button>
@@ -525,281 +521,280 @@ const BranchCustomers = () => {
           </div>
         </div>
 
-      {/* Content */}
-      {loading ? (
-        <div className="flex justify-center items-center py-12 md:py-16">
-          <FaSpinner className="animate-spin text-3xl md:text-4xl text-blue-600" />
-        </div>
-      ) : customers.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-md p-8 md:p-12 text-center -mx-4 md:mx-0 md:rounded-lg">
-          <p className="text-gray-500 text-base md:text-lg">No customers found</p>
-        </div>
-      ) : viewMode === "card" ? (
-        /* CARD VIEW */
-        <div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-            {customers.map((customer) => (
-              <div
-                key={customer._id}
-                className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-blue-600"
-              >
-                {/* Name */}
-                <h3 className="text-base md:text-lg font-bold text-gray-800 mb-3 truncate">
-                  {customer.name}
-                </h3>
-
-                {/* Details */}
-                <div className="space-y-2 mb-4 text-xs md:text-sm">
-                  {isFieldAllowed("gstin") && customer.gstin && (
-                    <p className="text-gray-600">
-                      <span className="font-semibold text-gray-800">GSTIN:</span>{" "}
-                      <span className="text-gray-700">{customer.gstin}</span>
-                    </p>
-                  )}
-                  {customer.email && (
-                    <p className="text-gray-600">
-                      <span className="font-semibold text-gray-800">
-                        Email:
-                      </span>{" "}
-                      <span className="text-gray-700">{customer.email}</span>
-                    </p>
-                  )}
-                  {customer.whatsapp && (
-                    <p className="text-gray-600">
-                      <span className="font-semibold text-gray-800">
-                        WhatsApp:
-                      </span>{" "}
-                      <span className="text-gray-700">{customer.whatsapp}</span>
-                    </p>
-                  )}
-                  {customer.address && (
-                    <p className="text-gray-600">
-                      <span className="font-semibold text-gray-800">
-                        Address:
-                      </span>{" "}
-                      <span className="text-gray-700">{customer.address}</span>
-                    </p>
-                  )}
-                  {customer.state && (
-                    <p className="text-gray-600">
-                      <span className="font-semibold text-gray-800">State:</span>{" "}
-                      <span className="text-gray-700">{customer.state}</span>
-                    </p>
-                  )}
-                  {isFieldAllowed("margin") && (
-                    <p className="text-gray-600">
-                      <span className="font-semibold text-gray-800">Margin:</span>{" "}
-                      <span className={`font-bold ${customer.margin < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                        {customer.margin || 0}%
-                      </span>
-                    </p>
-                  )}
-                </div>
-
-                {/* Divider */}
-                <hr className="my-3 border-gray-200" />
-
-                {/* Debit & Credit */}
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  {isFieldAllowed("debit") && (
-                    <div className="bg-red-50 rounded-lg p-3 text-center border border-red-200">
-                      <p className="text-xs text-red-700 font-bold uppercase">Debit</p>
-                      <p className="text-sm md:text-base font-bold text-red-600 mt-1">
-                        ₹{(customer.debit || 0).toFixed(2)}
-                      </p>
-                    </div>
-                  )}
-                  {isFieldAllowed("credit") && (
-                    <div className="bg-green-50 rounded-lg p-3 text-center border border-green-200">
-                      <p className="text-xs text-green-700 font-bold uppercase">
-                        Credit
-                      </p>
-                      <p className="text-sm md:text-base font-bold text-green-600 mt-1">
-                        ₹{(customer.credit || 0).toFixed(2)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-gray-100 flex gap-1.5 flex-wrap">
-                  <button
-                    onClick={() => setSelectedReceiptCustomer(customer)}
-                    className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg border border-emerald-200 text-xs flex items-center justify-center gap-1 transition"
-                  >
-                    <span>💰</span> Receipt
-                  </button>
-                  <button
-                    onClick={() => setSelectedCreditNoteCustomer(customer)}
-                    className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-lg border border-rose-200 text-xs flex items-center justify-center gap-1 transition"
-                  >
-                    <span>↩️</span> Return
-                  </button>
-                  <button
-                    onClick={() => setSelectedLedgerCustomer(customer)}
-                    className="flex-1 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg border border-blue-200 text-xs flex items-center justify-center gap-1 transition"
-                  >
-                    <span>📅</span> Ledger
-                  </button>
-                </div>
-              </div>
-            ))}
+        {/* Content */}
+        {loading ? (
+          <div className="flex justify-center items-center py-12 md:py-16">
+            <FaSpinner className="animate-spin text-3xl md:text-4xl text-blue-600" />
           </div>
+        ) : customers.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-md p-8 md:p-12 text-center -mx-4 md:mx-0 md:rounded-lg">
+            <p className="text-gray-500 text-base md:text-lg">No customers found</p>
+          </div>
+        ) : viewMode === "card" ? (
+          /* CARD VIEW */
+          <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+              {customers.map((customer) => (
+                <div
+                  key={customer._id}
+                  className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-blue-600"
+                >
+                  {/* Name */}
+                  <h3 className="text-base md:text-lg font-bold text-gray-800 mb-3 truncate">
+                    {customer.name}
+                  </h3>
 
-          {/* Pagination */}
-          {pagination.pages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-8">
-              <button
-                onClick={() => fetchCustomers(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:bg-gray-300 transition font-semibold"
-              >
-                ◀ Previous
-              </button>
-              <span className="text-gray-700 font-bold text-lg">
-                Page {currentPage} of {pagination.pages}
-              </span>
-              <button
-                onClick={() => fetchCustomers(currentPage + 1)}
-                disabled={currentPage === pagination.pages}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:bg-gray-300 transition font-semibold"
-              >
-                Next ▶
-              </button>
+                  {/* Details */}
+                  <div className="space-y-2 mb-4 text-xs md:text-sm">
+                    {isFieldAllowed("gstin") && customer.gstin && (
+                      <p className="text-gray-600">
+                        <span className="font-semibold text-gray-800">GSTIN:</span>{" "}
+                        <span className="text-gray-700">{customer.gstin}</span>
+                      </p>
+                    )}
+                    {customer.email && (
+                      <p className="text-gray-600">
+                        <span className="font-semibold text-gray-800">
+                          Email:
+                        </span>{" "}
+                        <span className="text-gray-700">{customer.email}</span>
+                      </p>
+                    )}
+                    {customer.whatsapp && (
+                      <p className="text-gray-600">
+                        <span className="font-semibold text-gray-800">
+                          WhatsApp:
+                        </span>{" "}
+                        <span className="text-gray-700">{customer.whatsapp}</span>
+                      </p>
+                    )}
+                    {customer.address && (
+                      <p className="text-gray-600">
+                        <span className="font-semibold text-gray-800">
+                          Address:
+                        </span>{" "}
+                        <span className="text-gray-700">{customer.address}</span>
+                      </p>
+                    )}
+                    {customer.state && (
+                      <p className="text-gray-600">
+                        <span className="font-semibold text-gray-800">State:</span>{" "}
+                        <span className="text-gray-700">{customer.state}</span>
+                      </p>
+                    )}
+                    {isFieldAllowed("margin") && (
+                      <p className="text-gray-600">
+                        <span className="font-semibold text-gray-800">Margin:</span>{" "}
+                        <span className={`font-bold ${customer.margin < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                          {customer.margin || 0}%
+                        </span>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Divider */}
+                  <hr className="my-3 border-gray-200" />
+
+                  {/* Debit & Credit */}
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    {isFieldAllowed("debit") && (
+                      <div className="bg-red-50 rounded-lg p-3 text-center border border-red-200">
+                        <p className="text-xs text-red-700 font-bold uppercase">Debit</p>
+                        <p className="text-sm md:text-base font-bold text-red-600 mt-1">
+                          ₹{(customer.debit || 0).toFixed(2)}
+                        </p>
+                      </div>
+                    )}
+                    {isFieldAllowed("credit") && (
+                      <div className="bg-green-50 rounded-lg p-3 text-center border border-green-200">
+                        <p className="text-xs text-green-700 font-bold uppercase">
+                          Credit
+                        </p>
+                        <p className="text-sm md:text-base font-bold text-green-600 mt-1">
+                          ₹{(customer.credit || 0).toFixed(2)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-gray-100 flex gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => setSelectedReceiptCustomer(customer)}
+                      className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg border border-emerald-200 text-xs flex items-center justify-center gap-1 transition"
+                    >
+                      <span>💰</span> Receipt
+                    </button>
+                    <button
+                      onClick={() => setSelectedCreditNoteCustomer(customer)}
+                      className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-lg border border-rose-200 text-xs flex items-center justify-center gap-1 transition"
+                    >
+                      <span>↩️</span> Return
+                    </button>
+                    <button
+                      onClick={() => setSelectedLedgerCustomer(customer)}
+                      className="flex-1 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg border border-blue-200 text-xs flex items-center justify-center gap-1 transition"
+                    >
+                      <span>📅</span> Ledger
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
-        </div>
-      ) : (
-        /* TABLE VIEW */
-        <div>
-          <div className="bg-white rounded-lg shadow-md overflow-x-auto -mx-4 md:mx-0 md:rounded-lg">
-            <table className="w-full">
-              <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
-                <tr>
-                  <th className="w-10"></th>
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("name")}>
-                    Customer Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                  </th>
-                  {isFieldAllowed("gstin") && (
-                    <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
-                      GSTIN
+
+            {/* Pagination */}
+            {pagination.pages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-8">
+                <button
+                  onClick={() => fetchCustomers(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:bg-gray-300 transition font-semibold"
+                >
+                  ◀ Previous
+                </button>
+                <span className="text-gray-700 font-bold text-lg">
+                  Page {currentPage} of {pagination.pages}
+                </span>
+                <button
+                  onClick={() => fetchCustomers(currentPage + 1)}
+                  disabled={currentPage === pagination.pages}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:bg-gray-300 transition font-semibold"
+                >
+                  Next ▶
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* TABLE VIEW */
+          <div>
+            <div className="bg-white rounded-lg shadow-md overflow-x-auto -mx-4 md:mx-0 md:rounded-lg">
+              <table className="w-full">
+                <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                  <tr>
+                    <th className="w-10"></th>
+                    <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("name")}>
+                      Customer Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
-                  )}
-                  {isFieldAllowed("margin") && (
-                    <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("margin")}>
-                      Margin (%) {sortConfig.key === "margin" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    {isFieldAllowed("gstin") && (
+                      <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
+                        GSTIN
+                      </th>
+                    )}
+                    {isFieldAllowed("margin") && (
+                      <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("margin")}>
+                        Margin (%) {sortConfig.key === "margin" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                    )}
+                    {isFieldAllowed("debit") && (
+                      <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("debit")}>
+                        Debit {sortConfig.key === "debit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                    )}
+                    {isFieldAllowed("credit") && (
+                      <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("credit")}>
+                        Credit {sortConfig.key === "credit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                    )}
+                    <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
+                      Action
                     </th>
-                  )}
-                  {isFieldAllowed("debit") && (
-                    <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("debit")}>
-                      Debit {sortConfig.key === "debit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                    </th>
-                  )}
-                  {isFieldAllowed("credit") && (
-                    <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("credit")}>
-                      Credit {sortConfig.key === "credit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                    </th>
-                  )}
-                  <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedCustomers.map((customer, index) => {
-                  const isExpanded = !!expandedRows[customer._id];
-                  return (
-                    <React.Fragment key={customer._id}>
-                      <tr
-                        className={`${
-                          index % 2 === 0 ? "bg-white" : "bg-blue-50"
-                        } border-b border-gray-200 hover:bg-blue-100/50 transition cursor-pointer`}
-                        onClick={() => toggleRow(customer._id)}
-                      >
-                        <td className="px-4 py-3 text-center text-gray-400">
-                           {isExpanded ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
-                        </td>
-                        <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
-                          {customer.name}
-                        </td>
-                        {isFieldAllowed("gstin") && (
-                          <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
-                            {customer.gstin || "-"}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedCustomers.map((customer, index) => {
+                    const isExpanded = !!expandedRows[customer._id];
+                    return (
+                      <React.Fragment key={customer._id}>
+                        <tr
+                          className={`${index % 2 === 0 ? "bg-white" : "bg-blue-50"
+                            } border-b border-gray-200 hover:bg-blue-100/50 transition cursor-pointer`}
+                          onClick={() => toggleRow(customer._id)}
+                        >
+                          <td className="px-4 py-3 text-center text-gray-400">
+                            {isExpanded ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
                           </td>
-                        )}
-                        {isFieldAllowed("margin") && (
-                          <td className={`px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-bold ${customer.margin < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                            {customer.margin || 0}%
+                          <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
+                            {customer.name}
                           </td>
-                        )}
-                        {isFieldAllowed("debit") && (
-                          <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600">
-                            ₹{(customer.debit || 0).toFixed(2)}
+                          {isFieldAllowed("gstin") && (
+                            <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
+                              {customer.gstin || "-"}
+                            </td>
+                          )}
+                          {isFieldAllowed("margin") && (
+                            <td className={`px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-bold ${customer.margin < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                              {customer.margin || 0}%
+                            </td>
+                          )}
+                          {isFieldAllowed("debit") && (
+                            <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600">
+                              ₹{(customer.debit || 0).toFixed(2)}
+                            </td>
+                          )}
+                          {isFieldAllowed("credit") && (
+                            <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600">
+                              ₹{(customer.credit || 0).toFixed(2)}
+                            </td>
+                          )}
+                          <td className="px-3 md:px-5 py-2 md:py-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedReceiptCustomer(customer); }}
+                                className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                              >
+                                Receipt
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedCreditNoteCustomer(customer); }}
+                                className="bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                              >
+                                Return
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedLedgerCustomer(customer); }}
+                                className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                              >
+                                Ledger
+                              </button>
+                            </div>
                           </td>
-                        )}
-                        {isFieldAllowed("credit") && (
-                          <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-green-600">
-                            ₹{(customer.credit || 0).toFixed(2)}
-                          </td>
-                        )}
-                        <td className="px-3 md:px-5 py-2 md:py-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setSelectedReceiptCustomer(customer); }}
-                              className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
-                            >
-                              Receipt
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setSelectedCreditNoteCustomer(customer); }}
-                              className="bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
-                            >
-                              Return
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setSelectedLedgerCustomer(customer); }}
-                              className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
-                            >
-                              Ledger
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr className="bg-gray-50 border-b border-gray-200">
-                          <td colSpan={7} className="px-8 py-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fadeIn">
-                               {/* Contact and Social section */}
-                               <div className="space-y-1">
-                                 <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Contact & Social</p>
-                                 <div className="flex items-center gap-2 text-xs text-gray-600 mt-2">
+                        </tr>
+                        {isExpanded && (
+                          <tr className="bg-gray-50 border-b border-gray-200">
+                            <td colSpan={7} className="px-8 py-4">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fadeIn">
+                                {/* Contact and Social section */}
+                                <div className="space-y-1">
+                                  <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Contact & Social</p>
+                                  <div className="flex items-center gap-2 text-xs text-gray-600 mt-2">
                                     <FaWhatsapp className="text-green-500 text-[10px]" />
                                     <span>{customer.whatsapp || "No WhatsApp provided"}</span>
-                                 </div>
-                                 <div className="flex items-center gap-2 text-xs text-gray-600">
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-gray-600">
                                     <FaEnvelope className="text-secondary text-[10px]" />
                                     <span>{customer.email || "No email provided"}</span>
-                                 </div>
-                               </div>
-                               
-                               {/* Location Section */}
-                               <div className="space-y-1">
-                                 <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Location & Address</p>
-                                 <div className="flex items-start gap-2 text-xs text-gray-600 mt-2">
+                                  </div>
+                                </div>
+
+                                {/* Location Section */}
+                                <div className="space-y-1">
+                                  <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Location & Address</p>
+                                  <div className="flex items-start gap-2 text-xs text-gray-600 mt-2">
                                     <FaMapMarkerAlt className="text-secondary text-[10px] mt-0.5" />
                                     <span>
                                       {customer.address ? `${customer.address}, ${customer.district || ""}, ${customer.state || ""}, ${customer.country || ""} - ${customer.pincode || ""}` : "No address provided"}
                                     </span>
-                                 </div>
-                               </div>
+                                  </div>
+                                </div>
 
-                               {/* Assignment Section */}
-                               <div className="space-y-1">
-                                 <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Assignment & Type</p>
-                                 <div className="flex items-center gap-2 text-xs text-gray-600 mt-2">
+                                {/* Assignment Section */}
+                                <div className="space-y-1">
+                                  <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Assignment & Type</p>
+                                  <div className="flex items-center gap-2 text-xs text-gray-600 mt-2">
                                     <FaUserTie className="text-secondary text-[10px]" />
                                     <span className="font-semibold">{customer.salesOwner?.name || "No Sales Owner assigned"}</span>
-                                 </div>
-                                 <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
                                     <FaTags className="text-secondary text-[10px]" />
                                     <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-bold">
                                       {customer.customerCategory?.name || "No Category"}
@@ -807,8 +802,8 @@ const BranchCustomers = () => {
                                     <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded text-[9px] font-bold">
                                       {customer.customerGroup?.name || "No Group"}
                                     </span>
-                                 </div>
-                                 <div className="mt-3">
+                                  </div>
+                                  <div className="mt-3">
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -818,44 +813,44 @@ const BranchCustomers = () => {
                                     >
                                       View Detailed Ledger →
                                     </button>
-                                 </div>
-                               </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {pagination.pages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-8">
-              <button
-                onClick={() => fetchCustomers(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:bg-gray-300 transition font-semibold"
-              >
-                ◀ Previous
-              </button>
-              <span className="text-gray-700 font-bold text-lg">
-                Page {currentPage} of {pagination.pages}
-              </span>
-              <button
-                onClick={() => fetchCustomers(currentPage + 1)}
-                disabled={currentPage === pagination.pages}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:bg-gray-300 transition font-semibold"
-              >
-                Next ▶
-              </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
-      )}
-        </div>
+
+            {/* Pagination */}
+            {pagination.pages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-8">
+                <button
+                  onClick={() => fetchCustomers(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:bg-gray-300 transition font-semibold"
+                >
+                  ◀ Previous
+                </button>
+                <span className="text-gray-700 font-bold text-lg">
+                  Page {currentPage} of {pagination.pages}
+                </span>
+                <button
+                  onClick={() => fetchCustomers(currentPage + 1)}
+                  disabled={currentPage === pagination.pages}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:bg-gray-300 transition font-semibold"
+                >
+                  Next ▶
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* LEDGER MODAL */}
       <CustomerLedgerModal
@@ -867,7 +862,7 @@ const BranchCustomers = () => {
       />
 
       {/* RECEIPT MODAL */}
-      <CustomerReceiptModal 
+      <CustomerReceiptModal
         isOpen={!!selectedReceiptCustomer}
         onClose={() => setSelectedReceiptCustomer(null)}
         customer={selectedReceiptCustomer}

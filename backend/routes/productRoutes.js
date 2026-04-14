@@ -647,7 +647,7 @@ router.get("/export/snapshot-mar31", async (req, res) => {
       const pid = p._id.toString();
       const aprIn = (pMap.get(pid) || 0) + (cnMap.get(pid) || 0);
       const aprOut = (sMap.get(pid) || 0) + (dnMap.get(pid) || 0);
-      
+
       // If openingQty was manually uploaded, use it. Otherwise calculate backwards.
       const snapshotQty = p.manualOpeningDate ? p.openingQty : (p.totalQty - aprIn + aprOut);
 
@@ -675,13 +675,13 @@ router.post("/sync-past-prices", auth, async (req, res) => {
     // Using dynamic import for the model to ensure it's loaded
     const PurchaseInvoice = (await import("../models/PurchaseInvoice.js")).default;
     const invoices = await PurchaseInvoice.find({ branchId }).sort({ invoiceDate: 1, createdAt: 1 });
-    
+
     let updateCount = 0;
     let historyCount = 0;
 
     for (const inv of invoices) {
       if (!inv.items) continue;
-      
+
       for (const item of inv.items) {
         const product = await Product.findById(item.productId);
         if (product) {
@@ -690,14 +690,14 @@ router.post("/sync-past-prices", auth, async (req, res) => {
 
           if (newPPrice > 0) {
             const oldSPrice = product.sellingPrice || 0;
-            
+
             // Check if this invoice is already in history to avoid duplicates
             const alreadyLogged = (product.priceHistory || []).some(h => h.sourceVoucher === inv.purchaseInvoiceId);
-            
+
             if (!alreadyLogged) {
               product.purchasingPrice = newPPrice;
               await product.save(); // Triggers margin calculation
-              
+
               product.priceHistory.push({
                 oldPurchasingPrice: oldPPrice,
                 newPurchasingPrice: newPPrice,
@@ -938,7 +938,7 @@ router.get("/stock-group-summary", async (req, res) => {
 
     // ⚡ Execute group-level math directly in MongoDB
     const products = await Product.find({ branchId }).select("productGroup totalQty purchasingPrice manualOpeningDate openingQty").lean();
-    
+
     const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
       PurchaseOrder.aggregate([
         { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, createdAt: { $gte: start } } },
@@ -983,7 +983,7 @@ router.get("/stock-group-summary", async (req, res) => {
 
       const opening = Math.max(0, product.totalQty - afterIn + afterOut);
       const closing = Math.max(0, product.totalQty - endIn + endOut);
-      
+
       if (!groupTotals[gid]) groupTotals[gid] = { inwards: 0, outwards: 0, closingQty: 0, closingValue: 0 };
       groupTotals[gid].inwards += (p.afterStart - p.afterEnd) + (cn.afterStart - cn.afterEnd);
       groupTotals[gid].outwards += (s.afterStart - s.afterEnd) + (dn.afterStart - dn.afterEnd);
@@ -1098,7 +1098,7 @@ router.get("/stock-journal", async (req, res) => {
         if (startDate === manualDateStr) {
           // If viewing exactly from the snapshot date, Opening is the snapshot value
           openingQty = product.openingQty;
-          
+
           // Closing becomes Opening + movements during this specific period
           const inDuring = p.duringPeriod + cn.duringPeriod;
           const outDuring = s.duringPeriod + dn.duringPeriod;
@@ -1374,13 +1374,13 @@ router.post("/sync-past-prices", auth, async (req, res) => {
 
     const PurchaseInvoice = (await import("../models/PurchaseInvoice.js")).default;
     const invoices = await PurchaseInvoice.find({ branchId }).sort({ invoiceDate: 1, createdAt: 1 });
-    
+
     let updateCount = 0;
     let historyCount = 0;
 
     for (const inv of invoices) {
       if (!inv.items) continue;
-      
+
       for (const item of inv.items) {
         const product = await Product.findById(item.productId);
         if (product) {
@@ -1390,11 +1390,11 @@ router.post("/sync-past-prices", auth, async (req, res) => {
           if (newPPrice > 0) {
             const oldSPrice = product.sellingPrice || 0;
             const alreadyLogged = (product.priceHistory || []).some(h => h.sourceVoucher === inv.purchaseInvoiceId);
-            
+
             if (!alreadyLogged) {
               product.purchasingPrice = newPPrice;
               await product.save();
-              
+
               product.priceHistory.push({
                 oldPurchasingPrice: oldPPrice,
                 newPurchasingPrice: newPPrice,

@@ -246,7 +246,7 @@ const BranchStockSummary = () => {
         valuation: acc.valuation + (stats.closingValue || 0)
       }), { inwards: 0, outwards: 0, valuation: 0 });
     }
-    
+
     const items = Array.isArray(stockData) ? stockData : [];
     return items.reduce((acc, item) => ({
       inwards: acc.inwards + (item.purchasesInPeriod || 0),
