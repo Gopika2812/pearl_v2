@@ -925,10 +925,82 @@ router.get("/available/:productId", async (req, res) => {
 
 // POST: Apply group margin percentage to all products in a group or category
 
+// GET: Group-wise Stock Summary (High Speed Aggregation)
+router.get("/stock-group-summary", async (req, res) => {
+  try {
+    const { branchId, startDate, endDate } = req.query;
+    if (!branchId || !startDate || !endDate) return res.status(400).json({ success: false, message: "Missing parameters" });
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    const branchOid = new mongoose.Types.ObjectId(branchId);
+
+    // ⚡ Execute group-level math directly in MongoDB
+    const products = await Product.find({ branchId }).select("productGroup totalQty purchasingPrice manualOpeningDate openingQty").lean();
+    
+    const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
+      PurchaseOrder.aggregate([
+        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, createdAt: { $gte: start } } },
+        { $unwind: "$items" },
+        { $group: { _id: "$items.productId", afterStart: { $sum: "$items.qty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$items.qty", 0] } } } }
+      ]),
+      SalesOrder.aggregate([
+        { $match: { branchId: branchOid, invoiceGenerated: true, createdAt: { $gte: start } } },
+        { $unwind: "$invoiceItems" },
+        { $group: { _id: "$invoiceItems.productId", afterStart: { $sum: "$invoiceItems.qty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$invoiceItems.qty", 0] } } } }
+      ]),
+      DebitNote.aggregate([
+        { $match: { branchId: branchOid, status: "confirmed", createdAt: { $gte: start } } },
+        { $unwind: "$items" },
+        { $group: { _id: "$items.productId", afterStart: { $sum: "$items.returnedQty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$items.returnedQty", 0] } } } }
+      ]),
+      CreditNote.aggregate([
+        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gte: start } } },
+        { $unwind: "$items" },
+        { $group: { _id: "$items.productId", afterStart: { $sum: "$items.qty" }, afterEnd: { $sum: { $cond: [{ $gt: ["$createdAt", end] }, "$items.qty", 0] } } } }
+      ])
+    ]);
+
+    const pMap = new Map(purchases.map(p => [p._id.toString(), p]));
+    const sMap = new Map(sales.map(s => [s._id.toString(), s]));
+    const dnMap = new Map(debitNotes.map(dn => [dn._id.toString(), dn]));
+    const cnMap = new Map(creditNotes.map(cn => [cn._id.toString(), cn]));
+
+    const groupTotals = {};
+    products.forEach(product => {
+      const gid = (product.productGroup || "uncategorized").toString();
+      const pid = product._id.toString();
+      const p = pMap.get(pid) || { afterStart: 0, afterEnd: 0 };
+      const s = sMap.get(pid) || { afterStart: 0, afterEnd: 0 };
+      const dn = dnMap.get(pid) || { afterStart: 0, afterEnd: 0 };
+      const cn = cnMap.get(pid) || { afterStart: 0, afterEnd: 0 };
+
+      const afterIn = p.afterStart + cn.afterStart;
+      const afterOut = s.afterStart + dn.afterStart;
+      const endIn = p.afterEnd + cn.afterEnd;
+      const endOut = s.afterEnd + dn.afterEnd;
+
+      const opening = Math.max(0, product.totalQty - afterIn + afterOut);
+      const closing = Math.max(0, product.totalQty - endIn + endOut);
+      
+      if (!groupTotals[gid]) groupTotals[gid] = { inwards: 0, outwards: 0, closingQty: 0, closingValue: 0 };
+      groupTotals[gid].inwards += (p.afterStart - p.afterEnd) + (cn.afterStart - cn.afterEnd);
+      groupTotals[gid].outwards += (s.afterStart - s.afterEnd) + (dn.afterStart - dn.afterEnd);
+      groupTotals[gid].closingQty += closing;
+      groupTotals[gid].closingValue += (closing * (product.purchasingPrice || 0));
+    });
+
+    res.json({ success: true, data: groupTotals });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // GET: Stock Journal Report (Opening vs Closing)
 router.get("/stock-journal", async (req, res) => {
   try {
-    const { branchId, startDate, endDate } = req.query;
+    const { branchId, startDate, endDate, productGroupId } = req.query;
 
     if (!branchId || !startDate || !endDate) {
       return res.status(400).json({
@@ -941,11 +1013,17 @@ router.get("/stock-journal", async (req, res) => {
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999); // End of the day
 
-    console.log(`📊 Generating Stock Journal: ${branchId} | ${start.toDateString()} - ${end.toDateString()}`);
+    console.log(`📊 Generating Stock Journal: ${branchId} | Group: ${productGroupId || 'ALL'} | ${start.toDateString()} - ${end.toDateString()}`);
 
-    // 1️⃣ Fetch All Products for the Branch (Optimized with Select and Lean)
-    const products = await Product.find({ branchId })
-      .select("name totalQty branchId purchasingPrice sellingPrice manualOpeningDate openingQty")
+    // 1️⃣ Build Filter for Products
+    const productFilter = { branchId };
+    if (productGroupId && productGroupId !== "all") {
+      productFilter.productGroup = productGroupId;
+    }
+
+    // 2️⃣ Fetch Products (Optimized with Select and Lean)
+    const products = await Product.find(productFilter)
+      .select("name totalQty branchId purchasingPrice sellingPrice manualOpeningDate openingQty productGroup")
       .lean();
 
     if (!products.length) {

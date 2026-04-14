@@ -32,8 +32,7 @@ const BranchCustomers = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({});
-  const [salesOrders, setSalesOrders] = useState([]);
-  const [customerPayments, setCustomerPayments] = useState([]);
+
   const [selectedLedgerCustomer, setSelectedLedgerCustomer] = useState(null);
   const [selectedReceiptCustomer, setSelectedReceiptCustomer] = useState(null);
   const [selectedCreditNoteCustomer, setSelectedCreditNoteCustomer] = useState(null);
@@ -116,40 +115,10 @@ const BranchCustomers = () => {
     
     if (branchLoaded && branchId) {
       fetchCustomers(1);
-      fetchSalesOrders();
-      fetchCustomerPayments();
     }
   }, [branchLoaded, branchId]);
 
-  const fetchSalesOrders = async () => {
-    try {
-      const url = `${API_BASE}/sales-orders`;
-      const response = await fetchWithAuth(url);
 
-      if (response.ok) {
-        const result = await response.json();
-        const orders = result.data || result || [];
-        setSalesOrders(orders);
-      }
-    } catch (error) {
-      console.error("Error fetching sales orders:", error);
-    }
-  };
-
-  const fetchCustomerPayments = async () => {
-    try {
-      const url = `${API_BASE}/receipts`;
-      const response = await fetchWithAuth(url);
-
-      if (response.ok) {
-        const result = await response.json();
-        const payments = result.data || result || [];
-        setCustomerPayments(payments);
-      }
-    } catch (error) {
-      console.error("Error fetching customer payments:", error);
-    }
-  };
 
   const fetchCustomers = async (page = 1) => {
     try {

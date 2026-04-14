@@ -39,31 +39,31 @@ const BranchStockSummary = () => {
     if (!currentBranch?._id) return;
     setLoading(true);
     try {
-      // 1. Fetch all products to know their groups
-      const prodRes = await fetchWithAuth(`${API_BASE}/products?branchId=${currentBranch._id}&limit=10000`);
-      const prodData = await prodRes.json();
-      const productToGroup = {};
-      if (prodData.success) {
-        prodData.data.forEach(p => {
-          productToGroup[p._id] = p.productGroup?._id || p.productGroup || "uncategorized";
-        });
-      }
+      if (viewLevel === "GROUPS") {
+        // 1. Fetch High-Speed Group Summary
+        const res = await fetchWithAuth(
+          `${API_BASE}/products/stock-group-summary?branchId=${currentBranch._id}&startDate=${fromDate}&endDate=${toDate}`
+        );
+        const data = await res.json();
 
-      // 2. Fetch stock journal and sync available quantities (Roll-Forward)
-      const res = await fetchWithAuth(
-        `${API_BASE}/products/stock-journal?branchId=${currentBranch._id}&startDate=${fromDate}&endDate=${toDate}&sync=true`
-      );
-      const data = await res.json();
+        if (data.success) {
+          setStockData(data.data || {});
+        } else {
+          toast.error(data.message || "Failed to fetch group summary");
+        }
+      } else if (viewLevel === "ITEMS") {
+        // 2. Fetch Detailed Items for SELECTED GROUP ONLY
+        const groupId = selectedGroup?._id || "all";
+        const res = await fetchWithAuth(
+          `${API_BASE}/products/stock-journal?branchId=${currentBranch._id}&startDate=${fromDate}&endDate=${toDate}&productGroupId=${groupId}`
+        );
+        const data = await res.json();
 
-      if (data.success) {
-        // Enrich stock data with group info
-        const enriched = (data.data || []).map(item => ({
-          ...item,
-          groupId: productToGroup[item.productId] || "uncategorized"
-        }));
-        setStockData(enriched);
-      } else {
-        toast.error(data.message || "Failed to fetch stock journal");
+        if (data.success) {
+          setStockData(data.data || []);
+        } else {
+          toast.error(data.message || "Failed to fetch item data");
+        }
       }
     } catch (err) {
       console.error(err);
@@ -187,33 +187,29 @@ const BranchStockSummary = () => {
 
   // Calculations for Level 1 (Groups)
   const groupAggregates = React.useMemo(() => {
-    const aggregates = {};
+    if (viewLevel !== "GROUPS" || Array.isArray(stockData)) return [];
 
-    // Initialize with all groups
+    const aggregates = [];
     productGroups.forEach(g => {
-      aggregates[g._id] = {
+      const stats = stockData[g._id] || { inwards: 0, outwards: 0, closingQty: 0, closingValue: 0 };
+      aggregates.push({
+        id: g._id,
         name: g.name,
-        inwards: 0,
-        outwards: 0,
-        closingQty: 0,
-        closingValue: 0
-      };
+        ...stats
+      });
     });
 
-    // Aggregate from stockData
-    stockData.forEach(item => {
-      const gid = item.groupId || "uncategorized";
-      if (!aggregates[gid]) {
-        aggregates[gid] = { name: "Uncategorized", inwards: 0, outwards: 0, closingQty: 0, closingValue: 0 };
-      }
-      aggregates[gid].inwards += (item.purchasesInPeriod || 0);
-      aggregates[gid].outwards += (item.salesInPeriod || 0);
-      aggregates[gid].closingQty += (item.closing?.qty || 0);
-      aggregates[gid].closingValue += (item.closing?.amount || 0);
-    });
+    // Handle Uncategorized
+    if (stockData["uncategorized"]) {
+      aggregates.push({
+        id: "uncategorized",
+        name: "Uncategorized",
+        ...stockData["uncategorized"]
+      });
+    }
 
-    return Object.entries(aggregates).map(([id, data]) => ({ id, ...data }));
-  }, [stockData, productGroups]);
+    return aggregates;
+  }, [stockData, productGroups, viewLevel]);
 
   // Filtered Group Aggregates (Search)
   const filteredGroupAggregates = React.useMemo(() => {
@@ -225,12 +221,12 @@ const BranchStockSummary = () => {
 
   // Filtered Stock Items (Search)
   const filteredStockItems = React.useMemo(() => {
-    const baseItems = stockData.filter(item => item.groupId === selectedGroup?._id);
-    if (!searchQuery) return baseItems;
-    return baseItems.filter(item =>
+    if (!Array.isArray(stockData)) return [];
+    if (!searchQuery) return stockData;
+    return stockData.filter(item =>
       item.productName.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [stockData, selectedGroup, searchQuery]);
+  }, [stockData, searchQuery]);
 
   // Filtered Ledger Data (Search)
   const filteredLedgerData = React.useMemo(() => {
@@ -243,12 +239,21 @@ const BranchStockSummary = () => {
 
   // Total Summary Stats
   const totalStats = React.useMemo(() => {
-    return stockData.reduce((acc, item) => ({
+    if (viewLevel === "GROUPS" && !Array.isArray(stockData)) {
+      return Object.values(stockData).reduce((acc, stats) => ({
+        inwards: acc.inwards + (stats.inwards || 0),
+        outwards: acc.outwards + (stats.outwards || 0),
+        valuation: acc.valuation + (stats.closingValue || 0)
+      }), { inwards: 0, outwards: 0, valuation: 0 });
+    }
+    
+    const items = Array.isArray(stockData) ? stockData : [];
+    return items.reduce((acc, item) => ({
       inwards: acc.inwards + (item.purchasesInPeriod || 0),
       outwards: acc.outwards + (item.salesInPeriod || 0),
       valuation: acc.valuation + (item.closing?.amount || 0)
     }), { inwards: 0, outwards: 0, valuation: 0 });
-  }, [stockData]);
+  }, [stockData, viewLevel]);
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-6 md:pl-24 px-4 md:px-8 pb-12 font-sans">
@@ -390,26 +395,26 @@ const BranchStockSummary = () => {
         </div>
 
         {/* SUMMARY CARDS (Top Level Only) */}
-        {viewLevel === "GROUPS" && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Items</p>
-              <h3 className="text-2xl font-black text-gray-800">{stockData.length}</h3>
-            </div>
-            <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Inwards (Period)</p>
-              <h3 className="text-2xl font-black text-green-600">{totalStats.inwards}</h3>
-            </div>
-            <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Outwards (Period)</p>
-              <h3 className="text-2xl font-black text-red-500">{totalStats.outwards}</h3>
-            </div>
-            <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-200 bg-secondary/5">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 text-secondary">Total Valuation</p>
-              <h3 className="text-2xl font-black text-secondary">₹{totalStats.valuation.toLocaleString()}</h3>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{viewLevel === "GROUPS" ? "Active Groups" : "Items in Group"}</p>
+            <h3 className="text-2xl font-black text-gray-800">
+              {viewLevel === "GROUPS" ? filteredGroupAggregates.length : filteredStockItems.length}
+            </h3>
           </div>
-        )}
+          <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Inwards (Period)</p>
+            <h3 className="text-2xl font-black text-green-600">{totalStats.inwards}</h3>
+          </div>
+          <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Outwards (Period)</p>
+            <h3 className="text-2xl font-black text-red-500">{totalStats.outwards}</h3>
+          </div>
+          <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-200 bg-secondary/5">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 text-secondary">Total Valuation</p>
+            <h3 className="text-2xl font-black text-secondary">₹{totalStats.valuation.toLocaleString()}</h3>
+          </div>
+        </div>
 
         {/* MAIN DATA SECTION */}
         <div className="space-y-4">
