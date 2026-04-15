@@ -12,15 +12,27 @@ import {
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
 import { useBranch } from "../context/BranchContext";
+import { useInventory } from "../context/InventoryContext";
 
 const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
   const { currentBranch, user } = useBranch();
+  const { products } = useInventory();
   const [activeTab, setActiveTab] = useState("edit");
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   // Edit state
   const initializationRef = useRef(false);
+
+  // 🏥 Name Repair Helper
+  const repairName = (pId, currentName) => {
+    if (!currentName || currentName === "Product Name Missing") {
+      const match = products?.find(p => p._id?.toString() === pId?.toString());
+      if (match) return match.name;
+    }
+    return currentName;
+  };
+
   const [editedItems, setEditedItems] = useState([]);
   const [notes, setNotes] = useState("");
   const [invoiceType, setInvoiceType] = useState("ORDER_DETAILS");
@@ -66,6 +78,33 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             setTransportCharge(prev => prev === 0 ? (freshOrder.transportCharge || 0) : prev);
             setTransportGstPercent(prev => (prev === 18 || prev === 0) ? (freshOrder.transportGstPercent || 18) : prev);
             setNotes(prev => !prev ? (freshOrder.notes || "") : prev);
+
+            // ⚡ SELF-HEALING: If any items are missing names, patch them from the fresh, populated order
+            setEditedItems(prevItems => {
+              return prevItems.map(item => {
+                const repairedName = repairName(item.productId, item.name);
+                if (repairedName && repairedName !== item.name) {
+                  return { ...item, name: repairedName };
+                }
+                
+                // Also check freshOrder directly if repair failed
+                if (!item.name || item.name === "Product Name Missing" || item.name === "") {
+                  const freshPool = [
+                    ...(freshOrder.invoiceItems || []), 
+                    ...(freshOrder.items || []),
+                    ...(freshOrder.lastInvoicedItems || [])
+                  ];
+                  const match = freshPool.find(f => (f.productId?._id || f.productId)?.toString() === (item.productId?._id || item.productId)?.toString());
+                  if (match) {
+                    return { 
+                      ...item, 
+                      name: match.name || match.productId?.name || item.name 
+                    };
+                  }
+                }
+                return item;
+              });
+            });
           }
         } catch (err) {
           console.error("Failed to re-sync order data:", err);
@@ -111,10 +150,18 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           const subtotal = (item.sellingPrice || 0) * (item.qty || item.confirmedQty || 0);
           const total = Math.round((subtotal - (item.discountAmount || 0)) * 100) / 100;
 
+          const rawName = item.name || item.productId?.name || "";
+          const repairedName = repairName(pId, rawName);
+          
+          // CRITICAL: Prioritize repaired names, but if it returns "Product Name Missing" AND we already have a rawName, keep the rawName
+          const finalName = (repairedName && repairedName !== "Product Name Missing") 
+            ? repairedName 
+            : (rawName || "Product Name Missing");
+
           finalItems.push({
             ...item,
             productId: pId,
-            name: item.name || "",
+            name: finalName,
             confirmedQty: item.qty || item.confirmedQty || 0,
             qty: item.qty || item.confirmedQty || 0,
             originalQty: item.originalQty || item.qty || 0,
@@ -132,10 +179,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
           const pId = (item.productId?._id || item.productId)?.toString();
           if (!pId) return;
 
+          const rawName = item.name || item.productName || item.productId?.name || "";
           finalItems.push({
             ...item,
             productId: pId,
-            name: item.name || item.productName || "",
+            name: repairName(pId, rawName) || rawName,
             confirmedQty: item.qty || 0,
             qty: item.qty || 0,
             originalQty: item.qty || 0,

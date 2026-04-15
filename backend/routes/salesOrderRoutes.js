@@ -190,6 +190,9 @@ router.get("/", async (req, res) => {
     const salesOrders = await SalesOrder.find(query)
       .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt orderDate invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount invoiceItems lastInvoicedItems invoiceSubtotal invoiceTotalTax invoiceGrandTotal invoiceOpeningBalance invoiceClosingBalance")
       .populate('salesOwner', 'name')
+      .populate('items.productId')
+      .populate('invoiceItems.productId')
+      .populate('lastInvoicedItems.productId')
       .sort({ createdAt: -1 })
       .limit(search ? 1000 : 200) // Increase limit for searches
       .lean();
@@ -592,7 +595,10 @@ router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, r
     const { id } = req.params;
     const { narration } = req.body; // ✅ Accept cancellation reason
 
-    const salesOrder = await SalesOrder.findById(id);
+    const salesOrder = await SalesOrder.findById(id)
+      .populate("items.productId")
+      .populate("invoiceItems.productId")
+      .populate("lastInvoicedItems.productId");
 
     if (!salesOrder) {
       return res.status(404).json({ success: false, message: "Sales order not found" });

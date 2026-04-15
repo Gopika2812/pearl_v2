@@ -238,7 +238,10 @@ const salesOrderSchema = new mongoose.Schema(
     // DELTA & HISTORY TRACKING
     lastInvoicedItems: [
       {
-        productId: mongoose.Schema.Types.ObjectId,
+        productId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product",
+        },
         name: String,
         hsn: String,
         qty: Number,
