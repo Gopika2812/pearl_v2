@@ -75,6 +75,10 @@ const creditNoteSchema = new mongoose.Schema(
       enum: ["Created", "Cancelled"],
       default: "Created",
     },
+    date: {
+      type: Date,
+      default: Date.now,
+    },
   },
   { timestamps: true }
 );

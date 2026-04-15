@@ -4,6 +4,7 @@ import multer from "multer";
 import XLSX from "xlsx";
 import Vendor from "../models/Vendor.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
+import PurchaseInvoice from "../models/PurchaseInvoice.js";
 import Payment from "../models/Payment.js";
 import DebitNote from "../models/DebitNote.js";
 
@@ -502,57 +503,55 @@ router.get("/:id/ledger", async (req, res) => {
     const end = endDate ? new Date(endDate) : new Date();
     end.setHours(23, 59, 59, 999);
 
-    // 1. Get current balance (This is the anchor for our backwards calculation)
+    // 1. Get current balance (anchor for backwards calculation)
     const currentBalance = (vendor.credit || 0) - (vendor.debit || 0);
 
-    // 2. Fetch ALL transactions after startDate to determine the opening balance
-    
-    // Credits: Invoices after startDate
-    const posAfterStart = await PurchaseOrder.find({
+    // 2. Fetch ALL Purchase Invoices for this vendor after startDate
+    //    Use PurchaseInvoice.createdAt (invoice generation date) — NOT PurchaseOrder.date (PO placement date)
+    const pisAfterStart = await PurchaseInvoice.find({
       branchId: vendor.branchId,
       vendor: vendor.name,
-      status: "INVOICED",
-      date: { $gte: start }
-    }).select("grandTotal date invoiceId");
+      createdAt: { $gte: start }
+    }).select("grandTotal createdAt purchaseInvoiceId poNumber").lean();
 
-    // Debits: Payments after startDate
+    // 3. Debits: Payments after startDate
     const paymentsAfterStart = await Payment.find({
       branchId: vendor.branchId,
       "vendor.vendorId": id,
       status: "completed",
       paymentDate: { $gte: start }
-    }).select("amount paymentDate paymentId paymentMethod purchaseOrder.invoiceId");
+    }).select("amount paymentDate paymentId paymentMethod purchaseOrder.invoiceId").lean();
 
-    // Debits: Debit Notes after startDate
+    // 4. Debits: Debit Notes after startDate
     const dnAfterStart = await DebitNote.find({
       branchId: vendor.branchId,
       "vendor.vendorId": id,
       status: "Created",
       createdAt: { $gte: start }
-    }).select("grandTotal createdAt debitNoteId reason");
+    }).select("grandTotal createdAt debitNoteId reason").lean();
 
     // Opening Balance = Current_Balance - (Credits after Start) + (Debits after Start)
-    const totalCreditsAfterStart = posAfterStart.reduce((sum, po) => sum + (po.grandTotal || 0), 0);
-    const totalDebitsAfterStart = 
+    const totalCreditsAfterStart = pisAfterStart.reduce((sum, pi) => sum + (pi.grandTotal || 0), 0);
+    const totalDebitsAfterStart =
       paymentsAfterStart.reduce((sum, p) => sum + (p.amount || 0), 0) +
       dnAfterStart.reduce((sum, dn) => sum + (dn.grandTotal || 0), 0);
 
     const openingBalance = currentBalance - totalCreditsAfterStart + totalDebitsAfterStart;
 
-    // 3. Filter transactions within the [start, end] range
-    const inRangePOs = posAfterStart.filter(po => po.date <= end);
-    const inRangePayments = paymentsAfterStart.filter(p => p.paymentDate <= end);
-    const inRangeDNs = dnAfterStart.filter(dn => dn.createdAt <= end);
+    // 5. Filter transactions within the [start, end] range
+    const inRangePIs = pisAfterStart.filter(pi => new Date(pi.createdAt) <= end);
+    const inRangePayments = paymentsAfterStart.filter(p => new Date(p.paymentDate) <= end);
+    const inRangeDNs = dnAfterStart.filter(dn => new Date(dn.createdAt) <= end);
 
-    // Format all transactions
+    // 6. Format all transactions
     const txns = [
-      ...inRangePOs.map(po => ({
-        id: `po-${po._id}`,
-        date: po.date,
+      ...inRangePIs.map(pi => ({
+        id: `pi-${pi._id}`,
+        date: pi.createdAt,
         type: "INVOICE",
-        particulars: `Purchase Invoice: ${po.invoiceId}`,
+        particulars: `Purchase Invoice: ${pi.purchaseInvoiceId}${pi.poNumber ? ` (PO: ${pi.poNumber})` : ""}`,
         debit: 0,
-        credit: po.grandTotal || 0
+        credit: pi.grandTotal || 0
       })),
       ...inRangePayments.map(p => ({
         id: `pay-${p._id}`,
@@ -572,7 +571,7 @@ router.get("/:id/ledger", async (req, res) => {
       }))
     ].sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    // Calculate running balance for the range
+    // 7. Calculate running balance
     let currentRunning = openingBalance;
     const txnsWithBalance = txns.map(t => {
       currentRunning = currentRunning + t.credit - t.debit;
