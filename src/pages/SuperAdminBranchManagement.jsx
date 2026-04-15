@@ -48,6 +48,7 @@ export default function SuperAdminBranchManagement() {
     stateCode: "33",
     pincode: "",
     gpayNo: "",
+    upiId: "",
     gstzenClientId: "",
     gstzenClientSecret: "",
   });
@@ -216,6 +217,7 @@ export default function SuperAdminBranchManagement() {
       isMainBranch: false,
       gstin: "",
       gpayNo: "",
+      upiId: "",
       gstzenClientId: "",
       gstzenClientSecret: "",
     });
@@ -237,6 +239,7 @@ export default function SuperAdminBranchManagement() {
       isMainBranch: branch.isMainBranch || false,
       gstin: branch.gstin || "",
       gpayNo: branch.gpayNo || "",
+      upiId: branch.upiId || "",
       gstzenClientId: branch.gstzenClientId || "",
       gstzenClientSecret: branch.gstzenClientSecret || "",
     });
@@ -747,7 +750,7 @@ export default function SuperAdminBranchManagement() {
 
                 <div className="md:col-span-2 border-t pt-4">
                   <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Branch GPay / UPI Number
+                    Branch GPay / UPI Number (for display on invoice)
                   </label>
                   <input
                     type="text"
@@ -756,6 +759,34 @@ export default function SuperAdminBranchManagement() {
                     onChange={(e) => setBranchForm({ ...branchForm, gpayNo: e.target.value })}
                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
                   />
+                </div>
+
+                <div className="md:col-span-2 border-t pt-4">
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                    📲 UPI ID for QR Code on Invoice
+                    <span className="text-xs font-normal text-gray-500">(shown as scannable QR in top-right of bill)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 9429692970@ybl or name@paytm"
+                    value={branchForm.upiId}
+                    onChange={(e) => setBranchForm({ ...branchForm, upiId: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  />
+                  {branchForm.upiId && (
+                    <div className="mt-3 flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(`upi://pay?pa=${branchForm.upiId}&pn=${branchForm.name || 'Pearl Agency'}&cu=INR`)}`}
+                        alt="UPI QR Preview"
+                        className="w-20 h-20 border border-green-300 rounded"
+                      />
+                      <div>
+                        <p className="text-xs font-bold text-green-700">QR Preview</p>
+                        <p className="text-xs text-green-600">{branchForm.upiId}</p>
+                        <p className="text-[10px] text-gray-500 mt-1">This QR will appear on all invoices for this branch</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="md:col-span-2 border-t pt-4 bg-blue-50/30 p-4 rounded-xl">

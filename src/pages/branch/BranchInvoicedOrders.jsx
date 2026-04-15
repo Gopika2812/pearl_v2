@@ -450,7 +450,7 @@ const BranchInvoicedOrders = () => {
       }
 
       const exportData = invoicedOnly.map((order) => ({
-        "Date": new Date(order.createdAt).toLocaleDateString("en-IN"),
+        "Date": new Date(order.orderDate || order.createdAt).toLocaleDateString("en-IN"),
         "Invoice ID": order.invoiceId || "-",
         "Customer Name": order.customer?.name || "-",
         "Customer WhatsApp": order.customer?.whatsapp || "-",
@@ -502,7 +502,7 @@ const BranchInvoicedOrders = () => {
       rows.push(headerRow);
 
       invoicedOnly.forEach((order) => {
-        const orderDate = new Date(order.createdAt).toLocaleDateString("en-IN");
+        const orderDate = new Date(order.orderDate || order.createdAt).toLocaleDateString("en-IN");
         const invoiceNo = order.invoiceId || order.salesInvoiceId || "-";
         const customerName = order.customer?.name || "-";
 

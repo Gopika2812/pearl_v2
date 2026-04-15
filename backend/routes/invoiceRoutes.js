@@ -255,6 +255,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         gstin: salesOrder.branchId?.gstin || "33DULPS2600Q1Z6",
         phone: salesOrder.branchId?.phone || "9429692970",
         gpayNo: salesOrder.branchId?.gpayNo || "",
+        upiId: salesOrder.branchId?.upiId || "",
         stateCode: salesOrder.branchId?.stateCode || "33",
         logo: salesOrder.branchId?.logo || "/logo.jpeg",
       },
@@ -568,6 +569,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           gstin: branch.gstin,
           phone: branch.phone || branch.contactNumber,
           gpayNo: branch.gpayNo || "",
+          upiId: branch.upiId || "",
           stateCode: branch.stateCode || "33",
         } : {};
 
@@ -677,7 +679,7 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         await session.commitTransaction();
         session.endSession();
         finalizeSuccess = true;
-        return res.json({ success: true, invoiceNumber, invoiceId: invoice._id });
+        return res.json({ success: true, invoiceNumber, invoiceId: invoice._id, invoice: invoice.toObject ? invoice.toObject() : invoice });
 
       } catch (error) {
         await session.abortTransaction();

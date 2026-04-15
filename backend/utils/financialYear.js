@@ -1,5 +1,5 @@
-export function getFinancialYear() {
-  const now = new Date();
+export function getFinancialYear(dateInput = null) {
+  const now = dateInput ? new Date(dateInput) : new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1; // Jan = 1
 

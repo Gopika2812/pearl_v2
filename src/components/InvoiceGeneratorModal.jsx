@@ -562,13 +562,16 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
         .page { width: 148mm; min-height: 210mm; padding: 6mm; margin: 0 auto; page-break-after: always; background: white; }
         .page-content { max-width: 136mm; margin: 0 auto; }
         
-        .top-header { display: flex; gap: 12px; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
+        .top-header { display: flex; gap: 12px; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; align-items: flex-start; }
         .logo-box { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 6px; flex-shrink: 0; overflow: hidden; }
         .logo-box img { width: 100%; height: 100%; object-fit: contain; }
         .company-header { flex: 1; }
         .company-name { font-size: 18px; font-weight: bold; color: #000; margin-bottom: 3px; text-transform: uppercase; }
         .company-address { font-size: 11px; color: #000; line-height: 1.3; margin-bottom: 3px; }
         .company-contact { font-size: 10px; color: #000; }
+        .upi-qr-box { flex-shrink: 0; text-align: center; }
+        .upi-qr-box img { width: 72px; height: 72px; display: block; border: 1px solid #ddd; border-radius: 4px; }
+        .upi-qr-label { font-size: 7px; color: #374151; margin-top: 2px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.3px; }
         
         .order-header { display: flex; justify-content: space-between; margin: 10px 0; font-size: 11px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 8px; color: #000; }
         .order-header-col { flex: 1; }
@@ -674,6 +677,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                     GPAY No: ${previewData?.seller?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
+                ${previewData?.seller?.upiId ? `
+                <div class="upi-qr-box">
+                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=72x72&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" alt="UPI QR" />
+                  <div class="upi-qr-label">Scan to Pay</div>
+                </div>` : ''}
               </div>
 
               <div class="section-title">📋 ORDER DETAILS</div>
@@ -715,7 +723,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
               <table>
                 <thead>
                   <tr>
-                    <th style="width: 25%;">Product Name</th>
+                    <th style="width: 5%; text-align: center;">#</th>
+                    <th style="width: 23%;">Product Name</th>
                     <th>HSN</th>
                     <th>GST</th>
                     <th style="text-align: right;">Qty</th>
@@ -725,8 +734,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0).map(item => `
+                  ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0).map((item, idx) => `
                     <tr>
+                      <td style="text-align: center; color: #64748b; font-size: 10px;">${idx + 1}</td>
                       <td style="font-weight: bold; color: #1e293b;">${item.name}</td>
                       <td style="text-align: center; color: #475569;">${item.hsn || "-"}</td>
                       <td style="text-align: center; color: #475569;">${item.gst || 0}%</td>
@@ -775,7 +785,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
               <div style="display: flex; gap: 10px;">
                    <!-- BALANCE INFO -->
                    <div class="balance-info">
-                     <div><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
+                     <div><strong>Previous Balance:</strong> ${previewData?.formattedOpeningBalance || (previewData?.openingBalance >= 0 ? '₹' + (previewData?.openingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.openingBalance || 0).toFixed(2) + ' Cr')}</div>
+                     <div style="margin-top: 4px;"><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
                    </div>
 
                   
@@ -830,6 +841,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
                     GPAY No: ${previewData?.seller?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
+                ${previewData?.seller?.upiId ? `
+                <div class="upi-qr-box">
+                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=72x72&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" alt="UPI QR" />
+                  <div class="upi-qr-label">Scan to Pay</div>
+                </div>` : ''}
               </div>
 
               <div class="section-title" style="background: #1e293b; color: #fff;">📊 HSN-WISE TAX SUMMARY</div>

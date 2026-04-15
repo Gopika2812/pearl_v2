@@ -83,6 +83,11 @@ const branchSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    upiId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     gstzenClientId: {
       type: String,
       default: "",

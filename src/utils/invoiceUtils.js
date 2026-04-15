@@ -12,12 +12,15 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
         .page { width: 148mm; min-height: 210mm; padding: 6mm; margin: 0 auto; page-break-after: always; background: white; border-bottom: 1px solid #eee; }
         .page-content { max-width: 136mm; margin: 0 auto; }
         
-        .top-header { display: flex; gap: 12px; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; }
+        .top-header { display: flex; gap: 12px; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; align-items: flex-start; }
         .logo-box { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 6px; flex-shrink: 0; overflow: hidden; }
         .logo-box img { width: 100%; height: 100%; object-fit: contain; }
         .company-header { flex: 1; }
         .company-name { font-size: 18px; font-weight: bold; color: #000; margin-bottom: 3px; text-transform: uppercase; }
         .company-address { font-size: 11px; color: #000; line-height: 1.3; margin-bottom: 3px; }
+        .upi-qr-box { flex-shrink: 0; text-align: center; }
+        .upi-qr-box img { width: 70px; height: 70px; display: block; border: 1px solid #ddd; border-radius: 4px; }
+        .upi-qr-label { font-size: 7px; color: #374151; margin-top: 2px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.3px; }
         
         .order-header { display: flex; justify-content: space-between; margin: 10px 0; font-size: 11px; border-bottom: 1px dashed #000; padding-bottom: 8px; color: #000; }
         .order-header-col { flex: 1; }
@@ -94,6 +97,11 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                     Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
                   </div>
                 </div>
+                ${previewData?.seller?.upiId ? `
+                <div class="upi-qr-box">
+                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=70x70&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" alt="UPI QR" />
+                  <div class="upi-qr-label">Scan to Pay</div>
+                </div>` : ''}
               </div>
 
               <div class="section-title">📋 ORDER DETAILS</div>
@@ -123,7 +131,8 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
               <table>
                 <thead>
                   <tr>
-                    <th style="width: 40%;">Product Name</th>
+                    <th style="width: 5%; text-align: center;">#</th>
+                    <th style="width: 37%;">Product Name</th>
                     <th>HSN</th>
                     <th style="text-align: right;">Qty</th>
                     <th style="text-align: right;">Rate</th>
@@ -131,8 +140,9 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                   </tr>
                 </thead>
                 <tbody>
-                  ${(previewData?.items || []).filter(item => item.qty > 0).map(item => `
+                  ${(previewData?.items || []).filter(item => item.qty > 0).map((item, idx) => `
                     <tr>
+                      <td style="text-align: center; color: #64748b; font-size: 10px;">${idx + 1}</td>
                       <td>${item.name}</td>
                       <td>${item.hsn || "-"}</td>
                       <td style="text-align: right;">${item.qty} ${item.unit || ""}</td>
@@ -173,7 +183,8 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
               <div class="total-section" style="display: flex; gap: 10px; margin-top: 15px;">
                 <div style="flex: 1; text-align: left;">
                   <div style="background: #f8fafc; padding: 10px; margin: 12px 0; font-size: 13px; border-left: 4px solid #000; border-radius: 4px;">
-                    <div><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
+                    <div><strong>Previous Balance:</strong> ${previewData?.formattedOpeningBalance || (previewData?.openingBalance >= 0 ? '₹' + (previewData?.openingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.openingBalance || 0).toFixed(2) + ' Cr')}</div>
+                    <div style="margin-top: 4px;"><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
                   </div>
                 </div>
 
@@ -214,6 +225,11 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                     Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
                   </div>
                 </div>
+                ${previewData?.seller?.upiId ? `
+                <div class="upi-qr-box">
+                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=70x70&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" alt="UPI QR" />
+                  <div class="upi-qr-label">Scan to Pay</div>
+                </div>` : ''}
               </div>
 
               <div class="section-title">🧾 TAX INVOICE - HSN SUMMARY</div>

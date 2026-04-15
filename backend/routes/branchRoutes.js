@@ -66,7 +66,7 @@ router.get("/:id", async (req, res) => {
 // POST: Create new branch (SUPER_ADMIN only)
 router.post("/", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
   try {
-    const { name, code, location, address, phone, email, manager, logo, color, isMainBranch, gpayNo } = req.body;
+    const { name, code, location, address, phone, email, manager, logo, color, isMainBranch, gpayNo, upiId } = req.body;
 
     if (!name || !code) {
       return res.status(400).json({
@@ -97,6 +97,7 @@ router.post("/", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
       isMainBranch: isMainBranch || false,
       gstin: req.body.gstin || "",
       gpayNo: gpayNo || "",
+      upiId: upiId || "",
     });
 
 
