@@ -446,17 +446,21 @@ router.get("/", async (req, res) => {
     const skip = (pageNum - 1) * pageSize;
 
     // Build search filter with branchId
-    const filter = search
-      ? {
-        branchId: branchObjectId,
-        $or: [
-          { name: { $regex: search, $options: "i" } },
-          { whatsapp: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
-          { gstin: { $regex: search, $options: "i" } },
-        ],
-      }
-      : { branchId: branchObjectId };
+    const { customerGroupId } = req.query;
+    const filter = { branchId: branchObjectId };
+    
+    if (customerGroupId) {
+      filter.customerGroups = customerGroupId;
+    }
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { whatsapp: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { gstin: { $regex: search, $options: "i" } },
+      ];
+    }
 
     // ⚡ Get total count
     const total = await Customer.countDocuments(filter);

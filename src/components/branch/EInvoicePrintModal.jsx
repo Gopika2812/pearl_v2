@@ -116,7 +116,8 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
 
     const irn = invoice.irn || "N/A";
     const ackNo = invoice.ackNo || "N/A";
-    const ackDate = invoice.ackDate ? new Date(invoice.ackDate).toLocaleString() : "N/A";
+    const ackDate = invoice.ackDate ? new Date(invoice.ackDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "N/A";
+
     
     let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">${style}</head><body>`;
 
@@ -145,7 +146,8 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
               <div style="text-align: right; flex: 1;">
                  <span class="meta-label">${invoice.creditNoteId ? "Credit Note" : "Invoice"} Details</span>
                  <div class="meta-value">${invoice.invoiceNumber || invoice.creditNoteId}</div>
-                 <div class="meta-value" style="font-size: 11px;">Date: ${new Date(invoice.invoiceDate || invoice.date).toLocaleDateString()}</div>
+                 <div class="meta-value" style="font-size: 11px;">Date: ${new Date(invoice.invoiceDate || invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+
               </div>
             </div>
           </div>
@@ -244,7 +246,8 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
         </div>
 
         <div class="certification">This is a system generated e-invoice authorized by Govt of India GST Tax Portal. No physical signature is required.</div>
-        <div class="footer">Powered by PEARL ERP | ${seller.name} | Generated on ${new Date().toLocaleString()}</div>
+        <div class="footer">Powered by PEARL ERP | ${seller.name} | Generated on ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+
       </div>
     `;
 
@@ -301,7 +304,8 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
                   <div className="text-right">
                     <span className="text-gray-400 block font-bold uppercase tracking-widest text-[9px]">Ack Details</span>
                     <div className="font-bold text-gray-800">{invoice.ackNo || "N/A"}</div>
-                    <div className="text-gray-500 font-black tracking-tighter">{invoice.ackDate ? new Date(invoice.ackDate).toLocaleDateString() : ""}</div>
+                    <div className="text-gray-500 font-black tracking-tighter">{invoice.ackDate ? new Date(invoice.ackDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ""}</div>
+
                   </div>
                 </div>
               </div>
