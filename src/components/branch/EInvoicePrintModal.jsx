@@ -137,14 +137,15 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
                 <span class="meta-label">Bill To</span>
                 <div class="meta-value" style="font-size: 13px;">${invoice.customer?.name}</div>
                 <div class="company-details">
-                  ${invoice.customer?.address} <br/>
+                  ${invoice.customer?.address || "Address Not Provided"} <br/>
+                  ${invoice.customer?.district ? `${invoice.customer.district}, ` : ""}${invoice.customer?.state || "Tamil Nadu"} ${invoice.customer?.pincode || ""} <br/>
                   GSTIN: <strong>${invoice.customer?.gstin || "URP"}</strong> | Pos: ${invoice.customer?.stateCode || "33"}
                 </div>
               </div>
               <div style="text-align: right; flex: 1;">
-                 <span class="meta-label">Invoice Details</span>
-                 <div class="meta-value">${invoice.invoiceNumber}</div>
-                 <div class="meta-value" style="font-size: 11px;">Date: ${new Date(invoice.invoiceDate).toLocaleDateString()}</div>
+                 <span class="meta-label">${invoice.creditNoteId ? "Credit Note" : "Invoice"} Details</span>
+                 <div class="meta-value">${invoice.invoiceNumber || invoice.creditNoteId}</div>
+                 <div class="meta-value" style="font-size: 11px;">Date: ${new Date(invoice.invoiceDate || invoice.date).toLocaleDateString()}</div>
               </div>
             </div>
           </div>
@@ -155,7 +156,7 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
           </div>
         </div>
 
-        <div class="invoice-title">TAX INVOICE</div>
+        <div class="invoice-title">${invoice.creditNoteId ? "CREDIT NOTE" : "TAX INVOICE"}</div>
 
         <div class="meta-grid">
           <div class="meta-box">
@@ -185,17 +186,24 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
             </tr>
           </thead>
           <tbody>
-            ${invoice.items.map((item, idx) => `
-              <tr>
-                <td class="text-center">${idx + 1}</td>
-                <td style="font-weight: bold;">${item.name}</td>
-                <td class="text-center">${item.hsn || "-"}</td>
-                <td class="text-right">${item.qty} ${item.unit} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
-                <td class="text-right">₹${item.sellingPrice?.toFixed(2)}</td>
-                <td class="text-center">${item.gst}%</td>
-                <td class="text-right font-bold">₹${item.total?.toFixed(2)}</td>
-              </tr>
-            `).join("")}
+             ${invoice.items
+               .filter(item => item.qty > 0) // 🔥 Do not print zero value products
+               .map((item, idx) => {
+               const qtyDisplay = `${item.qty} ${item.unit || "NOS"}`;
+               const rate = item.sellingPrice || 0;
+               const total = item.total || 0;
+               return `
+                 <tr>
+                   <td class="text-center">${idx + 1}</td>
+                   <td style="font-weight: bold;">${item.name}</td>
+                   <td class="text-center">${item.hsn || item.productId?.hsnCode || "-"}</td>
+                   <td class="text-right">${qtyDisplay} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
+                   <td class="text-right">₹${rate.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                   <td class="text-center">${item.gst || 0}%</td>
+                   <td class="text-right font-bold">₹${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                 </tr>
+               `;
+             }).join("")}
           </tbody>
         </table>
 
@@ -210,15 +218,15 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
               <table class="totals-table">
                 <tr>
                   <td>Taxable Value:</td>
-                  <td class="text-right">₹${invoice.subtotal?.toFixed(2)}</td>
+                  <td class="text-right">₹${(invoice.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                 </tr>
                 <tr>
                   <td>CGST:</td>
-                  <td class="text-right">₹${(invoice.totalTax?.cgst || 0).toFixed(2)}</td>
+                  <td class="text-right">₹${(typeof invoice.totalTax === 'object' ? (invoice.totalTax?.cgst || 0) : (invoice.totalTax || 0) / 2).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                 </tr>
                 <tr>
                   <td>SGST:</td>
-                  <td class="text-right">₹${(invoice.totalTax?.sgst || 0).toFixed(2)}</td>
+                  <td class="text-right">₹${(typeof invoice.totalTax === 'object' ? (invoice.totalTax?.sgst || 0) : (invoice.totalTax || 0) / 2).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                 </tr>
                 ${invoice.totalTax?.igst > 0 ? `<tr><td>IGST:</td><td class="text-right">₹${invoice.totalTax.igst.toFixed(2)}</td></tr>` : ""}
                 ${invoice.transportCharge > 0 ? `<tr><td>Transport:</td><td class="text-right">₹${invoice.transportCharge.toFixed(2)}</td></tr>` : ""}
@@ -253,7 +261,7 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
               <FaDownload size={24} />
             </div>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight text-white mb-0">TAX INVOICE Preview</h2>
+              <h2 className="text-xl font-black uppercase tracking-tight text-white mb-0">${invoice.creditNoteId ? "CREDIT NOTE" : "TAX INVOICE"} Preview</h2>
               <p className="text-[10px] opacity-70 font-bold uppercase tracking-widest m-0">Standardized E-Invoice Format</p>
             </div>
           </div>
@@ -323,7 +331,7 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
             className="flex items-center gap-3 bg-[#319bab] text-white border-0 px-10 py-4 rounded-2xl hover:bg-slate-800 transition-all font-black text-sm shadow-[#319bab]/20 shadow-xl scale-110 cursor-pointer"
           >
             {loading ? <FaSpinner className="animate-spin" /> : <FaPrint />}
-            PRINT TAX INVOICE
+            PRINT ${invoice.creditNoteId ? "CREDIT NOTE" : "TAX INVOICE"}
           </button>
         </div>
       </div>

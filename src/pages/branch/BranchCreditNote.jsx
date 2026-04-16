@@ -1,17 +1,21 @@
-import { useEffect, useState } from "react";
-import { FaPlus, FaUndoAlt, FaSearch, FaFileInvoiceDollar, FaChevronDown, FaChevronUp } from "react-icons/fa";
+import React, { useEffect, useState } from "react";
+import { FaPlus, FaUndoAlt, FaSearch, FaFileInvoiceDollar, FaChevronDown, FaChevronUp, FaFileContract, FaPrint, FaTruck, FaSpinner, FaFilePdf } from "react-icons/fa";
 import { toast } from "react-toastify";
-import CustomerCreditNoteModal from "../../components/inventory/CustomerCreditNoteModal"; // Use this for standalone/unified
+import CustomerCreditNoteModal from "../../components/inventory/CustomerCreditNoteModal";
 import { useBranch } from "../../context/BranchContext";
 import { API_BASE, fetchWithAuth } from "../../api";
+import EInvoicePrintModal from "../../components/branch/EInvoicePrintModal";
 
 export default function BranchCreditNote() {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const [creditNotes, setCreditNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedCN, setExpandedCN] = useState({});
+  const [requestingAction, setRequestingAction] = useState(null);
+  const [showEInvoiceModal, setShowEInvoiceModal] = useState(null);
+  const [showTransportModal, setShowTransportModal] = useState(null);
 
   useEffect(() => {
     if (currentBranch?._id) fetchCreditNotes();
@@ -33,6 +37,8 @@ export default function BranchCreditNote() {
     }
   };
 
+  const formatDate = (date) => new Date(date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
   const toggleExpand = (id) => {
     setExpandedCN(prev => ({ ...prev, [id]: !prev[id] }));
   };
@@ -42,7 +48,43 @@ export default function BranchCreditNote() {
     cn.customer?.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const formatDate = (date) => new Date(date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const handleGenerateEInvoice = async (cn, transportDetails = null) => {
+    // Check if transport details are required (>50k or as needed)
+    if (cn.grandTotal > 50000 && !transportDetails && !cn.ewayBillNo) {
+      setShowTransportModal(cn);
+      return;
+    }
+
+    if (!transportDetails && !window.confirm(`Generate E-Invoice for ${cn.creditNoteId}?`)) {
+      return;
+    }
+
+    setRequestingAction(cn._id);
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/credit-notes/generate-einvoice/${cn._id}`, {
+        method: "POST",
+        body: JSON.stringify({
+          userId: user?.id || user?._id,
+          username: user?.username || user?.fullName || "Staff",
+          transportDetails: transportDetails
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`✅ E-Invoice ${data.data.ewayBillNo ? "& E-Way Bill " : ""}Generated Successfully`);
+        setShowTransportModal(null);
+        fetchCreditNotes();
+      } else {
+        toast.error(`❌ Error: ${data.error || data.message || "Failed to generate"}`);
+      }
+    } catch (err) {
+      console.error("Error:", err);
+      toast.error("Error generating E-Invoice: " + err.message);
+    } finally {
+      setRequestingAction(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
@@ -114,9 +156,10 @@ export default function BranchCreditNote() {
                     <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>
                     <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Customer</th>
                     <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Items</th>
-                    <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
                     <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Invoice Ref</th>
-                    <th className="px-10 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Details</th>
+                    <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">E-Invoice</th>
+                    <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -135,13 +178,43 @@ export default function BranchCreditNote() {
                                 {cn.originalInvoiceId}
                             </span>
                         </td>
-                        <td className="px-10 py-5 text-center">
-                            <button 
-                              onClick={() => toggleExpand(cn._id)}
-                              className="p-2 hover:bg-white rounded-xl text-teal-600 transition-all shadow-sm group-hover:shadow-md"
-                            >
-                                {expandedCN[cn._id] ? <FaChevronUp /> : <FaChevronDown />}
-                            </button>
+                        <td className="px-6 py-5 text-center">
+                            {cn.einvoiceStatus === "GENERATED" ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="bg-green-100 text-green-700 font-black text-[9px] px-2 py-0.5 rounded-full border border-green-200 uppercase">Generated</span>
+                                {cn.ewayBillNo && <span className="bg-blue-100 text-blue-700 font-black text-[9px] px-2 py-0.5 rounded-full border border-blue-200 uppercase">E-Way Bill</span>}
+                              </div>
+                            ) : (
+                              <span className="bg-gray-100 text-gray-400 font-black text-[9px] px-2 py-0.5 rounded-full border border-gray-200 uppercase">Not Generated</span>
+                            )}
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {cn.einvoiceStatus === "GENERATED" ? (
+                                <button 
+                                  onClick={() => setShowEInvoiceModal(cn)}
+                                  className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 transition shadow-sm"
+                                  title="View E-Invoice PDF"
+                                >
+                                  <FaFilePdf size={14} />
+                                </button>
+                              ) : (
+                                <button 
+                                  onClick={() => handleGenerateEInvoice(cn)}
+                                  disabled={requestingAction === cn._id}
+                                  className="p-2 bg-teal-50 text-teal-600 rounded-xl hover:bg-teal-100 transition shadow-sm disabled:opacity-50"
+                                  title="Generate E-Invoice"
+                                >
+                                  {requestingAction === cn._id ? <FaSpinner className="animate-spin" size={14} /> : <FaPrint size={14} />}
+                                </button>
+                              )}
+                              <button 
+                                onClick={() => toggleExpand(cn._id)}
+                                className="p-2 bg-gray-50 text-gray-400 rounded-xl hover:bg-gray-100 transition shadow-sm"
+                              >
+                                  {expandedCN[cn._id] ? <FaChevronUp size={14} /> : <FaChevronDown size={14} />}
+                              </button>
+                            </div>
                         </td>
                       </tr>
                       {expandedCN[cn._id] && (
@@ -184,8 +257,129 @@ export default function BranchCreditNote() {
         onCreditSuccess={fetchCreditNotes}
         // No customer passed = allow selection in modal
       />
+
+      {/* E-Invoice Document Modal */}
+      {showEInvoiceModal && (
+        <EInvoicePrintModal 
+          invoice={showEInvoiceModal} 
+          onClose={() => setShowEInvoiceModal(null)} 
+        />
+      )}
+
+      {/* Transport Details Modal */}
+      {showTransportModal && (
+        <TransportDetailsModal 
+          invoice={showTransportModal} 
+          onClose={() => setShowTransportModal(null)} 
+          onConfirm={(details) => handleGenerateEInvoice(showTransportModal, details)}
+        />
+      )}
     </div>
   );
 }
 
-import React from "react";
+const TransportDetailsModal = ({ invoice, onClose, onConfirm }) => {
+  const [details, setDetails] = useState({
+    vehicleNo: invoice.vehicleNo || "",
+    transportMode: invoice.transportMode || "1",
+    transportDistance: invoice.transportDistance || 50,
+    vehicleType: invoice.vehicleType || "REGULAR",
+    transporterId: invoice.transporterId || "",
+    transporterName: invoice.transporterName || ""
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 text-center">
+      <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 text-left">
+        <div className="p-6 bg-teal-600 text-white text-center">
+          <h3 className="text-xl font-black uppercase tracking-tight flex items-center justify-center gap-2">
+            <FaTruck /> Transport Details Required
+          </h3>
+          <p className="text-xs opacity-90 mt-1 font-bold">Mandatory for E-Way Bill (Value {">"} ₹50,000)</p>
+        </div>
+
+        <div className="p-8 space-y-5">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black uppercase text-gray-400 ml-1 font-inter">Transport Mode</label>
+              <select
+                value={details.transportMode}
+                onChange={(e) => setDetails({ ...details, transportMode: e.target.value })}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-teal-500"
+              >
+                <option value="1">Road</option>
+                <option value="2">Rail</option>
+                <option value="3">Air</option>
+                <option value="4">Ship</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black uppercase text-gray-400 ml-1 font-inter">Vehicle Number</label>
+              <input
+                type="text"
+                placeholder="TN01AB1234"
+                value={details.vehicleNo}
+                onChange={(e) => setDetails({ ...details, vehicleNo: e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase() })}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-teal-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black uppercase text-gray-400 ml-1 font-inter">Distance (approx KM)</label>
+              <input
+                type="number"
+                placeholder="50"
+                value={details.transportDistance}
+                onChange={(e) => setDetails({ ...details, transportDistance: e.target.value })}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-teal-500"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black uppercase text-gray-400 ml-1 font-inter">Vehicle Type</label>
+              <select
+                value={details.vehicleType}
+                onChange={(e) => setDetails({ ...details, vehicleType: e.target.value })}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-teal-500"
+              >
+                <option value="REGULAR">Regular</option>
+                <option value="OVERSIZED">Oversized</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-black uppercase text-gray-400 ml-1 font-inter">Transporter GSTIN (Optional)</label>
+            <input
+              type="text"
+              placeholder="33XXXXX..."
+              value={details.transporterId}
+              onChange={(e) => setDetails({ ...details, transporterId: e.target.value.toUpperCase() })}
+              className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-teal-500"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 pt-6 border-t border-gray-50">
+            <button
+              onClick={onClose}
+              className="flex-1 px-6 py-4 rounded-2xl font-black text-xs text-gray-400 hover:bg-gray-50 transition"
+            >
+              CANCEL
+            </button>
+            <button
+              onClick={() => {
+                if (!details.vehicleNo) return toast.warning("Vehicle Number is required");
+                onConfirm(details);
+              }}
+              className="flex-1 bg-teal-600 text-white px-6 py-4 rounded-2xl font-black text-xs shadow-xl shadow-teal-100 hover:bg-teal-700 transition"
+            >
+              GENERATE NOW
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+

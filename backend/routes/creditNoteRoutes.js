@@ -11,6 +11,7 @@ import SalesOwner from "../models/SalesOwner.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import GLService from "../utils/glService.js";
+import gstzenService from "../utils/gstzenService.js";
 
 import { createAuditLog } from "../utils/logUtil.js";
 
@@ -145,7 +146,50 @@ router.get("/", async (req, res) => {
     }
 
     const creditNotes = await CreditNote.find({ branchId })
+      .populate("branchId")
       .sort({ createdAt: -1 });
+
+    // ⚡ LIVE REPAIR: Ensure all notes have addresses and GSTIN snapshots
+    // This fixes older records on-the-fly when viewed in the list
+    for (let cn of creditNotes) {
+      let changed = false;
+      if (!cn.seller?.gstin || cn.customer?.address === "Address Not Provided" || !cn.customer?.gstin || cn.customer.gstin === "URP") {
+        const branch = cn.branchId;
+        const customer = await Customer.findById(cn.customer?.customerId);
+        
+        if (branch && (!cn.seller?.gstin || !cn.seller?.address)) {
+          cn.seller = {
+            name: branch.name || "PEARL AGENCY",
+            address: branch.address || "Address Not Provided",
+            gstin: branch.gstin || "N/A",
+            state: branch.state || "TAMIL NADU",
+            stateCode: branch.stateCode || "33",
+            pincode: branch.pincode || "",
+            phone: branch.phone || "",
+          };
+          changed = true;
+        }
+
+        if (customer && (!cn.customer?.address || !cn.customer?.gstin || cn.customer.gstin === "URP")) {
+          cn.customer = {
+            customerId: customer._id,
+            name: customer.name,
+            address: customer.address || "",
+            gstin: (customer.gstin && customer.gstin.trim()) ? customer.gstin : "URP",
+            state: customer.state || "TAMIL NADU",
+            stateCode: customer.stateCode || "33",
+            pincode: customer.pincode || "",
+            district: customer.district || "",
+          };
+          changed = true;
+        }
+
+        if (changed) {
+          await cn.save();
+          console.log(`✅ [LIST REPAIR] Fixed snapshots for ${cn.creditNoteId}`);
+        }
+      }
+    }
 
     res.json({ success: true, data: creditNotes });
   } catch (error) {
@@ -268,7 +312,7 @@ router.post("/", async (req, res) => {
     let totalTax = 0;
     let grandTotal = 0;
 
-    const returnedItems = items.map(item => {
+    const returnedItems = items.filter(item => item.qty > 0).map(item => {
       const sPrice = Number(item.sellingPrice || 0);
       const qty = Number(item.qty || 0);
       const discountP = Number(item.discountPercent || 0);
@@ -288,13 +332,15 @@ router.post("/", async (req, res) => {
       return {
         productId: item.productId,
         name: item.name,
+        hsn: item.hsn || "",
+        unit: item.unit || "NOS",
         qty: qty,
         sellingPrice: sPrice,
         discountType: item.discountType || "PERCENT",
         discountPercent: discountP,
         discountAmount: itemDiscount,
         gst: gstRate,
-        tax: itemTax, // ✨ Added for GL/Accounting consistency
+        tax: itemTax,
         cgst: item.igst ? 0 : itemTax / 2,
         sgst: item.igst ? 0 : itemTax / 2,
         igst: item.igst ? itemTax : 0,
@@ -305,6 +351,9 @@ router.post("/", async (req, res) => {
     const financialYear = getFinancialYear();
     const creditNoteId = await generateBranchSpecificCNId(finalBranchId, financialYear);
 
+    const Branch = mongoose.model("Branch");
+    const branch = await Branch.findById(finalBranchId);
+
     // Create credit note
     const creditNote = new CreditNote({
       creditNoteId,
@@ -314,6 +363,21 @@ router.post("/", async (req, res) => {
       customer: {
         customerId: customer._id,
         name: customer.name,
+        address: customer.address || "",
+        gstin: customer.gstin || "URP",
+        state: customer.state || "TAMIL NADU",
+        stateCode: customer.stateCode || "33",
+        pincode: customer.pincode || "",
+        district: customer.district || "",
+      },
+      seller: {
+        name: branch?.name || "",
+        address: branch?.address || "",
+        gstin: branch?.gstin || "",
+        state: branch?.state || "TAMIL NADU",
+        stateCode: branch?.stateCode || "33",
+        pincode: branch?.pincode || "",
+        phone: branch?.phone || "",
       },
       items: returnedItems,
       subtotal: Math.round(subtotal),
@@ -527,6 +591,204 @@ router.delete("/:id", async (req, res) => {
   } catch (error) {
     console.error("Delete error:", error);
     res.status(500).json({ success: false, message: "Failed to delete credit note" });
+  }
+});
+
+// ==========================================
+// 🚀 E-INVOICE & E-WAY BILL GENERATION (GSTZEN)
+// ==========================================
+
+/**
+ * POST /api/credit-notes/generate-einvoice/:id
+ * Generates E-Invoice IRN + E-Way Bill using GSTZen API for a Credit Note
+ */
+router.post("/generate-einvoice/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, username, transportDetails } = req.body;
+
+    const creditNote = await CreditNote.findById(id)
+      .populate("branchId")
+      .populate("customer.customerId")
+      .populate("items.productId");
+
+    if (!creditNote) {
+      return res.status(404).json({ success: false, message: "Credit Note not found" });
+    }
+
+    console.log(`\n🔄 Processing Credit Note E-Invoice: ${creditNote.creditNoteId}`);
+
+    // Update transport details if provided
+    if (transportDetails) {
+      creditNote.vehicleNo = transportDetails.vehicleNo || creditNote.vehicleNo;
+      creditNote.transportMode = transportDetails.transportMode || creditNote.transportMode || "1";
+      creditNote.transportDistance = Number(transportDetails.transportDistance || 50);
+      creditNote.vehicleType = transportDetails.vehicleType || creditNote.vehicleType || "REGULAR";
+      await creditNote.save();
+    }
+
+    // ⚡ LIVE REPAIR: Ensure model consistency for older notes being processed
+    // Fetch Branch and Customer to fill in missing printable details
+    const branch = creditNote.branchId;
+    const customerId = creditNote.customer?.customerId;
+    const customer = await Customer.findById(customerId);
+
+    console.log(`🔍 [CN REPAIR] Processing ${creditNote.creditNoteId}. Customer Match: ${customer ? 'YES' : 'NO'} (${customerId})`);
+
+    if (branch) {
+      creditNote.seller = {
+        name: branch.name || "PEARL AGENCY",
+        address: branch.address || "Address Not Provided",
+        gstin: branch.gstin || "N/A",
+        state: branch.state || "TAMIL NADU",
+        stateCode: branch.stateCode || "33",
+        pincode: branch.pincode || "",
+        phone: branch.phone || "",
+      };
+    }
+    
+    if (customer) {
+      console.log(`✅ [CN REPAIR] Updating customer snapshot for: ${customer.name}. GSTIN: ${customer.gstin}`);
+      creditNote.customer = {
+        customerId: customer._id,
+        name: customer.name,
+        address: customer.address || "",
+        gstin: (customer.gstin && customer.gstin.trim()) ? customer.gstin : "URP",
+        state: customer.state || "TAMIL NADU",
+        stateCode: customer.stateCode || "33",
+        pincode: customer.pincode || "",
+        district: customer.district || "",
+      };
+    }
+
+    // ⚡ LIVE REPAIR: Refresh items with HSN/Unit from Product if missing
+    for (const item of creditNote.items) {
+      if (!item.hsn || !item.unit) {
+        const product = await Product.findById(item.productId);
+        if (product) {
+          item.hsn = (item.hsn && item.hsn !== "-") ? item.hsn : (product.hsnCode || "21050000");
+          item.unit = (item.unit && item.unit !== "undefined") ? item.unit : (product.unit || "NOS");
+        }
+      }
+    }
+
+    await creditNote.save();
+    console.log(`💾 [CN REPAIR] Record saved successfully.`);
+
+    // Call GSTZen Service for Credit Note (docType: "CRN")
+    let eInvoiceResult;
+    try {
+      eInvoiceResult = await gstzenService.generateEInvoice(creditNote, "CRN");
+    } catch (gstError) {
+      return res.status(400).json({
+        success: false,
+        message: "E-Invoice generation failed",
+        error: gstError.message
+      });
+    }
+
+    if (!eInvoiceResult || !eInvoiceResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Failed to generate E-Invoice",
+        error: eInvoiceResult?.message || "Unknown error"
+      });
+    }
+
+    // Update credit note with E-Invoice details
+    creditNote.einvoiceStatus = "GENERATED";
+    creditNote.irn = eInvoiceResult.irn;
+    creditNote.ackNo = eInvoiceResult.ackNo;
+    creditNote.ackDate = eInvoiceResult.ackDate;
+    creditNote.signedInvoice = eInvoiceResult.signedInvoice;
+    creditNote.signedQrCode = eInvoiceResult.signedQrCode;
+
+    // E-Way Bill details
+    if (eInvoiceResult.ewayBillNo) {
+      creditNote.ewayBillNo = eInvoiceResult.ewayBillNo;
+      creditNote.ewayBillDate = eInvoiceResult.ewayBillDate;
+      creditNote.ewayBillValidUntil = eInvoiceResult.ewayBillValidUntil;
+    }
+
+    // PDF & QR URLs
+    creditNote.invoicePdfUrl = eInvoiceResult.invoicePdfUrl;
+    creditNote.ewayBillPdfUrl = eInvoiceResult.ewayBillPdfUrl;
+    creditNote.qrCodeUrl = eInvoiceResult.qrCodeUrl;
+    creditNote.signedQrCodeImgUrl = eInvoiceResult.signedQrCodeImgUrl;
+
+    await creditNote.save();
+
+    // Audit Log
+    try {
+      await createAuditLog({
+        userId: userId || "System",
+        username: username || "System",
+        branchId: creditNote.branchId,
+        action: "GENERATE_CN_EINVOICE",
+        description: `E-Invoice (CRN): ${creditNote.creditNoteId}, IRN: ${creditNote.irn}`,
+        targetId: creditNote._id,
+        targetModel: "CreditNote"
+      });
+    } catch (logErr) { console.warn("Audit log failed"); }
+
+    res.json({
+      success: true,
+      message: "Credit Note E-Invoice generated successfully",
+      data: creditNote
+    });
+
+  } catch (error) {
+    console.error("❌ Credit Note E-Invoice Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/credit-notes/generate-ewb-only/:id
+ * Generates only E-Way Bill for an already generated IRN on a Credit Note
+ */
+router.post("/generate-ewb-only/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { transportDetails } = req.body;
+
+    const creditNote = await CreditNote.findById(id).populate("branchId");
+    if (!creditNote || !creditNote.irn) {
+      return res.status(400).json({ message: "Valid IRN is required for E-Way Bill" });
+    }
+
+    if (transportDetails) {
+      creditNote.vehicleNo = transportDetails.vehicleNo || creditNote.vehicleNo;
+      creditNote.transportMode = transportDetails.transportMode || creditNote.transportMode || "1";
+      creditNote.transportDistance = Number(transportDetails.transportDistance || 50);
+      creditNote.vehicleType = transportDetails.vehicleType || creditNote.vehicleType || "REGULAR";
+      await creditNote.save();
+    }
+
+    const ewbResult = await gstzenService.generateEWayBill(creditNote, { irn: creditNote.irn }, "CRN");
+
+    if (ewbResult.success) {
+      creditNote.ewayBillNo = ewbResult.ewayBillNo;
+      creditNote.ewayBillDate = ewbResult.ewayBillDate;
+      creditNote.ewayBillValidUntil = ewbResult.ewayBillValidUntil;
+      creditNote.ewayBillPdfUrl = ewbResult.ewayBillPdfUrl;
+      await creditNote.save();
+
+      res.json({
+        success: true,
+        message: "E-Way Bill generated successfully",
+        data: creditNote
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: ewbResult.message || "E-Way Bill failed",
+        details: ewbResult.raw
+      });
+    }
+  } catch (error) {
+    console.error("❌ CN EWB Error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

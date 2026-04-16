@@ -36,8 +36,10 @@ class GSTZenService {
 
   /**
    * Generates E-Invoice (IRN) and optionally E-Way Bill
+   * @param {Object} invoiceData The document data
+   * @param {String} docType "INV" for Invoice, "CRN" for Credit Note, "DBN" for Debit Note
    */
-  async generateEInvoice(invoiceData) {
+  async generateEInvoice(invoiceData, docType = "INV") {
     try {
       console.log("\n🚀 Generating E-Invoice IRN...");
 
@@ -57,9 +59,10 @@ class GSTZenService {
         }
       }
 
-      // 🛡️ INVOICE NUMBER LENGTH PRE-CHECK
-      if (String(invoiceData.invoiceNumber).length > 16) {
-        throw new Error(`Invoice Number "${invoiceData.invoiceNumber}" is too long (${invoiceData.invoiceNumber.length} chars). Max 16 allowed for E-Invoicing.`);
+      // 🛡️ DOCUMENT NUMBER LENGTH PRE-CHECK
+      const docNo = String(invoiceData.invoiceNumber || invoiceData.creditNoteId || "");
+      if (docNo.length > 16) {
+        throw new Error(`Document Number "${docNo}" is too long (${docNo.length} chars). Max 16 allowed for E-Invoicing.`);
       }
 
       const sellerGstin = invoiceData.seller?.gstin || invoiceData.branchId?.gstin || "33DULPS2600Q1Z6";
@@ -236,7 +239,7 @@ class GSTZenService {
       const payload = {
         Version: "1.1",
         TranDtls: { TaxSch: "GST", SupTyp: isB2C ? "B2C" : "B2B", RegRev: "N", IgstOnIntra: "N" },
-        DocDtls: { Typ: "INV", No: String(invoiceData.invoiceNumber), Dt: this.formatDate(invoiceData.invoiceDate) },
+        DocDtls: { Typ: docType, No: docNo, Dt: this.formatDate(invoiceData.invoiceDate || invoiceData.date) },
         SellerDtls: {
           Gstin: sellerGstin, LglNm: String(invoiceData.seller?.name || invoiceData.branchId?.name || "Seller"),
           Addr1: String(invoiceData.seller?.address || invoiceData.branchId?.address || "Address"),
@@ -323,7 +326,7 @@ class GSTZenService {
   /**
    * Identical robust logic for standalone e-way bill update
    */
-  async generateEWayBill(invoiceData, irnData) {
+  async generateEWayBill(invoiceData, irnData, docType = "INV") {
     try {
       const now = new Date().toLocaleTimeString();
       console.log(`\n🚚 [${now}] FORCING Standalone E-Way Bill Update...`);
@@ -337,9 +340,9 @@ class GSTZenService {
         // Including TranDtls and DocDtls forces GSTZen to treat this as a fresh validation attempt
         TranDtls: { TaxSch: "GST", SupTyp: "B2B", RegRev: "N", IgstOnIntra: "N" },
         DocDtls: {
-          Typ: "INV",
-          No: String(invoiceData.invoiceNumber),
-          Dt: this.formatDate(invoiceData.invoiceDate)
+          Typ: docType,
+          No: String(invoiceData.invoiceNumber || invoiceData.creditNoteId),
+          Dt: this.formatDate(invoiceData.invoiceDate || invoiceData.date)
         },
         SellerDtls: { Gstin: invoiceData.seller?.gstin || invoiceData.branchId?.gstin || "33DULPS2600Q1Z6" },
         EwbDtls: {

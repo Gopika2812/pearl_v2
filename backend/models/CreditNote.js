@@ -26,7 +26,24 @@ const creditNoteSchema = new mongoose.Schema(
         required: true,
       },
       name: String,
+      address: String,
+      district: String,
+      state: String,
+      stateCode: String,
+      pincode: String,
+      gstin: String,
       closingBalance: Number,
+    },
+    
+    // Seller Details
+    seller: {
+      name: String,
+      address: String,
+      state: String,
+      pincode: String,
+      gstin: String,
+      phone: String,
+      stateCode: String,
     },
     
     // Returned Items
@@ -38,6 +55,8 @@ const creditNoteSchema = new mongoose.Schema(
           required: true,
         },
         name: String,
+        hsn: String,
+        unit: String,
         qty: Number,
         sellingPrice: Number,
         discountType: String,
@@ -79,6 +98,36 @@ const creditNoteSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+
+    // E-Invoice & E-Way Bill Details
+    einvoiceStatus: {
+      type: String,
+      enum: ["NOT_GENERATED", "GENERATED", "CANCELLED", "FAILED"],
+      default: "NOT_GENERATED",
+    },
+    irn: String,
+    ackNo: String,
+    ackDate: String,
+    qrCodeUrl: String,
+    signedInvoice: String,
+    signedQrCode: String,
+    
+    ewayBillNo: String,
+    ewayBillDate: String,
+    ewayBillValidUntil: String,
+
+    // PDF URLs from GSTZen
+    invoicePdfUrl: String,
+    ewayBillPdfUrl: String,
+    signedQrCodeImgUrl: String,
+
+    // Transport Details for E-Way Bill
+    transportMode: { type: String, default: "1" },
+    transportDistance: { type: Number, default: 0 },
+    vehicleNo: { type: String, default: "" },
+    vehicleType: { type: String, enum: ["REGULAR", "OVERSIZED"], default: "REGULAR" },
+    transporterId: { type: String, default: "" },
+    transporterName: { type: String, default: "" },
   },
   { timestamps: true }
 );
