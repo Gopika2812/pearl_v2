@@ -4,7 +4,7 @@ import { useBranch } from "../../context/BranchContext";
 import FilterableSelect from "../../components/FilterableSelect";
 import FilterableCheckboxList from "../../components/FilterableCheckboxList";
 import { toast, ToastContainer } from "react-toastify";
-import { FaSave, FaBoxOpen, FaLink, FaTag, FaChartLine, FaEdit, FaTrash, FaTimes, FaSearch } from "react-icons/fa";
+import { FaSave, FaBoxOpen, FaLink, FaTag, FaChartLine, FaEdit, FaTrash, FaTimes, FaSearch, FaSync } from "react-icons/fa";
 
 const inputClass = "w-full border border-gray-100 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-all bg-white shadow-sm hover:border-emerald-200 text-sm";
 const labelClass = "block text-[13px] font-black text-slate-500 mb-2 uppercase tracking-widest";
