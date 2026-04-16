@@ -136,6 +136,9 @@ const BranchSidebar = ({ isOpen, onClose }) => {
         {isOpen && (
           <div className={`mt-1 ml-4 space-y-1 pl-3 border-l-2 border-white/20 overflow-hidden transition-opacity duration-300 ${!isMobile ? "opacity-0 group-hover:opacity-100" : ""}`}>
             {allowedSubItems.map((sub) => {
+              if (sub.isDropdown) {
+                return renderDropdown(sub, isMobile);
+              }
               const active = location.pathname === sub.path;
               return (
                 <Link

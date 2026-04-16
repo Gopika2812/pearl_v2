@@ -1,9 +1,36 @@
-import { FaHome } from "react-icons/fa";
+import { useState, useEffect } from "react";
+import { FaHome, FaPhone, FaCalendarCheck, FaClock } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import { useBranch } from "../../context/BranchContext";
+import { API_BASE } from "../../api";
 
 export default function BranchHome() {
-  const { branch, user } = useBranch();
+  const { branch, user, currentBranch } = useBranch();
+  const [reminders, setReminders] = useState([]);
+  const [loadingReminders, setLoadingReminders] = useState(false);
+
+  useEffect(() => {
+    if (currentBranch?._id) {
+      fetchReminders();
+    }
+  }, [currentBranch?._id]);
+
+  const fetchReminders = async () => {
+    setLoadingReminders(true);
+    try {
+      const res = await fetch(`${API_BASE}/follow-ups/reminders?branchId=${currentBranch._id}`, {
+        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setReminders(data.data || []);
+      }
+    } catch (err) {
+      console.error("Error fetching reminders:", err);
+    } finally {
+      setLoadingReminders(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 pt-20 md:pt-4 md:pl-20 px-4 md:px-6 pb-10">
@@ -30,33 +57,95 @@ export default function BranchHome() {
                   View Insights
                 </Link>
               </div>
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="bg-white/10 rounded-xl p-4">
-                  <p className="text-xs text-blue-100 font-semibold mb-1">Branch Code</p>
-                  <p className="text-lg font-bold text-white">{branch?.code || "-"}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Info Columns */}
+          <div className="lg:col-span-2 space-y-6">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">Branch Code</p>
+                  <p className="text-xl font-black text-gray-800">{branch?.code || "-"}</p>
                 </div>
-                <div className="bg-white/10 rounded-xl p-4">
-                  <p className="text-xs text-blue-100 font-semibold mb-1">Phone</p>
-                  <p className="text-lg font-bold text-white">{branch?.phone || "-"}</p>
+                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">Phone</p>
+                  <p className="text-xl font-black text-gray-800">{branch?.phone || "-"}</p>
                 </div>
-                <div className="bg-white/10 rounded-xl p-4">
-                  <p className="text-xs text-blue-100 font-semibold mb-1">Manager</p>
-                  <p className="text-lg font-bold text-white">{branch?.manager || "-"}</p>
+                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">Branch Manager</p>
+                  <p className="text-xl font-black text-gray-800">{branch?.manager || "-"}</p>
                 </div>
-                <div className="bg-white/10 rounded-xl p-4 md:col-span-2 lg:col-span-3">
-                  <p className="text-xs text-blue-100 font-semibold mb-1">Address</p>
-                  <p className="text-base font-semibold text-white">{branch?.address || "-"}</p>
-                </div>
-                {user?.allowedPages?.length > 0 && (
-                  <div className="bg-white/10 rounded-xl p-4 md:col-span-2 lg:col-span-3 border border-white/20">
-                    <p className="text-xs text-blue-100 font-semibold mb-2 uppercase tracking-widest">Active Permissions (DEBUG)</p>
-                    <div className="flex flex-wrap gap-2">
-                      {user.allowedPages.map(page => (
-                        <span key={page} className="bg-white/20 text-white text-[10px] px-2 py-1 rounded font-bold uppercase">{page}</span>
-                      ))}
-                    </div>
+                <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                  <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">Status</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+                    <span className="text-sm font-bold text-gray-700">Online & Synchronized</span>
                   </div>
+                </div>
+             </div>
+             
+             <div className="bg-white rounded-2xl shadow-sm p-8 border border-gray-100">
+               <h3 className="text-sm font-black text-gray-400 uppercase tracking-[2px] mb-4">Branch Address</h3>
+               <p className="text-gray-600 font-medium leading-relaxed">{branch?.address || "No address configured"}</p>
+             </div>
+          </div>
+
+          {/* Sticky Follow-Up Reminders */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden sticky top-8">
+              <div className="bg-indigo-600 p-6 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <FaCalendarCheck className="text-white text-xl" />
+                  <h3 className="text-white font-black text-sm uppercase tracking-widest">Follow-Up Reminders</h3>
+                </div>
+                <div className="bg-white/20 px-2.5 py-1 rounded-lg text-white text-[10px] font-black">{reminders.length}</div>
+              </div>
+              
+              <div className="p-4 max-h-[500px] overflow-y-auto space-y-3">
+                {loadingReminders ? (
+                   <div className="py-10 text-center animate-pulse text-gray-400 font-bold uppercase text-[10px] tracking-widest">Checking dates...</div>
+                ) : reminders.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <div className="bg-gray-50 w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                      <FaPhone className="text-gray-300" />
+                    </div>
+                    <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">No follow-ups due now</p>
+                  </div>
+                ) : (
+                  reminders.map(r => (
+                    <Link 
+                      to="/branch/follow-up" 
+                      key={r._id}
+                      className="group flex flex-col p-4 bg-gray-50 hover:bg-indigo-50 rounded-2xl border border-transparent hover:border-indigo-100 transition-all duration-300"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-black text-indigo-600 uppercase tracking-tight">Today</span>
+                        <div className="flex items-center gap-1 text-[9px] font-bold text-gray-400 bg-white px-2 py-0.5 rounded-full shadow-sm">
+                           <FaClock size={8} /> {new Date(r.nextFollowUpDate).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </div>
+                      </div>
+                      <h4 className="text-sm font-black text-gray-800 group-hover:text-indigo-700 transition-colors uppercase truncate">
+                        {r.customerId?.name}
+                      </h4>
+                      <p className="text-[10px] text-gray-500 font-medium mt-1 italic">"{r.remarks}"</p>
+                      
+                      <div className="mt-3 flex items-center justify-between pt-3 border-t border-gray-200/50">
+                        <span className="text-[9px] font-black text-emerald-600 uppercase">Commitment: ₹{r.closingBalance?.toLocaleString()}</span>
+                        <div className="w-6 h-6 bg-indigo-600 rounded-lg flex items-center justify-center text-white scale-0 group-hover:scale-100 transition-transform shadow-lg shadow-indigo-600/20">
+                           <FaPhone size={10} />
+                        </div>
+                      </div>
+                    </Link>
+                  ))
                 )}
+              </div>
+
+              <div className="p-4 border-t border-gray-50 bg-gray-50/50">
+                <Link to="/branch/follow-up-records" className="block text-center text-[10px] font-black text-indigo-600 uppercase hover:underline">
+                  View All Historical Data
+                </Link>
               </div>
             </div>
           </div>

@@ -52,6 +52,8 @@ import BranchLedger from "./pages/branch/BranchLedger";
 import BranchExtraExpenseLedger from "./pages/branch/BranchExtraExpenseLedger";
 import BranchReceiptRecords from "./pages/branch/BranchReceiptRecords";
 import BranchPaymentRecords from "./pages/branch/BranchPaymentRecords";
+import BranchFollowUp from "./pages/branch/BranchFollowUp";
+import BranchFollowUpRecords from "./pages/branch/BranchFollowUpRecords";
 
 import BranchProductConfig from "./pages/branch/BranchProductConfig";
 
@@ -230,8 +232,6 @@ function AppContent() {
                   <Route path="/" element={<BranchLoginPage />} />
                   <Route path="/branch/other-payment" element={<BranchOtherPayment />} />
                   <Route path="/branch/other-receipt" element={<BranchOtherReceipt />} />
-                  <Route path="/branch/recycling" element={<BranchRecycling />} />
-                  <Route path="/branch/tokenization" element={<Tokenization />} />
                   <Route path="/branch-login" element={<BranchLoginPage />} />
                   <Route path="/branch-register" element={<BranchRegisterPage />} />
                   <Route path="/user-register" element={<UserRegistrationPage />} />
@@ -276,6 +276,9 @@ function AppContent() {
                   <Route path="/branch/extra-expense-ledger" element={<ProtectedRoute element={<BranchExtraExpenseLedger />} />} />
                   <Route path="/branch/product-config" element={<ProtectedRoute element={<BranchProductConfig />} />} />
                   <Route path="/branch/ledger" element={<ProtectedRoute element={<BranchLedger />} />} />
+                  <Route path="/branch/follow-up" element={<ProtectedRoute element={<BranchFollowUp />} />} />
+                  <Route path="/branch/follow-up-records" element={<ProtectedRoute element={<BranchFollowUpRecords />} />} />
+                  <Route path="/branch/tokenization" element={<ProtectedRoute element={<Tokenization />} />} />
 
                   {/* LEGACY ROUTES */}
                   <Route

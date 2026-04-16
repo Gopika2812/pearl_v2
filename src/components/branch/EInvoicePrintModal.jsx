@@ -143,7 +143,7 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
               </div>
               <div style="text-align: right; flex: 1;">
                  <span class="meta-label">Invoice Details</span>
-                 <div class="meta-value"># ${invoice.invoiceNumber}</div>
+                 <div class="meta-value">${invoice.invoiceNumber}</div>
                  <div class="meta-value" style="font-size: 11px;">Date: ${new Date(invoice.invoiceDate).toLocaleDateString()}</div>
               </div>
             </div>

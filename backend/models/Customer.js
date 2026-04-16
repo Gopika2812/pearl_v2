@@ -59,6 +59,7 @@ const customerSchema = new mongoose.Schema(
     
     // Credit Limit System
     creditLimit: { type: Number, default: 200000 },
+    creditLimitDays: { type: Number, default: 0 },
     isCreditBypassed: { type: Boolean, default: false },
     creditLimitRequestStatus: { 
       type: String, 

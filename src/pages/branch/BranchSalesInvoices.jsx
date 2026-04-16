@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash } from "react-icons/fa";
+import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaFileExcel } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
+import * as XLSX from "xlsx";
 import { API_BASE, fetchWithAuth } from "../../api";
 import EInvoicePrintModal from "../../components/branch/EInvoicePrintModal";
 import { useBranch } from "../../context/BranchContext";
@@ -267,6 +268,136 @@ const BranchSalesInvoices = () => {
   };
 
   const [showTransportModal, setShowTransportModal] = useState(null);
+  const [exporting, setExporting] = useState(false);
+
+  /**
+   * 📊 DETAILED EXCEL EXPORT (Fetches everything in range with Items)
+   * This mirrors the Sales Order format but includes item-level discounts,
+   * transport charges, and common discounts.
+   */
+  const handleExportDetailedExcel = async () => {
+    if (!currentBranch?._id) return;
+    setExporting(true);
+    try {
+      // 1. Fetch matching invoices with includeItems=true
+      let url = `${API_BASE}/invoices?branchId=${currentBranch._id}&limit=1000&includeItems=true`;
+      if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
+      if (filterFromDate) url += `&fromDate=${filterFromDate}`;
+      if (filterToDate) url += `&toDate=${filterToDate}`;
+      if (filterVoucherPrefix) url += `&vPrefix=${encodeURIComponent(filterVoucherPrefix)}`;
+      if (filterEinvoiceStatus) url += `&einvoiceStatus=${filterEinvoiceStatus}`;
+
+      const res = await fetchWithAuth(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to fetch for export");
+
+      const invoicesToExport = data.data || [];
+      if (invoicesToExport.length === 0) {
+        toast.warn("No invoices found in this range to export.");
+        return;
+      }
+
+      const rows = [];
+      // Header for the detailed report
+      const headerRow = [
+        "Date", "Invoice No", "Customer", "Product Name", "Price", "Qty", "GST (%)", "Discount (Amt)", "Line Total"
+      ];
+      rows.push(headerRow);
+
+      invoicesToExport.forEach((inv) => {
+        const invDate = new Date(inv.invoiceDate).toLocaleDateString("en-IN");
+        const invNo = inv.invoiceNumber || "-";
+        const customerName = inv.customer?.name || "-";
+
+        // 1. Add each regular item
+        const items = inv.items || [];
+        items.forEach((item) => {
+          rows.push([
+            invDate,
+            invNo,
+            customerName,
+            item.name,
+            item.sellingPrice || 0,
+            item.qty || 0,
+            `${item.gst || 0}%`,
+            item.discountAmount || 0,
+            item.total || 0
+          ]);
+        });
+
+        // 2. Add sample items if any
+        const samples = inv.sampleItems || [];
+        samples.forEach((sample) => {
+          rows.push([
+            invDate,
+            invNo,
+            customerName,
+            `🎁 (Sample) ${sample.name}`,
+            sample.sellingPrice || 0,
+            sample.qty || 0,
+            "0%",
+            0,
+            0
+          ]);
+        });
+
+        // 3. Add Transport Charge if applicable
+        if (inv.transportCharge > 0) {
+          rows.push([
+            "", "", "", "🚚 Transport Charge", "", "", "", "", inv.transportCharge
+          ]);
+        }
+
+        // 4. Add Special/Common Discount if applicable
+        if (inv.commonDiscount > 0) {
+          rows.push([
+            "", "", "", "🛡️ Special Discount", "", "", "", "", -inv.commonDiscount
+          ]);
+        }
+
+        // 5. Add Sub Total
+        rows.push([
+          "", "", "", "📊 SUB TOTAL", "", "", "", "", inv.subtotal || 0
+        ]);
+
+        // 6. Add Grand Total
+        rows.push([
+          "", "", "", "💰 GRAND TOTAL", "", "", "", "", inv.grandTotal || 0
+        ]);
+
+        // 7. Add Blank Row for separation
+        rows.push(["", "", "", "", "", "", "", "", ""]);
+      });
+
+      // Add Final Summary Row for the entire report
+      const totalSubAll = invoicesToExport.reduce((sum, i) => sum + (i.subtotal || 0), 0);
+      const totalGrandAll = invoicesToExport.reduce((sum, i) => sum + (i.grandTotal || 0), 0);
+
+      rows.push(["", "", "", "━━━━━━━━━━━━━━━━━━━━━━━━", "", "", "", "", "━━━━━━━━━━"]);
+      rows.push(["", "", "", "🔥 TOTAL (ALL INVOICES)", "", "", "", "", ""]);
+      rows.push(["", "", "", "Total Sub Total", "", "", "", "", totalSubAll]);
+      rows.push(["", "", "", "Total Grand Total", "", "", "", "", totalGrandAll]);
+
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+
+      // Styling columns width
+      const wscols = [
+        { wch: 12 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 15 }
+      ];
+      worksheet['!cols'] = wscols;
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Detailed Export");
+      XLSX.writeFile(workbook, `Detailed_Invoice_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      toast.success("Detailed report exported successfully!");
+    } catch (error) {
+      console.error("Detailed export error:", error);
+      toast.error("Failed to generate detailed Excel report");
+    } finally {
+      setExporting(false);
+    }
+  };
 
 
   return (
@@ -338,6 +469,14 @@ const BranchSalesInvoices = () => {
                   <span>{new Date(filterToDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                 </div>
               </div>
+              <button
+                onClick={handleExportDetailedExcel}
+                disabled={exporting}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-200 text-xs font-black"
+              >
+                {exporting ? <FaSync className="animate-spin" /> : <FaFileExcel />}
+                DETAILED REPORT
+              </button>
               <button
                 onClick={fetchInvoices}
                 className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-slate-50 transition shadow-sm"
