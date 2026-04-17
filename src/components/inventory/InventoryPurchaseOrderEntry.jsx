@@ -129,6 +129,10 @@ const InventoryPurchaseOrderEntry = ({
   const [saving, setSaving] = useState(false);
   const [availableQtyCache, setAvailableQtyCache] = useState({});
 
+  // 🛡️ Price Warning Modal State
+  const [showPriceWarningModal, setShowPriceWarningModal] = useState(false);
+  const [pendingItemData, setPendingItemData] = useState(null);
+
   // Fetch products by product group from API
   useEffect(() => {
     console.log("🔄 Product Group changed to:", productGroup);
@@ -371,8 +375,6 @@ const InventoryPurchaseOrderEntry = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 🔄 AUTO-CALCULATE ALTERNATE QUANTITY
-
   // Add Item
   const addItem = () => {
     if (!selectedItem || qty <= 0) {
@@ -380,19 +382,29 @@ const InventoryPurchaseOrderEntry = ({
       return;
     }
 
-    const rowPrice = displayPrice; // Qty * PurchasePrice
-    const rowDiscount = (rowPrice * (parseFloat(discountPercent) || 0)) / 100;
-    const taxableAmount = rowPrice - rowDiscount;
-    const taxRate = igst ? gst : cgst + sgst;
-    const rowTax = (taxableAmount * taxRate) / 100;
-    const total = taxableAmount + rowTax;
-    // ✅ FIX: Use selectedProductData directly instead of searching fetchedProducts
-    // This prevents "Product not found" errors when search results refresh
     const product = selectedProductData;
     if (!product || product._id !== selectedItem) {
       toast.error("Product not found! Please select again.");
       return;
     }
+
+    // 🛡️ RED MODAL ALERT FOR NEGATIVE MARGIN
+    if (Number(sellingPrice) < Number(purchasePrice)) {
+      setPendingItemData({ product, purchasePrice: Number(purchasePrice), sellingPrice: Number(sellingPrice) });
+      setShowPriceWarningModal(true);
+      return;
+    }
+
+    proceedAddItem(product, Number(purchasePrice), Number(sellingPrice));
+  };
+
+  const proceedAddItem = (product, finalPurchasePrice, finalSellingPrice) => {
+    const rowPrice = (parseFloat(finalPurchasePrice) || 0) * (parseFloat(qty) || 0);
+    const rowDiscount = (rowPrice * (parseFloat(discountPercent) || 0)) / 100;
+    const taxableAmount = rowPrice - rowDiscount;
+    const taxRate = igst ? gst : cgst + sgst;
+    const rowTax = (taxableAmount * taxRate) / 100;
+    const total = taxableAmount + rowTax;
 
     setItems((prev) => [
       ...prev,
@@ -400,15 +412,15 @@ const InventoryPurchaseOrderEntry = ({
         productId: product._id,
         name: product.name,
         productGroup: product.productGroup || product.groupId,
-        qty,
+        qty: Number(qty),
         altQty: altQty,
         altUnit: convAltUnit,
         unit: convUnit || product.units || "",
         perQty: product.perQty || 1,
         units: product.units || "",
         totalQty: product.totalQty || 0,
-        purchasePrice,
-        sellingPrice,
+        purchasePrice: finalPurchasePrice,
+        sellingPrice: finalSellingPrice,
         discountPercent: parseFloat(discountPercent) || 0,
         discountAmount: rowDiscount,
         rowPrice: rowPrice,
@@ -1271,26 +1283,93 @@ const InventoryPurchaseOrderEntry = ({
           setFilteredProducts(prev => [...prev, product]);
           setSelectedItem(product._id);
           setItemSearch(product.name);
-
+          
           const pGroupId = product.productGroup?._id || product.productGroup || product.groupId?._id || product.groupId;
           if (pGroupId && pGroupId !== productGroup) {
             setProductGroup(pGroupId);
           }
-
+          
           setSelectedProductData(product);
           setQty("");
           setPurchasePrice(product.purchasingPrice || product.rate || 0);
           setSellingPrice(product.sellingPrice || product.rate || 0);
           setHsn(product.hsnCode || product.hsncode || "");
           setGst(product.gst || product.tax || 0);
-          if (!igst) {
-            setCgst((product.gst || product.tax || 0) / 2);
-            setSgst((product.gst || product.tax || 0) / 2);
-          }
-
           setShowProductModal(false);
         }}
       />
+
+      {/* 🛡️ RED BACKGROUND PRICE WARNING MODAL */}
+      {showPriceWarningModal && pendingItemData && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in fade-in zoom-in duration-200">
+            {/* Header with Red Gradient */}
+            <div className="bg-gradient-to-r from-red-600 to-rose-500 px-6 py-8 text-center text-white">
+              <div className="mb-4 flex justify-center">
+                <div className="rounded-full bg-white/20 p-3 ring-8 ring-white/10">
+                  <svg className="h-10 w-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+              </div>
+              <h2 className="text-2xl font-black uppercase tracking-tight">Purchase Warning!</h2>
+              <p className="mt-2 text-sm font-medium text-red-50">Negative Purchase Margin Detected</p>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <div className="mb-6 space-y-3 rounded-xl bg-red-50 p-4 border border-red-100">
+                <div className="flex justify-between text-sm uppercase tracking-wider font-bold">
+                  <span className="text-gray-500">Product</span>
+                  <span className="text-red-700">{pendingItemData.product.name}</span>
+                </div>
+                <div className="h-px bg-red-200/50" />
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 font-medium tracking-tight">Selling Price</span>
+                  <span className="font-black text-gray-900 italic">₹{pendingItemData.sellingPrice}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 font-medium tracking-tight">New Purchase Cost</span>
+                  <span className="font-black text-red-600 italic">₹{pendingItemData.purchasePrice}</span>
+                </div>
+                <div className="mt-4 rounded-lg bg-red-600 px-3 py-2 text-center text-xs font-black uppercase text-white shadow-lg">
+                  Negative Margin: ₹{Math.abs(Number(pendingItemData.sellingPrice) - Number(pendingItemData.purchasePrice)).toFixed(2)}
+                </div>
+              </div>
+
+              <p className="mb-6 text-center text-[11px] font-bold uppercase leading-relaxed text-gray-500">
+                Are you sure you want to purchase this item? <br/>
+                <span className="text-red-500 tracking-tighter">The cost is higher than your current selling price.</span>
+              </p>
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPriceWarningModal(false);
+                    setPendingItemData(null);
+                  }}
+                  className="flex-1 rounded-xl border-2 border-gray-200 py-3 text-xs font-black uppercase tracking-widest text-gray-500 transition-all hover:bg-gray-50 active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    proceedAddItem(pendingItemData.product, Number(pendingItemData.purchasePrice), Number(pendingItemData.sellingPrice));
+                    setShowPriceWarningModal(false);
+                    setPendingItemData(null);
+                  }}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 py-3 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-red-200 transition-all hover:opacity-90 active:scale-95"
+                >
+                  Buy at Loss
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Extra Expenses Modal */}
       {showExtraExpensesModal && (

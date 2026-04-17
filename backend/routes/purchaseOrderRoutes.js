@@ -375,7 +375,10 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         if (newPPrice !== oldPPrice && newPPrice > 0) {
           const oldSPrice = product.sellingPrice;
           product.purchasingPrice = newPPrice;
-          await product.save(); // Triggers margin recalculation
+          
+          // The pre-save hook in Product.js will now automatically update sellingPrice 
+          // to maintain the margin. We save first, then log the history with the new values.
+          await product.save(); 
           
           product.priceHistory.push({
             oldPurchasingPrice: oldPPrice,
@@ -384,7 +387,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
             newSellingPrice: product.sellingPrice,
             sourceVoucher: piNumber,
             type: newPPrice > oldPPrice ? 'INCREASE' : 'DECREASE',
-            note: `Updated via Purchase Invoice ${piNumber}`
+            note: `Updated via Purchase Invoice ${piNumber} (Margin Maintained)`
           });
         }
 

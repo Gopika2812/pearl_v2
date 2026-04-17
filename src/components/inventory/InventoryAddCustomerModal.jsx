@@ -29,8 +29,11 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     ifsc: "",
     branch: "",
     upi: "",
+    creditLimit: 200000,
+    creditLimitDays: 0,
   });
 
+  const [isSafeMode, setIsSafeMode] = useState(false);
   const [isFetchingGst, setIsFetchingGst] = useState(false);
   const [uploadResults, setUploadResults] = useState(null);
 
@@ -40,8 +43,12 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
       setCustomer({
         _id: editingItem._id || null,
         name: editingItem.name || "",
-        customerCategories: Array.isArray(editingItem.customerCategories) ? editingItem.customerCategories : (editingItem.customerCategory ? [editingItem.customerCategory] : []),
-        customerGroups: Array.isArray(editingItem.customerGroups) ? editingItem.customerGroups : (editingItem.customerGroup ? [editingItem.customerGroup] : []),
+        customerCategories: Array.isArray(editingItem.customerCategories) 
+          ? editingItem.customerCategories.map(c => typeof c === 'object' ? c._id : c) 
+          : (editingItem.customerCategory ? [typeof editingItem.customerCategory === 'object' ? editingItem.customerCategory._id : editingItem.customerCategory] : []),
+        customerGroups: Array.isArray(editingItem.customerGroups) 
+          ? editingItem.customerGroups.map(g => typeof g === 'object' ? g._id : g) 
+          : (editingItem.customerGroup ? [typeof editingItem.customerGroup === 'object' ? editingItem.customerGroup._id : editingItem.customerGroup] : []),
         whatsapp: editingItem.whatsapp || "",
         email: editingItem.email || "",
         address: editingItem.address || "",
@@ -61,6 +68,8 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         ifsc: editingItem.ifsc || "",
         branch: editingItem.branch || "",
         upi: editingItem.upi || "",
+        creditLimit: editingItem.creditLimit !== undefined ? editingItem.creditLimit : 200000,
+        creditLimitDays: editingItem.creditLimitDays !== undefined ? editingItem.creditLimitDays : 0,
       });
     } else {
       setCustomer({
@@ -86,6 +95,8 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         ifsc: "",
         branch: "",
         upi: "",
+        creditLimit: 200000,
+        creditLimitDays: 0,
       });
     }
   }, [editingItem]);
@@ -99,6 +110,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     const formData = new FormData();
     formData.append("file", file);
     formData.append("branchId", branchId);
+    formData.append("updateMode", isSafeMode ? "info_only" : "opening_balance");
 
     try {
       const res = await fetchWithAuth(`${API_BASE}/customers/bulk-upload`, {
@@ -310,8 +322,37 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                 id="customerBulkUpload"
                 onChange={handleBulkUpload}
               />
+              
+              {/* Safe Mode Toggle */}
+              <div className="px-8 pt-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isSafeMode ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'}`}>
+                    <FaCloudUploadAlt size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Safe Mode</p>
+                    <p className="text-[9px] font-bold text-gray-500 uppercase mt-0.5">Info-Only (Safe)</p>
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsSafeMode(!isSafeMode);
+                  }}
+                  className={`w-12 h-6 rounded-full transition-all relative ${isSafeMode ? 'bg-emerald-500' : 'bg-gray-300'}`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isSafeMode ? 'left-7' : 'left-1'}`}></div>
+                </button>
+              </div>
+
               <div 
-                onClick={() => document.getElementById("customerBulkUpload").click()}
+                onClick={() => {
+                  if (!isSafeMode) {
+                    const confirmBal = window.confirm("⚠️ You are in BALANCING MODE. This will adjust Debit/Credit balances. Enable SAFE MODE for info-only updates. Proceed?");
+                    if (!confirmBal) return;
+                  }
+                  document.getElementById("customerBulkUpload").click();
+                }}
                 className="group flex flex-col md:flex-row items-center gap-6 p-8 cursor-pointer rounded-2xl relative overflow-hidden transition-all duration-300"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-green-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -528,6 +569,29 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                   <div>
                     <label className={labelClass}>Opening Debit</label>
                     <input type="number" className={inputClass} value={customer.debit} onChange={(e) => setCustomer({ ...customer, debit: e.target.value })} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-50">
+                  <div>
+                    <label className={labelClass}>Credit Limit (₹)</label>
+                    <input 
+                      type="number" 
+                      className={`${inputClass} !bg-indigo-50/50 !border-indigo-100 focus:!border-indigo-500`} 
+                      placeholder="Default: 200,000"
+                      value={customer.creditLimit} 
+                      onChange={(e) => setCustomer({ ...customer, creditLimit: e.target.value })} 
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Credit Limit Days</label>
+                    <input 
+                      type="number" 
+                      className={`${inputClass} !bg-indigo-50/50 !border-indigo-100 focus:!border-indigo-500`} 
+                      placeholder="e.g., 30"
+                      value={customer.creditLimitDays} 
+                      onChange={(e) => setCustomer({ ...customer, creditLimitDays: e.target.value })} 
+                    />
                   </div>
                 </div>
               </div>

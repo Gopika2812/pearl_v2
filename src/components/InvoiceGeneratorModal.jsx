@@ -738,7 +738,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
               <div class="order-header">
                 <div class="order-header-col">
                   <div class="label">Invoice No:</div>
-                  <div style="font-weight: bold; color: #000;">${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</div>
+                  <div style="font-weight: bold; color: #000;">${generatedInvoice?.invoiceNumber || previewData?.invoiceNumber || order?.invoiceId || "PENDING"}</div>
                 </div>
                 <div class="order-header-col">
                   <div class="label">Date:</div>
@@ -898,7 +898,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
 
               <div class="section-title" style="background: #1e293b; color: #fff;">📊 HSN-WISE TAX SUMMARY</div>
               <div style="text-align: center; margin-bottom: 20px; font-size: 13px;">
-                <strong>Invoice No: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</strong> | Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
+                <strong>Invoice No: ${generatedInvoice?.invoiceNumber || previewData?.invoiceNumber || order?.invoiceId || "PENDING"}</strong> | Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
                 <div style="font-size: 10px; color: #666; margin-top: 5px;">
                   Billing: ${previewData?.billingPerson || "-"} | Delivery: ${previewData?.deliveryMan || "-"}
                 </div>

@@ -196,6 +196,44 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       }
     }
 
+    // Predict Sales Invoice (SI) Number for Preview
+    const financialYear = getFinancialYear();
+    let predictedSI = salesOrder.salesInvoiceId;
+    
+    if (!predictedSI) {
+      const rawSoId = salesOrder.invoiceId || "";
+      const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
+      const soPrefixPrefix = cleanSoId.split('/')[0];
+      let siPrefix = soPrefixPrefix.endsWith("SO") 
+        ? soPrefixPrefix.replace(/SO$/i, "SI") 
+        : (soPrefixPrefix.endsWith("O") ? soPrefixPrefix.replace(/O$/i, "I") : `${soPrefixPrefix}SI`);
+
+      const siVoucher = await VoucherType.findOne({
+        branchId: salesOrder.branchId,
+        prefix: siPrefix,
+        orderType: "SI",
+        financialYear
+      });
+
+      const existingInvoices = await Invoice.find({
+        branchId: salesOrder.branchId,
+        invoiceNumber: new RegExp(`^${siPrefix}/`),
+        financialYear
+      }).select('invoiceNumber').lean();
+
+      let highestNumInDB = 0;
+      existingInvoices.forEach(inv => {
+        const parts = inv.invoiceNumber.split('/');
+        if (parts.length >= 2) {
+          const num = parseInt(parts[1]);
+          if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+        }
+      });
+
+      const nextNum = Math.max((siVoucher?.counter || 1), highestNumInDB + 1);
+      predictedSI = `${siPrefix}/${String(nextNum).padStart(3, "0")}/${financialYear}`;
+    }
+
     // Dynamic balance calculation based on requested customer
     const bodyCustomerId = req.body.customerId;
     let customerToUse = salesOrder.customer?.customerId;
@@ -232,7 +270,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     };
 
     const previewData = {
-      invoiceNumber: salesOrder.invoiceId,
+      invoiceNumber: predictedSI,
       salesOrderId,
       billingPerson: billingPersonName,
       deliveryMan: deliveryManName,

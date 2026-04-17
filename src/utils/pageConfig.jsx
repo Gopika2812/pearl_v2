@@ -75,12 +75,12 @@ export const PAGE_CONFIG = [
         { id: "receipt", name: "Receipt Management", path: "/branch/receipt", icon: "receipt" },
         { id: "receipt-records", name: "Receipt Records", path: "/branch/receipt-records", icon: "history" },
         { id: "tokenization", name: "Tokenization", path: "/branch/tokenization", icon: "token" },
-        { id: "follow-up-dropdown", name: "Customer Follow-Up", icon: "phone", isDropdown: true, subItems: [
-          { id: "follow-up-form", name: "Log Follow-Up", path: "/branch/follow-up", icon: "add" },
-          { id: "follow-up-records", name: "Follow-Up Records", path: "/branch/follow-up-records", icon: "history" },
-        ]},
       ]},
       { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["margin", "debit", "credit", "gstin"] },
+      { id: "follow-up-dropdown", name: "Customer Follow-Up", icon: "phone", isDropdown: true, subItems: [
+        { id: "follow-up-form", name: "Log Follow-Up", path: "/branch/follow-up", icon: "add" },
+        { id: "follow-up-records", name: "Follow-Up Records", path: "/branch/follow-up-records", icon: "history" },
+      ]},
     ]
   },
   {

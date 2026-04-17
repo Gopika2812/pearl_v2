@@ -13,6 +13,15 @@ router.post("/", async (req, res) => {
       result, remarks, nextFollowUpDate 
     } = req.body;
 
+    // Mark previous PENDING reminders for this customer as COMPLETED
+    await FollowUp.updateMany(
+      { customerId, branchId, status: "PENDING" },
+      { $set: { status: "COMPLETED" } }
+    );
+
+    // If a next follow-up date is set, this record itself serves as a reminder "anchor"
+    const status = nextFollowUpDate ? "PENDING" : "COMPLETED";
+
     const followUp = new FollowUp({
       branchId,
       customerId,
@@ -22,7 +31,8 @@ router.post("/", async (req, res) => {
       creditLimitDays,
       result,
       remarks,
-      nextFollowUpDate
+      nextFollowUpDate,
+      status
     });
 
     await followUp.save();

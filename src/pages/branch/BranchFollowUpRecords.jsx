@@ -62,7 +62,7 @@ const BranchFollowUpRecords = () => {
     return (
         <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20">
             <ToastContainer />
-            <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
+            <div className="w-full max-w-full mx-auto px-4 sm:px-8 py-6">
                 
                 {/* HEADER */}
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6">

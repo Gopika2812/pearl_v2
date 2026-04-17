@@ -40,6 +40,7 @@ const BranchCustomers = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
   const [exportDate, setExportDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isSafeMode, setIsSafeMode] = useState(false); // Mode for info-only updates
   const fileInputRef = useRef(null);
 
   const handleExportBalances = async () => {
@@ -209,6 +210,7 @@ const BranchCustomers = () => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("branchId", branchId);
+    formData.append("updateMode", isSafeMode ? "info_only" : "opening_balance");
 
     try {
       setLoading(true);
@@ -222,7 +224,7 @@ const BranchCustomers = () => {
 
       const result = await res.json();
       if (res.ok) {
-        toast.success(`Upload Successful: ${result.insertedCount} inserted, ${result.updatedCount} updated.`);
+        toast.success(`Upload Result: ${result.insertedCount} New, ${result.updatedCount} Updated, ${result.skippedCount || 0} Skipped.`);
         fetchCustomers(1);
       } else {
         throw new Error(result.message || "Bulk upload failed");
@@ -373,6 +375,19 @@ const BranchCustomers = () => {
               <FaPlus /> Add Customer
             </button>
 
+            <div className="flex items-center gap-3 bg-white p-2 px-4 rounded-xl border border-gray-200 shadow-sm">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-gray-400 uppercase leading-none">Safe Mode</span>
+                <span className="text-[8px] font-bold text-gray-500 uppercase leading-tight">Info Only</span>
+              </div>
+              <button
+                onClick={() => setIsSafeMode(!isSafeMode)}
+                className={`w-10 h-5 rounded-full transition-all relative ${isSafeMode ? 'bg-emerald-500' : 'bg-gray-300'}`}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${isSafeMode ? 'left-5.5' : 'left-0.5'}`} style={{ left: isSafeMode ? '1.35rem' : '0.125rem' }}></div>
+              </button>
+            </div>
+
             <input
               type="file"
               ref={fileInputRef}
@@ -381,10 +396,16 @@ const BranchCustomers = () => {
               className="hidden"
             />
             <button
-              onClick={() => fileInputRef.current?.click()}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+              onClick={() => {
+                if (!isSafeMode) {
+                  const confirmBal = window.confirm("⚠️ You are uploading in BALANCING MODE. This will adjust Debit/Credit balances. For info-only updates, enable SAFE MODE. Proceed?");
+                  if (!confirmBal) return;
+                }
+                fileInputRef.current?.click();
+              }}
+              className={`${isSafeMode ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-purple-600 hover:bg-purple-700'} text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95`}
             >
-              <FaUpload /> Bulk Upload
+              <FaUpload /> {isSafeMode ? "Safe Update" : "Bulk Upload"}
             </button>
 
             <button

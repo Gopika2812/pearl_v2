@@ -138,6 +138,10 @@ export default function InventorySalesOrderEntry({
   const [altQty, setAltQty] = useState(0);
 
   const unitOptions = ["Pcs", "Box", "Pkt", "Kg", "Grm", "Mtr", "Bundle", "Set", "Case", "Roll", "Bag"];
+  
+  // 🛡️ Price Warning Modal State
+  const [showPriceWarningModal, setShowPriceWarningModal] = useState(false);
+  const [pendingItemData, setPendingItemData] = useState(null);
 
   // Check if current user is Admin or Super Admin
   const isAdmin = useMemo(() => {
@@ -817,15 +821,25 @@ export default function InventorySalesOrderEntry({
     }
 
     // ✅ FIX: Use selectedProductData directly
-    // This handles the race condition where productsWithStock might refresh and lose the item
     const p = selectedProductData || productsWithStock.find((x) => x._id === selectedItem);
     if (!p) {
       toast.error("Product not found. Please select again.");
       return;
     }
 
+    // 🛡️ NEGATIVE MARGIN ALERT
+    if (Number(sellingPrice) < Number(p.purchasingPrice)) {
+      setPendingItemData({ product: p, price: sellingPrice });
+      setShowPriceWarningModal(true);
+      return;
+    }
+
+    proceedAddItem(p, Number(sellingPrice));
+  };
+
+  const proceedAddItem = async (p, finalSellingPrice) => {
     // 1️⃣ USE SELLING PRICE AS IS (Already adjusted with margin during selection)
-    const adjustedSellingPrice = Number(sellingPrice);
+    const adjustedSellingPrice = finalSellingPrice;
 
     // 2️⃣ BASE AMOUNT (using adjusted selling price)
     const baseAmount = adjustedSellingPrice * Number(qty);
@@ -2371,6 +2385,78 @@ export default function InventorySalesOrderEntry({
           setShowProductModal(false);
         }}
       />
+
+      {/* 🛡️ RED BACKGROUND PRICE WARNING MODAL */}
+      {showPriceWarningModal && pendingItemData && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl animate-in fade-in zoom-in duration-200">
+            {/* Header with Red Gradient */}
+            <div className="bg-gradient-to-r from-red-600 to-rose-500 px-6 py-8 text-center text-white">
+              <div className="mb-4 flex justify-center">
+                <div className="rounded-full bg-white/20 p-3 ring-8 ring-white/10">
+                  <svg className="h-10 w-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+              </div>
+              <h2 className="text-2xl font-black uppercase tracking-tight">Price Warning!</h2>
+              <p className="mt-2 text-sm font-medium text-red-50">Negative Profit Margin Detected</p>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <div className="mb-6 space-y-3 rounded-xl bg-red-50 p-4 border border-red-100">
+                <div className="flex justify-between text-sm uppercase tracking-wider font-bold">
+                  <span className="text-gray-500">Product</span>
+                  <span className="text-red-700">{pendingItemData.product.name}</span>
+                </div>
+                <div className="h-px bg-red-200/50" />
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 font-medium tracking-tight">Selling Price</span>
+                  <span className="font-black text-gray-900 italic">₹{pendingItemData.price}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 font-medium tracking-tight">Purchase Cost</span>
+                  <span className="font-black text-red-600 italic">₹{pendingItemData.product.purchasingPrice}</span>
+                </div>
+                <div className="mt-4 rounded-lg bg-red-600 px-3 py-2 text-center text-xs font-black uppercase text-white shadow-lg">
+                  Loss per unit: ₹{Math.abs(Number(pendingItemData.price) - Number(pendingItemData.product.purchasingPrice)).toFixed(2)}
+                </div>
+              </div>
+
+              <p className="mb-6 text-center text-[11px] font-bold uppercase leading-relaxed text-gray-500">
+                Are you sure you want to add this item? <br/>
+                <span className="text-red-500 tracking-tighter">This transaction will result in a direct loss.</span>
+              </p>
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPriceWarningModal(false);
+                    setPendingItemData(null);
+                  }}
+                  className="flex-1 rounded-xl border-2 border-gray-200 py-3 text-xs font-black uppercase tracking-widest text-gray-500 transition-all hover:bg-gray-50 active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    proceedAddItem(pendingItemData.product, Number(pendingItemData.price));
+                    setShowPriceWarningModal(false);
+                    setPendingItemData(null);
+                  }}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 py-3 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-red-200 transition-all hover:opacity-90 active:scale-95"
+                >
+                  Proceed Anyway
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

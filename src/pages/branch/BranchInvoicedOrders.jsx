@@ -406,12 +406,13 @@ const BranchInvoicedOrders = () => {
   const handleExportPDF = () => {
     const doc = new jsPDF();
 
-    const tableColumn = ["Invoice ID", "Customer", "Grand Total"];
+    const tableColumn = ["Order (SO)", "Invoice (SI)", "Customer", "Grand Total"];
     const tableRows = [];
 
     filteredSalesOrders.forEach((order) => {
       const orderData = [
         order.invoiceId,
+        order.salesInvoiceId || "-",
         order.customer?.name || "N/A",
         `Rs. ${(order.grandTotal || 0).toLocaleString()}`
       ];
@@ -451,7 +452,8 @@ const BranchInvoicedOrders = () => {
 
       const exportData = invoicedOnly.map((order) => ({
         "Date": new Date(order.orderDate || order.createdAt).toLocaleDateString("en-IN"),
-        "Invoice ID": order.invoiceId || "-",
+        "Order ID (SO)": order.invoiceId || "-",
+        "Invoice ID (SI)": order.salesInvoiceId || "-",
         "Customer Name": order.customer?.name || "-",
         "Customer WhatsApp": order.customer?.whatsapp || "-",
         "Items Count": (order.items || []).length + (order.sampleItems || []).length,
@@ -497,13 +499,14 @@ const BranchInvoicedOrders = () => {
 
       // Header for the detailed report
       const headerRow = [
-        "Date", "Invoice No", "Customer", "Product Name", "Price", "Qty", "GST (%)", "Discount (Amt)", "Line Total"
+        "Date", "SO No", "SI No", "Customer", "Product Name", "Price", "Qty", "GST (%)", "Discount (Amt)", "Line Total"
       ];
       rows.push(headerRow);
 
       invoicedOnly.forEach((order) => {
         const orderDate = new Date(order.orderDate || order.createdAt).toLocaleDateString("en-IN");
-        const invoiceNo = order.invoiceId || order.salesInvoiceId || "-";
+        const soNo = order.invoiceId || "-";
+        const siNo = order.salesInvoiceId || "-";
         const customerName = order.customer?.name || "-";
 
         // 1. Add each regular item
@@ -511,7 +514,8 @@ const BranchInvoicedOrders = () => {
         items.forEach((item) => {
           rows.push([
             orderDate,
-            invoiceNo,
+            soNo,
+            siNo,
             customerName,
             item.name,
             item.sellingPrice || 0,
@@ -527,39 +531,40 @@ const BranchInvoicedOrders = () => {
         samples.forEach((sample) => {
           rows.push([
             orderDate,
-            invoiceNo,
+            soNo,
+            siNo,
             customerName,
             `🎁 (Sample) ${sample.name}`,
-            sample.sellingPrice || 0, // Usually 0 or reduced
+            sample.sellingPrice || 0,
             sample.qty || 0,
-            "0%", // Samples usually exempt or handled separately
+            "0%", 
             0,
-            0 // Samples are not billed
+            0 
           ]);
         });
 
         // 3. Add Transport Charge if applicable
         if (order.transportCharge > 0) {
           rows.push([
-            "", "", "", "🚚 Transport Charge", "", "", "", "", order.transportCharge
+            "", "", "", "", "🚚 Transport Charge", "", "", "", "", order.transportCharge
           ]);
         }
 
         // 4. Add Special/Common Discount if applicable
         if (order.commonDiscount > 0) {
           rows.push([
-            "", "", "", "🛡️ Special Discount", "", "", "", "", -order.commonDiscount
+            "", "", "", "", "🛡️ Special Discount", "", "", "", "", -order.commonDiscount
           ]);
         }
 
         // 5. Add Sub Total
         rows.push([
-          "", "", "", "📊 SUB TOTAL", "", "", "", "", order.subtotal || 0
+          "", "", "", "", "📊 SUB TOTAL", "", "", "", "", order.subtotal || 0
         ]);
 
         // 6. Add Grand Total
         rows.push([
-          "", "", "", "💰 GRAND TOTAL", "", "", "", "", order.grandTotal || 0
+          "", "", "", "", "💰 GRAND TOTAL", "", "", "", "", order.grandTotal || 0
         ]);
 
         // 7. Add Blank Row for separation
@@ -570,16 +575,16 @@ const BranchInvoicedOrders = () => {
       const totalSubAll = invoicedOnly.reduce((sum, o) => sum + (o.subtotal || 0), 0);
       const totalGrandAll = invoicedOnly.reduce((sum, o) => sum + (o.grandTotal || 0), 0);
 
-      rows.push(["", "", "", "━━━━━━━━━━━━━━━━━━━━━━━━", "", "", "", "", "━━━━━━━━━━"]);
-      rows.push(["", "", "", "🔥 TOTAL (ALL ORDERS)", "", "", "", "", ""]);
-      rows.push(["", "", "", "Total Sub Total", "", "", "", "", totalSubAll]);
-      rows.push(["", "", "", "Total Grand Total", "", "", "", "", totalGrandAll]);
+      rows.push(["", "", "", "", "━━━━━━━━━━━━━━━━━━━━━━━━", "", "", "", "", "━━━━━━━━━━"]);
+      rows.push(["", "", "", "", "🔥 TOTAL (ALL ORDERS)", "", "", "", "", ""]);
+      rows.push(["", "", "", "", "Total Sub Total", "", "", "", "", totalSubAll]);
+      rows.push(["", "", "", "", "Total Grand Total", "", "", "", "", totalGrandAll]);
 
       const worksheet = XLSX.utils.aoa_to_sheet(rows);
 
       // Styling columns width (approximate)
       const wscols = [
-        { wch: 12 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 15 }
+        { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 15 }
       ];
       worksheet['!cols'] = wscols;
 
@@ -818,7 +823,8 @@ const BranchInvoicedOrders = () => {
                         checked={filteredSalesOrders.length > 0 && selectedOrderIds.length === filteredSalesOrders.length}
                       />
                     </th>
-                    <th className="px-6 py-4 text-left">Invoice ID</th>
+                    <th className="px-6 py-4 text-left whitespace-nowrap">Order (SO)</th>
+                    <th className="px-6 py-4 text-left whitespace-nowrap">Invoice (SI)</th>
                     <th className="px-6 py-4 text-left">Voucher Type</th>
                     <th className="px-6 py-4 text-left">Customer</th>
                     {isFieldAllowed("itemsCount") && <th className="px-6 py-4 text-center">Items</th>}
@@ -863,16 +869,20 @@ const BranchInvoicedOrders = () => {
                               <div className="flex items-center gap-2">
                                 <div className={`p-1 w-2 h-2 rounded-full ${order.invoiceGenerated ? 'bg-green-500 animate-pulse' : 'bg-amber-400'}`} title={order.invoiceGenerated ? "Invoice Generated" : "Pending Invoice"}></div>
                                 <span className="font-bold text-[#319bab] text-xs">
-                                  SO: {order.invoiceId}
+                                  {order.invoiceId}
                                 </span>
                               </div>
-                              {order.salesInvoiceId && (
-                                <span className="font-black text-blue-600 text-[10px] ml-4">
-                                  SI: {order.salesInvoiceId}
-                                </span>
-                              )}
                             </div>
                           </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {order.salesInvoiceId ? (
+                            <span className="font-black text-blue-600 text-xs">
+                              {order.salesInvoiceId}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-[10px] italic">Not Generated</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 font-black">
                            <span className="bg-slate-100 px-2 py-1 rounded text-[10px] text-slate-600 border border-slate-200 uppercase tracking-tighter">
@@ -1396,7 +1406,7 @@ const BranchInvoicedOrders = () => {
                       {expandedOrders[order._id] &&
                         (invoicesByOrder[order._id] || []).length === 0 && (
                           <tr className="bg-blue-50">
-                            <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
+                            <td colSpan="10" className="px-6 py-4 text-center text-gray-500">
                               <p className="text-sm">
                                 No invoices generated yet for this sales order
                               </p>

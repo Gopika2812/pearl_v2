@@ -10,6 +10,7 @@ import OtherTransaction from "../models/OtherTransaction.js";
 import Receipt from "../models/Receipt.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
+import Invoice from "../models/Invoice.js";
 
 const router = express.Router();
 
@@ -24,76 +25,74 @@ const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * POST: Bulk Upload Customers
  */
 router.post("/bulk-upload", upload.single("file"), async (req, res) => {
-  console.log("🔥 CUSTOMER BULK UPLOAD HIT (REFINED MODE - MAR 31 OPENING)");
+  const { branchId, updateMode = "opening_balance" } = req.body;
+  console.log(`🔥 CUSTOMER BULK UPLOAD HIT (Mode: ${updateMode})`);
 
   try {
     if (!req.file) {
       return res.status(400).json({ message: "Excel file required" });
     }
 
-    const { branchId } = req.body;
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
     }
 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { raw: false });
+    const rows = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: "" });
 
     console.log("📄 TOTAL ROWS:", rows.length);
 
     // 📅 DEFINE CUTOFF: Everything after March 31, 2026
     const startOfApril = new Date("2026-04-01T00:00:00.000Z");
 
-    // 🚀 STEP 1: CALCULATE APRIL MOVEMENTS PER CUSTOMER
-    // This ensures that if we upload Mar 31 balances, we don't lose April sales/receipts.
+    // 🚀 STEP 1: CALCULATE APRIL MOVEMENTS (Only if balancing mode)
+    let salesMap = {};
+    let receiptMap = { credit: {}, debit: {} };
+    let cnMap = {};
 
-    // 1.1 April Sales (Debits)
-    const aprilSales = await SalesOrder.find({
-      branchId,
-      status: "INVOICED",
-      createdAt: { $gte: startOfApril }
-    }).select("customer.customerId lastInvoicedGrandTotal invoiceGrandTotal grandTotal");
+    if (updateMode === "opening_balance") {
+      const aprilSales = await SalesOrder.find({
+        branchId,
+        status: "INVOICED",
+        createdAt: { $gte: startOfApril }
+      }).select("customer.customerId lastInvoicedGrandTotal invoiceGrandTotal grandTotal");
 
-    const salesMap = {};
-    aprilSales.forEach(s => {
-      const cId = s.customer?.customerId?.toString();
-      if (!cId) return;
-      const amt = s.lastInvoicedGrandTotal !== undefined ? s.lastInvoicedGrandTotal : (s.invoiceGrandTotal || s.grandTotal || 0);
-      salesMap[cId] = (salesMap[cId] || 0) + amt;
-    });
+      aprilSales.forEach(s => {
+        const cId = s.customer?.customerId?.toString();
+        if (!cId) return;
+        const amt = s.lastInvoicedGrandTotal !== undefined ? s.lastInvoicedGrandTotal : (s.invoiceGrandTotal || s.grandTotal || 0);
+        salesMap[cId] = (salesMap[cId] || 0) + amt;
+      });
 
-    // 1.2 April Receipts (Credits/Bounced)
-    const aprilReceipts = await Receipt.find({
-      branchId,
-      status: { $in: ["confirmed", "bounced"] },
-      createdAt: { $gte: startOfApril }
-    }).select("customer.customerId amount status");
+      const aprilReceipts = await Receipt.find({
+        branchId,
+        status: { $in: ["confirmed", "bounced"] },
+        createdAt: { $gte: startOfApril }
+      }).select("customer.customerId amount status");
 
-    const receiptMap = { credit: {}, debit: {} };
-    aprilReceipts.forEach(r => {
-      const cId = r.customer?.customerId?.toString();
-      if (!cId) return;
-      if (r.status === "bounced") {
-        receiptMap.debit[cId] = (receiptMap.debit[cId] || 0) + (r.amount || 0);
-      } else {
-        receiptMap.credit[cId] = (receiptMap.credit[cId] || 0) + (r.amount || 0);
-      }
-    });
+      aprilReceipts.forEach(r => {
+        const cId = r.customer?.customerId?.toString();
+        if (!cId) return;
+        if (r.status === "bounced") {
+          receiptMap.debit[cId] = (receiptMap.debit[cId] || 0) + (r.amount || 0);
+        } else {
+          receiptMap.credit[cId] = (receiptMap.credit[cId] || 0) + (r.amount || 0);
+        }
+      });
 
-    // 1.3 April Credit Notes (Credits)
-    const aprilCNs = await CreditNote.find({
-      branchId,
-      status: "Created",
-      createdAt: { $gte: startOfApril }
-    }).select("customer.customerId grandTotal");
+      const aprilCNs = await CreditNote.find({
+        branchId,
+        status: "Created",
+        createdAt: { $gte: startOfApril }
+      }).select("customer.customerId grandTotal");
 
-    const cnMap = {};
-    aprilCNs.forEach(cn => {
-      const cId = cn.customer?.customerId?.toString();
-      if (!cId) return;
-      cnMap[cId] = (cnMap[cId] || 0) + (cn.grandTotal || 0);
-    });
+      aprilCNs.forEach(cn => {
+        const cId = cn.customer?.customerId?.toString();
+        if (!cId) return;
+        cnMap[cId] = (cnMap[cId] || 0) + (cn.grandTotal || 0);
+      });
+    }
 
     // 🏗️ STEP 2: PREPARE MASTER DATA MAPS
     const allSalesOwners = await SalesOwner.find({});
@@ -105,7 +104,11 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
     // Fetch existing customers to match by Name or WhatsApp
     const existingCustomers = await Customer.find({ branchId }, { name: 1, whatsapp: 1 });
-    const nameMap = new Map(existingCustomers.map(c => [c.name.toLowerCase(), c._id]));
+    // Normalize DB names: lowercase and collapse multiple spaces into one
+    const nameMap = new Map(existingCustomers.map(c => [
+      c.name.toLowerCase().replace(/\s+/g, " ").trim(), 
+      c._id
+    ]));
     const whatsappMap = new Map(existingCustomers.filter(c => c.whatsapp).map(c => [c.whatsapp.replace(/\D/g, ""), c._id]));
 
     let customersToBulkInsert = [];
@@ -129,12 +132,26 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         continue;
       }
 
-      // MATCHING LOGIC: WhatsApp first (if provided), then Name
+      // MATCHING LOGIC: WhatsApp first (if provided), then Name (Normalized)
+      const normalizedNameKey = name.toLowerCase().replace(/\s+/g, " ").trim();
       let existingCustomerId = (whatsapp && whatsappMap.has(whatsapp))
         ? whatsappMap.get(whatsapp)
-        : nameMap.get(name.toLowerCase());
+        : nameMap.get(normalizedNameKey);
 
-      let customerData = { branchId, name };
+      // [SKIP POLICY] If info_only mode and no match found, skip as per user instruction
+      if (updateMode === "info_only" && !existingCustomerId) {
+        skipped.push({ row, name, reason: "Customer not found in database (Skip in Safe Mode)" });
+        continue;
+      }
+
+      // Initialize update data. We don't include Name in updates to avoid unique index collisions
+      // (Safe Mode users usually want to update info like Groups/Limits, not rename customers).
+      let customerData = { branchId };
+
+      // Record the name for new inserts only
+      if (!existingCustomerId) {
+        customerData.name = name;
+      }
 
       // Field normalization
       if (normalizedRow.whatsapp !== undefined) customerData.whatsapp = normalizedRow.whatsapp;
@@ -143,40 +160,77 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       if (normalizedRow.district !== undefined) customerData.district = normalizedRow.district;
       if (normalizedRow.state !== undefined) customerData.state = normalizedRow.state;
       if (normalizedRow.gstin !== undefined) customerData.gstin = normalizedRow.gstin;
-      if (normalizedRow.creditlimit !== undefined) customerData.creditLimit = parseFloat(normalizedRow.creditlimit) || 200000;
-
-      // 💰 FINANCIAL CALCULATIONS (SPECIALIZED FOR MAR 31 OPENING)
-      const rawDebit = normalizedRow.debit || normalizedRow.debitbalance || normalizedRow.dr;
-      const rawCredit = normalizedRow.credit || normalizedRow.creditbalance || normalizedRow.cr;
-
-      if (rawDebit !== undefined || rawCredit !== undefined) {
-        const excelDebit = parseFloat(String(rawDebit || 0).replace(/[^0-9.-]+/g, "")) || 0;
-        const excelCredit = parseFloat(String(rawCredit || 0).replace(/[^0-9.-]+/g, "")) || 0;
-
-        // Calculate movements for this specific customer
-        const cIdStr = existingCustomerId?.toString();
-        const aprSales = salesMap[cIdStr] || 0;
-        const aprBounced = receiptMap.debit[cIdStr] || 0;
-        const aprConfirmed = receiptMap.credit[cIdStr] || 0;
-        const aprCNs = cnMap[cIdStr] || 0;
-
-        // Current totals = Excel Opening + April movements
-        customerData.debit = excelDebit + aprSales + aprBounced;
-        customerData.credit = excelCredit + aprConfirmed + aprCNs;
-
-        // Fix opening balance field for ledger stability
-        customerData.openingBalance = excelDebit - excelCredit;
-        customerData.manualOpeningDate = new Date("2026-03-31T23:59:59.999Z");
-
-        console.log(`📊 Adj Balance for ${name}: Excel[Dr:${excelDebit}/Cr:${excelCredit}] + April[Dr:${aprSales + aprBounced}/Cr:${aprConfirmed + aprCNs}] = Final[Dr:${customerData.debit}/Cr:${customerData.credit}]`);
+      if (normalizedRow.creditlimit !== undefined) {
+          const rawVal = String(normalizedRow.creditlimit).trim();
+          if (rawVal === "") {
+              customerData.creditLimit = 0; // Clear it if empty in Excel
+          } else {
+              const sanitizedVal = rawVal.replace(/[^0-9.-]+/g, "");
+              customerData.creditLimit = parseFloat(sanitizedVal) || 0;
+          }
+      }
+      if (normalizedRow.creditdays !== undefined || normalizedRow.creditlimitdays !== undefined) {
+          const rawVal = (normalizedRow.creditdays || normalizedRow.creditlimitdays || "").trim();
+          customerData.creditLimitDays = rawVal === "" ? 0 : (parseInt(rawVal) || 0);
       }
 
-      // Sales Owner, Categories, Groups mapping
+      // 💰 FINANCIAL CALCULATIONS (ONLY in opening_balance mode)
+      if (updateMode === "opening_balance") {
+        const rawDebit = normalizedRow.debit || normalizedRow.debitbalance || normalizedRow.dr;
+        const rawCredit = normalizedRow.credit || normalizedRow.creditbalance || normalizedRow.cr;
+
+        if (rawDebit !== undefined || rawCredit !== undefined) {
+          const excelDebit = parseFloat(String(rawDebit || 0).replace(/[^0-9.-]+/g, "")) || 0;
+          const excelCredit = parseFloat(String(rawCredit || 0).replace(/[^0-9.-]+/g, "")) || 0;
+
+          // Calculate movements for this specific customer
+          const cIdStr = existingCustomerId?.toString();
+          const aprSales = salesMap[cIdStr] || 0;
+          const aprBounced = receiptMap.debit[cIdStr] || 0;
+          const aprConfirmed = receiptMap.credit[cIdStr] || 0;
+          const aprCNs = cnMap[cIdStr] || 0;
+
+          // Current totals = Excel Opening + April movements
+          customerData.debit = excelDebit + aprSales + aprBounced;
+          customerData.credit = excelCredit + aprConfirmed + aprCNs;
+
+          // Fix opening balance field for ledger stability
+          customerData.openingBalance = excelDebit - excelCredit;
+          customerData.manualOpeningDate = new Date("2026-03-31T23:59:59.999Z");
+        }
+      }
+
+      // Sales Owner mapping
       if (normalizedRow.salesowner && salesOwnerMap.has(normalizedRow.salesowner.toLowerCase())) {
         customerData.salesOwner = salesOwnerMap.get(normalizedRow.salesowner.toLowerCase());
       }
-      if (normalizedRow.customercategory && customerCategoryMap.has(normalizedRow.customercategory.toLowerCase())) {
-        customerData.customerCategories = [customerCategoryMap.get(normalizedRow.customercategory.toLowerCase())];
+      
+      // Category mapping
+      const catKeyRaw = normalizedRow.customercategory || normalizedRow.customercategories || normalizedRow.category;
+      if (catKeyRaw !== undefined) {
+        const catKey = String(catKeyRaw).trim();
+        if (catKey === "") {
+            customerData.customerCategories = [];
+            customerData.customerCategory = null;
+        } else if (customerCategoryMap.has(catKey.toLowerCase())) {
+            const catId = customerCategoryMap.get(catKey.toLowerCase());
+            customerData.customerCategories = [catId];
+            customerData.customerCategory = catId;
+        }
+      }
+
+      // Group mapping
+      const groupKeyRaw = normalizedRow.customergroup || normalizedRow.customergroups || normalizedRow.group;
+      if (groupKeyRaw !== undefined) {
+        const groupKey = String(groupKeyRaw).trim();
+        if (groupKey === "") {
+            customerData.customerGroups = [];
+            customerData.customerGroup = null;
+        } else if (customerGroupMap.has(groupKey.toLowerCase())) {
+            const groupId = customerGroupMap.get(groupKey.toLowerCase());
+            customerData.customerGroups = [groupId];
+            customerData.customerGroup = groupId;
+        }
       }
 
       if (existingCustomerId) {
@@ -187,11 +241,12 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
           }
         });
       } else {
+        // Only insert if NOT info_only mode
         const newCustomerData = {
           ...customerData,
-          stateCode: customerData.stateCode || "33",
+          stateCode: normalizedRow.statecode || "33",
           country: customerData.country || "India",
-          registrationType: customerData.registrationType || "regular",
+          registrationType: normalizedRow.registrationtype || "regular",
         };
         customersToBulkInsert.push(newCustomerData);
         // Avoid duplicate inserts for same name in same file
@@ -212,16 +267,20 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     }
 
     return res.json({
-      message: "Bulk upload (Opening Balance mode) completed successfully",
+      success: true,
+      message: `Bulk upload (${updateMode}) completed successfully`,
       insertedCount,
       updatedCount,
       skippedCount: skipped.length,
       skipped,
-      info: "Balances adjusted as of March 31st cutoff. April transactions were preserved."
+      info: updateMode === "info_only" 
+        ? "Only customer information was updated. Financial balances were NOT touched."
+        : "Balances adjusted as of March 31st cutoff. April transactions were preserved."
     });
   } catch (err) {
     console.error("Customer bulk upload error:", err);
     return res.status(500).json({
+      success: false,
       message: "Bulk upload failed",
       error: err.message,
     });
@@ -871,22 +930,20 @@ router.get("/:id/ledger", async (req, res) => {
     end.setHours(23, 59, 59, 999);
 
     // 1. Get current balance (This is the anchor for our backwards calculation)
-    // For a customer (debtor), Balance = Debit - Credit
     const currentBalance = (customer.debit || 0) - (customer.credit || 0);
 
     // 2. Fetch ALL transactions after startDate to determine the opening balance
+    // 🛡️ We remove branchId filter to show all transactions affecting the global balance.
 
-    // Debits: Sales Invoices after startDate
-    const salesAfterStart = await SalesOrder.find({
-      branchId: customer.branchId,
+    // Debits: Invoices after startDate (Using Invoice model as source of truth for finalized bills)
+    const invoicesAfterStart = await Invoice.find({
       "customer.customerId": id,
-      status: "INVOICED",
-      createdAt: { $gte: start }
-    }).select("grandTotal invoiceGrandTotal lastInvoicedGrandTotal createdAt invoiceId");
+      status: "FINALIZED",
+      invoiceDate: { $gte: start }
+    }).select("grandTotal invoiceDate invoiceNumber salesOrderId status");
 
     // Credits: Receipts after startDate
     const receiptsAfterStart = await Receipt.find({
-      branchId: customer.branchId,
       "customer.customerId": id,
       status: { $in: ["confirmed", "bounced"] },
       createdAt: { $gte: start }
@@ -894,19 +951,13 @@ router.get("/:id/ledger", async (req, res) => {
 
     // Credits: Credit Notes after startDate
     const cnAfterStart = await CreditNote.find({
-      branchId: customer.branchId,
       "customer.customerId": id,
       status: "Created",
-      createdAt: { $gte: start }
-    }).select("grandTotal createdAt creditNoteId reasonForReturn");
+      date: { $gte: start }
+    }).select("grandTotal date creditNoteId reasonForReturn");
 
-    // Opening Balance = Current_Balance - (Debits after Start) + (Credits after Start)
-    // 🛡️ CRITICAL: We MUST use the LAST FINALIZED amount (lastInvoicedGrandTotal) for ledger stability.
-    // If we use the "Draft" grandTotal, the Opening Balance will shift incorrectly during edits.
-    const totalDebitsAfterStart = salesAfterStart.reduce((sum, s) => {
-      const finalizedAmount = s.lastInvoicedGrandTotal !== undefined ? s.lastInvoicedGrandTotal : (s.invoiceGrandTotal || s.grandTotal || 0);
-      return sum + finalizedAmount;
-    }, 0);
+    // 🧮 Opening Balance = Current_Balance - (Debits after Start) + (Credits after Start)
+    const totalDebitsAfterStart = invoicesAfterStart.reduce((sum, s) => sum + (s.grandTotal || 0), 0);
 
     const totalCreditsAfterStart =
       receiptsAfterStart.reduce((sum, r) => {
@@ -918,19 +969,18 @@ router.get("/:id/ledger", async (req, res) => {
     const openingBalance = currentBalance - totalDebitsAfterStart + totalCreditsAfterStart;
 
     // 3. Filter transactions within the [start, end] range
-    const inRangeSales = salesAfterStart.filter(s => s.createdAt <= end);
+    const inRangeInvoices = invoicesAfterStart.filter(s => s.invoiceDate <= end);
     const inRangeReceipts = receiptsAfterStart.filter(r => r.createdAt <= end);
-    const inRangeCNs = cnAfterStart.filter(cn => cn.createdAt <= end);
+    const inRangeCNs = cnAfterStart.filter(cn => (cn.date || cn.createdAt) <= end);
 
     // Format all transactions
     const txns = [
-      ...inRangeSales.map(s => ({
-        id: `si-${s._id}`,
-        date: s.createdAt,
+      ...inRangeInvoices.map(s => ({
+        id: `inv-${s._id}`,
+        date: s.invoiceDate,
         type: "INVOICE",
-        particulars: `Sales Invoice: ${s.invoiceId}`,
-        // 🛡️ Use finalized amount for the report line item
-        debit: s.lastInvoicedGrandTotal !== undefined ? s.lastInvoicedGrandTotal : (s.invoiceGrandTotal || s.grandTotal || 0),
+        particulars: `Sales Invoice: ${s.invoiceNumber}`,
+        debit: s.grandTotal || 0,
         credit: 0
       })),
       ...inRangeReceipts.map(r => ({
@@ -943,7 +993,7 @@ router.get("/:id/ledger", async (req, res) => {
       })),
       ...inRangeCNs.map(cn => ({
         id: `cn-${cn._id}`,
-        date: cn.createdAt,
+        date: cn.date || cn.createdAt,
         type: "CREDIT_NOTE",
         particulars: `Credit Note: ${cn.creditNoteId} (${cn.reasonForReturn || "General"})`,
         debit: 0,

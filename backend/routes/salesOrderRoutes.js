@@ -149,6 +149,7 @@ router.get("/", async (req, res) => {
       const searchCriteria = {
         $or: [
           { invoiceId: { $regex: search, $options: "i" } },
+          { salesInvoiceId: { $regex: search, $options: "i" } },
           { "customer.name": { $regex: search, $options: "i" } }
         ]
       };
@@ -188,7 +189,7 @@ router.get("/", async (req, res) => {
 
     // ⚡ Optimized Fetch
     const salesOrders = await SalesOrder.find(query)
-      .select("invoiceId customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt orderDate invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount invoiceItems lastInvoicedItems invoiceSubtotal invoiceTotalTax invoiceGrandTotal invoiceOpeningBalance invoiceClosingBalance")
+      .select("invoiceId salesInvoiceId customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt orderDate invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount invoiceItems lastInvoicedItems invoiceSubtotal invoiceTotalTax invoiceGrandTotal invoiceOpeningBalance invoiceClosingBalance")
       .populate('salesOwner', 'name')
       .populate('items.productId')
       .populate('invoiceItems.productId')
