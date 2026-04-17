@@ -19,15 +19,24 @@ router.get("/branch/:branchId", auth, async (req, res) => {
     }
 
     let query = { branchId };
+    
+    // Role-based visibility:
+    // ADMIN and SUPER_ADMIN see all. Others see only what is assigned to them.
+    if (req.user.role !== "ADMIN" && req.user.role !== "SUPER_ADMIN") {
+      query["assignedTo.id"] = req.user.id;
+    }
+
     if (status && status !== "ALL") {
       query.status = status;
     } else if (!status) {
-      // Default: exclude finished and cancelled unless specified
+      // Default: exclude completed and cancelled unless specified
       query.status = { $in: ["OPEN", "TAKEN", "IN_PROGRESS"] };
     }
     // If status is "ALL", no status filter is applied to the query
 
-    const tokens = await Token.find(query).sort({ createdAt: -1 });
+    const tokens = await Token.find(query)
+      .populate("assignedTo.id", "fullName username role")
+      .sort({ createdAt: -1 });
 
     res.json({ success: true, data: tokens });
   } catch (error) {
@@ -39,10 +48,10 @@ router.get("/branch/:branchId", auth, async (req, res) => {
 // POST: Create a new token
 router.post("/", auth, async (req, res) => {
   try {
-    const { branchId, createdBy, assignedTo, customer, items } = req.body;
+    const { branchId, createdBy, assignedTo, customer, message } = req.body;
 
-    if (!branchId || !createdBy || !assignedTo || !customer) {
-      return res.status(400).json({ success: false, message: "Missing required fields" });
+    if (!branchId || !createdBy || !assignedTo || !customer || !message) {
+      return res.status(400).json({ success: false, message: "Missing required fields (including message)" });
     }
 
     // 1. Get Branch Code for ID generation
@@ -80,7 +89,7 @@ router.post("/", auth, async (req, res) => {
           createdBy,
           assignedTo,
           customer,
-          items,
+          message,
           status: "OPEN"
         });
 
@@ -136,7 +145,7 @@ router.patch("/:id/status", auth, async (req, res) => {
       if (!token.takenAt) token.takenAt = new Date();
     }
 
-    if (status === "FINISHED") {
+    if (status === "COMPLETED") {
       token.finishedAt = new Date();
       if (salesOrderId) token.salesOrderId = salesOrderId;
     }

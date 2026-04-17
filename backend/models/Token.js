@@ -29,18 +29,12 @@ const tokenSchema = new mongoose.Schema(
       name: String,
     },
     
-    // Items List
-    items: [
-      {
-        productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
-        name: String,
-        qty: Number,
-      },
-    ],
+    // Token message replaces product list
+    message: { type: String, required: true },
     
     status: {
       type: String,
-      enum: ["OPEN", "TAKEN", "IN_PROGRESS", "FINISHED", "CANCELLED"],
+      enum: ["OPEN", "TAKEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
       default: "OPEN",
     },
     

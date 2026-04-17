@@ -28,14 +28,8 @@ const Tokenization = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   
-  const [tokenItems, setTokenItems] = useState([]);
-  const [itemSearch, setItemSearch] = useState("");
-  const [itemQty, setItemQty] = useState(1);
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [showProductDropdown, setShowProductDropdown] = useState(false);
-
+  const [tokenMessage, setTokenMessage] = useState("");
   const customerDropdownRef = useRef(null);
-  const productDropdownRef = useRef(null);
 
   useEffect(() => {
     fetchTokens();
@@ -72,8 +66,8 @@ const Tokenization = () => {
   };
 
   const handleCreateToken = async () => {
-    if (!assignedPerson.id || !selectedCustomer || tokenItems.length === 0) {
-      toast.warning("Please fill assigned person, customer and add at least one item");
+    if (!assignedPerson.id || !selectedCustomer || !tokenMessage.trim()) {
+      toast.warning("Please fill assigned person, customer and a message");
       return;
     }
 
@@ -83,7 +77,7 @@ const Tokenization = () => {
         createdBy: createdPerson,
         assignedTo: assignedPerson,
         customer: { id: selectedCustomer._id, name: selectedCustomer.name },
-        items: tokenItems
+        message: tokenMessage
       };
 
       const res = await fetchWithAuth(`${API_BASE}/tokens`, {
@@ -110,10 +104,7 @@ const Tokenization = () => {
     setAssignedPerson({ id: "", name: "" });
     setSelectedCustomer(null);
     setCustomerSearch("");
-    setTokenItems([]);
-    setItemSearch("");
-    setItemQty(1);
-    setSelectedProduct(null);
+    setTokenMessage("");
   };
 
   const updateTokenStatus = async (tokenId, status) => {
@@ -140,13 +131,6 @@ const Tokenization = () => {
     ).slice(0, 5);
   }, [customers, customerSearch]);
 
-  const filteredProducts = useMemo(() => {
-    if (!itemSearch.trim()) return [];
-    return products.filter(p => 
-      p.name.toLowerCase().includes(itemSearch.toLowerCase())
-    ).slice(0, 5);
-  }, [products, itemSearch]);
-
   const filteredTokens = useMemo(() => {
     return tokens.filter(t => {
       const matchesSearch = 
@@ -161,31 +145,11 @@ const Tokenization = () => {
     });
   }, [tokens, searchQuery, statusFilter]);
 
-  const addItem = () => {
-    if (!selectedProduct || !itemQty) return;
-    const newItem = {
-      productId: selectedProduct._id,
-      name: selectedProduct.name,
-      qty: Number(itemQty)
-    };
-    setTokenItems([...tokenItems, newItem]);
-    setSelectedProduct(null);
-    setItemSearch("");
-    setItemQty(1);
-  };
-
-  const removeItem = (index) => {
-    setTokenItems(tokenItems.filter((_, i) => i !== index));
-  };
-
   // --- CLICK OUTSIDE HANDLERS ---
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target)) {
         setShowCustomerDropdown(false);
-      }
-      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target)) {
-        setShowProductDropdown(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -218,7 +182,8 @@ const Tokenization = () => {
                 </span>
                 <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black tracking-widest uppercase border ${
                   token.status === "OPEN" ? "bg-amber-50 text-amber-600 border-amber-100" :
-                  token.status === "FINISHED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                  token.status === "COMPLETED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                  token.status === "CANCELLED" ? "bg-red-50 text-red-600 border-red-100" :
                   "bg-blue-50 text-blue-600 border-blue-100"
                 }`}>
                   {token.status?.replace("_", " ")}
@@ -275,15 +240,10 @@ const Tokenization = () => {
 
               <div>
                 <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                  <FaBox className="text-slate-300" /> Items ({token.items?.length})
+                  <FaBox className="text-slate-300" /> Task Message
                 </p>
-                <div className="space-y-1.5">
-                  {token.items?.map((item, idx) => (
-                    <div key={idx} className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-[10px] flex items-center justify-between shadow-sm">
-                      <span className="font-bold text-slate-700">{item.name}</span>
-                      <span className="font-black text-indigo-600">x{item.qty}</span>
-                    </div>
-                  ))}
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl text-[11px] font-bold text-slate-600 leading-relaxed min-h-[80px]">
+                  {token.message || "No message provided."}
                 </div>
               </div>
             </div>
@@ -309,20 +269,26 @@ const Tokenization = () => {
             )}
             {token.status === "IN_PROGRESS" && (
               <button 
-                onClick={() => updateTokenStatus(token._id, "FINISHED")}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5"
+                onClick={() => updateTokenStatus(token._id, "COMPLETED")}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-9 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-200"
               >
-                <FaCheckCircle /> Finish
+                <FaCheckCircle /> Complete
               </button>
             )}
-            {token.status === "FINISHED" && (
+            {token.status === "COMPLETED" && (
               <div className="flex-1 flex items-center justify-center gap-1.5 text-emerald-600 font-bold bg-emerald-50 h-9 rounded-xl border border-emerald-100 text-[10px] uppercase tracking-widest">
-                <FaCheckCircle /> Completed
+                <FaCheckCircle /> Finished
               </div>
             )}
-            <button className="w-9 h-9 rounded-xl bg-slate-50 text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors flex items-center justify-center border border-slate-100">
-              <FaHistory />
-            </button>
+            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && token.status !== "COMPLETED" && token.status !== "CANCELLED" && (
+              <button 
+                onClick={() => updateTokenStatus(token._id, "CANCELLED")}
+                className="w-9 h-9 rounded-xl bg-red-50 text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center border border-red-100"
+                title="Cancel Token"
+              >
+                <FaTimes size={14} />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -369,7 +335,7 @@ const Tokenization = () => {
           />
         </div>
         <div className="flex gap-2 p-1.5 bg-white border-2 border-slate-100 rounded-2xl shadow-sm overflow-x-auto no-scrollbar">
-          {["ALL", "OPEN", "TAKEN", "IN_PROGRESS", "FINISHED"].map(status => (
+          {["ALL", "OPEN", "TAKEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"].map(status => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -391,7 +357,7 @@ const Tokenization = () => {
           { label: "Active", value: tokens.filter(t => ["OPEN", "TAKEN", "IN_PROGRESS"].includes(t.status)).length, color: "text-indigo-600" },
           { label: "Pending", value: tokens.filter(t => t.status === "OPEN").length, color: "text-amber-600" },
           { label: "In Progress", value: tokens.filter(t => ["TAKEN", "IN_PROGRESS"].includes(t.status)).length, color: "text-blue-600" },
-          { label: "Done Today", value: tokens.filter(t => t.status === "FINISHED").length, color: "text-emerald-600" }
+          { label: "Done", value: tokens.filter(t => t.status === "COMPLETED").length, color: "text-emerald-600" }
         ].map((stat, i) => (
           <div key={i} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
@@ -486,35 +452,17 @@ const Tokenization = () => {
                 </div>
               </div>
 
-              <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <FaShoppingBag className="text-indigo-400" /> Items List
-                </h4>
-                <div className="flex gap-2 mb-6">
-                  <div className="flex-1 relative" ref={productDropdownRef}>
-                    <input type="text" placeholder="Item name..." value={itemSearch} onChange={(e) => { setItemSearch(e.target.value); setShowProductDropdown(true); }} onFocus={() => setShowProductDropdown(true)} className="w-full bg-white border-2 border-slate-100 rounded-lg px-3 py-2.5 text-xs font-bold outline-none focus:border-indigo-500 transition-all" />
-                    {showProductDropdown && filteredProducts.length > 0 && (
-                      <div className="absolute top-[110%] left-0 right-0 bg-white rounded-lg shadow-xl border border-slate-100 overflow-hidden z-20">
-                        {filteredProducts.map(p => (
-                          <div key={p._id} onClick={() => { setSelectedProduct(p); setItemSearch(p.name); setShowProductDropdown(false); }} className="px-4 py-2 hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-800 border-b border-slate-50 last:border-0">{p.name}</div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <input type="number" value={itemQty} onChange={(e) => setItemQty(e.target.value)} className="w-16 bg-white border-2 border-slate-100 rounded-lg px-2 py-2.5 text-xs font-black text-indigo-600 outline-none text-center" />
-                  <button onClick={addItem} disabled={!selectedProduct || !itemQty} className="bg-indigo-600 text-white w-10 flex items-center justify-center rounded-lg hover:bg-indigo-700 transition"><FaPlus size={12} /></button>
-                </div>
-
-                <div className="space-y-2">
-                  {tokenItems.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-black text-slate-800">{item.name}</span>
-                        <span className="text-[10px] font-black text-indigo-600">x{item.qty}</span>
-                      </div>
-                      <button onClick={() => removeItem(idx)} className="text-slate-300 hover:text-red-500 transition-colors"><FaTimes size={12} /></button>
-                    </div>
-                  ))}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <FaBox className="text-indigo-400" /> Token Message / Notes
+                  </label>
+                  <textarea 
+                    value={tokenMessage}
+                    onChange={(e) => setTokenMessage(e.target.value)}
+                    placeholder="Enter task details, messages, or instructions here..."
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all min-h-[120px] resize-none shadow-inner"
+                  />
                 </div>
               </div>
             </div>

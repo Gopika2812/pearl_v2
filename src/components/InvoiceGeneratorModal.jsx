@@ -21,7 +21,13 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  // Edit state
+  // Lifecycle guard
+  const isMounted = useRef(false);
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
   const initializationRef = useRef(false);
 
   // 🏥 Name Repair Helper
@@ -464,12 +470,16 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
 
       // Auto print if selected
       if (shouldPrint) {
-        setTimeout(() => handlePrint(), 500);
+        setTimeout(() => {
+          if (isMounted.current) handlePrint();
+        }, 500);
       }
 
       // Auto WhatsApp if selected
       if (shouldWhatsApp) {
-        setTimeout(() => handleWhatsApp(), 500);
+        setTimeout(() => {
+          if (isMounted.current) handleWhatsApp();
+        }, 500);
       }
 
       if (onSuccess) onSuccess();

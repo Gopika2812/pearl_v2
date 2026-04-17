@@ -220,7 +220,10 @@ const BranchInvoicedOrders = () => {
       toast.error(err.message || "Failed to generate invoice");
     } finally {
       setProcessingPrint(false);
-      setSelectedOrder(null);
+      // Small timeout to prevent unmounting race conditions with print dialogs
+      setTimeout(() => {
+        setSelectedOrder(null);
+      }, 500);
     }
   };
 
@@ -949,7 +952,6 @@ const BranchInvoicedOrders = () => {
                               <button
                                 onClick={() => handleGenerateInvoice(order, false)}
                                 className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-black bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-200 border border-blue-700"
-                                title="View/Print SI Bill Format"
                               >
                                 <FaFileInvoice className="text-sm" />
                                 SI Bill
@@ -970,7 +972,6 @@ const BranchInvoicedOrders = () => {
                               <button
                                 onClick={() => handleOpenCancelModal(order)}
                                 className="flex items-center gap-1 px-3 py-2 rounded-lg transition text-xs font-semibold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-200 hover:border-red-600 shadow-sm"
-                                title="Cancel this Sales Order"
                               >
                                 <FaBan className="text-xs" />
                                 Cancel
