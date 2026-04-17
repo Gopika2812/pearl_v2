@@ -37,6 +37,7 @@ const BranchInvoicedOrders = () => {
   const [showCopyChoice, setShowCopyChoice] = useState(false);
   const [processingPrint, setProcessingPrint] = useState(false);
   const [voucherTypes, setVoucherTypes] = useState([]);
+  const [useSoFormat, setUseSoFormat] = useState(false);
 
   // Cancel SO state
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -138,8 +139,9 @@ const BranchInvoicedOrders = () => {
     toast.info("Filters reset to Today");
   };
 
-  const handleGenerateInvoice = (order) => {
+  const handleGenerateInvoice = (order, asSo = false) => {
     setSelectedOrder(order);
+    setUseSoFormat(asSo);
     setShowModal(true); // Open the Back Order Workbench / Generator
   };
 
@@ -943,9 +945,20 @@ const BranchInvoicedOrders = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center gap-2 justify-center flex-wrap">
+                            {order.invoiceGenerated && (
+                              <button
+                                onClick={() => handleGenerateInvoice(order, false)}
+                                className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-black bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-200 border border-blue-700"
+                                title="View/Print SI Bill Format"
+                              >
+                                <FaFileInvoice className="text-sm" />
+                                SI Bill
+                              </button>
+                            )}
+
                             <button
-                              onClick={() => handleGenerateInvoice(order)}
-                              className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-md shadow-[#319bab]/20"
+                              onClick={() => handleGenerateInvoice(order, true)}
+                              className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-sm shadow-[#319bab]/20"
                               disabled={order.status === "CANCELLED"}
                             >
                               <FaFileInvoice />
@@ -1426,6 +1439,7 @@ const BranchInvoicedOrders = () => {
       {showModal && selectedOrder && (
         <InvoiceGeneratorModal
           order={selectedOrder}
+          useSoNumber={useSoFormat}
           onClose={() => {
             setShowModal(false);
             setSelectedOrder(null);

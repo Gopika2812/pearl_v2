@@ -449,6 +449,7 @@ const BranchClaims = () => {
       {showModal && selectedOrder && (
         <InvoiceGeneratorModal
           order={selectedOrder}
+          useSoNumber={true} // Default to SO format for claims preview
           onClose={() => {
             setShowModal(false);
             setSelectedOrder(null);

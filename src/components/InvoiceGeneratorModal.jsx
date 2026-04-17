@@ -14,7 +14,7 @@ import { API_BASE } from "../api";
 import { useBranch } from "../context/BranchContext";
 import { useInventory } from "../context/InventoryContext";
 
-const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
+const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false }) => {
   const { currentBranch, user } = useBranch();
   const { products } = useInventory();
   const [activeTab, setActiveTab] = useState("edit");
@@ -412,6 +412,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess }) => {
             commonDiscount: Number(commonDiscount) || 0,
             transportCharge: Number(transportCharge) || 0,
             transportGstPercent: Number(transportGstPercent) || 18,
+            useSoNumber,
             customerId: selectedCustomer?.customerId || selectedCustomer?._id, // Use swapped customer
           }),
         }

@@ -198,7 +198,8 @@ router.post("/preview/:salesOrderId", async (req, res) => {
 
     // Predict Sales Invoice (SI) Number for Preview
     const financialYear = getFinancialYear();
-    let predictedSI = salesOrder.salesInvoiceId;
+    const useSoNumber = req.body.useSoNumber === true;
+    let predictedSI = useSoNumber ? salesOrder.invoiceId : salesOrder.salesInvoiceId;
     
     if (!predictedSI) {
       const rawSoId = salesOrder.invoiceId || "";
