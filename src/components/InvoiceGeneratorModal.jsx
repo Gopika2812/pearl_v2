@@ -472,17 +472,20 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
       if (shouldPrint) {
         setTimeout(() => {
           if (isMounted.current) handlePrint();
-        }, 500);
+        }, 200);
       }
 
       // Auto WhatsApp if selected
       if (shouldWhatsApp) {
         setTimeout(() => {
           if (isMounted.current) handleWhatsApp();
-        }, 500);
+        }, 200);
       }
 
-      if (onSuccess) onSuccess();
+      // Call onSuccess after a small delay to allow printing triggers to initialize
+      setTimeout(() => {
+        if (isMounted.current && onSuccess) onSuccess();
+      }, 300);
     } catch (error) {
       console.error("Error:", error);
       toast.error(error.message || "Failed to finalize invoice");
