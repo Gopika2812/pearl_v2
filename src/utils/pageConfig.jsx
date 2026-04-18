@@ -46,6 +46,7 @@ export const PAGE_CONFIG = [
     category: "General",
     items: [
       { id: "home", name: "Home Dashboard", path: "/branch-home", icon: "home" },
+      { id: "tokenization", name: "Tokenization", path: "/branch/tokenization", icon: "token" },
     ]
   },
   {
@@ -74,7 +75,6 @@ export const PAGE_CONFIG = [
         { id: "credit-note", name: "Credit Note", path: "/branch/credit-note", icon: "return" },
         { id: "receipt", name: "Receipt Management", path: "/branch/receipt", icon: "receipt" },
         { id: "receipt-records", name: "Receipt Records", path: "/branch/receipt-records", icon: "history" },
-        { id: "tokenization", name: "Tokenization", path: "/branch/tokenization", icon: "token" },
       ]},
       { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["margin", "debit", "credit", "gstin"] },
       { id: "follow-up-dropdown", name: "Customer Follow-Up", icon: "phone", isDropdown: true, subItems: [
