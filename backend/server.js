@@ -13,6 +13,7 @@ import { fixPurchaseOrderIndex } from "./utils/fixPurchaseOrderIndex.js";
 import { fixSalesOrderIndex } from "./utils/fixSalesOrderIndex.js";
 import fixVendorIndex from "./utils/fixVendorIndex.js";
 import fixVoucherTypeIndex from "./utils/fixVoucherTypeIndex.js";
+import fixTokenIndex from "./utils/fixTokenIndex.js";
 
 import auditLogRoutes from "./routes/auditLogRoutes.js";
 import branchRoutes from "./routes/branchRoutes.js";
@@ -151,6 +152,7 @@ mongoose
     await fixPurchaseInvoiceIndex();
     await fixSalesOrderIndex();
     await fixInvoiceIndex();
+    await fixTokenIndex();
     // await fixVoucherTypes(); // Commented out to prevent auto-recreation
   })
   .catch((err) => console.error("Mongo Error:", err));

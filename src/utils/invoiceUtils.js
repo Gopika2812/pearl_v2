@@ -4,7 +4,12 @@
  * Updated to follow the "1 copy = 2 pages" rule (Order Details + HSN Details).
  */
 
-export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generatedInvoice = {}) => {
+export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generatedInvoice = {}, mode = 'INVOICE') => {
+    const isCN = mode === 'CREDIT_NOTE';
+    const documentTitle = isCN ? "CREDIT NOTE" : "TAX INVOICE";
+    const idLabel = isCN ? "Credit Note ID" : "Invoice No";
+    const dateLabel = isCN ? "Note Date" : "Invoice Date";
+
     const style = `
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -28,7 +33,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
           font-size: 13px; 
           font-weight: bold; 
           color: #fff; 
-          background: #000; 
+          background: ${isCN ? '#0d9488' : '#000'}; 
           padding: 4px 10px; 
           margin: 10px 0 8px 0;
           border-radius: 4px;
@@ -70,23 +75,22 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
       </style>
     `;
 
-    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">${style}</head><body>`;
+    let html = `<!DOCTYPE html><html><head><title>${documentTitle}</title><meta charset="UTF-8">${style}</head><body>`;
 
     const isReEdited = !!order.isReEdited || !!order.invoiceGenerated;
-    const baseTitles = isReEdited 
-      ? ["RE-EDIT ORIGINAL", "RE-EDIT COPY 1", "RE-EDIT COPY 2"] 
-      : ["ORIGINAL INVOICE", "OFFICE COPY", "EXTRA COPY"];
+    let baseTitles = isCN 
+      ? ["CN ORIGINAL", "CN OFFICE COPY", "CN EXTRA COPY"]
+      : (isReEdited ? ["RE-EDIT ORIGINAL", "RE-EDIT COPY 1", "RE-EDIT COPY 2"] : ["ORIGINAL INVOICE", "OFFICE COPY", "EXTRA COPY"]);
     
     const copiesToGenerate = baseTitles.slice(0, numCopies);
 
     copiesToGenerate.forEach(copyTitle => {
-        // --- PAGE 1: ORDER DETAILS ---
+        // --- PAGE 1: DOCUMENT DETAILS ---
         html += `
           <div class="page">
             <div class="page-content">
               <div class="quick-info">
-                <span>INV: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</span>
-                <span>CUST: ${previewData?.customer?.name || "CASH CUSTOMER"}</span>
+                <span>${isCN ? 'CN' : 'INV'}: ${isCN ? (generatedInvoice?.creditNoteId || order?.creditNoteId) : (generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING")}</span>
               </div>
               <div class="top-header">
                 <div class="logo-box"><img src="${previewData?.seller?.logo || "/logo.jpeg"}" alt="Logo" /></div>
@@ -97,34 +101,37 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                     Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
                   </div>
                 </div>
-                ${previewData?.seller?.upiId ? `
+                ${(!isCN && previewData?.seller?.upiId) ? `
                 <div class="upi-qr-box">
                   <img src="https://api.qrserver.com/v1/create-qr-code/?size=70x70&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" alt="UPI QR" />
                   <div class="upi-qr-label">Scan to Pay</div>
                 </div>` : ''}
               </div>
 
-              <div class="section-title">📋 ORDER DETAILS</div>
+              <div class="section-title">📋 ${documentTitle} DETAILS</div>
 
               <div class="order-header">
                 <div class="order-header-col">
-                  <strong>Invoice No:</strong> ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}<br/>
-                  <strong>Date:</strong> ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
+                  <strong>${idLabel}:</strong> ${isCN ? (generatedInvoice?.creditNoteId || order?.creditNoteId) : (generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING")}<br/>
+                  <strong>${dateLabel}:</strong> ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
                 </div>
                 <div class="order-header-col" style="text-align: right;">
-                  <strong>Customer:</strong> ${previewData?.customer?.name || "CASH CUSTOMER"}<br/>
-                  <strong>Contact:</strong> ${previewData?.customer?.whatsapp || "-"}
+                  ${!isCN ? `
+                    <strong>Customer:</strong> ${previewData?.customer?.name || "CASH CUSTOMER"}<br/>
+                    <strong>Contact:</strong> ${previewData?.customer?.whatsapp || "-"}
+                  ` : ''}
                 </div>
               </div>
 
               <div class="sender-buyer">
                 <div class="sender-buyer-col">
-                  <strong>BUYER (BILL TO)</strong>
+                  <strong>${isCN ? 'RETURN FROM' : 'BUYER (BILL TO)'}</strong>
                   ${previewData?.customer?.name}<br/>
                   ${previewData?.customer?.address || "N/A"}<br/>
                   ${previewData?.customer?.district ? previewData?.customer?.district + ', ' : ''}${previewData?.customer?.state || ""} ${previewData?.customer?.pincode || ""}<br/>
                   Mobile: ${previewData?.customer?.whatsapp || previewData?.customer?.customerId?.whatsapp || "-"}<br/>
-                  GSTIN: ${previewData?.customer?.gstin || previewData?.customer?.customerId?.gstin || "N/A"}
+                  GSTIN: ${previewData?.customer?.gstin || previewData?.customer?.customerId?.gstin || "N/A"}<br/>
+                  ${isCN && order?.originalInvoiceId ? `<strong>Orig. Invoice:</strong> ${order.originalInvoiceId}` : ''}
                 </div>
               </div>
 
@@ -132,7 +139,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                 <thead>
                   <tr>
                     <th style="width: 5%; text-align: center;">#</th>
-                    <th style="width: 37%;">Product Name</th>
+                    <th style="width: 37%;">${isCN ? 'Returned Product' : 'Product Name'}</th>
                     <th>HSN</th>
                     <th style="text-align: right;">Qty</th>
                     <th style="text-align: right;">Rate</th>
@@ -153,8 +160,8 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                 </tbody>
               </table>
               
-              <!-- SAMPLE PRODUCTS TABLE -->
-              ${previewData?.sampleItems?.length > 0 ? `
+              <!-- SAMPLE PRODUCTS -->
+              ${(!isCN && previewData?.sampleItems?.length > 0) ? `
                 <div class="sample-section">
                   <strong style="font-size: 11px; color: #92400e;">🎁 SAMPLE PRODUCTS (NOT BILLED)</strong>
                   <table style="margin-top: 5px;">
@@ -182,39 +189,45 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
 
               <div class="total-section" style="display: flex; gap: 10px; margin-top: 15px;">
                 <div style="flex: 1; text-align: left;">
-                  <div style="background: #f8fafc; padding: 10px; margin: 12px 0; font-size: 13px; border-left: 4px solid #000; border-radius: 4px;">
-                    <div><strong>Previous Balance:</strong> ${previewData?.formattedOpeningBalance || (previewData?.openingBalance >= 0 ? '₹' + (previewData?.openingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.openingBalance || 0).toFixed(2) + ' Cr')}</div>
-                    <div style="margin-top: 4px;"><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
-                  </div>
+                  ${!isCN ? `
+                    <div style="background: #f8fafc; padding: 10px; margin: 12px 0; font-size: 13px; border-left: 4px solid #000; border-radius: 4px;">
+                      <div><strong>Previous Balance:</strong> ${previewData?.formattedOpeningBalance || (previewData?.openingBalance >= 0 ? '₹' + (previewData?.openingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.openingBalance || 0).toFixed(2) + ' Cr')}</div>
+                      <div style="margin-top: 4px;"><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
+                    </div>
+                  ` : ''}
+                  ${isCN ? `<div style="font-size: 11px; color: #1e293b; margin-top: 10px; border-bottom: 2px solid #0d9488; padding-bottom: 4px; display: inline-block;"><strong>Reason for Return:</strong> ${order.reasonForReturn || 'Product Return'}</div>` : ''}
                 </div>
 
                 <div style="flex: 1; text-align: right;">
-                  <div style="font-size: 11px;">Subtotal: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
-                  ${previewData?.totalTax?.igst > 0 ? 
+                  <div style="font-size: 11px;">Subtotal: <strong>₹${(previewData?.subtotal || 0).toFixed(2)}</strong></div>
+                  ${(previewData?.totalTax?.igst > 0 || previewData?.totalTax?.total > 0) ? (
+                    previewData?.totalTax?.igst > 0 ? 
                     `<div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` : 
                     `<div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
                      <div style="font-size: 11px;">SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
-                  }
-                  ${previewData?.commonDiscount > 0 ? `<div style="font-size: 11px; color: red;">Discount: -₹${previewData.commonDiscount.toFixed(2)}</div>` : ""}
-                  ${previewData?.roundingOff !== 0 ? `<div style="font-size: 11px; color: #666;">Rounding Off: <strong>${previewData.roundingOff > 0 ? '+' : ''}₹${previewData.roundingOff.toFixed(2)}</strong></div>` : ""}
-                  <div class="grand-total">GRAND TOTAL: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
+                  ) : ''}
+                  ${(previewData?.totalTax?.total > 0) ? `<div style="font-size: 11px; margin-top: 2px; border-top: 1px dashed #ccc; padding-top: 2px;">Total Tax Value: <strong>₹${(previewData?.totalTax?.total || 0).toFixed(2)}</strong></div>` : ''}
+                  ${(previewData?.commonDiscount || 0) > 0 ? `<div style="font-size: 11px; color: red;">Discount: -₹${Number(previewData.commonDiscount).toFixed(2)}</div>` : ""}
+                  ${(previewData?.roundingOff || 0) !== 0 ? `<div style="font-size: 11px; color: #666;">Rounding Off: <strong>${previewData.roundingOff > 0 ? '+' : ''}₹${Number(previewData.roundingOff).toFixed(2)}</strong></div>` : ""}
+                  <div class="grand-total">${isCN ? 'CREDIT AMOUNT' : 'GRAND TOTAL'}: ₹${(previewData?.grandTotal || 0).toFixed(2)}</div>
+                  ${isCN && previewData?.totalTax?.total > 0 ? `<div style="font-size: 9px; margin-top: -2px; opacity: 0.8;">(Includes Total GST of ₹${(previewData?.totalTax?.total || 0).toFixed(2)})</div>` : ''}
                 </div>
               </div>
               </div>
 
               <div class="copy-label">${copyTitle} - PAGE 1</div>
-              <div class="footer">Order details generated on ${new Date().toLocaleString("en-IN")} (Original Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")})</div>
+              <div class="footer">${isCN ? 'Credit details' : 'Order details'} generated on ${new Date().toLocaleString("en-IN")} (Record Date: ${new Date(order?.createdAt || new Date()).toLocaleDateString("en-IN")})</div>
             </div>
           </div>
         `;
 
-        // --- PAGE 2: TAX INVOICE (HSN SUMMARY) ---
-        html += `
-          <div class="page">
+        // --- PAGE 2: TAX SUMMARY (HSN) ---
+        if (!isCN) {
+          html += `
+            <div class="page">
             <div class="page-content">
               <div class="quick-info">
-                <span>INV: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</span>
-                <span>CUST: ${previewData?.customer?.name || "CASH CUSTOMER"}</span>
+                <span>${isCN ? 'CN' : 'INV'}: ${isCN ? (generatedInvoice?.creditNoteId || order?.creditNoteId) : (generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING")}</span>
               </div>
               <div class="top-header">
                 <div class="logo-box"><img src="${previewData?.seller?.logo || "/logo.jpeg"}" alt="Logo" /></div>
@@ -225,17 +238,12 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                     Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
                   </div>
                 </div>
-                ${previewData?.seller?.upiId ? `
-                <div class="upi-qr-box">
-                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=70x70&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" alt="UPI QR" />
-                  <div class="upi-qr-label">Scan to Pay</div>
-                </div>` : ''}
               </div>
 
-              <div class="section-title">🧾 TAX INVOICE - HSN SUMMARY</div>
+              <div class="section-title">🧾 ${isCN ? 'CREDIT NOTE' : 'TAX INVOICE'} - HSN SUMMARY</div>
 
               <div style="text-align: center; margin-bottom: 20px; font-size: 11px;">
-                <strong>Invoice No: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</strong> | Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
+                <strong>${idLabel}: ${isCN ? (generatedInvoice?.creditNoteId || order?.creditNoteId) : (generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING")}</strong> | Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
               </div>
 
               <table>
@@ -283,14 +291,15 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
               <div class="total-section">
                 <div style="font-size: 10px;">Taxable Subtotal: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
                 <div style="font-size: 10px;">Total GST: <strong>₹${(previewData?.totalTax?.total || 0).toFixed(2)}</strong></div>
-                <div class="grand-total">TOTAL AMOUNT: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
+                <div class="grand-total">${isCN ? 'TOTAL CREDIT' : 'TOTAL AMOUNT'}: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
               </div>
 
               <div class="copy-label">${copyTitle} - PAGE 2</div>
-              <div class="footer">Tax Invoice as per GST regulations | Generated on ${new Date().toLocaleString("en-IN")} (Original Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")})</div>
+              <div class="footer">Document generated as per GST regulations | Generated on ${new Date().toLocaleString("en-IN")}</div>
             </div>
           </div>
-        `;
+          `;
+        }
     });
 
     html += "</body></html>";

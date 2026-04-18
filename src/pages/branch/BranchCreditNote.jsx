@@ -5,6 +5,7 @@ import CustomerCreditNoteModal from "../../components/inventory/CustomerCreditNo
 import { useBranch } from "../../context/BranchContext";
 import { API_BASE, fetchWithAuth } from "../../api";
 import EInvoicePrintModal from "../../components/branch/EInvoicePrintModal";
+import { getInvoiceHTML } from "../../utils/invoiceUtils";
 
 export default function BranchCreditNote() {
   const { currentBranch, user } = useBranch();
@@ -86,25 +87,53 @@ export default function BranchCreditNote() {
     }
   };
 
+  /**
+   * 🖨️ HANDLE LOCAL PRINT: Uses the custom Pearl layout.
+   */
+  const handleLocalPrint = (cn) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.warning("🔔 Pop-up blocked! Please allow pop-ups to print.");
+      return;
+    }
+
+    const previewData = {
+      ...cn,
+      seller: currentBranch || {}, // Branch info
+      customer: cn.customer || {},
+      invoiceDate: cn.createdAt
+    };
+
+    const html = getInvoiceHTML(previewData, 2, cn, cn, 'CREDIT_NOTE');
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.print();
+      setTimeout(() => printWindow.close(), 1000);
+    }, 500);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      <div className="w-full px-4 sm:px-10 py-6">
         
         {/* HEADER SECTION */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div className="flex items-center gap-4">
-            <div className="p-4 bg-teal-600 rounded-2xl shadow-lg shadow-teal-100 text-white">
+            <div className="p-4 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-100 text-white">
               <FaUndoAlt size={32} />
             </div>
             <div>
-              <h1 className="text-3xl font-black text-gray-900 tracking-tight">CREDIT NOTES</h1>
-              <p className="text-gray-500 font-bold text-sm uppercase tracking-widest">Sales Returns & Customer Credits</p>
+              <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                CREDIT <span className="text-indigo-600">NOTES</span>
+              </h1>
+              <p className="text-gray-500 font-bold text-sm uppercase tracking-widest">Sales Returns & IRN Generation</p>
             </div>
           </div>
           
           <button 
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-3 bg-teal-600 hover:bg-teal-700 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl shadow-teal-100 active:scale-95"
+            className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl shadow-indigo-100 active:scale-95"
           >
             <FaPlus /> Create Credit Note
           </button>
@@ -118,7 +147,7 @@ export default function BranchCreditNote() {
             </div>
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Credit Value</p>
-                <p className="text-3xl font-black text-teal-600">₹{filteredCN.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0).toLocaleString()}</p>
+                <p className="text-3xl font-black text-indigo-600">₹{filteredCN.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0).toLocaleString()}</p>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4 relative overflow-hidden">
                 <FaSearch className="absolute -right-4 -bottom-4 text-8xl text-gray-50 -rotate-12" />
@@ -127,7 +156,7 @@ export default function BranchCreditNote() {
                     <input 
                       type="text"
                       placeholder="CN ID or Customer..."
-                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-teal-500 outline-none transition-all"
+                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-indigo-500 outline-none transition-all"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -139,7 +168,7 @@ export default function BranchCreditNote() {
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
           {loading ? (
             <div className="p-20 text-center space-y-4">
-              <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
               <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">Fetching records...</p>
             </div>
           ) : filteredCN.length === 0 ? (
@@ -149,72 +178,99 @@ export default function BranchCreditNote() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-100">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50/80 text-slate-500 uppercase text-[10px] font-black border-b border-slate-100 tracking-wider">
                   <tr>
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">CN ID</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Customer</th>
-                    <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Items</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Invoice Ref</th>
-                    <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">E-Invoice</th>
-                    <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Actions</th>
+                    <th className="px-6 py-5 text-left">CN ID</th>
+                    <th className="px-6 py-5 text-left">Date</th>
+                    <th className="px-6 py-5 text-left">Customer</th>
+                    <th className="px-6 py-5 text-center">Items</th>
+                    <th className="px-6 py-5 text-right">Amount</th>
+                    <th className="px-6 py-5 text-left">Invoice Ref</th>
+                    <th className="px-6 py-5 text-center">E-Invoice Status</th>
+                    <th className="px-6 py-5 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filteredCN.map((cn) => (
                     <React.Fragment key={cn._id}>
-                      <tr className="group hover:bg-teal-50/30 transition-all cursor-pointer">
-                        <td className="px-6 py-5 font-black text-teal-600 text-sm whitespace-nowrap">{cn.creditNoteId}</td>
-                        <td className="px-6 py-5 font-bold text-gray-600 text-xs whitespace-nowrap">{formatDate(cn.createdAt)}</td>
+                      <tr className="group hover:bg-indigo-50/30 transition-all cursor-pointer">
+                        <td className="px-6 py-5 font-black text-indigo-700 text-sm whitespace-nowrap">{cn.creditNoteId}</td>
+                        <td className="px-6 py-5 font-bold text-gray-600 text-[11px] whitespace-nowrap">{formatDate(cn.createdAt)}</td>
                         <td className="px-6 py-5 font-black text-gray-800 text-xs">{cn.customer?.name}</td>
                         <td className="px-6 py-5 text-center">
-                            <span className="bg-gray-100 px-2 py-1 rounded-lg text-[10px] font-black text-gray-500">{cn.items?.length || 0} ITEMS</span>
+                            <span className="bg-slate-100 px-2 py-1 rounded-lg text-[10px] font-black text-slate-500">{cn.items?.length || 0} ITEMS</span>
                         </td>
-                        <td className="px-6 py-5 text-right font-black text-gray-900 text-sm">₹{(cn.grandTotal || 0).toLocaleString()}</td>
+                        <td className="px-6 py-5 text-right font-black text-indigo-700 text-sm">₹{(cn.grandTotal || 0).toLocaleString()}</td>
                         <td className="px-6 py-5">
                             <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${cn.originalInvoiceId === 'STANDALONE' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600 uppercase'}`}>
                                 {cn.originalInvoiceId}
                             </span>
                         </td>
                         <td className="px-6 py-5 text-center">
+                          <div className="flex flex-col gap-1 items-center scale-90">
                             {cn.einvoiceStatus === "GENERATED" ? (
-                              <div className="flex flex-col items-center gap-1">
-                                <span className="bg-green-100 text-green-700 font-black text-[9px] px-2 py-0.5 rounded-full border border-green-200 uppercase">Generated</span>
-                                {cn.ewayBillNo && <span className="bg-blue-100 text-blue-700 font-black text-[9px] px-2 py-0.5 rounded-full border border-blue-200 uppercase">E-Way Bill</span>}
-                              </div>
+                              <>
+                                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-green-200">
+                                  ✅ IRN READY
+                                </span>
+                                <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold truncate w-24" title={cn.irn}>{cn.irn?.substring(0, 12)}...</code>
+                              </>
                             ) : (
-                              <span className="bg-gray-100 text-gray-400 font-black text-[9px] px-2 py-0.5 rounded-full border border-gray-200 uppercase">Not Generated</span>
+                              <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-yellow-200">
+                                📄 CN PENDING
+                              </span>
                             )}
+                            {cn.ewayBillNo && (
+                              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-blue-200">
+                                🚚 EWB READY
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-5 text-center">
-                            <div className="flex items-center justify-center gap-2">
-                              {cn.einvoiceStatus === "GENERATED" ? (
-                                <button 
-                                  onClick={() => setShowEInvoiceModal(cn)}
-                                  className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-100 transition shadow-sm"
-                                  title="View E-Invoice PDF"
-                                >
-                                  <FaFilePdf size={14} />
-                                </button>
-                              ) : (
-                                <button 
-                                  onClick={() => handleGenerateEInvoice(cn)}
-                                  disabled={requestingAction === cn._id}
-                                  className="p-2 bg-teal-50 text-teal-600 rounded-xl hover:bg-teal-100 transition shadow-sm disabled:opacity-50"
-                                  title="Generate E-Invoice"
-                                >
-                                  {requestingAction === cn._id ? <FaSpinner className="animate-spin" size={14} /> : <FaPrint size={14} />}
-                                </button>
-                              )}
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                               onClick={() => handleGenerateEInvoice(cn)}
+                               disabled={requestingAction === cn._id}
+                               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${cn.einvoiceStatus === "GENERATED" || cn.ewayBillNo
+                                 ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
+                                 : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
+                               }`}
+                            >
+                               {requestingAction === cn._id ? <FaSpinner className="animate-spin" /> : (
+                                 <>
+                                   <FaFileContract size={12} />
+                                   {cn.einvoiceStatus === "GENERATED" ? "RE-GENERATE" : "GENERATE E-INV"}
+                                 </>
+                               )}
+                            </button>
+
+                            {cn.einvoiceStatus === "GENERATED" && (
                               <button 
-                                onClick={() => toggleExpand(cn._id)}
-                                className="p-2 bg-gray-50 text-gray-400 rounded-xl hover:bg-gray-100 transition shadow-sm"
+                                onClick={() => setShowEInvoiceModal(cn)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-[10px] font-black transition-all shadow-sm"
+                                title="View PDF"
                               >
-                                  {expandedCN[cn._id] ? <FaChevronUp size={14} /> : <FaChevronDown size={14} />}
+                                <FaFilePdf size={12} /> PDF
                               </button>
-                            </div>
+                            )}
+
+                            <button 
+                              onClick={() => handleLocalPrint(cn)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-600 hover:text-white text-[10px] font-black transition-all shadow-sm"
+                              title="Local Formal Print"
+                            >
+                              <FaPrint size={12} /> PRINT
+                            </button>
+
+                            <button 
+                              onClick={() => toggleExpand(cn._id)}
+                              className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:bg-slate-100 transition shadow-sm border border-slate-100"
+                            >
+                                {expandedCN[cn._id] ? <FaChevronUp size={14} /> : <FaChevronDown size={14} />}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                       {expandedCN[cn._id] && (

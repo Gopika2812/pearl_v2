@@ -18,7 +18,7 @@ const Tokenization = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   
   // MODAL FORM STATE
-  const [createdPerson, setCreatedPerson] = useState({ id: user?.id || "", name: user?.fullName || user?.username || "" });
+  const [createdPerson, setCreatedPerson] = useState({ id: user?.id || null, name: user?.fullName || user?.username || "" });
   const [assignedPerson, setAssignedPerson] = useState({ id: "", name: "" });
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState("");
@@ -35,6 +35,13 @@ const Tokenization = () => {
     fetchTokens();
     fetchBranchUsers();
   }, [currentBranch]);
+
+  // Sync creator info when user context is ready
+  useEffect(() => {
+    if (user?.id) {
+      setCreatedPerson({ id: user.id, name: user.fullName || user.username });
+    }
+  }, [user]);
 
   const fetchTokens = async () => {
     if (!currentBranch?._id) return;
@@ -66,17 +73,16 @@ const Tokenization = () => {
   };
 
   const handleCreateToken = async () => {
-    if (!assignedPerson.id || !selectedCustomer || !tokenMessage.trim()) {
-      toast.warning("Please fill assigned person, customer and a message");
+    if (!tokenMessage.trim()) {
+      toast.warning("Please enter a message for the token");
       return;
     }
 
     try {
       const payload = {
         branchId: currentBranch._id,
-        createdBy: createdPerson,
-        assignedTo: assignedPerson,
-        customer: { id: selectedCustomer._id, name: selectedCustomer.name },
+        assignedTo: assignedPerson.id ? assignedPerson : { id: null, name: "Unassigned" },
+        customer: selectedCustomer ? { id: selectedCustomer._id, name: selectedCustomer.name } : { name: "INTERNAL" },
         message: tokenMessage
       };
 
@@ -100,7 +106,7 @@ const Tokenization = () => {
   };
 
   const resetForm = () => {
-    setCreatedPerson({ id: user?.id || "", name: user?.fullName || user?.username || "" });
+    setCreatedPerson({ id: user?.id || null, name: user?.fullName || user?.username || "" });
     setAssignedPerson({ id: "", name: "" });
     setSelectedCustomer(null);
     setCustomerSearch("");
@@ -132,17 +138,34 @@ const Tokenization = () => {
   }, [customers, customerSearch]);
 
   const filteredTokens = useMemo(() => {
-    return tokens.filter(t => {
-      const matchesSearch = 
-        t.tokenId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.createdBy?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.assignedTo?.name.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesStatus = statusFilter === "ALL" || t.status === statusFilter;
-      
-      return matchesSearch && matchesStatus;
-    });
+    const statusPriority = {
+      "OPEN": 1,
+      "TAKEN": 2,
+      "IN_PROGRESS": 3,
+      "COMPLETED": 4,
+      "CANCELLED": 5
+    };
+
+    return tokens
+      .filter(t => {
+        const matchesSearch = 
+          t.tokenId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          t.customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          t.createdBy?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          t.assignedTo?.name.toLowerCase().includes(searchQuery.toLowerCase());
+        
+        const matchesStatus = statusFilter === "ALL" || t.status === statusFilter;
+        
+        return matchesSearch && matchesStatus;
+      })
+      .sort((a, b) => {
+        // Sort by status priority first
+        if (statusPriority[a.status] !== statusPriority[b.status]) {
+          return statusPriority[a.status] - statusPriority[b.status];
+        }
+        // Then by most recent
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      });
   }, [tokens, searchQuery, statusFilter]);
 
   // --- CLICK OUTSIDE HANDLERS ---
@@ -164,6 +187,22 @@ const Tokenization = () => {
     // Extract timings from statusLog
     const takenLog = token.statusLog?.find(log => log.status === "TAKEN" || log.status === "IN_PROGRESS");
     const finishedLog = token.statusLog?.find(log => log.status === "FINISHED");
+
+    const handleAssign = async (userId, userName) => {
+      try {
+        const res = await fetchWithAuth(`${API_BASE}/tokens/${token._id}/assign`, {
+          method: "PATCH",
+          body: JSON.stringify({ assignedTo: { id: userId, name: userName } })
+        });
+        const data = await res.json();
+        if (data.success) {
+          toast.success(`Token assigned to ${userName}`);
+          fetchTokens();
+        }
+      } catch (err) {
+        toast.error("Assignment failed");
+      }
+    };
 
     const formatTime = (date) => {
       if (!date) return "--/--";
@@ -189,7 +228,9 @@ const Tokenization = () => {
                   {token.status?.replace("_", " ")}
                 </span>
               </div>
-              <h3 className="text-base font-black text-slate-800 tracking-tight leading-tight truncate">{token.customer?.name}</h3>
+              <h3 className="text-base font-black text-slate-800 tracking-tight leading-tight truncate">
+                {token.customer?.name === "INTERNAL" ? "Task / Internal" : (token.customer?.name || "No Customer")}
+              </h3>
               <p className="text-[10px] text-slate-400 font-bold mt-1">
                 {formatTime(token.createdAt)}
               </p>
@@ -213,11 +254,32 @@ const Tokenization = () => {
                   </p>
                   <p className="text-[10px] font-black text-slate-700 truncate">{token.createdBy?.name || "System"}</p>
                 </div>
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 relative group/assign">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1.5 font-sans">
                     <FaUserFriends className="text-indigo-400" /> Assigned To
                   </p>
-                  <p className="text-[10px] font-black text-slate-700 truncate">{token.assignedTo?.name}</p>
+                  
+                  {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") ? (
+                    <div className="relative">
+                      <select 
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-black text-slate-700 outline-none focus:border-indigo-500 transition-all appearance-none pr-6"
+                        value={token.assignedTo?.id?._id || token.assignedTo?.id || ""}
+                        onChange={(e) => {
+                          const u = branchUsers.find(abu => abu._id === e.target.value);
+                          if (u) handleAssign(u._id, u.fullName || u.username);
+                          else handleAssign(null, "Unassigned");
+                        }}
+                      >
+                        <option value="">Choose User...</option>
+                        {branchUsers.map(u => (
+                          <option key={u._id} value={u._id}>{u.fullName || u.username}</option>
+                        ))}
+                      </select>
+                      <FaChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={8} />
+                    </div>
+                  ) : (
+                    <p className="text-[10px] font-black text-slate-700 truncate">{token.assignedTo?.name || "Unassigned"}</p>
+                  )}
                 </div>
               </div>
 
@@ -256,17 +318,27 @@ const Tokenization = () => {
                 onClick={() => updateTokenStatus(token._id, "TAKEN")}
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
               >
-                Take
+                Take Token
               </button>
             )}
-            {(token.status === "TAKEN" || token.status === "OPEN") && (
-              <button 
-                onClick={() => updateTokenStatus(token._id, "IN_PROGRESS")}
-                className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-700 h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
-              >
-                In Progress
-              </button>
+            
+            {token.status === "TAKEN" && (
+              <>
+                <button 
+                  onClick={() => updateTokenStatus(token._id, "IN_PROGRESS")}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
+                >
+                  Start Work
+                </button>
+                <button 
+                  onClick={() => updateTokenStatus(token._id, "COMPLETED")}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
+                >
+                  Finish
+                </button>
+              </>
             )}
+
             {token.status === "IN_PROGRESS" && (
               <button 
                 onClick={() => updateTokenStatus(token._id, "COMPLETED")}
@@ -275,12 +347,14 @@ const Tokenization = () => {
                 <FaCheckCircle /> Complete
               </button>
             )}
+
             {token.status === "COMPLETED" && (
               <div className="flex-1 flex items-center justify-center gap-1.5 text-emerald-600 font-bold bg-emerald-50 h-9 rounded-xl border border-emerald-100 text-[10px] uppercase tracking-widest">
-                <FaCheckCircle /> Finished
+                <FaCheckCircle /> Completed
               </div>
             )}
-            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && token.status !== "COMPLETED" && token.status !== "CANCELLED" && (
+            
+            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && !["COMPLETED", "CANCELLED"].includes(token.status) && (
               <button 
                 onClick={() => updateTokenStatus(token._id, "CANCELLED")}
                 className="w-9 h-9 rounded-xl bg-red-50 text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center border border-red-100"
@@ -398,59 +472,35 @@ const Tokenization = () => {
             </div>
 
             <div className="p-8 max-h-[70vh] overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div>
-                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Created By</label>
-                  <select 
-                    value={createdPerson.id}
-                    onChange={(e) => {
-                      const u = branchUsers.find(abu => abu._id === e.target.value);
-                      if (u) setCreatedPerson({ id: u._id, name: u.fullName || u.username });
-                    }}
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all"
-                  >
-                    <option value={user?.id}>{user?.fullName || user?.username}</option>
-                    {branchUsers.map(abu => abu._id !== user?.id && <option key={abu._id} value={abu._id}>{abu.fullName || abu.username}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Assigned To</label>
-                  <select 
-                    value={assignedPerson.id}
-                    onChange={(e) => {
-                      const u = branchUsers.find(abu => abu._id === e.target.value);
-                      if (u) setAssignedPerson({ id: u._id, name: u.fullName || u.username });
-                    }}
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all"
-                  >
-                    <option value="">Select Assignee</option>
-                    {branchUsers.map(abu => <option key={abu._id} value={abu._id}>{abu.fullName || abu.username}</option>)}
-                  </select>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Customer</label>
-                  <div className="relative" ref={customerDropdownRef}>
-                    <input 
-                      type="text" 
-                      placeholder="Search customer..."
-                      value={customerSearch}
-                      onChange={(e) => { setCustomerSearch(e.target.value); setShowCustomerDropdown(true); }}
-                      onFocus={() => setShowCustomerDropdown(true)}
-                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all"
-                    />
-                    {showCustomerDropdown && filteredCustomers.length > 0 && (
-                      <div className="absolute top-[110%] left-0 right-0 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden z-20">
-                        {filteredCustomers.map(c => (
-                          <div key={c._id} onClick={() => { setSelectedCustomer(c); setCustomerSearch(c.name); setShowCustomerDropdown(false); }} className="px-5 py-3 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-colors">
-                            <span className="font-bold text-slate-800 text-xs">{c.name}</span>
-                            <span className="text-[9px] font-black text-slate-400">{c.mobile || c.whatsapp}</span>
-                          </div>
-                        ))}
+                <div className="bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] p-6 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Created By</label>
+                      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-black text-indigo-600 flex items-center gap-2">
+                        <FaUserCircle className="text-indigo-400" />
+                        {user?.fullName || user?.username} (Logged In)
                       </div>
-                    )}
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 flex justify-between items-center">
+                        <span>Assigned To</span>
+                        <span className="text-[8px] font-bold text-slate-300">OPTIONAL</span>
+                      </label>
+                      <select 
+                        value={assignedPerson.id}
+                        onChange={(e) => {
+                          const u = branchUsers.find(abu => abu._id === e.target.value);
+                          if (u) setAssignedPerson({ id: u._id, name: u.fullName || u.username });
+                          else setAssignedPerson({ id: "", name: "" });
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all"
+                      >
+                        <option value="">No Assignment (General)</option>
+                        {branchUsers.map(abu => <option key={abu._id} value={abu._id}>{abu.fullName || abu.username}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
-              </div>
 
               <div className="space-y-4">
                 <div>

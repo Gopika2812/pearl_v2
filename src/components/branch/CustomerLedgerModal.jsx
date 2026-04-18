@@ -101,19 +101,48 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer, branch, onBalanceUpdat
   if (!isOpen || !customer) return null;
 
   const handleExportPDF = async () => {
-    const element = document.getElementById("customer-ledger-content");
-    const canvas = await html2canvas(element, { scale: 2, useCORS: true });
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-    });
+    const element = document.getElementById("formal-ledger-export");
+    if (!element) return toast.error("Export template not found");
 
-    const imgWidth = 210;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-    pdf.save(`Ledger-${customer.name}-${startDate}-to-${endDate}.pdf`);
+    toast.loading("Preparing multi-page PDF...", { id: "pdf-gen" });
+
+    try {
+      const canvas = await html2canvas(element, { 
+        scale: 2, 
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
+      });
+      
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      
+      const imgWidth = 210; 
+      const pageHeight = 295; // Slightly less than 297 to avoid tight margins
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // Add first page
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= pageHeight;
+
+      // Add subsequent pages if needed
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+        heightLeft -= pageHeight;
+      }
+      
+      pdf.save(`Ledger-${customer.name}-${startDate}-to-${endDate}.pdf`);
+      toast.success("PDF Downloaded!", { id: "pdf-gen" });
+    } catch (error) {
+      console.error("PDF generation failed:", error);
+      toast.error("Failed to generate PDF", { id: "pdf-gen" });
+    }
   };
 
   const formatDate = (dateStr) => {
@@ -264,194 +293,223 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer, branch, onBalanceUpdat
         </div>
 
         {/* Content */}
-        <div id="customer-ledger-content" className="flex-1 overflow-y-auto p-8 bg-white">
-          {/* PDF HEADER: SELLER INFO */}
-          <div className="hidden pdf-only flex justify-between items-start border-b-4 border-blue-900 pb-6 mb-8">
-            <div className="flex items-center gap-6">
-              {branch?.logo ? (
-                 <img src={branch.logo} alt="Logo" className="w-24 h-24 object-contain rounded-xl" />
-              ) : (
-                 <div className="w-20 h-20 bg-blue-900 text-white rounded-xl flex items-center justify-center text-4xl font-black">
-                   {branch?.name?.charAt(0) || "P"}
-                 </div>
-              )}
+        <div id="customer-ledger-content" className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50">
+          
+          {/* 1. OFF-SCREEN FORMAL EXPORT TEMPLATE (HIDDEN FROM UI) */}
+          <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '800px', background: 'white' }}>
+            <div id="formal-ledger-export" className="p-10 formal-ledger">
+               <style>
+                 {`
+                   .formal-ledger { font-family: 'Times New Roman', Times, serif; color: #000; padding: 20px; }
+                   .formal-h { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
+                   .formal-c-info { flex: 1; text-align: center; }
+                   .formal-c-name { font-size: 28px; font-weight: 900; text-transform: uppercase; margin-bottom: 5px; }
+                   .formal-c-addr { font-size: 13px; line-height: 1.4; font-weight: 600; }
+                   
+                   .formal-sb-box { display: flex; border: 1.5px solid #000; margin-bottom: 20px; }
+                   .formal-sb-half { flex: 1; padding: 12px; font-size: 13px; line-height: 1.5; }
+                   .formal-sb-half:first-child { border-right: 1.5px solid #000; }
+                   .formal-sb-lab { font-weight: 900; text-transform: uppercase; border-bottom: 1px solid #000; margin-bottom: 5px; padding-bottom: 2px; display: block; font-size: 11px; }
+                   
+                   .formal-t { width: 100%; border-collapse: collapse; border: 1.5px solid #000; font-size: 13px; margin-bottom: 1px; }
+                   .formal-t th { border: 1px solid #000; padding: 10px 5px; background: #f0f0f0; font-weight: 900; text-transform: uppercase; text-align: center; }
+                   .formal-t td { border: 1px solid #000; padding: 6px 6px 8px 6px; vertical-align: middle; font-weight: 700; line-height: 1.3; }
+                   
+                   .formal-sum-bar { display: flex; border: 1.5px solid #000; border-top: none; background: #fff; color: #000; font-weight: 900; font-size: 14px; }
+                   .formal-sum-item { padding: 10px; border-right: 1.5px solid #000; }
+                   
+                   .v-c { font-weight: 900; font-size: 11px; display: inline-block; }
+                 `}
+               </style>
+
+               <div className="formal-h">
+                  <img src={branch?.logo || "/logo.jpeg"} alt="Logo" style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
+                  <div className="formal-c-info">
+                    <div className="formal-c-name">{branch?.name || "PEARL AGENCY"}</div>
+                    <div className="formal-c-addr">
+                      {branch?.address}<br/>
+                      {branch?.city}, {branch?.state} - {branch?.pincode}<br/>
+                      GSTIN: {branch?.gstin || "N/A"} | PH: {branch?.phone || "N/A"}
+                    </div>
+                  </div>
+                  <div style={{ width: '80px' }}></div>
+               </div>
+
+               <div style={{ textAlign: 'center', marginBottom: '15px' }}>
+                  <span style={{ fontWeight: 900, textTransform: 'uppercase', textDecoration: 'underline', fontSize: '16px' }}>Customer Ledger Account</span>
+               </div>
+
+               <div className="formal-sb-box">
+                  <div className="formal-sb-half">
+                    <span className="formal-sb-lab">Account Details</span>
+                    <div style={{ fontSize: '14px', fontWeight: 900, color: '#000' }}>{customer.name}</div>
+                    <div>{customer.address}</div>
+                    <div>WhatsApp: {customer.whatsapp}</div>
+                    <div>GSTIN: {customer.gstin || "Unregistered"}</div>
+                  </div>
+                  <div className="formal-sb-half">
+                    <span className="formal-sb-lab">Period Covered</span>
+                    <div style={{ fontWeight: 900, fontStyle: 'italic' }}>{formatDate(startDate)} TO {formatDate(endDate)}</div>
+                    <div style={{ marginTop: '10px', fontSize: '10px', opacity: 0.6 }}>Generated on: {new Date().toLocaleString()}</div>
+                  </div>
+               </div>
+
+               <table className="formal-t">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '30px' }}>No</th>
+                      <th style={{ width: '100px' }}>Date</th>
+                      <th>Particulars / Ref No</th>
+                      <th style={{ width: '50px' }}>Type</th>
+                      <th style={{ width: '90px' }} className="text-right">Debit</th>
+                      <th style={{ width: '90px' }} className="text-right">Credit</th>
+                      <th style={{ width: '100px' }} className="text-right">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ background: '#f5f5f5', fontStyle: 'italic' }}>
+                      <td style={{ textAlign: 'center' }}>-</td>
+                      <td style={{ textAlign: 'center' }}>{formatDate(startDate)}</td>
+                      <td style={{ fontWeight: 900 }}>OPENING BALANCE B/F</td>
+                      <td style={{ textAlign: 'center' }}>O/B</td>
+                      <td style={{ textAlign: 'right' }}>-</td>
+                      <td style={{ textAlign: 'right' }}>-</td>
+                      <td style={{ textAlign: 'right', fontWeight: 900 }}>₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</td>
+                    </tr>
+                    {transactions.map((txn, idx) => {
+                       let docId = "-";
+                       const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note):\s*([^\s(]+)/i);
+                       if (pm) docId = pm[1]; else if (txn.type === "INVOICE") docId = txn.particulars.split(": ")[1] || "-";
+                       
+                       // Extraction for Mode / Voucher Type
+                       let vt = "-";
+                       if (txn.type === "INVOICE") vt = "Z-1";
+                       else if (txn.type === "RECEIPT") {
+                         const modeMatch = txn.particulars?.match(/\(([^)]+)\)/);
+                         vt = modeMatch ? modeMatch[1].toUpperCase() : "CASH";
+                       } else if (txn.type === "CREDIT_NOTE") vt = "Z-2";
+                       else vt = "B-X";
+
+                       return (
+                         <tr key={txn.id}>
+                           <td style={{ textAlign: 'center' }}>{idx+1}</td>
+                           <td style={{ textAlign: 'center' }}>{formatDate(txn.date)}</td>
+                           <td><span style={{ fontWeight: 900 }}>{docId}</span></td>
+                           <td style={{ textAlign: 'center' }}><span className="v-c">{vt}</span></td>
+                           <td style={{ textAlign: 'right', fontWeight: 900, color: '#b91c1c' }}>{txn.debit > 0 ? `₹${txn.debit.toLocaleString()}` : "-"}</td>
+                           <td style={{ textAlign: 'right', fontWeight: 900, color: '#15803d' }}>{txn.credit > 0 ? `₹${txn.credit.toLocaleString()}` : "-"}</td>
+                           <td style={{ textAlign: 'right', fontWeight: 900 }}>₹{Math.abs(txn.balance).toLocaleString()} {balanceLabel(txn.balance)}</td>
+                         </tr>
+                       )
+                    })}
+                  </tbody>
+               </table>
+               <div className="formal-sum-bar">
+                  <div style={{ flex: 1, textAlign: 'right', padding: '10px', borderRight: '1.5px solid #000' }}>PERIOD TOTALS:</div>
+                  <div style={{ width: '90px', textAlign: 'right', padding: '10px', borderRight: '1.5px solid #000' }}>₹{totalDebit.toLocaleString()}</div>
+                  <div style={{ width: '90px', textAlign: 'right', padding: '10px', borderRight: '1.5px solid #000' }}>₹{totalCredit.toLocaleString()}</div>
+                  <div style={{ width: '100px', textAlign: 'right', padding: '10px' }}>₹{Math.abs(closingBalance).toLocaleString()} {balanceLabel(closingBalance)}</div>
+               </div>
+               <div style={{ marginTop: '30px', display: 'flex', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: '10px', fontStyle: 'italic' }}>E.&amp;O.E.</div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 900, marginBottom: '40px' }}>for {branch?.name || "PEARL AGENCY"}</div>
+                    <div style={{ borderTop: '1px solid #000', width: '150px', fontSize: '10px', fontWeight: 900, paddingTop: '5px' }}>Authorised Signatory</div>
+                  </div>
+               </div>
+            </div>
+          </div>
+
+          {/* 2. ON-SCREEN MODERN UI (AS USUAL) */}
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+            {/* Live Filter Bar Placeholder */}
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
               <div>
-                <h1 className="text-3xl font-black text-blue-900 uppercase tracking-tight">{branch?.name || "Pearls ERP Branch"}</h1>
-                <p className="text-sm text-gray-600 font-bold max-w-md mt-1 italic">
-                  {branch?.address}, {branch?.city}, {branch?.state} - {branch?.pincode}
-                </p>
-                <div className="flex gap-4 mt-2 text-xs font-black text-gray-500 uppercase tracking-wider">
-                   {branch?.phone && <span>📞 {branch.phone}</span>}
-                   {branch?.gstin && <span>📄 GSTIN: {branch.gstin}</span>}
-                </div>
+                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Statement Ledger</h3>
+                <p className="text-xs text-slate-400 font-bold tracking-widest uppercase mt-1">Transaction History</p>
+              </div>
+              <div className="flex gap-4">
+                 <div className="px-4 py-2 bg-white rounded-xl border border-slate-100 shadow-sm text-right">
+                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-tighter">Current Balance</p>
+                    <p className={`text-lg font-black ${closingBalance >= 0 ? 'text-indigo-600' : 'text-red-500'}`}>
+                      ₹{Math.abs(closingBalance).toLocaleString()} {balanceLabel(closingBalance)}
+                    </p>
+                 </div>
               </div>
             </div>
-            <div className="text-right">
-               <h2 className="text-xl font-black text-white bg-blue-900 px-4 py-1 rounded uppercase tracking-widest">Ledger Report</h2>
-               <p className="text-xs font-bold text-gray-400 mt-2 uppercase tracking-widest">Selective Period</p>
-               <p className="text-sm font-black text-blue-900">{formatDate(startDate)} TO {formatDate(endDate)}</p>
-            </div>
-          </div>
 
-          {/* CUSTOMER DETAILS (In PDF) */}
-          <div className="hidden pdf-only grid grid-cols-2 gap-8 mb-8 p-6 bg-slate-50 rounded-2xl border border-slate-200">
-             <div>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Customer Details</h3>
-                <p className="text-xl font-black text-slate-900 uppercase">{customer.name}</p>
-                <p className="text-sm font-bold text-slate-500 mt-1">{customer.address || "No Address Provided"}</p>
-                <div className="mt-4 space-y-1">
-                   <p className="text-xs font-bold text-slate-700">📞 WhatsApp: <span className="text-slate-900">{customer.whatsapp || "N/A"}</span></p>
-                   <p className="text-xs font-bold text-slate-700">📄 GSTIN: <span className="text-slate-900 font-black">{customer.gstin || "Unregistered"}</span></p>
-                </div>
-             </div>
-             <div className="flex flex-col justify-center items-end border-l border-slate-200 pl-8">
-                <div className="text-right mb-4">
-                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Opening Balance</p>
-                   <p className={`text-xl font-black ${balanceColor(openingBalance)} italic`}>₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</p>
-                </div>
-                <div className="text-right">
-                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Dues</p>
-                   <p className={`text-2xl font-black ${balanceColor(closingBalance)}`}>₹{Math.abs(closingBalance).toLocaleString()} {balanceLabel(closingBalance)}</p>
-                </div>
-             </div>
-          </div>
-
-          <div className="pdf-only hidden mb-4">
-             <h4 className="text-xs font-black text-blue-900 uppercase tracking-widest border-l-4 border-blue-900 pl-2">Transaction History</h4>
-          </div>
-
-          {/* Transactions Table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-blue-50 border-b border-blue-100 text-blue-900 font-black uppercase text-[10px] tracking-widest">
+              <table className="w-full text-left">
+                <thead className="bg-slate-900 text-white font-black uppercase text-[10px] tracking-[0.2em]">
                   <tr>
-                    <th className="px-6 py-4">Date</th>
-                    <th className="px-6 py-4">Particulars</th>
-                    <th className="px-6 py-4">Type</th>
-                    <th className="px-6 py-4 text-right">Debit (Owed)</th>
-                    <th className="px-6 py-4 text-right">Credit (Paid)</th>
-                    <th className="px-6 py-4 text-right bg-blue-100/50">Balance</th>
+                    <th className="px-6 py-5">S.No</th>
+                    <th className="px-6 py-5">Date</th>
+                    <th className="px-6 py-5">Invoice Number</th>
+                    <th className="px-6 py-5">Voucher Type</th>
+                    <th className="px-6 py-5 text-right">Debit (₹)</th>
+                    <th className="px-6 py-5 text-right">Credit (₹)</th>
+                    <th className="px-6 py-5 text-right">Balance</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 font-medium">
-                  {/* Opening Balance Row */}
-                  <tr className="bg-amber-50/30 border-b border-amber-100 italic">
-                    <td className="px-6 py-3 text-gray-400">{formatDate(startDate)}</td>
-                    <td className="px-6 py-3 font-black text-[#5e7182] uppercase tracking-wide">Opening Balance B/F</td>
-                    <td className="px-6 py-3 text-gray-400 text-xs">O/B</td>
-                    <td className="px-6 py-3 text-right">-</td>
-                    <td className="px-6 py-3 text-right">-</td>
-                    <td className="px-6 py-3 text-right font-black bg-blue-50/30 text-blue-900">
-                      ₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}
-                    </td>
+                <tbody className="font-bold divide-y divide-slate-100">
+                  {/* Opening Balance */}
+                  <tr className="bg-indigo-50/30">
+                    <td className="px-6 py-4 text-slate-300">-</td>
+                    <td className="px-6 py-4 text-slate-500">{formatDate(startDate)}</td>
+                    <td className="px-6 py-4 text-indigo-900 font-black">OPENING BALANCE B/F</td>
+                    <td className="px-6 py-4 text-indigo-300">O/B</td>
+                    <td className="px-6 py-4 text-right">-</td>
+                    <td className="px-6 py-4 text-right">-</td>
+                    <td className="px-6 py-4 text-right font-black text-indigo-700">₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</td>
                   </tr>
 
-                  {loading ? (
-                    <tr>
-                      <td colSpan="6" className="px-6 py-20 text-center">
-                        <FaSpinner className="animate-spin text-blue-600 text-3xl mx-auto mb-2" />
-                        <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Recalculating Ledger...</p>
-                      </td>
-                    </tr>
-                  ) : transactions.length > 0 ? (
-                    transactions.map((txn, index) => (
-                      <tr 
-                        key={txn.id} 
-                        className={`hover:bg-gray-50 transition-colors group ${txn.type === 'RECEIPT' ? 'bg-green-50/20' : txn.type === 'CREDIT_NOTE' ? 'bg-indigo-50/20' : ''}`}
-                      >
-                        <td className="px-6 py-4 text-gray-600 text-xs font-bold">
-                          {formatDate(txn.date)}
+                  {transactions.map((txn, index) => {
+                    let docId = "-";
+                    const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note):\s*([^\s(]+)/i);
+                    if (pm) docId = pm[1]; else if (txn.type === "INVOICE") docId = txn.particulars.split(": ")[1] || "-";
+
+                    return (
+                      <tr key={txn.id} className="hover:bg-slate-50 transition-colors group">
+                        <td className="px-6 py-4 text-slate-400">{index + 1}</td>
+                        <td className="px-6 py-4 text-slate-600">{formatDate(txn.date)}</td>
+                        <td className="px-6 py-4">
+                          <span className="text-slate-900 font-black group-hover:text-blue-600 transition-colors">{docId}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="font-bold text-gray-800 text-xs uppercase tracking-tight">{txn.particulars}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${
-                            txn.type === "INVOICE" ? "bg-red-100 text-red-700" : 
-                            txn.type === "RECEIPT" ? "bg-green-100 text-green-700" : 
-                            "bg-indigo-100 text-indigo-700"
+                          <span className={`px-2 py-1 rounded-lg text-[10px] uppercase font-black tracking-widest ${
+                            txn.type === "INVOICE" ? "bg-red-100 text-red-600" : 
+                            txn.type === "RECEIPT" ? "bg-green-100 text-green-600" : 
+                            "bg-purple-100 text-purple-600"
                           }`}>
-                            {txn.type.replace("_", " ")}
+                            {txn.type === "RECEIPT" ? (txn.particulars?.match(/\(([^)]+)\)/)?.[1]?.toUpperCase() || "CASH") : (txn.type === "INVOICE" ? "Z-1" : (txn.type === "CREDIT_NOTE" ? "Z-2" : txn.type))}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-right font-bold text-red-600">
-                          {txn.debit > 0 ? `₹${txn.debit.toLocaleString(undefined, {minimumFractionDigits: 2})}` : "-"}
-                        </td>
-                        <td className="px-6 py-4 text-right font-bold text-green-600">
-                          {txn.credit > 0 ? `₹${txn.credit.toLocaleString(undefined, {minimumFractionDigits: 2})}` : "-"}
-                        </td>
-                        <td className="px-6 py-4 text-right font-black bg-blue-50/30 text-blue-900 group-hover:scale-105 transition-transform duration-200">
-                          ₹{Math.abs(txn.balance).toLocaleString()} {balanceLabel(txn.balance)}
-                        </td>
+                        <td className="px-6 py-4 text-right text-red-500 font-bold">{txn.debit > 0 ? `₹${txn.debit.toLocaleString()}` : "-"}</td>
+                        <td className="px-6 py-4 text-right text-green-600 font-bold">{txn.credit > 0 ? `₹${txn.credit.toLocaleString()}` : "-"}</td>
+                        <td className="px-6 py-4 text-right font-black text-slate-900">₹{Math.abs(txn.balance).toLocaleString()} {balanceLabel(txn.balance)}</td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="6" className="px-6 py-12 text-center text-gray-500 italic bg-gray-50/50">
-                        No transactions found for this period
-                      </td>
-                    </tr>
-                  )}
+                    );
+                  })}
 
-                  {/* Closing Balance Row */}
-                  <tr className="bg-blue-900 text-white shadow-xl isolate z-10">
-                    <td className="px-6 py-5">{formatDate(endDate)}</td>
-                    <td className="px-6 py-5 font-black uppercase tracking-widest text-base">Closing Balance C/F</td>
-                    <td className="px-6 py-5 uppercase font-bold text-xs opacity-70">C/B</td>
-                    <td className="px-6 py-5 text-right font-bold">
-                       ₹{totalDebit.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-5 text-right font-bold">
-                       ₹{totalCredit.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-5 text-right font-black text-lg bg-white/10">
-                      ₹{Math.abs(closingBalance).toLocaleString()} {balanceLabel(closingBalance)}
-                    </td>
+                  {/* Summary Totals */}
+                  <tr className="bg-slate-900 text-white">
+                    <td colSpan={4} className="px-6 py-6 text-right uppercase tracking-widest text-xs opacity-60">Period Totals</td>
+                    <td className="px-6 py-6 text-right font-black text-red-300">₹{totalDebit.toLocaleString()}</td>
+                    <td className="px-6 py-6 text-right font-black text-green-300">₹{totalCredit.toLocaleString()}</td>
+                    <td className="px-6 py-6 text-right font-black bg-white/20">₹{Math.abs(closingBalance).toLocaleString()} {balanceLabel(closingBalance)}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* PDF FOOTER SUMMARY */}
-          <div className="hidden pdf-only mt-12 grid grid-cols-4 gap-4 px-6 py-8 bg-blue-900 text-white rounded-2xl shadow-xl">
-             <div className="border-r border-white/20 pr-4">
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Opening Balance</p>
-                <p className="text-lg font-black mt-1">₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</p>
+          {/* DR/CR Explainer */}
+          <div className="mt-8 flex gap-8 justify-center">
+             <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <div className="w-3 h-3 rounded-full bg-red-400"></div> DEBIT (DR) = OWED TO US
              </div>
-             <div className="border-r border-white/20 px-4">
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Total Debit (+)</p>
-                <p className="text-lg font-black mt-1 text-red-200">₹{totalDebit.toLocaleString()}</p>
-             </div>
-             <div className="border-r border-white/20 px-4">
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Total Credit (-)</p>
-                <p className="text-lg font-black mt-1 text-green-200">₹{totalCredit.toLocaleString()}</p>
-             </div>
-             <div className="pl-4">
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Statement Balance</p>
-                <p className="text-2xl font-black mt-1">₹{Math.abs(closingBalance).toLocaleString()} {balanceLabel(closingBalance)}</p>
-             </div>
-          </div>
-
-          <div className="hidden pdf-only flex justify-between items-center mt-12 pt-8 border-t border-gray-200">
-             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                Generated via Pearls ERP on {new Date().toLocaleString()}
-             </div>
-             <div className="text-right">
-                <div className="w-32 h-1 bg-gray-200 mb-2"></div>
-                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Authorized Signature</p>
-             </div>
-          </div>
-          
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-             <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-red-400"></div>
-                <span>DR (Debit) means amount owed to us</span>
-             </div>
-             <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                <span>CR (Credit) means payment received or return</span>
+             <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <div className="w-3 h-3 rounded-full bg-green-400"></div> CREDIT (CR) = RECEIVED
              </div>
           </div>
         </div>

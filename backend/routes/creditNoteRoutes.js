@@ -153,10 +153,11 @@ router.get("/", async (req, res) => {
     // This fixes older records on-the-fly when viewed in the list
     for (let cn of creditNotes) {
       let changed = false;
-      if (!cn.seller?.gstin || cn.customer?.address === "Address Not Provided" || !cn.customer?.gstin || cn.customer.gstin === "URP") {
+      if (!cn.seller?.gstin || cn.customer?.address === "Address Not Provided" || !cn.customer?.gstin || cn.customer.gstin === "URP" || cn.items.some(it => !it.hsn)) {
         const branch = cn.branchId;
         const customer = await Customer.findById(cn.customer?.customerId);
         
+        // Repair Seller/Customer snapshots
         if (branch && (!cn.seller?.gstin || !cn.seller?.address)) {
           cn.seller = {
             name: branch.name || "PEARL AGENCY",
@@ -184,9 +185,20 @@ router.get("/", async (req, res) => {
           changed = true;
         }
 
+        // 🔍 REPAIR HSN CODES
+        for (let item of cn.items) {
+          if (!item.hsn && item.productId) {
+            const product = await Product.findById(item.productId);
+            if (product) {
+              item.hsn = product.hsnCode || product.hsn || "";
+              changed = true;
+            }
+          }
+        }
+
         if (changed) {
           await cn.save();
-          console.log(`✅ [LIST REPAIR] Fixed snapshots for ${cn.creditNoteId}`);
+          console.log(`✅ [LIST REPAIR] Fixed snapshots/HSN for ${cn.creditNoteId}`);
         }
       }
     }
@@ -312,7 +324,8 @@ router.post("/", async (req, res) => {
     let totalTax = 0;
     let grandTotal = 0;
 
-    const returnedItems = items.filter(item => item.qty > 0).map(item => {
+    const returnedItems = [];
+    for (const item of items.filter(item => item.qty > 0)) {
       const sPrice = Number(item.sellingPrice || 0);
       const qty = Number(item.qty || 0);
       const discountP = Number(item.discountPercent || 0);
@@ -329,10 +342,17 @@ router.post("/", async (req, res) => {
       totalTax += itemTax;
       grandTotal += itemTotal;
 
-      return {
+      // 🔍 BACKEND HSN LOOKUP FALLBACK
+      let finalHsn = item.hsn;
+      if (!finalHsn && item.productId) {
+        const product = await Product.findById(item.productId);
+        finalHsn = product?.hsnCode || product?.hsn || "";
+      }
+
+      returnedItems.push({
         productId: item.productId,
         name: item.name,
-        hsn: item.hsn || "",
+        hsn: finalHsn,
         unit: item.unit || "NOS",
         qty: qty,
         sellingPrice: sPrice,
@@ -345,8 +365,8 @@ router.post("/", async (req, res) => {
         sgst: item.igst ? 0 : itemTax / 2,
         igst: item.igst ? itemTax : 0,
         total: itemTotal,
-      };
-    });
+      });
+    }
 
     const financialYear = getFinancialYear();
     const creditNoteId = await generateBranchSpecificCNId(finalBranchId, financialYear);

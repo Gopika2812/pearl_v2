@@ -1051,7 +1051,8 @@ router.get("/:id", async (req, res) => {
       .populate("customer.customerId")
       .populate("salesOrderId")
       .populate("branchId")
-      .select("+items") // Explicitly include items if they were globally excluded
+      .populate("items.productId") // ✨ NEW: Needed for HSN fallback in Credit Notes
+      .select("+items")
       .lean();
 
     if (!invoice) return res.status(404).json({ success: false, message: "Invoice not found" });

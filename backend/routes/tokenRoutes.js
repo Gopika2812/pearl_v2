@@ -21,9 +21,12 @@ router.get("/branch/:branchId", auth, async (req, res) => {
     let query = { branchId };
     
     // Role-based visibility:
-    // ADMIN and SUPER_ADMIN see all. Others see only what is assigned to them.
+    // ADMIN and SUPER_ADMIN see all. Others see only what they created OR what is assigned to them.
     if (req.user.role !== "ADMIN" && req.user.role !== "SUPER_ADMIN") {
-      query["assignedTo.id"] = req.user.id;
+      query.$or = [
+        { "createdBy.id": req.user.id },
+        { "assignedTo.id": req.user.id }
+      ];
     }
 
     if (status && status !== "ALL") {
@@ -48,11 +51,21 @@ router.get("/branch/:branchId", auth, async (req, res) => {
 // POST: Create a new token
 router.post("/", auth, async (req, res) => {
   try {
-    const { branchId, createdBy, assignedTo, customer, message } = req.body;
+    const { branchId, assignedTo, customer, message } = req.body;
 
-    if (!branchId || !createdBy || !assignedTo || !customer || !message) {
-      return res.status(400).json({ success: false, message: "Missing required fields (including message)" });
+    if (!branchId || !message) {
+      return res.status(400).json({ success: false, message: "Missing required fields (branch or message)" });
     }
+
+    const finalCustomer = customer || { name: "INTERNAL" };
+    const finalAssignedTo = assignedTo || { id: null, name: "Unassigned" };
+    
+    // Set createdBy from authenticated user details
+    const finalCreatedBy = {
+      id: req.user.id,
+      name: req.user.fullName || req.user.username,
+      username: req.user.username
+    };
 
     // 1. Get Branch Code for ID generation
     const branch = await Branch.findById(branchId);
@@ -86,9 +99,12 @@ router.post("/", auth, async (req, res) => {
         const newToken = new Token({
           tokenId,
           branchId,
-          createdBy,
-          assignedTo,
-          customer,
+          createdBy: finalCreatedBy,
+          assignedTo: {
+            ...finalAssignedTo,
+            id: finalAssignedTo.id || undefined
+          },
+          customer: finalCustomer,
           message,
           status: "OPEN"
         });
@@ -102,7 +118,7 @@ router.post("/", auth, async (req, res) => {
           username: req.user.username,
           branchId,
           action: "CREATE_TOKEN",
-          description: `Created token ${tokenId} for customer ${customer.name}`,
+          description: `Created token ${tokenId}${finalCustomer.name !== 'INTERNAL' ? ' for customer ' + finalCustomer.name : ' (Internal Task)'}`,
           targetId: newToken._id,
           targetModel: "Token"
         });
@@ -185,6 +201,40 @@ router.delete("/:id", auth, async (req, res) => {
     res.json({ success: true, message: "Token cancelled" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to cancel token" });
+  }
+});
+
+// PATCH: Assign token to someone (Admin only)
+router.patch("/:id/assign", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assignedTo } = req.body;
+
+    if (req.user.role !== "ADMIN" && req.user.role !== "SUPER_ADMIN") {
+      return res.status(403).json({ success: false, message: "Only admins can assign tokens" });
+    }
+
+    const token = await Token.findById(id);
+    if (!token) return res.status(404).json({ success: false, message: "Token not found" });
+
+    token.assignedTo = assignedTo;
+    await token.save();
+
+    // Log assignment
+    await createAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      branchId: token.branchId,
+      action: "ASSIGN_TOKEN",
+      description: `Assigned token ${token.tokenId} to ${assignedTo.name}`,
+      targetId: token._id,
+      targetModel: "Token"
+    });
+
+    res.json({ success: true, data: token });
+  } catch (error) {
+    console.error("Assign Token Error:", error);
+    res.status(500).json({ success: false, message: "Failed to assign token" });
   }
 });
 

@@ -47,15 +47,26 @@ class GSTZenService {
       // (NIC strictly rejects 4-digit HSNs for businesses above the ₹5Cr threshold).
       if (invoiceData.items && Array.isArray(invoiceData.items)) {
         for (const item of invoiceData.items) {
-          const hsn = String(item.hsn || item.productId?.hsnCode || "").trim();
-          // NIC portal currently enforces 6 or 8 digits for E-Invoicing
+          let hsn = String(item.hsn || item.productId?.hsnCode || "").trim();
+          
+          // 🛠️ AUTO-FIX: Pad with leading zero if 5 or 7 digits (Excel/Numbers often strip leading zeros)
+          if (hsn.length === 5 || hsn.length === 7) {
+            console.log(`🔧 Auto-padding HSN "${hsn}" to "0${hsn}"`);
+            hsn = "0" + hsn;
+          }
+
+          // NIC portal strictly enforces 6 or 8 digits for E-Invoicing
           if (!/^\d{6}$|^\d{8}$/.test(hsn)) {
-            const errorMsg = `Product "${item.name}" has a 4-digit HSN code "${hsn}". ` +
-              `The Tax Portal requires a minimum of 6 digits for E-Invoicing. ` +
-              `Please update the HSN to 6 digits (e.g., 160100) in the product master or edit the bill to proceed.`;
+            const digitCount = hsn.length;
+            const errorMsg = `Product "${item.name}" has a ${digitCount}-digit HSN code "${hsn}". ` +
+              `The Tax Portal requires exactly 6 or 8 digits for E-Invoicing. ` +
+              `Please update the HSN in the product master or edit the bill to proceed.`;
             console.error(`❌ Pre-check fail: ${errorMsg}`);
             throw new Error(errorMsg);
           }
+          
+          // Update the item object with padded HSN for the payload
+          item.hsn = hsn;
         }
       }
 
