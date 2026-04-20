@@ -306,11 +306,11 @@ const BranchFollowUp = () => {
                                             <th onClick={() => handleSort("balance")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
                                                 <div className="flex items-center justify-end">Balance <SortIcon column="balance" /></div>
                                             </th>
-                                            <th onClick={() => handleSort("creditLimit")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
-                                                <div className="flex items-center justify-end">Limit <SortIcon column="creditLimit" /></div>
+                                            <th onClick={() => handleSort("limit")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
+                                                <div className="flex items-center justify-end">Limit <SortIcon column="limit" /></div>
                                             </th>
-                                            <th onClick={() => handleSort("creditDays")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
-                                                <div className="flex items-center justify-end">Days <SortIcon column="creditDays" /></div>
+                                            <th onClick={() => handleSort("days")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
+                                                <div className="flex items-center justify-end">Days <SortIcon column="days" /></div>
                                             </th>
                                             <th className="px-12 py-10 text-center rounded-tr-[4rem]">Actions</th>
 

@@ -569,14 +569,31 @@ router.get("/", async (req, res) => {
       filter.$and = andConditions;
     }
 
-    // ⚡ Build Search Sort
+
+    // ⚡ Build the Aggregation Pipeline
+    const pipeline = [];
+
+    // 1. Initial Filtering
+    pipeline.push({ $match: filter });
+
+    // 2. Add Calculated Fields for Sorting
+    pipeline.push({
+      $addFields: {
+        netBalance: {
+          $subtract: [
+            { $ifNull: ["$debit", 0] },
+            { $ifNull: ["$credit", 0] }
+          ]
+        }
+      }
+    });
+
     const sort = {};
     const order = sortOrder === "desc" ? -1 : 1;
 
     switch (sortBy) {
       case "balance":
-        // Sort by net balance if possible, otherwise use debit as proxy
-        sort.debit = order; 
+        sort.netBalance = order;
         break;
       case "limit":
         sort.creditLimit = order;
@@ -587,8 +604,69 @@ router.get("/", async (req, res) => {
       case "name":
         sort.name = order;
         break;
+      case "createdAt":
+        sort.createdAt = order;
+        break;
       default:
         sort[sortBy] = order;
+    }
+    console.log("⚡ AGGREGATION SORT:", sort);
+    pipeline.push({ $sort: sort });
+
+    // 4. Pagination
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: pageSize });
+
+    // 5. Lookups (Population)
+    pipeline.push(
+      {
+        $lookup: {
+          from: "salesowners",
+          localField: "salesOwner",
+          foreignField: "_id",
+          as: "salesOwner"
+        }
+      },
+      { $unwind: { path: "$salesOwner", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "customercategories",
+          localField: "customerCategories",
+          foreignField: "_id",
+          as: "customerCategories"
+        }
+      },
+      {
+        $lookup: {
+          from: "customergroups",
+          localField: "customerGroups",
+          foreignField: "_id",
+          as: "customerGroups"
+        }
+      }
+    );
+
+    // 6. Selection (Projection)
+    if (isMini) {
+      pipeline.push({
+        $project: {
+          name: 1,
+          whatsapp: 1,
+          email: 1,
+          gstin: 1,
+          branchId: 1,
+          customerGroups: 1,
+          customerCategories: 1,
+          salesOwner: 1,
+          riskStatus: 1,
+          creditLimit: 1,
+          creditLimitDays: 1,
+          debit: 1,
+          credit: 1,
+          closingBalance: 1,
+          netBalance: 1
+        }
+      });
     }
 
     // ⚡ Get total count
@@ -622,24 +700,10 @@ router.get("/", async (req, res) => {
       totalGlobalCredit = totalsAggregation.length > 0 ? totalsAggregation[0].totalGlobalCredit : 0;
     }
 
-    // ⚡ Fetch paginated results with lean() for faster performance
-    let customersQuery = Customer.find(filter);
+    // ⚡ Execute Aggregation for Paginated Results
+    const customers = await Customer.aggregate(pipeline);
 
-    if (isMini) {
-      // Light version skips large financial data and deep populations if possible
-      customersQuery = customersQuery.select("name whatsapp email gstin branchId customerGroups customerCategories salesOwner riskStatus creditLimit creditLimitDays debit credit closingBalance");
-    }
-
-    const customers = await customersQuery
-      .populate('salesOwner', '_id name phone role')
-      .populate('customerCategories', '_id name')
-      .populate('customerGroups', '_id name')
-      .sort(sort)
-      .skip(skip)
-      .limit(pageSize)
-      .lean();
-
-    console.log(`✅ Returned ${customers.length} customers for page ${pageNum}`);
+    console.log(`✅ Returned ${customers.length} customers using aggregation for page ${pageNum}`);
 
     res.json({
       success: true,
