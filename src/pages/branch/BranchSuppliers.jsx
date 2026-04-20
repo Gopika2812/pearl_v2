@@ -57,7 +57,7 @@ const BranchSuppliers = () => {
   const fetchSuppliers = async (search = "") => {
     try {
       setLoading(true);
-      
+
       // Fetch vendors with search and a higher limit to ensure visibility
       const vendorUrl = `${API_BASE}/vendors?branchId=${branchId}&search=${encodeURIComponent(search)}&limit=1000`;
       const vendorResponse = await fetchWithAuth(vendorUrl);
@@ -187,7 +187,7 @@ const BranchSuppliers = () => {
   const getSortedSuppliers = (data) => {
     return [...data].sort((a, b) => {
       const { key, direction } = sortConfig;
-      
+
       if (key === "name") {
         const valA = a.name.toLowerCase();
         const valB = b.name.toLowerCase();
@@ -195,23 +195,23 @@ const BranchSuppliers = () => {
         if (valA > valB) return direction === "asc" ? 1 : -1;
         return 0;
       }
-      
+
       if (key === "outstandingPOs") {
         const valA = getOutstandingPOCount(a.name);
         const valB = getOutstandingPOCount(b.name);
         return direction === "asc" ? valA - valB : valB - valA;
       }
-      
+
       if (key === "credit" || key === "debit") {
         const valA = a[key] || 0;
         const valB = b[key] || 0;
         return direction === "asc" ? valA - valB : valB - valA;
       }
-      
+
       return 0;
     });
   };
- 
+
   const toggleRow = (id) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
@@ -219,10 +219,10 @@ const BranchSuppliers = () => {
   const filteredSuppliers = getSortedSuppliers(
     searchTerm
       ? suppliers.filter((supplier) =>
-          supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          supplier.gstin?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          supplier.email?.toLowerCase().includes(searchTerm.toLowerCase())
-        )
+        supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        supplier.gstin?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        supplier.email?.toLowerCase().includes(searchTerm.toLowerCase())
+      )
       : suppliers
   );
 
@@ -265,7 +265,7 @@ const BranchSuppliers = () => {
       const worksheet = XLSX.utils.json_to_sheet(result.data);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Vendor_March_31_Balances");
-      
+
       // Auto-width adjustment
       const wscols = [
         { wch: 35 }, // Name
@@ -349,25 +349,23 @@ const BranchSuppliers = () => {
             >
               <FaFileExport /> 31st Mar Snapshot
             </button>
-            
+
             <div className="flex bg-gray-100 p-1 rounded-xl items-center">
               <button
                 onClick={() => setViewMode("table")}
-                className={`p-2 rounded-lg transition-all ${
-                  viewMode === "table"
+                className={`p-2 rounded-lg transition-all ${viewMode === "table"
                     ? "bg-white text-primary shadow-sm"
                     : "text-gray-400 hover:text-gray-600"
-                }`}
+                  }`}
               >
                 <FaList size={18} />
               </button>
               <button
                 onClick={() => setViewMode("card")}
-                className={`p-2 rounded-lg transition-all ${
-                  viewMode === "card"
+                className={`p-2 rounded-lg transition-all ${viewMode === "card"
                     ? "bg-white text-primary shadow-sm"
                     : "text-gray-400 hover:text-gray-600"
-                }`}
+                  }`}
               >
                 <FaThLarge size={18} />
               </button>
@@ -444,21 +442,19 @@ const BranchSuppliers = () => {
             <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
               <button
                 onClick={() => setViewMode("table")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
-                  viewMode === "table"
+                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${viewMode === "table"
                     ? "bg-white text-blue-600 shadow-md"
                     : "text-gray-600 hover:text-blue-600"
-                }`}
+                  }`}
               >
                 <FaList size={16} /> Table
               </button>
               <button
                 onClick={() => setViewMode("card")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
-                  viewMode === "card"
+                className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${viewMode === "card"
                     ? "bg-white text-blue-600 shadow-md"
                     : "text-gray-600 hover:text-blue-600"
-                }`}
+                  }`}
               >
                 <FaThLarge size={16} /> Card
               </button>
@@ -554,11 +550,10 @@ const BranchSuppliers = () => {
               {/* Status */}
               <div className="flex items-center justify-center">
                 <span
-                  className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                    supplier.isActive
+                  className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase ${supplier.isActive
                       ? "bg-green-100 text-green-700"
                       : "bg-gray-100 text-gray-700"
-                  }`}
+                    }`}
                 >
                   {supplier.isActive ? "✓ Active" : "Inactive"}
                 </span>
@@ -589,7 +584,7 @@ const BranchSuppliers = () => {
           ))}
         </div>
       ) : (
-        /* TABLE VIEW */
+
         <div className="bg-white rounded-lg shadow-md overflow-x-auto -mx-4 md:mx-0 md:rounded-lg">
           <table className="w-full">
             <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
@@ -627,13 +622,12 @@ const BranchSuppliers = () => {
                 return (
                   <React.Fragment key={supplier._id}>
                     <tr
-                      className={`${
-                        index % 2 === 0 ? "bg-white" : "bg-blue-50"
-                      } border-b border-gray-200 hover:bg-blue-100/50 transition cursor-pointer`}
+                      className={`${index % 2 === 0 ? "bg-white" : "bg-blue-50"
+                        } border-b border-gray-200 hover:bg-blue-100/50 transition cursor-pointer`}
                       onClick={() => toggleRow(supplier._id)}
                     >
                       <td className="px-4 py-3 text-center text-gray-400">
-                         {isExpanded ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
+                        {isExpanded ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
                       </td>
                       <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
                         {supplier.name}
@@ -683,52 +677,51 @@ const BranchSuppliers = () => {
                       <tr className="bg-gray-50 border-b border-gray-200">
                         <td colSpan={7} className="px-8 py-4">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fadeIn">
-                             {/* Address section */}
-                             <div className="space-y-1">
-                               <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Contact Details</p>
-                               <div className="flex items-center gap-2 text-xs text-gray-600 mt-2">
-                                  <FaPhone className="text-primary text-[10px]" />
-                                  <span>{supplier.phone || "No phone provided"}</span>
-                               </div>
-                               <div className="flex items-center gap-2 text-xs text-gray-600">
-                                  <FaEnvelope className="text-primary text-[10px]" />
-                                  <span>{supplier.email || "No email provided"}</span>
-                               </div>
-                             </div>
-                             
-                             <div className="space-y-1">
-                               <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Location Info</p>
-                               <div className="flex items-start gap-2 text-xs text-gray-600 mt-2">
-                                  <FaMapMarkerAlt className="text-primary text-[10px] mt-0.5" />
-                                  <span>{supplier.address ? `${supplier.address}, ${supplier.stateName || ""}` : "No address provided"}</span>
-                               </div>
-                             </div>
+                            {/* Address section */}
+                            <div className="space-y-1">
+                              <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Contact Details</p>
+                              <div className="flex items-center gap-2 text-xs text-gray-600 mt-2">
+                                <FaPhone className="text-primary text-[10px]" />
+                                <span>{supplier.phone || "No phone provided"}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-gray-600">
+                                <FaEnvelope className="text-primary text-[10px]" />
+                                <span>{supplier.email || "No email provided"}</span>
+                              </div>
+                            </div>
 
-                             <div className="space-y-1">
-                               <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Account Status</p>
-                               <div className="mt-2 text-xs">
-                                  <span
-                                    className={`inline-block px-2 py-0.5 rounded-full font-bold uppercase text-[9px] ${
-                                      supplier.isActive
-                                        ? "bg-green-100 text-green-700"
-                                        : "bg-gray-100 text-gray-700"
+                            <div className="space-y-1">
+                              <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Location Info</p>
+                              <div className="flex items-start gap-2 text-xs text-gray-600 mt-2">
+                                <FaMapMarkerAlt className="text-primary text-[10px] mt-0.5" />
+                                <span>{supplier.address ? `${supplier.address}, ${supplier.stateName || ""}` : "No address provided"}</span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Account Status</p>
+                              <div className="mt-2 text-xs">
+                                <span
+                                  className={`inline-block px-2 py-0.5 rounded-full font-bold uppercase text-[9px] ${supplier.isActive
+                                      ? "bg-green-100 text-green-700"
+                                      : "bg-gray-100 text-gray-700"
                                     }`}
-                                  >
-                                    {supplier.isActive ? "Active" : "Inactive"}
-                                  </span>
-                               </div>
-                               <div className="mt-3">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedLedgerSupplier(supplier);
-                                    }}
-                                    className="text-primary hover:underline text-xs font-bold"
-                                  >
-                                    Open Ledger View →
-                                  </button>
-                               </div>
-                             </div>
+                                >
+                                  {supplier.isActive ? "Active" : "Inactive"}
+                                </span>
+                              </div>
+                              <div className="mt-3">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedLedgerSupplier(supplier);
+                                  }}
+                                  className="text-primary hover:underline text-xs font-bold"
+                                >
+                                  Open Ledger View →
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -742,7 +735,7 @@ const BranchSuppliers = () => {
       )}
 
       {/* VENDOR LEDGER MODAL */}
-      <VendorLedgerModal 
+      <VendorLedgerModal
         isOpen={!!selectedLedgerSupplier}
         onClose={() => setSelectedLedgerSupplier(null)}
         supplier={selectedLedgerSupplier}
