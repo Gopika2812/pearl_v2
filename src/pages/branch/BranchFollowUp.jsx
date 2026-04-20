@@ -25,6 +25,7 @@ const BranchFollowUp = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [groupFilter, setGroupFilter] = useState("All");
     const [categoryFilter, setCategoryFilter] = useState("All");
+    const [zoneFilter, setZoneFilter] = useState("All");
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -40,8 +41,8 @@ const BranchFollowUp = () => {
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [editingCustomer, setEditingCustomer] = useState(null);
 
-    // Sorting state
-    const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
+    // Sorting state - default to Balance High to Low
+    const [sortConfig, setSortConfig] = useState({ key: "balance", direction: "desc" });
 
     useEffect(() => {
         if (currentBranch?._id) {
@@ -56,7 +57,7 @@ const BranchFollowUp = () => {
             // STAGE 1: Fetch light customer data (No expensive balance calculations)
             // We also fetch groups/categories/owners as usual
             const [custRes, groupRes, categoryRes, salesOwnerRes] = await Promise.all([
-                fetchWithAuth(`${API_BASE}/customers?branchId=${currentBranch._id}&mini=true&limit=${rowsPerPage}&page=${currentPage}&search=${searchTerm}`),
+                fetchWithAuth(`${API_BASE}/customers?branchId=${currentBranch._id}&mini=true&limit=${rowsPerPage}&page=${currentPage}&search=${searchTerm}&customerGroupId=${groupFilter}&customerCategoryId=${categoryFilter}&riskStatus=${zoneFilter}&sortBy=${sortConfig.key}&sortOrder=${sortConfig.direction}`),
                 fetchWithAuth(`${API_BASE}/customer-groups?branchId=${currentBranch._id}`),
                 fetchWithAuth(`${API_BASE}/customer-categories?branchId=${currentBranch._id}`),
                 fetchWithAuth(`${API_BASE}/sales-owners?branchId=${currentBranch._id}`)
@@ -76,8 +77,13 @@ const BranchFollowUp = () => {
             }
 
             setCustomers(fetchedCustomers);
-            if (groupData.success) setCustomerGroups(groupData.data || []);
-            if (categoryData.success) setCustomerCategories(categoryData.data || []);
+            
+            // Resilience: Handle both {success, data} and plain array formats
+            const groups = groupData.success ? (groupData.data || []) : (Array.isArray(groupData) ? groupData : []);
+            const categories = categoryData.success ? (categoryData.data || []) : (Array.isArray(categoryData) ? categoryData : []);
+            
+            setCustomerGroups(groups);
+            setCustomerCategories(categories);
             if (ownerData.success) setSalesOwners(ownerData.data || []);
 
             setLoading(false); // UI is now fast and interactive with basic info
@@ -124,7 +130,7 @@ const BranchFollowUp = () => {
     // Reset and trigger fetch when filters or pagination change
     useEffect(() => {
         fetchData();
-    }, [searchTerm, groupFilter, categoryFilter, rowsPerPage, currentPage, sortConfig]);
+    }, [searchTerm, groupFilter, categoryFilter, zoneFilter, rowsPerPage, currentPage, sortConfig]);
 
     const SortIcon = ({ column }) => {
         if (sortConfig.key !== column) return <FaSort className="opacity-20 ml-1" />;
@@ -240,6 +246,21 @@ const BranchFollowUp = () => {
                                 ))}
                             </select>
                             <FaTag className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={14} />
+                        </div>
+
+                        {/* Zone Filter */}
+                        <div className="relative flex-1 xl:flex-none min-w-[240px]">
+                            <select
+                                className="w-full appearance-none bg-gray-50 border-2 border-transparent focus:border-indigo-100 rounded-[2.5rem] pl-10 pr-14 py-7 text-xs font-black uppercase tracking-[0.2em] text-gray-700 outline-none cursor-pointer transition-all shadow-inner"
+                                value={zoneFilter}
+                                onChange={(e) => setZoneFilter(e.target.value)}
+                            >
+                                <option value="All">All Zones</option>
+                                <option value="safe_zone">Safe Zone</option>
+                                <option value="medium_zone">Medium Zone</option>
+                                <option value="risk_zone">Risk Zone</option>
+                            </select>
+                            <FaClock className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={14} />
                         </div>
 
                         {/* Manage Button (Super Admin) */}

@@ -486,7 +486,7 @@ router.get("/", async (req, res) => {
     const isMini = mini === "true" || mini === true;
 
     console.log("🔍 GET /customers endpoint hit");
-    console.log("Query params:", { page, limit, search, branchId, mini: isMini });
+    console.log("Query params:", req.query);
 
     if (!branchId || branchId === "undefined" || branchId === "null") {
       return res.status(400).json({ message: "Valid branchId is required" });
@@ -503,21 +503,92 @@ router.get("/", async (req, res) => {
     const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 50)); // Max 10000 per page
     const skip = (pageNum - 1) * pageSize;
 
-    // Build search filter with branchId
-    const { customerGroupId } = req.query;
-    const filter = { branchId: branchObjectId };
+    // Build robust filter with branchId and optional multi-column criteria
+    const { 
+      customerGroupId, 
+      customerCategoryId, 
+      riskStatus, 
+      sortBy = "createdAt", 
+      sortOrder = "desc" 
+    } = req.query;
     
-    if (customerGroupId) {
-      filter.customerGroups = customerGroupId;
+    const filter = { branchId: branchObjectId };
+    const andConditions = [];
+
+    // 1️⃣ Group Filter (Check both new plural and legacy singular fields)
+    if (customerGroupId && customerGroupId !== "All") {
+      andConditions.push({
+        $or: [
+          { customerGroups: customerGroupId },
+          { customerGroup: customerGroupId }
+        ]
+      });
     }
 
+    // 2️⃣ Category Filter (Check both new plural and legacy singular fields)
+    if (customerCategoryId && customerCategoryId !== "All") {
+      andConditions.push({
+        $or: [
+          { customerCategories: customerCategoryId },
+          { customerCategory: customerCategoryId }
+        ]
+      });
+    }
+
+    // 3️⃣ Zone / Risk Status Filter
+    if (riskStatus && riskStatus !== "All") {
+      if (riskStatus === "safe_zone") {
+        // Safe Zone filter includes customers with explicit 'safe_zone' or missing status
+        andConditions.push({ 
+          $or: [
+            { riskStatus: "safe_zone" },
+            { riskStatus: { $exists: false } },
+            { riskStatus: null },
+            { riskStatus: "" }
+          ] 
+        });
+      } else {
+        andConditions.push({ riskStatus });
+      }
+    }
+
+    // 4️⃣ Search Filter
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { whatsapp: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { gstin: { $regex: search, $options: "i" } },
-      ];
+      andConditions.push({
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { whatsapp: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+          { gstin: { $regex: search, $options: "i" } },
+        ]
+      });
+    }
+
+    // Combine all conditions into the main filter
+    if (andConditions.length > 0) {
+      filter.$and = andConditions;
+    }
+
+    // ⚡ Build Search Sort
+    const sort = {};
+    const order = sortOrder === "desc" ? -1 : 1;
+
+    switch (sortBy) {
+      case "balance":
+        // Sort by net balance if possible, otherwise use debit as proxy
+        sort.debit = order; 
+        break;
+      case "limit":
+        sort.creditLimit = order;
+        break;
+      case "days":
+        sort.creditLimitDays = order;
+        break;
+      case "name":
+        sort.name = order;
+        break;
+      default:
+        sort[sortBy] = order;
     }
 
     // ⚡ Get total count
@@ -556,14 +627,14 @@ router.get("/", async (req, res) => {
 
     if (isMini) {
       // Light version skips large financial data and deep populations if possible
-      customersQuery = customersQuery.select("name whatsapp email gstin branchId customerGroups customerCategories salesOwner riskStatus creditLimit creditLimitDays");
+      customersQuery = customersQuery.select("name whatsapp email gstin branchId customerGroups customerCategories salesOwner riskStatus creditLimit creditLimitDays debit credit closingBalance");
     }
 
     const customers = await customersQuery
       .populate('salesOwner', '_id name phone role')
       .populate('customerCategories', '_id name')
       .populate('customerGroups', '_id name')
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip(skip)
       .limit(pageSize)
       .lean();

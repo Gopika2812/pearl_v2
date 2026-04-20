@@ -139,7 +139,7 @@ router.get("/", async (req, res) => {
 
     console.log(`✅ Found ${categories.length} CustomerCategories:`, categories.map(c => ({ _id: c._id, name: c.name, branchId: c.branchId })));
 
-    return res.json(categories);
+    return res.json({ success: true, data: categories });
   } catch (err) {
     console.error("Customer Category fetch error:", err);
     return res.status(500).json({ message: err.message });
