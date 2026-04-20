@@ -482,10 +482,11 @@ router.get("/export/snapshot-mar31", async (req, res) => {
  */
 router.get("/", async (req, res) => {
   try {
-    const { page = 1, limit = 50, search = "", branchId } = req.query;
+    const { page = 1, limit = 50, search = "", branchId, mini = false } = req.query;
+    const isMini = mini === "true" || mini === true;
 
     console.log("🔍 GET /customers endpoint hit");
-    console.log("Query params:", { page, limit, search, branchId });
+    console.log("Query params:", { page, limit, search, branchId, mini: isMini });
 
     if (!branchId || branchId === "undefined" || branchId === "null") {
       return res.status(400).json({ message: "Valid branchId is required" });
@@ -497,8 +498,6 @@ router.get("/", async (req, res) => {
 
     // Convert string branchId to ObjectId for proper matching
     const branchObjectId = new mongoose.Types.ObjectId(branchId);
-
-    console.log("Converted branchObjectId:", branchObjectId);
 
     const pageNum = Math.max(1, parseInt(page) || 1);
     const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 50)); // Max 10000 per page
@@ -523,34 +522,44 @@ router.get("/", async (req, res) => {
 
     // ⚡ Get total count
     const total = await Customer.countDocuments(filter);
-    console.log(`📊 Total customers matching filter: ${total}`);
 
-    // ⚡ Get global totals (Netted per customer, then summed)
-    const totalsAggregation = await Customer.aggregate([
-      { $match: { branchId: branchObjectId } },
-      {
-        $project: {
-          netBalance: { $subtract: [{ $ifNull: ["$debit", 0] }, { $ifNull: ["$credit", 0] }] }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalGlobalDebit: {
-            $sum: { $cond: [{ $gt: ["$netBalance", 0] }, "$netBalance", 0] }
-          },
-          totalGlobalCredit: {
-            $sum: { $cond: [{ $lt: ["$netBalance", 0] }, { $abs: "$netBalance" }, 0] }
+    let totalGlobalDebit = 0;
+    let totalGlobalCredit = 0;
+
+    // ⚡ ONLY Calculate global totals if NOT in mini mode
+    if (!isMini) {
+      const totalsAggregation = await Customer.aggregate([
+        { $match: { branchId: branchObjectId } },
+        {
+          $project: {
+            netBalance: { $subtract: [{ $ifNull: ["$debit", 0] }, { $ifNull: ["$credit", 0] }] }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalGlobalDebit: {
+              $sum: { $cond: [{ $gt: ["$netBalance", 0] }, "$netBalance", 0] }
+            },
+            totalGlobalCredit: {
+              $sum: { $cond: [{ $lt: ["$netBalance", 0] }, { $abs: "$netBalance" }, 0] }
+            }
           }
         }
-      }
-    ]);
-
-    const totalGlobalDebit = totalsAggregation.length > 0 ? totalsAggregation[0].totalGlobalDebit : 0;
-    const totalGlobalCredit = totalsAggregation.length > 0 ? totalsAggregation[0].totalGlobalCredit : 0;
+      ]);
+      totalGlobalDebit = totalsAggregation.length > 0 ? totalsAggregation[0].totalGlobalDebit : 0;
+      totalGlobalCredit = totalsAggregation.length > 0 ? totalsAggregation[0].totalGlobalCredit : 0;
+    }
 
     // ⚡ Fetch paginated results with lean() for faster performance
-    const customers = await Customer.find(filter)
+    let customersQuery = Customer.find(filter);
+
+    if (isMini) {
+      // Light version skips large financial data and deep populations if possible
+      customersQuery = customersQuery.select("name whatsapp email gstin branchId customerGroups customerCategories salesOwner riskStatus creditLimit creditLimitDays");
+    }
+
+    const customers = await customersQuery
       .populate('salesOwner', '_id name phone role')
       .populate('customerCategories', '_id name')
       .populate('customerGroups', '_id name')
@@ -580,6 +589,39 @@ router.get("/", async (req, res) => {
       message: "Failed to fetch customers",
       error: error.message,
     });
+  }
+});
+
+/**
+ * POST: Fetch Net Balances for a Batch of Customers
+ * Performance optimization: used for two-stage loading
+ */
+router.post("/balances", async (req, res) => {
+  try {
+    const { customerIds, branchId } = req.body;
+    if (!branchId || !customerIds || !Array.isArray(customerIds)) {
+      return res.status(400).json({ success: false, message: "branchId and customerIds array required" });
+    }
+
+    const branchObjectId = new mongoose.Types.ObjectId(branchId);
+    const objectIds = customerIds.map(id => new mongoose.Types.ObjectId(id));
+
+    const balances = await Customer.aggregate([
+      { $match: { _id: { $in: objectIds }, branchId: branchObjectId } },
+      {
+        $project: {
+          _id: 1,
+          debit: { $ifNull: ["$debit", 0] },
+          credit: { $ifNull: ["$credit", 0] },
+          netBalance: { $subtract: [{ $ifNull: ["$debit", 0] }, { $ifNull: ["$credit", 0] }] }
+        }
+      }
+    ]);
+
+    res.json({ success: true, data: balances });
+  } catch (error) {
+    console.error("Batch balance fetch error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

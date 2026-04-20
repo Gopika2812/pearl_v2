@@ -42,6 +42,12 @@ const followUpSchema = new mongoose.Schema(
     remarks: { type: String, default: "" },
     nextFollowUpDate: { type: Date }, // Combined date and time
     
+    riskStatus: {
+      type: String,
+      enum: ["safe_zone", "medium_zone", "risk_zone"],
+      default: "safe_zone"
+    },
+
     status: {
       type: String,
       enum: ["PENDING", "COMPLETED"],

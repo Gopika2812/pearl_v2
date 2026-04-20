@@ -68,6 +68,14 @@ const customerSchema = new mongoose.Schema(
     },
     creditLimitRequestBy: { type: String, default: "" },
     creditLimitRequestAt: { type: Date },
+
+    // Risk Tracking System
+    riskStatus: {
+      type: String,
+      enum: ["safe_zone", "medium_zone", "risk_zone"],
+      default: "safe_zone",
+      index: true
+    },
   },
   { timestamps: true }
 );

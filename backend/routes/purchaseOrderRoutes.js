@@ -124,6 +124,36 @@ router.get("/", async (req, res) => {
   }
 });
 
+// GET ALL ASSETS / ITEMS SUMMARY (for HSN/Stock fallback)
+router.get("/items", async (req, res) => {
+  try {
+    const orders = await PurchaseOrder.find({ status: "PLACED" });
+    const stockMap = {};
+
+    orders.forEach((order) => {
+      order.items.forEach((item) => {
+        const key = `${order.warehouse}_${item.productId}`;
+        if (!stockMap[key]) {
+          stockMap[key] = {
+            productId: item.productId,
+            warehouse: order.warehouse,
+            qty: 0,
+            sellingPrice: item.sellingPrice,
+            gst: item.gst,
+            hsn: item.hsn,
+          };
+        }
+        stockMap[key].qty += item.qty;
+      });
+    });
+
+    res.json(Object.values(stockMap));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to load stock" });
+  }
+});
+
 // GET SINGLE PURCHASE ORDER
 router.get("/:id", auth, async (req, res) => {
   try {
@@ -540,37 +570,6 @@ router.post("/", auth, async (req, res) => {
   }
 });
 
-router.get("/items", async (req, res) => {
-  try {
-    const orders = await PurchaseOrder.find({ status: "PLACED" });
-
-    const stockMap = {};
-
-    orders.forEach((order) => {
-      order.items.forEach((item) => {
-        const key = `${order.warehouse}_${item.productId}`;
-
-        if (!stockMap[key]) {
-          stockMap[key] = {
-            productId: item.productId,
-            warehouse: order.warehouse,
-            qty: 0,
-            sellingPrice: item.sellingPrice,
-            gst: item.gst,
-            hsn: item.hsn,
-          };
-        }
-
-        stockMap[key].qty += item.qty;
-      });
-    });
-
-    res.json(Object.values(stockMap));
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to load stock" });
-  }
-});
 
 // UPDATE PURCHASE ORDER
 router.put("/:id", auth, async (req, res) => {

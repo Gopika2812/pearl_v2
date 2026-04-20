@@ -354,9 +354,9 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
     // ⚡ OPTIMIZATION: Batch load all existing products in this branch
     // Product names are unique per branch, so we can index by name alone for lookup
-    const existingProducts = await Product.find({ branchId }, { _id: 1, name: 1, productGroup: 1 });
+    const existingProducts = await Product.find({ branchId }, { _id: 1, name: 1, productGroup: 1, purchasingPrice: 1 });
     const existingProductNameMap = new Map(
-      existingProducts.map(p => [p.name.toLowerCase(), p._id])
+      existingProducts.map(p => [p.name.toLowerCase().trim().replace(/\s+/g, ' '), p])
     );
 
     let productsToBulkInsert = [];
@@ -381,7 +381,9 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       // Check if product already exists (by name only within branch)
-      const existingProductId = existingProductNameMap.get(name.toLowerCase());
+      const normalizedName = name.toLowerCase().trim().replace(/\s+/g, ' ');
+      const existingProduct = existingProductNameMap.get(normalizedName);
+      const existingProductId = existingProduct?._id;
 
       // Prepare data object - start EMPTY to only include fields present in row
       let productData = {};
@@ -493,6 +495,13 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         // Back-calculate purchasingPrice: P = S / (1 + M/100)
         productData.purchasingPrice = Math.round((productData.sellingPrice / (1 + productData.marginPercentage / 100)) * 100) / 100;
         productData.margin = Math.round((productData.sellingPrice - productData.purchasingPrice) * 100) / 100;
+      } else if (existingProduct && productData.marginPercentage !== undefined && productData.sellingPrice === undefined && productData.purchasingPrice === undefined) {
+        // ⚡ SPECIAL CASE: Update margin only for existing product
+        // Recalculate selling price based on existing database cost
+        const existingCost = existingProduct.purchasingPrice || 0;
+        productData.margin = Math.round((existingCost * productData.marginPercentage / 100) * 100) / 100;
+        productData.sellingPrice = Math.round((existingCost + productData.margin) * 100) / 100;
+        console.log(`✨ Auto-calculated selling price for existing product [${name}]: ₹${productData.sellingPrice} (from ${productData.marginPercentage}% margin)`);
       }
 
       // Warehouse
@@ -542,6 +551,10 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       if (existingProductId) {
+        if (skipExisting === true || skipExisting === "true") {
+          alreadyExistsCount++;
+          continue; 
+        }
         // Queue for update
         productsToBulkUpdate.push({
           updateOne: {

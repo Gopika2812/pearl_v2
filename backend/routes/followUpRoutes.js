@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import FollowUp from "../models/FollowUp.js";
 import { getISTStartOfDay, getISTEndOfDay } from "../utils/dateUtils.js";
 
@@ -10,7 +11,7 @@ router.post("/", async (req, res) => {
     const { 
       branchId, customerId, followUpBy, 
       closingBalance, creditLimit, creditLimitDays, 
-      result, remarks, nextFollowUpDate 
+      result, remarks, nextFollowUpDate, riskStatus 
     } = req.body;
 
     // Mark previous PENDING reminders for this customer as COMPLETED
@@ -32,10 +33,20 @@ router.post("/", async (req, res) => {
       result,
       remarks,
       nextFollowUpDate,
+      riskStatus: riskStatus || "safe_zone",
       status
     });
 
     await followUp.save();
+
+    // 🛡️ UPDATE CUSTOMER RISK ZONE
+    if (riskStatus) {
+      const Customer = mongoose.model("Customer");
+      await Customer.findByIdAndUpdate(customerId, {
+        $set: { riskStatus: riskStatus }
+      });
+    }
+
     res.status(201).json({ success: true, data: followUp });
   } catch (error) {
     console.error("FollowUp Create Error:", error);

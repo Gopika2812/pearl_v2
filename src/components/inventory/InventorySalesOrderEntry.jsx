@@ -1407,8 +1407,19 @@ export default function InventorySalesOrderEntry({
 
         {/* CENTER: CUSTOMER DETAILS */}
         <div className="lg:col-span-6 bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-3 h-fit">
-          <h3 className="text-[#319bab] font-black uppercase text-xs tracking-widest border-b pb-2 border-[#319bab]/30">
-            Customer Details
+          <h3 className="text-[#319bab] font-black uppercase text-xs tracking-widest border-b pb-2 border-[#319bab]/30 flex justify-between items-center">
+            <span>Customer Details</span>
+            {selectedCustomer && (
+              <div className="flex gap-2 items-center">
+                {selectedCustomer.riskStatus === "risk_zone" ? (
+                  <span className="bg-rose-500 text-white px-2 py-0.5 rounded-[4px] text-[9px] font-black uppercase animate-pulse shadow-lg shadow-rose-500/20">Risk Zone</span>
+                ) : selectedCustomer.riskStatus === "medium_zone" ? (
+                  <span className="bg-amber-500 text-white px-2 py-0.5 rounded-[4px] text-[9px] font-black uppercase shadow-lg shadow-amber-500/20">Medium Zone</span>
+                ) : (
+                  <span className="bg-emerald-500 text-white px-2 py-0.5 rounded-[4px] text-[9px] font-black uppercase opacity-60">Safe Zone</span>
+                )}
+              </div>
+            )}
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1435,6 +1446,17 @@ export default function InventorySalesOrderEntry({
                 onFocus={() => setShowCustomerDropdown(true)}
                 className={inputClass}
               />
+              {selectedCustomer?.riskStatus && (
+                <div className="absolute top-1/2 -translate-y-1/2 right-3 flex items-center pointer-events-none">
+                    {selectedCustomer.riskStatus === "risk_zone" ? (
+                        <span className="bg-rose-500 text-white px-2 py-0.5 rounded-[4px] text-[9px] font-black uppercase animate-pulse shadow-lg shadow-rose-500/20">Risk Zone</span>
+                    ) : selectedCustomer.riskStatus === "medium_zone" ? (
+                        <span className="bg-amber-500 text-white px-2 py-0.5 rounded-[4px] text-[9px] font-black uppercase shadow-lg shadow-amber-500/20">Medium Zone</span>
+                    ) : (
+                        <span className="bg-emerald-500 text-white px-2 py-0.5 rounded-[4px] text-[9px] font-black uppercase opacity-60">Safe Zone</span>
+                    )}
+                </div>
+              )}
 
               {/* CUSTOMER DROPDOWN */}
               {showCustomerDropdown && (
@@ -1487,7 +1509,19 @@ export default function InventorySalesOrderEntry({
                 }
                 readOnly
               />
-              {/* Credit Limit UI removed */}
+            </div>
+
+            <div>
+              <label className={labelClass}>Credit Limit</label>
+              <input
+                className={`${inputClass} font-bold text-orange-600`}
+                value={
+                  selectedCustomer?.creditLimit
+                    ? `₹${selectedCustomer.creditLimit.toLocaleString()}`
+                    : "₹0.00"
+                }
+                readOnly
+              />
             </div>
 
             <div className="lg:col-span-2">

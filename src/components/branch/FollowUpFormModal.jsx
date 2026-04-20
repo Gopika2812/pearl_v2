@@ -7,6 +7,7 @@ const FollowUpFormModal = ({ isOpen, onClose, customer, user, branch, onSave }) 
     const [submitting, setSubmitting] = useState(false);
     const [result, setResult] = useState("Promised");
     const [remarks, setRemarks] = useState("");
+    const [riskStatus, setRiskStatus] = useState(customer?.riskStatus || "safe_zone");
     const [nextFollowUpDate, setNextFollowUpDate] = useState("");
     const [nextFollowUpTime, setNextFollowUpTime] = useState("10:00");
 
@@ -14,6 +15,12 @@ const FollowUpFormModal = ({ isOpen, onClose, customer, user, branch, onSave }) 
         "Paid", "Promised", "Part Payment Promised", "Already Paid – Entry Pending",
         "No Response", "Call Later", "Document Needed", "Billing Dispute",
         "Approval Pending", "Long Pending", "Not Committed", "others"
+    ];
+
+    const RISK_OPTIONS = [
+        { id: "safe_zone", label: "Safe Zone", color: "bg-emerald-500", active: "bg-emerald-600 ring-4 ring-emerald-500/20" },
+        { id: "medium_zone", label: "Medium Zone", color: "bg-amber-500", active: "bg-amber-600 ring-4 ring-amber-500/20" },
+        { id: "risk_zone", label: "Risk Zone", color: "bg-rose-500", active: "bg-rose-600 ring-4 ring-rose-500/20" }
     ];
 
     if (!isOpen || !customer) return null;
@@ -36,6 +43,7 @@ const FollowUpFormModal = ({ isOpen, onClose, customer, user, branch, onSave }) 
                 creditLimitDays: customer.creditLimitDays || 0,
                 result,
                 remarks,
+                riskStatus,
                 nextFollowUpDate: combinedDate
             };
 
@@ -84,6 +92,28 @@ const FollowUpFormModal = ({ isOpen, onClose, customer, user, branch, onSave }) 
 
                 <div className="flex-1 overflow-y-auto p-8">
                     <form onSubmit={handleSubmit} className="space-y-8">
+                        {/* RISK ZONE SELECTION */}
+                        <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-[2px] mb-4 block">Assessment Status</label>
+                            <div className="grid grid-cols-3 gap-4">
+                                {RISK_OPTIONS.map(opt => (
+                                    <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => setRiskStatus(opt.id)}
+                                        className={`flex items-center justify-center gap-3 py-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                                            riskStatus === opt.id 
+                                                ? `${opt.active} text-white shadow-lg` 
+                                                : "bg-white text-gray-400 border border-gray-100 hover:border-gray-200"
+                                        }`}
+                                    >
+                                        <span className={`w-2 h-2 rounded-full ${riskStatus === opt.id ? 'bg-white' : opt.color}`}></span>
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                             <div className="space-y-6">
                                 <div>

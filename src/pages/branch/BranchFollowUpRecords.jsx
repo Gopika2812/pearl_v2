@@ -15,21 +15,23 @@ const BranchFollowUpRecords = () => {
     const [searchTerm, setSearchTerm] = useState("");
 
     useEffect(() => {
-        if (currentBranch?._id) {
-            fetchRecords();
-        }
-    }, [currentBranch?._id, fromDate, toDate]);
+        // We no longer fetch automatically on mount to keep it fast
+    }, [currentBranch?._id]);
 
     const fetchRecords = async () => {
+        if (!currentBranch?._id) return;
         setLoading(true);
         try {
-            const url = `${API_BASE}/follow-ups?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}`;
+            const url = `${API_BASE}/follow-ups?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&limit=100`;
             const res = await fetch(url, {
                 headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
             });
             const data = await res.json();
             if (data.success) {
                 setRecords(data.data || []);
+                if (data.data?.length === 0) {
+                    toast.info("No records found for the selected dates");
+                }
             } else {
                 throw new Error(data.message);
             }
@@ -79,7 +81,7 @@ const BranchFollowUpRecords = () => {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-3">
                             <div className="flex items-center bg-gray-50 p-2 rounded-xl border border-gray-200">
                                 <div className="flex items-center gap-2 px-2">
                                     <FaCalendarAlt className="text-indigo-500 text-xs" />
@@ -100,6 +102,13 @@ const BranchFollowUpRecords = () => {
                                     />
                                 </div>
                             </div>
+                            <button
+                                onClick={fetchRecords}
+                                disabled={loading}
+                                className="px-6 py-2.5 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-600/20 disabled:opacity-50"
+                            >
+                                {loading ? "Searching..." : "Search"}
+                            </button>
                         </div>
                     </div>
                 </div>

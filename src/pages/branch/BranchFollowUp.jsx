@@ -29,6 +29,7 @@ const BranchFollowUp = () => {
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(50);
+    const [totalPages, setTotalPages] = useState(1);
 
     // Modal states
     const [isLedgerOpen, setIsLedgerOpen] = useState(false);
@@ -49,10 +50,13 @@ const BranchFollowUp = () => {
     }, [currentBranch?._id]);
 
     const fetchData = async () => {
+        if (!currentBranch?._id) return;
         setLoading(true);
         try {
+            // STAGE 1: Fetch light customer data (No expensive balance calculations)
+            // We also fetch groups/categories/owners as usual
             const [custRes, groupRes, categoryRes, salesOwnerRes] = await Promise.all([
-                fetchWithAuth(`${API_BASE}/customers?branchId=${currentBranch._id}&limit=10000`),
+                fetchWithAuth(`${API_BASE}/customers?branchId=${currentBranch._id}&mini=true&limit=${rowsPerPage}&page=${currentPage}&search=${searchTerm}`),
                 fetchWithAuth(`${API_BASE}/customer-groups?branchId=${currentBranch._id}`),
                 fetchWithAuth(`${API_BASE}/customer-categories?branchId=${currentBranch._id}`),
                 fetchWithAuth(`${API_BASE}/sales-owners?branchId=${currentBranch._id}`)
@@ -63,33 +67,44 @@ const BranchFollowUp = () => {
             const categoryData = await categoryRes.json();
             const ownerData = await salesOwnerRes.json();
 
+            let fetchedCustomers = [];
             if (custData.success) {
-                setCustomers(custData.data || []);
+                fetchedCustomers = custData.data || [];
+                setTotalPages(custData.pagination?.pages || 1);
             } else if (Array.isArray(custData)) {
-                setCustomers(custData);
+                fetchedCustomers = custData;
             }
 
-            if (groupData.success) {
-                setCustomerGroups(groupData.data || []);
-            } else if (Array.isArray(groupData)) {
-                setCustomerGroups(groupData);
-            }
+            setCustomers(fetchedCustomers);
+            if (groupData.success) setCustomerGroups(groupData.data || []);
+            if (categoryData.success) setCustomerCategories(categoryData.data || []);
+            if (ownerData.success) setSalesOwners(ownerData.data || []);
 
-            if (categoryData.success) {
-                setCustomerCategories(categoryData.data || []);
-            } else if (Array.isArray(categoryData)) {
-                setCustomerCategories(categoryData);
-            }
+            setLoading(false); // UI is now fast and interactive with basic info
 
-            if (ownerData.success) {
-                setSalesOwners(ownerData.data || []);
-            } else if (Array.isArray(ownerData)) {
-                setSalesOwners(ownerData);
+            // STAGE 2: Background fetch balances for ONLY the visible customers on THIS page
+            if (fetchedCustomers.length > 0) {
+                const customerIds = fetchedCustomers.map(c => c._id);
+                const balRes = await fetchWithAuth(`${API_BASE}/customers/balances`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ customerIds, branchId: currentBranch._id })
+                });
+                const balData = await balRes.json();
+                
+                if (balData.success) {
+                    const balMap = new Map(balData.data.map(b => [b._id, { debit: b.debit, credit: b.credit }]));
+                    setCustomers(prev => prev.map(c => {
+                        if (balMap.has(c._id)) {
+                            return { ...c, ...balMap.get(c._id) };
+                        }
+                        return c;
+                    }));
+                }
             }
         } catch (err) {
             console.error("Error fetching data:", err);
             toast.error("Failed to load customer data");
-        } finally {
             setLoading(false);
         }
     };
@@ -104,89 +119,12 @@ const BranchFollowUp = () => {
 
     const getBalance = (c) => (c.debit || 0) - (c.credit || 0);
 
-    const filteredAndSortedCustomers = useMemo(() => {
-        let result = [...customers];
+    const paginatedCustomers = customers;
 
-        // Filter by Group
-        if (groupFilter !== "All") {
-            result = result.filter(c => 
-                c.customerGroups?.some(g => g._id === groupFilter) || 
-                c.customerGroups === groupFilter ||
-                (typeof c.customerGroups === "object" && c.customerGroups?._id === groupFilter)
-            );
-        }
-
-        // Filter by Category
-        if (categoryFilter !== "All") {
-            result = result.filter(c => 
-                c.customerCategories?.some(cat => cat._id === categoryFilter) || 
-                c.customerCategories === categoryFilter ||
-                c.customerCategory === categoryFilter ||
-                (typeof c.customerCategory === "object" && c.customerCategory?._id === categoryFilter)
-            );
-        }
-
-        // Filter by Search
-        if (searchTerm) {
-            const lowerSearch = searchTerm.toLowerCase();
-            result = result.filter(c => 
-                c.name.toLowerCase().includes(lowerSearch) ||
-                (c.whatsapp && c.whatsapp.includes(lowerSearch))
-            );
-        }
-
-        // Sort
-        result.sort((a, b) => {
-            let valA, valB;
-
-            switch (sortConfig.key) {
-                case "name":
-                    valA = a.name.toLowerCase();
-                    valB = b.name.toLowerCase();
-                    break;
-                case "group":
-                    valA = (a.customerGroups?.[0]?.name || a.customerGroup?.name || "Unassigned").toLowerCase();
-                    valB = (b.customerGroups?.[0]?.name || b.customerGroup?.name || "Unassigned").toLowerCase();
-                    break;
-                case "category":
-                    valA = (a.customerCategories?.[0]?.name || a.customerCategory?.name || "Unassigned").toLowerCase();
-                    valB = (b.customerCategories?.[0]?.name || b.customerCategory?.name || "Unassigned").toLowerCase();
-                    break;
-                case "balance":
-                    valA = getBalance(a);
-                    valB = getBalance(b);
-                    break;
-                case "creditLimit":
-                    valA = a.creditLimit || 0;
-                    valB = b.creditLimit || 0;
-                    break;
-                case "creditDays":
-                    valA = a.creditLimitDays || 0;
-                    valB = b.creditLimitDays || 0;
-                    break;
-                default:
-                    return 0;
-            }
-
-            if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
-            if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
-            return 0;
-        });
-
-        return result;
-    }, [customers, searchTerm, groupFilter, categoryFilter, sortConfig]);
-
-    // PAGINATION LOGIC
-    const totalPages = Math.ceil(filteredAndSortedCustomers.length / rowsPerPage);
-    const paginatedCustomers = useMemo(() => {
-        const start = (currentPage - 1) * rowsPerPage;
-        return filteredAndSortedCustomers.slice(start, start + rowsPerPage);
-    }, [filteredAndSortedCustomers, currentPage, rowsPerPage]);
-
-    // Reset to page 1 when filters change
+    // Reset and trigger fetch when filters or pagination change
     useEffect(() => {
-        setCurrentPage(1);
-    }, [searchTerm, groupFilter, categoryFilter, rowsPerPage]);
+        fetchData();
+    }, [searchTerm, groupFilter, categoryFilter, rowsPerPage, currentPage, sortConfig]);
 
     const SortIcon = ({ column }) => {
         if (sortConfig.key !== column) return <FaSort className="opacity-20 ml-1" />;
@@ -251,9 +189,8 @@ const BranchFollowUp = () => {
 
                     <div className="flex items-center gap-4">
                         <div className="bg-indigo-50/50 px-10 py-6 rounded-[2.5rem] border border-indigo-100 shadow-inner">
-                            <p className="text-[11px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-2">Total Outstanding</p>
                             <p className="text-4xl font-black text-indigo-900 tracking-tighter">
-                                ₹{customers.reduce((sum, c) => sum + Math.max(0, getBalance(c)), 0).toLocaleString()}
+                                {loading ? "..." : `₹${customers.reduce((sum, c) => sum + Math.max(0, getBalance(c)), 0).toLocaleString()}`}
                             </p>
                         </div>
                     </div>
@@ -342,6 +279,8 @@ const BranchFollowUp = () => {
                                             </th>
                                             <th onClick={() => handleSort("category")} className="px-6 py-10 text-left cursor-pointer hover:bg-white/5 hover:text-white transition-all">
                                                 <div className="flex items-center">Category <SortIcon column="category" /></div>
+                                            </th>                                             <th className="px-6 py-10 text-left">
+                                                <div className="flex items-center">Zone</div>
                                             </th>
                                             <th onClick={() => handleSort("balance")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
                                                 <div className="flex items-center justify-end">Balance <SortIcon column="balance" /></div>
@@ -353,6 +292,7 @@ const BranchFollowUp = () => {
                                                 <div className="flex items-center justify-end">Days <SortIcon column="creditDays" /></div>
                                             </th>
                                             <th className="px-12 py-10 text-center rounded-tr-[4rem]">Actions</th>
+
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
@@ -378,15 +318,35 @@ const BranchFollowUp = () => {
                                                         <span className="bg-indigo-50 text-indigo-700 px-6 py-3 rounded-[1.2rem] text-[12px] font-black uppercase tracking-[0.1em] border border-indigo-100/50 block w-fit whitespace-nowrap shadow-sm">
                                                             {primaryGroup}
                                                         </span>
-                                                    </td>
-                                                    <td className="px-6 py-8">
-                                                        <span className="bg-amber-50 text-amber-700 px-6 py-3 rounded-[1.2rem] text-[12px] font-black uppercase tracking-[0.1em] border border-amber-100/50 block w-fit whitespace-nowrap shadow-sm">
+                                                    </td>                                                     <td className="px-6 py-8">
+                                                        <span className="bg-emerald-50 text-emerald-700 px-6 py-3 rounded-[1.2rem] text-[12px] font-black uppercase tracking-[0.1em] border border-emerald-100/50 block w-fit whitespace-nowrap shadow-sm">
                                                             {primaryCategory}
                                                         </span>
                                                     </td>
+                                                    <td className="px-6 py-8">
+                                                        {customer.riskStatus === "risk_zone" ? (
+                                                            <span className="bg-rose-100 text-rose-700 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border border-rose-200 shadow-sm animate-pulse">
+                                                                Risk Zone
+                                                            </span>
+                                                        ) : customer.riskStatus === "medium_zone" ? (
+                                                            <span className="bg-amber-100 text-amber-700 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border border-amber-200 shadow-sm">
+                                                                Medium Zone
+                                                            </span>
+                                                        ) : (
+                                                            <span className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border border-emerald-200 shadow-sm opacity-60">
+                                                                Safe Zone
+                                                            </span>
+                                                        )}
+                                                    </td>
                                                     <td className={`px-6 py-8 text-right font-black text-2xl tracking-tighter ${balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                                                        <span className="text-[12px] font-black opacity-30 mr-2 align-middle">{balance > 0 ? "DR" : "CR"}</span>
-                                                        ₹{Math.abs(balance).toLocaleString()}
+                                                        {customer.debit !== undefined ? (
+                                                            <>
+                                                                <span className="text-[12px] font-black opacity-30 mr-2 align-middle">{balance > 0 ? "DR" : "CR"}</span>
+                                                                ₹{Math.abs(balance).toLocaleString()}
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-xs text-gray-300 animate-pulse font-normal tracking-normal italic uppercase">Calculating...</span>
+                                                        )}
                                                     </td>
                                                     <td className="px-6 py-8 text-right text-gray-900 text-lg font-black tracking-tight">
                                                         ₹{(customer.creditLimit || 200000).toLocaleString()}
@@ -489,7 +449,7 @@ const BranchFollowUp = () => {
                                 </div>
                             </div>
 
-                            {filteredAndSortedCustomers.length === 0 && (
+                            {customers.length === 0 && (
                                 <div className="py-40 text-center">
                                     <div className="w-36 h-36 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-10 border border-gray-100 animate-pulse">
                                         <FaSearch className="text-gray-200 text-5xl" />

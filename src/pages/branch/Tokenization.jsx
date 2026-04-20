@@ -228,8 +228,10 @@ const Tokenization = () => {
                   {token.status?.replace("_", " ")}
                 </span>
               </div>
-              <h3 className="text-base font-black text-slate-800 tracking-tight leading-tight truncate">
-                {token.customer?.name === "INTERNAL" ? "Task / Internal" : (token.customer?.name || "No Customer")}
+              <h3 className="text-base font-black text-slate-800 tracking-tight leading-tight truncate flex items-center gap-2">
+                <span className="text-indigo-600">{token.createdBy?.name || "System"}</span>
+                <span className="text-slate-300">➔</span>
+                <span className="text-slate-700">{token.assignedTo?.name || "Unassigned"}</span>
               </h3>
               <p className="text-[10px] text-slate-400 font-bold mt-1">
                 {formatTime(token.createdAt)}
@@ -313,39 +315,65 @@ const Tokenization = () => {
 
           {/* Actions Bar (Stays compact but functional) */}
           <div className="flex items-center gap-2 pt-4 border-t border-slate-50 mt-4">
-            {token.status === "OPEN" && (
-              <button 
-                onClick={() => updateTokenStatus(token._id, "TAKEN")}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
-              >
-                Take Token
-              </button>
-            )}
-            
-            {token.status === "TAKEN" && (
+            {/* If the current user is the one assigned to this token, simplified buttons */}
+            {token.assignedTo?.id?._id === user?.id || token.assignedTo?.id === user?.id ? (
               <>
-                <button 
-                  onClick={() => updateTokenStatus(token._id, "IN_PROGRESS")}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
-                >
-                  Start Work
-                </button>
-                <button 
-                  onClick={() => updateTokenStatus(token._id, "COMPLETED")}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
-                >
-                  Finish
-                </button>
+                {token.status === "OPEN" && (
+                  <button 
+                    onClick={() => updateTokenStatus(token._id, "TAKEN")}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
+                  >
+                    Taken
+                  </button>
+                )}
+                
+                {(token.status === "TAKEN" || token.status === "IN_PROGRESS") && (
+                  <button 
+                    onClick={() => updateTokenStatus(token._id, "COMPLETED")}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
+                  >
+                    Completed
+                  </button>
+                )}
               </>
-            )}
+            ) : (
+              /* Normal logic for Admins or non-assigned users */
+              <>
+                {token.status === "OPEN" && (
+                  <button 
+                    onClick={() => updateTokenStatus(token._id, "TAKEN")}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
+                  >
+                    Take Token
+                  </button>
+                )}
+                
+                {token.status === "TAKEN" && (
+                  <>
+                    <button 
+                      onClick={() => updateTokenStatus(token._id, "IN_PROGRESS")}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
+                    >
+                      Start Work
+                    </button>
+                    <button 
+                      onClick={() => updateTokenStatus(token._id, "COMPLETED")}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
+                    >
+                      Finish
+                    </button>
+                  </>
+                )}
 
-            {token.status === "IN_PROGRESS" && (
-              <button 
-                onClick={() => updateTokenStatus(token._id, "COMPLETED")}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-9 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-200"
-              >
-                <FaCheckCircle /> Complete
-              </button>
+                {token.status === "IN_PROGRESS" && (
+                  <button 
+                    onClick={() => updateTokenStatus(token._id, "COMPLETED")}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-9 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-200"
+                  >
+                    <FaCheckCircle /> Complete
+                  </button>
+                )}
+              </>
             )}
 
             {token.status === "COMPLETED" && (
