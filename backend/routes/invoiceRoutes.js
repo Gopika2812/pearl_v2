@@ -199,40 +199,50 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     // Predict Sales Invoice (SI) Number for Preview
     const financialYear = getFinancialYear();
     const useSoNumber = req.body.useSoNumber === true;
-    let predictedSI = useSoNumber ? salesOrder.invoiceId : salesOrder.salesInvoiceId;
-    
+    let predictedSI = salesOrder.salesInvoiceId; // Use existing if already generated
+
     if (!predictedSI) {
       const rawSoId = salesOrder.invoiceId || "";
+      // Robust prefix extraction and replacement
       const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
-      const soPrefixPrefix = cleanSoId.split('/')[0];
-      let siPrefix = soPrefixPrefix.endsWith("SO") 
-        ? soPrefixPrefix.replace(/SO$/i, "SI") 
-        : (soPrefixPrefix.endsWith("O") ? soPrefixPrefix.replace(/O$/i, "I") : `${soPrefixPrefix}SI`);
+      const parts = cleanSoId.split('/');
+      const soMainPrefix = parts[0];
+      
+      // Convert SO prefix to SI
+      let siPrefix = soMainPrefix.endsWith("SO") 
+        ? soMainPrefix.replace(/SO$/i, "SI") 
+        : (soMainPrefix.endsWith("-SO") ? soMainPrefix.replace(/-SO$/i, "-SI") : (soMainPrefix.endsWith("O") ? soMainPrefix.replace(/O$/i, "I") : `${soMainPrefix}SI`));
 
-      const siVoucher = await VoucherType.findOne({
-        branchId: salesOrder.branchId,
-        prefix: siPrefix,
-        orderType: "SI",
-        financialYear
-      });
+      if (useSoNumber) {
+        // Option A: Use SO Number but with SI Prefix
+        predictedSI = `${siPrefix}/${parts.slice(1).join('/')}`;
+      } else {
+        // Option B: Sequential Generation
+        const siVoucher = await VoucherType.findOne({
+          branchId: salesOrder.branchId,
+          prefix: siPrefix,
+          orderType: "SI",
+          financialYear
+        });
 
-      const existingInvoices = await Invoice.find({
-        branchId: salesOrder.branchId,
-        invoiceNumber: new RegExp(`^${siPrefix}/`),
-        financialYear
-      }).select('invoiceNumber').lean();
+        const existingInvoices = await Invoice.find({
+          branchId: salesOrder.branchId,
+          invoiceNumber: new RegExp(`^${siPrefix}/`),
+          financialYear
+        }).select('invoiceNumber').lean();
 
-      let highestNumInDB = 0;
-      existingInvoices.forEach(inv => {
-        const parts = inv.invoiceNumber.split('/');
-        if (parts.length >= 2) {
-          const num = parseInt(parts[1]);
-          if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
-        }
-      });
+        let highestNumInDB = 0;
+        existingInvoices.forEach(inv => {
+          const parts = inv.invoiceNumber.split('/');
+          if (parts.length >= 2) {
+            const num = parseInt(parts[1]);
+            if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+          }
+        });
 
-      const nextNum = Math.max((siVoucher?.counter || 1), highestNumInDB + 1);
-      predictedSI = `${siPrefix}/${String(nextNum).padStart(3, "0")}/${financialYear}`;
+        const nextNum = Math.max((siVoucher?.counter || 1), highestNumInDB + 1);
+        predictedSI = `${siPrefix}/${String(nextNum).padStart(3, "0")}/${financialYear}`;
+      }
     }
 
     // Dynamic balance calculation based on requested customer
@@ -388,50 +398,60 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
         if (invoice) {
           invoiceNumber = invoice.invoiceNumber;
         } else {
-          // Generate NEW sequential SI number
+          const useSoNumber = req.body.useSoNumber === true;
           const rawSoId = salesOrder.invoiceId || "";
           const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
-          const soPrefixPrefix = cleanSoId.split('/')[0];
-          let siPrefix = soPrefixPrefix.endsWith("SO") ? soPrefixPrefix.replace(/SO$/i, "SI") : `${soPrefixPrefix}SI`;
+          const parts = cleanSoId.split('/');
+          const soMainPrefix = parts[0];
+          
+          let siPrefix = soMainPrefix.endsWith("SO") 
+            ? soMainPrefix.replace(/SO$/i, "SI") 
+            : (soMainPrefix.endsWith("-SO") ? soMainPrefix.replace(/-SO$/i, "-SI") : (soMainPrefix.endsWith("O") ? soMainPrefix.replace(/O$/i, "I") : `${soMainPrefix}SI`));
 
-          let siVoucher = await VoucherType.findOne({
-            branchId: salesOrder.branchId,
-            prefix: siPrefix,
-            orderType: "SI",
-            financialYear
-          }).session(session);
-
-          if (!siVoucher) {
-            siVoucher = new VoucherType({
+          if (useSoNumber) {
+            // Option A: Match SO sequential ID but swap prefix to SI
+            invoiceNumber = `${siPrefix}/${parts.slice(1).join('/')}`;
+          } else {
+            // Option B: Generate NEW sequential SI number
+            let siVoucher = await VoucherType.findOne({
               branchId: salesOrder.branchId,
-              name: soPrefixPrefix.toLowerCase().replace(/so$/i, ""),
-              orderType: "SI",
               prefix: siPrefix,
-              counter: 1,
+              orderType: "SI",
               financialYear
+            }).session(session);
+
+            if (!siVoucher) {
+              siVoucher = new VoucherType({
+                branchId: salesOrder.branchId,
+                name: soMainPrefix.toLowerCase().replace(/so$/i, ""),
+                orderType: "SI",
+                prefix: siPrefix,
+                counter: 1,
+                financialYear
+              });
+              await siVoucher.save({ session });
+            }
+
+            const existingInvoices = await Invoice.find({
+              branchId: salesOrder.branchId,
+              invoiceNumber: new RegExp(`^${siPrefix}/`),
+              financialYear
+            }).select('invoiceNumber').session(session).lean();
+
+            let highestNumInDB = 0;
+            existingInvoices.forEach(inv => {
+              const parts = inv.invoiceNumber.split('/');
+              if (parts.length >= 2) {
+                const num = parseInt(parts[1]);
+                if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+              }
             });
+
+            const nextNum = Math.max(siVoucher.counter, highestNumInDB + 1);
+            invoiceNumber = `${siPrefix}/${String(nextNum).padStart(3, "0")}/${financialYear}`;
+            siVoucher.counter = nextNum + 1;
             await siVoucher.save({ session });
           }
-
-          const existingInvoices = await Invoice.find({
-            branchId: salesOrder.branchId,
-            invoiceNumber: new RegExp(`^${siPrefix}/`),
-            financialYear
-          }).select('invoiceNumber').session(session).lean();
-
-          let highestNumInDB = 0;
-          existingInvoices.forEach(inv => {
-            const parts = inv.invoiceNumber.split('/');
-            if (parts.length >= 2) {
-              const num = parseInt(parts[1]);
-              if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
-            }
-          });
-
-          const nextNum = Math.max(siVoucher.counter, highestNumInDB + 1);
-          invoiceNumber = `${siVoucher.prefix}/${String(nextNum).padStart(3, "0")}/${financialYear}`;
-          siVoucher.counter = nextNum + 1;
-          await siVoucher.save({ session });
         }
 
         // ==========================================

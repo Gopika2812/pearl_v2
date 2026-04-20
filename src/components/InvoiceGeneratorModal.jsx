@@ -10,6 +10,7 @@ import {
   FaWhatsapp,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
+import html2canvas from "html2canvas";
 import { API_BASE } from "../api";
 import { useBranch } from "../context/BranchContext";
 import { useInventory } from "../context/InventoryContext";
@@ -482,10 +483,13 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
         }, 200);
       }
 
-      // Call onSuccess after a small delay to allow printing triggers to initialize
+      // Call onSuccess after a larger delay to allow printing/whatsapp triggers to initialize
+      // and complete the initial DOM-heavy parts.
       setTimeout(() => {
-        if (isMounted.current && onSuccess) onSuccess();
-      }, 300);
+        if (isMounted.current && onSuccess) {
+          onSuccess();
+        }
+      }, 1000); // Increased from 300ms to 1000ms for safety
     } catch (error) {
       console.error("Error:", error);
       toast.error(error.message || "Failed to finalize invoice");
