@@ -385,14 +385,23 @@ const BranchSalesInvoices = () => {
       const rows = [];
       // Header for the detailed report
       const headerRow = [
-        "Date", "Invoice No", "Customer", "Product Name", "Price", "Qty", "GST (%)", "Discount (Amt)", "Line Total"
+        "Date", "Invoice No", "Customer", "Created By", "Product Name", "Price", "Qty", "GST (%)", "Discount (Amt)", "Line Total"
       ];
       rows.push(headerRow);
 
       invoicesToExport.forEach((inv) => {
-        const invDate = new Date(inv.invoiceDate).toLocaleDateString("en-IN");
         const invNo = inv.invoiceNumber || "-";
         const customerName = inv.customer?.name || "-";
+        
+        // Accurate Creator Logic
+        const soUser = inv.salesOrderId?.billingPerson || "";
+        const siUser = inv.generatedBy || inv.billingPerson || "";
+        let creator = "System";
+        if (soUser && siUser && soUser !== siUser) {
+          creator = `${soUser} / ${siUser}`;
+        } else {
+          creator = siUser || soUser || "System";
+        }
 
         // 1. Add each regular item
         const items = inv.items || [];
@@ -401,6 +410,7 @@ const BranchSalesInvoices = () => {
             invDate,
             invNo,
             customerName,
+            creator,
             item.name,
             item.sellingPrice || 0,
             item.qty || 0,
@@ -674,9 +684,11 @@ const BranchSalesInvoices = () => {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50/80 text-slate-500 uppercase text-[10px] font-black border-b border-slate-100 tracking-wider">
                   <tr>
+                    <th className="px-6 py-5 text-left">Date & Time</th>
                     <th className="px-6 py-5 text-left">Invoice ID (SI)</th>
                     <th className="px-6 py-5 text-left">Order Ref (SO)</th>
                     <th className="px-6 py-5 text-left">Customer Details</th>
+                    <th className="px-6 py-5 text-left">Created By</th>
                     <th className="px-6 py-5 text-right">Grand Total</th>
                     <th className="px-6 py-5 text-center">E-Invoice Status</th>
                     <th className="px-6 py-5 text-center">Status</th>
@@ -687,6 +699,10 @@ const BranchSalesInvoices = () => {
                   {invoices.map((inv) => (
                     <React.Fragment key={inv._id}>
                       <tr className="hover:bg-indigo-50/30 transition group">
+                        <td className="px-6 py-5 whitespace-nowrap">
+                           <div className="text-[11px] font-black text-slate-700 tracking-tight">{formatIST(inv.invoiceDate)}</div>
+                           <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{new Date(inv.invoiceDate).toDateString() === new Date().toDateString() ? "TODAY" : ""}</div>
+                        </td>
                         <td className="px-6 py-5">
                           <div className="flex items-center gap-3">
                             <button
@@ -706,6 +722,22 @@ const BranchSalesInvoices = () => {
                         <td className="px-6 py-5">
                           <div className="font-black text-slate-800 text-xs">{inv.customer?.name}</div>
                           <div className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-0.5">{inv.customer?.whatsapp || "No Contact"}</div>
+                        </td>
+                        <td className="px-6 py-5">
+                          <div className="flex flex-col gap-1.5">
+                            {inv.salesOrderId?.billingPerson && (inv.generatedBy || inv.billingPerson) !== inv.salesOrderId?.billingPerson && (
+                               <div className="flex items-center gap-1.5 opacity-60">
+                                  <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase tracking-widest border border-slate-200">SO</span>
+                                  <span className="text-[10px] font-bold text-slate-500 truncate max-w-[100px]">{inv.salesOrderId.billingPerson}</span>
+                               </div>
+                            )}
+                            <div className="flex items-center gap-1.5">
+                               <span className="text-[8px] font-black bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase tracking-widest border border-indigo-200">INV</span>
+                               <span className="text-[10px] font-black text-indigo-700 uppercase tracking-tight">
+                                  {inv.generatedBy || inv.billingPerson || inv.salesOrderId?.billingPerson || "SYSTEM"}
+                               </span>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-6 py-5 text-right font-black text-indigo-700 tracking-tight text-base">
                           ₹{(inv.grandTotal || 0).toLocaleString()}

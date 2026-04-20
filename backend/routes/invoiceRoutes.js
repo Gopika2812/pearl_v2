@@ -644,6 +644,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           invoice.commonDiscount = commonDiscount;
           invoice.extraExpenseAmount = extraExpenseAmount;
           invoice.grandTotal = grandTotal;
+          invoice.billingPerson = finalizedByUsername || invoice.billingPerson || "System";
+          invoice.generatedBy = finalizedByUsername || invoice.generatedBy || "System";
           await invoice.save({ session });
         } else {
           invoice = new Invoice({
@@ -665,6 +667,8 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
             commonDiscount: commonDiscount,
             extraExpenseAmount: extraExpenseAmount,
             grandTotal,
+            billingPerson: finalizedByUsername || "System",
+            generatedBy: finalizedByUsername || "System",
             status: "FINALIZED",
           });
           await invoice.save({ session });
@@ -1041,7 +1045,7 @@ router.get("", async (req, res) => {
     }
 
     const invoices = await queryExec
-      .sort({ invoiceDate: -1 })
+      .sort({ invoiceDate: -1, createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
       .lean();

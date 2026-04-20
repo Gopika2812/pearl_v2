@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { FaTimes, FaFileInvoiceDollar, FaDownload, FaCalendarAlt, FaSpinner, FaPencilAlt, FaCheck } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import * as XLSX from 'xlsx';
 import { API_BASE, fetchWithAuth } from "../../api";
 import { toast } from "react-toastify";
 
@@ -145,6 +146,87 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer, branch, onBalanceUpdat
     }
   };
 
+  const handleExportExcel = () => {
+    try {
+      const data = [];
+      
+      // Header info
+      data.push([branch?.name || "PEARL AGENCY"]);
+      data.push([branch?.address || ""]);
+      data.push([`Customer: ${customer.name}`]);
+      data.push([`Date: ${formatDate(startDate)} TO ${formatDate(endDate)}`]);
+      data.push([]); // Spacer
+
+      // Table Header
+      data.push(["Date", "Particulars / Ref No", "Type", "Debit", "Credit", "Balance"]);
+
+      // Opening Balance
+      data.push([
+        formatDate(startDate),
+        "OPENING BALANCE B/F",
+        "O/B",
+        0,
+        0,
+        `${Math.abs(openingBalance).toLocaleString()} ${balanceLabel(openingBalance)}`
+      ]);
+
+      // Transactions
+      transactions.forEach(txn => {
+        let docId = "-";
+        const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note):\s*([^\s(]+)/i);
+        if (pm) docId = pm[1]; else if (txn.type === "INVOICE") docId = txn.particulars.split(": ")[1] || "-";
+
+        let vt = "-";
+        if (txn.type === "INVOICE") vt = "Z-1";
+        else if (txn.type === "RECEIPT") {
+          const modeMatch = txn.particulars?.match(/\(([^)]+)\)/);
+          vt = modeMatch ? modeMatch[1].toUpperCase() : "CASH";
+        } else if (txn.type === "CREDIT_NOTE") vt = "Z-2";
+        else vt = "B-X";
+
+        data.push([
+          formatDate(txn.date),
+          docId,
+          vt,
+          txn.debit || 0,
+          txn.credit || 0,
+          `${Math.abs(txn.balance).toLocaleString()} ${balanceLabel(txn.balance)}`
+        ]);
+      });
+
+      // Period Totals
+      data.push([]);
+      data.push([
+        "PERIOD TOTALS",
+        "",
+        "",
+        totalDebit,
+        totalCredit,
+        `${Math.abs(closingBalance).toLocaleString()} ${balanceLabel(closingBalance)}`
+      ]);
+
+      const worksheet = XLSX.utils.aoa_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Ledger");
+
+      // Column widths
+      worksheet["!cols"] = [
+        { wch: 15 },
+        { wch: 30 },
+        { wch: 10 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 15 }
+      ];
+
+      XLSX.writeFile(workbook, `Ledger-${customer.name}-${startDate}-to-${endDate}.xlsx`);
+      toast.success("Excel Exported!");
+    } catch (error) {
+      console.error("Excel export failed:", error);
+      toast.error("Failed to generate Excel");
+    }
+  };
+
   const formatDate = (dateStr) => {
     return new Date(dateStr).toLocaleDateString('en-IN', {
       day: '2-digit', month: 'short', year: 'numeric'
@@ -177,6 +259,12 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer, branch, onBalanceUpdat
               className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-black border border-white/20 uppercase tracking-widest"
             >
               <FaDownload /> Export PDF
+            </button>
+            <button
+              onClick={handleExportExcel}
+              className="px-4 py-2 bg-green-600/20 hover:bg-green-600/40 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-black border border-green-500/30 uppercase tracking-widest"
+            >
+              <FaDownload /> Export Excel
             </button>
             <button
               onClick={onClose}

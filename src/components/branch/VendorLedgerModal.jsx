@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { FaTimes, FaFileInvoiceDollar, FaDownload, FaCalendarAlt, FaSpinner } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import * as XLSX from 'xlsx';
 import { API_BASE } from "../../api";
 import { toast } from "react-toastify";
 
@@ -63,6 +64,73 @@ const VendorLedgerModal = ({ isOpen, onClose, supplier }) => {
     pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
     pdf.save(`Ledger-${supplier.name}-${startDate}-to-${endDate}.pdf`);
   };
+  
+  const handleExportExcel = () => {
+    try {
+      const data = [];
+      
+      // Header info
+      data.push([supplier.name]);
+      data.push([`Period: ${formatDate(startDate)} to ${formatDate(endDate)}`]);
+      data.push([]); // Spacer
+
+      // Table Header
+      data.push(["Date", "Particulars", "Type", "Debit (Paid/Return)", "Credit (Billed)", "Balance"]);
+
+      // Opening Balance
+      data.push([
+        formatDate(startDate),
+        "OPENING BALANCE B/F",
+        "O/B",
+        0,
+        0,
+        `${Math.abs(openingBalance).toLocaleString()} ${balanceLabel(openingBalance)}`
+      ]);
+
+      // Transactions
+      transactions.forEach(txn => {
+        data.push([
+          formatDate(txn.date),
+          txn.particulars,
+          txn.type.replace("_", " "),
+          txn.debit || 0,
+          txn.credit || 0,
+          `${Math.abs(txn.balance).toLocaleString()} ${balanceLabel(txn.balance)}`
+        ]);
+      });
+
+      // Closing Totals
+      data.push([]);
+      data.push([
+        formatDate(endDate),
+        "CLOSING BALANCE C/F",
+        "C/B",
+        transactions.reduce((sum, t) => sum + t.debit, 0),
+        transactions.reduce((sum, t) => sum + t.credit, 0),
+        `${Math.abs(closingBalance).toLocaleString()} ${balanceLabel(closingBalance)}`
+      ]);
+
+      const worksheet = XLSX.utils.aoa_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Ledger");
+
+      // Column widths
+      worksheet["!cols"] = [
+        { wch: 15 },
+        { wch: 35 },
+        { wch: 10 },
+        { wch: 15 },
+        { wch: 15 },
+        { wch: 15 }
+      ];
+
+      XLSX.writeFile(workbook, `Ledger-${supplier.name}-${startDate}-to-${endDate}.xlsx`);
+      toast.success("Excel Exported!");
+    } catch (error) {
+      console.error("Excel export failed:", error);
+      toast.error("Failed to generate Excel");
+    }
+  };
 
   // Helper for formatting date
   const formatDate = (dateStr) => {
@@ -94,6 +162,12 @@ const VendorLedgerModal = ({ isOpen, onClose, supplier }) => {
               className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-black border border-white/20 uppercase tracking-widest"
             >
               <FaDownload /> Export PDF
+            </button>
+            <button
+              onClick={handleExportExcel}
+              className="px-4 py-2 bg-green-600/20 hover:bg-green-600/40 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-black border border-green-500/30 uppercase tracking-widest"
+            >
+              <FaDownload /> Export Excel
             </button>
             <button
               onClick={onClose}
