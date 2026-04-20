@@ -300,7 +300,8 @@ const BranchFollowUp = () => {
                                             </th>
                                             <th onClick={() => handleSort("category")} className="px-6 py-10 text-left cursor-pointer hover:bg-white/5 hover:text-white transition-all">
                                                 <div className="flex items-center">Category <SortIcon column="category" /></div>
-                                            </th>                                             <th className="px-6 py-10 text-left">
+                                            </th>
+                                            <th className="px-6 py-10 text-left">
                                                 <div className="flex items-center">Zone</div>
                                             </th>
                                             <th onClick={() => handleSort("balance")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
@@ -313,7 +314,6 @@ const BranchFollowUp = () => {
                                                 <div className="flex items-center justify-end">Days <SortIcon column="days" /></div>
                                             </th>
                                             <th className="px-12 py-10 text-center rounded-tr-[4rem]">Actions</th>
-
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
@@ -339,7 +339,8 @@ const BranchFollowUp = () => {
                                                         <span className="bg-indigo-50 text-indigo-700 px-6 py-3 rounded-[1.2rem] text-[12px] font-black uppercase tracking-[0.1em] border border-indigo-100/50 block w-fit whitespace-nowrap shadow-sm">
                                                             {primaryGroup}
                                                         </span>
-                                                    </td>                                                     <td className="px-6 py-8">
+                                                    </td>
+                                                    <td className="px-6 py-8">
                                                         <span className="bg-emerald-50 text-emerald-700 px-6 py-3 rounded-[1.2rem] text-[12px] font-black uppercase tracking-[0.1em] border border-emerald-100/50 block w-fit whitespace-nowrap shadow-sm">
                                                             {primaryCategory}
                                                         </span>

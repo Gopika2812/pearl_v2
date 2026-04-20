@@ -517,20 +517,22 @@ router.get("/", async (req, res) => {
 
     // 1️⃣ Group Filter (Check both new plural and legacy singular fields)
     if (customerGroupId && customerGroupId !== "All") {
+      const gId = new mongoose.Types.ObjectId(customerGroupId);
       andConditions.push({
         $or: [
-          { customerGroups: customerGroupId },
-          { customerGroup: customerGroupId }
+          { customerGroups: gId },
+          { customerGroup: gId }
         ]
       });
     }
 
     // 2️⃣ Category Filter (Check both new plural and legacy singular fields)
     if (customerCategoryId && customerCategoryId !== "All") {
+      const cId = new mongoose.Types.ObjectId(customerCategoryId);
       andConditions.push({
         $or: [
-          { customerCategories: customerCategoryId },
-          { customerCategory: customerCategoryId }
+          { customerCategories: cId },
+          { customerCategory: cId }
         ]
       });
     }
