@@ -43,11 +43,14 @@ const BranchFollowUpRecords = () => {
         }
     };
 
-    const filteredRecords = records.filter(r => 
-        r.customerId?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.result?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.followUpBy?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredRecords = records.filter(r => {
+        const search = searchTerm.toLowerCase();
+        return (
+            (r.customerId?.name?.toLowerCase() || "").includes(search) ||
+            (r.result?.toLowerCase() || "").includes(search) ||
+            (r.followUpBy?.toLowerCase() || "").includes(search)
+        );
+    });
 
     const getResultColor = (result) => {
         switch(result) {

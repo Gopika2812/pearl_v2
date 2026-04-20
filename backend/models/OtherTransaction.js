@@ -11,7 +11,6 @@ const OtherTransactionSchema = new mongoose.Schema(
     transactionId: {
       type: String,
       required: true,
-      unique: true,
     },
     type: {
       type: String,
@@ -53,7 +52,8 @@ const OtherTransactionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Search index
+// Search and Unique indexes
+OtherTransactionSchema.index({ branchId: 1, transactionId: 1 }, { unique: true });
 OtherTransactionSchema.index({ branchId: 1, type: 1, date: -1 });
 
 const OtherTransaction = mongoose.model("OtherTransaction", OtherTransactionSchema);

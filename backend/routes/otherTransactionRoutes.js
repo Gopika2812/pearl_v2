@@ -28,7 +28,7 @@ router.get("/", async (req, res) => {
       return res.status(400).json({ message: "branchId is required" });
     }
 
-    const query = { branchId };
+    const query = { branchId: new mongoose.Types.ObjectId(branchId) };
     if (type) {
       query.type = type.toUpperCase();
     }

@@ -60,8 +60,12 @@ router.get("/", async (req, res) => {
     const { branchId, fromDate, toDate, customerId } = req.query;
     
     let query = {};
-    if (branchId) query.branchId = branchId;
-    if (customerId) query.customerId = customerId;
+    if (branchId && mongoose.Types.ObjectId.isValid(branchId)) {
+      query.branchId = new mongoose.Types.ObjectId(branchId);
+    }
+    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+      query.customerId = new mongoose.Types.ObjectId(customerId);
+    }
 
     if (fromDate || toDate) {
       const start = fromDate ? getISTStartOfDay(fromDate) : getISTStartOfDay();
