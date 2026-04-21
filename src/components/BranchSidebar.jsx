@@ -31,7 +31,7 @@ import { useBranch } from "../context/BranchContext";
 
 import { PAGE_CONFIG, ICON_MAP, getFlattenedPages } from "../utils/pageConfig";
 
-const BranchSidebar = ({ isOpen, onClose }) => {
+const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { branch, logout, superAdminViewBranch, setSuperAdminViewBranch, user } = useBranch();
@@ -40,6 +40,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   const [openDropdowns, setOpenDropdowns] = useState({});
 
   const toggleDropdown = (id) => {
+    if (isBlocked) return;
     setOpenDropdowns(prev => ({
       ...prev,
       [id]: !prev[id]
@@ -49,6 +50,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   const isSuperAdminViewing = !!superAdminViewBranch;
 
   const handleBackToSuperAdmin = () => {
+    if (isBlocked) return;
     setSuperAdminViewBranch(null);
     navigate("/super-admin/branch-management");
     if (onClose) onClose();
@@ -84,18 +86,19 @@ const BranchSidebar = ({ isOpen, onClose }) => {
   const renderMenuItem = (item, isMobile = false) => {
     if (!isAllowed(item)) return null;
     const active = location.pathname === item.path;
+    const isDisabled = isBlocked && item.id !== "tokenization";
     
     return (
       <Link
         key={item.id}
-        to={item.path}
+        to={isDisabled ? location.pathname : item.path}
         className={`mx-3 mb-1 flex items-center gap-4 px-3 py-3.5 rounded-2xl transition-all duration-300 relative group/item ${
           active
             ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/20 font-bold"
             : "hover:bg-white/5 text-slate-400 hover:text-white"
-        }`}
-        onClick={isMobile ? onClose : undefined}
-        title={item.name}
+        } ${isDisabled ? "opacity-30 cursor-not-allowed grayscale pointer-events-none" : ""}`}
+        onClick={isDisabled ? (e) => e.preventDefault() : (isMobile ? onClose : undefined)}
+        title={isDisabled ? "Complete tasks to unlock navigation" : item.name}
       >
         <div className={`w-8 flex justify-center flex-shrink-0 transition-transform duration-300 ${active ? "scale-110" : "group-hover/item:scale-110"}`}>
           <span className="text-xl">{ICON_MAP[item.icon]}</span>
@@ -115,13 +118,14 @@ const BranchSidebar = ({ isOpen, onClose }) => {
     if (allowedSubItems.length === 0) return null;
 
     const isOpen = !!openDropdowns[item.id];
+    const isDisabled = isBlocked;
 
     return (
-      <div key={item.id} className="mx-3 mb-1">
+      <div key={item.id} className={`mx-3 mb-1 ${isDisabled ? "opacity-30 pointer-events-none grayscale" : ""}`}>
         <button
-          onClick={() => toggleDropdown(item.id)}
+          onClick={() => !isDisabled && toggleDropdown(item.id)}
           className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
-          title={item.name}
+          title={isDisabled ? "Navigation Locked" : item.name}
         >
           <div className="w-8 flex justify-center flex-shrink-0">
             <span className="text-lg">{ICON_MAP[item.icon]}</span>
@@ -143,7 +147,7 @@ const BranchSidebar = ({ isOpen, onClose }) => {
               return (
                 <Link
                   key={sub.id}
-                  to={sub.path}
+                  to={active ? location.pathname : sub.path}
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
                     active ? "bg-white/20 text-white font-semibold" : "hover:bg-white/10 text-white/80"
                   }`}

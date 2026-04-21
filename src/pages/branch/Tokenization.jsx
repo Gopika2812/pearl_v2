@@ -10,7 +10,7 @@ import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 
 const Tokenization = () => {
-  const { currentBranch, user } = useBranch();
+  const { currentBranch, user, refreshBlockingTokens } = useBranch();
   const { customers, products } = useInventory();
   const [tokens, setTokens] = useState([]);
   const [branchUsers, setBranchUsers] = useState([]);
@@ -123,6 +123,9 @@ const Tokenization = () => {
       if (data.success) {
         toast.success(`Status updated to ${status}`);
         fetchTokens();
+        if (typeof refreshBlockingTokens === "function") {
+          refreshBlockingTokens();
+        }
       }
     } catch (err) {
       toast.error("Status update failed");
@@ -182,11 +185,19 @@ const Tokenization = () => {
   // --- SUB-COMPONENT: TOKEN CARD ---
   const TokenCard = ({ token }) => {
     const [isExpanded, setIsExpanded] = useState(false);
-    const isFinished = token.status === "FINISHED";
+    const isFinished = token.status === "COMPLETED";
 
     // Extract timings from statusLog
     const takenLog = token.statusLog?.find(log => log.status === "TAKEN" || log.status === "IN_PROGRESS");
-    const finishedLog = token.statusLog?.find(log => log.status === "FINISHED");
+    const finishedLog = token.statusLog?.find(log => log.status === "COMPLETED");
+
+    // Check if token is taken but not finished for > 1 hour
+    const isOverdue = useMemo(() => {
+      if (!token.takenAt || isFinished || token.status === "CANCELLED") return false;
+      const takenTime = new Date(token.takenAt).getTime();
+      const now = new Date().getTime();
+      return (now - takenTime) > 3600000; // 1 hour
+    }, [token.takenAt, token.status, isFinished]);
 
     const handleAssign = async (userId, userName) => {
       try {
@@ -209,8 +220,12 @@ const Tokenization = () => {
       return new Date(date).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' });
     };
 
+    const myId = user?.id || user?._id;
+    const isCreatorOrSuperAdmin = user?.role === "SUPER_ADMIN" || myId?.toString() === (token.createdBy?.id?._id || token.createdBy?.id)?.toString();
+    const isAssignedToMe = (token.assignedTo?.id?._id || token.assignedTo?.id)?.toString() === myId?.toString();
+
     return (
-      <div className={`bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden transition-all hover:shadow-lg group ${isFinished ? 'opacity-80 bg-slate-50' : ''}`}>
+      <div className={`bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden transition-all hover:shadow-lg group ${isFinished ? 'opacity-80 bg-slate-50' : ''} ${isOverdue ? 'ring-2 ring-red-500 ring-inset' : ''}`}>
         <div className="p-4 md:p-5">
           {/* Default Compact View */}
           <div className="flex justify-between items-start">
@@ -227,6 +242,11 @@ const Tokenization = () => {
                 }`}>
                   {token.status?.replace("_", " ")}
                 </span>
+                {isOverdue && (
+                  <span className="px-2 py-0.5 bg-red-100 text-red-600 rounded-lg text-[9px] font-black tracking-widest uppercase animate-pulse border border-red-200">
+                    ⚠️ OVERDUE
+                  </span>
+                )}
               </div>
               <h3 className="text-base font-black text-slate-800 tracking-tight leading-tight truncate flex items-center gap-2">
                 <span className="text-indigo-600">{token.createdBy?.name || "System"}</span>
@@ -293,11 +313,11 @@ const Tokenization = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between items-center bg-white/50 p-2 rounded-lg">
                     <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Taken At</span>
-                    <span className="text-[10px] font-black text-indigo-600">{takenLog ? formatTime(takenLog.updatedAt) : "Pending"}</span>
+                    <span className="text-[10px] font-black text-indigo-600">{token.takenAt ? formatTime(token.takenAt) : "Pending"}</span>
                   </div>
                   <div className="flex justify-between items-center bg-white/50 p-2 rounded-lg">
                     <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Finished At</span>
-                    <span className="text-[10px] font-black text-emerald-600">{finishedLog ? formatTime(finishedLog.updatedAt) : "In Progress"}</span>
+                    <span className="text-[10px] font-black text-emerald-600">{token.finishedAt ? formatTime(token.finishedAt) : "In Progress"}</span>
                   </div>
                 </div>
               </div>
@@ -313,31 +333,10 @@ const Tokenization = () => {
             </div>
           </div>
 
-          {/* Actions Bar (Stays compact but functional) */}
+          {/* Actions Bar */}
           <div className="flex items-center gap-2 pt-4 border-t border-slate-50 mt-4">
-            {/* If the current user is the one assigned to this token, simplified buttons */}
-            {token.assignedTo?.id?._id === user?.id || token.assignedTo?.id === user?.id ? (
-              <>
-                {token.status === "OPEN" && (
-                  <button 
-                    onClick={() => updateTokenStatus(token._id, "TAKEN")}
-                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
-                  >
-                    Taken
-                  </button>
-                )}
-                
-                {(token.status === "TAKEN" || token.status === "IN_PROGRESS") && (
-                  <button 
-                    onClick={() => updateTokenStatus(token._id, "COMPLETED")}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-9 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all"
-                  >
-                    Completed
-                  </button>
-                )}
-              </>
-            ) : (
-              /* Normal logic for Admins or non-assigned users */
+            {/* 1. If assigned to me, show actions */}
+            {isAssignedToMe && !isFinished && token.status !== "CANCELLED" ? (
               <>
                 {token.status === "OPEN" && (
                   <button 
@@ -374,15 +373,28 @@ const Tokenization = () => {
                   </button>
                 )}
               </>
-            )}
+            ) : isCreatorOrSuperAdmin && !isFinished && token.status !== "CANCELLED" ? (
+              /* 2. If creator/admin but NOT the assignee, show read-only */
+              <div className="flex-1 text-center py-2 bg-slate-50 border border-slate-100 rounded-xl text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                Read-Only Perspective
+              </div>
+            ) : null}
 
-            {token.status === "COMPLETED" && (
+            {/* Status Overlays for Finished/Cancelled */}
+            {isFinished && (
               <div className="flex-1 flex items-center justify-center gap-1.5 text-emerald-600 font-bold bg-emerald-50 h-9 rounded-xl border border-emerald-100 text-[10px] uppercase tracking-widest">
                 <FaCheckCircle /> Completed
               </div>
             )}
             
-            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && !["COMPLETED", "CANCELLED"].includes(token.status) && (
+            {token.status === "CANCELLED" && (
+              <div className="flex-1 text-center py-2 bg-red-50 text-red-500 rounded-xl text-[10px] font-bold uppercase tracking-widest border border-red-100">
+                Cancelled
+              </div>
+            )}
+            
+            {/* Admin Cancel Button */}
+            {user?.role === "ADMIN" && !["COMPLETED", "CANCELLED"].includes(token.status) && (
               <button 
                 onClick={() => updateTokenStatus(token._id, "CANCELLED")}
                 className="w-9 h-9 rounded-xl bg-red-50 text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center border border-red-100"

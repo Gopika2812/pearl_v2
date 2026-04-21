@@ -92,9 +92,14 @@ function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { superAdminViewBranch, user, currentBranch } = useBranch();
-  const [blockingTokens, setBlockingTokens] = useState([]);
-  const [isCheckingTokens, setIsCheckingTokens] = useState(false);
+  const { 
+    superAdminViewBranch, 
+    user, 
+    currentBranch, 
+    blockingTokens, 
+    isCheckingTokens, 
+    refreshBlockingTokens 
+  } = useBranch();
 
   // Check if we're on a branch-specific page
   const isBranchRoute = location.pathname.startsWith("/branch/") || location.pathname === "/branch-home";
@@ -178,46 +183,32 @@ function AppContent() {
         }
     }, [location.pathname, isBranchRoute, superAdminViewBranch, navigate, user]);
 
-  // --- MANDATORY TOKEN BLOCKER LOGIC ---
-  useEffect(() => {
-    const checkBlockingTokens = async () => {
-      if (!user?.id || !currentBranch?._id || !isBranchRoute) {
-        setBlockingTokens([]);
-        return;
-      }
 
-      try {
-        setIsCheckingTokens(true);
-        const res = await fetchWithAuth(`${API_BASE}/tokens/branch/${currentBranch._id}?status=OPEN`);
-        const data = await res.json();
-        if (data.success) {
-          // Filter tokens specifically assigned to this user that are still OPEN
-          const assignedToMe = data.data.filter(t => 
-            (t.assignedTo?.id?._id === user.id || t.assignedTo?.id === user.id) && 
-            t.status === "OPEN"
-          );
-          setBlockingTokens(assignedToMe);
-        }
-      } catch (err) {
-        console.error("Token check failed:", err);
-      } finally {
-        setIsCheckingTokens(false);
-      }
-    };
-
-    checkBlockingTokens();
-    
-    // Periodically re-check every 2 minutes or on route change for safety
-    const interval = setInterval(checkBlockingTokens, 120000);
-    return () => clearInterval(interval);
-  }, [user?.id, currentBranch?._id, isBranchRoute, location.pathname]);
 
   // Redirect Logic: If blocking tokens exist and NOT on tokenization page, FORCE redirect
   useEffect(() => {
     if (blockingTokens.length > 0 && location.pathname !== "/branch/tokenization" && isBranchRoute) {
-      navigate("/branch/tokenization");
+      // Use replace: true to prevent back button from trapping the user in a loop
+      navigate("/branch/tokenization", { replace: true });
     }
   }, [blockingTokens, location.pathname, isBranchRoute, navigate]);
+
+  const handleTakeToken = async (tokenId) => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/tokens/${tokenId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "TAKEN", takenBy: user?.id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Task Taken Successfully");
+        setBlockingTokens(prev => prev.filter(t => t._id !== tokenId));
+        navigate("/branch/tokenization");
+      }
+    } catch (err) {
+      toast.error("Failed to take task");
+    }
+  };
 
   const ForcedTokenModal = () => {
     if (blockingTokens.length === 0) return null;
@@ -225,16 +216,16 @@ function AppContent() {
     return (
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/90 backdrop-blur-md p-4">
         <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-500 border border-white/20">
-          <div className="bg-gradient-to-br from-rose-600 to-rose-500 px-10 py-12 text-white text-center relative overflow-hidden">
+          <div className="bg-gradient-to-br from-indigo-600 to-indigo-500 px-10 py-12 text-white text-center relative overflow-hidden">
             <div className="absolute top-0 right-0 -translate-y-1/4 translate-x-1/4 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
             <div className="relative z-10">
               <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm border border-white/30 shadow-xl">
                 <FaTicketAlt className="text-4xl text-white drop-shadow-lg" />
               </div>
-              <h2 className="text-3xl font-black tracking-tight mb-2 uppercase">Mandatory Tasks</h2>
-              <p className="text-rose-100 font-bold text-xs uppercase tracking-widest leading-relaxed">
-                You have {blockingTokens.length} pending {blockingTokens.length === 1 ? 'task' : 'tasks'} assigned to you.<br /> 
-                Complete them to continue.
+              <h2 className="text-3xl font-black tracking-tight mb-2 uppercase">You Have Tasks!</h2>
+              <p className="text-indigo-100 font-bold text-xs uppercase tracking-widest leading-relaxed">
+                You have {blockingTokens.length} mandatory {blockingTokens.length === 1 ? 'task' : 'tasks'} assigned to you.<br /> 
+                Open a task to continue.
               </p>
             </div>
           </div>
@@ -242,29 +233,34 @@ function AppContent() {
           <div className="p-8 max-h-[40vh] overflow-y-auto bg-slate-50/50">
             <div className="space-y-4">
               {blockingTokens.map((token, idx) => (
-                <div key={token._id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4 transition-all hover:border-rose-100">
-                  <div className="w-10 h-10 bg-rose-50 text-rose-500 rounded-xl flex items-center justify-center shrink-0 font-black text-xs">
-                    {idx + 1}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{token.tokenId}</span>
-                      <span className="text-[9px] font-black bg-rose-100 text-rose-600 px-2 py-0.5 rounded-lg uppercase tracking-tighter">OPEN</span>
+                <div key={token._id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-start justify-between gap-4 transition-all hover:border-indigo-100">
+                  <div className="flex items-start gap-4 flex-1">
+                    <div className="w-10 h-10 bg-indigo-50 text-indigo-500 rounded-xl flex items-center justify-center shrink-0 font-black text-xs">
+                      {idx + 1}
                     </div>
-                    <p className="text-xs font-bold text-slate-700 leading-relaxed italic line-clamp-2">"{token.message}"</p>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{token.tokenId}</span>
+                        <span className="text-[9px] font-black bg-amber-100 text-amber-600 px-2 py-0.5 rounded-lg uppercase tracking-tighter">PENDING</span>
+                      </div>
+                      <p className="text-xs font-bold text-slate-700 leading-relaxed italic line-clamp-2">"{token.message}"</p>
+                    </div>
                   </div>
+                  <button 
+                    onClick={() => handleTakeToken(token._id)}
+                    className="self-center px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg shadow-indigo-100"
+                  >
+                    Open
+                  </button>
                 </div>
               ))}
             </div>
           </div>
 
           <div className="p-8 bg-white border-t border-slate-100">
-            <button 
-              onClick={() => navigate("/branch/tokenization")}
-              className="w-full bg-slate-900 hover:bg-black text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] transition-all shadow-xl shadow-slate-200 text-xs flex items-center justify-center gap-3 active:scale-[0.98]"
-            >
-              Take Tasks Now <FaArrowRight />
-            </button>
+             <div className="text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+               System Locked Until Task is Acknowledged
+             </div>
           </div>
         </div>
       </div>
@@ -276,8 +272,7 @@ function AppContent() {
   return (
     <>
       <ToastContainer />
-      <ForcedTokenModal />
-
+      
           <div className="flex">
             {/* Sidebar logic:
                 - Super admin viewing a branch → BranchSidebar
@@ -291,6 +286,7 @@ function AppContent() {
                   <BranchSidebar
                     isOpen={sidebarOpen}
                     onClose={() => setSidebarOpen(false)}
+                    isBlocked={blockingTokens.length > 0}
                   />
                 ) : isSuperAdminRoute ? (
                   <SuperAdminSidebar
@@ -301,6 +297,7 @@ function AppContent() {
                   <BranchSidebar
                     isOpen={sidebarOpen}
                     onClose={() => setSidebarOpen(false)}
+                    isBlocked={blockingTokens.length > 0}
                   />
                 ) : (
                   <Sidebar

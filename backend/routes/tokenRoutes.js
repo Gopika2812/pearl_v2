@@ -20,6 +20,13 @@ router.get("/branch/:branchId", auth, async (req, res) => {
 
     let query = { branchId };
     
+    // Day-specific filter if requested
+    if (req.query.todayOnly === "true") {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      query.createdAt = { $gte: startOfToday };
+    }
+
     // Role-based visibility:
     // ADMIN and SUPER_ADMIN see all. Others see only what they created OR what is assigned to them.
     if (req.user.role !== "ADMIN" && req.user.role !== "SUPER_ADMIN") {
@@ -235,6 +242,38 @@ router.patch("/:id/assign", auth, async (req, res) => {
   } catch (error) {
     console.error("Assign Token Error:", error);
     res.status(500).json({ success: false, message: "Failed to assign token" });
+  }
+});
+
+// GET: Fetch stats for Super Admin (counts across all branches for today)
+router.get("/stats/super-admin", auth, async (req, res) => {
+  try {
+    if (req.user.role !== "SUPER_ADMIN") {
+      return res.status(403).json({ success: false, message: "Only Super Admins can access global stats" });
+    }
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const todayTotal = await Token.countDocuments({
+      createdAt: { $gte: startOfToday }
+    });
+
+    const todayPending = await Token.countDocuments({
+      createdAt: { $gte: startOfToday },
+      status: { $in: ["OPEN", "TAKEN", "IN_PROGRESS"] }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        todayTotal,
+        todayPending
+      }
+    });
+  } catch (error) {
+    console.error("Super Admin Stats Error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch topbar stats" });
   }
 });
 

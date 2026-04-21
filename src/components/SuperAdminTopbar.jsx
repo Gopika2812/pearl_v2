@@ -10,6 +10,7 @@ import { useBranch } from "../context/BranchContext";
 const SuperAdminTopbar = ({ onMenuClick }) => {
   const navigate = useNavigate();
   const { superAdminViewBranch, setSuperAdminViewBranch } = useBranch();
+  const [tokenStats, setTokenStats] = useState({ todayTotal: 0, todayPending: 0 });
   const [time, setTime] = useState(new Date());
   const [openProfile, setOpenProfile] = useState(false);
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
@@ -21,6 +22,30 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
 
   useEffect(() => {
     const interval = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch global token stats for Super Admin
+  useEffect(() => {
+    const fetchTokenStats = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+        
+        const res = await fetch(`${API_BASE}/tokens/stats/super-admin`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success) {
+          setTokenStats(data.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch super admin token stats:", err);
+      }
+    };
+
+    fetchTokenStats();
+    const interval = setInterval(fetchTokenStats, 60000); // refresh every minute
     return () => clearInterval(interval);
   }, []);
 
@@ -192,9 +217,29 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
           {/* Right Actions */}
           <div className="flex items-center gap-4 relative">
             {/* Alerts */}
-            <button className="hidden sm:flex items-center gap-2 bg-primary/10 text-primary px-3 py-1.5 rounded-md text-sm hover:bg-primary/20 transition">
+            <button className="hidden sm:flex items-center gap-2 bg-primary/10 text-primary px-3 py-1.5 rounded-md text-sm hover:bg-primary/20 transition relative group/alerts">
               <FaBell />
-              Alerts
+              <span>Alerts</span>
+              {tokenStats.todayTotal > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold px-1 rounded-full border border-white">
+                  {tokenStats.todayTotal}
+                </span>
+              )}
+              
+              {/* Tooltip summary */}
+              <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-xl p-3 hidden group-hover/alerts:block z-[60] animate-in fade-in slide-in-from-top-1 duration-200">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 border-b pb-2">Tokens Today</p>
+                <div className="space-y-2">
+                   <div className="flex justify-between items-center px-1">
+                     <span className="text-xs font-bold text-gray-600">Total Raised</span>
+                     <span className="text-xs font-black text-primary">{tokenStats.todayTotal}</span>
+                   </div>
+                   <div className="flex justify-between items-center px-1">
+                     <span className="text-xs font-bold text-gray-600">Pending</span>
+                     <span className="text-xs font-black text-amber-600">{tokenStats.todayPending}</span>
+                   </div>
+                </div>
+              </div>
             </button>
 
             {/* Profile */}

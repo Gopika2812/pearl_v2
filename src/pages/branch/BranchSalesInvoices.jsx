@@ -1,11 +1,87 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaFileExcel } from "react-icons/fa";
+import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaFileExcel, FaTimes } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import * as XLSX from "xlsx";
 import { API_BASE, fetchWithAuth } from "../../api";
 import EInvoicePrintModal from "../../components/branch/EInvoicePrintModal";
 import { useBranch } from "../../context/BranchContext";
 import { getInvoiceHTML } from "../../utils/invoiceUtils";
+
+const ExportColumnSelectorModal = ({ show, onClose, columns, selected, onSelect, exporting, onExport }) => {
+  if (!show) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
+      <div className="bg-white rounded-[32px] w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+        <div className="bg-indigo-600 p-8 flex items-center justify-between text-white">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+              <FaFileExcel size={24} />
+            </div>
+            <div>
+              <h2 className="text-xl font-black uppercase tracking-tight">Export Settings</h2>
+              <p className="text-[10px] opacity-80 font-bold uppercase tracking-widest">Select Columns to Include in Excel</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition border-0 bg-transparent text-white">
+            <FaTimes />
+          </button>
+        </div>
+
+        <div className="p-8">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+            {columns.map(col => (
+              <label 
+                key={col.id} 
+                className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer ${
+                  selected.includes(col.id) 
+                  ? "bg-indigo-50 border-indigo-600 text-indigo-700" 
+                  : "bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200"
+                }`}
+              >
+                <input 
+                  type="checkbox"
+                  className="hidden"
+                  checked={selected.includes(col.id)}
+                  onChange={() => onSelect(col.id)}
+                />
+                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                  selected.includes(col.id) ? "bg-indigo-600 border-indigo-600" : "bg-white border-slate-300"
+                }`}>
+                  {selected.includes(col.id) && <FaSync className="text-white text-[10px]" />}
+                </div>
+                <span className="text-[11px] font-black uppercase tracking-tight">{col.label}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => onSelect('ALL')}
+              className="flex-1 py-4 rounded-2xl border-2 border-slate-100 text-slate-500 font-black uppercase tracking-widest text-[10px] hover:bg-slate-50 transition"
+            >
+              Select All
+            </button>
+            <button
+              onClick={onClose}
+              className="flex-1 py-4 rounded-2xl bg-slate-800 text-white font-black uppercase tracking-widest text-[10px] hover:bg-slate-900 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onExport}
+              disabled={exporting}
+              className="flex-[2] py-4 rounded-2xl bg-emerald-600 text-white font-black uppercase tracking-widest text-[10px] hover:bg-emerald-700 transition shadow-xl shadow-emerald-100 flex items-center justify-center gap-2"
+            >
+              {exporting ? <FaSync className="animate-spin" /> : <FaFileExcel />}
+              Download Excel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const BranchSalesInvoices = () => {
   const { currentBranch, user } = useBranch();
@@ -30,6 +106,32 @@ const BranchSalesInvoices = () => {
   const [voucherTypes, setVoucherTypes] = useState([]);
   const [filterVoucherPrefix, setFilterVoucherPrefix] = useState("");
   const [filterEinvoiceStatus, setFilterEinvoiceStatus] = useState("");
+
+  // --- SELECTIVE EXPORT STATE ---
+  const [showColumnModal, setShowColumnModal] = useState(false);
+  const [selectedColumns, setSelectedColumns] = useState([
+    "date", "invoiceNumber", "voucherType", "customerName", "grandTotal", "creator"
+  ]);
+
+  const AVAILABLE_COLUMNS = [
+    { id: "date", label: "Date" },
+    { id: "invoiceNumber", label: "Invoice No" },
+    { id: "voucherType", label: "Voucher Type (Series)" },
+    { id: "customerName", label: "Customer Name" },
+    { id: "customerGstin", label: "Customer GSTIN" },
+    { id: "creator", label: "Created By" },
+    { id: "productName", label: "Product Name" },
+    { id: "hsn", label: "HSN Code" },
+    { id: "price", label: "Rate" },
+    { id: "qty", label: "Quantity" },
+    { id: "taxableValue", label: "Taxable Value" },
+    { id: "cgst", label: "CGST" },
+    { id: "sgst", label: "SGST" },
+    { id: "igst", label: "IGST" },
+    { id: "discount", label: "Discount" },
+    { id: "extraCharges", label: "Extra Charges" },
+    { id: "grandTotal", label: "Grand Total" }
+  ];
 
   // 🌍 Helper to format date in Indian Standard Time (IST)
   const formatIST = (dateStr) => {
@@ -358,13 +460,16 @@ const BranchSalesInvoices = () => {
   /**
    * 📊 DETAILED EXCEL EXPORT (Fetches everything in range with Items)
    * This mirrors the Sales Order format but includes item-level discounts,
-   * transport charges, and common discounts.
+   * transport charges,  /**
+   * 📊 SELECTIVE EXCEL EXPORT
+   * Builds the report dynamically based on user-selected columns.
+   * Maps 'Voucher Type' to the Series codes (Z-1, CS, etc.) as requested.
    */
   const handleExportDetailedExcel = async () => {
     if (!currentBranch?._id) return;
     setExporting(true);
     try {
-      // 1. Fetch matching invoices with includeItems=true
+      // 1. Fetch matching invoices with includeItems=true for full data access
       let url = `${API_BASE}/invoices?branchId=${currentBranch._id}&limit=1000&includeItems=true`;
       if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
       if (filterFromDate) url += `&fromDate=${filterFromDate}`;
@@ -382,130 +487,96 @@ const BranchSalesInvoices = () => {
         return;
       }
 
-      const rows = [];
-      // Header for the detailed report
-      const headerRow = [
-        "Date", "Invoice No", "Customer", "Created By", "Product Name", "Price", "Qty", "GST (%)", "Discount (Amt)", "Line Total"
-      ];
-      rows.push(headerRow);
+      // 2. Identify active columns based on user selection
+      const activeColumns = AVAILABLE_COLUMNS.filter(c => selectedColumns.includes(c.id));
+      const headerRow = activeColumns.map(c => c.label);
+      
+      const rows = [headerRow];
 
       invoicesToExport.forEach((inv) => {
         const invNo = inv.invoiceNumber || "-";
         const customerName = inv.customer?.name || "-";
+        const invDate = inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN') : "-";
         
+        // 🎫 Voucher Type Mapping (Extracting Series like Z-1, Z-2, CS)
+        let voucherType = "Sales Invoice";
+        if (invNo.includes("/SI/")) {
+          const parts = invNo.split("/SI/");
+          voucherType = parts[0].replace("SI", ""); 
+        } else if (invNo.includes("SI/")) {
+          voucherType = invNo.split("SI/")[0];
+        } else if (invNo.includes("/")) {
+          voucherType = invNo.split("/")[0];
+        }
+
         // Accurate Creator Logic
         const soUser = inv.salesOrderId?.billingPerson || "";
         const siUser = inv.generatedBy || inv.billingPerson || "";
-        let creator = "System";
-        if (soUser && siUser && soUser !== siUser) {
-          creator = `${soUser} / ${siUser}`;
-        } else {
-          creator = siUser || soUser || "System";
-        }
+        let creator = siUser || soUser || "System";
 
-        // 1. Add each regular item
         const items = inv.items || [];
-        items.forEach((item) => {
-          rows.push([
-            invDate,
-            invNo,
-            customerName,
-            creator,
-            item.name,
-            item.sellingPrice || 0,
-            item.qty || 0,
-            `${item.gst || 0}%`,
-            item.discountAmount || 0,
-            item.total || 0
-          ]);
+        
+        const rowData = activeColumns.map(col => {
+          switch (col.id) {
+            case "date": return invDate;
+            case "invoiceNumber": return invNo;
+            case "voucherType": return voucherType;
+            case "customerName": return customerName;
+            case "customerGstin": return inv.customer?.gstin || "URP";
+            case "creator": return creator;
+            case "productName": return items.map(i => i.name).join(", ");
+            case "hsn": return items.map(i => i.hsn || "").filter(Boolean).join(", ");
+            case "price": return items.length > 1 ? "Multiple" : (items[0]?.sellingPrice || 0);
+            case "qty": return items.reduce((sum, i) => sum + (i.qty || 0), 0);
+            case "taxableValue": return inv.subtotal || 0;
+            case "cgst": return (typeof inv.totalTax === 'object' ? inv.totalTax?.cgst : (inv.totalTax || 0) / 2) || 0;
+            case "sgst": return (typeof inv.totalTax === 'object' ? inv.totalTax?.sgst : (inv.totalTax || 0) / 2) || 0;
+            case "igst": return (typeof inv.totalTax === 'object' ? inv.totalTax?.igst : 0) || 0;
+            case "discount": return inv.totalDiscount || 0;
+            case "extraCharges": return (inv.transportCharge || 0) + (inv.extraExpenseAmount || 0);
+            case "grandTotal": return inv.grandTotal || 0;
+            default: return "";
+          }
         });
-
-        // 2. Add sample items if any
-        const samples = inv.sampleItems || [];
-        samples.forEach((sample) => {
-          rows.push([
-            invDate,
-            invNo,
-            customerName,
-            `🎁 (Sample) ${sample.name}`,
-            sample.sellingPrice || 0,
-            sample.qty || 0,
-            "0%",
-            0,
-            0
-          ]);
-        });
-
-        // 3. Add Transport Charge if applicable
-        if (inv.transportCharge > 0) {
-          rows.push([
-            "", "", "", "🚚 Transport Charge", "", "", "", "", inv.transportCharge
-          ]);
-        }
-
-        // 4. Add Special/Common Discount if applicable
-        if (inv.commonDiscount > 0) {
-          rows.push([
-            "", "", "", "🛡️ Special Discount", "", "", "", "", -inv.commonDiscount
-          ]);
-        }
-
-        // 5. Add Sub Total
-        rows.push([
-          "", "", "", "📊 SUB TOTAL", "", "", "", "", inv.subtotal || 0
-        ]);
-
-        // 6. Add Grand Total
-        rows.push([
-          "", "", "", "💰 GRAND TOTAL", "", "", "", "", inv.grandTotal || 0
-        ]);
-
-        // 7. Add Blank Row for separation
-        rows.push(["", "", "", "", "", "", "", "", ""]);
+        rows.push(rowData);
       });
 
-      // Add Final Summary Row for the entire report
-      const totalSubAll = invoicesToExport.reduce((sum, i) => sum + (i.subtotal || 0), 0);
-      const totalGrandAll = invoicesToExport.reduce((sum, i) => sum + (i.grandTotal || 0), 0);
-
-      rows.push(["", "", "", "━━━━━━━━━━━━━━━━━━━━━━━━", "", "", "", "", "━━━━━━━━━━"]);
-      rows.push(["", "", "", "🔥 TOTAL (ALL INVOICES)", "", "", "", "", ""]);
-      rows.push(["", "", "", "Total Sub Total", "", "", "", "", totalSubAll]);
-      rows.push(["", "", "", "Total Grand Total", "", "", "", "", totalGrandAll]);
-
       const worksheet = XLSX.utils.aoa_to_sheet(rows);
-
-      // Styling columns width
-      const wscols = [
-        { wch: 12 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 15 }
-      ];
-      worksheet['!cols'] = wscols;
-
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Detailed Export");
-      XLSX.writeFile(workbook, `Detailed_Invoice_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
-
-      toast.success("Detailed report exported successfully!");
-    } catch (error) {
-      console.error("Detailed export error:", error);
-      toast.error("Failed to generate detailed Excel report");
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Sales_Export");
+      XLSX.writeFile(workbook, `Sales_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      toast.success("Excel report generated with selected columns!");
+      setShowColumnModal(false);
+    } catch (err) {
+      console.error("Export Error:", err);
+      toast.error("Export failed: " + err.message);
     } finally {
       setExporting(false);
     }
   };
 
 
+  const handleToggleColumn = (colId) => {
+    if (colId === 'ALL') {
+      setSelectedColumns(AVAILABLE_COLUMNS.map(c => c.id));
+      return;
+    }
+    if (selectedColumns.includes(colId)) {
+      if (selectedColumns.length > 1) {
+        setSelectedColumns(prev => prev.filter(id => id !== colId));
+      } else {
+        toast.error("At least one column must be selected");
+      }
+    } else {
+      setSelectedColumns(prev => [...prev, colId]);
+    }
+  };
+
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <ToastContainer
-        position="top-right"
-        autoClose={2500}
-        newestOnTop
-        closeOnClick
-        pauseOnHover
-        theme="colored"
-      />
-
+      
       {showTransportModal && (
         <TransportDetailsModal
           invoice={showTransportModal}
@@ -537,6 +608,18 @@ const BranchSalesInvoices = () => {
         />
       )}
 
+      {showColumnModal && (
+        <ExportColumnSelectorModal 
+          show={showColumnModal}
+          onClose={() => setShowColumnModal(false)}
+          columns={AVAILABLE_COLUMNS}
+          selected={selectedColumns}
+          onSelect={handleToggleColumn}
+          exporting={exporting}
+          onExport={handleExportDetailedExcel}
+        />
+      )}
+
       <div className="w-full mx-auto px-4 sm:px-8 py-4">
         {/* HEADER */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
@@ -565,12 +648,19 @@ const BranchSalesInvoices = () => {
                 </div>
               </div>
               <button
+                onClick={() => setShowColumnModal(true)}
+                className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition shadow-sm"
+                title="Select Export Columns"
+              >
+                <FaFileExcel size={18} />
+              </button>
+              <button
                 onClick={handleExportDetailedExcel}
                 disabled={exporting}
                 className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-200 text-xs font-black"
               >
                 {exporting ? <FaSync className="animate-spin" /> : <FaFileExcel />}
-                DETAILED REPORT
+                QUICK REPORT
               </button>
               <button
                 onClick={fetchInvoices}

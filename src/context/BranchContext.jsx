@@ -9,6 +9,8 @@ export function BranchProvider({ children }) {
   const [superAdminViewBranch, setSuperAdminViewBranch] = useState(null);
   const [user, setUser] = useState(null);
   const [branchLoaded, setBranchLoaded] = useState(false);
+  const [blockingTokens, setBlockingTokens] = useState([]);
+  const [isCheckingTokens, setIsCheckingTokens] = useState(false);
 
   // currentBranch: superAdminViewBranch > adminViewBranch > real login branch
   const currentBranch = superAdminViewBranch || adminViewBranch || loginBranch;
@@ -29,6 +31,41 @@ export function BranchProvider({ children }) {
     
     setBranchLoaded(true);
   }, []);
+
+  const refreshBlockingTokens = async () => {
+    const myId = user?.id || user?._id;
+    const branchId = currentBranch?._id || currentBranch?.id;
+
+    if (!myId || !branchId) {
+      setBlockingTokens([]);
+      return;
+    }
+
+    try {
+      setIsCheckingTokens(true);
+      const res = await fetchWithAuth(`${API_BASE}/tokens/branch/${branchId}?status=OPEN`);
+      const data = await res.json();
+      
+      if (data.success) {
+        const assignedToMe = data.data.filter(t => {
+          const assigneeId = t.assignedTo?.id?._id || t.assignedTo?.id;
+          return assigneeId?.toString() === myId?.toString() && t.status === "OPEN";
+        });
+        setBlockingTokens(assignedToMe);
+      }
+    } catch (err) {
+      console.error("Token check failed:", err);
+    } finally {
+      setIsCheckingTokens(false);
+    }
+  };
+
+  // Poll for blocking tokens
+  useEffect(() => {
+    refreshBlockingTokens();
+    const interval = setInterval(refreshBlockingTokens, 60000);
+    return () => clearInterval(interval);
+  }, [user?.id, user?._id, currentBranch?._id, currentBranch?.id]);
 
   const refreshUser = async (userId, role) => {
     if (!userId) return;
@@ -67,6 +104,7 @@ export function BranchProvider({ children }) {
     setAdminViewBranch(null);
     setSuperAdminViewBranch(null);
     setUser(null);
+    setBlockingTokens([]);
     localStorage.removeItem("currentBranch");
     localStorage.removeItem("user");
   };
@@ -86,6 +124,9 @@ export function BranchProvider({ children }) {
         switchBranch,
         logout,
         refreshUser,
+        blockingTokens,
+        isCheckingTokens,
+        refreshBlockingTokens
       }}
     >
       {children}
