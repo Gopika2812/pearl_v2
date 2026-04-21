@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FaSync, FaFilter, FaSearch, FaHistory, FaFileExport } from "react-icons/fa";
 import * as XLSX from 'xlsx';
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
@@ -119,7 +119,7 @@ const BranchProductRecords = () => {
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <div className="w-full px-3 sm:px-6 py-4">
-        <ToastContainer />
+
         
         {/* HEADER */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">

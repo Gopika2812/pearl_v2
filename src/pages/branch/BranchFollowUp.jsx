@@ -5,7 +5,7 @@ import {
     FaArrowRight, FaBook, FaCalendarAlt, FaCog, FaTag,
     FaEdit, FaChevronLeft, FaChevronRight, FaListOl
 } from "react-icons/fa";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth, apiWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import CustomerLedgerModal from "../../components/branch/CustomerLedgerModal";
@@ -175,7 +175,7 @@ const BranchFollowUp = () => {
 
     return (
         <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20 pb-10">
-            <ToastContainer />
+
             <div className="w-full max-w-full mx-auto px-4 sm:px-8 py-6">
                 
                 {/* HEADER */}

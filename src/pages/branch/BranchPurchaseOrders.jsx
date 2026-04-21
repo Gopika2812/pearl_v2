@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FaChevronDown, FaEdit, FaSearch, FaShoppingCart, FaSync, FaTrash, FaTruck } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
 import { API_BASE, fetchWithAuth } from "../../api";
 import EditPurchaseOrderModal from "../../components/branch/EditPurchaseOrderModal";
@@ -262,14 +262,7 @@ const BranchPurchaseOrders = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <ToastContainer
-        position="top-right"
-        autoClose={2500}
-        newestOnTop
-        closeOnClick
-        pauseOnHover
-        theme="colored"
-      />
+
 
       {/* INVOICE PREVIEW & EDIT MODAL */}
       {showInvoiceModal && editingOrder && (

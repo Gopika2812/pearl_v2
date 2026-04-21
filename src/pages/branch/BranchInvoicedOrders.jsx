@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import EditBillModal from "../../components/EditBillModal";
 import InvoiceGeneratorModal from "../../components/InvoiceGeneratorModal";
@@ -606,14 +606,7 @@ const BranchInvoicedOrders = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <ToastContainer
-        position="top-right"
-        autoClose={2500}
-        newestOnTop
-        closeOnClick
-        pauseOnHover
-        theme="colored"
-      />
+
 
       <div className="w-full mx-auto px-4 sm:px-8 py-4">
         {/* HEADER */}

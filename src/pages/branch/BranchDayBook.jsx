@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaBookOpen, FaCalendarAlt, FaFileAlt, FaFileExcel, FaFilePdf, FaFilter, FaSearch, FaSync, FaUser, FaCheckCircle } from "react-icons/fa";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -204,7 +204,7 @@ const BranchDayBook = () => {
 
     return (
         <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20">
-            <ToastContainer />
+
             <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
 
                 {/* HEADER SECTION */}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { FaHistory, FaCalendarAlt, FaSearch, FaUser, FaPhone, FaCheckCircle, FaExclamationCircle } from "react-icons/fa";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
@@ -66,7 +66,7 @@ const BranchFollowUpRecords = () => {
 
     return (
         <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20">
-            <ToastContainer />
+
             <div className="w-full max-w-full mx-auto px-4 sm:px-8 py-6">
                 
                 {/* HEADER */}

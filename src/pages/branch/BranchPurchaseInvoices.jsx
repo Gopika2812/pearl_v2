@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { FaChevronDown, FaFileAlt, FaSync, FaSearch } from "react-icons/fa";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
@@ -50,7 +50,7 @@ const BranchPurchaseInvoices = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <ToastContainer position="top-right" autoClose={2500} theme="colored" />
+
 
       <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4">
         {/* HEADER */}

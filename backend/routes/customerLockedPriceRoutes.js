@@ -356,6 +356,29 @@ router.get("/:customerId/:productId", async (req, res) => {
 });
 
 /**
+ * DELETE: Bulk Remove Customer Locked Prices
+ */
+router.delete("/bulk-delete", async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: "No IDs provided" });
+    }
+
+    const result = await CustomerLockedPrice.deleteMany({ _id: { $in: ids } });
+    
+    res.status(200).json({ 
+      success: true, 
+      message: `${result.deletedCount} locked prices removed successfully`,
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error("Bulk Delete Locked Price Error:", error);
+    res.status(500).json({ success: false, message: "Failed to perform bulk delete", error: error.message });
+  }
+});
+
+/**
  * DELETE: Remove Customer Locked Price
  */
 router.delete("/:id", async (req, res) => {

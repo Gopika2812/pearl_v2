@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaArrowUp, FaBox, FaChevronDown, FaChevronUp, FaEdit, FaExclamationCircle, FaExclamationTriangle, FaList, FaSync, FaThLarge } from "react-icons/fa";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
@@ -1338,14 +1338,7 @@ export default function BranchRecycling() {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20 px-4 md:px-6 pb-10">
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        newestOnTop
-        closeOnClick
-        pauseOnHover
-        theme="colored"
-      />
+
 
       <div className="max-w-7xl mx-auto">
         {/* HEADER */}

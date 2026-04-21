@@ -4,7 +4,7 @@ import {
   FaBookOpen, FaChartBar, FaSearch, FaFilter, FaArrowLeft,
   FaChevronRight, FaCalendarAlt, FaSync, FaChartLine, FaDownload, FaUpload
 } from "react-icons/fa";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
@@ -262,7 +262,7 @@ const BranchStockSummary = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-6 md:pl-24 px-4 md:px-8 pb-12 font-sans">
-      <ToastContainer position="top-right" autoClose={2000} theme="colored" />
+
 
       {/* HEADER SECTION */}
       <div className="w-full px-4 md:px-6 py-6 space-y-6">

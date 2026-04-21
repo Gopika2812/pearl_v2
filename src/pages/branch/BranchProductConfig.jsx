@@ -3,7 +3,7 @@ import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import FilterableSelect from "../../components/FilterableSelect";
 import FilterableCheckboxList from "../../components/FilterableCheckboxList";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import { FaSave, FaBoxOpen, FaLink, FaTag, FaChartLine, FaEdit, FaTrash, FaTimes, FaSearch, FaSync } from "react-icons/fa";
 
 const inputClass = "w-full border border-gray-100 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-all bg-white shadow-sm hover:border-emerald-200 text-sm";
@@ -186,7 +186,7 @@ export default function BranchProductConfig() {
 
   return (
     <div className="w-full px-4 md:px-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <ToastContainer hideProgressBar theme="colored" />
+
 
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

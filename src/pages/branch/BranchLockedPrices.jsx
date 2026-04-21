@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FaLock, FaSync, FaSearch, FaUser, FaBox, FaTrash, FaPlus, FaCheckCircle, FaChevronDown, FaUpload } from "react-icons/fa";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
@@ -39,6 +39,8 @@ const BranchLockedPrices = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     if (currentBranch?._id) {
@@ -157,6 +159,49 @@ const BranchLockedPrices = () => {
       toast.error("Failed to fetch locked prices");
     } finally {
       setLoading(false);
+      setSelectedIds([]); // Clear selection on new fetch
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === lockedPrices.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(lockedPrices.map(lp => lp._id));
+    }
+  };
+
+  const toggleSelectRow = (id) => {
+    if (selectedIds.includes(id)) {
+      setSelectedIds(prev => prev.filter(i => i !== id));
+    } else {
+      setSelectedIds(prev => [...prev, id]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to remove ${selectedIds.length} locked prices?`)) return;
+
+    setBulkDeleting(true);
+    try {
+      const resp = await fetch(`${API_BASE}/customer-locked-prices/bulk-delete`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds })
+      });
+      const data = await resp.json();
+      if (data.success) {
+        toast.success(data.message);
+        setSelectedIds([]);
+        fetchLockedPrices();
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (err) {
+      toast.error(err.message || "Bulk delete failed");
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -265,7 +310,7 @@ const BranchLockedPrices = () => {
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <div className="w-full px-3 sm:px-6 py-4">
-        <ToastContainer />
+
 
         {/* HEADER */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -500,7 +545,19 @@ const BranchLockedPrices = () => {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden h-full">
               <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
-                <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Active Locked Prices</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Active Locked Prices</span>
+                  {selectedIds.length > 0 && (
+                    <button 
+                      onClick={handleBulkDelete}
+                      disabled={bulkDeleting}
+                      className="flex items-center gap-2 text-[10px] font-black uppercase bg-red-500 text-white hover:bg-red-600 px-3 py-1.5 rounded-lg transition shadow-sm animate-in fade-in slide-in-from-left-2"
+                    >
+                      {bulkDeleting ? <FaSync className="animate-spin" /> : <FaTrash />}
+                      Delete Selected ({selectedIds.length})
+                    </button>
+                  )}
+                </div>
                 <span className="text-[10px] text-[#319bab] font-bold">Showing {lockedPrices.length} records</span>
               </div>
 
@@ -508,6 +565,14 @@ const BranchLockedPrices = () => {
                 <table className="w-full text-left">
                   <thead>
                     <tr className="bg-slate-50 text-slate-500 font-black uppercase text-[10px] tracking-widest border-b border-slate-100">
+                      <th className="px-6 py-5 text-center">
+                        <input 
+                          type="checkbox"
+                          checked={lockedPrices.length > 0 && selectedIds.length === lockedPrices.length}
+                          onChange={toggleSelectAll}
+                          className="w-4 h-4 accent-[#319bab] cursor-pointer"
+                        />
+                      </th>
                       <th 
                         className="px-6 py-5 cursor-pointer hover:bg-slate-100 transition-colors group"
                         onClick={() => handleSort("productName")}
@@ -566,6 +631,7 @@ const BranchLockedPrices = () => {
                       <th className="px-6 py-5 text-center">Action</th>
                     </tr>
                     <tr className="bg-white border-b border-slate-50">
+                      <th className="px-4 py-3 bg-slate-50/10"></th>
                       <th className="px-4 py-3">
                         <div className="relative">
                           <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
@@ -596,14 +662,14 @@ const BranchLockedPrices = () => {
                    <tbody className="divide-y divide-slate-50">
                     {loading ? (
                       <tr>
-                        <td colSpan="7" className="px-6 py-20 text-center">
+                        <td colSpan="8" className="px-6 py-20 text-center">
                           <FaSync className="animate-spin text-[#319bab] mx-auto mb-2" size={32} />
                           <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Optimizing Data Stream...</p>
                         </td>
                       </tr>
                     ) : lockedPrices.length === 0 ? (
                       <tr>
-                        <td colSpan="7" className="px-6 py-20 text-center">
+                        <td colSpan="8" className="px-6 py-20 text-center">
                           <div className="opacity-20 flex flex-col items-center">
                              <FaSearch size={48} className="mb-3 text-slate-300" />
                              <p className="text-sm font-black uppercase text-slate-400 tracking-tighter">No Locked Records Found</p>
@@ -619,7 +685,15 @@ const BranchLockedPrices = () => {
                         const mp = lp.marginPercent || 0;
 
                         return (
-                          <tr key={lp._id} className="hover:bg-slate-50 transition-colors group">
+                          <tr key={lp._id} className={`hover:bg-slate-50 transition-colors group ${selectedIds.includes(lp._id) ? 'bg-indigo-50/50' : ''}`}>
+                            <td className="px-6 py-5 text-center">
+                               <input 
+                                 type="checkbox" 
+                                 checked={selectedIds.includes(lp._id)}
+                                 onChange={() => toggleSelectRow(lp._id)}
+                                 className="w-4 h-4 accent-[#319bab] cursor-pointer"
+                               />
+                            </td>
                             <td className="px-6 py-5">
                               <div className="font-black text-slate-800 text-sm leading-tight">{productName}</div>
                               <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">Ref: {lp._id.substring(18).toUpperCase()}</div>
