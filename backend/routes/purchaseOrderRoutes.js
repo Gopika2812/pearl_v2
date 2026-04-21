@@ -8,6 +8,7 @@ import PurchaseOrder from "../models/PurchaseOrder.js";
 import Vendor from "../models/Vendor.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear as getGlobalFinancialYear } from "../utils/financialYear.js";
+import { updateProductCostsFromInvoice } from "../utils/priceUtil.js";
 
 
 import auth from "../middleware/auth.js";
@@ -239,28 +240,12 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
           if (deltaQty !== 0) {
             product.totalQty = (product.totalQty || 0) + deltaQty;
           }
-
-          // B. Price Sync Logic (Re-Invoice)
-          const newPPrice = Number(item.purchasePrice) || 0;
-          const oldPPrice = Number(product.purchasingPrice) || 0;
-          if (newPPrice !== oldPPrice && newPPrice > 0) {
-            const oldSPrice = product.sellingPrice;
-            product.purchasingPrice = newPPrice;
-            await product.save(); // Triggers margin recalculation
-            
-            product.priceHistory.push({
-              oldPurchasingPrice: oldPPrice,
-              newPurchasingPrice: newPPrice,
-              oldSellingPrice: oldSPrice,
-              newSellingPrice: product.sellingPrice,
-              sourceVoucher: order.purchaseInvoiceId || existingPI?.purchaseInvoiceId,
-              type: newPPrice > oldPPrice ? 'INCREASE' : 'DECREASE',
-              note: `Updated via Re-Invoice of ${order.invoiceId}`
-            });
-          }
           await product.save();
         }
       }
+
+      // Sync product prices to Locked Prices using utility
+      await updateProductCostsFromInvoice(newItems, order.purchaseInvoiceId || existingPI?.purchaseInvoiceId, true);
 
       const newPids = new Set(newItems.map(i => i.productId.toString()));
       for (const oldItem of order.lastInvoicedItems || []) {
@@ -395,32 +380,11 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     order.status = 'INVOICED';
 
     // STOCK & PRICE UPDATES
+    await updateProductCostsFromInvoice(invoiceItems, piNumber);
+
     for (const item of invoiceItems) {
       const product = await Product.findById(item.productId);
       if (product) {
-        // A. Price Sync Logic
-        const newPPrice = Number(item.purchasePrice) || 0;
-        const oldPPrice = Number(product.purchasingPrice) || 0;
-
-        if (newPPrice !== oldPPrice && newPPrice > 0) {
-          const oldSPrice = product.sellingPrice;
-          product.purchasingPrice = newPPrice;
-          
-          // The pre-save hook in Product.js will now automatically update sellingPrice 
-          // to maintain the margin. We save first, then log the history with the new values.
-          await product.save(); 
-          
-          product.priceHistory.push({
-            oldPurchasingPrice: oldPPrice,
-            newPurchasingPrice: newPPrice,
-            oldSellingPrice: oldSPrice,
-            newSellingPrice: product.sellingPrice,
-            sourceVoucher: piNumber,
-            type: newPPrice > oldPPrice ? 'INCREASE' : 'DECREASE',
-            note: `Updated via Purchase Invoice ${piNumber} (Margin Maintained)`
-          });
-        }
-
         // B. Stock Update
         product.totalQty = (product.totalQty || 0) + (Number(item.qty) || 0);
         await product.save();

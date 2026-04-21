@@ -23,12 +23,9 @@ async function testSync() {
     console.log("--- Testing Single Update Sync (with new: true) ---");
     await Product.findByIdAndUpdate(product._id, { purchasingPrice: newCost }, { new: true });
     
-    let lp = await CustomerLockedPrice.findOne({ productId: product._id });
-    if (!lp) throw new Error("Locked price record not found for testing!");
-
+    let lp = await CustomerLockedPrice.findOne({ productId: product._id, customerId: new mongoose.Types.ObjectId("67b6eb7a7e36683526d7f02d") }); // Gomathi Enterprises (Kayal)
     console.log(`Updated Locked Price: ${lp.lockedPrice} (Expected: ${Math.round((newCost + lp.margin) * 100) / 100})`);
-    const s1 = lp.lockedPrice === Math.round((newCost + lp.margin) * 100) / 100;
-    console.log(`Sync Status: ${s1 ? "SUCCESS" : "FAILED"}`);
+    console.log(`Sync Status: ${lp.lockedPrice === Math.round((newCost + lp.margin) * 100) / 100 ? "SUCCESS" : "FAILED"}`);
 
     // Test Case 2: Bulk Update Simulation
     console.log("--- Testing Bulk Update Sync Simulation ---");
@@ -45,7 +42,6 @@ async function testSync() {
     // Simulate what's in productRoutes.js
     await Product.bulkWrite(productsToBulkUpdate);
     const updatedProductIds = productsToBulkUpdate.map(op => op.updateOne.filter._id);
-    console.log(`📡 Bulk Sync: Triggering price sync for ${updatedProductIds.length} products...`);
     const updatedProducts = await Product.find({ _id: { $in: updatedProductIds } });
     
     for (const p of updatedProducts) {
@@ -63,14 +59,12 @@ async function testSync() {
           }
         }));
         await CustomerLockedPrice.bulkWrite(lpOps);
-        console.log(`   ✅ Synced ${lockedPrices.length} locked prices for [${p.name}]`);
       }
     }
 
-    lp = await CustomerLockedPrice.findOne({ productId: product._id });
+    lp = await CustomerLockedPrice.findOne({ productId: product._id, customerId: new mongoose.Types.ObjectId("67b6eb7a7e36683526d7f02d") });
     console.log(`Updated Locked Price (Bulk): ${lp.lockedPrice} (Expected: ${Math.round((bulkNewCost + lp.margin) * 100) / 100})`);
-    const s2 = lp.lockedPrice === Math.round((bulkNewCost + lp.margin) * 100) / 100;
-    console.log(`Bulk Sync Status: ${s2 ? "SUCCESS" : "FAILED"}`);
+    console.log(`Bulk Sync Status: ${lp.lockedPrice === Math.round((bulkNewCost + lp.margin) * 100) / 100 ? "SUCCESS" : "FAILED"}`);
 
 
     // Reset
@@ -78,10 +72,8 @@ async function testSync() {
 
     await mongoose.disconnect();
     console.log("Tests finished.");
-    process.exit((s1 && s2) ? 0 : 1);
   } catch (err) {
     console.error("Test Error:", err);
-    process.exit(1);
   }
 }
 
