@@ -226,8 +226,62 @@ productSchema.pre(["findOneAndUpdate", "findByIdAndUpdate"], async function () {
     }
   }
 
-  // Ensure these values are in the final update object for Mongoose to save
-  this.setUpdate(update);
+});
+
+// 🔄 CASCADING PRICE SYNC: Update Customer Locked Prices when Product Cost changes
+productSchema.post("save", async function() {
+  if (this.isModified("purchasingPrice")) {
+    try {
+       const CustomerLockedPrice = mongoose.model("CustomerLockedPrice");
+       const lockedPrices = await CustomerLockedPrice.find({ productId: this._id });
+       
+       const bulkOps = lockedPrices.map(lp => {
+         const newLockedPrice = Math.round((this.purchasingPrice + (lp.margin || 0)) * 100) / 100;
+         return {
+           updateOne: {
+             filter: { _id: lp._id },
+             update: { $set: { lockedPrice: newLockedPrice, purchasingPrice: this.purchasingPrice } }
+           }
+         };
+       });
+
+       if (bulkOps.length > 0) {
+         await CustomerLockedPrice.bulkWrite(bulkOps);
+         console.log(`📡 Dynamic Pricing: Synced ${bulkOps.length} customer locked prices for product [${this.name}]`);
+       }
+    } catch (err) {
+       console.error("Cascading Pricing Error:", err.message);
+    }
+  }
+});
+
+productSchema.post(["findOneAndUpdate", "findByIdAndUpdate"], async function (doc) {
+  if (doc) {
+    // Note: In some mongoose versions, we skip if no price change. 
+    // But to be safe, we re-fetch the update object if possible or just check the doc.
+    // For simplicity and stability, we use the doc's current state.
+    try {
+       const CustomerLockedPrice = mongoose.model("CustomerLockedPrice");
+       const lockedPrices = await CustomerLockedPrice.find({ productId: doc._id });
+       
+       const bulkOps = lockedPrices.map(lp => {
+         const newLockedPrice = Math.round((doc.purchasingPrice + (lp.margin || 0)) * 100) / 100;
+         return {
+           updateOne: {
+             filter: { _id: lp._id },
+             update: { $set: { lockedPrice: newLockedPrice, purchasingPrice: doc.purchasingPrice } }
+           }
+         };
+       });
+
+       if (bulkOps.length > 0) {
+         await CustomerLockedPrice.bulkWrite(bulkOps);
+         console.log(`📡 Dynamic Pricing (Query): Synced ${bulkOps.length} customer locked prices for product [${doc.name}]`);
+       }
+    } catch (err) {
+       console.error("Cascading Pricing (Query) Error:", err.message);
+    }
+  }
 });
 
 const Product = mongoose.model("Product", productSchema);

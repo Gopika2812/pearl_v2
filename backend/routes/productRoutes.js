@@ -11,6 +11,7 @@ import ProductGroup from "../models/ProductGroup.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SalesOrder from "../models/SalesOrder.js";
 import Warehouse from "../models/Warehouse.js";
+import CustomerLockedPrice from "../models/CustomerLockedPrice.js";
 import moment from "moment-timezone";
 
 import auth from "../middleware/auth.js";
@@ -594,6 +595,36 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     if (productsToBulkUpdate.length > 0) {
       const result = await Product.bulkWrite(productsToBulkUpdate, { ordered: false });
       updatedCount = result.modifiedCount;
+
+      // ⚡ DYNAMIC PRICING SYNC (BULK):
+      // Trigger sync for all products that had price changes
+      const updatedProductIds = productsToBulkUpdate
+        .filter(op => op.updateOne.update.$set && op.updateOne.update.$set.purchasingPrice !== undefined)
+        .map(op => op.updateOne.filter._id);
+
+      if (updatedProductIds.length > 0) {
+        console.log(`📡 Bulk Sync: Triggering price sync for ${updatedProductIds.length} products...`);
+        const updatedProducts = await Product.find({ _id: { $in: updatedProductIds } }, { _id: 1, purchasingPrice: 1, name: 1 });
+        
+        for (const p of updatedProducts) {
+          const lockedPrices = await CustomerLockedPrice.find({ productId: p._id });
+          if (lockedPrices.length > 0) {
+            const lpOps = lockedPrices.map(lp => ({
+              updateOne: {
+                filter: { _id: lp._id },
+                update: { 
+                  $set: { 
+                    lockedPrice: Math.round((p.purchasingPrice + (lp.margin || 0)) * 100) / 100,
+                    purchasingPrice: p.purchasingPrice 
+                  } 
+                }
+              }
+            }));
+            await CustomerLockedPrice.bulkWrite(lpOps);
+            console.log(`   ✅ Synced ${lockedPrices.length} locked prices for [${p.name}]`);
+          }
+        }
+      }
     }
 
     console.log(`✅ Uploaded: ${insertedCount}, 🔄 Updated: ${updatedCount}, ⚠️ Skipped: ${skipped.length}, ⏩ Already Existed: ${alreadyExistsCount}`);
@@ -960,6 +991,51 @@ router.delete("/:id", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to delete product",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE: Bulk Delete Products
+ */
+router.delete("/bulk-delete", auth, async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: "No IDs provided" });
+    }
+
+    // Verify all IDs are valid
+    const validIds = ids.filter(id => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      return res.status(400).json({ success: false, message: "No valid IDs provided" });
+    }
+
+    const result = await Product.deleteMany({ _id: { $in: validIds } });
+
+    // Optional: Log the bulk delete action
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: req.user.branch,
+      action: "BULK_DELETE_PRODUCT",
+      description: `Bulk deleted ${result.deletedCount} products`,
+      targetModel: "Product",
+      changes: { ids: validIds }
+    });
+
+    res.json({
+      success: true,
+      message: `${result.deletedCount} products deleted successfully`,
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error("Bulk Delete Product Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to perform bulk delete",
       error: error.message,
     });
   }

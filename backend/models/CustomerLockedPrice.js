@@ -24,6 +24,14 @@ const customerLockedPriceSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    purchasingPrice: {
+      type: Number,
+      default: 0,
+    },
+    margin: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true }
 );

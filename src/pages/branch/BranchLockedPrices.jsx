@@ -320,7 +320,10 @@ const BranchLockedPrices = () => {
             </div>
             <div>
               <h1 className="text-xl font-black text-gray-800 uppercase tracking-tight">Locked Price Records</h1>
-              <p className="text-xs text-gray-500 font-semibold tracking-wider uppercase">Customer-Specific Pricing Rules</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-gray-500 font-semibold tracking-wider uppercase">Customer-Specific Pricing Rules</p>
+                <span className="bg-emerald-100 text-emerald-700 text-[9px] font-black px-2 py-0.5 rounded-full border border-emerald-200 uppercase animate-pulse">Dynamic Sync Active</span>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -707,9 +710,12 @@ const BranchLockedPrices = () => {
                             <td className="px-6 py-5 text-right font-black text-slate-700 text-sm">
                               ₹{sellingPrice.toFixed(2)}
                             </td>
-                            <td className="px-6 py-5 text-right">
-                              <div className="bg-orange-50 text-orange-700 font-black px-3 py-1.5 rounded-lg border border-orange-100 inline-block text-sm shadow-sm">
-                                ₹{lp.lockedPrice?.toFixed(2)}
+                             <td className="px-6 py-5 text-right">
+                              <div className="flex flex-col items-end gap-1">
+                                <div className="bg-orange-50 text-orange-700 font-black px-3 py-1.5 rounded-lg border border-orange-100 inline-block text-sm shadow-sm">
+                                  ₹{lp.lockedPrice?.toFixed(2)}
+                                </div>
+                                <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-1.5 rounded">Linked to Cost</span>
                               </div>
                             </td>
                             <td className={`px-6 py-5 text-right text-sm font-black ${mp >= 0 ? 'text-green-600' : 'text-red-500'}`}>

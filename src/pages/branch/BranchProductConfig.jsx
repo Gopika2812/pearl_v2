@@ -20,6 +20,8 @@ export default function BranchProductConfig() {
   const [selectedProduct, setSelectedProduct] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   // Configuration State
   const [config, setConfig] = useState({
@@ -75,6 +77,7 @@ export default function BranchProductConfig() {
       if (res.ok) {
         toast.success("Product deleted successfully");
         fetchMasterData();
+        if (selectedGroup) fetchProductsByGroup(selectedGroup, debouncedSearch);
       } else {
         const data = await res.json();
         throw new Error(data.message || "Failed to delete product");
@@ -82,6 +85,47 @@ export default function BranchProductConfig() {
     } catch (err) {
       toast.error(err.message);
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`⚠️ Are you sure you want to delete ${selectedIds.length} selected products? This action cannot be undone.`)) return;
+
+    setIsBulkDeleting(true);
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/products/bulk-delete`, {
+        method: "DELETE",
+        body: JSON.stringify({ ids: selectedIds })
+      });
+
+      if (res.ok) {
+        toast.success(`${selectedIds.length} products deleted successfully`);
+        setSelectedIds([]);
+        fetchMasterData();
+        if (selectedGroup) fetchProductsByGroup(selectedGroup, debouncedSearch);
+      } else {
+        const data = await res.json();
+        throw new Error(data.message || "Bulk delete failed");
+      }
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredProducts.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredProducts.map(p => p._id));
+    }
+  };
+
+  const toggleSelectRow = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
   };
 
   useEffect(() => {
@@ -199,6 +243,29 @@ export default function BranchProductConfig() {
           </h1>
           <p className="text-slate-500 font-medium mt-1">Manage global product groups, categories, and unit rules.</p>
         </div>
+
+        {selectedIds.length > 0 && (
+          <div className="flex items-center gap-3 animate-in fade-in zoom-in slide-in-from-right-4 duration-300">
+            <span className="text-slate-500 text-sm font-bold bg-slate-100 px-4 py-2 rounded-xl border border-slate-200">
+              {selectedIds.length} selected
+            </span>
+            <button
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+              className="flex items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white px-6 py-2.5 rounded-xl font-black transition-all shadow-lg shadow-rose-200 disabled:opacity-50"
+            >
+              {isBulkDeleting ? <FaSync className="animate-spin" /> : <FaTrash />}
+              {isBulkDeleting ? "Deleting..." : "Delete Selected"}
+            </button>
+            <button
+              onClick={() => setSelectedIds([])}
+              className="p-2.5 text-slate-400 hover:text-slate-600 transition-colors"
+              title="Clear Selection"
+            >
+              <FaTimes size={18} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* FILTER BAR */}
@@ -235,7 +302,15 @@ export default function BranchProductConfig() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-100">
-                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Product Details</th>
+                <th className="px-8 py-6 w-10">
+                  <input
+                    type="checkbox"
+                    className="w-5 h-5 rounded-lg border-2 border-slate-300 text-emerald-500 focus:ring-emerald-500 transition-all cursor-pointer"
+                    checked={filteredProducts.length > 0 && selectedIds.length === filteredProducts.length}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
+                <th className="px-4 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Product Details</th>
                 <th className="px-4 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Available Qty</th>
                 <th className="px-4 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Unit Conversion</th>
                 <th className="px-4 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Prices</th>
@@ -253,8 +328,16 @@ export default function BranchProductConfig() {
                   </td>
                 </tr>
               ) : filteredProducts.map(p => (
-                <tr key={p._id} className="hover:bg-slate-50/50 transition-colors group">
+                <tr key={p._id} className={`hover:bg-slate-50/50 transition-colors group ${selectedIds.includes(p._id) ? 'bg-emerald-50/30' : ''}`}>
                   <td className="px-8 py-5">
+                    <input
+                      type="checkbox"
+                      className="w-5 h-5 rounded-lg border-2 border-slate-300 text-emerald-500 focus:ring-emerald-500 transition-all cursor-pointer"
+                      checked={selectedIds.includes(p._id)}
+                      onChange={() => toggleSelectRow(p._id)}
+                    />
+                  </td>
+                  <td className="px-4 py-5">
                     <p className="font-black text-slate-800 text-lg">{p.name}</p>
                     <p className="text-[12px] font-bold text-emerald-600 uppercase tracking-tighter mt-1">{p.productGroup?.name || "No Group"}</p>
                   </td>

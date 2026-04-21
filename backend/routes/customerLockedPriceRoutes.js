@@ -118,10 +118,20 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         continue;
       }
 
+      const product = allProducts.find(p => p._id.toString() === productId.toString());
+      const pPrice = product?.purchasingPrice || 0;
+      const margin = Math.round((lockedPrice - pPrice) * 100) / 100;
+
       bulkOps.push({
         updateOne: {
           filter: { branchId, customerId, productId },
-          update: { $set: { lockedPrice: Math.round(lockedPrice * 100) / 100 } },
+          update: { 
+            $set: { 
+              lockedPrice: Math.round(lockedPrice * 100) / 100,
+              purchasingPrice: pPrice,
+              margin: margin
+            } 
+          },
           upsert: true
         }
       });
@@ -162,10 +172,22 @@ router.post("/", async (req, res) => {
       });
     }
 
+    // Get current product cost for margin calculation
+    const product = await Product.findById(productId).select("purchasingPrice");
+    if (!product) {
+       return res.status(404).json({ success: false, message: "Product not found" });
+    }
+    const pPrice = product.purchasingPrice || 0;
+    const margin = Math.round((Number(lockedPrice) - pPrice) * 100) / 100;
+
     // Upsert: update existing or create new
     const result = await CustomerLockedPrice.findOneAndUpdate(
       { branchId, customerId, productId },
-      { lockedPrice },
+      { 
+        lockedPrice: Number(lockedPrice),
+        purchasingPrice: pPrice,
+        margin: margin
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
