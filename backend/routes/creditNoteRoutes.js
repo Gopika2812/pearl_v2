@@ -594,6 +594,152 @@ router.post("/general", async (req, res) => {
     res.status(500).json({ success: false, message: error.message || "Failed to create credit note" });
   }
 });
+// UPDATE credit note
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { items, reasonForReturn, userId, username } = req.body;
+
+    const oldCN = await CreditNote.findById(id);
+    if (!oldCN) return res.status(404).json({ success: false, message: "Credit note not found" });
+
+    // 🛡️ RESTRICTION: Do not allow editing if E-Invoice is already generated
+    if (oldCN.einvoiceStatus === "GENERATED") {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot edit a credit note after E-Invoice has been generated. Please cancel it first if allowed."
+      });
+    }
+
+    const Customer = mongoose.model("Customer");
+    const Product = mongoose.model("Product");
+
+    // 1️⃣ REVERSE OLD IMPACT
+    // Reverse Inventory
+    for (const item of oldCN.items) {
+      if (item.productId) {
+        await Product.findByIdAndUpdate(item.productId, {
+          $inc: { totalQty: -item.qty }
+        });
+      }
+    }
+    // Reverse Customer Balance
+    const customer = await Customer.findById(oldCN.customer.customerId);
+    if (customer) {
+      const restoredBalance = (customer.closingBalance || 0) + oldCN.grandTotal;
+      let amountToTakeBack = oldCN.grandTotal;
+      let currentDebit = customer.debit || 0;
+      let currentCredit = customer.credit || 0;
+
+      // Reverse the netted logic
+      if (currentCredit >= amountToTakeBack) {
+        currentCredit -= amountToTakeBack;
+      } else {
+        amountToTakeBack -= currentCredit;
+        currentCredit = 0;
+        currentDebit += amountToTakeBack;
+      }
+
+      await Customer.findByIdAndUpdate(customer._id, {
+        debit: currentDebit,
+        credit: currentCredit,
+        closingBalance: restoredBalance,
+        totalBalance: restoredBalance,
+      });
+    }
+
+    // 2️⃣ CALCULATE NEW TOTALS
+    let subtotal = 0;
+    let totalTax = 0;
+    let grandTotal = 0;
+    const newItems = [];
+
+    for (const item of items) {
+      const sPrice = Number(item.sellingPrice || 0);
+      const qty = Number(item.qty || 0);
+      const disc = Number(item.discountPercent || 0);
+      const gstRate = Number(item.gst || 0);
+
+      const itemSubtotal = sPrice * qty;
+      const itemTaxable = itemSubtotal * (1 - disc / 100);
+      const itemTax = (itemTaxable * gstRate) / 100;
+      const itemTotal = itemTaxable + itemTax;
+
+      subtotal += itemSubtotal;
+      totalTax += itemTax;
+      grandTotal += itemTotal;
+
+      newItems.push({
+        ...item,
+        tax: itemTax,
+        total: itemTotal,
+        cgst: itemTax / 2,
+        sgst: itemTax / 2,
+      });
+    }
+
+    // 3️⃣ APPLY NEW IMPACT
+    // Apply Inventory
+    for (const item of newItems) {
+      if (item.productId) {
+        await Product.findByIdAndUpdate(item.productId, {
+          $inc: { totalQty: item.qty }
+        });
+      }
+    }
+    // Apply Customer Balance
+    if (customer) {
+      const newBalance = (customer.closingBalance || 0) + oldCN.grandTotal - Math.round(grandTotal);
+      let amountToReturn = Math.round(grandTotal);
+      // Fetch fresh customer data after reversal
+      const freshCustomer = await Customer.findById(customer._id);
+      let cDebit = freshCustomer.debit || 0;
+      let cCredit = freshCustomer.credit || 0;
+
+      if (cDebit >= amountToReturn) {
+        cDebit -= amountToReturn;
+      } else {
+        amountToReturn -= cDebit;
+        cDebit = 0;
+        cCredit += amountToReturn;
+      }
+
+      await Customer.findByIdAndUpdate(customer._id, {
+        debit: cDebit,
+        credit: cCredit,
+        closingBalance: newBalance,
+        totalBalance: newBalance,
+      });
+    }
+
+    // 4️⃣ UPDATE RECORD
+    const updatedCN = await CreditNote.findByIdAndUpdate(id, {
+      items: newItems,
+      reasonForReturn,
+      subtotal: Math.round(subtotal),
+      totalTax: Math.round(totalTax),
+      grandTotal: Math.round(grandTotal),
+    }, { new: true });
+
+    // AUDIT LOG
+    try {
+      await createAuditLog({
+        userId: userId || "System",
+        username: username || "System",
+        branchId: oldCN.branchId,
+        action: "EDIT_CREDIT_NOTE",
+        description: `Edited credit note ${oldCN.creditNoteId}. New Total: ₹${grandTotal}`,
+        targetId: id,
+        targetModel: "CreditNote",
+      });
+    } catch (e) {}
+
+    res.json({ success: true, message: "Credit note updated successfully", data: updatedCN });
+  } catch (error) {
+    console.error("Edit CN error:", error);
+    res.status(500).json({ success: false, message: "Failed to update credit note" });
+  }
+});
 
 // DELETE credit note (cancel return)
 router.delete("/:id", async (req, res) => {

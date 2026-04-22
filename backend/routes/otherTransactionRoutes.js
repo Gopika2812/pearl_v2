@@ -44,7 +44,7 @@ router.get("/", async (req, res) => {
 // CREATE NEW OTHER TRANSACTION
 router.post("/", async (req, res) => {
   try {
-    const { branchId, type, ledgerGroup, ledgerName, amount, gst, note, recordedBy } = req.body;
+    const { branchId, type, ledgerGroup, ledgerName, amount, gst, note, recordedBy, paymentMode } = req.body;
 
     if (!branchId || !type || !ledgerGroup || !ledgerName || amount === undefined) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -78,6 +78,7 @@ router.post("/", async (req, res) => {
       ledgerName,
       amount: Number(amount),
       gst: Number(gst || 0),
+      paymentMode: paymentMode || "CASH",
       note,
       recordedBy,
     });
@@ -119,7 +120,7 @@ router.post("/", async (req, res) => {
       username: req.body.username || req.body.recordedBy || "System",
       branchId: branchId,
       action: `OTHER_${type.toUpperCase()}`,
-      description: `${type} of ₹${amount} recorded for ${ledgerName} (${ledgerGroup})`,
+      description: `${type} of ₹${amount} (${paymentMode || "CASH"}) recorded for ${ledgerName} (${ledgerGroup})`,
       targetId: newTransaction._id,
       targetModel: "OtherTransaction",
     });

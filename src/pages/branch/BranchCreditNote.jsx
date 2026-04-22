@@ -16,6 +16,7 @@ export default function BranchCreditNote() {
   const [expandedCN, setExpandedCN] = useState({});
   const [requestingAction, setRequestingAction] = useState(null);
   const [showEInvoiceModal, setShowEInvoiceModal] = useState(null);
+  const [editCN, setEditCN] = useState(null);
   const [showTransportModal, setShowTransportModal] = useState(null);
 
   useEffect(() => {
@@ -132,7 +133,7 @@ export default function BranchCreditNote() {
           </div>
           
           <button 
-            onClick={() => setShowModal(true)}
+            onClick={() => { setEditCN(null); setShowModal(true); }}
             className="flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl shadow-indigo-100 active:scale-95"
           >
             <FaPlus /> Create Credit Note
@@ -257,6 +258,15 @@ export default function BranchCreditNote() {
                             )}
 
                             <button 
+                              onClick={() => { setEditCN(cn); setShowModal(true); }}
+                              disabled={cn.einvoiceStatus === "GENERATED"}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[10px] font-black transition-all shadow-sm ${cn.einvoiceStatus === "GENERATED" ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-600 hover:text-white'}`}
+                              title={cn.einvoiceStatus === "GENERATED" ? "Cannot edit after E-Invoice generation" : "Edit Credit Note"}
+                            >
+                              EDIT
+                            </button>
+
+                            <button 
                               onClick={() => handleLocalPrint(cn)}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-600 hover:text-white text-[10px] font-black transition-all shadow-sm"
                               title="Local Formal Print"
@@ -309,8 +319,9 @@ export default function BranchCreditNote() {
       {/* Standalone/Unified Creation Modal */}
       <CustomerCreditNoteModal 
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => { setShowModal(false); setEditCN(null); }}
         onCreditSuccess={fetchCreditNotes}
+        editData={editCN}
         // No customer passed = allow selection in modal
       />
 

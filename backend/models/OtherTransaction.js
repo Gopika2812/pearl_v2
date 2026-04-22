@@ -35,6 +35,12 @@ const OtherTransactionSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    paymentMode: {
+      type: String,
+      enum: ["CASH", "UPI", "BANK_TRANSFER", "CHEQUE", "OTHER"],
+      default: "CASH",
+      required: true,
+    },
     note: {
       type: String,
       trim: true,

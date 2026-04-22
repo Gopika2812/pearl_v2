@@ -16,6 +16,7 @@ export default function BranchOtherTransaction({ type }) {
     amount: "",
     gst: "0",
     note: "",
+    paymentMode: "CASH",
   });
 
   const [availableGroups, setAvailableGroups] = useState([]);
@@ -172,6 +173,7 @@ export default function BranchOtherTransaction({ type }) {
           amount: "",
           gst: "0",
           note: "",
+          paymentMode: "CASH",
         });
         fetchTransactions();
       } else {
@@ -241,6 +243,7 @@ export default function BranchOtherTransaction({ type }) {
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Ledger Group</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Ledger Name</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Note</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Mode</th>
                     <th className="px-6 py-4 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">GST %</th>
                     <th className="px-6 py-4 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">Amount</th>
                     <th className="px-6 py-4 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Action</th>
@@ -259,6 +262,16 @@ export default function BranchOtherTransaction({ type }) {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">{t.ledgerName}</td>
                       <td className="px-6 py-4 max-w-xs truncate text-xs text-gray-500 italic">"{t.note || "-"}"</td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-600">{t.gst}%</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${
+                          t.paymentMode === "CASH" ? "bg-green-100 text-green-700" :
+                          t.paymentMode === "UPI" ? "bg-blue-100 text-blue-700" :
+                          t.paymentMode === "BANK_TRANSFER" ? "bg-purple-100 text-purple-700" :
+                          "bg-orange-100 text-orange-700"
+                        }`}>
+                          {t.paymentMode?.replace("_", " ")}
+                        </span>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-base font-black text-gray-900">
                         ₹{Number(t.amount).toLocaleString()}
                       </td>
@@ -432,6 +445,26 @@ export default function BranchOtherTransaction({ type }) {
                     className="w-full bg-gray-50 border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 font-bold"
                     placeholder="0"
                   />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Payment Mode</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {["CASH", "UPI", "BANK_TRANSFER", "CHEQUE", "OTHER"].map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, paymentMode: mode })}
+                      className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
+                        formData.paymentMode === mode
+                          ? `bg-${themeColor}-600 text-white border-${themeColor}-600 shadow-lg shadow-${themeColor}-200`
+                          : "bg-gray-50 text-gray-400 border-transparent hover:border-gray-200"
+                      }`}
+                    >
+                      {mode.replace("_", " ")}
+                    </button>
+                  ))}
                 </div>
               </div>
 

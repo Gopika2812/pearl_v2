@@ -8,7 +8,7 @@ const inputClass = "w-full border border-gray-200 rounded-md px-3 py-2 focus:rin
 const selectClass = "w-full border border-gray-200 rounded-md px-3 py-2 bg-white focus:ring-1 focus:ring-[#319bab] outline-none text-sm font-semibold text-gray-800 appearance-none";
 const labelClass = "block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight";
 
-const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, onCreditSuccess }) => {
+const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, onCreditSuccess, editData }) => {
   const formatDate = (date) => {
     if (!date) return "";
     return new Date(date).toLocaleDateString("en-IN", {
@@ -48,11 +48,31 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
   // Fetch Next ID and Initial Data
   useEffect(() => {
     if (isOpen) {
-      fetchNextId();
-      fetchCustomers();
-      fetchProducts();
+      if (editData) {
+        setNextId(editData.creditNoteId);
+        setCustomer(editData.customer?.customerId ? { _id: editData.customer.customerId, name: editData.customer.name } : null);
+        setCustomerSearch(editData.customer?.name || "");
+        setSelectedItems(editData.items.map(item => ({
+          ...item,
+          productId: item.productId?._id || item.productId
+        })));
+        setFormData({
+          reason: editData.reasonForReturn || "",
+          date: new Date(editData.createdAt || Date.now()).toISOString().split("T")[0]
+        });
+        setReturnType(editData.originalInvoiceId === "STANDALONE" ? "standalone" : "invoice");
+      } else {
+        fetchNextId();
+        fetchCustomers();
+        fetchProducts();
+        // Reset if not editing
+        setCustomer(initialCustomer || null);
+        setCustomerSearch(initialCustomer?.name || "");
+        setSelectedItems([]);
+        setFormData({ reason: "", date: new Date().toISOString().split("T")[0] });
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, editData]);
 
   // Sync initial customer
   useEffect(() => {
@@ -241,13 +261,13 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
         originalSalesOrderId: returnType === "invoice" ? selectedInvoice?.salesOrderId : null
       };
 
-      const res = await fetchWithAuth(`${API_BASE}/credit-notes`, {
-        method: "POST",
+      const res = await fetchWithAuth(`${API_BASE}/credit-notes${editData ? `/${editData._id}` : ""}`, {
+        method: editData ? "PUT" : "POST",
         body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (data.success) {
-        toast.success("Credit Note Created");
+        toast.success(editData ? "Credit Note Updated" : "Credit Note Created");
         onCreditSuccess();
         onClose();
         // Reset
@@ -273,7 +293,7 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
             <FaUndoAlt size={22} />
           </div>
           <div>
-            <h3 className="text-xl font-black text-gray-900 tracking-tight leading-none uppercase italic">Process Return / Issue Credit Note</h3>
+            <h3 className="text-xl font-black text-gray-900 tracking-tight leading-none uppercase italic">{editData ? "Edit Credit Note" : "Process Return / Issue Credit Note"}</h3>
             <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1.5 flex items-center gap-2">
               <span className="text-[#319bab]">REFERENCE ID: {nextId || "GETTING ID..."}</span>
               <span className="px-2 py-0.5 bg-gray-100 rounded text-gray-500">{formatDate(new Date())}</span>
@@ -594,9 +614,9 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
               className={`flex-1 md:flex-none px-16 py-4 font-black rounded-xl text-white shadow-xl transition-all uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3 ${submitting ? 'bg-gray-300 cursor-not-allowed' : 'bg-[#319bab] hover:bg-[#287e8b] active:scale-95 hover:-translate-y-0.5 shadow-[#319bab]/20'}`}
             >
               {submitting ? (
-                <><FaSpinner className="animate-spin" /> Finalizing...</>
+                <><FaSpinner className="animate-spin" /> {editData ? "Updating..." : "Finalizing..."}</>
               ) : (
-                <><FaCheckCircle /> Issue Credit Note</>
+                <><FaCheckCircle /> {editData ? "Update Credit Note" : "Issue Credit Note"}</>
               )}
             </button>
           </div>
