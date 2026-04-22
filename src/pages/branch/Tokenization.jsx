@@ -194,10 +194,11 @@ const Tokenization = () => {
     // Check if token is taken but not finished for > 1 hour
     const isOverdue = useMemo(() => {
       if (!token.takenAt || isFinished || token.status === "CANCELLED") return false;
-      const takenTime = new Date(token.takenAt).getTime();
+      const startTime = new Date(token.inProgressAt || token.takenAt).getTime();
       const now = new Date().getTime();
-      return (now - takenTime) > 3600000; // 1 hour
-    }, [token.takenAt, token.status, isFinished]);
+      const thresholdMin = currentBranch?.tokenBlockTime || 120;
+      return (now - startTime) > (thresholdMin * 60 * 1000); 
+    }, [token.takenAt, token.inProgressAt, token.status, isFinished]);
 
     const handleAssign = async (userId, userName) => {
       try {

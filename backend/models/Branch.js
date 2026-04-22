@@ -98,6 +98,10 @@ const branchSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    tokenBlockTime: {
+      type: Number,
+      default: 120, // Default 120 minutes (2 hours)
+    },
 
   },
   { timestamps: true }

@@ -99,9 +99,26 @@ function AppContent() {
     user, 
     currentBranch, 
     blockingTokens, 
+    reminderTokens,
     isCheckingTokens, 
     refreshBlockingTokens 
   } = useBranch();
+
+  // Reminder Tracking
+  useEffect(() => {
+    if (reminderTokens?.length > 0) {
+      reminderTokens.forEach(token => {
+        // Show a toast for each overdue token if work has started
+        toast.info(
+          <div className="flex flex-col gap-1">
+            <span className="font-bold text-xs uppercase tracking-widest text-indigo-600">Task Completion Reminder</span>
+            <span className="text-[10px] text-gray-700 font-medium">[{token.tokenId}] Work has been ongoing for over {currentBranch?.tokenBlockTime || 120} minutes. Please complete this task.</span>
+          </div>,
+          { autoClose: 10000, toastId: `reminder-${token._id}`, theme: "colored" }
+        );
+      });
+    }
+  }, [reminderTokens]);
 
   // Check if we're on a branch-specific page
   const isBranchRoute = location.pathname.startsWith("/branch/") || location.pathname === "/branch-home";
@@ -204,11 +221,28 @@ function AppContent() {
       const data = await res.json();
       if (data.success) {
         toast.success("Task Taken Successfully");
-        setBlockingTokens(prev => prev.filter(t => t._id !== tokenId));
+        refreshBlockingTokens(); // Refresh to update block state
         navigate("/branch/tokenization");
       }
     } catch (err) {
       toast.error("Failed to take task");
+    }
+  };
+
+  const handleStartWorkInModal = async (tokenId) => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/tokens/${tokenId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "IN_PROGRESS", takenBy: user?.id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Work Started Successfully");
+        refreshBlockingTokens(); // Refresh to lift block
+        navigate("/branch/tokenization");
+      }
+    } catch (err) {
+      toast.error("Failed to start work");
     }
   };
 
@@ -224,10 +258,17 @@ function AppContent() {
               <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm border border-white/30 shadow-xl">
                 <FaTicketAlt className="text-4xl text-white drop-shadow-lg" />
               </div>
-              <h2 className="text-3xl font-black tracking-tight mb-2 uppercase">You Have Tasks!</h2>
+              <h2 className="text-3xl font-black tracking-tight mb-2 uppercase">Action Required!</h2>
               <p className="text-indigo-100 font-bold text-xs uppercase tracking-widest leading-relaxed">
-                You have {blockingTokens.length} mandatory {blockingTokens.length === 1 ? 'task' : 'tasks'} assigned to you.<br /> 
-                Open a task to continue.
+                {blockingTokens[0]?.blockType === "START_WORK" 
+                  ? `You have a task taken but not started for over ${currentBranch?.tokenBlockTime || 120} minutes.` 
+                  : `You have ${blockingTokens.length} mandatory ${blockingTokens.length === 1 ? 'task' : 'tasks'} assigned to you.`
+                }
+                <br /> 
+                {blockingTokens[0]?.blockType === "START_WORK" 
+                  ? "Click 'Start Work' to continue." 
+                  : "Open a task to acknowledge and continue."
+                }
               </p>
             </div>
           </div>
@@ -248,12 +289,21 @@ function AppContent() {
                       <p className="text-xs font-bold text-slate-700 leading-relaxed italic line-clamp-2">"{token.message}"</p>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => handleTakeToken(token._id)}
-                    className="self-center px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg shadow-indigo-100"
-                  >
-                    Open
-                  </button>
+                  {token.blockType === "START_WORK" ? (
+                    <button 
+                      onClick={() => handleStartWorkInModal(token._id)}
+                      className="self-center px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition shadow-lg shadow-emerald-100"
+                    >
+                      Start Work
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => handleTakeToken(token._id)}
+                      className="self-center px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg shadow-indigo-100"
+                    >
+                      Open
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

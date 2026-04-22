@@ -51,6 +51,7 @@ export default function SuperAdminBranchManagement() {
     upiId: "",
     gstzenClientId: "",
     gstzenClientSecret: "",
+    tokenBlockTime: 120,
   });
 
 
@@ -220,6 +221,7 @@ export default function SuperAdminBranchManagement() {
       upiId: "",
       gstzenClientId: "",
       gstzenClientSecret: "",
+      tokenBlockTime: 120,
     });
 
     setEditingBranch(null);
@@ -242,6 +244,7 @@ export default function SuperAdminBranchManagement() {
       upiId: branch.upiId || "",
       gstzenClientId: branch.gstzenClientId || "",
       gstzenClientSecret: branch.gstzenClientSecret || "",
+      tokenBlockTime: branch.tokenBlockTime || 120,
     });
 
     setShowBranchModal(true);
@@ -446,6 +449,10 @@ export default function SuperAdminBranchManagement() {
                     <div>
                       <p className="text-sm text-gray-600 font-semibold">GSTZen Client Secret</p>
                       <p className="text-gray-900 font-mono">{selectedBranch.gstzenClientSecret ? "••••••••" : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 font-semibold">Workflow Token Block Time</p>
+                      <p className="text-gray-900 font-bold text-indigo-600">{selectedBranch.tokenBlockTime || 120} Minutes</p>
                     </div>
 
                     <div className="md:col-span-2">
@@ -720,6 +727,20 @@ export default function SuperAdminBranchManagement() {
                     onChange={(e) => setBranchForm({ ...branchForm, pincode: e.target.value })}
                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    Token Block Time (Minutes)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="120"
+                    value={branchForm.tokenBlockTime}
+                    onChange={(e) => setBranchForm({ ...branchForm, tokenBlockTime: parseInt(e.target.value) || 0 })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Time before a TAKEN token blocks navigation</p>
                 </div>
 
                 <div className="md:col-span-2">

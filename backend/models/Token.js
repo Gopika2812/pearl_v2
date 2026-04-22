@@ -44,6 +44,7 @@ const tokenSchema = new mongoose.Schema(
     },
     
     takenAt: Date,
+    inProgressAt: Date,
     finishedAt: Date,
     salesOrderId: {
       type: mongoose.Schema.Types.ObjectId,

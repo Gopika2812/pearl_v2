@@ -41,6 +41,11 @@ const BranchLockedPrices = () => {
   const [totalRecords, setTotalRecords] = useState(0);
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  
+  // Edit State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [editPrice, setEditPrice] = useState("");
 
   useEffect(() => {
     if (currentBranch?._id) {
@@ -264,6 +269,43 @@ const BranchLockedPrices = () => {
       }
     } catch (err) {
       toast.error("Failed to delete");
+    }
+  };
+  
+  const openEditModal = (lp) => {
+    setEditingItem(lp);
+    setEditPrice(lp.lockedPrice.toString());
+    setShowEditModal(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editingItem || !editPrice) return;
+    
+    setSaving(true);
+    try {
+      const resp = await fetch(`${API_BASE}/customer-locked-prices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branchId: currentBranch._id,
+          customerId: editingItem.customerId._id,
+          productId: editingItem.productId._id,
+          lockedPrice: Number(editPrice),
+        }),
+      });
+
+      const data = await resp.json();
+      if (data.success) {
+        toast.success("Price updated successfully");
+        setShowEditModal(false);
+        fetchLockedPrices();
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (err) {
+      toast.error(err.message || "Failed to update price");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -631,7 +673,7 @@ const BranchLockedPrices = () => {
                            {sortField === "marginPercent" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
                         </div>
                       </th>
-                      <th className="px-6 py-5 text-center">Action</th>
+                      <th className="px-6 py-5 text-center">Actions</th>
                     </tr>
                     <tr className="bg-white border-b border-slate-50">
                       <th className="px-4 py-3 bg-slate-50/10"></th>
@@ -722,12 +764,22 @@ const BranchLockedPrices = () => {
                               {mp.toFixed(1)}%
                             </td>
                             <td className="px-6 py-5 text-center">
-                              <button 
-                                onClick={() => handleDelete(lp._id)}
-                                className="text-slate-300 hover:text-red-500 p-2 transition-all hover:bg-red-50 rounded-lg"
-                              >
-                                <FaTrash size={14} />
-                              </button>
+                              <div className="flex items-center justify-center gap-2">
+                                <button 
+                                  onClick={() => openEditModal(lp)}
+                                  className="text-blue-400 hover:text-blue-600 p-2 transition-all hover:bg-blue-50 rounded-lg"
+                                  title="Edit Price"
+                                >
+                                  <FaEdit size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => handleDelete(lp._id)}
+                                  className="text-slate-300 hover:text-red-500 p-2 transition-all hover:bg-red-50 rounded-lg"
+                                  title="Delete Record"
+                                >
+                                  <FaTrash size={14} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -764,6 +816,79 @@ const BranchLockedPrices = () => {
           </div>
         </div>
       </div>
+
+      {/* EDIT MODAL */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-300">
+            <div className="bg-slate-900 px-6 py-4 text-white flex justify-between items-center">
+              <h2 className="text-sm font-black uppercase tracking-widest">Edit Locked Price</h2>
+              <button onClick={() => setShowEditModal(false)} className="text-white/40 hover:text-white transition-colors">
+                <FaTimes size={18} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Product</p>
+                <p className="text-sm font-bold text-gray-700">{editingItem?.productId?.name}</p>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Customer</p>
+                <p className="text-sm font-bold text-gray-700">{editingItem?.customerId?.name}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
+                  <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1">Cost Price</p>
+                  <p className="text-sm font-black text-blue-700">₹{editingItem?.productId?.purchasingPrice?.toFixed(2)}</p>
+                </div>
+                <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100">
+                  <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">Standard Price</p>
+                  <p className="text-sm font-black text-indigo-700">₹{editingItem?.productId?.sellingPrice?.toFixed(2)}</p>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">New Locked Price (₹)</label>
+                <input 
+                  type="number"
+                  value={editPrice}
+                  onChange={(e) => setEditPrice(e.target.value)}
+                  className="w-full px-4 py-3 bg-white border-2 border-[#319bab]/20 rounded-xl text-lg font-black text-[#319bab] outline-none focus:border-[#319bab] transition shadow-inner"
+                  autoFocus
+                />
+              </div>
+
+              {editingItem && (
+                <div className="flex items-center justify-between p-3 bg-orange-50/30 rounded-xl border border-orange-100">
+                  <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest">New Margin</span>
+                  <span className={`text-sm font-black ${ (Number(editPrice) - editingItem.productId.purchasingPrice) >= 0 ? 'text-green-600' : 'text-red-500' }`}>
+                    {(((Number(editPrice) - editingItem.productId.purchasingPrice) / editingItem.productId.purchasingPrice) * 100).toFixed(1)}%
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 bg-gray-50 border-t border-gray-100 flex gap-3">
+              <button 
+                onClick={() => setShowEditModal(false)}
+                className="flex-1 px-4 py-3 bg-white border border-gray-200 text-gray-600 rounded-xl text-xs font-black uppercase hover:bg-gray-100 transition"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleUpdate}
+                disabled={saving}
+                className="flex-[2] px-4 py-3 bg-[#319bab] text-white rounded-xl text-xs font-black uppercase hover:bg-[#257f87] transition shadow-lg shadow-[#319bab]/20 flex items-center justify-center gap-2"
+              >
+                {saving ? <FaSync className="animate-spin" /> : <FaCheckCircle />}
+                {saving ? "Updating..." : "Update Price"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

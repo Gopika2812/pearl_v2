@@ -166,6 +166,7 @@ router.patch("/:id/status", auth, async (req, res) => {
     if (status === "TAKEN" || status === "IN_PROGRESS") {
       token.takenBy = takenBy || req.user.id;
       if (!token.takenAt) token.takenAt = new Date();
+      if (status === "IN_PROGRESS" && !token.inProgressAt) token.inProgressAt = new Date();
     }
 
     if (status === "COMPLETED") {

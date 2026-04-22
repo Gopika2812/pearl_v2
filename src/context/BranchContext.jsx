@@ -10,6 +10,7 @@ export function BranchProvider({ children }) {
   const [user, setUser] = useState(null);
   const [branchLoaded, setBranchLoaded] = useState(false);
   const [blockingTokens, setBlockingTokens] = useState([]);
+  const [reminderTokens, setReminderTokens] = useState([]);
   const [isCheckingTokens, setIsCheckingTokens] = useState(false);
 
   // currentBranch: superAdminViewBranch > adminViewBranch > real login branch
@@ -38,20 +39,50 @@ export function BranchProvider({ children }) {
 
     if (!myId || !branchId) {
       setBlockingTokens([]);
+      setReminderTokens([]);
       return;
     }
 
     try {
       setIsCheckingTokens(true);
-      const res = await fetchWithAuth(`${API_BASE}/tokens/branch/${branchId}?status=OPEN`);
+      // Fetch all tokens for this branch (no status filter to get all active ones)
+      const res = await fetchWithAuth(`${API_BASE}/tokens/branch/${branchId}`);
       const data = await res.json();
       
       if (data.success) {
-        const assignedToMe = data.data.filter(t => {
+        const now = new Date();
+        const blockTimeMinutes = currentBranch?.tokenBlockTime || 120;
+        const blockTimeMs = blockTimeMinutes * 60 * 1000;
+
+        const blocks = [];
+        const reminders = [];
+
+        data.data.forEach(t => {
           const assigneeId = t.assignedTo?.id?._id || t.assignedTo?.id;
-          return assigneeId?.toString() === myId?.toString() && t.status === "OPEN";
+          if (assigneeId?.toString() !== myId?.toString()) return;
+
+          // 1. OPEN -> Instant Hard Block
+          if (t.status === "OPEN") {
+            blocks.push({ ...t, blockType: "ACKNOWLEDGE" });
+          }
+          // 2. TAKEN but NOT STARTED for > 2 hours -> Hard Block
+          else if (t.status === "TAKEN") {
+            const takenTime = new Date(t.takenAt);
+            if (now - takenTime > blockTimeMs) {
+              blocks.push({ ...t, blockType: "START_WORK" });
+            }
+          }
+          // 3. IN_PROGRESS but NOT COMPLETED for > 2 hours -> Soft Reminder
+          else if (t.status === "IN_PROGRESS") {
+            const progressTime = new Date(t.inProgressAt || t.takenAt);
+            if (now - progressTime > blockTimeMs) {
+              reminders.push({ ...t, reminderType: "COMPLETE_TASK" });
+            }
+          }
         });
-        setBlockingTokens(assignedToMe);
+
+        setBlockingTokens(blocks);
+        setReminderTokens(reminders);
       }
     } catch (err) {
       console.error("Token check failed:", err);
@@ -125,6 +156,7 @@ export function BranchProvider({ children }) {
         logout,
         refreshUser,
         blockingTokens,
+        reminderTokens,
         isCheckingTokens,
         refreshBlockingTokens
       }}
