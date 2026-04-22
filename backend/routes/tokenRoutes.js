@@ -277,4 +277,33 @@ router.get("/stats/super-admin", auth, async (req, res) => {
   }
 });
 
+// GET: Fetch personalized reminders for Home page (All assigned tokens, active first)
+router.get("/reminders/my", auth, async (req, res) => {
+  try {
+    const tokens = await Token.find({ "assignedTo.id": req.user.id })
+      .sort({ createdAt: -1 });
+
+    // Custom sort: Active (OPEN, TAKEN, IN_PROGRESS) first
+    const statusPriority = {
+      "OPEN": 1,
+      "TAKEN": 1,
+      "IN_PROGRESS": 1,
+      "COMPLETED": 2,
+      "CANCELLED": 3
+    };
+
+    const sortedTokens = tokens.sort((a, b) => {
+      if (statusPriority[a.status] !== statusPriority[b.status]) {
+        return statusPriority[a.status] - statusPriority[b.status];
+      }
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+
+    res.json({ success: true, data: sortedTokens });
+  } catch (error) {
+    console.error("My Token Reminders Error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch your token reminders" });
+  }
+});
+
 export default router;

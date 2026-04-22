@@ -80,7 +80,10 @@ const creditNoteSchema = new mongoose.Schema(
     salesOwner: String,
     salesOwnerId: mongoose.Schema.Types.ObjectId,
     salesMan: mongoose.Schema.Types.ObjectId,
-    deliveryMan: mongoose.Schema.Types.ObjectId,
+    deliveryMan: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DeliveryMan",
+    },
     
     // Financial Year
     financialYear: String,

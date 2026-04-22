@@ -1,20 +1,26 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+
 import { 
     FaUser, FaPhone, FaMoneyBillWave, FaClock, FaHistory, 
     FaSearch, FaFilter, FaSort, FaSortUp, FaSortDown,
     FaArrowRight, FaBook, FaCalendarAlt, FaCog, FaTag,
-    FaEdit, FaChevronLeft, FaChevronRight, FaListOl
+    FaEdit, FaChevronLeft, FaChevronRight, FaListOl, FaTicketAlt
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth, apiWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
-import CustomerLedgerModal from "../../components/branch/CustomerLedgerModal";
+
 import FollowUpFormModal from "../../components/branch/FollowUpFormModal";
+import CustomerFollowUpHistoryModal from "../../components/branch/CustomerFollowUpHistoryModal";
+import TokenManagerModal from "../../components/branch/TokenManagerModal";
 import CategoryManagementModal from "../../components/branch/CategoryManagementModal";
 import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCustomerModal";
 
 const BranchFollowUp = () => {
+    const navigate = useNavigate();
     const { currentBranch, user } = useBranch();
+
     const [customers, setCustomers] = useState([]);
     const [customerGroups, setCustomerGroups] = useState([]);
     const [customerCategories, setCustomerCategories] = useState([]);
@@ -33,12 +39,16 @@ const BranchFollowUp = () => {
     const [totalPages, setTotalPages] = useState(1);
 
     // Modal states
-    const [isLedgerOpen, setIsLedgerOpen] = useState(false);
     const [isFollowUpOpen, setIsFollowUpOpen] = useState(false);
+
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [isTokenOpen, setIsTokenOpen] = useState(false);
     const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
     const [isEditCustomerOpen, setIsEditCustomerOpen] = useState(false);
     
     const [selectedCustomer, setSelectedCustomer] = useState(null);
+    const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState(null);
+    const [selectedCustomerForToken, setSelectedCustomerForToken] = useState(null);
     const [editingCustomer, setEditingCustomer] = useState(null);
 
     // Sorting state - default to Balance High to Low
@@ -143,8 +153,18 @@ const BranchFollowUp = () => {
     };
 
     const openLedger = (customer) => {
-        setSelectedCustomer(customer);
-        setIsLedgerOpen(true);
+        navigate(`/branch/customer-ledger/${customer._id}`);
+    };
+
+
+    const openHistory = (customer) => {
+        setSelectedCustomerForHistory(customer);
+        setIsHistoryOpen(true);
+    };
+
+    const openToken = (customer) => {
+        setSelectedCustomerForToken(customer);
+        setIsTokenOpen(true);
     };
 
     const openEditCustomer = (customer) => {
@@ -309,9 +329,11 @@ const BranchFollowUp = () => {
                                             </th>
                                             <th onClick={() => handleSort("limit")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
                                                 <div className="flex items-center justify-end">Limit <SortIcon column="limit" /></div>
-                                            </th>
-                                            <th onClick={() => handleSort("days")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
+                                            </th>                                            <th onClick={() => handleSort("days")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
                                                 <div className="flex items-center justify-end">Days <SortIcon column="days" /></div>
+                                            </th>
+                                            <th className="px-6 py-10 text-center">
+                                                <div className="flex items-center justify-center">Token</div>
                                             </th>
                                             <th className="px-12 py-10 text-center rounded-tr-[4rem]">Actions</th>
                                         </tr>
@@ -379,25 +401,43 @@ const BranchFollowUp = () => {
                                                             <span className="text-[11px] text-gray-400 font-black uppercase tracking-widest mt-1.5">Days</span>
                                                         </div>
                                                     </td>
+                                                    <td className="px-6 py-8 text-center">
+                                                        <button 
+                                                            onClick={() => openToken(customer)}
+                                                            className="w-[64px] h-[64px] bg-white border-2 border-indigo-50 text-indigo-500 rounded-2xl flex items-center justify-center hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-sm active:scale-95 group mx-auto"
+                                                            title="Token Manager"
+                                                        >
+                                                            <FaTicketAlt size={22} className="group-hover:rotate-12 transition-transform" />
+                                                        </button>
+                                                    </td>
                                                     <td className="px-12 py-8 text-center">
                                                         <div className="flex items-center justify-center gap-3">
-                                                            <button 
-                                                                onClick={() => openFollowUp(customer)}
-                                                                className="flex items-center gap-3 bg-indigo-600 text-white px-7 py-4 rounded-2xl text-[12px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 active:scale-95 whitespace-nowrap"
-                                                                title="Follow up logs"
-                                                            >
-                                                                <FaHistory size={14} /> Log
-                                                            </button>
+                                                            <div className="flex flex-col gap-1.5 min-w-[130px]">
+                                                                <button 
+                                                                    onClick={() => openFollowUp(customer)}
+                                                                    className="flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/10 active:scale-95 whitespace-nowrap"
+                                                                    title="Record New Follow-Up"
+                                                                >
+                                                                    <FaPhone size={10} /> Follow Up
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => openHistory(customer)}
+                                                                    className="flex items-center justify-center gap-2 bg-gray-900 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-gray-900/10 active:scale-95 whitespace-nowrap"
+                                                                    title="View History Logs"
+                                                                >
+                                                                    <FaHistory size={10} /> Log
+                                                                </button>
+                                                            </div>
                                                             <button 
                                                                 onClick={() => openLedger(customer)}
-                                                                className="flex items-center gap-3 bg-white text-indigo-600 border-2 border-indigo-50 px-7 py-4 rounded-2xl text-[12px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-sm active:scale-95 whitespace-nowrap"
+                                                                className="flex items-center gap-3 bg-white text-indigo-600 border-2 border-indigo-50 px-7 py-5 rounded-2xl text-[12px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-sm active:scale-95 whitespace-nowrap"
                                                                 title="View Full Ledger"
                                                             >
                                                                 <FaBook size={14} /> Ledger
                                                             </button>
                                                             <button 
                                                                 onClick={() => openEditCustomer(customer)}
-                                                                className="w-[56px] h-[56px] flex items-center justify-center bg-gray-50 text-gray-400 border-2 border-gray-100 rounded-2xl hover:bg-amber-50 hover:text-amber-600 hover:border-amber-100 transition-all active:scale-95"
+                                                                className="w-[64px] h-[64px] flex items-center justify-center bg-gray-50 text-gray-400 border-2 border-gray-100 rounded-2xl hover:bg-amber-50 hover:text-amber-600 hover:border-amber-100 transition-all active:scale-95"
                                                                 title="Edit Profile"
                                                             >
                                                                 <FaEdit size={16} />
@@ -495,12 +535,19 @@ const BranchFollowUp = () => {
                 onSave={fetchData}
             />
 
-            <CustomerLedgerModal 
-                isOpen={isLedgerOpen}
-                onClose={() => setIsLedgerOpen(false)}
-                customer={selectedCustomer}
+            <CustomerFollowUpHistoryModal 
+                isOpen={isHistoryOpen}
+                onClose={() => setIsHistoryOpen(false)}
+                customer={selectedCustomerForHistory}
                 branch={currentBranch}
-                onBalanceUpdate={fetchData}
+            />
+
+            <TokenManagerModal 
+                isOpen={isTokenOpen}
+                onClose={() => setIsTokenOpen(false)}
+                customer={selectedCustomerForToken}
+                branch={currentBranch}
+                user={user}
             />
 
             <CategoryManagementModal 

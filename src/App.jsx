@@ -58,6 +58,8 @@ import BranchFollowUp from "./pages/branch/BranchFollowUp";
 import BranchFollowUpRecords from "./pages/branch/BranchFollowUpRecords";
 
 import BranchProductConfig from "./pages/branch/BranchProductConfig";
+import BranchCustomerLedger from "./pages/branch/BranchCustomerLedger";
+
 
 import BranchLoginPage from "./pages/BranchLoginPage";
 import BranchRegisterPage from "./pages/BranchRegisterPage";
@@ -371,6 +373,8 @@ function AppContent() {
                   <Route path="/branch/extra-expense-ledger" element={<ProtectedRoute element={<BranchExtraExpenseLedger />} />} />
                   <Route path="/branch/product-config" element={<ProtectedRoute element={<BranchProductConfig />} />} />
                   <Route path="/branch/ledger" element={<ProtectedRoute element={<BranchLedger />} />} />
+                  <Route path="/branch/customer-ledger/:customerId" element={<ProtectedRoute element={<BranchCustomerLedger />} />} />
+
                   <Route path="/branch/follow-up" element={<ProtectedRoute element={<BranchFollowUp />} />} />
                   <Route path="/branch/follow-up-records" element={<ProtectedRoute element={<BranchFollowUpRecords />} />} />
                   <Route path="/branch/tokenization" element={<ProtectedRoute element={<Tokenization />} />} />

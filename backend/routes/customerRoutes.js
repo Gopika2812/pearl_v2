@@ -1119,7 +1119,13 @@ router.get("/:id/ledger", async (req, res) => {
       "customer.customerId": id,
       status: "FINALIZED",
       invoiceDate: { $gte: start }
-    }).select("grandTotal invoiceDate invoiceNumber salesOrderId status");
+    })
+    .select("grandTotal invoiceDate invoiceNumber salesOrderId status generatedBy deliveryPerson")
+    .populate({
+      path: "salesOrderId",
+      select: "deliveryMan billingPerson",
+      populate: { path: "deliveryMan", select: "name" }
+    });
 
     // Credits: Receipts after startDate
     const receiptsAfterStart = await Receipt.find({
@@ -1133,14 +1139,14 @@ router.get("/:id/ledger", async (req, res) => {
       "customer.customerId": id,
       status: "Created",
       date: { $gte: start }
-    }).select("grandTotal date creditNoteId reasonForReturn");
+    })
+    .select("grandTotal date creditNoteId reasonForReturn");
 
     // 🧮 Opening Balance = Current_Balance - (Debits after Start) + (Credits after Start)
     const totalDebitsAfterStart = invoicesAfterStart.reduce((sum, s) => sum + (s.grandTotal || 0), 0);
 
     const totalCreditsAfterStart =
       receiptsAfterStart.reduce((sum, r) => {
-        // If bounced, it's effectively a debit (removes credit), so we subtract it from credit total
         return sum + (r.status === "bounced" ? -(r.amount || 0) : (r.amount || 0));
       }, 0) +
       cnAfterStart.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
@@ -1154,31 +1160,45 @@ router.get("/:id/ledger", async (req, res) => {
 
     // Format all transactions
     const txns = [
-      ...inRangeInvoices.map(s => ({
-        id: `inv-${s._id}`,
-        date: s.invoiceDate,
-        type: "INVOICE",
-        particulars: `Sales Invoice: ${s.invoiceNumber}`,
-        debit: s.grandTotal || 0,
-        credit: 0
-      })),
+      ...inRangeInvoices.map(s => {
+        // PRIORITIZE data from SalesOrder as requested
+        const user = s.salesOrderId?.billingPerson || s.generatedBy || "-";
+        const dMan = s.salesOrderId?.deliveryMan?.name || s.deliveryPerson || "-";
+
+        return {
+          id: `inv-${s._id}`,
+          date: s.invoiceDate,
+          type: "INVOICE",
+          particulars: `Sales Invoice: ${s.invoiceNumber}`,
+          debit: s.grandTotal || 0,
+          credit: 0,
+          user: user,
+          deliveryMan: dMan
+        };
+      }),
       ...inRangeReceipts.map(r => ({
         id: `rcp-${r._id}`,
         date: r.createdAt,
         type: r.status === "bounced" ? "BOUNCED" : "RECEIPT",
         particulars: `${r.status === "bounced" ? "BOUNCED: " : "Receipt: "}${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})${r.originalInvoiceId ? ` - for Inv: ${r.originalInvoiceId}` : ""}`,
         debit: r.status === "bounced" ? (r.amount || 0) : 0,
-        credit: r.status === "bounced" ? 0 : (r.amount || 0)
+        credit: r.status === "bounced" ? 0 : (r.amount || 0),
+        user: "-",
+        deliveryMan: "-"
       })),
       ...inRangeCNs.map(cn => ({
         id: `cn-${cn._id}`,
         date: cn.date || cn.createdAt,
         type: "CREDIT_NOTE",
-        particulars: `Credit Note: ${cn.creditNoteId} (${cn.reasonForReturn || "General"})`,
+        particulars: `Credit Note: ${cn.creditNoteId} (${cn.reasonForReturn || "Customer Return"})`,
         debit: 0,
-        credit: cn.grandTotal || 0
+        credit: cn.grandTotal || 0,
+        user: "-",
+        deliveryMan: "-"
       }))
     ].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+
 
     // Calculate running balance for the range
     let currentRunning = openingBalance;

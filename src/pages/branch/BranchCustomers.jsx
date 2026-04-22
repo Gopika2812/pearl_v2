@@ -1,18 +1,22 @@
 import React, { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+
 import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaWhatsapp, FaMapMarkerAlt, FaEnvelope, FaUserTie, FaTags } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
-import CustomerLedgerModal from "../../components/branch/CustomerLedgerModal";
+
 import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCustomerModal";
 import CustomerReceiptModal from "../../components/inventory/CustomerReceiptModal";
 import CustomerCreditNoteModal from "../../components/inventory/CustomerCreditNoteModal";
 
 
 const BranchCustomers = () => {
+  const navigate = useNavigate();
   const { branch, branchLoaded, user } = useBranch();
+
   const branchId = branch?._id;
 
   // Permission helper
@@ -33,8 +37,8 @@ const BranchCustomers = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({});
 
-  const [selectedLedgerCustomer, setSelectedLedgerCustomer] = useState(null);
   const [selectedReceiptCustomer, setSelectedReceiptCustomer] = useState(null);
+
   const [selectedCreditNoteCustomer, setSelectedCreditNoteCustomer] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -652,9 +656,10 @@ const BranchCustomers = () => {
                       <span>↩️</span> Return
                     </button>
                     <button
-                      onClick={() => setSelectedLedgerCustomer(customer)}
+                      onClick={() => navigate(`/branch/customer-ledger/${customer._id}`)}
                       className="flex-1 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg border border-blue-200 text-xs flex items-center justify-center gap-1 transition"
                     >
+
                       <span>📅</span> Ledger
                     </button>
                   </div>
@@ -772,11 +777,12 @@ const BranchCustomers = () => {
                                 Return
                               </button>
                               <button
-                                onClick={(e) => { e.stopPropagation(); setSelectedLedgerCustomer(customer); }}
+                                onClick={(e) => { e.stopPropagation(); navigate(`/branch/customer-ledger/${customer._id}`); }}
                                 className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
                               >
                                 Ledger
                               </button>
+
                             </div>
                           </td>
                         </tr>
@@ -873,16 +879,8 @@ const BranchCustomers = () => {
         )}
       </div>
 
-      {/* LEDGER MODAL */}
-      <CustomerLedgerModal
-        isOpen={!!selectedLedgerCustomer}
-        onClose={() => setSelectedLedgerCustomer(null)}
-        customer={selectedLedgerCustomer}
-        branch={branch}
-        onBalanceUpdate={() => fetchCustomers(currentPage)}
-      />
-
       {/* RECEIPT MODAL */}
+
       <CustomerReceiptModal
         isOpen={!!selectedReceiptCustomer}
         onClose={() => setSelectedReceiptCustomer(null)}
