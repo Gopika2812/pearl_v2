@@ -56,6 +56,11 @@ const BranchFollowUp = () => {
 
     useEffect(() => {
         if (currentBranch?._id) {
+            const savedSearch = localStorage.getItem("followup_search");
+            if (savedSearch) {
+                setSearchTerm(savedSearch);
+                localStorage.removeItem("followup_search");
+            }
             fetchData();
         }
     }, [currentBranch?._id]);

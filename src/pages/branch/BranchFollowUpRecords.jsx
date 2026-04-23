@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaHistory, FaCalendarAlt, FaSearch, FaUser, FaPhone, FaCheckCircle, FaExclamationCircle } from "react-icons/fa";
+import { FaHistory, FaCalendarAlt, FaSearch, FaUser, FaPhone, FaCheckCircle, FaExclamationCircle, FaSort, FaSortUp, FaSortDown } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -13,9 +13,10 @@ const BranchFollowUpRecords = () => {
     const [fromDate, setFromDate] = useState(new Date().toISOString().split("T")[0]);
     const [toDate, setToDate] = useState(new Date().toISOString().split("T")[0]);
     const [searchTerm, setSearchTerm] = useState("");
+    const [sortConfig, setSortConfig] = useState({ key: "createdAt", direction: "desc" });
 
     useEffect(() => {
-        // We no longer fetch automatically on mount to keep it fast
+        if (currentBranch?._id) fetchRecords();
     }, [currentBranch?._id]);
 
     const fetchRecords = async () => {
@@ -29,9 +30,6 @@ const BranchFollowUpRecords = () => {
             const data = await res.json();
             if (data.success) {
                 setRecords(data.data || []);
-                if (data.data?.length === 0) {
-                    toast.info("No records found for the selected dates");
-                }
             } else {
                 throw new Error(data.message);
             }
@@ -43,14 +41,43 @@ const BranchFollowUpRecords = () => {
         }
     };
 
-    const filteredRecords = records.filter(r => {
+    const handleSort = (key) => {
+        let direction = "asc";
+        if (sortConfig.key === key && sortConfig.direction === "asc") {
+            direction = "desc";
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const getSortedRecords = (records) => {
+        return [...records].sort((a, b) => {
+            let valA, valB;
+            
+            if (sortConfig.key === "customer") {
+                valA = a.customerId?.name || "";
+                valB = b.customerId?.name || "";
+            } else if (sortConfig.key === "balance") {
+                valA = a.closingBalance || 0;
+                valB = b.closingBalance || 0;
+            } else {
+                valA = a[sortConfig.key] || "";
+                valB = b[sortConfig.key] || "";
+            }
+
+            if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+            if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+            return 0;
+        });
+    };
+
+    const filteredRecords = getSortedRecords(records.filter(r => {
         const search = searchTerm.toLowerCase();
         return (
             (r.customerId?.name?.toLowerCase() || "").includes(search) ||
             (r.result?.toLowerCase() || "").includes(search) ||
             (r.followUpBy?.toLowerCase() || "").includes(search)
         );
-    });
+    }));
 
     const getResultColor = (result) => {
         switch(result) {
@@ -62,6 +89,11 @@ const BranchFollowUpRecords = () => {
             case "Billing Dispute": return "bg-rose-100 text-rose-700";
             default: return "bg-indigo-50 text-indigo-700";
         }
+    };
+
+    const SortIcon = ({ column }) => {
+        if (sortConfig.key !== column) return <FaSort className="opacity-20 ml-1 inline-block" size={10} />;
+        return sortConfig.direction === "asc" ? <FaSortUp className="ml-1 inline-block text-indigo-500" size={10} /> : <FaSortDown className="ml-1 inline-block text-indigo-500" size={10} />;
     };
 
     return (
@@ -134,12 +166,24 @@ const BranchFollowUpRecords = () => {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-gray-50/50 border-b border-gray-100">
-                                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Date Logged</th>
-                                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Customer</th>
-                                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Follow-up By</th>
-                                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Result</th>
-                                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right">Bal (Logged)</th>
-                                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Next Follow-up</th>
+                                    <th onClick={() => handleSort("createdAt")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
+                                        Date Logged <SortIcon column="createdAt" />
+                                    </th>
+                                    <th onClick={() => handleSort("customer")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
+                                        Customer <SortIcon column="customer" />
+                                    </th>
+                                    <th onClick={() => handleSort("followUpBy")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
+                                        Follow-up By <SortIcon column="followUpBy" />
+                                    </th>
+                                    <th onClick={() => handleSort("result")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
+                                        Result <SortIcon column="result" />
+                                    </th>
+                                    <th onClick={() => handleSort("balance")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right cursor-pointer hover:text-indigo-600 transition-colors">
+                                        Bal (Logged) <SortIcon column="balance" />
+                                    </th>
+                                    <th onClick={() => handleSort("nextFollowUpDate")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
+                                        Next Follow-up <SortIcon column="nextFollowUpDate" />
+                                    </th>
                                     <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Remarks</th>
                                 </tr>
                             </thead>
@@ -180,7 +224,15 @@ const BranchFollowUpRecords = () => {
                                                         <FaUser size={12} />
                                                     </div>
                                                     <div>
-                                                        <p className="text-xs font-black text-gray-800 truncate w-40">{r.customerId?.name || "Unknown"}</p>
+                                                        <p 
+                                                            className="text-xs font-black text-gray-800 truncate w-40 hover:text-indigo-600 cursor-pointer transition-colors"
+                                                            onClick={() => {
+                                                                localStorage.setItem("followup_search", r.customerId?.name || "");
+                                                                window.location.href = "/branch/follow-up";
+                                                            }}
+                                                        >
+                                                            {r.customerId?.name || "Unknown"}
+                                                        </p>
                                                         <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight">{r.customerId?.whatsapp || "N/A"}</p>
                                                     </div>
                                                 </div>

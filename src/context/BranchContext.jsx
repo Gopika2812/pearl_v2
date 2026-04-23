@@ -19,10 +19,18 @@ export function BranchProvider({ children }) {
   // Load from localStorage on mount
   useEffect(() => {
     const storedBranch = localStorage.getItem("currentBranch");
+    const storedAdminView = localStorage.getItem("adminViewBranch");
+    const storedSuperAdminView = localStorage.getItem("superAdminViewBranch");
     const storedUser = localStorage.getItem("user");
 
     if (storedBranch) {
       setLoginBranch(JSON.parse(storedBranch));
+    }
+    if (storedAdminView) {
+      setAdminViewBranch(JSON.parse(storedAdminView));
+    }
+    if (storedSuperAdminView) {
+      setSuperAdminViewBranch(JSON.parse(storedSuperAdminView));
     }
     if (storedUser) {
       const parsedUser = JSON.parse(storedUser);
@@ -32,6 +40,23 @@ export function BranchProvider({ children }) {
     
     setBranchLoaded(true);
   }, []);
+
+  // Save admin view overrides to localStorage when they change
+  useEffect(() => {
+    if (adminViewBranch) {
+      localStorage.setItem("adminViewBranch", JSON.stringify(adminViewBranch));
+    } else {
+      localStorage.removeItem("adminViewBranch");
+    }
+  }, [adminViewBranch]);
+
+  useEffect(() => {
+    if (superAdminViewBranch) {
+      localStorage.setItem("superAdminViewBranch", JSON.stringify(superAdminViewBranch));
+    } else {
+      localStorage.removeItem("superAdminViewBranch");
+    }
+  }, [superAdminViewBranch]);
 
   const refreshBlockingTokens = async () => {
     const myId = user?.id || user?._id;
@@ -137,6 +162,8 @@ export function BranchProvider({ children }) {
     setUser(null);
     setBlockingTokens([]);
     localStorage.removeItem("currentBranch");
+    localStorage.removeItem("adminViewBranch");
+    localStorage.removeItem("superAdminViewBranch");
     localStorage.removeItem("user");
   };
 

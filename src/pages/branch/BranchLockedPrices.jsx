@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FaLock, FaSync, FaSearch, FaUser, FaBox, FaTrash, FaPlus, FaCheckCircle, FaChevronDown, FaUpload } from "react-icons/fa";
+import { FaLock, FaSync, FaSearch, FaUser, FaBox, FaTrash, FaPlus, FaCheckCircle, FaChevronDown, FaUpload, FaEdit, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -42,10 +42,19 @@ const BranchLockedPrices = () => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   
-  // Edit State
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const [editPrice, setEditPrice] = useState("");
+  // Inline Editing State
+  const [editingId, setEditingId] = useState(null);
+  const [editProduct, setEditProduct] = useState(null);
+  const [editCustomer, setEditCustomer] = useState(null);
+  const [editLockedPrice, setEditLockedPrice] = useState("");
+  const [editProdSearch, setEditProdSearch] = useState("");
+  const [editCustSearch, setEditCustSearch] = useState("");
+  const [showEditProdDropdown, setShowEditProdDropdown] = useState(false);
+  const [showEditCustDropdown, setShowEditCustDropdown] = useState(false);
+  const [editProdResults, setEditProdResults] = useState([]);
+  const [editCustResults, setEditCustResults] = useState([]);
+  const [editSearchingProd, setEditSearchingProd] = useState(false);
+  const [editSearchingCust, setEditSearchingCust] = useState(false);
 
   useEffect(() => {
     if (currentBranch?._id) {
@@ -128,6 +137,48 @@ const BranchLockedPrices = () => {
     const timer = setTimeout(searchProducts, 500);
     return () => clearTimeout(timer);
   }, [prodSearch, currentBranch?._id]);
+
+  // 🔍 DEBOUNCED EDIT CUSTOMER SEARCH
+  useEffect(() => {
+    const searchCustomers = async () => {
+      if (!editCustSearch.trim() || editCustomer) return;
+      
+      setEditSearchingCust(true);
+      try {
+        const res = await fetch(`${API_BASE}/customers?branchId=${currentBranch._id}&search=${editCustSearch}&limit=20`);
+        const data = await res.json();
+        setEditCustResults(data.data || []);
+      } catch (err) {
+        console.error("Search Edit Customers Error:", err);
+      } finally {
+        setEditSearchingCust(false);
+      }
+    };
+
+    const timer = setTimeout(searchCustomers, 500);
+    return () => clearTimeout(timer);
+  }, [editCustSearch, currentBranch?._id]);
+
+  // 🔍 DEBOUNCED EDIT PRODUCT SEARCH
+  useEffect(() => {
+    const searchProducts = async () => {
+      if (!editProdSearch.trim() || editProduct) return;
+      
+      setEditSearchingProd(true);
+      try {
+        const res = await fetch(`${API_BASE}/products?branchId=${currentBranch._id}&search=${editProdSearch}&limit=20`);
+        const data = await res.json();
+        setEditProdResults(data.data || []);
+      } catch (err) {
+        console.error("Search Edit Products Error:", err);
+      } finally {
+        setEditSearchingProd(false);
+      }
+    };
+
+    const timer = setTimeout(searchProducts, 500);
+    return () => clearTimeout(timer);
+  }, [editProdSearch, currentBranch?._id]);
 
   const fetchCustomers = async () => {
     try {
@@ -272,38 +323,54 @@ const BranchLockedPrices = () => {
     }
   };
   
-  const openEditModal = (lp) => {
-    setEditingItem(lp);
-    setEditPrice(lp.lockedPrice.toString());
-    setShowEditModal(true);
+  const startInlineEdit = (lp) => {
+    setEditingId(lp._id);
+    setEditProduct(lp.productId);
+    setEditCustomer(lp.customerId);
+    setEditLockedPrice(lp.lockedPrice?.toString() || "");
+    setEditProdSearch(lp.productId?.name || "");
+    setEditCustSearch(lp.customerId?.name || "");
+    setShowEditProdDropdown(false);
+    setShowEditCustDropdown(false);
+  };
+
+  const cancelInlineEdit = () => {
+    setEditingId(null);
+    setEditProduct(null);
+    setEditCustomer(null);
+    setEditLockedPrice("");
+    setEditProdSearch("");
+    setEditCustSearch("");
   };
 
   const handleUpdate = async () => {
-    if (!editingItem || !editPrice) return;
-    
+    if (!editingId) return;
+    if (!editCustomer?._id || !editProduct?._id || !editLockedPrice) {
+      return toast.warning("Please fill all fields");
+    }
+
     setSaving(true);
     try {
-      const resp = await fetch(`${API_BASE}/customer-locked-prices`, {
-        method: "POST",
+      const res = await fetch(`${API_BASE}/customer-locked-prices/${editingId}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          branchId: currentBranch._id,
-          customerId: editingItem.customerId._id,
-          productId: editingItem.productId._id,
-          lockedPrice: Number(editPrice),
-        }),
+          customerId: editCustomer._id,
+          productId: editProduct._id,
+          lockedPrice: Number(editLockedPrice)
+        })
       });
-
-      const data = await resp.json();
+      const data = await res.json();
       if (data.success) {
-        toast.success("Price updated successfully");
-        setShowEditModal(false);
+        toast.success("Locked price updated successfully");
+        cancelInlineEdit();
         fetchLockedPrices();
       } else {
         throw new Error(data.message);
       }
     } catch (err) {
-      toast.error(err.message || "Failed to update price");
+      console.error("Update Error:", err);
+      toast.error(err.message || "Failed to update");
     } finally {
       setSaving(false);
     }
@@ -723,28 +790,125 @@ const BranchLockedPrices = () => {
                       </tr>
                     ) : (
                       lockedPrices.map(lp => {
-                        const productName = lp.productId?.name || "Unknown Product";
-                        const customerName = lp.customerId?.name || "Unknown Customer";
-                        const purchasingPrice = lp.productId?.purchasingPrice || 0;
-                        const sellingPrice = lp.productId?.sellingPrice || 0;
-                        const mp = lp.marginPercent || 0;
+                        const isEditing = editingId === lp._id;
+                        const productName = isEditing ? (editProduct?.name || "") : (lp.productId?.name || "Unknown Product");
+                        const customerName = isEditing ? (editCustomer?.name || "") : (lp.customerId?.name || "Unknown Customer");
+                        const purchasingPrice = isEditing ? (editProduct?.purchasingPrice || 0) : (lp.productId?.purchasingPrice || 0);
+                        const sellingPrice = isEditing ? (editProduct?.sellingPrice || 0) : (lp.productId?.sellingPrice || 0);
+                        const currentLockedPrice = isEditing ? Number(editLockedPrice) : (lp.lockedPrice || 0);
+                        const mp = purchasingPrice > 0 ? ((currentLockedPrice - purchasingPrice) / purchasingPrice) * 100 : 0;
 
                         return (
-                          <tr key={lp._id} className={`hover:bg-slate-50 transition-colors group ${selectedIds.includes(lp._id) ? 'bg-indigo-50/50' : ''}`}>
+                          <tr key={lp._id} className={`hover:bg-slate-50 transition-colors group ${selectedIds.includes(lp._id) ? 'bg-indigo-50/50' : ''} ${isEditing ? 'bg-amber-50/50' : ''}`}>
                             <td className="px-6 py-5 text-center">
                                <input 
                                  type="checkbox" 
                                  checked={selectedIds.includes(lp._id)}
                                  onChange={() => toggleSelectRow(lp._id)}
                                  className="w-4 h-4 accent-[#319bab] cursor-pointer"
-                               />
+                                 disabled={isEditing}
+                                />
                             </td>
-                            <td className="px-6 py-5">
-                              <div className="font-black text-slate-800 text-sm leading-tight">{productName}</div>
-                              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">Ref: {lp._id.substring(18).toUpperCase()}</div>
+                            <td className="px-6 py-5 relative">
+                              {isEditing ? (
+                                <div className="relative">
+                                  <div className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-[#319bab]/20 rounded-lg focus-within:border-[#319bab] transition-all">
+                                    <FaBox className="text-slate-400" size={12} />
+                                    <input 
+                                      type="text"
+                                      placeholder="Search Product..."
+                                      className="flex-1 bg-transparent border-none outline-none text-xs font-black text-slate-800"
+                                      value={editProdSearch}
+                                      onChange={(e) => {
+                                        setEditProdSearch(e.target.value);
+                                        setEditProduct(null);
+                                        setShowEditProdDropdown(true);
+                                      }}
+                                      onFocus={() => setShowEditProdDropdown(true)}
+                                    />
+                                    {editProduct && <FaCheckCircle className="text-emerald-500" size={12} />}
+                                  </div>
+                                  
+                                  {showEditProdDropdown && (
+                                    <div className="absolute top-full left-0 right-0 z-[100] mt-1 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden max-h-60 overflow-y-auto animate-in slide-in-from-top-2 duration-200">
+                                      {editSearchingProd ? (
+                                        <div className="p-4 text-center"><FaSync className="animate-spin text-[#319bab] mx-auto" /></div>
+                                      ) : editProdResults.length > 0 ? (
+                                        editProdResults.map(p => (
+                                          <div 
+                                            key={p._id} 
+                                            className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                            onClick={() => {
+                                              setEditProduct(p);
+                                              setEditProdSearch(p.name);
+                                              setShowEditProdDropdown(false);
+                                            }}
+                                          >
+                                            <p className="text-xs font-black text-slate-800">{p.name}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">₹{p.purchasingPrice} → ₹{p.sellingPrice}</p>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <div className="p-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">No Products Found</div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="font-black text-slate-800 text-sm leading-tight">{productName}</div>
+                                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">Ref: {lp._id.substring(18).toUpperCase()}</div>
+                                </>
+                              )}
                             </td>
-                            <td className="px-6 py-5">
-                              <div className="font-black text-[#319bab] text-sm">{customerName}</div>
+                            <td className="px-6 py-5 relative">
+                              {isEditing ? (
+                                <div className="relative">
+                                  <div className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-[#319bab]/20 rounded-lg focus-within:border-[#319bab] transition-all">
+                                    <FaUser className="text-slate-400" size={12} />
+                                    <input 
+                                      type="text"
+                                      placeholder="Search Customer..."
+                                      className="flex-1 bg-transparent border-none outline-none text-xs font-black text-[#319bab]"
+                                      value={editCustSearch}
+                                      onChange={(e) => {
+                                        setEditCustSearch(e.target.value);
+                                        setEditCustomer(null);
+                                        setShowEditCustDropdown(true);
+                                      }}
+                                      onFocus={() => setShowEditCustDropdown(true)}
+                                    />
+                                    {editCustomer && <FaCheckCircle className="text-emerald-500" size={12} />}
+                                  </div>
+
+                                  {showEditCustDropdown && (
+                                    <div className="absolute top-full left-0 right-0 z-[100] mt-1 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden max-h-60 overflow-y-auto animate-in slide-in-from-top-2 duration-200">
+                                      {editSearchingCust ? (
+                                        <div className="p-4 text-center"><FaSync className="animate-spin text-[#319bab] mx-auto" /></div>
+                                      ) : editCustResults.length > 0 ? (
+                                        editCustResults.map(c => (
+                                          <div 
+                                            key={c._id} 
+                                            className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                            onClick={() => {
+                                              setEditCustomer(c);
+                                              setEditCustSearch(c.name);
+                                              setShowEditCustDropdown(false);
+                                            }}
+                                          >
+                                            <p className="text-xs font-black text-slate-800">{c.name}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{c.whatsapp || c.phone}</p>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <div className="p-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">No Customers Found</div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="font-black text-[#319bab] text-sm">{customerName}</div>
+                              )}
                             </td>
                             <td className="px-6 py-5 text-right font-bold text-slate-400 text-xs">
                               ₹{purchasingPrice.toFixed(2)}
@@ -753,33 +917,63 @@ const BranchLockedPrices = () => {
                               ₹{sellingPrice.toFixed(2)}
                             </td>
                              <td className="px-6 py-5 text-right">
-                              <div className="flex flex-col items-end gap-1">
-                                <div className="bg-orange-50 text-orange-700 font-black px-3 py-1.5 rounded-lg border border-orange-100 inline-block text-sm shadow-sm">
-                                  ₹{lp.lockedPrice?.toFixed(2)}
+                              {isEditing ? (
+                                <input 
+                                  type="number"
+                                  className="w-24 px-3 py-2 bg-white border-2 border-[#319bab]/40 rounded-lg text-right font-black text-[#319bab] text-sm outline-none shadow-inner"
+                                  value={editLockedPrice}
+                                  onChange={(e) => setEditLockedPrice(e.target.value)}
+                                  autoFocus
+                                />
+                              ) : (
+                                <div className="flex flex-col items-end gap-1">
+                                  <div className="bg-orange-50 text-orange-700 font-black px-3 py-1.5 rounded-lg border border-orange-100 inline-block text-sm shadow-sm">
+                                    ₹{lp.lockedPrice?.toFixed(2)}
+                                  </div>
+                                  <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-1.5 rounded">Linked to Cost</span>
                                 </div>
-                                <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-1.5 rounded">Linked to Cost</span>
-                              </div>
+                              )}
                             </td>
                             <td className={`px-6 py-5 text-right text-sm font-black ${mp >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                               {mp.toFixed(1)}%
                             </td>
                             <td className="px-6 py-5 text-center">
-                              <div className="flex items-center justify-center gap-2">
-                                <button 
-                                  onClick={() => openEditModal(lp)}
-                                  className="text-blue-400 hover:text-blue-600 p-2 transition-all hover:bg-blue-50 rounded-lg"
-                                  title="Edit Price"
-                                >
-                                  <FaEdit size={14} />
-                                </button>
-                                <button 
-                                  onClick={() => handleDelete(lp._id)}
-                                  className="text-slate-300 hover:text-red-500 p-2 transition-all hover:bg-red-50 rounded-lg"
-                                  title="Delete Record"
-                                >
-                                  <FaTrash size={14} />
-                                </button>
-                              </div>
+                              {isEditing ? (
+                                <div className="flex items-center justify-center gap-2">
+                                  <button 
+                                    onClick={handleUpdate}
+                                    disabled={saving}
+                                    className="p-2 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-all shadow-sm"
+                                    title="Save Changes"
+                                  >
+                                    {saving ? <FaSync className="animate-spin" size={14} /> : <FaCheckCircle size={14} />}
+                                  </button>
+                                  <button 
+                                    onClick={cancelInlineEdit}
+                                    className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-all shadow-sm"
+                                    title="Cancel"
+                                  >
+                                    <FaTimes size={14} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-center gap-2">
+                                  <button 
+                                    onClick={() => startInlineEdit(lp)}
+                                    className="text-blue-400 hover:text-blue-600 p-2 transition-all hover:bg-blue-50 rounded-lg"
+                                    title="Edit Price"
+                                  >
+                                    <FaEdit size={14} />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDelete(lp._id)}
+                                    className="text-slate-300 hover:text-red-500 p-2 transition-all hover:bg-red-50 rounded-lg"
+                                    title="Delete Record"
+                                  >
+                                    <FaTrash size={14} />
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
@@ -817,78 +1011,6 @@ const BranchLockedPrices = () => {
         </div>
       </div>
 
-      {/* EDIT MODAL */}
-      {showEditModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-300">
-            <div className="bg-slate-900 px-6 py-4 text-white flex justify-between items-center">
-              <h2 className="text-sm font-black uppercase tracking-widest">Edit Locked Price</h2>
-              <button onClick={() => setShowEditModal(false)} className="text-white/40 hover:text-white transition-colors">
-                <FaTimes size={18} />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Product</p>
-                <p className="text-sm font-bold text-gray-700">{editingItem?.productId?.name}</p>
-              </div>
-              <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Customer</p>
-                <p className="text-sm font-bold text-gray-700">{editingItem?.customerId?.name}</p>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
-                  <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1">Cost Price</p>
-                  <p className="text-sm font-black text-blue-700">₹{editingItem?.productId?.purchasingPrice?.toFixed(2)}</p>
-                </div>
-                <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100">
-                  <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">Standard Price</p>
-                  <p className="text-sm font-black text-indigo-700">₹{editingItem?.productId?.sellingPrice?.toFixed(2)}</p>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">New Locked Price (₹)</label>
-                <input 
-                  type="number"
-                  value={editPrice}
-                  onChange={(e) => setEditPrice(e.target.value)}
-                  className="w-full px-4 py-3 bg-white border-2 border-[#319bab]/20 rounded-xl text-lg font-black text-[#319bab] outline-none focus:border-[#319bab] transition shadow-inner"
-                  autoFocus
-                />
-              </div>
-
-              {editingItem && (
-                <div className="flex items-center justify-between p-3 bg-orange-50/30 rounded-xl border border-orange-100">
-                  <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest">New Margin</span>
-                  <span className={`text-sm font-black ${ (Number(editPrice) - editingItem.productId.purchasingPrice) >= 0 ? 'text-green-600' : 'text-red-500' }`}>
-                    {(((Number(editPrice) - editingItem.productId.purchasingPrice) / editingItem.productId.purchasingPrice) * 100).toFixed(1)}%
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 bg-gray-50 border-t border-gray-100 flex gap-3">
-              <button 
-                onClick={() => setShowEditModal(false)}
-                className="flex-1 px-4 py-3 bg-white border border-gray-200 text-gray-600 rounded-xl text-xs font-black uppercase hover:bg-gray-100 transition"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleUpdate}
-                disabled={saving}
-                className="flex-[2] px-4 py-3 bg-[#319bab] text-white rounded-xl text-xs font-black uppercase hover:bg-[#257f87] transition shadow-lg shadow-[#319bab]/20 flex items-center justify-center gap-2"
-              >
-                {saving ? <FaSync className="animate-spin" /> : <FaCheckCircle />}
-                {saving ? "Updating..." : "Update Price"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
