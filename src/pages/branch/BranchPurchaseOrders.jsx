@@ -410,12 +410,14 @@ const BranchPurchaseOrders = () => {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button
-                onClick={handleExportExcel}
-                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm font-bold text-sm"
-              >
-                Export Excel
-              </button>
+              {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
+                <button
+                  onClick={handleExportExcel}
+                  className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition shadow-sm font-bold text-sm"
+                >
+                  Export Excel
+                </button>
+              )}
               <button
                 onClick={fetchPurchaseOrders}
                 disabled={loading}

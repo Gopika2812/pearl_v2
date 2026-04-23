@@ -258,22 +258,26 @@ const BranchDayBook = () => {
                             >
                                 <FaSync className={loading ? "animate-spin" : ""} />
                             </button>
-                            <button
-                                onClick={handleExportExcel}
-                                className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/20 text-xs font-bold"
-                                title="Export to Excel"
-                            >
-                                <FaFileExcel />
-                                <span className="hidden sm:inline">EXCEL</span>
-                            </button>
-                            <button
-                                onClick={handleExportPDF}
-                                className="flex items-center gap-2 px-5 py-3 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition shadow-lg shadow-rose-600/20 text-xs font-bold"
-                                title="Export to PDF"
-                            >
-                                <FaFilePdf />
-                                <span className="hidden sm:inline">PDF</span>
-                            </button>
+                            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
+                                <>
+                                    <button
+                                        onClick={handleExportExcel}
+                                        className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/20 text-xs font-bold"
+                                        title="Export to Excel"
+                                    >
+                                        <FaFileExcel />
+                                        <span className="hidden sm:inline">EXCEL</span>
+                                    </button>
+                                    <button
+                                        onClick={handleExportPDF}
+                                        className="flex items-center gap-2 px-5 py-3 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition shadow-lg shadow-rose-600/20 text-xs font-bold"
+                                        title="Export to PDF"
+                                    >
+                                        <FaFilePdf />
+                                        <span className="hidden sm:inline">PDF</span>
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>

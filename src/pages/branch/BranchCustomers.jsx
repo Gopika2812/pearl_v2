@@ -412,34 +412,38 @@ const BranchCustomers = () => {
               <FaUpload /> {isSafeMode ? "Safe Update" : "Bulk Upload"}
             </button>
 
-            <button
-              onClick={handleExportExcel}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
-            >
-              <FaFileExport /> Export Excel
-            </button>
+            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
+              <>
+                <button
+                  onClick={handleExportExcel}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+                >
+                  <FaFileExport /> Export Excel
+                </button>
 
-            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-              <input
-                type="date"
-                value={exportDate}
-                onChange={(e) => setExportDate(e.target.value)}
-                className="bg-white border border-slate-200 text-[11px] font-bold rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-primary outline-none"
-              />
-              <button
-                onClick={handleExportBalances}
-                className="bg-primary hover:bg-primary/90 text-white px-3 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all shadow-md flex items-center gap-2"
-              >
-                <FaFileExport /> Export Balances
-              </button>
-            </div>
+                <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                  <input
+                    type="date"
+                    value={exportDate}
+                    onChange={(e) => setExportDate(e.target.value)}
+                    className="bg-white border border-slate-200 text-[11px] font-bold rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-primary outline-none"
+                  />
+                  <button
+                    onClick={handleExportBalances}
+                    className="bg-primary hover:bg-primary/90 text-white px-3 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all shadow-md flex items-center gap-2"
+                  >
+                    <FaFileExport /> Export Balances
+                  </button>
+                </div>
 
-            <button
-              onClick={handleExportSnapshot}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
-            >
-              <FaFileExport /> 31st Mar Snapshot
-            </button>
+                <button
+                  onClick={handleExportSnapshot}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+                >
+                  <FaFileExport /> 31st Mar Snapshot
+                </button>
+              </>
+            )}
 
             <div className="flex bg-gray-100 p-1 rounded-xl items-center">
               <button

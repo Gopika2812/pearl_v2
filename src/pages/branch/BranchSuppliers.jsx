@@ -337,18 +337,22 @@ const BranchSuppliers = () => {
               <FaPlus /> Add Supplier
             </button>
 
-            <button
-              onClick={handleExportExcel}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
-            >
-              <FaFileExport /> Export
-            </button>
-            <button
-              onClick={handleExportSnapshot}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
-            >
-              <FaFileExport /> 31st Mar Snapshot
-            </button>
+            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
+              <>
+                <button
+                  onClick={handleExportExcel}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+                >
+                  <FaFileExport /> Export
+                </button>
+                <button
+                  onClick={handleExportSnapshot}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+                >
+                  <FaFileExport /> 31st Mar Snapshot
+                </button>
+              </>
+            )}
 
             <div className="flex bg-gray-100 p-1 rounded-xl items-center">
               <button

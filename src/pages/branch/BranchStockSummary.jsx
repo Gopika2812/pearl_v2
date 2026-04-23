@@ -374,56 +374,60 @@ const BranchStockSummary = () => {
             </button>
 
             {/* Hidden File Input for Import */}
-            <input
-              type="file"
-              id="snapshot-import-input"
-              className="hidden"
-              accept=".xlsx, .xls"
-              onChange={handleImportSnapshot}
-            />
-            <button
-              onClick={() => document.getElementById('snapshot-import-input').click()}
-              className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition flex items-center gap-2"
-            >
-              <FaUpload size={14} /> Import 31st Mar Stock
-            </button>
+            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
+              <>
+                <input
+                  type="file"
+                  id="snapshot-import-input"
+                  className="hidden"
+                  accept=".xlsx, .xls"
+                  onChange={handleImportSnapshot}
+                />
+                <button
+                  onClick={() => document.getElementById('snapshot-import-input').click()}
+                  className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition flex items-center gap-2"
+                >
+                  <FaUpload size={14} /> Import 31st Mar Stock
+                </button>
 
-            <button
-              onClick={() => setShowExportModal(true)}
-              className="bg-white text-secondary border-2 border-secondary px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-secondary/5 transition flex items-center gap-2"
-            >
-              <FaDownload size={14} /> {viewLevel === "GROUPS" ? "Export Groups" : "Export"}
-            </button>
+                <button
+                  onClick={() => setShowExportModal(true)}
+                  className="bg-white text-secondary border-2 border-secondary px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-secondary/5 transition flex items-center gap-2"
+                >
+                  <FaDownload size={14} /> {viewLevel === "GROUPS" ? "Export Groups" : "Export"}
+                </button>
 
-            {viewLevel === "GROUPS" && (
-              <button
-                disabled={isExportLoading}
-                onClick={async () => {
-                  try {
-                    setIsExportLoading(true);
-                    const res = await fetchWithAuth(
-                      `${API_BASE}/products/stock-journal?branchId=${currentBranch._id}&startDate=${fromDate}&endDate=${toDate}&productGroupId=all`
-                    );
-                    const result = await res.json();
-                    if (result.success) {
-                      setExportItemsData(result.data || []);
-                      setIsAllItemsExport(true);
-                      setShowExportModal(true);
-                    } else {
-                      toast.error("Failed to fetch all items for export");
-                    }
-                  } catch (err) {
-                    console.error(err);
-                    toast.error("Error preparing export data");
-                  } finally {
-                    setIsExportLoading(false);
-                  }
-                }}
-                className="bg-secondary/10 text-secondary border-2 border-secondary/20 px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-secondary/20 transition flex items-center gap-2"
-              >
-                {isExportLoading ? <FaSync className="animate-spin" /> : <FaDownload size={14} />} 
-                Export All Items
-              </button>
+                {viewLevel === "GROUPS" && (
+                  <button
+                    disabled={isExportLoading}
+                    onClick={async () => {
+                      try {
+                        setIsExportLoading(true);
+                        const res = await fetchWithAuth(
+                          `${API_BASE}/products/stock-journal?branchId=${currentBranch._id}&startDate=${fromDate}&endDate=${toDate}&productGroupId=all`
+                        );
+                        const result = await res.json();
+                        if (result.success) {
+                          setExportItemsData(result.data || []);
+                          setIsAllItemsExport(true);
+                          setShowExportModal(true);
+                        } else {
+                          toast.error("Failed to fetch all items for export");
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        toast.error("Error preparing export data");
+                      } finally {
+                        setIsExportLoading(false);
+                      }
+                    }}
+                    className="bg-secondary/10 text-secondary border-2 border-secondary/20 px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-secondary/20 transition flex items-center gap-2"
+                  >
+                    {isExportLoading ? <FaSync className="animate-spin" /> : <FaDownload size={14} />} 
+                    Export All Items
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>

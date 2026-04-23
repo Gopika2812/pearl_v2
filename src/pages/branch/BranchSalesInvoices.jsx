@@ -657,21 +657,25 @@ const BranchSalesInvoices = () => {
                   <span>{new Date(filterToDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
                 </div>
               </div>
-              <button
-                onClick={() => setShowColumnModal(true)}
-                className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition shadow-sm"
-                title="Select Export Columns"
-              >
-                <FaFileExcel size={18} />
-              </button>
-              <button
-                onClick={handleExportDetailedExcel}
-                disabled={exporting}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-200 text-xs font-black"
-              >
-                {exporting ? <FaSync className="animate-spin" /> : <FaFileExcel />}
-                QUICK REPORT
-              </button>
+              {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
+                <>
+                  <button
+                    onClick={() => setShowColumnModal(true)}
+                    className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition shadow-sm"
+                    title="Select Export Columns"
+                  >
+                    <FaFileExcel size={18} />
+                  </button>
+                  <button
+                    onClick={handleExportDetailedExcel}
+                    disabled={exporting}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-200 text-xs font-black"
+                  >
+                    {exporting ? <FaSync className="animate-spin" /> : <FaFileExcel />}
+                    QUICK REPORT
+                  </button>
+                </>
+              )}
               <button
                 onClick={fetchInvoices}
                 className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-slate-50 transition shadow-sm"

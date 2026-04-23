@@ -83,7 +83,7 @@ const COLORS = [
   "#FFD3B6", "#FFAAA5", "#FF8B94", "#A8D8EA", "#AA96DA",
 ];
 
-function ProductTable({ title, rows, accent, page, setPage }) {
+function ProductTable({ title, rows, accent, page, setPage, user }) {
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const chartTotalPages = Math.max(1, Math.ceil(rows.length / CHART_PAGE_SIZE));
   const [chartPage, setChartPage] = useState(1);
@@ -314,13 +314,15 @@ function ProductTable({ title, rows, accent, page, setPage }) {
             </button>
           </div>
           <div className="relative">
-            <button
-              onClick={() => setDlOpen(!dlOpen)}
-              className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition"
-              title="Download"
-            >
-              <FaDownload className="text-sm" />
-            </button>
+            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
+              <button
+                onClick={() => setDlOpen(!dlOpen)}
+                className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition"
+                title="Download"
+              >
+                <FaDownload className="text-sm" />
+              </button>
+            )}
             {dlOpen && (
               <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded shadow-lg z-10 min-w-[120px]">
                 <button
@@ -490,7 +492,7 @@ function ProductTable({ title, rows, accent, page, setPage }) {
   );
 }
 
-function PurchaseOrderTable({ title, rows, accent, page, setPage, columns, setColumns, chartField, setChartField }) {
+function PurchaseOrderTable({ title, rows, accent, page, setPage, columns, setColumns, chartField, setChartField, user }) {
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const chartTotalPages = Math.max(1, Math.ceil(rows.length / CHART_PAGE_SIZE));
   const [chartPage, setChartPage] = useState(1);
@@ -862,13 +864,15 @@ function PurchaseOrderTable({ title, rows, accent, page, setPage, columns, setCo
           </div>
 
           <div className="relative">
-            <button
-              onClick={() => setDlOpen(!dlOpen)}
-              className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition"
-              title="Download"
-            >
-              <FaDownload className="text-sm" />
-            </button>
+            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
+              <button
+                onClick={() => setDlOpen(!dlOpen)}
+                className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition"
+                title="Download"
+              >
+                <FaDownload className="text-sm" />
+              </button>
+            )}
             {dlOpen && (
               <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded shadow-lg z-10 min-w-[120px]">
                 <button
@@ -1031,7 +1035,7 @@ function PurchaseOrderTable({ title, rows, accent, page, setPage, columns, setCo
   );
 }
 
-function SalesOrderTable({ title, rows, accent, page, setPage, columns, setColumns, chartField, setChartField }) {
+function SalesOrderTable({ title, rows, accent, page, setPage, columns, setColumns, chartField, setChartField, user }) {
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const chartTotalPages = Math.max(1, Math.ceil(rows.length / CHART_PAGE_SIZE));
   const [chartPage, setChartPage] = useState(1);
@@ -1305,7 +1309,9 @@ function SalesOrderTable({ title, rows, accent, page, setPage, columns, setColum
             )}
           </div>
           <div className="relative">
-            <button onClick={() => setDlOpen(!dlOpen)} className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition" title="Download"><FaDownload className="text-sm" /></button>
+            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
+              <button onClick={() => setDlOpen(!dlOpen)} className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-800 transition" title="Download"><FaDownload className="text-sm" /></button>
+            )}
             {dlOpen && (
               <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded shadow-lg z-10 min-w-[120px]">
                 <button onClick={() => { downloadCSV(); setDlOpen(false); }} className="block w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2"><FaFileExcel className="text-green-600 text-xs" /> Export CSV</button>
@@ -1775,8 +1781,8 @@ export default function BranchInsights() {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <ProductTable title="Purchasing Price" rows={ppRows} accent="border-l-amber-500 bg-amber-50"   page={ppPage} setPage={setPpPage} />
-            <ProductTable title="Selling Price"    rows={spRows} accent="border-l-emerald-500 bg-emerald-50" page={spPage} setPage={setSpPage} />
+            <ProductTable title="Purchasing Price" rows={ppRows} accent="border-l-amber-500 bg-amber-50"   page={ppPage} setPage={setPpPage} user={user} />
+            <ProductTable title="Selling Price"    rows={spRows} accent="border-l-emerald-500 bg-emerald-50" page={spPage} setPage={setSpPage} user={user} />
           </div>
 
           <div className="mt-5 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 flex items-center gap-2">
@@ -1789,7 +1795,7 @@ export default function BranchInsights() {
           {/* Show Purchase Order view */}
           {currentView === "po" && (
           <>
-          <PurchaseOrderTable title="Purchase Orders" rows={poItems} accent="border-l-blue-600 bg-blue-50" page={poPage} setPage={setPoPage} columns={poColumns} setColumns={setPoColumns} chartField={poChartField} setChartField={setPoChartField} />
+          <PurchaseOrderTable title="Purchase Orders" rows={poItems} accent="border-l-blue-600 bg-blue-50" page={poPage} setPage={setPoPage} columns={poColumns} setColumns={setPoColumns} chartField={poChartField} setChartField={setPoChartField} user={user} />
 
           <div className="mt-5 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 flex items-center gap-2">
             <FaCheck className="text-green-600 shrink-0" />
@@ -1801,7 +1807,7 @@ export default function BranchInsights() {
           {/* Show Sales Order view */}
           {currentView === "so" && (
           <>
-          <SalesOrderTable title="Sales Orders" rows={soItems} accent="border-l-emerald-600 bg-emerald-50" page={soPage} setPage={setSoPage} columns={soColumns} setColumns={setSoColumns} chartField={soChartField} setChartField={setSoChartField} />
+          <SalesOrderTable title="Sales Orders" rows={soItems} accent="border-l-emerald-600 bg-emerald-50" page={soPage} setPage={setSoPage} columns={soColumns} setColumns={setSoColumns} chartField={soChartField} setChartField={setSoChartField} user={user} />
 
           <div className="mt-5 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 flex items-center gap-2">
             <FaCheck className="text-green-600 shrink-0" />

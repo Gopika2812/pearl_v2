@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaBuilding, FaCheck, FaShieldAlt, FaUser, FaUsers, FaUsersCog, FaLock, FaGlobe, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign, FaTruck, FaHandshake, FaChartLine, FaLink, FaBook, FaChartBar, FaChevronRight, FaEdit, FaTrash, FaCheckCircle, FaPlus } from "react-icons/fa";
+import { FaBuilding, FaCheck, FaShieldAlt, FaUser, FaUsers, FaUsersCog, FaLock, FaGlobe, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign, FaTruck, FaHandshake, FaChartLine, FaLink, FaBook, FaChartBar, FaChevronRight, FaEdit, FaTrash, FaCheckCircle, FaPlus, FaFileInvoice, FaFilePdf } from "react-icons/fa";
 import { QUICK_LINKS_CONFIG, QUICK_LINKS_CATEGORIES } from "../utils/quickLinksConfig";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -192,7 +192,7 @@ export default function SuperAdminControlSystem() {
       
       // 2. Actions
       const newActionPerms = {};
-      ["edit", "delete", "restock", "create_shortcuts"].forEach(a => newActionPerms[a] = true);
+      ["edit", "delete", "restock", "create_shortcuts", "export"].forEach(a => newActionPerms[a] = true);
       setActionPermissions(newActionPerms);
       
       // 3. Field Visibility
@@ -213,7 +213,7 @@ export default function SuperAdminControlSystem() {
       setUserPermissions([]);
       
       const newActionPerms = {};
-      ["edit", "delete", "restock", "create_shortcuts"].forEach(a => newActionPerms[a] = false);
+      ["edit", "delete", "restock", "create_shortcuts", "export"].forEach(a => newActionPerms[a] = false);
       setActionPermissions(newActionPerms);
       
       const newFieldPerms = {};
@@ -541,6 +541,86 @@ export default function SuperAdminControlSystem() {
                 </div>
 
                 <div className="p-6 space-y-8">
+                  {/* Global Action Permissions */}
+                  <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-6 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      GLOBAL ACTION PERMISSIONS
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      {[
+                        { id: "edit", name: "Allow Edit", icon: <FaEdit /> },
+                        { id: "delete", name: "Allow Delete", icon: <FaTrash /> },
+                        { id: "restock", name: "Allow Restock", icon: <FaBox /> },
+                        { id: "create_shortcuts", name: "Shortcuts", icon: <FaLink /> }
+                      ].map(action => (
+                        <div
+                          key={action.id}
+                          onClick={() => toggleActionPermission(action.id)}
+                          className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
+                            actionPermissions[action.id] !== false
+                              ? "border-primary/20 bg-white shadow-sm"
+                              : "border-gray-50 bg-gray-100/50 opacity-60"
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                            actionPermissions[action.id] !== false ? "bg-primary text-white" : "bg-gray-200 text-gray-400"
+                          }`}>
+                            <span className="text-xs">{action.icon}</span>
+                          </div>
+                          <span className={`text-[10px] font-bold ${actionPermissions[action.id] !== false ? "text-gray-900" : "text-gray-400"}`}>
+                            {action.name}
+                          </span>
+                          <div className={`ml-auto w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
+                            actionPermissions[action.id] !== false ? "bg-primary border-primary text-white" : "border-gray-200 bg-white"
+                          }`}>
+                            {actionPermissions[action.id] !== false && <FaCheck size={6} />}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Data Export Control */}
+                  <div className="bg-emerald-50/30 p-6 rounded-2xl border border-emerald-100 shadow-sm">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 mb-6 flex items-center gap-2">
+                      <FaFilePdf className="text-xs" />
+                      DATA EXPORT CONTROL (PDF/EXCEL/REPORTS)
+                    </h4>
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                      <div className="max-w-md">
+                        <p className="text-xs text-gray-600 font-medium">
+                          Manage user ability to export data from the system. When disabled, the user will not see any "Export" or "Download" buttons across all modules including Sales, Inventory, and Financial reports.
+                        </p>
+                      </div>
+                      <div
+                        onClick={() => toggleActionPermission("export")}
+                        className={`flex items-center gap-4 px-8 py-5 rounded-2xl border-2 cursor-pointer transition-all duration-300 min-w-[240px] ${
+                          actionPermissions.export !== false
+                            ? "border-emerald-500/20 bg-white shadow-md shadow-emerald-500/5 scale-105"
+                            : "border-gray-100 bg-gray-50 opacity-60"
+                        }`}
+                      >
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-lg ${
+                          actionPermissions.export !== false ? "bg-emerald-500 text-white shadow-emerald-500/20" : "bg-gray-300 text-white"
+                        }`}>
+                          <FaFilePdf size={20} />
+                        </div>
+                        <div>
+                          <p className={`text-[11px] font-black uppercase tracking-widest ${actionPermissions.export !== false ? "text-gray-900" : "text-gray-400"}`}>
+                            {actionPermissions.export !== false ? "Exporting Allowed" : "Exporting Restricted"}
+                          </p>
+                          <p className="text-[9px] text-gray-400 font-bold mt-1">Global Data Access Security</p>
+                        </div>
+                        <div className={`ml-auto w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                          actionPermissions.export !== false ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-200 bg-white"
+                        }`}>
+                          {actionPermissions.export !== false && <FaCheck size={10} />}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-6 flex items-center gap-2">
                       <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
@@ -702,7 +782,50 @@ export default function SuperAdminControlSystem() {
                     </div>
                   </div>
 
+                  {/* 4. Voucher Type Controls */}
+                  <div className="mt-12 pt-8 border-t border-gray-100">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-6 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
+                      Voucher Type Control (Sales/Purchase)
+                    </h4>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {voucherTypes.length === 0 ? (
+                        <p className="text-[10px] text-gray-400 font-bold uppercase italic">No voucher types configured for this branch</p>
+                      ) : (
+                        voucherTypes.map(vt => (
+                          <div 
+                            key={vt._id}
+                            onClick={() => toggleVoucherType(vt._id)}
+                            className={`flex items-center gap-4 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
+                              allowedVoucherTypes.includes(vt._id)
+                                ? "border-primary/20 bg-primary/5 shadow-sm"
+                                : "border-gray-50 bg-white hover:border-gray-200"
+                            }`}
+                          >
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                              allowedVoucherTypes.includes(vt._id) ? "bg-primary text-white" : "bg-gray-100 text-gray-400"
+                            }`}>
+                              <FaFileInvoice className="text-xs" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-[10px] font-bold truncate ${allowedVoucherTypes.includes(vt._id) ? "text-gray-900" : "text-gray-500"}`}>
+                                {vt.name}
+                              </p>
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">
+                                {vt.orderType} • {vt.prefix}
+                              </p>
+                            </div>
+                            <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
+                              allowedVoucherTypes.includes(vt._id) ? "bg-primary border-primary text-white" : "border-gray-200 bg-white"
+                            }`}>
+                              {allowedVoucherTypes.includes(vt._id) && <FaCheck size={6} />}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (

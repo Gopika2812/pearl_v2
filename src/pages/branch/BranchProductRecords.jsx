@@ -134,12 +134,14 @@ const BranchProductRecords = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <button 
-              onClick={handleExportExcel}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold transition flex items-center gap-2 text-sm shadow-sm"
-            >
-              <FaFileExport /> Export Excel
-            </button>
+            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
+              <button 
+                onClick={handleExportExcel}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold transition flex items-center gap-2 text-sm shadow-sm"
+              >
+                <FaFileExport /> Export Excel
+              </button>
+            )}
             <button
               onClick={async () => {
                 if (!window.confirm("This will scan all past Purchase Invoices and update your price history. Proceed?")) return;

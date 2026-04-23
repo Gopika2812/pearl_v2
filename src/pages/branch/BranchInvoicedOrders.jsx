@@ -627,28 +627,32 @@ const BranchInvoicedOrders = () => {
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                onClick={handleExportPDF}
-                disabled={filteredSalesOrders.length === 0}
-                className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition disabled:opacity-50 shadow-sm text-sm font-bold"
-              >
-                <FaFilePdf /> PDF
-              </button>
-              <button
-                onClick={handleExportExcel}
-                disabled={filteredSalesOrders.length === 0}
-                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition disabled:opacity-50 shadow-sm text-sm font-bold"
-              >
-                <FaFileExcel /> Summary
-              </button>
-              <button
-                onClick={handleExportDetailedExcel}
-                disabled={filteredSalesOrders.length === 0}
-                className="flex items-center gap-2 bg-indigo-700 text-white px-4 py-2 rounded-lg hover:bg-indigo-800 transition disabled:opacity-50 shadow-sm text-sm font-bold"
-                title="Export with individual product lines and totals"
-              >
-                <FaFileExcel /> Detailed Report
-              </button>
+              {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
+                <>
+                  <button
+                    onClick={handleExportPDF}
+                    disabled={filteredSalesOrders.length === 0}
+                    className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition disabled:opacity-50 shadow-sm text-sm font-bold"
+                  >
+                    <FaFilePdf /> PDF
+                  </button>
+                  <button
+                    onClick={handleExportExcel}
+                    disabled={filteredSalesOrders.length === 0}
+                    className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition disabled:opacity-50 shadow-sm text-sm font-bold"
+                  >
+                    <FaFileExcel /> Summary
+                  </button>
+                  <button
+                    onClick={handleExportDetailedExcel}
+                    disabled={filteredSalesOrders.length === 0}
+                    className="flex items-center gap-2 bg-indigo-700 text-white px-4 py-2 rounded-lg hover:bg-indigo-800 transition disabled:opacity-50 shadow-sm text-sm font-bold"
+                    title="Export with individual product lines and totals"
+                  >
+                    <FaFileExcel /> Detailed Report
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => {
                   if (selectedOrderIds.length > 0) {

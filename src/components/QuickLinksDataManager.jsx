@@ -492,12 +492,14 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
         </button>
         <h2 className="text-3xl font-bold text-gray-900">{config.label} Records</h2>
         <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={handleExportExcel}
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg transition font-semibold shadow-md active:scale-95"
-          >
-            <FaFileExport /> Export Excel
-          </button>
+          {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || actionPermissions.export !== false) && (
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg transition font-semibold shadow-md active:scale-95"
+            >
+              <FaFileExport /> Export Excel
+            </button>
+          )}
           {type === "product" && (
             <>
               <button
