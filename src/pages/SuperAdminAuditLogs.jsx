@@ -197,8 +197,8 @@ const SuperAdminAuditLogs = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 px-4 md:px-8 pb-10">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-white p-4 md:p-6 pb-10 w-full">
+      <div className="w-full">
 
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">

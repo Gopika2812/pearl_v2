@@ -33,7 +33,7 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
 
   const menu = [
     { name: "Branch Management", path: "/super-admin/branch-management", icon: <FaBuilding /> },
-    { name: "User Approvals", path: "/super-admin/user-approvals", icon: <FaUserCheck /> },
+    { name: "User Management", path: "/super-admin/user-management", icon: <FaUserCheck /> },
     { name: "Control System", path: "/super-admin/control-system", icon: <FaUsersCog /> },
     { name: "Audit Logs", path: "/super-admin/audit-logs", icon: <FaClipboardList /> },
   ];
@@ -45,10 +45,9 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
   };
 
   return (
-    <>
+    <div className="font-poppins">
       {/* ================= DESKTOP SIDEBAR ================= */}
-      {/* ================= DESKTOP SIDEBAR ================= */}
-      <aside className="hidden md:flex md:flex-col w-20 hover:w-64 transition-all duration-300 h-screen bg-gradient-to-b from-secondary to-secondary/90 text-white shadow-xl fixed left-0 top-0 z-50 overflow-x-hidden group">
+      <aside className="hidden md:flex md:flex-col w-20 hover:w-64 transition-all duration-300 h-screen bg-secondary text-white shadow-xl fixed left-0 top-0 z-50 overflow-x-hidden group border-r border-white/5">
         <div className="px-4 py-6 border-b border-white/10 flex items-center h-[96px]">
           <div className="flex items-center gap-3 w-full justify-center group-hover:justify-start">
             <img
@@ -61,17 +60,17 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
         </div>
 
         {/* Super Admin Badge */}
-        <div className="mx-3 mt-4 mb-4 px-3 py-3 bg-yellow-400/20 border border-yellow-400/50 rounded-lg flex items-center gap-3 overflow-hidden">
+        <div className="mx-3 mt-4 mb-4 px-3 py-3 bg-primary/20 border border-primary/50 rounded-lg flex items-center gap-3 overflow-hidden">
           <div className="w-8 flex justify-center flex-shrink-0">
-            <FaShieldAlt className="text-yellow-300 text-lg" />
+            <FaShieldAlt className="text-primary text-lg" />
           </div>
           <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto whitespace-nowrap">
-            <p className="text-xs text-yellow-200 font-semibold">SUPER ADMIN</p>
+            <p className="text-[10px] text-primary font-black uppercase tracking-widest">SUPER ADMIN</p>
             <p className="text-sm font-bold text-white">{user?.username || "Admin"}</p>
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4 no-scrollbar">
           {menu.map((item, index) => {
             const active = location.pathname === item.path;
             return (
@@ -81,7 +80,7 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
                 onClick={() => onClose()}
                 className={`mx-3 mb-1 flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
                   active
-                    ? "bg-white text-secondary shadow-md font-semibold"
+                    ? "bg-primary text-white shadow-lg shadow-primary/20 font-semibold"
                     : "hover:bg-white/10 text-white/90"
                 }`}
                 title={item.name}
@@ -89,7 +88,7 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
                 <div className="w-8 flex justify-center flex-shrink-0">
                   <span className="text-lg">{item.icon}</span>
                 </div>
-                <span className="text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">{item.name}</span>
+                <span className="text-sm font-bold uppercase tracking-wide whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-0 group-hover:w-auto overflow-hidden">{item.name}</span>
               </Link>
             );
           })}
@@ -99,7 +98,7 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
         <div className="p-4 border-t border-white/10 flex justify-center group-hover:justify-start">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-2 bg-red-500/20 hover:bg-red-500/30 text-red-200 px-3 py-2 rounded-xl transition-colors text-sm font-semibold justify-center group-hover:justify-start overflow-hidden"
+            className="w-full flex items-center gap-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 px-3 py-2 rounded-xl transition-colors text-sm font-semibold justify-center group-hover:justify-start overflow-hidden shadow-lg shadow-rose-500/10"
             title="Logout"
           >
             <div className="w-6 flex justify-center flex-shrink-0">
@@ -119,7 +118,7 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
       />
 
       <aside
-        className={`fixed left-0 top-0 h-screen w-64 bg-gradient-to-b from-secondary to-secondary/90 text-white shadow-xl md:hidden z-50 transform transition-transform ${
+        className={`fixed left-0 top-0 h-screen w-64 bg-secondary text-white shadow-xl md:hidden z-50 transform transition-transform ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -138,15 +137,15 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
         </div>
 
         {/* Super Admin Badge */}
-        <div className="mx-3 mt-4 mb-4 px-4 py-3 bg-yellow-400/20 border border-yellow-400/50 rounded-lg flex items-center gap-3">
-          <FaShieldAlt className="text-yellow-300" />
+        <div className="mx-3 mt-4 mb-4 px-4 py-3 bg-primary/20 border border-primary/50 rounded-lg flex items-center gap-3">
+          <FaShieldAlt className="text-primary" />
           <div>
-            <p className="text-xs text-yellow-200 font-semibold">SUPER ADMIN</p>
+            <p className="text-[10px] text-primary font-black uppercase tracking-widest">SUPER ADMIN</p>
             <p className="text-sm font-bold text-white">{user?.username || "Admin"}</p>
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4">
+        <nav className="flex-1 overflow-y-auto py-4 px-2 no-scrollbar">
           {menu.map((item, index) => {
             const active = location.pathname === item.path;
             return (
@@ -156,12 +155,12 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
                 onClick={() => onClose()}
                 className={`mx-3 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${
                   active
-                    ? "bg-white text-secondary shadow-md font-semibold"
+                    ? "bg-primary text-white shadow-lg shadow-primary/20 font-semibold"
                     : "hover:bg-white/10 text-white/90"
                 }`}
               >
                 <span className="text-lg">{item.icon}</span>
-                <span className="text-sm">{item.name}</span>
+                <span className="text-sm font-bold uppercase tracking-wide">{item.name}</span>
               </Link>
             );
           })}
@@ -171,14 +170,14 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
         <div className="p-4 border-t border-white/10">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-200 transition font-semibold text-sm"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 transition font-semibold text-sm shadow-lg shadow-rose-500/10"
           >
             <FaSignOutAlt />
             Logout
           </button>
         </div>
       </aside>
-    </>
+    </div>
   );
 };
 

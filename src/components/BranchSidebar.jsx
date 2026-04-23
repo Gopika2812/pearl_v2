@@ -77,9 +77,13 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
   // Permission check helper
   const isAllowed = (page) => {
     if (!user) return false;
-    if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
+    
+    // Global Super Admin sees everything
+    if (user.role === "SUPER_ADMIN") return true;
     
     const allowedPages = user.allowedPages || [];
+    
+    // For all branch roles (ADMIN, MANAGER, etc.), respect the allowedPages configuration
     return allowedPages.includes(page.id);
   };
 
@@ -94,8 +98,8 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
         to={isDisabled ? location.pathname : item.path}
         className={`mx-3 mb-1 flex items-center gap-4 px-3 py-3.5 rounded-2xl transition-all duration-300 relative group/item ${
           active
-            ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/20 font-bold"
-            : "hover:bg-white/5 text-slate-400 hover:text-white"
+            ? "bg-gradient-to-r from-[#4096d3] to-[#4096d3]/80 text-white shadow-lg shadow-[#4096d3]/20 font-bold"
+            : "hover:bg-white/5 text-white/40 hover:text-white"
         } ${isDisabled ? "opacity-30 cursor-not-allowed grayscale pointer-events-none" : ""}`}
         onClick={isDisabled ? (e) => e.preventDefault() : (isMobile ? onClose : undefined)}
         title={isDisabled ? "Complete tasks to unlock navigation" : item.name}
@@ -169,10 +173,10 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
 
 
   return (
-    <>
+    <div className="font-poppins">
       {/* DESKTOP SIDEBAR */}
       <aside
-        className="hidden md:flex md:flex-col w-20 hover:w-64 transition-all duration-500 ease-in-out h-screen bg-slate-900/95 backdrop-blur-xl text-white shadow-2xl fixed left-0 top-0 group z-50 overflow-x-hidden border-r border-white/5"
+        className="hidden md:flex md:flex-col w-20 hover:w-64 transition-all duration-500 ease-in-out h-screen bg-[#001f3f] backdrop-blur-xl text-white shadow-2xl fixed left-0 top-0 group z-50 overflow-x-hidden border-r border-white/5"
         onMouseLeave={() => setOpenDropdowns({})}
       >
         {/* Header with Glass Effect */}
@@ -184,11 +188,11 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
                 alt="Pearls ERP Logo"
                 className="w-10 h-10 object-contain rounded-xl shadow-lg shadow-black/20"
               />
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-slate-900 rounded-full"></div>
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#4096d3] border-2 border-[#001f3f] rounded-full"></div>
             </div>
             <div className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-x-2 group-hover:translate-x-0">
-              <p className="font-black text-sm tracking-tight text-white uppercase italic">Pearls <span className="text-emerald-400 not-italic">ERP</span></p>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{branch?.name}</p>
+              <p className="font-black text-sm tracking-tight text-white uppercase italic">Pearls <span className="text-[#4096d3] not-italic">ERP</span></p>
+              <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{branch?.name}</p>
             </div>
           </div>
         </div>
@@ -211,23 +215,23 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
           <div className="mx-3 mb-2 rounded-lg overflow-hidden">
             {/* Collapsed: just a shield icon centered */}
             <div className="flex justify-center group-hover:hidden">
-              <div className="w-10 h-10 flex items-center justify-center bg-orange-500/20 border border-orange-400/40 rounded-lg">
-                <FaShieldAlt className="text-orange-300 text-sm" />
+              <div className="w-10 h-10 flex items-center justify-center bg-[#4096d3]/20 border border-[#4096d3]/40 rounded-lg">
+                <FaShieldAlt className="text-[#4096d3] text-sm" />
               </div>
             </div>
             {/* Expanded: full admin view info */}
-            <div className="hidden group-hover:block bg-orange-500/20 border border-orange-400/40 rounded-lg px-3 py-2">
+            <div className="hidden group-hover:block bg-[#4096d3]/20 border border-[#4096d3]/40 rounded-lg px-3 py-2">
               <div className="flex items-center gap-2">
-                <FaShieldAlt className="text-orange-300 text-sm flex-shrink-0" />
+                <FaShieldAlt className="text-[#4096d3] text-sm flex-shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-[10px] text-orange-200 font-semibold uppercase">Admin View</p>
+                  <p className="text-[10px] text-[#4096d3] font-semibold uppercase">Admin View</p>
                   <p className="text-xs text-white font-bold truncate">{superAdminViewBranch?.name}</p>
                 </div>
               </div>
               <div className="mt-2">
                 <button
                   onClick={handleBackToSuperAdmin}
-                  className="w-full flex items-center gap-2 text-orange-200 hover:text-white text-xs font-semibold transition"
+                  className="w-full flex items-center gap-2 text-[#4096d3]/80 hover:text-white text-xs font-semibold transition"
                 >
                   <FaShieldAlt size={10} /> Back to Super Admin
                 </button>
@@ -240,7 +244,7 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
         <div className="p-4 border-t border-white/20 flex justify-center group-hover:justify-start">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg transition-colors text-sm font-semibold justify-center group-hover:justify-start overflow-hidden"
+            className="w-full flex items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white px-3 py-2 rounded-lg transition-colors text-sm font-semibold justify-center group-hover:justify-start overflow-hidden shadow-lg shadow-rose-500/20"
             title="Logout"
           >
             <div className="w-6 flex justify-center flex-shrink-0">
@@ -261,7 +265,7 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
 
       {/* MOBILE SIDEBAR */}
       <aside
-        className={`md:hidden fixed top-0 left-0 h-full w-[280px] bg-slate-900 shadow-2xl z-50 transform transition-transform duration-500 ease-in-out flex flex-col ${
+        className={`md:hidden fixed top-0 left-0 h-full w-[280px] bg-[#001f3f] shadow-2xl z-50 transform transition-transform duration-500 ease-in-out flex flex-col ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -269,7 +273,7 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
         <div className="flex justify-end p-4 border-b border-white/20">
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/20 transition"
+            className="p-2 rounded-lg hover:bg-white/20 transition text-white"
           >
             <FaTimes size={22} />
           </button>
@@ -284,8 +288,8 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
               className="h-10 w-10 object-contain rounded-xl shadow-lg"
             />
             <div className="min-w-0">
-              <p className="font-black text-sm text-white uppercase italic truncate">Pearls <span className="text-emerald-400 not-italic">ERP</span></p>
-              <p className="text-[10px] text-slate-400 font-bold uppercase truncate tracking-widest">{branch?.name}</p>
+              <p className="font-black text-sm text-white uppercase italic truncate">Pearls <span className="text-[#4096d3] not-italic">ERP</span></p>
+              <p className="text-[10px] text-white/40 font-bold uppercase truncate tracking-widest">{branch?.name}</p>
             </div>
           </div>
         </div>
@@ -304,11 +308,11 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
 
           {/* Super Admin Back Button - Mobile */}
           {isSuperAdminViewing && (
-            <div className="mx-2 mb-2 px-4 py-3 bg-orange-500/20 border border-orange-400/40 rounded-xl">
-              <p className="text-[10px] text-orange-200 font-semibold uppercase mb-1">Admin View: {superAdminViewBranch?.name}</p>
+            <div className="mx-2 mb-2 px-4 py-3 bg-[#4096d3]/20 border border-[#4096d3]/40 rounded-xl">
+              <p className="text-[10px] text-[#4096d3] font-semibold uppercase mb-1 text-left">Admin View: {superAdminViewBranch?.name}</p>
               <button
                 onClick={handleBackToSuperAdmin}
-                className="flex items-center gap-2 text-orange-200 hover:text-white text-sm font-semibold transition"
+                className="flex items-center gap-2 text-[#4096d3] hover:text-white text-sm font-semibold transition"
               >
                 <FaShieldAlt size={12} /> Back to Super Admin
               </button>
@@ -321,13 +325,13 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
         <div className="p-4 border-t border-white/20">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition text-sm font-semibold"
+            className="w-full flex items-center justify-center gap-2 bg-rose-500 hover:bg-rose-600 text-white px-4 py-2 rounded-lg transition text-sm font-semibold shadow-lg shadow-rose-500/20"
           >
             <FaSignOutAlt /> Logout
           </button>
         </div>
       </aside>
-    </>
+    </div>
   );
 };
 

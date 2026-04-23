@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FaLock, FaSignInAlt, FaUser, FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaLock, FaSignInAlt, FaUser, FaEye, FaEyeSlash, FaShieldAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -92,88 +92,129 @@ export default function BranchLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-secondary to-primary flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Branch Login</h1>
-          <p className="text-gray-600">Enter your credentials</p>
-        </div>
+    <div className="min-h-screen bg-secondary flex items-center justify-center p-4 font-poppins overflow-hidden relative">
+      {/* Dynamic Background Elements */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 bg-primary/10 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 bg-primary/5 rounded-full blur-[120px] animate-pulse transition-all duration-1000"></div>
+      </div>
 
-        {/* Login Form */}
-        <form onSubmit={handleLogin} className="space-y-6">
-          {/* Username */}
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Username
-            </label>
-            <div className="relative">
-              <FaUser className="absolute left-4 top-3.5 text-gray-400" />
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
-                className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
-              />
+      <div className="bg-white/95 backdrop-blur-xl rounded-[40px] shadow-2xl w-full max-w-5xl flex flex-col md:flex-row overflow-hidden border border-white/20 animate-in fade-in zoom-in duration-500 relative z-10">
+        {/* Branding Side */}
+        <div className="hidden md:flex md:w-1/2 bg-secondary p-12 flex-col justify-between relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-full h-full opacity-10 pointer-events-none">
+            <div className="absolute top-10 right-10 w-64 h-64 border-4 border-white rounded-full"></div>
+            <div className="absolute bottom-20 -left-10 w-96 h-96 border-8 border-white rounded-full"></div>
+          </div>
+          
+          <div className="relative z-10">
+            <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mb-8 border border-white/20 shadow-xl">
+              <FaShieldAlt className="text-3xl text-primary" />
             </div>
+            <h2 className="text-4xl font-black text-white leading-tight mb-4 uppercase tracking-tighter">
+              The Next <br />
+              <span className="text-primary">Generation</span> <br />
+              ERP Platform
+            </h2>
+            <p className="text-white/60 font-medium text-lg max-w-sm">
+              Secure, scalable, and intelligent business management for modern enterprises.
+            </p>
           </div>
 
-          {/* Password */}
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Password
-            </label>
-            <div className="relative">
-              <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
-                className="w-full pl-10 pr-12 py-3 border-2 border-gray-300 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
-              />
+          <div className="relative z-10">
+            <div className="flex items-center gap-4 text-white/40 text-sm font-black uppercase tracking-widest">
+              <div className="w-8 h-[2px] bg-primary"></div>
+              Pearls ERP v2.0
+            </div>
+          </div>
+        </div>
+
+        {/* Login Form Side */}
+        <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center bg-white">
+          <div className="mb-10">
+            <h1 className="text-3xl font-black text-secondary mb-2 uppercase tracking-tight">Access Terminal</h1>
+            <p className="text-secondary/40 font-bold text-xs uppercase tracking-[0.2em]">Authorized Personnel Only</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Identity ID</label>
+              <div className="relative group">
+                <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-primary transition-colors">
+                  <FaUser size={14} />
+                </div>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Enter username"
+                  className="w-full pl-14 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-primary focus:bg-white transition-all outline-none font-bold text-sm text-secondary shadow-inner"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Access Protocol</label>
+              <div className="relative group">
+                <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-primary transition-colors">
+                  <FaLock size={14} />
+                </div>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  className="w-full pl-14 pr-14 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-primary focus:bg-white transition-all outline-none font-bold text-sm text-secondary shadow-inner"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-5 top-1/2 -translate-y-1/2 text-secondary/20 hover:text-primary transition-colors"
+                >
+                  {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-secondary hover:bg-secondary/90 text-white font-black py-4 rounded-[20px] shadow-xl shadow-secondary/20 transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-xs disabled:opacity-50"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <>
+                  <FaSignInAlt /> Initiate Session
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="mt-12 space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-1 h-[1px] bg-gray-100"></div>
+              <span className="text-[9px] font-black text-gray-300 uppercase tracking-[0.2em]">External Access</span>
+              <div className="flex-1 h-[1px] bg-gray-100"></div>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors focus:outline-none"
+                onClick={() => navigate("/user-register")}
+                className="py-3 px-4 rounded-xl border-2 border-gray-100 text-secondary/60 hover:border-primary hover:text-primary font-black text-[10px] uppercase tracking-widest transition-all text-center"
               >
-                {showPassword ? <FaEyeSlash /> : <FaEye />}
+                Register Account
+              </button>
+              <button
+                onClick={() => navigate("/super-admin-login")}
+                className="py-3 px-4 rounded-xl border-2 border-gray-100 text-secondary/60 hover:border-primary hover:text-primary font-black text-[10px] uppercase tracking-widest transition-all text-center"
+              >
+                Super Admin
               </button>
             </div>
           </div>
-
-          {/* Login Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            <FaSignInAlt />
-            {loading ? "Logging in..." : "Login"}
-          </button>
-        </form>
-
-        {/* Links */}
-        <div className="mt-8 space-y-2 text-center">
-          <p className="text-gray-600 text-sm">
-            Don't have an account?{" "}
-            <button
-              onClick={() => navigate("/user-register")}
-              className="text-primary font-bold hover:underline"
-            >
-              Register here
-            </button>
-          </p>
-          <p className="text-gray-600 text-sm">
-            Are you a super admin?{" "}
-            <button
-              onClick={() => navigate("/super-admin-login")}
-              className="text-primary font-bold hover:underline"
-            >
-              Login as Super Admin
-            </button>
-          </p>
         </div>
       </div>
     </div>

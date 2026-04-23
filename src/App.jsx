@@ -65,10 +65,11 @@ import BranchLoginPage from "./pages/BranchLoginPage";
 import BranchRegisterPage from "./pages/BranchRegisterPage";
 import UserRegistrationPage from "./pages/UserRegistrationPage";
 import SuperAdminLoginPage from "./pages/SuperAdminLoginPage";
+import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import SuperAdminBranchManagement from "./pages/SuperAdminBranchManagement";
 import SuperAdminControlSystem from "./pages/SuperAdminControlSystem";
 import SuperAdminAuditLogs from "./pages/SuperAdminAuditLogs";
-import SuperAdminUserApproval from "./pages/SuperAdminUserApproval";
+import SuperAdminUserManagement from "./pages/SuperAdminUserManagement";
 import CRMPage from "./pages/CRMPage";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerSummary from "./pages/CustomerSummary";
@@ -156,15 +157,53 @@ function AppContent() {
     wakeUpServer();
   }, []);
 
-  // RBAC Permission Check
+  // Global Session & Status Check + RBAC Enforcement
   useEffect(() => {
-    if (isBranchRoute && !superAdminViewBranch && user) {
-      // Skip check for ADMIN and SUPER_ADMIN roles
-      if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return;
+    const verifyAccess = async () => {
+      if (!isBranchRoute || superAdminViewBranch || !user) return;
 
-      // Map paths to permission IDs
+      // 1. ACCOUNT STATUS VERIFICATION (Server-side check)
+      // This ensures that if an admin blocks a user, they are kicked out immediately
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_BASE}/branch-users/${user.id || user._id}`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            const latestUser = data.data;
+            
+            // Check if user or branch is deactivated
+            if (latestUser.status !== "ACTIVE" || (latestUser.branch && latestUser.branch.status !== "ACTIVE")) {
+              toast.error("🛑 Access revoked. Account or Branch is no longer active.");
+              localStorage.clear();
+              window.location.href = "/branch-login";
+              return;
+            }
+
+            // Sync permissions if they changed in DB
+            if (JSON.stringify(latestUser.allowedPages) !== JSON.stringify(user.allowedPages)) {
+              localStorage.setItem("user", JSON.stringify(latestUser));
+            }
+          }
+        } else if (res.status === 401) {
+          localStorage.clear();
+          navigate("/branch-login");
+          return;
+        }
+      } catch (err) {
+        console.warn("Status check failed:", err.message);
+      }
+
+      // 2. GRANULAR PERMISSION ENFORCEMENT
+      // Skip check ONLY for SUPER_ADMIN. Normal branch ADMINS must respect allowedPages.
+      if (user.role === "SUPER_ADMIN") return;
+
       const pathPermissionMap = {
         "/branch-home": "home",
+        "/branch/tokenization": "tokenization",
         "/branch/po": "create-po",
         "/branch/purchase-orders": "purchase-list",
         "/branch/purchase-invoices": "purchase-invoice-list",
@@ -186,21 +225,24 @@ function AppContent() {
         "/branch/receipt-records": "receipt",
         "/branch/payment-records": "payment-po",
         "/branch/summary": "summary",
-        "/admin/branches": "admin-branches",
+        "/branch/product-records": "product-records",
+        "/branch/product-config": "product-config",
+        "/branch/locked-prices": "locked-prices",
       };
 
       const requiredPermission = pathPermissionMap[location.pathname];
       const allowedPages = user.allowedPages || [];
 
-      // If page has a defined permission and user doesn't have it, redirect
-          if (requiredPermission && !allowedPages.includes(requiredPermission)) {
-            if (location.pathname !== "/branch-home") {
-              toast.error("You don't have permission to access that page");
-              navigate("/branch-home");
-            }
-          }
+      if (requiredPermission && !allowedPages.includes(requiredPermission)) {
+        if (location.pathname !== "/branch-home") {
+          toast.error("Access Denied: Permission not granted for this module.");
+          navigate("/branch-home");
         }
-    }, [location.pathname, isBranchRoute, superAdminViewBranch, navigate, user]);
+      }
+    };
+
+    verifyAccess();
+  }, [location.pathname, isBranchRoute, superAdminViewBranch, navigate, user]);
 
 
 
@@ -361,7 +403,7 @@ function AppContent() {
             )}
 
             {/* Main Content Area: Offset by sidebar width (20 units = 80px) on desktop */}
-            <div className={`flex-1 min-h-screen flex flex-col transition-all duration-300 ${!hideLayout && !isInsightsRoute ? "md:ml-20" : ""}`}>
+            <div className={`flex-1 min-h-screen flex flex-col transition-all duration-300 w-full overflow-hidden ${(!hideLayout && !isInsightsRoute) || isSuperAdminRoute ? "md:ml-20" : ""}`}>
               {!hideLayout && (
                 <>
                   {user?.role === "SUPER_ADMIN" ? (
@@ -374,7 +416,7 @@ function AppContent() {
                 </>
               )}
 
-              <div className={`flex-1 transition-all duration-300 ${isInsightsRoute ? "p-0" : "p-6"} ${!hideLayout ? "pt-24" : ""}`}>
+              <div className={`flex-1 transition-all duration-300 overflow-y-auto ${isInsightsRoute || isSuperAdminRoute ? "p-0" : "p-6"} ${!hideLayout ? "pt-16" : ""}`}>
                 <Routes>
                   <Route path="/" element={<BranchLoginPage />} />
                   <Route path="/branch/other-payment" element={<BranchOtherPayment />} />
@@ -383,7 +425,7 @@ function AppContent() {
                   <Route path="/branch-register" element={<BranchRegisterPage />} />
                   <Route path="/user-register" element={<UserRegistrationPage />} />
                   <Route path="/super-admin-login" element={<SuperAdminLoginPage />} />
-                  <Route path="/super-admin/dashboard" element={<ProtectedRoute element={<SuperAdminBranchManagement />} role={["SUPER_ADMIN"]} />} />
+                  <Route path="/super-admin/dashboard" element={<ProtectedRoute element={<SuperAdminDashboard />} role={["SUPER_ADMIN"]} />} />
                   <Route path="/super-admin/branch-management" element={<ProtectedRoute element={<SuperAdminBranchManagement />} role={["SUPER_ADMIN"]} />} />
                   <Route path="/home" element={<Home />} />
                   <Route path="/login" element={<HrLogin />} />
@@ -499,9 +541,9 @@ function AppContent() {
                     path="/super-admin/audit-logs"
                     element={<ProtectedRoute element={<SuperAdminAuditLogs />} role={["SUPER_ADMIN"]} />}
                   />
-                  <Route
-                    path="/super-admin/user-approvals"
-                    element={<ProtectedRoute element={<SuperAdminUserApproval />} role={["SUPER_ADMIN"]} />}
+                  <Route 
+                    path="/super-admin/user-management" 
+                    element={<ProtectedRoute element={<SuperAdminUserManagement />} role={["SUPER_ADMIN"]} />} 
                   />
                 </Routes>
             </div>

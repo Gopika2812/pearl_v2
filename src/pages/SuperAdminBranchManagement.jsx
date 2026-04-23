@@ -1,208 +1,57 @@
 import { useEffect, useState } from "react";
-import { FaBuilding, FaCheck, FaEdit, FaEnvelope, FaPhone, FaPlus, FaTimes, FaTrash, FaUser, FaUsers } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
+import {
+  FaBuilding, FaPlus, FaEdit, FaCheck, FaTimes,
+  FaPhone, FaEnvelope, FaMapMarkerAlt, FaGlobe, FaShieldAlt
+} from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../api";
+import { API_BASE, fetchWithAuth } from "../api";
+import { useBranch } from "../context/BranchContext";
 
-export default function SuperAdminBranchManagement() {
-  const navigate = useNavigate();
+const SuperAdminBranchManagement = () => {
+  const { setSuperAdminViewBranch } = useBranch();
   const [branches, setBranches] = useState([]);
-  const [showBranchModal, setShowBranchModal] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showBranchModal, setShowBranchModal] = useState(false);
   const [editingBranch, setEditingBranch] = useState(null);
-  const [staffMembers, setStaffMembers] = useState([]);
-  const [loadingStaff, setLoadingStaff] = useState(false);
-  const [logoFile, setLogoFile] = useState(null);
-  const [uploadingLogo, setUploadingLogo] = useState(false);
 
-  // Check if user is SUPER_ADMIN
-  useEffect(() => {
-    const userData = localStorage.getItem("user");
-    if (!userData) {
-      navigate("/super-admin-login");
-      return;
-    }
-
-    const user = JSON.parse(userData);
-    if (user.role !== "SUPER_ADMIN") {
-      toast.error("You do not have permission to access this page");
-      navigate("/branch-login");
-      return;
-    }
-  }, [navigate]);
-
-  // Branch Form
   const [branchForm, setBranchForm] = useState({
     name: "",
     code: "",
     location: "",
-    address: "",
     phone: "",
     email: "",
-    manager: "",
-    isMainBranch: false,
+    address: "",
     gstin: "",
-    city: "",
-    state: "Tamil Nadu",
-    stateCode: "33",
-    pincode: "",
     gpayNo: "",
-    upiId: "",
     gstzenClientId: "",
     gstzenClientSecret: "",
     tokenBlockTime: 120,
+    isMainBranch: false,
+    manager: "",
+    status: "ACTIVE",
   });
 
-
-  // Fetch branches
   useEffect(() => {
     fetchBranches();
   }, []);
 
-  // Fetch staff members when branch is selected
-  useEffect(() => {
-    if (selectedBranch) {
-      fetchStaffMembers(selectedBranch._id);
-    }
-  }, [selectedBranch]);
-
   const fetchBranches = async () => {
     try {
+      setLoading(true);
       const res = await fetch(`${API_BASE}/branches`);
       const data = await res.json();
       if (data.success) {
-        setBranches(data.data);
+        setBranches(data.data || []);
+        if (data.data?.length > 0 && !selectedBranch) {
+          setSelectedBranch(data.data[0]);
+        }
       }
-    } catch (error) {
-      console.error("Error fetching branches:", error);
+    } catch (err) {
+      console.error("Failed to fetch branches:", err);
       toast.error("Failed to load branches");
-    }
-  };
-
-  const fetchStaffMembers = async (branchId) => {
-    setLoadingStaff(true);
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/branch-users/branch/${branchId}`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
-      const data = await res.json();
-      if (data.success) {
-        setStaffMembers(data.data || []);
-      } else {
-        setStaffMembers([]);
-      }
-    } catch (error) {
-      console.error("Error fetching staff members:", error);
-      setStaffMembers([]);
-    } finally {
-      setLoadingStaff(false);
-    }
-  };
-
-  const handleCreateBranch = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      if (!branchForm.name || !branchForm.code) {
-        toast.error("Branch name and code are required");
-        setLoading(false);
-        return;
-      }
-
-      const token = localStorage.getItem("token");
-      const isEditing = editingBranch !== null;
-
-      if (isEditing) {
-        // Update branch
-        const res = await fetch(`${API_BASE}/branches/${editingBranch._id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-          },
-          body: JSON.stringify(branchForm),
-        });
-
-        const data = await res.json();
-
-        if (data.success) {
-          toast.success(`✅ Branch updated: ${data.data.name}`);
-          setBranches(branches.map((b) => (b._id === editingBranch._id ? data.data : b)));
-          setSelectedBranch(data.data);
-          setEditingBranch(null);
-          setShowBranchModal(false);
-          resetForm();
-        } else {
-          toast.error(data.message || "Failed to update branch");
-        }
-      } else {
-        // Create new branch
-        const res = await fetch(`${API_BASE}/branches`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-          },
-          body: JSON.stringify(branchForm),
-        });
-
-        const data = await res.json();
-
-        if (data.success) {
-          toast.success(`✅ Branch created: ${data.data.name}`);
-          setBranches([...branches, data.data]);
-          setShowBranchModal(false);
-          resetForm();
-        } else {
-          toast.error(data.message || "Failed to create branch");
-        }
-      }
-    } catch (error) {
-      console.error("Error creating/updating branch:", error);
-      toast.error("Error creating/updating branch");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleLogoUpload = async (branchId) => {
-    if (!logoFile) return;
-    setUploadingLogo(true);
-
-    try {
-      const token = localStorage.getItem("token");
-      const formData = new FormData();
-      formData.append("logo", logoFile);
-
-      const res = await fetch(`${API_BASE}/branches/${branchId}/logo`, {
-        method: "PATCH",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        toast.success("✅ Logo uploaded successfully!");
-        setBranches(branches.map(b => b._id === branchId ? { ...b, logo: data.logo } : b));
-        if (selectedBranch?._id === branchId) {
-          setSelectedBranch({ ...selectedBranch, logo: data.logo });
-        }
-        setLogoFile(null);
-      } else {
-        toast.error(data.message || "Failed to upload logo");
-      }
-    } catch (error) {
-      console.error("Logo upload error:", error);
-      toast.error("Error uploading logo");
-    } finally {
-      setUploadingLogo(false);
     }
   };
 
@@ -211,695 +60,430 @@ export default function SuperAdminBranchManagement() {
       name: "",
       code: "",
       location: "",
-      address: "",
       phone: "",
       email: "",
-      manager: "",
-      isMainBranch: false,
+      address: "",
       gstin: "",
       gpayNo: "",
-      upiId: "",
       gstzenClientId: "",
       gstzenClientSecret: "",
       tokenBlockTime: 120,
+      isMainBranch: false,
+      manager: "",
+      status: "ACTIVE",
     });
-
     setEditingBranch(null);
-    setLogoFile(null);
+  };
+
+  const handleCreateBranch = async (e) => {
+    e.preventDefault();
+    try {
+      const url = editingBranch
+        ? `${API_BASE}/branches/${editingBranch._id}`
+        : `${API_BASE}/branches`;
+      const method = editingBranch ? "PUT" : "POST";
+
+      const res = await fetchWithAuth(url, {
+        method,
+        body: JSON.stringify(branchForm),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        toast.success(editingBranch ? "Branch updated" : "Branch created");
+        setShowBranchModal(false);
+        resetForm();
+        fetchBranches();
+      } else {
+        toast.error(data.message || "Operation failed");
+      }
+    } catch (err) {
+      console.error("Error saving branch:", err);
+      toast.error("An error occurred");
+    }
   };
 
   const openEditModal = (branch) => {
     setEditingBranch(branch);
     setBranchForm({
-      name: branch.name,
-      code: branch.code,
-      location: branch.location || "",
-      address: branch.address || "",
-      phone: branch.phone || "",
-      email: branch.email || "",
-      manager: branch.manager || "",
-      isMainBranch: branch.isMainBranch || false,
-      gstin: branch.gstin || "",
-      gpayNo: branch.gpayNo || "",
-      upiId: branch.upiId || "",
-      gstzenClientId: branch.gstzenClientId || "",
-      gstzenClientSecret: branch.gstzenClientSecret || "",
+      ...branch,
       tokenBlockTime: branch.tokenBlockTime || 120,
     });
-
     setShowBranchModal(true);
   };
 
-  const closeModal = () => {
-    setShowBranchModal(false);
-    resetForm();
-  };
-
-  const handleDeleteBranch = async (branchId) => {
-    if (!window.confirm("Are you sure you want to delete this branch?")) return;
-
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/branches/${branchId}`, {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        toast.success("Branch deleted");
-        setBranches(branches.filter((b) => b._id !== branchId));
-        setSelectedBranch(null);
-      } else {
-        toast.error(data.message || "Failed to delete branch");
-      }
-    } catch (error) {
-      console.error("Error deleting branch:", error);
-      toast.error("Error deleting branch");
-    }
-  };
-
-  const handleRemoveStaff = async (staffId) => {
-    if (!window.confirm("Remove this staff member from the branch?")) return;
-
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/branch-users/${staffId}`, {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        toast.success("Staff member removed");
-        setStaffMembers(staffMembers.filter((s) => s._id !== staffId));
-      } else {
-        toast.error(data.message || "Failed to remove staff");
-      }
-    } catch (error) {
-      console.error("Error removing staff:", error);
-      toast.error("Error removing staff");
-    }
-  };
+  if (loading && branches.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin text-secondary text-4xl">⟳</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-100 pt-20 md:pt-4 md:pl-20 px-4 md:px-6 pb-10">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-white p-4 md:p-6 pb-10 w-full font-poppins text-secondary">
+      <div className="w-full">
+        
         {/* Header */}
-        <div className="bg-gradient-to-r from-secondary to-primary text-white rounded-2xl shadow-lg p-8 mb-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">
-                <FaBuilding />
-                Branch Management
-              </h1>
-              <p className="text-blue-100">Create, edit and manage all branches system-wide</p>
-            </div>
-            <button
-              onClick={() => {
-                resetForm();
-                setShowBranchModal(true);
-              }}
-              className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition"
-            >
-              <FaPlus />
-              New Branch
-            </button>
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-extrabold text-gray-800 flex items-center gap-3">
+              <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+                <FaBuilding className="text-primary text-sm" />
+              </span>
+              Branch Management
+            </h1>
+            <p className="text-gray-500 mt-1 text-sm">
+              Configure and monitor system branch infrastructure
+              <span className="ml-2 bg-primary/10 text-primary text-xs font-bold px-2 py-0.5 rounded-full">
+                {branches.length} active nodes
+              </span>
+            </p>
           </div>
+          <button
+            onClick={() => {
+              resetForm();
+              setShowBranchModal(true);
+            }}
+            className="bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary/20"
+          >
+            <FaPlus size={12} />
+            <span className="text-xs uppercase tracking-widest">New Node</span>
+          </button>
         </div>
 
-        {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Branches List */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-              <div className="bg-primary text-white p-4 font-bold">
-                📍 Branches ({branches.length})
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          {/* Left Column: Branch Directory */}
+          <div className="lg:col-span-4 xl:col-span-3">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden sticky top-24">
+              <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/50">
+                <h2 className="font-black text-[10px] uppercase tracking-widest text-gray-400">Directory</h2>
               </div>
-              <div className="divide-y max-h-[600px] overflow-y-auto">
-                {branches.length === 0 ? (
-                  <div className="p-6 text-center text-gray-500">
-                    <p>No branches created yet</p>
-                    <p className="text-sm mt-2">Click "New Branch" to get started</p>
-                  </div>
-                ) : (
-                  branches.map((branch) => (
-                    <div
-                      key={branch._id}
-                      onClick={() => setSelectedBranch(branch)}
-                      className={`p-4 cursor-pointer transition ${
-                        selectedBranch?._id === branch._id
-                          ? "bg-primary/10 border-l-4 border-primary"
-                          : "hover:bg-gray-50"
-                      }`}
-                    >
-                      <div className="font-bold text-gray-900">{branch.name}</div>
-                      <div className="text-sm text-gray-600 mt-1">
-                        <span className="inline-block bg-gray-100 px-2 py-1 rounded text-xs font-bold">
-                          {branch.code}
+              <div className="divide-y divide-gray-50 max-h-[calc(100vh-300px)] overflow-y-auto no-scrollbar">
+                {branches.map((branch) => (
+                  <div
+                    key={branch._id}
+                    onClick={() => setSelectedBranch(branch)}
+                    className={`p-4 cursor-pointer transition-all relative group ${
+                      selectedBranch?._id === branch._id
+                        ? "bg-primary/5"
+                        : "hover:bg-gray-50/70"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <div className={`font-bold text-sm ${selectedBranch?._id === branch._id ? "text-primary" : "text-gray-700"}`}>
+                        {branch.name}
+                      </div>
+                      {branch.isMainBranch && (
+                        <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                          HQ
                         </span>
-                        {branch.isMainBranch && (
-                          <span className="inline-block bg-green-100 text-green-700 px-2 py-1 rounded ml-2 text-xs font-bold">
-                            MAIN
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-2">
-                        {branch.location}
-                      </div>
-                      <div className="flex gap-2 mt-3">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditModal(branch);
-                          }}
-                          className="text-blue-500 hover:text-blue-700 text-sm flex items-center gap-1 flex-1 justify-center"
-                        >
-                          <FaEdit size={12} />
-                          Edit
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteBranch(branch._id);
-                          }}
-                          className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1 flex-1 justify-center"
-                        >
-                          <FaTrash size={12} />
-                          Delete
-                        </button>
-                      </div>
+                      )}
                     </div>
-                  ))
-                )}
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                      {branch.code} • {branch.location || "Remote"}
+                    </div>
+                    {selectedBranch?._id === branch._id && (
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Branch Details & Staff */}
-          <div className="lg:col-span-2 space-y-6">
+          {/* Right Column: Branch Intelligence */}
+          <div className="lg:col-span-8 xl:col-span-9">
             {selectedBranch ? (
-              <>
-                {/* Branch Details Card */}
-                <div className="bg-white rounded-2xl shadow-lg p-6">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                    {selectedBranch.name}
-                  </h2>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Code</p>
-                      <p className="text-lg font-bold text-gray-900">{selectedBranch.code}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Location</p>
-                      <p className="text-gray-900">{selectedBranch.location || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Phone</p>
-                      <p className="text-gray-900 flex items-center gap-2">
-                        <FaPhone size={14} />
-                        {selectedBranch.phone || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Email</p>
-                      <p className="text-gray-900 flex items-center gap-2">
-                        <FaEnvelope size={14} />
-                        {selectedBranch.email || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">GSTIN</p>
-                      <p className="text-gray-900 font-mono">{selectedBranch.gstin || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-900 font-mono">{selectedBranch.gpayNo || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">GSTZen Client ID</p>
-                      <p className="text-gray-900 font-mono">{selectedBranch.gstzenClientId || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">GSTZen Client Secret</p>
-                      <p className="text-gray-900 font-mono">{selectedBranch.gstzenClientSecret ? "••••••••" : "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Workflow Token Block Time</p>
-                      <p className="text-gray-900 font-bold text-indigo-600">{selectedBranch.tokenBlockTime || 120} Minutes</p>
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <p className="text-sm text-gray-600 font-semibold">Address</p>
-                      <p className="text-gray-900">{selectedBranch.address || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Manager</p>
-                      <p className="text-gray-900">{selectedBranch.manager || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Status</p>
-                      <p className="text-gray-900 flex items-center gap-2">
-                        {selectedBranch.status === "ACTIVE" ? (
-                          <>
-                            <FaCheck className="text-green-500" />
-                            Active
-                          </>
-                        ) : (
-                          <>
-                            <FaTimes className="text-red-500" />
-                            Inactive
-                          </>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 mt-8 pt-6 border-t">
-                    <button
-                      onClick={() => openEditModal(selectedBranch)}
-                      className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-bold transition flex items-center justify-center gap-2"
-                    >
-                      <FaEdit />
-                      Edit Branch
-                    </button>
-                    <button
-                      onClick={() => handleDeleteBranch(selectedBranch._id)}
-                      className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg font-bold transition flex items-center justify-center gap-2"
-                    >
-                      <FaTrash />
-                      Delete Branch
-                    </button>
-                  </div>
-                </div>
-
-                {/* Staff Members Card */}
-                <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                  <div className="bg-gradient-to-r from-secondary to-primary text-white p-6">
-                    <h3 className="text-xl font-bold flex items-center gap-2">
-                      <FaUsers />
-                      Staff Members ({staffMembers.length})
-                    </h3>
-                    <p className="text-blue-100 text-sm mt-1">Approved users registered with this branch</p>
-                  </div>
-
-                  {loadingStaff ? (
-                    <div className="p-8 text-center">
-                      <div className="animate-spin text-primary text-3xl mb-2">⟳</div>
-                      <p className="text-gray-600">Loading staff...</p>
-                    </div>
-                  ) : staffMembers.length === 0 ? (
-                    <div className="p-8 text-center">
-                      <FaUser className="text-6xl text-gray-300 mx-auto mb-3" />
-                      <p className="text-gray-500">No staff members registered for this branch</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y max-h-96 overflow-y-auto">
-                      {staffMembers.map((staff) => (
-                        <div key={staff._id} className="p-4 hover:bg-gray-50 transition">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <p className="font-bold text-gray-900">{staff.username}</p>
-                              <p className="text-sm text-gray-600 flex items-center gap-1 mt-1">
-                                <FaEnvelope size={12} />
-                                {staff.email}
-                              </p>
-                              <div className="flex gap-2 mt-2">
-                                <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded text-xs font-bold">
-                                  {staff.role}
-                                </span>
-                                {staff.status === "ACTIVE" ? (
-                                  <span className="inline-block bg-green-100 text-green-700 px-3 py-1 rounded text-xs font-bold">
-                                    <FaCheck className="inline mr-1" />
-                                    Active
-                                  </span>
-                                ) : (
-                                  <span className="inline-block bg-gray-100 text-gray-700 px-3 py-1 rounded text-xs font-bold">
-                                    Inactive
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleRemoveStaff(staff._id)}
-                              className="ml-4 text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded transition"
-                              title="Remove staff member"
-                            >
-                              <FaTrash size={14} />
-                            </button>
-                          </div>
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                
+                {/* Overview Card */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
+                  <div className="flex flex-col md:flex-row justify-between gap-6 mb-8">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-secondary flex items-center justify-center text-white text-xl font-black shadow-lg shadow-secondary/20">
+                        {selectedBranch.name.charAt(0)}
+                      </div>
+                      <div>
+                        <h2 className="text-xl md:text-2xl font-black text-gray-800 tracking-tight">
+                          {selectedBranch.name}
+                        </h2>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{selectedBranch.code}</span>
+                          <div className="w-1 h-1 rounded-full bg-gray-300" />
+                          <span className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest ${
+                            selectedBranch.status === "ACTIVE" ? "text-primary" : "text-rose-500"
+                          }`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${selectedBranch.status === "ACTIVE" ? "bg-primary" : "bg-rose-500"}`} />
+                            {selectedBranch.status}
+                          </span>
                         </div>
-                      ))}
+                      </div>
                     </div>
-                  )}
+                    <div className="flex gap-2">
+                       <button
+                        onClick={() => openEditModal(selectedBranch)}
+                        className="bg-white border border-gray-200 hover:border-primary hover:text-primary text-gray-500 px-4 py-2 rounded-xl font-bold text-xs transition-all flex items-center gap-2"
+                      >
+                        <FaEdit size={12} />
+                        Update Node
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-y-8 gap-x-8 border-t border-gray-50 pt-8">
+                    
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Communication</label>
+                      <div className="space-y-2 pt-2">
+                        <div className="flex items-center gap-3 text-xs font-bold text-gray-700">
+                          <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400"><FaPhone size={10} /></div>
+                          {selectedBranch.phone || "—"}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs font-bold text-gray-700">
+                          <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400"><FaEnvelope size={10} /></div>
+                          <span className="truncate">{selectedBranch.email || "—"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Operational Data</label>
+                      <div className="space-y-2 pt-2">
+                        <div className="flex items-center gap-3 text-xs font-bold text-gray-700">
+                          <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 text-[9px] font-black">GST</div>
+                          {selectedBranch.gstin || "—"}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs font-bold text-gray-700">
+                          <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 text-[9px] font-black">PAY</div>
+                          {selectedBranch.gpayNo || "—"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Workflow Engine</label>
+                      <div className="mt-2 p-4 rounded-xl bg-primary/5 border border-primary/10">
+                        <div className="text-[10px] font-bold text-gray-600 mb-1">Token Block Threshold</div>
+                        <div className="text-lg font-black text-primary">{selectedBranch.tokenBlockTime || 120} <span className="text-[9px] uppercase">Minutes</span></div>
+                      </div>
+                    </div>
+
+                    <div className="md:col-span-2 space-y-1">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Primary Physical Address</label>
+                      <div className="flex gap-3 text-xs font-bold text-gray-700 leading-relaxed bg-gray-50/50 p-4 rounded-xl mt-2">
+                        <div className="w-7 h-7 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-400 shrink-0"><FaMapMarkerAlt size={10} /></div>
+                        {selectedBranch.address || "No address provided"}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Entity Leadership</label>
+                      <div className="flex items-center gap-3 text-xs font-bold text-gray-700 bg-gray-50/50 p-4 rounded-xl mt-2">
+                        <div className="w-7 h-7 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-400 shrink-0"><FaShieldAlt size={10} /></div>
+                        {selectedBranch.manager || "Unassigned"}
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
-              </>
+
+                {/* API Integration Card */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8 overflow-hidden relative">
+                   <div className="absolute top-0 right-0 p-8 opacity-[0.02] rotate-12 pointer-events-none">
+                     <FaGlobe size={100} />
+                   </div>
+                   <h3 className="text-sm font-black text-gray-800 mb-6 flex items-center gap-2">
+                     <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                     GSTZen Integration
+                   </h3>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                        <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Client ID</div>
+                        <div className="font-mono text-[10px] font-bold break-all text-gray-600">{selectedBranch.gstzenClientId || "Not Configured"}</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                        <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Client Secret</div>
+                        <div className="font-mono text-[10px] font-bold break-all text-gray-600">
+                          {selectedBranch.gstzenClientSecret ? "••••••••••••••••••••••••" : "Not Configured"}
+                        </div>
+                      </div>
+                   </div>
+                </div>
+
+              </div>
             ) : (
-              <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-                <FaBuilding className="text-6xl text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg">Select a branch to view details and staff</p>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 py-32 text-center flex flex-col items-center justify-center">
+                <div className="w-20 h-20 rounded-[24px] bg-gray-50 flex items-center justify-center text-gray-200 mb-6">
+                  <FaBuilding size={32} />
+                </div>
+                <h2 className="text-xl font-black text-gray-800 mb-1">Select a Node</h2>
+                <p className="text-gray-400 text-xs font-medium">Please choose a branch from the directory to view its operational intelligence.</p>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Branch Modal */}
+      {/* Modern Modal */}
       {showBranchModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="bg-gradient-to-r from-secondary to-primary text-white p-6 rounded-t-2xl sticky top-0">
-              <h2 className="text-2xl font-bold flex items-center gap-2">
-                <FaBuilding />
-                {editingBranch ? "Edit Branch" : "Create New Branch"}
-              </h2>
+        <div className="fixed inset-0 bg-secondary/80 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+            <div className="p-6 border-b border-gray-50 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-black text-gray-800">
+                  {editingBranch ? "Modify Node" : "Initialize Node"}
+                </h2>
+                <p className="text-gray-400 text-[9px] font-black uppercase tracking-widest mt-1">Infrastructure Provisioning</p>
+              </div>
+              <button onClick={() => setShowBranchModal(false)} className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-rose-50 hover:text-rose-500 transition-colors">
+                <FaTimes size={12} />
+              </button>
             </div>
 
-            <form onSubmit={handleCreateBranch} className="p-6 space-y-4">
+            <form onSubmit={handleCreateBranch} className="p-6 space-y-5 overflow-y-auto no-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Branch Name *
-                  </label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Node Name</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Pearl Foods - Tirunelveli"
                     value={branchForm.name}
                     onChange={(e) => setBranchForm({ ...branchForm, name: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Branch Code * {editingBranch && "(cannot be changed)"}
-                  </label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Node Code</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. PF-TRV"
+                    disabled={!!editingBranch}
                     value={branchForm.code}
                     onChange={(e) => setBranchForm({ ...branchForm, code: e.target.value.toUpperCase() })}
-                    disabled={editingBranch !== null}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none disabled:bg-gray-100"
+                    className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary transition-all outline-none font-bold text-sm ${
+                      editingBranch ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-gray-50"
+                    }`}
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Location
-                  </label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Location</label>
                   <input
                     type="text"
-                    placeholder="e.g. Tirunelveli"
                     value={branchForm.location}
                     onChange={(e) => setBranchForm({ ...branchForm, location: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Phone
-                  </label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Contact Protocol</label>
                   <input
-                    type="tel"
-                    placeholder="9429692970"
+                    type="text"
                     value={branchForm.phone}
                     onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Email
-                  </label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Deployment Email</label>
                   <input
                     type="email"
-                    placeholder="branch@email.com"
                     value={branchForm.email}
                     onChange={(e) => setBranchForm({ ...branchForm, email: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Manager
-                  </label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">GSTIN Identifier</label>
                   <input
                     type="text"
-                    placeholder="Manager Name"
-                    value={branchForm.manager}
-                    onChange={(e) => setBranchForm({ ...branchForm, manager: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    GSTIN Number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 29ABCDE1234F1Z5"
                     value={branchForm.gstin}
                     onChange={(e) => setBranchForm({ ...branchForm, gstin: e.target.value.toUpperCase() })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    City
-                  </label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Terminal No</label>
                   <input
                     type="text"
-                    placeholder="e.g. Tirunelveli"
-                    value={branchForm.city}
-                    onChange={(e) => setBranchForm({ ...branchForm, city: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    State
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Tamil Nadu"
-                    value={branchForm.state}
-                    onChange={(e) => setBranchForm({ ...branchForm, state: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    State Code *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 33 (TN), 32 (KA), 29 (MH), 27 (TG)"
-                    value={branchForm.stateCode}
-                    onChange={(e) => setBranchForm({ ...branchForm, stateCode: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Pincode
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 627003"
-                    value={branchForm.pincode}
-                    onChange={(e) => setBranchForm({ ...branchForm, pincode: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Token Block Time (Minutes)
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="120"
-                    value={branchForm.tokenBlockTime}
-                    onChange={(e) => setBranchForm({ ...branchForm, tokenBlockTime: parseInt(e.target.value) || 0 })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                  />
-                  <p className="text-[10px] text-gray-400 mt-1">Time before a TAKEN token blocks navigation</p>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Address
-                  </label>
-                  <textarea
-                    placeholder="Full address"
-                    value={branchForm.address}
-                    onChange={(e) => setBranchForm({ ...branchForm, address: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                    rows="3"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="mainBranch"
-                    checked={branchForm.isMainBranch}
-                    onChange={(e) => setBranchForm({ ...branchForm, isMainBranch: e.target.checked })}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="mainBranch" className="font-bold text-gray-700">
-                    Mark as Main Branch
-                  </label>
-                </div>
-
-                <div className="md:col-span-2 border-t pt-4">
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    Branch GPay / UPI Number (for display on invoice)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 8825847884"
                     value={branchForm.gpayNo}
                     onChange={(e) => setBranchForm({ ...branchForm, gpayNo: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm"
                   />
                 </div>
 
-                <div className="md:col-span-2 border-t pt-4">
-                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                    📲 UPI ID for QR Code on Invoice
-                    <span className="text-xs font-normal text-gray-500">(shown as scannable QR in top-right of bill)</span>
-                  </label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Token Delay (Mins)</label>
+                  <input
+                    type="number"
+                    value={branchForm.tokenBlockTime}
+                    onChange={(e) => setBranchForm({ ...branchForm, tokenBlockTime: parseInt(e.target.value) })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">GSTZen Client</label>
                   <input
                     type="text"
-                    placeholder="e.g. 9429692970@ybl or name@paytm"
-                    value={branchForm.upiId}
-                    onChange={(e) => setBranchForm({ ...branchForm, upiId: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    value={branchForm.gstzenClientId}
+                    onChange={(e) => setBranchForm({ ...branchForm, gstzenClientId: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm font-mono"
                   />
-                  {branchForm.upiId && (
-                    <div className="mt-3 flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                      <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(`upi://pay?pa=${branchForm.upiId}&pn=${branchForm.name || 'Pearl Agency'}&cu=INR`)}`}
-                        alt="UPI QR Preview"
-                        className="w-20 h-20 border border-green-300 rounded"
-                      />
-                      <div>
-                        <p className="text-xs font-bold text-green-700">QR Preview</p>
-                        <p className="text-xs text-green-600">{branchForm.upiId}</p>
-                        <p className="text-[10px] text-gray-500 mt-1">This QR will appear on all invoices for this branch</p>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
-                <div className="md:col-span-2 border-t pt-4 bg-blue-50/30 p-4 rounded-xl">
-                  <h3 className="text-blue-900 font-bold mb-3 flex items-center gap-2">
-                    🛡️ GSTZen API Credentials (PER BRANCH)
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-black uppercase text-blue-400 mb-1 tracking-widest">
-                        GSP Client ID
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Required for Multi-GSTIN accounts"
-                        value={branchForm.gstzenClientId}
-                        onChange={(e) => setBranchForm({ ...branchForm, gstzenClientId: e.target.value })}
-                        className="w-full px-4 py-2 border border-blue-100 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black uppercase text-blue-400 mb-1 tracking-widest">
-                        GSP Client Secret
-                      </label>
-                      <input
-                        type="password"
-                        placeholder="NIC Dashboard Password/ID"
-                        value={branchForm.gstzenClientSecret}
-                        onChange={(e) => setBranchForm({ ...branchForm, gstzenClientSecret: e.target.value })}
-                        className="w-full px-4 py-2 border border-blue-100 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white"
-                      />
-                    </div>
-                  </div>
-                  <p className="text-[9px] text-blue-400 mt-2 italic font-medium">
-                    * Found in your GSTZen Dashboard under "API Integration &gt; GSP Credentials" for this GSTIN.
-                  </p>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">GSTZen Secret</label>
+                  <input
+                    type="password"
+                    value={branchForm.gstzenClientSecret}
+                    onChange={(e) => setBranchForm({ ...branchForm, gstzenClientSecret: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm font-mono"
+                  />
                 </div>
-
-                {editingBranch && (
-                  <div className="md:col-span-2 border-t pt-4">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Branch Logo (for Invoice Header)
-                    </label>
-                    <div className="flex items-center gap-4">
-                      {editingBranch.logo ? (
-                        <img 
-                          src={editingBranch.logo} 
-                          alt="Logo" 
-                          className="h-16 w-16 object-contain border rounded p-1 bg-gray-50"
-                        />
-                      ) : (
-                        <div className="h-16 w-16 bg-gray-100 flex items-center justify-center text-gray-400 border rounded text-xs text-center p-1">
-                          No Logo
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => setLogoFile(e.target.files[0])}
-                          className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-opacity-80"
-                        />
-                        {logoFile && (
-                          <button
-                            type="button"
-                            onClick={() => handleLogoUpload(editingBranch._id)}
-                            disabled={uploadingLogo}
-                            className="mt-2 text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded font-bold transition flex items-center gap-2"
-                          >
-                            {uploadingLogo ? "Uploading..." : "Click to Confirm Upload"}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
 
-              <div className="flex gap-3 mt-6 pt-6 border-t">
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Physical Coordinates</label>
+                <textarea
+                  value={branchForm.address}
+                  onChange={(e) => setBranchForm({ ...branchForm, address: e.target.value })}
+                  rows={2}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none font-bold text-sm"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                 <input
+                  type="checkbox"
+                  id="isMain"
+                  checked={branchForm.isMainBranch}
+                  onChange={(e) => setBranchForm({ ...branchForm, isMainBranch: e.target.checked })}
+                  className="w-4 h-4 rounded accent-primary cursor-pointer"
+                />
+                <label htmlFor="isMain" className="text-xs font-bold text-gray-600 cursor-pointer">Designate as Headquarters Node</label>
+              </div>
+
+              <div className="flex gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={closeModal}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-400 transition"
+                  onClick={() => setShowBranchModal(false)}
+                  className="flex-1 px-4 py-3 bg-gray-100 text-gray-400 rounded-xl font-black text-xs hover:bg-gray-200 transition-all uppercase tracking-widest"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-primary text-white py-2 rounded-lg font-bold hover:bg-opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="flex-[2] px-4 py-3 bg-primary text-white rounded-xl font-black text-xs hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 uppercase tracking-widest"
                 >
-                  <FaCheck />
-                  {loading ? "Saving..." : editingBranch ? "Update Branch" : "Create Branch"}
+                  {editingBranch ? "Commit Updates" : "Initialize Node"}
                 </button>
               </div>
             </form>
@@ -908,4 +492,6 @@ export default function SuperAdminBranchManagement() {
       )}
     </div>
   );
-}
+};
+
+export default SuperAdminBranchManagement;

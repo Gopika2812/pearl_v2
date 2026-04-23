@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FaBarcode, FaBriefcase, FaEnvelope, FaLock, FaUser, FaUserPlus, FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaBarcode, FaBriefcase, FaEnvelope, FaLock, FaUser, FaUserPlus, FaEye, FaEyeSlash, FaShieldAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -162,123 +162,141 @@ export default function UserRegistrationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-secondary to-primary flex items-center justify-center p-4 py-12">
-      <div className="bg-white rounded-3xl shadow-2xl overflow-hidden w-full max-w-2xl">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-secondary to-primary p-8 text-white">
-          <div className="text-center">
-            <img
-              src="/logo.jpeg"
-              alt="Pearls ERP"
-              className="h-16 mx-auto mb-4 rounded-lg"
-            />
-            <h1 className="text-3xl font-bold">
-              Register Account
-            </h1>
-            <p className="text-white/80 mt-2">
-              Create your account and join our network
+    <div className="min-h-screen bg-[#001f3f] flex items-center justify-center p-4 py-12 font-poppins overflow-hidden relative">
+      {/* Dynamic Background Elements */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 bg-sky-400/10 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 bg-indigo-500/10 rounded-full blur-[120px] animate-pulse transition-all duration-1000"></div>
+      </div>
+
+      <div className="bg-white/95 backdrop-blur-xl rounded-[40px] shadow-2xl w-full max-w-5xl flex flex-col md:flex-row overflow-hidden border border-white/20 animate-in fade-in zoom-in duration-500 relative z-10">
+        {/* Branding Side */}
+        <div className="hidden md:flex md:w-5/12 bg-secondary p-12 flex-col justify-between relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-full h-full opacity-10 pointer-events-none">
+            <div className="absolute top-10 right-10 w-64 h-64 border-4 border-white rounded-full"></div>
+            <div className="absolute bottom-20 -left-10 w-96 h-96 border-8 border-white rounded-full"></div>
+          </div>
+          
+          <div className="relative z-10">
+            <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mb-8 border border-white/20 shadow-xl">
+              <FaShieldAlt className="text-3xl text-sky-400" />
+            </div>
+            <h2 className="text-4xl font-black text-white leading-tight mb-4 uppercase tracking-tighter">
+              Join the <br />
+              <span className="text-sky-400">Network</span> <br />
+              Registration
+            </h2>
+            <p className="text-white/60 font-medium text-lg max-w-xs">
+              Onboard your terminal and start managing your branch operations with precision.
             </p>
+          </div>
+
+          <div className="relative z-10">
+            <div className="flex items-center gap-4 text-white/40 text-sm font-black uppercase tracking-widest">
+              <div className="w-8 h-[2px] bg-sky-400"></div>
+              Network Node v2.0
+            </div>
           </div>
         </div>
 
-        {/* Form */}
-        <div className="p-8">
-          {/* REGISTRATION FORM */}
-          <form onSubmit={handleRegister} className="space-y-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Full Name */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <FaUser className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+        {/* Form Side */}
+        <div className="w-full md:w-7/12 p-8 md:p-12 bg-white">
+          <div className="mb-8">
+            <h1 className="text-3xl font-black text-secondary mb-2 uppercase tracking-tight">Identity Provisioning</h1>
+            <p className="text-secondary/40 font-bold text-xs uppercase tracking-[0.2em]">Enter your administrative details</p>
+          </div>
+
+          <form onSubmit={handleRegister} className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Legal Name</label>
+                <div className="relative group">
+                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-sky-500 transition-colors">
+                    <FaUser size={14} />
+                  </div>
                   <input
                     type="text"
                     name="name"
-                    placeholder="Your full name"
                     value={formData.name}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                    placeholder="Full Name"
+                    className="w-full pl-14 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-sky-500 focus:bg-white transition-all outline-none font-bold text-sm text-secondary"
                     required
                   />
                 </div>
               </div>
 
-              {/* Username */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Username
-                </label>
-                <div className="relative">
-                  <FaUser className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Identity ID</label>
+                <div className="relative group">
+                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-sky-500 transition-colors">
+                    <FaUser size={14} />
+                  </div>
                   <input
                     type="text"
                     name="username"
-                    placeholder="Choose username"
                     value={formData.username}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                    placeholder="Username"
+                    className="w-full pl-14 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-sky-500 focus:bg-white transition-all outline-none font-bold text-sm text-secondary"
                     required
                   />
                 </div>
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <FaEnvelope className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Communication Endpoint</label>
+              <div className="relative group">
+                <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-sky-500 transition-colors">
+                  <FaEnvelope size={14} />
+                </div>
                 <input
                   type="email"
                   name="email"
-                  placeholder="your@email.com"
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                  placeholder="Official Email Address"
+                  className="w-full pl-14 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-sky-500 focus:bg-white transition-all outline-none font-bold text-sm text-secondary"
                   required
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Branch Code */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Branch Code
-                </label>
-                <div className="relative">
-                  <FaBarcode className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Deployment Code</label>
+                <div className="relative group">
+                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-sky-500 transition-colors">
+                    <FaBarcode size={14} />
+                  </div>
                   <input
                     type="text"
                     name="branchCode"
-                    placeholder="e.g., PFC001"
                     value={formData.branchCode}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition uppercase"
+                    placeholder="e.g. PFC001"
+                    className="w-full pl-14 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-sky-500 focus:bg-white transition-all outline-none font-bold text-sm text-secondary uppercase"
                     required
                   />
                 </div>
               </div>
 
-              {/* Role */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Role
-                </label>
-                <div className="relative">
-                  <FaBriefcase className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Protocol Level</label>
+                <div className="relative group">
+                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-sky-500 transition-colors pointer-events-none">
+                    <FaBriefcase size={14} />
+                  </div>
                   <select
                     name="role"
                     value={formData.role}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition appearance-none bg-white"
+                    className="w-full pl-14 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-sky-500 focus:bg-white transition-all outline-none font-bold text-sm text-secondary appearance-none"
                   >
                     {ROLES.map((role) => (
                       <option key={role.value} value={role.value}>
-                        {role.label}
+                        {role.label.toUpperCase()}
                       </option>
                     ))}
                   </select>
@@ -286,84 +304,81 @@ export default function UserRegistrationPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Password */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Password
-                </label>
-                <div className="relative">
-                  <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Secure Protocol</label>
+                <div className="relative group">
+                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-sky-500 transition-colors">
+                    <FaLock size={14} />
+                  </div>
                   <input
                     type={showPassword ? "text" : "password"}
                     name="password"
-                    placeholder="Min 6 characters"
                     value={formData.password}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-12 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                    placeholder="Create Password"
+                    className="w-full pl-14 pr-12 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-sky-500 focus:bg-white transition-all outline-none font-bold text-sm text-secondary"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors focus:outline-none"
+                    className="absolute right-5 top-1/2 -translate-y-1/2 text-secondary/20 hover:text-sky-500 transition-colors"
                   >
-                    {showPassword ? <FaEyeSlash /> : <FaEye />}
+                    {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
                   </button>
                 </div>
               </div>
 
-              {/* Confirm Password */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Confirm Protocol</label>
+                <div className="relative group">
+                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-sky-500 transition-colors">
+                    <FaLock size={14} />
+                  </div>
                   <input
                     type={showConfirmPassword ? "text" : "password"}
                     name="confirmPassword"
-                    placeholder="Repeat password"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    className="w-full pl-12 pr-12 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                    placeholder="Repeat Password"
+                    className="w-full pl-14 pr-12 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-sky-500 focus:bg-white transition-all outline-none font-bold text-sm text-secondary"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors focus:outline-none"
+                    className="absolute right-5 top-1/2 -translate-y-1/2 text-secondary/20 hover:text-sky-500 transition-colors"
                   >
-                    {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
+                    {showConfirmPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Register Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-primary to-secondary text-white font-bold py-3 rounded-lg hover:shadow-lg transform hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full bg-secondary hover:bg-secondary/90 text-white font-black py-4 rounded-[20px] shadow-xl shadow-secondary/20 transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-xs disabled:opacity-50 mt-4"
             >
-              <FaUserPlus />
-              {loading ? "Creating Account..." : "Register"}
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <>
+                  <FaUserPlus /> Provision Identity
+                </>
+              )}
             </button>
-
-            {/* Footer */}
-            <div className="text-center mt-8 pt-6 border-t border-gray-200">
-              <p className="text-gray-600 text-sm">
-                Already have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => navigate("/branch-login")}
-                  className="text-primary font-bold hover:underline"
-                >
-                  Log in here
-                </button>
-              </p>
-            </div>
           </form>
+
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => navigate("/branch-login")}
+              className="text-secondary/40 hover:text-secondary font-black text-[10px] uppercase tracking-widest transition-all"
+            >
+              Already have an account? <span className="text-sky-500 underline decoration-sky-500/30 underline-offset-4 ml-1">Authenticate here</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

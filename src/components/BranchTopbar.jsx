@@ -46,8 +46,8 @@ export default function BranchTopbar({ onMenuClick }) {
   };
 
   return (
-    <div className="fixed top-0 right-0 left-0 md:left-20 z-40 transition-all duration-300 md:h-[80px] p-4 flex items-center justify-center pointer-events-none">
-      <div className="bg-white/90 backdrop-blur-md shadow-xl px-8 py-3 rounded-2xl w-full max-w-7xl relative pointer-events-auto border border-gray-100/50 flex items-center justify-between">
+    <div className="fixed top-0 right-0 left-0 md:left-20 z-40 transition-all duration-300 h-16 md:h-[80px] p-2 md:p-4 flex items-center justify-center pointer-events-none">
+      <div className="bg-white/90 backdrop-blur-md shadow-xl px-4 md:px-8 py-3 rounded-3xl w-full max-w-[1600px] relative pointer-events-auto border border-gray-100/50 flex items-center justify-between">
         
         {/* Mobile Menu Button */}
         <button

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FaEnvelope, FaLock, FaSignInAlt, FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaEnvelope, FaLock, FaSignInAlt, FaEye, FaEyeSlash, FaShieldAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -59,90 +59,114 @@ export default function SuperAdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-secondary to-primary flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl overflow-hidden w-full max-w-md">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-secondary to-primary p-8 text-white">
-          <div className="text-center">
-            <img
-              src="/logo.jpeg"
-              alt="Pearls ERP"
-              className="h-16 mx-auto mb-4 rounded-lg"
-            />
-            <h1 className="text-3xl font-bold">Super Admin Login</h1>
-            <p className="text-white/80 mt-2">Manage all branches & approvals</p>
+    <div className="min-h-screen bg-secondary flex items-center justify-center p-4 font-poppins overflow-hidden relative">
+      {/* Dynamic Background Elements */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute -top-1/4 -right-1/4 w-1/2 h-1/2 bg-primary/10 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute -bottom-1/4 -left-1/4 w-1/2 h-1/2 bg-primary/5 rounded-full blur-[120px] animate-pulse transition-all duration-1000"></div>
+      </div>
+
+      <div className="bg-white/95 backdrop-blur-xl rounded-[40px] shadow-2xl w-full max-w-5xl flex flex-col md:flex-row overflow-hidden border border-white/20 animate-in fade-in zoom-in duration-500 relative z-10">
+        {/* Branding Side */}
+        <div className="hidden md:flex md:w-1/2 bg-secondary p-12 flex-col justify-between relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-full h-full opacity-10 pointer-events-none">
+            <div className="absolute top-10 left-10 w-64 h-64 border-4 border-white rounded-full"></div>
+            <div className="absolute bottom-20 -right-10 w-96 h-96 border-8 border-white rounded-full"></div>
+          </div>
+          
+          <div className="relative z-10">
+            <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mb-8 border border-white/20 shadow-xl">
+              <FaShieldAlt className="text-3xl text-primary" />
+            </div>
+            <h2 className="text-4xl font-black text-white leading-tight mb-4 uppercase tracking-tighter">
+              Master <br />
+              <span className="text-primary">Terminal</span> <br />
+              Administration
+            </h2>
+            <p className="text-white/60 font-medium text-lg max-w-sm">
+              Global system oversight, branch provisioning, and security management.
+            </p>
+          </div>
+
+          <div className="relative z-10">
+            <div className="flex items-center gap-4 text-white/40 text-sm font-black uppercase tracking-widest">
+              <div className="w-8 h-[2px] bg-primary"></div>
+              Super Admin Core v2.0
+            </div>
           </div>
         </div>
 
-        {/* Form */}
-        <div className="p-8">
+        {/* Login Form Side */}
+        <div className="w-full md:w-1/2 p-10 md:p-16 flex flex-col justify-center bg-white">
+          <div className="mb-10">
+            <h1 className="text-3xl font-black text-secondary mb-2 uppercase tracking-tight">Master Access</h1>
+            <p className="text-secondary/40 font-bold text-xs uppercase tracking-[0.2em]">Elevated Privileges Required</p>
+          </div>
+
           <form onSubmit={handleLogin} className="space-y-6">
-            {/* Username Field */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Username
-              </label>
-              <div className="relative">
-                <FaEnvelope className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Admin Identity</label>
+              <div className="relative group">
+                <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-primary transition-colors">
+                  <FaEnvelope size={14} />
+                </div>
                 <input
                   type="text"
-                  placeholder="Enter super admin username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                  placeholder="Enter super admin username"
+                  className="w-full pl-14 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-primary focus:bg-white transition-all outline-none font-bold text-sm text-secondary shadow-inner"
                   required
                 />
               </div>
             </div>
 
-            {/* Password Field */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Security Key</label>
+              <div className="relative group">
+                <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-primary transition-colors">
+                  <FaLock size={14} />
+                </div>
                 <input
                   type={showPassword ? "text" : "password"}
-                  placeholder="Enter password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-12 pr-12 py-3 border-2 border-gray-200 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                  placeholder="Enter master password"
+                  className="w-full pl-14 pr-14 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-primary focus:bg-white transition-all outline-none font-bold text-sm text-secondary shadow-inner"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors focus:outline-none"
+                  className="absolute right-5 top-1/2 -translate-y-1/2 text-secondary/20 hover:text-primary transition-colors"
                 >
-                  {showPassword ? <FaEyeSlash /> : <FaEye />}
+                  {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
                 </button>
               </div>
             </div>
 
-            {/* Login Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-secondary to-primary text-white font-bold py-3 rounded-lg hover:shadow-lg transform hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full bg-secondary hover:bg-secondary/90 text-white font-black py-4 rounded-[20px] shadow-xl shadow-secondary/20 transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-xs disabled:opacity-50"
             >
-              <FaSignInAlt />
-              {loading ? "Logging in..." : "Login as Super Admin"}
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <>
+                  <FaSignInAlt /> Authorize Master Session
+                </>
+              )}
             </button>
           </form>
 
-          {/* Footer */}
-          <div className="text-center mt-8 pt-6 border-t border-gray-200">
-            <p className="text-gray-600 text-sm">
-              Normal user?{" "}
-              <button
-                type="button"
-                onClick={() => navigate("/branch-login")}
-                className="text-primary font-bold hover:underline"
-              >
-                Go to login
-              </button>
-            </p>
+          <div className="mt-12">
+            <button
+              onClick={() => navigate("/branch-login")}
+              className="w-full py-4 rounded-xl border-2 border-gray-100 text-secondary/60 hover:border-primary hover:text-primary font-black text-[10px] uppercase tracking-widest transition-all text-center"
+            >
+              Back to Branch Login
+            </button>
           </div>
         </div>
       </div>

@@ -45,81 +45,92 @@ export default function CustomerLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        {/* HEADER */}
-        <div className="text-center mb-6">
-          <div className="bg-primary/10 text-primary w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-            <FaWhatsapp className="text-3xl" />
+    <div className="min-h-screen bg-[#001f3f] flex items-center justify-center p-4 font-poppins overflow-hidden relative">
+      {/* Dynamic Background Elements */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute -top-1/4 -right-1/4 w-1/2 h-1/2 bg-emerald-400/10 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute -bottom-1/4 -left-1/4 w-1/2 h-1/2 bg-emerald-500/10 rounded-full blur-[120px] animate-pulse transition-all duration-1000"></div>
+      </div>
+
+      <div className="bg-white/95 backdrop-blur-xl rounded-[40px] shadow-2xl w-full max-w-lg overflow-hidden border border-white/20 animate-in fade-in zoom-in duration-500 relative z-10 p-10 md:p-14 text-center">
+        {/* Header */}
+        <div className="mb-10">
+          <div className="w-20 h-20 bg-emerald-500 text-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-emerald-500/20 rotate-3">
+            <FaWhatsapp size={40} />
           </div>
-          <h1 className="text-2xl font-bold text-primary">Pearls Shopping</h1>
-          <p className="text-gray-500 text-sm mt-2">Login to continue shopping</p>
+          <h1 className="text-3xl font-black text-secondary uppercase tracking-tight">Customer Portal</h1>
+          <p className="text-secondary/40 font-bold text-xs uppercase tracking-[0.2em] mt-1">Authenticate to start shopping</p>
         </div>
 
-        {/* FORM */}
-        <form onSubmit={handleLogin} className="space-y-4">
-          {/* WHATSAPP NUMBER */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              WhatsApp Number
-            </label>
-            <input
-              type="tel"
-              placeholder="Enter your WhatsApp number"
-              value={whatsappNumber}
-              onChange={(e) => setWhatsappNumber(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-              required
-            />
-            <p className="text-xs text-gray-500 mt-1">The number linked to your customer account</p>
+        {/* Form */}
+        <form onSubmit={handleLogin} className="space-y-6 text-left">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">WhatsApp Identity</label>
+            <div className="relative group">
+              <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-emerald-500 transition-colors">
+                <FaWhatsapp size={14} />
+              </div>
+              <input
+                type="tel"
+                value={whatsappNumber}
+                onChange={(e) => setWhatsappNumber(e.target.value)}
+                placeholder="Enter registered number"
+                className="w-full pl-14 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-emerald-500 focus:bg-white transition-all outline-none font-bold text-sm text-secondary"
+                required
+              />
+            </div>
           </div>
 
-          {/* PASSWORD */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Password
-            </label>
-            <div className="relative">
-              <FaLock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Secret Key</label>
+            <div className="relative group">
+              <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-emerald-500 transition-colors">
+                <FaLock size={14} />
+              </div>
               <input
                 type={showPassword ? "text" : "password"}
-                placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-12 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                placeholder="Enter password"
+                className="w-full pl-14 pr-14 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-emerald-500 focus:bg-white transition-all outline-none font-bold text-sm text-secondary"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-primary transition-colors focus:outline-none"
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-secondary/20 hover:text-emerald-500 transition-colors"
               >
-                {showPassword ? <FaEyeSlash /> : <FaEye />}
+                {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
               </button>
             </div>
           </div>
 
-          {/* ERROR MESSAGE */}
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {error}
+            <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-500 text-xs font-bold animate-shake">
+              ⚠️ {error}
             </div>
           )}
 
-          {/* LOGIN BUTTON */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-4 rounded-[20px] shadow-xl shadow-emerald-500/20 transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-xs disabled:opacity-50"
           >
-            {loading ? "Logging in..." : "Login"}
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+            ) : (
+              <>
+                Initiate Secure Shopping
+              </>
+            )}
           </button>
         </form>
 
-        {/* FOOTER */}
-        <div className="text-center mt-6 text-sm text-gray-500">
-          <p>Don't have an account?</p>
-          <p>Contact us on WhatsApp for customer registration</p>
+        <div className="mt-12 space-y-4">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Account Setup Required?</p>
+          <p className="text-[11px] font-bold text-secondary/60 leading-relaxed px-4">
+            Contact your local branch manager to register your WhatsApp number for online access.
+          </p>
         </div>
       </div>
     </div>

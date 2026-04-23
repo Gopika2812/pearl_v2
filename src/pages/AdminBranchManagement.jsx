@@ -230,41 +230,45 @@ export default function AdminBranchManagement() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 pt-20 md:pt-4 md:pl-20 px-4 md:px-6 pb-10">
+    <div className="min-h-screen bg-gray-50 pt-20 md:pt-8 md:pl-24 px-4 md:px-8 pb-10 font-poppins">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-gradient-to-r from-secondary to-primary text-white rounded-2xl shadow-lg p-8 mb-8">
-          <div className="flex justify-between items-center">
+        <div className="bg-secondary text-white rounded-[32px] shadow-2xl p-10 mb-10 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-10 opacity-10 rotate-12 transition-transform group-hover:scale-110 duration-500">
+            <FaBuilding size={120} />
+          </div>
+          <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
             <div>
-              <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">
-                <FaBuilding />
-                Branch Management
+              <h1 className="text-4xl font-black mb-2 flex items-center gap-4 uppercase tracking-tighter">
+                <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md border border-white/20">
+                  <FaBuilding />
+                </div>
+                Branch Terminal
               </h1>
-              <p className="text-blue-100">Create and manage branches and user credentials</p>
+              <p className="text-white/60 font-medium">Provision and manage infrastructure nodes and access protocols</p>
             </div>
             <button
               onClick={() => setShowBranchModal(true)}
-              className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition"
+              className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-3 transition-all shadow-xl shadow-primary/20 uppercase tracking-widest text-xs"
             >
               <FaPlus />
-              New Branch
+              Initialize Node
             </button>
           </div>
         </div>
 
         {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Branches List */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-              <div className="bg-primary text-white p-4 font-bold">
-                📍 Branches ({branches.length})
+          <div className="lg:col-span-4">
+            <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 overflow-hidden sticky top-24">
+              <div className="bg-gray-50/50 p-6 border-b border-gray-100 flex items-center justify-between">
+                <span className="font-black text-xs uppercase tracking-widest text-secondary/40">📍 Active Nodes ({branches.length})</span>
               </div>
-              <div className="divide-y max-h-[600px] overflow-y-auto">
+              <div className="divide-y divide-gray-50 max-h-[600px] overflow-y-auto no-scrollbar">
                 {branches.length === 0 ? (
-                  <div className="p-6 text-center text-gray-500">
-                    <p>No branches created yet</p>
-                    <p className="text-sm mt-2">Click "New Branch" to get started</p>
+                  <div className="p-10 text-center">
+                    <p className="text-secondary/40 font-bold text-sm">No active nodes detected</p>
                   </div>
                 ) : (
                   branches.map((branch) => (
@@ -274,36 +278,50 @@ export default function AdminBranchManagement() {
                         setSelectedBranch(branch);
                         fetchUsersForBranch(branch._id);
                       }}
-                      className={`p-4 cursor-pointer transition ${
+                      className={`p-6 cursor-pointer transition-all relative group ${
                         selectedBranch?._id === branch._id
-                          ? "bg-primary/10 border-l-4 border-primary"
+                          ? "bg-secondary text-white"
                           : "hover:bg-gray-50"
                       }`}
                     >
-                      <div className="font-bold text-gray-900">{branch.name}</div>
-                      <div className="text-sm text-gray-600 mt-1">
-                        <span className="inline-block bg-gray-100 px-2 py-1 rounded">
-                          {branch.code}
-                        </span>
+                      <div className="flex justify-between items-start mb-2">
+                        <div className={`font-black text-lg ${selectedBranch?._id === branch._id ? "text-white" : "text-secondary"}`}>{branch.name}</div>
                         {branch.isMainBranch && (
-                          <span className="inline-block bg-green-100 text-green-700 px-2 py-1 rounded ml-2 text-xs font-bold">
-                            MAIN
+                          <span className={`text-[8px] font-black px-2 py-1 rounded ${
+                            selectedBranch?._id === branch._id ? "bg-white/20 text-white" : "bg-primary/10 text-primary"
+                          }`}>
+                            HQ
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-gray-500 mt-2">
-                        {branch.location}
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${
+                          selectedBranch?._id === branch._id ? "border-white/20 text-white/60" : "border-gray-200 text-secondary/40"
+                        }`}>
+                          {branch.code}
+                        </span>
+                        <span className={`text-[10px] font-bold ${
+                          selectedBranch?._id === branch._id ? "text-white/40" : "text-secondary/40"
+                        }`}>
+                          {branch.location}
+                        </span>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteBranch(branch._id);
-                        }}
-                        className="text-red-500 hover:text-red-700 text-sm mt-2 flex items-center gap-1"
-                      >
-                        <FaTrash size={12} />
-                        Delete
-                      </button>
+                      <div className="mt-4 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteBranch(branch._id);
+                          }}
+                          className={`p-2 rounded-lg transition-colors ${
+                            selectedBranch?._id === branch._id ? "bg-white/10 text-white hover:bg-rose-500" : "bg-gray-100 text-gray-400 hover:text-rose-500"
+                          }`}
+                        >
+                          <FaTrash size={12} />
+                        </button>
+                      </div>
+                      {selectedBranch?._id === branch._id && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
+                      )}
                     </div>
                   ))
                 )}
@@ -312,133 +330,144 @@ export default function AdminBranchManagement() {
           </div>
 
           {/* Branch Details & Users */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-8">
             {selectedBranch ? (
-              <div className="space-y-6">
+              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 {/* Branch Details */}
-                <div className="bg-white rounded-2xl shadow-lg p-6">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                    {selectedBranch.name}
-                  </h2>
+                <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 p-8">
+                  <div className="flex items-center gap-5 mb-10">
+                    <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center text-white text-2xl font-black shadow-xl shadow-secondary/20">
+                      {selectedBranch.name.charAt(0)}
+                    </div>
+                    <div>
+                      <h2 className="text-3xl font-black text-secondary tracking-tighter">
+                        {selectedBranch.name}
+                      </h2>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-xs font-bold text-secondary/40 uppercase tracking-widest">{selectedBranch.code}</span>
+                        <div className="w-1 h-1 rounded-full bg-gray-300" />
+                        <span className={`flex items-center gap-1.5 text-xs font-black uppercase tracking-widest ${
+                          selectedBranch.status === "ACTIVE" ? "text-primary" : "text-rose-500"
+                        }`}>
+                          <div className={`w-1.5 h-1.5 rounded-full ${selectedBranch.status === "ACTIVE" ? "bg-primary" : "bg-rose-500"}`} />
+                          {selectedBranch.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Code</p>
-                      <p className="text-gray-900">{selectedBranch.code}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-y-10 gap-x-12">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-secondary/30 uppercase tracking-widest">Communication Protocol</label>
+                      <div className="space-y-3 pt-2">
+                        <div className="flex items-center gap-4 text-sm font-bold text-secondary">
+                          <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-secondary/40"><FaPhone size={12} /></div>
+                          {selectedBranch.phone || "—"}
+                        </div>
+                        <div className="flex items-center gap-4 text-sm font-bold text-secondary">
+                          <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-secondary/40"><FaEnvelope size={12} /></div>
+                          {selectedBranch.email || "—"}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Location</p>
-                      <p className="text-gray-900">{selectedBranch.location || "—"}</p>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-secondary/30 uppercase tracking-widest">Operational Metadata</label>
+                      <div className="space-y-3 pt-2">
+                        <div className="flex items-center justify-between p-3 bg-gray-50/50 rounded-xl">
+                          <span className="text-[10px] font-black text-secondary/40 uppercase">Location</span>
+                          <span className="text-xs font-bold">{selectedBranch.location || "—"}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-gray-50/50 rounded-xl">
+                          <span className="text-[10px] font-black text-secondary/40 uppercase">Manager</span>
+                          <span className="text-xs font-bold">{selectedBranch.manager || "—"}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Phone</p>
-                      <p className="text-gray-900 flex items-center gap-2">
-                        <FaPhone size={14} />
-                        {selectedBranch.phone || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Email</p>
-                      <p className="text-gray-900 flex items-center gap-2">
-                        <FaEnvelope size={14} />
-                        {selectedBranch.email || "—"}
-                      </p>
-                    </div>
-                    <div className="md:col-span-2">
-                      <p className="text-sm text-gray-600 font-semibold">Address</p>
-                      <p className="text-gray-900">{selectedBranch.address || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Manager</p>
-                      <p className="text-gray-900">{selectedBranch.manager || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 font-semibold">Status</p>
-                      <p className="text-gray-900 flex items-center gap-2">
-                        {selectedBranch.status === "ACTIVE" ? (
-                          <>
-                            <FaCheck className="text-green-500" />
-                            Active
-                          </>
-                        ) : (
-                          <>
-                            <FaTimes className="text-red-500" />
-                            Inactive
-                          </>
-                        )}
-                      </p>
+                    <div className="md:col-span-2 space-y-1">
+                      <label className="text-[10px] font-black text-secondary/30 uppercase tracking-widest">Physical Coordinates</label>
+                      <div className="mt-2 p-5 bg-gray-50 rounded-2xl text-sm font-bold text-secondary leading-relaxed border border-gray-100">
+                        {selectedBranch.address || "No address data available"}
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Users List */}
-                <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                  <div className="bg-primary text-white p-4 font-bold flex justify-between items-center">
-                    <span>👤 Users ({users.length})</span>
+                <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="bg-secondary p-6 flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white">
+                        <FaUser size={18} />
+                      </div>
+                      <div>
+                        <h3 className="text-white font-black uppercase tracking-widest text-sm">Access Credentials</h3>
+                        <p className="text-white/40 text-[10px] font-bold">Total Personnel: {users.length}</p>
+                      </div>
+                    </div>
                     <button
                       onClick={() => setShowUserModal(true)}
-                      className="bg-green-500 hover:bg-green-600 px-3 py-1 rounded-lg text-sm flex items-center gap-2 transition"
+                      className="bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg shadow-primary/20"
                     >
-                      <FaPlus size={12} />
-                      Add User
+                      <FaPlus size={10} />
+                      New Profile
                     </button>
                   </div>
 
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th className="px-6 py-3 text-left font-bold text-gray-700">Username</th>
-                          <th className="px-6 py-3 text-left font-bold text-gray-700">Email</th>
-                          <th className="px-6 py-3 text-left font-bold text-gray-700">Role</th>
-                          <th className="px-6 py-3 text-left font-bold text-gray-700">Status</th>
-                          <th className="px-6 py-3 text-center font-bold text-gray-700">Action</th>
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-50/50">
+                          <th className="px-8 py-5 text-left text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em]">Personnel</th>
+                          <th className="px-8 py-5 text-left text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em]">Contact</th>
+                          <th className="px-8 py-5 text-left text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em]">Protocol</th>
+                          <th className="px-8 py-5 text-left text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em]">Status</th>
+                          <th className="px-8 py-5 text-center text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em]">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y">
+                      <tbody className="divide-y divide-gray-50">
                         {users.length === 0 ? (
                           <tr>
-                            <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
-                              <p>No users for this branch</p>
-                              <p className="text-xs mt-2">Click "Add User" to create credentials</p>
+                            <td colSpan="5" className="px-8 py-16 text-center">
+                              <p className="text-secondary/40 font-bold text-sm italic">No personnel records found for this node</p>
                             </td>
                           </tr>
                         ) : (
                           users.map((user) => (
-                            <tr key={user._id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 font-semibold text-gray-900">
-                                <FaUser className="inline mr-2 text-primary" size={12} />
-                                {user.username}
+                            <tr key={user._id} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-8 py-5">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-black text-xs">
+                                    {user.username.charAt(0).toUpperCase()}
+                                  </div>
+                                  <span className="font-bold text-secondary">{user.username}</span>
+                                </div>
                               </td>
-                              <td className="px-6 py-4 text-gray-700">{user.email || "—"}</td>
-                              <td className="px-6 py-4">
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                              <td className="px-8 py-5 text-sm text-secondary/60 font-medium">{user.email || "—"}</td>
+                              <td className="px-8 py-5">
+                                <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${
                                   user.role === "ADMIN"
-                                    ? "bg-red-100 text-red-700"
+                                    ? "bg-rose-50 text-rose-600 border border-rose-100"
                                     : user.role === "MANAGER"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : "bg-gray-100 text-gray-700"
+                                    ? "bg-primary/10 text-primary border border-primary/20"
+                                    : "bg-gray-100 text-gray-600 border border-gray-200"
                                 }`}>
                                   {user.role}
                                 </span>
                               </td>
-                              <td className="px-6 py-4">
-                                {user.status === "ACTIVE" ? (
-                                  <span className="text-green-600 font-bold flex items-center gap-1">
-                                    <FaCheck /> Active
-                                  </span>
-                                ) : (
-                                  <span className="text-red-600 font-bold flex items-center gap-1">
-                                    <FaTimes /> Inactive
-                                  </span>
-                                )}
+                              <td className="px-8 py-5">
+                                <span className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest ${
+                                  user.status === "ACTIVE" ? "text-primary" : "text-rose-500"
+                                }`}>
+                                  <div className={`w-1.5 h-1.5 rounded-full ${user.status === "ACTIVE" ? "bg-primary" : "bg-rose-500"}`} />
+                                  {user.status}
+                                </span>
                               </td>
-                              <td className="px-6 py-4 text-center">
+                              <td className="px-8 py-5 text-center">
                                 <button
                                   onClick={() => handleDeleteUser(user._id)}
-                                  className="text-red-500 hover:text-red-700 font-bold"
+                                  className="p-2 text-gray-300 hover:text-rose-500 transition-colors"
                                 >
-                                  <FaTrash />
+                                  <FaTrash size={14} />
                                 </button>
                               </td>
                             </tr>
@@ -450,9 +479,12 @@ export default function AdminBranchManagement() {
                 </div>
               </div>
             ) : (
-              <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-                <FaBuilding className="text-6xl text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg">Select a branch to view details and manage users</p>
+              <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 p-24 text-center flex flex-col items-center justify-center">
+                <div className="w-24 h-24 rounded-[32px] bg-gray-50 flex items-center justify-center text-gray-200 mb-8">
+                  <FaBuilding size={48} />
+                </div>
+                <h2 className="text-2xl font-black text-secondary mb-2 uppercase tracking-tighter">Node Directory</h2>
+                <p className="text-secondary/40 font-medium max-w-sm mx-auto">Select an infrastructure node from the sidebar to initialize management protocols.</p>
               </div>
             )}
           </div>

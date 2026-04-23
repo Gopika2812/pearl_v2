@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaCheck, FaTimes, FaTrash, FaUser, FaBriefcase } from "react-icons/fa";
+import { FaCheck, FaTimes, FaTrash, FaUser, FaBriefcase, FaShieldAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -155,106 +155,105 @@ export default function SuperAdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 pt-20 md:pt-4 md:pl-20 px-4 md:px-6 pb-10">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-[#f8fafc] p-4 md:p-8 font-poppins text-secondary">
+      <div className="max-w-[1400px] mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900">Super Admin Dashboard</h1>
-          <p className="text-gray-600 mt-2">Approve or reject pending user registrations</p>
-        </div>
+        <div className="mb-10">
+            <h1 className="text-2xl md:text-3xl font-black text-secondary flex items-center gap-4 tracking-tight">
+              <div className="p-3 bg-secondary rounded-2xl text-white shadow-xl shadow-secondary/20">
+                <FaShieldAlt size={24} />
+              </div>
+              Super Admin Dashboard
+            </h1>
+            <p className="text-secondary/60 mt-1 font-medium text-sm">System-wide operational overview and stats</p>
+          </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-lg">
-          <p className="text-gray-600 text-sm"><FaUser className="inline mr-2" /> Total Pending</p>
-          <p className="text-3xl font-bold text-blue-600">{pendingRegistrations.length}</p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-[24px]">
+          <p className="text-secondary/40 text-[10px] font-black uppercase tracking-widest mb-2"><FaUser className="inline mr-2" /> Pending Verification</p>
+          <p className="text-4xl font-black text-secondary">{pendingRegistrations.length}</p>
         </div>
-        <div className="bg-green-50 border-l-4 border-green-500 p-6 rounded-lg">
-          <p className="text-gray-600 text-sm"><FaCheck className="inline mr-2" /> Approved Today</p>
-          <p className="text-3xl font-bold text-green-600">0</p>
+        <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-[24px]">
+          <p className="text-secondary/40 text-[10px] font-black uppercase tracking-widest mb-2"><FaCheck className="inline mr-2" /> Processed Today</p>
+          <p className="text-4xl font-black text-emerald-500">0</p>
         </div>
-        <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-lg">
-          <p className="text-gray-600 text-sm"><FaTimes className="inline mr-2" /> Rejected Today</p>
-          <p className="text-3xl font-bold text-red-600">0</p>
+        <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-[24px]">
+          <p className="text-secondary/40 text-[10px] font-black uppercase tracking-widest mb-2"><FaTimes className="inline mr-2" /> Denied Today</p>
+          <p className="text-4xl font-black text-rose-500">0</p>
         </div>
       </div>
 
       {/* Pending Registrations List */}
       {pendingRegistrations.length === 0 ? (
-        <div className="bg-blue-50 border border-blue-200 p-8 rounded-lg text-center">
-          <p className="text-gray-600 text-lg">No pending registrations</p>
-          <p className="text-gray-500 text-sm mt-2">All users have been approved or rejected</p>
+        <div className="bg-white border border-dashed border-gray-200 p-20 rounded-[40px] text-center">
+          <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-200 mx-auto mb-4">
+            <FaCheck size={32} />
+          </div>
+          <p className="text-secondary font-black text-lg">Clear Queue</p>
+          <p className="text-secondary/40 text-sm font-medium mt-1">All registration requests have been processed.</p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {pendingRegistrations.map((registration) => (
             <div
               key={registration._id}
-              className="bg-white border-2 border-gray-200 rounded-lg p-6 hover:shadow-lg transition"
+              className="bg-white border border-gray-100 rounded-[32px] p-8 shadow-sm hover:shadow-xl hover:shadow-secondary/5 transition-all animate-in fade-in slide-in-from-bottom-2"
             >
-              {/* Registration Details */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div>
-                  <p className="text-xs text-gray-500 font-semibold">Username</p>
-                  <p className="text-lg font-bold text-gray-900">{registration.username}</p>
+              <div className="flex justify-between items-start mb-8">
+                 <div className="flex items-center gap-4">
+                   <div className="w-14 h-14 rounded-2xl bg-secondary flex items-center justify-center text-white text-xl font-black">
+                     {registration.username.charAt(0).toUpperCase()}
+                   </div>
+                   <div>
+                     <h3 className="text-lg font-black text-secondary tracking-tight">{registration.username}</h3>
+                     <p className="text-xs font-bold text-secondary/40 truncate max-w-[200px]">{registration.email}</p>
+                   </div>
+                 </div>
+                 <div className="text-right">
+                   <span className="text-[10px] font-black text-secondary/30 uppercase tracking-widest block mb-1">Assigned Role</span>
+                   <span className="inline-block bg-primary/10 text-primary px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+                     {registration.role}
+                   </span>
+                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                  <span className="text-[9px] font-black text-secondary/30 uppercase tracking-widest block mb-2">Branch</span>
+                  <span className="text-sm font-black text-secondary">{registration.branchCode}</span>
                 </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-semibold">Email</p>
-                  <p className="text-lg text-gray-700">{registration.email}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-semibold">Branch Code</p>
-                  <p className="text-lg font-bold text-primary">{registration.branchCode}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 font-semibold">Role</p>
-                  <p className="text-lg font-bold text-secondary flex items-center gap-2">
-                    <FaBriefcase /> {registration.role}
-                  </p>
+                <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100/50">
+                  <span className="text-[9px] font-black text-amber-600/40 uppercase tracking-widest block mb-2">OTP Pin</span>
+                  <span className="text-xl font-black text-amber-600 tracking-widest">{registration.otp}</span>
                 </div>
               </div>
 
-              {/* OTP Display */}
-              <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded mb-6">
-                <p className="text-xs text-gray-600 font-semibold">OTP Code (Valid for 5 minutes)</p>
-                <p className="text-3xl font-bold text-yellow-600 mt-2">{registration.otp}</p>
-              </div>
-
-              {/* Approval Section */}
-              <div className="border-t pt-6">
-                <div className="space-y-4">
-                  {/* Approve Button */}
-                  <div>
-                    <button
-                      onClick={() => handleApprove(registration._id, registration.otp)}
-                      disabled={approvingId === registration._id}
-                      className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      <FaCheck />
-                      {approvingId === registration._id
-                        ? "Approving..."
-                        : "Approve Registration"}
-                    </button>
-                  </div>
-
-                  {/* Reject Section */}
-                  <div>
-                    <textarea
-                      placeholder="Rejection reason (required to reject)..."
-                      value={rejectionReason}
-                      onChange={(e) => setRejectionReason(e.target.value)}
-                      className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-red-500 outline-none mb-3 resize-none"
-                      rows="3"
-                    />
-                    <button
-                      onClick={() => handleReject(registration._id)}
-                      disabled={rejectingId === registration._id || !rejectionReason.trim()}
-                      className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      <FaTimes />
-                      {rejectingId === registration._id ? "Rejecting..." : "Reject Registration"}
-                    </button>
-                  </div>
+              <div className="space-y-4 pt-6 border-t border-gray-50">
+                <button
+                  onClick={() => handleApprove(registration._id, registration.otp)}
+                  disabled={approvingId === registration._id}
+                  className="w-full bg-secondary text-white font-black py-4 rounded-2xl hover:bg-secondary/90 transition-all shadow-lg shadow-secondary/10 disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
+                >
+                  <FaCheck />
+                  {approvingId === registration._id ? "Processing..." : "Approve User"}
+                </button>
+                
+                <div className="relative group">
+                  <textarea
+                    placeholder="Enter reason for rejection..."
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:border-rose-200 focus:bg-white transition-all outline-none text-xs font-bold text-secondary mb-3 resize-none min-h-[80px]"
+                  />
+                  <button
+                    onClick={() => handleReject(registration._id)}
+                    disabled={rejectingId === registration._id || !rejectionReason.trim()}
+                    className="w-full text-rose-500 hover:bg-rose-50 font-black py-3 rounded-xl transition-all disabled:opacity-30 flex items-center justify-center gap-2 uppercase tracking-widest text-[10px]"
+                  >
+                    <FaTimes />
+                    {rejectingId === registration._id ? "Rejecting..." : "Reject User"}
+                  </button>
                 </div>
               </div>
             </div>

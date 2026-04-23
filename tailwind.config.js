@@ -7,11 +7,14 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: "#4096d3",
-        secondary: "#08295f",
+        primary: "#4096d3", // Sky Blue
+        secondary: "#001f3f", // Navy Blue
+        navy: "#001f3f",
+        sky: "#4096d3",
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        poppins: ['Poppins', 'sans-serif'],
+        sans: ['Poppins', 'sans-serif'],
       }
 
     },
