@@ -207,6 +207,60 @@ router.post("/", async (req, res) => {
 });
 
 /**
+ * PUT: Update Customer Locked Price by ID
+ */
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { customerId, productId, lockedPrice } = req.body;
+
+    if (!customerId || !productId || lockedPrice === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "customerId, productId, and lockedPrice are required",
+      });
+    }
+
+    // Get current product cost for margin calculation
+    const product = await Product.findById(productId).select("purchasingPrice");
+    if (!product) {
+       return res.status(404).json({ success: false, message: "Product not found" });
+    }
+    const pPrice = product.purchasingPrice || 0;
+    const margin = Math.round((Number(lockedPrice) - pPrice) * 100) / 100;
+
+    const updated = await CustomerLockedPrice.findByIdAndUpdate(
+      id,
+      { 
+        customerId, 
+        productId, 
+        lockedPrice: Number(lockedPrice),
+        purchasingPrice: pPrice,
+        margin: margin
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Locked price record not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: updated,
+      message: "Customer locked price updated successfully",
+    });
+  } catch (error) {
+    console.error("Update Customer Locked Price Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update customer locked price",
+      error: error.message,
+    });
+  }
+});
+
+/**
  * GET: Fetch All Customer Locked Prices for a Branch (Optimized with Sort & Pagination)
  */
 router.get("/branch/:branchId", async (req, res) => {
