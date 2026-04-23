@@ -273,6 +273,7 @@ const salesOrderSchema = new mongoose.Schema(
         totalTax: Object,
         grandTotal: Number,
         editedAt: { type: Date, default: Date.now },
+        editedBy: String, // ✨ NEW: Track who made this edit
         note: String,
       },
     ],

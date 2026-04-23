@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FaLock, FaSync, FaSearch, FaUser, FaBox, FaTrash, FaPlus, FaCheckCircle, FaChevronDown, FaUpload, FaEdit, FaTimes } from "react-icons/fa";
+import { FaLock, FaSync, FaSearch, FaUser, FaBox, FaTrash, FaPlus, FaCheckCircle, FaChevronDown, FaUpload, FaEdit, FaTimes, FaFileExcel } from "react-icons/fa";
+import * as XLSX from "xlsx";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -63,6 +64,26 @@ const BranchLockedPrices = () => {
   const [editCustResults, setEditCustResults] = useState([]);
   const [editSearchingProd, setEditSearchingProd] = useState(false);
   const [editSearchingCust, setEditSearchingCust] = useState(false);
+  
+  // New Row State
+  const [isAdding, setIsAdding] = useState(false);
+  const [newRowData, setNewRowData] = useState({
+    customerId: "",
+    customerName: "",
+    productId: "",
+    productName: "",
+    purchasingPrice: 0,
+    sellingPrice: 0,
+    lockedPrice: "",
+    custSearch: "",
+    prodSearch: ""
+  });
+  const [showNewCustDropdown, setShowNewCustDropdown] = useState(false);
+  const [showNewProdDropdown, setShowNewProdDropdown] = useState(false);
+  const [newCustResults, setNewCustResults] = useState([]);
+  const [newProdResults, setNewProdResults] = useState([]);
+  const [newSearchingCust, setNewSearchingCust] = useState(false);
+  const [newSearchingProd, setNewSearchingProd] = useState(false);
 
   useEffect(() => {
     if (currentBranch?._id) {
@@ -187,6 +208,48 @@ const BranchLockedPrices = () => {
     const timer = setTimeout(searchProducts, 500);
     return () => clearTimeout(timer);
   }, [editProdSearch, currentBranch?._id]);
+
+  // 🔍 DEBOUNCED NEW ROW CUSTOMER SEARCH
+  useEffect(() => {
+    const searchCustomers = async () => {
+      if (!newRowData.custSearch.trim() || newRowData.customerId) return;
+      
+      setNewSearchingCust(true);
+      try {
+        const res = await fetch(`${API_BASE}/customers?branchId=${currentBranch._id}&search=${newRowData.custSearch}&limit=20`);
+        const data = await res.json();
+        setNewCustResults(data.data || []);
+      } catch (err) {
+        console.error("Search New Customers Error:", err);
+      } finally {
+        setNewSearchingCust(false);
+      }
+    };
+
+    const timer = setTimeout(searchCustomers, 500);
+    return () => clearTimeout(timer);
+  }, [newRowData.custSearch, currentBranch?._id]);
+
+  // 🔍 DEBOUNCED NEW ROW PRODUCT SEARCH
+  useEffect(() => {
+    const searchProducts = async () => {
+      if (!newRowData.prodSearch.trim() || newRowData.productId) return;
+      
+      setNewSearchingProd(true);
+      try {
+        const res = await fetch(`${API_BASE}/products?branchId=${currentBranch._id}&search=${newRowData.prodSearch}&limit=20`);
+        const data = await res.json();
+        setNewProdResults(data.data || []);
+      } catch (err) {
+        console.error("Search New Products Error:", err);
+      } finally {
+        setNewSearchingProd(false);
+      }
+    };
+
+    const timer = setTimeout(searchProducts, 500);
+    return () => clearTimeout(timer);
+  }, [newRowData.prodSearch, currentBranch?._id]);
 
   const fetchCustomers = async () => {
     try {
@@ -415,6 +478,91 @@ const BranchLockedPrices = () => {
     }
   };
 
+  const handleExportExcel = async () => {
+    setLoading(true);
+    try {
+      // Fetch ALL records for this branch without pagination limits (or a very high limit)
+      const url = `${API_BASE}/customer-locked-prices/branch/${currentBranch._id}?limit=10000`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+      const data = await res.json();
+      
+      if (!data.success || !data.data || data.data.length === 0) {
+        return toast.info("No records to export");
+      }
+
+      const allRecords = data.data;
+      const exportData = allRecords.map(lp => ({
+        "Product Name": lp.productId?.name || "N/A",
+        "SKU/Code": lp.productId?.sku || lp.productId?.productCode || "N/A",
+        "Customer Name": lp.customerId?.name || "N/A",
+        "Current Cost": lp.productId?.purchasingPrice || 0,
+        "Std. Selling Price": lp.productId?.sellingPrice || 0,
+        "Locked Price": lp.lockedPrice || 0,
+        "Margin Amount": (lp.lockedPrice || 0) - (lp.productId?.purchasingPrice || 0),
+        "Margin %": lp.productId?.purchasingPrice > 0 
+          ? (((lp.lockedPrice - lp.productId.purchasingPrice) / lp.productId.purchasingPrice) * 100).toFixed(2) + "%"
+          : "0%"
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Locked Prices");
+      XLSX.writeFile(wb, `Locked_Prices_FULL_${currentBranch.name}_${new Date().toLocaleDateString()}.xlsx`);
+      toast.success(`Excel exported successfully (${allRecords.length} records)`);
+    } catch (err) {
+      console.error("Export Error:", err);
+      toast.error("Failed to export Excel");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveNewRow = async () => {
+    if (!newRowData.customerId || !newRowData.productId || !newRowData.lockedPrice) {
+      return toast.warn("Please select customer, product, and set a price");
+    }
+
+    setSaving(true);
+    try {
+      const resp = await fetch(`${API_BASE}/customer-locked-prices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branchId: currentBranch._id,
+          customerId: newRowData.customerId,
+          productId: newRowData.productId,
+          lockedPrice: Number(newRowData.lockedPrice),
+        }),
+      });
+
+      const data = await resp.json();
+      if (data.success) {
+        toast.success("Price locked successfully");
+        setIsAdding(false);
+        setNewRowData({
+          customerId: "",
+          customerName: "",
+          productId: "",
+          productName: "",
+          purchasingPrice: 0,
+          sellingPrice: 0,
+          lockedPrice: "",
+          custSearch: "",
+          prodSearch: ""
+        });
+        fetchLockedPrices();
+      } else {
+        throw new Error(data.message);
+      }
+    } catch (err) {
+      toast.error(err.message || "Failed to save locked price");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Dropdown options: If searching, use searching state results. Otherwise use initial fetch results.
   const displayCustomers = customers.slice(0, 50);
   const displayProducts = prodSearch.trim() && prodResults.length > 0 ? prodResults : products.slice(0, 50);
@@ -452,12 +600,24 @@ const BranchLockedPrices = () => {
               className="hidden" 
             />
             <button 
+              onClick={handleExportExcel}
+              className="flex items-center gap-2 text-xs font-black uppercase bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-2 rounded-lg transition shadow-sm"
+            >
+              <FaFileExcel /> Export Excel
+            </button>
+            <button 
               onClick={() => fileInputRef.current?.click()}
               disabled={bulkLoading}
-              className="flex items-center gap-2 text-xs font-black uppercase bg-[#319bab] text-white hover:bg-[#257f87] px-4 py-2 rounded-lg transition shadow-sm"
+              className="flex items-center gap-2 text-xs font-black uppercase bg-orange-600 text-white hover:bg-orange-700 px-4 py-2 rounded-lg transition shadow-sm"
             >
               <FaUpload className={bulkLoading ? "animate-spin" : ""} />
               {bulkLoading ? "Processing..." : "Bulk Upload"}
+            </button>
+            <button 
+              onClick={() => setIsAdding(true)}
+              className="flex items-center gap-2 text-xs font-black uppercase bg-[#319bab] text-white hover:bg-[#257f87] px-4 py-2 rounded-lg transition shadow-sm"
+            >
+              <FaPlus /> Create Lock Price
             </button>
             <button 
               onClick={fetchLockedPrices}
@@ -468,201 +628,9 @@ const BranchLockedPrices = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* CREATE FORM */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <div className="flex items-center gap-2 mb-6">
-                <FaPlus className="text-[#319bab]" />
-                <h2 className="font-black text-xs uppercase tracking-widest text-gray-700">Create Lock Price</h2>
-              </div>
-
-              <div className="space-y-4">
-                {/* CUSTOMER SEARCH */}
-                <div className="relative">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block underline decoration-[#319bab]/20 offset-2">Select Customer</label>
-                  <div className="relative group">
-                    <FaUser className="absolute left-3 top-1/2 -translate-y-1/2 text-[#319bab] group-focus-within:text-blue-500 transition-colors" size={12} />
-                    <input 
-                      type="text"
-                      placeholder="Search customer name..."
-                      value={selectedCustomer ? selectedCustomer.name : custSearch}
-                      onChange={(e) => {
-                        setCustSearch(e.target.value);
-                        if(selectedCustomer) setSelectedCustomer(null);
-                      }}
-                      onFocus={() => {
-                        setShowCustomerDropdown(true);
-                        if (!custSearch.trim()) fetchCustomers(); // Refresh on focus
-                      }}
-                      className="w-full pl-9 pr-10 py-3 bg-gray-50 border-2 border-transparent rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/30 transition-all shadow-inner"
-                    />
-                    {selectedCustomer && (
-                      <button 
-                        onClick={() => { setSelectedCustomer(null); setCustSearch(""); }}
-                        className="absolute right-8 top-1/2 -translate-y-1/2 text-red-400 hover:text-red-600 p-1"
-                      >
-                        <FaTrash size={10} />
-                      </button>
-                    )}
-                    <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={10} />
-                  </div>
-                  {showCustomerDropdown && (
-                    <div 
-                      className="absolute z-20 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200"
-                      onMouseLeave={() => setShowCustomerDropdown(false)}
-                    >
-                      {searchingCust ? (
-                        <div className="p-4 text-center text-gray-400 text-[10px] font-black uppercase flex items-center justify-center gap-2">
-                          <FaSync className="animate-spin text-[#319bab]" /> Searching Database...
-                        </div>
-                      ) : displayCustomers.length > 0 ? displayCustomers.map(c => (
-                        <div 
-                          key={c._id}
-                          onClick={() => {
-                            setSelectedCustomer(c);
-                            setCustSearch("");
-                            setShowCustomerDropdown(false);
-                          }}
-                          className="px-4 py-3 text-xs hover:bg-[#319bab]/5 cursor-pointer border-b border-gray-50 flex items-center justify-between group"
-                        >
-                          <span className="font-bold text-gray-700 group-hover:text-[#319bab] transition-colors">{c.name}</span>
-                          <span className="text-[9px] text-gray-400 font-black">{c.whatsapp || "No Phone"}</span>
-                        </div>
-                      )) : (
-                        <div className="p-4 text-center text-gray-400 text-[10px] font-black uppercase">
-                          No customers found
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* PRODUCT SEARCH */}
-                <div className="relative">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block underline decoration-[#319bab]/20 offset-2">Select Product</label>
-                  <div className="relative group">
-                    <FaBox className="absolute left-3 top-1/2 -translate-y-1/2 text-[#319bab] group-focus-within:text-blue-500 transition-colors" size={12} />
-                    <input 
-                      type="text"
-                      placeholder="Search product name..."
-                      value={selectedProduct ? selectedProduct.name : prodSearch}
-                      onChange={(e) => {
-                        setProdSearch(e.target.value);
-                        if(selectedProduct) setSelectedProduct(null);
-                      }}
-                      onFocus={() => setShowProductDropdown(true)}
-                      className="w-full pl-9 pr-10 py-3 bg-gray-50 border-2 border-transparent rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/30 transition-all shadow-inner"
-                    />
-                    {selectedProduct && (
-                      <button 
-                        onClick={() => { setSelectedProduct(null); setProdSearch(""); }}
-                        className="absolute right-8 top-1/2 -translate-y-1/2 text-red-400 hover:text-red-600 p-1"
-                      >
-                        <FaTrash size={10} />
-                      </button>
-                    )}
-                    <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={10} />
-                  </div>
-                  {showProductDropdown && (
-                    <div 
-                      className="absolute z-20 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200"
-                      onMouseLeave={() => setShowProductDropdown(false)}
-                    >
-                      {searchingProd ? (
-                        <div className="p-4 text-center text-gray-400 text-[10px] font-black uppercase flex items-center justify-center gap-2">
-                          <FaSync className="animate-spin text-[#319bab]" /> Searching Database...
-                        </div>
-                      ) : displayProducts.length > 0 ? displayProducts.map(p => (
-                        <div 
-                          key={p._id}
-                          onClick={() => {
-                            setSelectedProduct(p);
-                            setProdSearch("");
-                            setShowProductDropdown(false);
-                            setLockedPrice(""); // Reset price to let them enter new one or see default
-                          }}
-                          className="px-4 py-3 text-xs hover:bg-[#319bab]/5 cursor-pointer border-b border-gray-50 flex items-center justify-between group"
-                        >
-                          <span className="font-bold text-gray-700 group-hover:text-[#319bab] transition-colors">{p.name}</span>
-                          <div className="text-right">
-                             <div className="text-[9px] text-gray-400 font-black">STOCK: {p.totalQty}</div>
-                             <div className="text-[9px] text-[#319bab] font-black">₹{p.sellingPrice}</div>
-                          </div>
-                        </div>
-                      )) : (
-                        <div className="p-4 text-center text-gray-400 text-[10px] font-black uppercase">
-                          No products found
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* AUTO FIELDS */}
-                <div className="grid grid-cols-3 gap-2 p-4 bg-gray-50 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden">
-                  <div className="absolute top-0 right-0 h-full w-1 bg-[#319bab]/20"></div>
-                  <div>
-                    <span className="text-[9px] font-black text-gray-400 uppercase block mb-1">Current Cost</span>
-                    <span className="font-black text-gray-700 text-sm">₹{selectedProduct?.purchasingPrice?.toFixed(2) || "0.00"}</span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] font-black text-gray-400 uppercase block mb-1">Standard Selling</span>
-                    <span className="font-black text-gray-700 text-sm">₹{selectedProduct?.sellingPrice?.toFixed(2) || "0.00"}</span>
-                  </div>
-                  <div className="text-right border-l pl-2 border-gray-200">
-                    <span className="text-[9px] font-black text-gray-400 uppercase block mb-1">Curr. Margin</span>
-                    <span className="font-black text-[#319bab] text-sm">
-                      {selectedProduct && selectedProduct.purchasingPrice > 0 
-                        ? (((selectedProduct.sellingPrice - selectedProduct.purchasingPrice) / selectedProduct.purchasingPrice) * 100).toFixed(1)
-                        : "0.0"}%
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 block">Locked Price (₹)</label>
-                  <input 
-                    type="number"
-                    value={lockedPrice}
-                    onChange={(e) => setLockedPrice(e.target.value)}
-                    placeholder="Enter special price..."
-                    className="w-full px-4 py-2 bg-white border-2 border-[#319bab]/20 rounded-lg text-sm font-black text-[#319bab] outline-none focus:border-[#319bab] transition"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 border border-orange-100 bg-orange-50/30 rounded-lg">
-                   <div className="flex items-center gap-2">
-                     <input 
-                      type="checkbox" 
-                      checked={isLocked} 
-                      onChange={(e) => setIsLocked(e.target.checked)}
-                      className="accent-orange-500"
-                     />
-                     <span className="text-xs font-black text-orange-600 uppercase tracking-tight">Locked Price</span>
-                   </div>
-                   <div className="text-right">
-                     <span className="text-[9px] font-black text-gray-400 uppercase block">Margin</span>
-                     <span className={`text-xs font-bold ${margin >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                       {marginPercent.toFixed(1)}%
-                     </span>
-                   </div>
-                </div>
-
-                <button 
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="w-full py-3 bg-[#319bab] hover:bg-[#257f87] text-white rounded-lg font-black transition flex items-center justify-center gap-2 shadow-md shadow-[#319bab]/20 uppercase tracking-widest text-xs"
-                >
-                  {saving ? <FaSync className="animate-spin" /> : <FaLock />}
-                  {saving ? "Saving..." : "Save Lock Price"}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* RECORD LIST */}
-          <div className="lg:col-span-2">
+        <div className="flex flex-col gap-6">
+          {/* RECORD LIST (FULL WIDTH) */}
+          <div className="w-full">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden h-full">
               <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
                 <div className="flex items-center gap-3">
@@ -762,6 +730,120 @@ const BranchLockedPrices = () => {
                       )}
                       {isFieldAllowed("action") && <th className="px-6 py-5 text-center">Actions</th>}
                     </tr>
+
+                    {/* NEW ROW INLINE */}
+                    {isAdding && (
+                      <tr className="bg-amber-50/30 border-b-2 border-amber-100 animate-in slide-in-from-top-2">
+                        <td className="px-6 py-4 text-center">
+                          <FaPlus className="text-amber-500 mx-auto" />
+                        </td>
+                        <td className="px-4 py-4 relative">
+                          <div className="relative">
+                            <input 
+                              type="text"
+                              placeholder="Search Product..."
+                              className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs font-black"
+                              value={newRowData.prodSearch}
+                              onChange={(e) => {
+                                setNewRowData({ ...newRowData, prodSearch: e.target.value, productId: "" });
+                                setShowNewProdDropdown(true);
+                              }}
+                              onFocus={() => setShowNewProdDropdown(true)}
+                            />
+                            {showNewProdDropdown && (
+                              <div className="absolute top-full left-0 right-0 z-[110] mt-1 bg-white rounded-xl shadow-2xl border border-amber-100 overflow-hidden max-h-60 overflow-y-auto">
+                                {newSearchingProd ? (
+                                  <div className="p-4 text-center"><FaSync className="animate-spin text-[#319bab] mx-auto" /></div>
+                                ) : newProdResults.length > 0 ? newProdResults.map(p => (
+                                  <div 
+                                    key={p._id} 
+                                    className="px-4 py-3 hover:bg-amber-50 cursor-pointer border-b border-slate-50"
+                                    onClick={() => {
+                                      setNewRowData({ 
+                                        ...newRowData, 
+                                        productId: p._id, 
+                                        productName: p.name, 
+                                        prodSearch: p.name,
+                                        purchasingPrice: p.purchasingPrice,
+                                        sellingPrice: p.sellingPrice 
+                                      });
+                                      setShowNewProdDropdown(false);
+                                    }}
+                                  >
+                                    <p className="text-xs font-black">{p.name}</p>
+                                    <p className="text-[10px] text-slate-400">Cost: ₹{p.purchasingPrice} | Std: ₹{p.sellingPrice}</p>
+                                  </div>
+                                )) : <div className="p-4 text-center text-xs">No Products Found</div>}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 relative">
+                           <div className="relative">
+                            <input 
+                              type="text"
+                              placeholder="Search Customer..."
+                              className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg text-xs font-black"
+                              value={newRowData.custSearch}
+                              onChange={(e) => {
+                                setNewRowData({ ...newRowData, custSearch: e.target.value, customerId: "" });
+                                setShowNewCustDropdown(true);
+                              }}
+                              onFocus={() => setShowNewCustDropdown(true)}
+                            />
+                            {showNewCustDropdown && (
+                              <div className="absolute top-full left-0 right-0 z-[110] mt-1 bg-white rounded-xl shadow-2xl border border-amber-100 overflow-hidden max-h-60 overflow-y-auto">
+                                {newSearchingCust ? (
+                                  <div className="p-4 text-center"><FaSync className="animate-spin text-[#319bab] mx-auto" /></div>
+                                ) : newCustResults.length > 0 ? newCustResults.map(c => (
+                                  <div 
+                                    key={c._id} 
+                                    className="px-4 py-3 hover:bg-amber-50 cursor-pointer border-b border-slate-50"
+                                    onClick={() => {
+                                      setNewRowData({ 
+                                        ...newRowData, 
+                                        customerId: c._id, 
+                                        customerName: c.name, 
+                                        custSearch: c.name 
+                                      });
+                                      setShowNewCustDropdown(false);
+                                    }}
+                                  >
+                                    <p className="text-xs font-black">{c.name}</p>
+                                  </div>
+                                )) : <div className="p-4 text-center text-xs">No Customers Found</div>}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-right text-xs font-bold text-slate-400">
+                          ₹{newRowData.purchasingPrice.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-4 text-right text-sm font-black text-slate-700">
+                          ₹{newRowData.sellingPrice.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-4 text-right">
+                          <input 
+                            type="number"
+                            placeholder="Price"
+                            className="w-24 px-3 py-2 border-2 border-amber-200 rounded-lg text-right font-black text-amber-600 outline-none"
+                            value={newRowData.lockedPrice}
+                            onChange={(e) => setNewRowData({ ...newRowData, lockedPrice: e.target.value })}
+                          />
+                        </td>
+                        <td className={`px-4 py-4 text-right text-xs font-black ${((Number(newRowData.lockedPrice) - newRowData.purchasingPrice) / (newRowData.purchasingPrice || 1) * 100) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {newRowData.purchasingPrice > 0 
+                            ? (((Number(newRowData.lockedPrice) - newRowData.purchasingPrice) / newRowData.purchasingPrice) * 100).toFixed(1)
+                            : "0.0"}%
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                           <div className="flex items-center justify-center gap-2">
+                             <button onClick={handleSaveNewRow} className="p-2 bg-emerald-500 text-white rounded-lg shadow-sm"><FaPlus size={12} /></button>
+                             <button onClick={() => setIsAdding(false)} className="p-2 bg-slate-200 text-slate-600 rounded-lg shadow-sm"><FaTimes size={12} /></button>
+                           </div>
+                        </td>
+                      </tr>
+                    )}
                     <tr className="bg-white border-b border-slate-50">
                       <th className="px-4 py-3 bg-slate-50/10"></th>
                       {isFieldAllowed("productInfo") && (

@@ -338,8 +338,11 @@ router.post("/preview/:salesOrderId", async (req, res) => {
   }
 });
 
+import auth from "../middleware/auth.js";
+
+
 // POST - Finalize Invoice (save and generate)
-router.post("/finalize/:salesOrderId", async (req, res) => {
+router.post("/finalize/:salesOrderId", auth, async (req, res) => {
   try {
     const { salesOrderId } = req.params;
     const {
@@ -734,10 +737,23 @@ router.post("/finalize/:salesOrderId", async (req, res) => {
           editType: "INVOICED",
           grandTotal,
           editedAt: new Date(),
+          editedBy: req.user.username, // ✨ NEW
           note: `Invoice ${invoiceNumber} finalized. ${isCustomerSwapped ? 'Customer Swap Applied.' : ''}`
         });
 
         await salesOrder.save({ session });
+
+        // ✅ LOG SUCCESSFUL INVOICE FINALIZATION
+        await createAuditLog({
+          userId: req.user.id,
+          userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+          username: req.user.username,
+          branchId: salesOrder.branchId,
+          action: "INVOICE_SO",
+          description: `Finalized Invoice: ${invoiceNumber} for Order: ${salesOrder.invoiceId}. Total: ₹${grandTotal}`,
+          targetId: invoice._id,
+          targetModel: "Invoice",
+        });
 
         await session.commitTransaction();
         session.endSession();

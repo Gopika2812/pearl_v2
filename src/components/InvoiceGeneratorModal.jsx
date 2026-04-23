@@ -11,7 +11,7 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import html2canvas from "html2canvas";
-import { API_BASE } from "../api";
+import { API_BASE, fetchWithAuth } from "../api";
 import { useBranch } from "../context/BranchContext";
 import { useInventory } from "../context/InventoryContext";
 
@@ -407,7 +407,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
   const handleGeneratePreview = async () => {
     try {
       setGenerating(true);
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${API_BASE}/invoices/preview/${order._id}`,
         {
           method: "POST",
@@ -443,7 +443,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
   const handleFinalize = async () => {
     try {
       setGenerating(true);
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${API_BASE}/invoices/finalize/${order._id}`,
         {
           method: "POST",

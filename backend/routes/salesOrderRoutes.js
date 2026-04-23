@@ -1113,6 +1113,7 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
       items: allItems,
       grandTotal: grandTotalToUse,
       invoicedAt: new Date(),
+      editedBy: req.user.username, // ✨ NEW
       invoiceNumber: siNumber
     };
 
@@ -1292,6 +1293,7 @@ router.put("/:id", auth, async (req, res) => {
         totalTax: { total: Math.round(Number(totalTax) || 0) },
         grandTotal: newGrandTotal,
         editedAt: new Date(),
+        editedBy: req.user.username, // ✨ NEW
         note: `Draft Edit (V${(salesOrder.editHistory.length || 0) + 1}) - Balance/Stock not yet affected.`
       });
       salesOrder.isReEdited = true;
@@ -1305,7 +1307,6 @@ router.put("/:id", auth, async (req, res) => {
 
     // 4. Create Audit Log
     try {
-      const { createAuditLog } = require("../utils/auditLogger");
       await createAuditLog({
         userId: req.user.id,
         userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",

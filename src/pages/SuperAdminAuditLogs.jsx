@@ -16,6 +16,11 @@ const ACTION_META = {
   REQUEST_REEDIT:   { label: "Request Re-Edit",   color: "text-amber-700 bg-amber-100 border-amber-200" },
   APPROVE_REEDIT:   { label: "Approve Re-Edit",   color: "text-emerald-700 bg-emerald-100 border-emerald-200" },
   CANCEL_BILL:      { label: "Cancel Bill",       color: "text-rose-700 bg-rose-100 border-rose-200" },
+  UPDATE_SALES_ORDER: { label: "Update SO",       color: "text-blue-700 bg-blue-100 border-blue-200" },
+  CANCEL_INVOICE:   { label: "Cancel SI",       color: "text-rose-700 bg-rose-100 border-rose-200" },
+  DELETE_INVOICE:   { label: "Delete SI",       color: "text-red-700 bg-red-100 border-red-200" },
+  PRINT_BILL:       { label: "Print Bill",       color: "text-orange-700 bg-orange-100 border-orange-200" },
+  GENERATE_EINVOICE: { label: "E-Invoice",      color: "text-blue-700 bg-blue-100 border-blue-200" },
   // Purchase Order
   CREATE_PO:        { label: "Create PO",         color: "text-green-700 bg-green-100 border-green-200" },
   UPDATE_PO:        { label: "Update PO",         color: "text-blue-700 bg-blue-100 border-blue-200" },
@@ -84,6 +89,26 @@ const SuperAdminAuditLogs = () => {
       }
     } catch (err) { console.error("Error fetching logs:", err); }
     finally { setLoading(false); }
+  };
+
+  const syncHistory = async () => {
+    if (!window.confirm("This will scan all Sales Orders and Invoices to recover missing audit logs. Proceed?")) return;
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/audit-logs/sync-historical`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        fetchLogs();
+      } else {
+        alert("Sync failed: " + data.message);
+      }
+    } catch (err) {
+      console.error("Sync error:", err);
+      alert("Failed to sync historical data.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const clearFilters = () => {
@@ -207,16 +232,28 @@ const SuperAdminAuditLogs = () => {
               <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
                 <FaClipboardList className="text-primary text-sm" />
               </span>
-              Audit Logs
+              Audit Logs Dashboard
             </h1>
             <p className="text-gray-500 mt-1 text-sm">
-              Every action tracked — login, orders, invoices, prints &amp; slips
+              Every action tracked — logins, orders, invoices, prints &amp; slips
               {pagination.total > 0 && (
                 <span className="ml-2 bg-primary/10 text-primary text-xs font-bold px-2 py-0.5 rounded-full">
                   {pagination.total.toLocaleString()} records
                 </span>
               )}
             </p>
+          </div>
+          <div className="flex gap-3">
+            <button 
+              onClick={syncHistory}
+              title="Sync missing historical logs from Sales Orders"
+              className="flex items-center px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-all font-medium text-sm border border-indigo-200"
+            >
+              <FaClock className="mr-2 opacity-70" /> Sync History
+            </button>
+            <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm shadow-blue-200 font-medium text-sm">
+              <FaFileExport className="mr-2" /> Export Logs
+            </button>
           </div>
         </div>
 
