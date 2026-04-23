@@ -20,7 +20,7 @@ const BranchInvoicedOrders = () => {
   const isFieldAllowed = (fieldId) => {
     if (!user) return false;
     if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
-    const key = `invoiced-orders_${fieldId}`;
+    const key = `sales-order-list_${fieldId}`;
     return user.fieldPermissions?.[key] !== false; // Default to true
   };
 
@@ -821,15 +821,17 @@ const BranchInvoicedOrders = () => {
                         checked={filteredSalesOrders.length > 0 && selectedOrderIds.length === filteredSalesOrders.length}
                       />
                     </th>
-                    <th className="px-6 py-4 text-left whitespace-nowrap">Order (SO)</th>
-                    <th className="px-6 py-4 text-left whitespace-nowrap">Invoice (SI)</th>
-                    <th className="px-6 py-4 text-left">Voucher Type</th>
-                    <th className="px-6 py-4 text-left">Customer</th>
-                    {isFieldAllowed("itemsCount") && <th className="px-6 py-4 text-center">Items</th>}
+                    {isFieldAllowed("soId") && <th className="px-6 py-4 text-left whitespace-nowrap">Order (SO)</th>}
+                    {isFieldAllowed("siId") && <th className="px-6 py-4 text-left whitespace-nowrap">Invoice (SI)</th>}
+                    {isFieldAllowed("voucherType") && <th className="px-6 py-4 text-left">Voucher Type</th>}
+                    {isFieldAllowed("customer") && <th className="px-6 py-4 text-left">Customer</th>}
+                    {isFieldAllowed("items") && <th className="px-6 py-4 text-center">Items</th>}
                     {isFieldAllowed("grandTotal") && <th className="px-6 py-4 text-right">Grand Total</th>}
-                    <th className="px-6 py-4 text-center">Status</th>
-                    <th className="px-6 py-4 text-center">Date</th>
-                    <th className="px-6 py-4 text-center">Action</th>
+                    {isFieldAllowed("status") && <th className="px-6 py-4 text-center">Status</th>}
+                    {isFieldAllowed("date") && <th className="px-6 py-4 text-center">Date</th>}
+                    {(isFieldAllowed("action_si_bill") || isFieldAllowed("action_gen_invoice") || isFieldAllowed("action_cancel")) && (
+                      <th className="px-6 py-4 text-center">Action</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -850,52 +852,60 @@ const BranchInvoicedOrders = () => {
                             }}
                           />
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => toggleExpanded(order._id)}
-                              className="text-[#319bab] hover:bg-gray-200 p-1 rounded transition"
-                            >
-                              <FaChevronDown
-                                className={`text-xs transition-transform ${expandedOrders[order._id]
-                                  ? "rotate-180"
-                                  : ""
-                                  }`}
-                              />
-                            </button>
-                            <div className="flex flex-col">
-                              <div className="flex items-center gap-2">
-                                <div className={`p-1 w-2 h-2 rounded-full ${order.invoiceGenerated ? 'bg-green-500 animate-pulse' : 'bg-amber-400'}`} title={order.invoiceGenerated ? "Invoice Generated" : "Pending Invoice"}></div>
-                                <span className="font-bold text-[#319bab] text-xs">
-                                  {order.invoiceId}
-                                </span>
+                        {isFieldAllowed("soId") && (
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => toggleExpanded(order._id)}
+                                className="text-[#319bab] hover:bg-gray-200 p-1 rounded transition"
+                              >
+                                <FaChevronDown
+                                  className={`text-xs transition-transform ${expandedOrders[order._id]
+                                    ? "rotate-180"
+                                    : ""
+                                    }`}
+                                />
+                              </button>
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-2">
+                                  <div className={`p-1 w-2 h-2 rounded-full ${order.invoiceGenerated ? 'bg-green-500 animate-pulse' : 'bg-amber-400'}`} title={order.invoiceGenerated ? "Invoice Generated" : "Pending Invoice"}></div>
+                                  <span className="font-bold text-[#319bab] text-xs">
+                                    {order.invoiceId}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          {order.salesInvoiceId ? (
-                            <span className="font-black text-blue-600 text-xs">
-                              {order.salesInvoiceId}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400 text-[10px] italic">Not Generated</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 font-black">
-                           <span className="bg-slate-100 px-2 py-1 rounded text-[10px] text-slate-600 border border-slate-200 uppercase tracking-tighter">
-                             {order.voucherType || "GE"}
-                           </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="font-semibold text-gray-800">
-    {order.customer?.name}
-                          </div>
-                          <div className="text-[11px] text-gray-500">
-                            {order.customer?.whatsapp}
-                          </div>
-                        </td>
-                        {isFieldAllowed("itemsCount") && (
+                          </td>
+                        )}
+                        {isFieldAllowed("siId") && (
+                          <td className="px-6 py-4">
+                            {order.salesInvoiceId ? (
+                              <span className="font-black text-blue-600 text-xs">
+                                {order.salesInvoiceId}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-[10px] italic">Not Generated</span>
+                            )}
+                          </td>
+                        )}
+                        {isFieldAllowed("voucherType") && (
+                          <td className="px-6 py-4 font-black">
+                             <span className="bg-slate-100 px-2 py-1 rounded text-[10px] text-slate-600 border border-slate-200 uppercase tracking-tighter">
+                               {order.voucherType || "GE"}
+                             </span>
+                          </td>
+                        )}
+                        {isFieldAllowed("customer") && (
+                          <td className="px-6 py-4">
+                            <div className="font-semibold text-gray-800">
+                              {order.customer?.name}
+                            </div>
+                            <div className="text-[11px] text-gray-500">
+                              {order.customer?.whatsapp}
+                            </div>
+                          </td>
+                        )}
+                        {isFieldAllowed("items") && (
                           <td className="px-6 py-4 text-center">
                             <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold">
                               {(order.items || []).length +
@@ -908,70 +918,78 @@ const BranchInvoicedOrders = () => {
                             ₹{(order.grandTotal || 0).toLocaleString()}
                           </td>
                         )}
-                        <td className="px-6 py-4 text-center">
-                          {order.status === "CANCELLED" ? (
-                            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-bold line-through uppercase tracking-wider">
-                              Cancelled
-                            </span>
-                          ) : order.editHistory?.some(h => h.editType === 'RE_INVOICED') ? (
-                            <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-indigo-200">
-                              ✓ Re-Invoiced (V2)
-                            </span>
-                          ) : order.invoiceGenerated ? (
-                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                              ✓ Invoiced (V1)
-                            </span>
-                          ) : (
-                            <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                              Pending Order
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-center text-gray-600 text-xs">
-                          {(() => {
-                            const od = order.orderDate ? new Date(order.orderDate) : null;
-                            const ct = new Date(order.createdAt);
-                            const d = od ? od : ct;
-                            const day = String(d.getDate()).padStart(2, "0");
-                            const month = String(d.getMonth() + 1).padStart(2, "0");
-                            const year = d.getFullYear();
-                            const time = ct.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
-                            return `${day}-${month}-${year}, ${time}`;
-                          })()}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex items-center gap-2 justify-center flex-wrap">
-                            {order.invoiceGenerated && (
-                              <button
-                                onClick={() => handleGenerateInvoice(order, false)}
-                                className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-black bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-200 border border-blue-700"
-                              >
-                                <FaFileInvoice className="text-sm" />
-                                SI Bill
-                              </button>
+                        {isFieldAllowed("status") && (
+                          <td className="px-6 py-4 text-center">
+                            {order.status === "CANCELLED" ? (
+                              <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-bold line-through uppercase tracking-wider">
+                                Cancelled
+                              </span>
+                            ) : order.editHistory?.some(h => h.editType === 'RE_INVOICED') ? (
+                              <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border border-indigo-200">
+                                ✓ Re-Invoiced (V2)
+                              </span>
+                            ) : order.invoiceGenerated ? (
+                              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                                ✓ Invoiced (V1)
+                              </span>
+                            ) : (
+                              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                                Pending Order
+                              </span>
                             )}
+                          </td>
+                        )}
+                        {isFieldAllowed("date") && (
+                          <td className="px-6 py-4 text-center text-gray-600 text-xs">
+                            {(() => {
+                              const od = order.orderDate ? new Date(order.orderDate) : null;
+                              const ct = new Date(order.createdAt);
+                              const d = od ? od : ct;
+                              const day = String(d.getDate()).padStart(2, "0");
+                              const month = String(d.getMonth() + 1).padStart(2, "0");
+                              const year = d.getFullYear();
+                              const time = ct.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+                              return `${day}-${month}-${year}, ${time}`;
+                            })()}
+                          </td>
+                        )}
+                        {(isFieldAllowed("action_si_bill") || isFieldAllowed("action_gen_invoice") || isFieldAllowed("action_cancel")) && (
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex items-center gap-2 justify-center flex-wrap">
+                              {order.invoiceGenerated && isFieldAllowed("action_si_bill") && (
+                                <button
+                                  onClick={() => handleGenerateInvoice(order, false)}
+                                  className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-black bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-200 border border-blue-700"
+                                >
+                                  <FaFileInvoice className="text-sm" />
+                                  SI Bill
+                                </button>
+                              )}
 
-                            <button
-                              onClick={() => handleGenerateInvoice(order, true)}
-                              className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-sm shadow-[#319bab]/20"
-                              disabled={order.status === "CANCELLED"}
-                            >
-                              <FaFileInvoice />
-                              {order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
-                            </button>
+                              {isFieldAllowed("action_gen_invoice") && (
+                                <button
+                                  onClick={() => handleGenerateInvoice(order, true)}
+                                  className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-sm shadow-[#319bab]/20"
+                                  disabled={order.status === "CANCELLED"}
+                                >
+                                  <FaFileInvoice />
+                                  {order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
+                                </button>
+                              )}
 
-                            {/* Cancel Button — Admin & Super Admin only */}
-                            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.status !== "CANCELLED" && (
-                              <button
-                                onClick={() => handleOpenCancelModal(order)}
-                                className="flex items-center gap-1 px-3 py-2 rounded-lg transition text-xs font-semibold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-200 hover:border-red-600 shadow-sm"
-                              >
-                                <FaBan className="text-xs" />
-                                Cancel
-                              </button>
-                            )}
-                          </div>
-                        </td>
+                              {/* Cancel Button — Admin & Super Admin only */}
+                              {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.status !== "CANCELLED" && isFieldAllowed("action_cancel") && (
+                                <button
+                                  onClick={() => handleOpenCancelModal(order)}
+                                  className="flex items-center gap-1 px-3 py-2 rounded-lg transition text-xs font-semibold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-200 hover:border-red-600 shadow-sm"
+                                >
+                                  <FaBan className="text-xs" />
+                                  Cancel
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
 
                       {/* EXPANDED ITEMS ROW */}

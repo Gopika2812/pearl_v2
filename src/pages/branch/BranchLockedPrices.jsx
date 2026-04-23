@@ -6,8 +6,16 @@ import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 
 const BranchLockedPrices = () => {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const { products } = useInventory();
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    const key = `locked-prices_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false;
+  };
   
   const [customers, setCustomers] = useState([]);
   const [lockedPrices, setLockedPrices] = useState([]);
@@ -685,89 +693,105 @@ const BranchLockedPrices = () => {
                           className="w-4 h-4 accent-[#319bab] cursor-pointer"
                         />
                       </th>
-                      <th 
-                        className="px-6 py-5 cursor-pointer hover:bg-slate-100 transition-colors group"
-                        onClick={() => handleSort("productName")}
-                      >
-                        <div className="flex items-center gap-2">
-                           Product Info
-                           {sortField === "productName" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
-                           {!sortField === "productName" && <FaChevronDown className="opacity-0 group-hover:opacity-30" />}
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-5 cursor-pointer hover:bg-slate-100 transition-colors group"
-                        onClick={() => handleSort("customerName")}
-                      >
-                        <div className="flex items-center gap-2">
-                           Customer
-                           {sortField === "customerName" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-5 text-right cursor-pointer hover:bg-slate-100 transition-colors group"
-                        onClick={() => handleSort("purchasingPrice")}
-                      >
-                         <div className="flex items-center justify-end gap-2">
-                            Cost
-                            {sortField === "purchasingPrice" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
-                         </div>
-                      </th>
-                      <th 
-                        className="px-6 py-5 text-right cursor-pointer hover:bg-slate-100 transition-colors group"
-                        onClick={() => handleSort("sellingPrice")}
-                      >
-                        <div className="flex items-center justify-end gap-2">
-                           Std. Price
-                           {sortField === "sellingPrice" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-5 text-right text-orange-600 cursor-pointer hover:bg-slate-100 transition-colors group"
-                        onClick={() => handleSort("lockedPrice")}
-                      >
-                        <div className="flex items-center justify-end gap-2">
-                           Locked ₹
-                           {sortField === "lockedPrice" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
-                        </div>
-                      </th>
-                      <th 
-                        className="px-6 py-5 text-right cursor-pointer hover:bg-slate-100 transition-colors group"
-                        onClick={() => handleSort("marginPercent")}
-                      >
-                        <div className="flex items-center justify-end gap-2">
-                           Margin %
-                           {sortField === "marginPercent" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
-                        </div>
-                      </th>
-                      <th className="px-6 py-5 text-center">Actions</th>
+                      {isFieldAllowed("productInfo") && (
+                        <th 
+                          className="px-6 py-5 cursor-pointer hover:bg-slate-100 transition-colors group"
+                          onClick={() => handleSort("productName")}
+                        >
+                          <div className="flex items-center gap-2">
+                             Product Info
+                             {sortField === "productName" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                             {!sortField === "productName" && <FaChevronDown className="opacity-0 group-hover:opacity-30" />}
+                          </div>
+                        </th>
+                      )}
+                      {isFieldAllowed("customer") && (
+                        <th 
+                          className="px-6 py-5 cursor-pointer hover:bg-slate-100 transition-colors group"
+                          onClick={() => handleSort("customerName")}
+                        >
+                          <div className="flex items-center gap-2">
+                             Customer
+                             {sortField === "customerName" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                          </div>
+                        </th>
+                      )}
+                      {isFieldAllowed("cost") && (
+                        <th 
+                          className="px-6 py-5 text-right cursor-pointer hover:bg-slate-100 transition-colors group"
+                          onClick={() => handleSort("purchasingPrice")}
+                        >
+                           <div className="flex items-center justify-end gap-2">
+                              Cost
+                              {sortField === "purchasingPrice" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                           </div>
+                        </th>
+                      )}
+                      {isFieldAllowed("stdPrice") && (
+                        <th 
+                          className="px-6 py-5 text-right cursor-pointer hover:bg-slate-100 transition-colors group"
+                          onClick={() => handleSort("sellingPrice")}
+                        >
+                          <div className="flex items-center justify-end gap-2">
+                             Std. Price
+                             {sortField === "sellingPrice" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                          </div>
+                        </th>
+                      )}
+                      {isFieldAllowed("lockedPrice") && (
+                        <th 
+                          className="px-6 py-5 text-right text-orange-600 cursor-pointer hover:bg-slate-100 transition-colors group"
+                          onClick={() => handleSort("lockedPrice")}
+                        >
+                          <div className="flex items-center justify-end gap-2">
+                             Locked ₹
+                             {sortField === "lockedPrice" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                          </div>
+                        </th>
+                      )}
+                      {isFieldAllowed("margin") && (
+                        <th 
+                          className="px-6 py-5 text-right cursor-pointer hover:bg-slate-100 transition-colors group"
+                          onClick={() => handleSort("marginPercent")}
+                        >
+                          <div className="flex items-center justify-end gap-2">
+                             Margin %
+                             {sortField === "marginPercent" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                          </div>
+                        </th>
+                      )}
+                      {isFieldAllowed("action") && <th className="px-6 py-5 text-center">Actions</th>}
                     </tr>
                     <tr className="bg-white border-b border-slate-50">
                       <th className="px-4 py-3 bg-slate-50/10"></th>
-                      <th className="px-4 py-3">
-                        <div className="relative">
-                          <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
-                          <input 
-                            type="text"
-                            placeholder="Find Product..."
-                            value={filters.product}
-                            onChange={(e) => setFilters({ ...filters, product: e.target.value })}
-                            className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/40 transition-all"
-                          />
-                        </div>
-                      </th>
-                      <th className="px-4 py-3">
-                        <div className="relative">
-                          <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
-                          <input 
-                            type="text"
-                            placeholder="Find Customer..."
-                            value={filters.customer}
-                            onChange={(e) => setFilters({ ...filters, customer: e.target.value })}
-                            className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/40 transition-all"
-                          />
-                        </div>
-                      </th>
+                      {isFieldAllowed("productInfo") && (
+                        <th className="px-4 py-3">
+                          <div className="relative">
+                            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
+                            <input 
+                              type="text"
+                              placeholder="Find Product..."
+                              value={filters.product}
+                              onChange={(e) => setFilters({ ...filters, product: e.target.value })}
+                              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/40 transition-all"
+                            />
+                          </div>
+                        </th>
+                      )}
+                      {isFieldAllowed("customer") && (
+                        <th className="px-4 py-3">
+                          <div className="relative">
+                            <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
+                            <input 
+                              type="text"
+                              placeholder="Find Customer..."
+                              value={filters.customer}
+                              onChange={(e) => setFilters({ ...filters, customer: e.target.value })}
+                              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-xs font-bold outline-none focus:bg-white focus:border-[#319bab]/40 transition-all"
+                            />
+                          </div>
+                        </th>
+                      )}
                       <th colSpan="5"></th>
                     </tr>
                   </thead>
@@ -809,172 +833,186 @@ const BranchLockedPrices = () => {
                                  disabled={isEditing}
                                 />
                             </td>
-                            <td className="px-6 py-5 relative">
-                              {isEditing ? (
-                                <div className="relative">
-                                  <div className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-[#319bab]/20 rounded-lg focus-within:border-[#319bab] transition-all">
-                                    <FaBox className="text-slate-400" size={12} />
-                                    <input 
-                                      type="text"
-                                      placeholder="Search Product..."
-                                      className="flex-1 bg-transparent border-none outline-none text-xs font-black text-slate-800"
-                                      value={editProdSearch}
-                                      onChange={(e) => {
-                                        setEditProdSearch(e.target.value);
-                                        setEditProduct(null);
-                                        setShowEditProdDropdown(true);
-                                      }}
-                                      onFocus={() => setShowEditProdDropdown(true)}
-                                    />
-                                    {editProduct && <FaCheckCircle className="text-emerald-500" size={12} />}
-                                  </div>
-                                  
-                                  {showEditProdDropdown && (
-                                    <div className="absolute top-full left-0 right-0 z-[100] mt-1 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden max-h-60 overflow-y-auto animate-in slide-in-from-top-2 duration-200">
-                                      {editSearchingProd ? (
-                                        <div className="p-4 text-center"><FaSync className="animate-spin text-[#319bab] mx-auto" /></div>
-                                      ) : editProdResults.length > 0 ? (
-                                        editProdResults.map(p => (
-                                          <div 
-                                            key={p._id} 
-                                            className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
-                                            onClick={() => {
-                                              setEditProduct(p);
-                                              setEditProdSearch(p.name);
-                                              setShowEditProdDropdown(false);
-                                            }}
-                                          >
-                                            <p className="text-xs font-black text-slate-800">{p.name}</p>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">₹{p.purchasingPrice} → ₹{p.sellingPrice}</p>
-                                          </div>
-                                        ))
-                                      ) : (
-                                        <div className="p-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">No Products Found</div>
-                                      )}
+                            {isFieldAllowed("productInfo") && (
+                              <td className="px-6 py-5 relative">
+                                {isEditing ? (
+                                  <div className="relative">
+                                    <div className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-[#319bab]/20 rounded-lg focus-within:border-[#319bab] transition-all">
+                                      <FaBox className="text-slate-400" size={12} />
+                                      <input 
+                                        type="text"
+                                        placeholder="Search Product..."
+                                        className="flex-1 bg-transparent border-none outline-none text-xs font-black text-slate-800"
+                                        value={editProdSearch}
+                                        onChange={(e) => {
+                                          setEditProdSearch(e.target.value);
+                                          setEditProduct(null);
+                                          setShowEditProdDropdown(true);
+                                        }}
+                                        onFocus={() => setShowEditProdDropdown(true)}
+                                      />
+                                      {editProduct && <FaCheckCircle className="text-emerald-500" size={12} />}
                                     </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <>
-                                  <div className="font-black text-slate-800 text-sm leading-tight">{productName}</div>
-                                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">Ref: {lp._id.substring(18).toUpperCase()}</div>
-                                </>
-                              )}
-                            </td>
-                            <td className="px-6 py-5 relative">
-                              {isEditing ? (
-                                <div className="relative">
-                                  <div className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-[#319bab]/20 rounded-lg focus-within:border-[#319bab] transition-all">
-                                    <FaUser className="text-slate-400" size={12} />
-                                    <input 
-                                      type="text"
-                                      placeholder="Search Customer..."
-                                      className="flex-1 bg-transparent border-none outline-none text-xs font-black text-[#319bab]"
-                                      value={editCustSearch}
-                                      onChange={(e) => {
-                                        setEditCustSearch(e.target.value);
-                                        setEditCustomer(null);
-                                        setShowEditCustDropdown(true);
-                                      }}
-                                      onFocus={() => setShowEditCustDropdown(true)}
-                                    />
-                                    {editCustomer && <FaCheckCircle className="text-emerald-500" size={12} />}
+                                    
+                                    {showEditProdDropdown && (
+                                      <div className="absolute top-full left-0 right-0 z-[100] mt-1 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden max-h-60 overflow-y-auto animate-in slide-in-from-top-2 duration-200">
+                                        {editSearchingProd ? (
+                                          <div className="p-4 text-center"><FaSync className="animate-spin text-[#319bab] mx-auto" /></div>
+                                        ) : editProdResults.length > 0 ? (
+                                          editProdResults.map(p => (
+                                            <div 
+                                              key={p._id} 
+                                              className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                              onClick={() => {
+                                                setEditProduct(p);
+                                                setEditProdSearch(p.name);
+                                                setShowEditProdDropdown(false);
+                                              }}
+                                            >
+                                              <p className="text-xs font-black text-slate-800">{p.name}</p>
+                                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">₹{p.purchasingPrice} → ₹{p.sellingPrice}</p>
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <div className="p-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">No Products Found</div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
+                                ) : (
+                                  <>
+                                    <div className="font-black text-slate-800 text-sm leading-tight">{productName}</div>
+                                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">Ref: {lp._id.substring(18).toUpperCase()}</div>
+                                  </>
+                                )}
+                              </td>
+                            )}
+                            {isFieldAllowed("customer") && (
+                              <td className="px-6 py-5 relative">
+                                {isEditing ? (
+                                  <div className="relative">
+                                    <div className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-[#319bab]/20 rounded-lg focus-within:border-[#319bab] transition-all">
+                                      <FaUser className="text-slate-400" size={12} />
+                                      <input 
+                                        type="text"
+                                        placeholder="Search Customer..."
+                                        className="flex-1 bg-transparent border-none outline-none text-xs font-black text-[#319bab]"
+                                        value={editCustSearch}
+                                        onChange={(e) => {
+                                          setEditCustSearch(e.target.value);
+                                          setEditCustomer(null);
+                                          setShowEditCustDropdown(true);
+                                        }}
+                                        onFocus={() => setShowEditCustDropdown(true)}
+                                      />
+                                      {editCustomer && <FaCheckCircle className="text-emerald-500" size={12} />}
+                                    </div>
 
-                                  {showEditCustDropdown && (
-                                    <div className="absolute top-full left-0 right-0 z-[100] mt-1 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden max-h-60 overflow-y-auto animate-in slide-in-from-top-2 duration-200">
-                                      {editSearchingCust ? (
-                                        <div className="p-4 text-center"><FaSync className="animate-spin text-[#319bab] mx-auto" /></div>
-                                      ) : editCustResults.length > 0 ? (
-                                        editCustResults.map(c => (
-                                          <div 
-                                            key={c._id} 
-                                            className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
-                                            onClick={() => {
-                                              setEditCustomer(c);
-                                              setEditCustSearch(c.name);
-                                              setShowEditCustDropdown(false);
-                                            }}
-                                          >
-                                            <p className="text-xs font-black text-slate-800">{c.name}</p>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{c.whatsapp || c.phone}</p>
-                                          </div>
-                                        ))
-                                      ) : (
-                                        <div className="p-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">No Customers Found</div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="font-black text-[#319bab] text-sm">{customerName}</div>
-                              )}
-                            </td>
-                            <td className="px-6 py-5 text-right font-bold text-slate-400 text-xs">
-                              ₹{purchasingPrice.toFixed(2)}
-                            </td>
-                            <td className="px-6 py-5 text-right font-black text-slate-700 text-sm">
-                              ₹{sellingPrice.toFixed(2)}
-                            </td>
-                             <td className="px-6 py-5 text-right">
-                              {isEditing ? (
-                                <input 
-                                  type="number"
-                                  className="w-24 px-3 py-2 bg-white border-2 border-[#319bab]/40 rounded-lg text-right font-black text-[#319bab] text-sm outline-none shadow-inner"
-                                  value={editLockedPrice}
-                                  onChange={(e) => setEditLockedPrice(e.target.value)}
-                                  autoFocus
-                                />
-                              ) : (
-                                <div className="flex flex-col items-end gap-1">
-                                  <div className="bg-orange-50 text-orange-700 font-black px-3 py-1.5 rounded-lg border border-orange-100 inline-block text-sm shadow-sm">
-                                    ₹{lp.lockedPrice?.toFixed(2)}
+                                    {showEditCustDropdown && (
+                                      <div className="absolute top-full left-0 right-0 z-[100] mt-1 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden max-h-60 overflow-y-auto animate-in slide-in-from-top-2 duration-200">
+                                        {editSearchingCust ? (
+                                          <div className="p-4 text-center"><FaSync className="animate-spin text-[#319bab] mx-auto" /></div>
+                                        ) : editCustResults.length > 0 ? (
+                                          editCustResults.map(c => (
+                                            <div 
+                                              key={c._id} 
+                                              className="px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                              onClick={() => {
+                                                setEditCustomer(c);
+                                                setEditCustSearch(c.name);
+                                                setShowEditCustDropdown(false);
+                                              }}
+                                            >
+                                              <p className="text-xs font-black text-slate-800">{c.name}</p>
+                                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{c.whatsapp || c.phone}</p>
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <div className="p-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">No Customers Found</div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
-                                  <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-1.5 rounded">Linked to Cost</span>
-                                </div>
-                              )}
-                            </td>
-                            <td className={`px-6 py-5 text-right text-sm font-black ${mp >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                              {mp.toFixed(1)}%
-                            </td>
-                            <td className="px-6 py-5 text-center">
-                              {isEditing ? (
-                                <div className="flex items-center justify-center gap-2">
-                                  <button 
-                                    onClick={handleUpdate}
-                                    disabled={saving}
-                                    className="p-2 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-all shadow-sm"
-                                    title="Save Changes"
-                                  >
-                                    {saving ? <FaSync className="animate-spin" size={14} /> : <FaCheckCircle size={14} />}
-                                  </button>
-                                  <button 
-                                    onClick={cancelInlineEdit}
-                                    className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-all shadow-sm"
-                                    title="Cancel"
-                                  >
-                                    <FaTimes size={14} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center justify-center gap-2">
-                                  <button 
-                                    onClick={() => startInlineEdit(lp)}
-                                    className="text-blue-400 hover:text-blue-600 p-2 transition-all hover:bg-blue-50 rounded-lg"
-                                    title="Edit Price"
-                                  >
-                                    <FaEdit size={14} />
-                                  </button>
-                                  <button 
-                                    onClick={() => handleDelete(lp._id)}
-                                    className="text-slate-300 hover:text-red-500 p-2 transition-all hover:bg-red-50 rounded-lg"
-                                    title="Delete Record"
-                                  >
-                                    <FaTrash size={14} />
-                                  </button>
-                                </div>
-                              )}
-                            </td>
+                                ) : (
+                                  <div className="font-black text-[#319bab] text-sm">{customerName}</div>
+                                )}
+                              </td>
+                            )}
+                            {isFieldAllowed("cost") && (
+                              <td className="px-6 py-5 text-right font-bold text-slate-400 text-xs">
+                                ₹{purchasingPrice.toFixed(2)}
+                              </td>
+                            )}
+                            {isFieldAllowed("stdPrice") && (
+                              <td className="px-6 py-5 text-right font-black text-slate-700 text-sm">
+                                ₹{sellingPrice.toFixed(2)}
+                              </td>
+                            )}
+                             {isFieldAllowed("lockedPrice") && (
+                              <td className="px-6 py-5 text-right">
+                                {isEditing ? (
+                                  <input 
+                                    type="number"
+                                    className="w-24 px-3 py-2 bg-white border-2 border-[#319bab]/40 rounded-lg text-right font-black text-[#319bab] text-sm outline-none shadow-inner"
+                                    value={editLockedPrice}
+                                    onChange={(e) => setEditLockedPrice(e.target.value)}
+                                    autoFocus
+                                  />
+                                ) : (
+                                  <div className="flex flex-col items-end gap-1">
+                                    <div className="bg-orange-50 text-orange-700 font-black px-3 py-1.5 rounded-lg border border-orange-100 inline-block text-sm shadow-sm">
+                                      ₹{lp.lockedPrice?.toFixed(2)}
+                                    </div>
+                                    <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-1.5 rounded">Linked to Cost</span>
+                                  </div>
+                                )}
+                              </td>
+                            )}
+                            {isFieldAllowed("margin") && (
+                              <td className={`px-6 py-5 text-right text-sm font-black ${mp >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                {mp.toFixed(1)}%
+                              </td>
+                            )}
+                            {isFieldAllowed("action") && (
+                              <td className="px-6 py-5 text-center">
+                                {isEditing ? (
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button 
+                                      onClick={handleUpdate}
+                                      disabled={saving}
+                                      className="p-2 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-all shadow-sm"
+                                      title="Save Changes"
+                                    >
+                                      {saving ? <FaSync className="animate-spin" size={14} /> : <FaCheckCircle size={14} />}
+                                    </button>
+                                    <button 
+                                      onClick={cancelInlineEdit}
+                                      className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-all shadow-sm"
+                                      title="Cancel"
+                                    >
+                                      <FaTimes size={14} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button 
+                                      onClick={() => startInlineEdit(lp)}
+                                      className="text-blue-400 hover:text-blue-600 p-2 transition-all hover:bg-blue-50 rounded-lg"
+                                      title="Edit Price"
+                                    >
+                                      <FaEdit size={14} />
+                                    </button>
+                                    <button 
+                                      onClick={() => handleDelete(lp._id)}
+                                      className="text-slate-300 hover:text-red-500 p-2 transition-all hover:bg-red-50 rounded-lg"
+                                      title="Delete Record"
+                                    >
+                                      <FaTrash size={14} />
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            )}
                           </tr>
                         );
                       })

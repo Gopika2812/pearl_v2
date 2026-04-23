@@ -14,8 +14,8 @@ const BranchProductRecords = () => {
   const isFieldAllowed = (fieldId) => {
     if (!user) return false;
     if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
-    const key = `branch-product-records_${fieldId}`;
-    return user.fieldPermissions?.[key] !== false; // Default to true
+    const key = `product-records_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false;
   };
   
   const [records, setRecords] = useState([]);
@@ -275,7 +275,7 @@ const BranchProductRecords = () => {
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Qty</span>
                     <span className="text-xl font-black text-gray-800">{totalQty}</span>
                   </div>
-                  {isFieldAllowed("grossProfit") && (
+                  {isFieldAllowed("profit") && (
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Gross Profit</span>
                       <span className={`text-xl font-black ${totalProfit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
@@ -283,7 +283,7 @@ const BranchProductRecords = () => {
                       </span>
                     </div>
                   )}
-                  {isFieldAllowed("marginPercentage") && (
+                  {isFieldAllowed("margin") && (
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avg. Profit %</span>
                       <span className="text-xl font-black text-[#319bab]">
@@ -305,16 +305,16 @@ const BranchProductRecords = () => {
                     <table className="w-full text-left text-sm border-collapse">
                       <thead>
                         <tr className="bg-gray-50/50 text-gray-500 font-black uppercase text-[9px] tracking-widest border-b border-gray-100">
-                          <th className="px-4 py-3">Voucher / Time</th>
-                          <th className="px-4 py-3">Customer</th>
-                          {isFieldAllowed("purchasingPrice") && <th className="px-4 py-3 text-right">Purchase ₹</th>}
+                          {isFieldAllowed("voucher") && <th className="px-4 py-3">Voucher / Time</th>}
+                          {isFieldAllowed("customer") && <th className="px-4 py-3">Customer</th>}
+                          {isFieldAllowed("purchasePrice") && <th className="px-4 py-3 text-right">Purchase ₹</th>}
                           {isFieldAllowed("sellingPrice") && <th className="px-4 py-3 text-right">Selling ₹</th>}
-                          {isFieldAllowed("marginPercentage") && <th className="px-4 py-3 text-right">Margin (%)</th>}
-                          <th className="px-4 py-3 text-center">Qty</th>
+                          {isFieldAllowed("margin") && <th className="px-4 py-3 text-right">Margin (%)</th>}
+                          {isFieldAllowed("qty") && <th className="px-4 py-3 text-center">Qty</th>}
                           {isFieldAllowed("gst") && <th className="px-4 py-3 text-center">GST %</th>}
-                          <th className="px-4 py-3 text-right">Discount</th>
-                          {isFieldAllowed("marginPercentage") && <th className="px-4 py-3 text-right font-black">Profit (%)</th>}
-                          {isFieldAllowed("grossProfit") && <th className="px-4 py-3 text-right font-black">Profit (₹)</th>}
+                          {isFieldAllowed("discount") && <th className="px-4 py-3 text-right">Discount</th>}
+                          {isFieldAllowed("margin") && <th className="px-4 py-3 text-right font-black">Profit (%)</th>}
+                          {isFieldAllowed("profit") && <th className="px-4 py-3 text-right font-black">Profit (₹)</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
@@ -333,17 +333,21 @@ const BranchProductRecords = () => {
                             const profitPercent = r.purchasingPrice > 0 ? (r.grossProfit / r.purchasingPrice) * 100 : 0;
                             return (
                               <tr key={i} className="hover:bg-gray-50/50 transition-colors">
-                                <td className="px-4 py-3">
-                                  <div className="font-bold text-gray-700 text-xs">{r.voucherType}</div>
-                                  <div className="text-[9px] text-gray-500 font-bold">
-                                    {new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  </div>
-                                  <div className="text-[9px] text-gray-400 font-bold">{r.invoiceId} | {new Date(r.date).toLocaleDateString()}</div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="font-bold text-gray-700 text-xs">{r.customerName || "Walk-in"}</div>
-                                </td>
-                                {isFieldAllowed("purchasingPrice") && (
+                                {isFieldAllowed("voucher") && (
+                                  <td className="px-4 py-3">
+                                    <div className="font-bold text-gray-700 text-xs">{r.voucherType}</div>
+                                    <div className="text-[9px] text-gray-500 font-bold">
+                                      {new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </div>
+                                    <div className="text-[9px] text-gray-400 font-bold">{r.invoiceId} | {new Date(r.date).toLocaleDateString()}</div>
+                                  </td>
+                                )}
+                                {isFieldAllowed("customer") && (
+                                  <td className="px-4 py-3">
+                                    <div className="font-bold text-gray-700 text-xs">{r.customerName || "Walk-in"}</div>
+                                  </td>
+                                )}
+                                {isFieldAllowed("purchasePrice") && (
                                   <td className="px-4 py-3 text-right text-gray-500 text-xs">
                                     ₹{r.purchasingPrice?.toFixed(2)}
                                   </td>
@@ -353,28 +357,32 @@ const BranchProductRecords = () => {
                                     ₹{r.sellingPrice?.toFixed(2)}
                                   </td>
                                 )}
-                                {isFieldAllowed("marginPercentage") && (
+                                {isFieldAllowed("margin") && (
                                   <td className={`px-4 py-3 text-right text-xs font-black ${profitPercent >= 0 ? 'text-[#319bab]' : 'text-red-500'}`}>
                                     {profitPercent.toFixed(1)}%
                                   </td>
                                 )}
-                                <td className="px-4 py-3 text-center font-black text-gray-700 text-xs">
-                                  {r.qty}
-                                </td>
+                                {isFieldAllowed("qty") && (
+                                  <td className="px-4 py-3 text-center font-black text-gray-700 text-xs">
+                                    {r.qty}
+                                  </td>
+                                )}
                                 {isFieldAllowed("gst") && (
                                   <td className="px-4 py-3 text-center text-gray-500 text-xs">
                                     {r.gst}%
                                   </td>
                                 )}
-                                <td className="px-4 py-3 text-right text-red-500 font-bold text-xs">
-                                  -₹{r.discountPerUnit?.toFixed(2)}
-                                </td>
-                                {isFieldAllowed("marginPercentage") && (
+                                {isFieldAllowed("discount") && (
+                                  <td className="px-4 py-3 text-right text-red-500 font-bold text-xs">
+                                    -₹{r.discountPerUnit?.toFixed(2)}
+                                  </td>
+                                )}
+                                {isFieldAllowed("margin") && (
                                   <td className={`px-4 py-3 text-right text-xs font-black ${profitPercent >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                                     {profitPercent.toFixed(1)}%
                                   </td>
                                 )}
-                                {isFieldAllowed("grossProfit") && (
+                                {isFieldAllowed("profit") && (
                                   <td className={`px-4 py-3 text-right font-black text-xs ${r.grossProfit * r.qty >= 0 ? 'text-green-700' : 'text-red-600'}`}>
                                     ₹{(r.grossProfit * r.qty).toFixed(2)}
                                   </td>

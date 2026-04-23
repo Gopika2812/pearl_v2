@@ -10,6 +10,16 @@ import { useBranch } from "../../context/BranchContext";
 export default function BranchPOPayment() {
   const { currentBranch, user } = useBranch();
   const navigate = useNavigate();
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    // Global Super Admin or Branch Admin (local) bypass checks
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    
+    const key = `payment-po_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true if not explicitly restricted
+  };
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -183,33 +193,15 @@ export default function BranchPOPayment() {
                 <thead className="bg-gray-50 border-b-2 border-[#319bab]/20">
                   <tr>
                     <th className="px-2 py-3 text-center font-bold text-[#319bab]"></th>
-                    <th className="px-4 py-3 text-left font-bold text-[#319bab]">
-                      Invoice ID
-                    </th>
-                    <th className="px-4 py-3 text-left font-bold text-[#319bab]">
-                      Vendor
-                    </th>
-                    <th className="px-4 py-3 text-left font-bold text-[#319bab]">
-                      Warehouse
-                    </th>
-                    <th className="px-4 py-3 text-right font-bold text-[#319bab]">
-                      Items
-                    </th>
-                    <th className="px-4 py-3 text-right font-bold text-[#319bab]">
-                      Total Amount
-                    </th>
-                    <th className="px-4 py-3 text-right font-bold text-[#319bab]">
-                      Paid Amount
-                    </th>
-                    <th className="px-4 py-3 text-center font-bold text-[#319bab]">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-center font-bold text-[#319bab]">
-                      PO Date
-                    </th>
-                    <th className="px-4 py-3 text-center font-bold text-[#319bab]">
-                      Actions
-                    </th>
+                    {isFieldAllowed("invoiceId") && <th className="px-4 py-3 text-left font-bold text-[#319bab]">Invoice ID</th>}
+                    {isFieldAllowed("vendor") && <th className="px-4 py-3 text-left font-bold text-[#319bab]">Vendor</th>}
+                    {isFieldAllowed("warehouse") && <th className="px-4 py-3 text-left font-bold text-[#319bab]">Warehouse</th>}
+                    {isFieldAllowed("items") && <th className="px-4 py-3 text-right font-bold text-[#319bab]">Items</th>}
+                    {isFieldAllowed("totalAmount") && <th className="px-4 py-3 text-right font-bold text-[#319bab]">Total Amount</th>}
+                    {isFieldAllowed("paidAmount") && <th className="px-4 py-3 text-right font-bold text-[#319bab]">Paid Amount</th>}
+                    {isFieldAllowed("status") && <th className="px-4 py-3 text-center font-bold text-[#319bab]">Status</th>}
+                    {isFieldAllowed("poDate") && <th className="px-4 py-3 text-center font-bold text-[#319bab]">PO Date</th>}
+                    {isFieldAllowed("action") && <th className="px-4 py-3 text-center font-bold text-[#319bab]">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -234,61 +226,79 @@ export default function BranchPOPayment() {
                               )}
                             </button>
                           </td>
-                          <td className="px-4 py-3 font-bold text-[#319bab]">
-                            {po.invoiceId}
-                          </td>
-                          <td className="px-4 py-3">
-                            {typeof po.vendor === "object"
-                              ? po.vendor?.name
-                              : po.vendor}
-                          </td>
-                          <td className="px-4 py-3">
-                            {typeof po.warehouse === "object"
-                              ? po.warehouse?.name
-                              : po.warehouse}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="bg-[#319bab]/10 text-[#319bab] px-3 py-1 rounded-full text-xs font-bold">
-                              {po.items?.length || 0}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold">
-                            ₹{(po.grandTotal || 0).toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold text-green-600">
-                            ₹{paid.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(
-                                po
-                              )}`}
-                            >
-                              {getStatusText(po)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center text-gray-600">
-                            {formatDate(po.date || po.createdAt)}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {pending > 0 && (
-                              <button
-                                onClick={() => {
-                                  setSelectedPO(po);
-                                  setShowPaymentModal(true);
-                                }}
-                                className="inline-flex items-center gap-2 bg-green-600 text-white px-3 py-1 rounded-lg font-bold text-xs hover:bg-green-700 transition"
-                                title="Record Payment"
-                              >
-                                <FaCreditCard /> Pay
-                              </button>
-                            )}
-                            {pending === 0 && (
-                              <span className="text-green-600 font-bold text-xs">
-                                ✅ Settled
+                          {isFieldAllowed("invoiceId") && (
+                            <td className="px-4 py-3 font-bold text-[#319bab]">
+                              {po.invoiceId}
+                            </td>
+                          )}
+                          {isFieldAllowed("vendor") && (
+                            <td className="px-4 py-3">
+                              {typeof po.vendor === "object"
+                                ? po.vendor?.name
+                                : po.vendor}
+                            </td>
+                          )}
+                          {isFieldAllowed("warehouse") && (
+                            <td className="px-4 py-3">
+                              {typeof po.warehouse === "object"
+                                ? po.warehouse?.name
+                                : po.warehouse}
+                            </td>
+                          )}
+                          {isFieldAllowed("items") && (
+                            <td className="px-4 py-3 text-right">
+                              <span className="bg-[#319bab]/10 text-[#319bab] px-3 py-1 rounded-full text-xs font-bold">
+                                {po.items?.length || 0}
                               </span>
-                            )}
-                          </td>
+                            </td>
+                          )}
+                          {isFieldAllowed("totalAmount") && (
+                            <td className="px-4 py-3 text-right font-bold">
+                              ₹{(po.grandTotal || 0).toLocaleString()}
+                            </td>
+                          )}
+                          {isFieldAllowed("paidAmount") && (
+                            <td className="px-4 py-3 text-right font-bold text-green-600">
+                              ₹{paid.toLocaleString()}
+                            </td>
+                          )}
+                          {isFieldAllowed("status") && (
+                            <td className="px-4 py-3 text-center">
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(
+                                  po
+                                )}`}
+                              >
+                                {getStatusText(po)}
+                              </span>
+                            </td>
+                          )}
+                          {isFieldAllowed("poDate") && (
+                            <td className="px-4 py-3 text-center text-gray-600">
+                              {formatDate(po.date || po.createdAt)}
+                            </td>
+                          )}
+                          {isFieldAllowed("action") && (
+                            <td className="px-4 py-3 text-center">
+                              {pending > 0 && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedPO(po);
+                                    setShowPaymentModal(true);
+                                  }}
+                                  className="inline-flex items-center gap-2 bg-green-600 text-white px-3 py-1 rounded-lg font-bold text-xs hover:bg-green-700 transition"
+                                  title="Record Payment"
+                                >
+                                  <FaCreditCard /> Pay
+                                </button>
+                              )}
+                              {pending === 0 && (
+                                <span className="text-green-600 font-bold text-xs">
+                                  ✅ Settled
+                                </span>
+                              )}
+                            </td>
+                          )}
                         </tr>
 
                         {/* PRODUCT DETAILS ROWS */}

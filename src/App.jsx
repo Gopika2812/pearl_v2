@@ -219,21 +219,46 @@ function AppContent() {
         "/branch/dispatch": "dispatch",
         "/branch/suppliers": "suppliers",
         "/branch/customers": "customers",
-        "/branch/journals": "journals",
-        "/branch/insights": "insights",
-        "/branch/quick-links": "quick-links",
-        "/branch/receipt-records": "receipt",
-        "/branch/payment-records": "payment-po",
-        "/branch/summary": "summary",
+        "/branch/follow-up": "follow-up-form",
+        "/branch/follow-up-records": "follow-up-records",
+        "/branch/other-payment": "other-payment",
+        "/branch/other-receipt": "other-receipt",
         "/branch/product-records": "product-records",
         "/branch/product-config": "product-config",
         "/branch/locked-prices": "locked-prices",
+        "/branch/ledger": "ledgers",
+        "/branch/journals": "journals",
+        "/branch/day-book": "day-book",
+        "/branch/extra-expense-ledger": "extra-expense-ledger",
+        "/branch/stock-summary": "stock-summary",
+        "/branch/quick-links": "quick-links",
+        "/branch/admin-requests": "admin-requests",
+        "/branch/tokenization": "tokenization",
+        "/branch/insights": "insights",
+        "/branch/receipt-records": "receipt",
+        "/branch/payment-records": "payment-po",
+        "/branch/summary": "summary",
       };
 
       const requiredPermission = pathPermissionMap[location.pathname];
       const allowedPages = user.allowedPages || [];
 
-      if (requiredPermission && !allowedPages.includes(requiredPermission)) {
+      let hasAccess = false;
+      if (!requiredPermission) {
+        hasAccess = true; // No permission required for this route
+      } else if (allowedPages.includes(requiredPermission)) {
+        hasAccess = true;
+      } else if (requiredPermission === "quick-links") {
+        // Special case for Quick Links: Allow if ANY master data module is allowed
+        const masterModules = [
+          "voucher_type", "warehouse", "product_group", "product_category", "product",
+          "customer_category", "customer_group", "customer", "vendor",
+          "sales_owner", "sales_man", "delivery_man", "token"
+        ];
+        hasAccess = masterModules.some(mod => allowedPages.includes(mod));
+      }
+
+      if (!hasAccess) {
         if (location.pathname !== "/branch-home") {
           toast.error("Access Denied: Permission not granted for this module.");
           navigate("/branch-home");

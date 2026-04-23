@@ -14,9 +14,11 @@ const BranchPurchaseOrders = () => {
   // Permission helper
   const isFieldAllowed = (fieldId) => {
     if (!user) return false;
-    if (user.role === "ADMIN" || user.role === "SUPER_ADMIN") return true;
-    const key = `branch-purchase-orders_${fieldId}`;
-    return user.fieldPermissions?.[key] !== false; // Default to true
+    // Global Super Admin or Branch Admin (local) bypass checks
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    
+    const key = `purchase-list_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true if not explicitly restricted
   };
 
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -497,53 +499,57 @@ const BranchPurchaseOrders = () => {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold border-b">
                   <tr>
-                    <th className="px-6 py-4 text-left">Order / Bill ID</th>
-                    <th className="px-6 py-4 text-left">Vendor</th>
-                    {isFieldAllowed("itemsCount") && <th className="px-6 py-4 text-center">Items</th>}
+                    {isFieldAllowed("orderBillId") && <th className="px-6 py-4 text-left">Order / Bill ID</th>}
+                    {isFieldAllowed("vendor") && <th className="px-6 py-4 text-left">Vendor</th>}
+                    {isFieldAllowed("items") && <th className="px-6 py-4 text-center">Items</th>}
                     {isFieldAllowed("grandTotal") && <th className="px-6 py-4 text-right">Grand Total</th>}
-                    <th className="px-6 py-4 text-center">Status</th>
-                    <th className="px-6 py-4 text-center">Date</th>
-                    <th className="px-6 py-4 text-center">Action</th>
+                    {isFieldAllowed("status") && <th className="px-6 py-4 text-center">Status</th>}
+                    {isFieldAllowed("date") && <th className="px-6 py-4 text-center">Date</th>}
+                    {isFieldAllowed("action") && <th className="px-6 py-4 text-center">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {filteredOrders.map((order) => (
                     <React.Fragment key={order._id}>
                       <tr className="hover:bg-gray-50 transition">
-                        <td className="px-6 py-4">
-                          <div className="flex items-start gap-2">
-                            <button
-                              onClick={() => toggleExpanded(order._id)}
-                              className="text-[#319bab] hover:bg-gray-200 p-1 rounded transition mt-0.5"
-                            >
-                              <FaChevronDown
-                                className={`text-xs transition-transform ${expandedOrders[order._id]
-                                  ? "rotate-180"
-                                  : ""
-                                  }`}
-                              />
-                            </button>
-                            <div className="flex flex-col">
-                              <span className="font-bold text-[#319bab] text-xs">
-                                PO: {order.invoiceId}
-                              </span>
-                              {order.purchaseInvoiceId && (
-                                <span className="font-black text-green-700 text-[10px] mt-1 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">
-                                  PI: {order.purchaseInvoiceId}
+                        {isFieldAllowed("orderBillId") && (
+                          <td className="px-6 py-4">
+                            <div className="flex items-start gap-2">
+                              <button
+                                onClick={() => toggleExpanded(order._id)}
+                                className="text-[#319bab] hover:bg-gray-200 p-1 rounded transition mt-0.5"
+                              >
+                                <FaChevronDown
+                                  className={`text-xs transition-transform ${expandedOrders[order._id]
+                                    ? "rotate-180"
+                                    : ""
+                                    }`}
+                                />
+                              </button>
+                              <div className="flex flex-col">
+                                <span className="font-bold text-[#319bab] text-xs">
+                                  PO: {order.invoiceId}
                                 </span>
-                              )}
+                                {order.purchaseInvoiceId && (
+                                  <span className="font-black text-green-700 text-[10px] mt-1 bg-green-50 px-1.5 py-0.5 rounded border border-green-100">
+                                    PI: {order.purchaseInvoiceId}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="font-semibold text-gray-800">
-                            {order.vendor}
-                          </div>
-                          <div className="text-[11px] text-gray-500">
-                            {order.warehouse}
-                          </div>
-                        </td>
-                        {isFieldAllowed("itemsCount") && (
+                          </td>
+                        )}
+                        {isFieldAllowed("vendor") && (
+                          <td className="px-6 py-4">
+                            <div className="font-semibold text-gray-800">
+                              {order.vendor}
+                            </div>
+                            <div className="text-[11px] text-gray-500">
+                              {order.warehouse}
+                            </div>
+                          </td>
+                        )}
+                        {isFieldAllowed("items") && (
                           <td className="px-6 py-4 text-center">
                             <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold">
                               {(order.items || []).length}
@@ -555,133 +561,153 @@ const BranchPurchaseOrders = () => {
                             ₹{(order.grandTotal || 0).toLocaleString()}
                           </td>
                         )}
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex flex-col items-center gap-1">
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(
-                                order.status
-                              )}`}
-                            >
-                              {order.status}
-                            </span>
+                        {isFieldAllowed("status") && (
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(
+                                  order.status
+                                )}`}
+                              >
+                                {order.status}
+                              </span>
 
-                            {/* REQUEST STATUS LABELS */}
-                            {order.editRequestStatus === "PENDING" && (
-                              <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                                Edit Pending
-                              </span>
-                            )}
-                            {order.editRequestStatus === "REJECTED" && (
-                              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                                Edit Rejected
-                              </span>
-                            )}
-                            {order.cancelRequestStatus === "PENDING" && (
-                              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                                Cancel Pending
-                              </span>
-                            )}
-                            {order.cancelRequestStatus === "REJECTED" && (
-                              <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                                Cancel Rejected
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-center text-gray-600 text-xs">
-                          {new Date(order.createdAt).toLocaleString("en-IN", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            hour12: true,
-                          })}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            {order.status !== 'INVOICED' ? (
-                              <>
-                                <button
-                                  onClick={() => handleEditClick(order)}
-                                  className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-lg transition shadow-md shadow-orange-100"
-                                  title="Edit Order"
-                                >
-                                  <FaEdit size={14} />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteOrder(order._id)}
-                                  className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition shadow-md shadow-red-100"
-                                  title="Delete Order"
-                                >
-                                  <FaTrash size={14} />
-                                </button>
-                                <button
-                                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 px-4 rounded-lg text-xs shadow-md shadow-green-100 transition disabled:bg-gray-300 disabled:cursor-not-allowed uppercase"
-                                  disabled={loading}
-                                  onClick={() => {
-                                    setEditingOrder(order);
-                                    setEditItems(order.items.map(i => ({ ...i })));
-                                    setVendorBillNo("");
-                                    setVendorDate("");
-                                    setShowInvoiceModal(true);
-                                  }}
-                                >
-                                  ✔ Generate PI
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => handleEditClick(order)}
-                                  className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-lg transition shadow-md shadow-orange-100 flex items-center gap-1 text-xs font-bold"
-                                  title="Edit Invoiced Order"
-                                >
-                                  <FaEdit size={12} /> RE-EDIT
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteOrder(order._id)}
-                                  className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition shadow-md shadow-red-100 flex items-center gap-1 text-xs font-bold"
-                                  title="Cancel Invoiced Order"
-                                >
-                                  <FaTrash size={12} /> CANCEL
-                                </button>
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      setLoading(true);
-                                      // FORCE FETCH LATEST ORDER TO AVOID STALE DATA OVERWRITING PO
-                                      const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${order._id}`);
-                                      const latestOrder = await res.json();
-                                      if (!res.ok) throw new Error("Failed to fetch latest order data");
-                                      
-                                      setEditingOrder(latestOrder);
-                                      setEditItems(latestOrder.items.map(i => ({ ...i })));
-                                      setVendorBillNo(latestOrder.vendorBillNo || "");
-                                      setVendorDate(latestOrder.vendorDate ? new Date(latestOrder.vendorDate).toISOString().split('T')[0] : "");
-                                      setShowInvoiceModal(true);
-                                    } catch (err) {
-                                      toast.error("Error loading fresh data: " + err.message);
-                                    } finally {
-                                      setLoading(false);
-                                    }
-                                  }}
-                                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-4 rounded-lg text-xs shadow-md shadow-blue-100 transition uppercase flex items-center gap-1"
-                                  title="Update Existing Invoice"
-                                >
-                                  <FaSync size={10} /> Re-gen PI
-                                </button>
-                                <button
-                                  onClick={() => navigate(`/branch/dispatch?type=PO&voucher=${encodeURIComponent(order.voucherType)}&orderId=${order._id}`)}
-                                  className="bg-indigo-500 hover:bg-indigo-600 text-white p-2 rounded-lg transition shadow-md shadow-indigo-100 flex items-center gap-1 text-xs font-bold"
-                                  title="Loading Slip"
-                                >
-                                  <FaTruck size={12} /> SLIP
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
+                              {/* REQUEST STATUS LABELS */}
+                              {order.editRequestStatus === "PENDING" && (
+                                <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                  Edit Pending
+                                </span>
+                              )}
+                              {order.editRequestStatus === "REJECTED" && (
+                                <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                  Edit Rejected
+                                </span>
+                              )}
+                              {order.cancelRequestStatus === "PENDING" && (
+                                <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                  Cancel Pending
+                                </span>
+                              )}
+                              {order.cancelRequestStatus === "REJECTED" && (
+                                <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                  Cancel Rejected
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                        {isFieldAllowed("date") && (
+                          <td className="px-6 py-4 text-center text-gray-600 text-xs">
+                            {new Date(order.createdAt).toLocaleString("en-IN", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: true,
+                            })}
+                          </td>
+                        )}
+                        {(isFieldAllowed("action_edit") || isFieldAllowed("action_delete") || isFieldAllowed("action_invoice") || isFieldAllowed("action_slip")) && (
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {order.status !== 'INVOICED' ? (
+                                <>
+                                  {isFieldAllowed("action_edit") && (
+                                    <button
+                                      onClick={() => handleEditClick(order)}
+                                      className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-lg transition shadow-md shadow-orange-100"
+                                      title="Edit Order"
+                                    >
+                                      <FaEdit size={14} />
+                                    </button>
+                                  )}
+                                  {isFieldAllowed("action_delete") && (
+                                    <button
+                                      onClick={() => handleDeleteOrder(order._id)}
+                                      className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition shadow-md shadow-red-100"
+                                      title="Delete Order"
+                                    >
+                                      <FaTrash size={14} />
+                                    </button>
+                                  )}
+                                  {isFieldAllowed("action_invoice") && (
+                                    <button
+                                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 px-4 rounded-lg text-xs shadow-md shadow-green-100 transition disabled:bg-gray-300 disabled:cursor-not-allowed uppercase"
+                                      disabled={loading}
+                                      onClick={() => {
+                                        setEditingOrder(order);
+                                        setEditItems(order.items.map(i => ({ ...i })));
+                                        setVendorBillNo("");
+                                        setVendorDate("");
+                                        setShowInvoiceModal(true);
+                                      }}
+                                    >
+                                      ✔ Generate PI
+                                    </button>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  {isFieldAllowed("action_edit") && (
+                                    <button
+                                      onClick={() => handleEditClick(order)}
+                                      className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-lg transition shadow-md shadow-orange-100 flex items-center gap-1 text-xs font-bold"
+                                      title="Edit Invoiced Order"
+                                    >
+                                      <FaEdit size={12} /> RE-EDIT
+                                    </button>
+                                  )}
+                                  {isFieldAllowed("action_delete") && (
+                                    <button
+                                      onClick={() => handleDeleteOrder(order._id)}
+                                      className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition shadow-md shadow-red-100 flex items-center gap-1 text-xs font-bold"
+                                      title="Cancel Invoiced Order"
+                                    >
+                                      <FaTrash size={12} /> CANCEL
+                                    </button>
+                                  )}
+                                  {isFieldAllowed("action_invoice") && (
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          setLoading(true);
+                                          // FORCE FETCH LATEST ORDER TO AVOID STALE DATA OVERWRITING PO
+                                          const res = await fetchWithAuth(`${API_BASE}/purchase-orders/${order._id}`);
+                                          const latestOrder = await res.json();
+                                          if (!res.ok) throw new Error("Failed to fetch latest order data");
+                                          
+                                          setEditingOrder(latestOrder);
+                                          setEditItems(latestOrder.items.map(i => ({ ...i })));
+                                          setVendorBillNo(latestOrder.vendorBillNo || "");
+                                          setVendorDate(latestOrder.vendorDate ? new Date(latestOrder.vendorDate).toISOString().split('T')[0] : "");
+                                          setShowInvoiceModal(true);
+                                        } catch (err) {
+                                          toast.error("Error loading fresh data: " + err.message);
+                                        } finally {
+                                          setLoading(false);
+                                        }
+                                      }}
+                                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-4 rounded-lg text-xs shadow-md shadow-blue-100 transition uppercase flex items-center gap-1"
+                                      title="Update Existing Invoice"
+                                    >
+                                      <FaSync size={10} /> Re-gen PI
+                                    </button>
+                                  )}
+                                  {isFieldAllowed("action_slip") && (
+                                    <button
+                                      onClick={() => navigate(`/branch/dispatch?type=PO&voucher=${encodeURIComponent(order.voucherType)}&orderId=${order._id}`)}
+                                      className="bg-indigo-500 hover:bg-indigo-600 text-white p-2 rounded-lg transition shadow-md shadow-indigo-100 flex items-center gap-1 text-xs font-bold"
+                                      title="Loading Slip"
+                                    >
+                                      <FaTruck size={12} /> SLIP
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
 
                       {/* EXPANDED ITEMS ROW */}

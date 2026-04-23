@@ -7,9 +7,17 @@ import autoTable from "jspdf-autotable";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 const BranchDayBook = () => {
-    const { currentBranch } = useBranch();
+    const { currentBranch, user } = useBranch();
     const [dayBook, setDayBook] = useState([]);
     const [loading, setLoading] = useState(false);
+
+    // Permission helper
+    const isFieldAllowed = (fieldId) => {
+        if (!user) return false;
+        if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+        const key = `day-book_${fieldId}`;
+        return user.fieldPermissions?.[key] !== false;
+    };
 
     // Filters
     const [searchTerm, setSearchTerm] = useState("");
@@ -377,12 +385,12 @@ const BranchDayBook = () => {
                                             }}
                                         />
                                     </th>
-                                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400">Date</th>
-                                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400">Voucher Type</th>
-                                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400">Invoice ID</th>
-                                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400">Account Name</th>
-                                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400 text-right">Debit (Sales)</th>
-                                    <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400 text-right">Credit (Purchase)</th>
+                                    {isFieldAllowed("date") && <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400">Date</th>}
+                                    {isFieldAllowed("voucherType") && <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400">Voucher Type</th>}
+                                    {isFieldAllowed("invoiceId") && <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400">Invoice ID</th>}
+                                    {isFieldAllowed("accountName") && <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400">Account Name</th>}
+                                    {isFieldAllowed("debit") && <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400 text-right">Debit (Sales)</th>}
+                                    {isFieldAllowed("credit") && <th className="px-6 py-5 text-[11px] font-black uppercase tracking-widest text-gray-400 text-right">Credit (Purchase)</th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
@@ -422,49 +430,61 @@ const BranchDayBook = () => {
                                                     }}
                                                 />
                                             </td>
-                                            <td className="px-6 py-5">
-                                                <p className="text-xs font-black text-gray-700">
-                                                    {new Date(entry.date).toLocaleDateString("en-IN", {
-                                                        day: "2-digit",
-                                                        month: "short",
-                                                        year: "numeric"
-                                                    })}
-                                                </p>
-                                                <p className="text-[10px] text-gray-400 font-bold mt-0.5">
-                                                    {new Date(entry.date).toLocaleTimeString("en-IN", {
-                                                        hour: "2-digit",
-                                                        minute: "2-digit",
-                                                        hour12: true
-                                                    })}
-                                                </p>
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-tight uppercase ${entry.type === "SALE"
-                                                        ? "bg-emerald-100 text-emerald-700"
-                                                        : "bg-amber-100 text-amber-700"
-                                                    }`}>
-                                                    {entry.voucherType}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-5 font-bold text-[#319bab] text-sm tracking-tight">
-                                                {entry.invoiceId}
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-[#319bab]/10 group-hover:text-[#319bab] transition">
-                                                        <FaUser size={12} />
-                                                    </div>
-                                                    <p className="text-sm font-bold text-gray-800 truncate max-w-[200px]">
-                                                        {entry.name}
+                                            {isFieldAllowed("date") && (
+                                                <td className="px-6 py-5">
+                                                    <p className="text-xs font-black text-gray-700">
+                                                        {new Date(entry.date).toLocaleDateString("en-IN", {
+                                                            day: "2-digit",
+                                                            month: "short",
+                                                            year: "numeric"
+                                                        })}
                                                     </p>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5 text-right font-black text-emerald-600 text-sm">
-                                                {entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : "-"}
-                                            </td>
-                                            <td className="px-6 py-5 text-right font-black text-amber-600 text-sm">
-                                                {entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : "-"}
-                                            </td>
+                                                    <p className="text-[10px] text-gray-400 font-bold mt-0.5">
+                                                        {new Date(entry.date).toLocaleTimeString("en-IN", {
+                                                            hour: "2-digit",
+                                                            minute: "2-digit",
+                                                            hour12: true
+                                                        })}
+                                                    </p>
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("voucherType") && (
+                                                <td className="px-6 py-5">
+                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-tight uppercase ${entry.type === "SALE"
+                                                            ? "bg-emerald-100 text-emerald-700"
+                                                            : "bg-amber-100 text-amber-700"
+                                                        }`}>
+                                                        {entry.voucherType}
+                                                    </span>
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("invoiceId") && (
+                                                <td className="px-6 py-5 font-bold text-[#319bab] text-sm tracking-tight">
+                                                    {entry.invoiceId}
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("accountName") && (
+                                                <td className="px-6 py-5">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-[#319bab]/10 group-hover:text-[#319bab] transition">
+                                                            <FaUser size={12} />
+                                                        </div>
+                                                        <p className="text-sm font-bold text-gray-800 truncate max-w-[200px]">
+                                                            {entry.name}
+                                                        </p>
+                                                    </div>
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("debit") && (
+                                                <td className="px-6 py-5 text-right font-black text-emerald-600 text-sm">
+                                                    {entry.debit > 0 ? `₹${entry.debit.toLocaleString()}` : "-"}
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("credit") && (
+                                                <td className="px-6 py-5 text-right font-black text-amber-600 text-sm">
+                                                    {entry.credit > 0 ? `₹${entry.credit.toLocaleString()}` : "-"}
+                                                </td>
+                                            )}
                                         </tr>
                                     ))
                                 )}
@@ -474,15 +494,24 @@ const BranchDayBook = () => {
                             {!loading && filteredEntries.length > 0 && (
                                 <tfoot className="bg-gray-50/80 border-t-2 border-gray-100">
                                     <tr>
-                                        <td colSpan="4" className="px-6 py-5 text-right">
+                                        <td colSpan={isFieldAllowed("date") ? 1 : 0} className="px-6 py-5 text-center"></td>
+                                        <td colSpan={
+                                            (isFieldAllowed("voucherType") ? 1 : 0) + 
+                                            (isFieldAllowed("invoiceId") ? 1 : 0) + 
+                                            (isFieldAllowed("accountName") ? 1 : 0)
+                                        } className="px-6 py-5 text-right">
                                             <span className="text-xs font-black text-gray-400 uppercase tracking-widest mr-4">Period Totals</span>
                                         </td>
-                                        <td className="px-6 py-5 text-right font-black text-emerald-600 text-lg">
-                                            ₹{totalDebit.toLocaleString()}
-                                        </td>
-                                        <td className="px-6 py-5 text-right font-black text-amber-600 text-lg">
-                                            ₹{totalCredit.toLocaleString()}
-                                        </td>
+                                        {isFieldAllowed("debit") && (
+                                            <td className="px-6 py-5 text-right font-black text-emerald-600 text-lg">
+                                                ₹{totalDebit.toLocaleString()}
+                                            </td>
+                                        )}
+                                        {isFieldAllowed("credit") && (
+                                            <td className="px-6 py-5 text-right font-black text-amber-600 text-lg">
+                                                ₹{totalCredit.toLocaleString()}
+                                            </td>
+                                        )}
                                     </tr>
                                 </tfoot>
                             )}

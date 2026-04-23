@@ -5,10 +5,18 @@ import { FaFilter, FaFileInvoice, FaTag, FaInfoCircle, FaSearch } from "react-ic
 import { toast } from "react-toastify";
 
 const BranchExtraExpenseLedger = () => {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    const key = `extra-expense-ledger_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false;
+  };
   
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -180,54 +188,73 @@ const BranchExtraExpenseLedger = () => {
             <table className="w-full text-sm">
               <thead className="bg-[#319bab] text-white uppercase text-[11px] font-black tracking-widest">
                 <tr>
-                  <th className="px-6 py-4 text-left">Date</th>
-                  <th className="px-6 py-4 text-left">Type</th>
-                  <th className="px-6 py-4 text-left">Invoice ID</th>
-                  <th className="px-6 py-4 text-left">Party Name</th>
-                  <th className="px-6 py-4 text-left">Expense Name</th>
-                  <th className="px-6 py-4 text-right">Base Amount</th>
-                  <th className="px-6 py-4 text-right">GST %</th>
-                  <th className="px-6 py-4 text-right">GST Amount</th>
-                  <th className="px-6 py-4 text-right">Total</th>
+                  {isFieldAllowed("date") && <th className="px-6 py-4 text-left">Date</th>}
+                  {isFieldAllowed("type") && <th className="px-6 py-4 text-left">Type</th>}
+                  {isFieldAllowed("invoiceId") && <th className="px-6 py-4 text-left">Invoice ID</th>}
+                  {isFieldAllowed("partyName") && <th className="px-6 py-4 text-left">Party Name</th>}
+                  {isFieldAllowed("expenseName") && <th className="px-6 py-4 text-left">Expense Name</th>}
+                  {isFieldAllowed("baseAmount") && <th className="px-6 py-4 text-right">Base Amount</th>}
+                  {isFieldAllowed("gstPercent") && <th className="px-6 py-4 text-right">GST %</th>}
+                  {isFieldAllowed("gstAmount") && <th className="px-6 py-4 text-right">GST Amount</th>}
+                  {isFieldAllowed("total") && <th className="px-6 py-4 text-right">Total</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredData.map((item, index) => (
                   <tr key={index} className="hover:bg-gray-50 transition-colors group">
-                    <td className="px-6 py-4 text-gray-600 font-semibold">
-                      {new Date(item.date).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${
-                        item.type === "Purchase" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"
-                      }`}>
-                        {item.type}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 font-bold text-gray-800">{item.invoiceId}</td>
-                    <td className="px-6 py-4 text-gray-500 truncate max-w-[200px]">{item.partyName}</td>
-                    <td className="px-6 py-4">
-                       <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded font-bold text-[11px] uppercase border border-gray-200">
-                        {item.expenseName}
-                       </span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-medium text-gray-700">₹{item.basePrice.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right text-gray-400 font-bold">{item.gstPercent}%</td>
-                    <td className="px-6 py-4 text-right text-red-400 font-semibold">₹{item.gstAmount.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="font-black text-[#319bab] text-base group-hover:scale-105 transition-transform">
-                        ₹{item.totalPrice.toLocaleString()}
-                      </div>
-                    </td>
+                    {isFieldAllowed("date") && (
+                      <td className="px-6 py-4 text-gray-600 font-semibold">
+                        {new Date(item.date).toLocaleDateString()}
+                      </td>
+                    )}
+                    {isFieldAllowed("type") && (
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${
+                          item.type === "Purchase" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"
+                        }`}>
+                          {item.type}
+                        </span>
+                      </td>
+                    )}
+                    {isFieldAllowed("invoiceId") && <td className="px-6 py-4 font-bold text-gray-800">{item.invoiceId}</td>}
+                    {isFieldAllowed("partyName") && <td className="px-6 py-4 text-gray-500 truncate max-w-[200px]">{item.partyName}</td>}
+                    {isFieldAllowed("expenseName") && (
+                      <td className="px-6 py-4">
+                         <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded font-bold text-[11px] uppercase border border-gray-200">
+                          {item.expenseName}
+                         </span>
+                      </td>
+                    )}
+                    {isFieldAllowed("baseAmount") && <td className="px-6 py-4 text-right font-medium text-gray-700">₹{item.basePrice.toLocaleString()}</td>}
+                    {isFieldAllowed("gstPercent") && <td className="px-6 py-4 text-right text-gray-400 font-bold">{item.gstPercent}%</td>}
+                    {isFieldAllowed("gstAmount") && <td className="px-6 py-4 text-right text-red-400 font-semibold">₹{item.gstAmount.toLocaleString()}</td>}
+                    {isFieldAllowed("total") && (
+                      <td className="px-6 py-4 text-right">
+                        <div className="font-black text-[#319bab] text-base group-hover:scale-105 transition-transform">
+                          ₹{item.totalPrice.toLocaleString()}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
               <tfoot className="bg-gray-50 border-t-2 border-[#319bab]/10">
                 <tr className="font-black text-gray-800 uppercase text-xs">
-                  <td colSpan={8} className="px-6 py-4 text-right">Grand Total:</td>
-                  <td className="px-6 py-4 text-right text-[#319bab] text-lg">
-                    ₹{filteredData.reduce((sum, i) => sum + i.totalPrice, 0).toLocaleString()}
-                  </td>
+                  <td colSpan={
+                    (isFieldAllowed("date") ? 1 : 0) + 
+                    (isFieldAllowed("type") ? 1 : 0) + 
+                    (isFieldAllowed("invoiceId") ? 1 : 0) + 
+                    (isFieldAllowed("partyName") ? 1 : 0) + 
+                    (isFieldAllowed("expenseName") ? 1 : 0) + 
+                    (isFieldAllowed("baseAmount") ? 1 : 0) + 
+                    (isFieldAllowed("gstPercent") ? 1 : 0) + 
+                    (isFieldAllowed("gstAmount") ? 1 : 0)
+                  } className="px-6 py-4 text-right">Grand Total:</td>
+                  {isFieldAllowed("total") && (
+                    <td className="px-6 py-4 text-right text-[#319bab] text-lg">
+                      ₹{filteredData.reduce((sum, i) => sum + i.totalPrice, 0).toLocaleString()}
+                    </td>
+                  )}
                 </tr>
               </tfoot>
             </table>

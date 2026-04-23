@@ -8,9 +8,17 @@ import BulkUploadTallyGroupsModal from "../../components/BulkUploadTallyGroupsMo
 import BulkUploadTallyJournalsModal from "../../components/BulkUploadTallyJournalsModal";
 
 const BranchJournalEntries = () => {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const [journals, setJournals] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    const key = `journals_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false;
+  };
   const [searchTerm, setSearchTerm] = useState("");
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -130,12 +138,12 @@ const BranchJournalEntries = () => {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold">
                 <tr>
-                  <th className="px-6 py-4 text-left">Ledger Name</th>
-                  <th className="px-6 py-4 text-left">Under Group</th>
-                  <th className="px-6 py-4 text-left">GSTIN</th>
-                  <th className="px-6 py-4 text-center">Type</th>
-                  <th className="px-6 py-4 text-right bg-red-50/50">Debit (Dr)</th>
-                  <th className="px-6 py-4 text-right bg-green-50/50">Credit (Cr)</th>
+                  {isFieldAllowed("name") && <th className="px-6 py-4 text-left">Ledger Name</th>}
+                  {isFieldAllowed("group") && <th className="px-6 py-4 text-left">Under Group</th>}
+                  {isFieldAllowed("gstin") && <th className="px-6 py-4 text-left">GSTIN</th>}
+                  {isFieldAllowed("type") && <th className="px-6 py-4 text-center">Type</th>}
+                  {isFieldAllowed("debit") && <th className="px-6 py-4 text-right bg-red-50/50">Debit (Dr)</th>}
+                  {isFieldAllowed("credit") && <th className="px-6 py-4 text-right bg-green-50/50">Credit (Cr)</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -158,35 +166,47 @@ const BranchJournalEntries = () => {
                 ) : (
                   filteredJournals.map((journal) => (
                     <tr key={journal._id} className="hover:bg-gray-50/80 transition-colors">
-                      <td className="px-6 py-3">
-                        <div className="font-semibold text-gray-800">
-                          {journal.journalName}
-                        </div>
-                        {journal.state && (
-                          <div className="text-[11px] text-gray-500">
-                            {journal.state}
+                      {isFieldAllowed("name") && (
+                        <td className="px-6 py-3">
+                          <div className="font-semibold text-gray-800">
+                            {journal.journalName}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-3">
-                        <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-medium">
-                          {journal.group}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3 font-mono text-xs text-gray-500">
-                        {journal.gstin || "-"}
-                      </td>
-                      <td className="px-6 py-3 text-center">
-                        <span className="text-xs text-gray-500">
-                          {journal.registrationType || "-"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3 text-right bg-red-50/10 font-medium text-red-600">
-                        {journal.debit > 0 ? `₹${journal.debit.toLocaleString()}` : "-"}
-                      </td>
-                      <td className="px-6 py-3 text-right bg-green-50/10 font-medium text-green-600">
-                        {journal.credit > 0 ? `₹${journal.credit.toLocaleString()}` : "-"}
-                      </td>
+                          {journal.state && (
+                            <div className="text-[11px] text-gray-500">
+                              {journal.state}
+                            </div>
+                          )}
+                        </td>
+                      )}
+                      {isFieldAllowed("group") && (
+                        <td className="px-6 py-3">
+                          <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-medium">
+                            {journal.group}
+                          </span>
+                        </td>
+                      )}
+                      {isFieldAllowed("gstin") && (
+                        <td className="px-6 py-3 font-mono text-xs text-gray-500">
+                          {journal.gstin || "-"}
+                        </td>
+                      )}
+                      {isFieldAllowed("type") && (
+                        <td className="px-6 py-3 text-center">
+                          <span className="text-xs text-gray-500">
+                            {journal.registrationType || "-"}
+                          </span>
+                        </td>
+                      )}
+                      {isFieldAllowed("debit") && (
+                        <td className="px-6 py-3 text-right bg-red-50/10 font-medium text-red-600">
+                          {journal.debit > 0 ? `₹${journal.debit.toLocaleString()}` : "-"}
+                        </td>
+                      )}
+                      {isFieldAllowed("credit") && (
+                        <td className="px-6 py-3 text-right bg-green-50/10 font-medium text-green-600">
+                          {journal.credit > 0 ? `₹${journal.credit.toLocaleString()}` : "-"}
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}

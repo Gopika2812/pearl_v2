@@ -6,7 +6,17 @@ import { useBranch } from "../../context/BranchContext";
 
 export default function BranchRecycling() {
   const { currentBranch, user } = useBranch();
-  const fieldPermissions = user?.fieldPermissions || {};
+  
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    // Global Super Admin or Branch Admin (local) bypass checks
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    
+    const key = `restocking_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true if not explicitly restricted
+  };
+
   const actionPermissions = user?.actionPermissions || {};
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1556,65 +1566,79 @@ export default function BranchRecycling() {
                       className="w-5 h-5 cursor-pointer"
                     />
                   </th>
-                  <th 
-                    onClick={() => handleSort("name")}
-                    className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
-                  >
-                    Product Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                  </th>
-                  <th 
-                    onClick={() => handleSort("units")}
-                    className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
-                  >
-                    Units {sortConfig.key === "units" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                  </th>
-                  {fieldPermissions.totalQty !== false && (
-                    <>
-                      <th 
-                        onClick={() => handleSort("totalQty")}
-                        className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
-                      >
-                        Current Stock {sortConfig.key === "totalQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                      </th>
-                      <th 
-                        onClick={() => handleSort("pendingSales")}
-                        className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
-                      >
-                        ⏳ Pending Sales {sortConfig.key === "pendingSales" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                      </th>
-                      <th 
-                        onClick={() => handleSort("available")}
-                        className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
-                      >
-                        ✓ Available {sortConfig.key === "available" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                      </th>
-                    </>
+                  {isFieldAllowed("productName") && (
+                    <th 
+                      onClick={() => handleSort("name")}
+                      className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                    >
+                      Product Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
                   )}
-                  <th 
-                    onClick={() => handleSort("threshold")}
-                    className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
-                  >
-                    Threshold {sortConfig.key === "threshold" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                  </th>
-                  <th 
-                    onClick={() => handleSort("restockingQty")}
-                    className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
-                  >
-                    Restock Qty {sortConfig.key === "restockingQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                  </th>
-                  <th 
-                    onClick={() => handleSort("preferredVendor")}
-                    className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
-                  >
-                    Preferred Vendor {sortConfig.key === "preferredVendor" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                  </th>
-                  <th 
-                    onClick={() => handleSort("status")}
-                    className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
-                  >
-                    Status {sortConfig.key === "status" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                  </th>
-                  {(actionPermissions.edit !== false || actionPermissions.restock !== false) && (
+                  {isFieldAllowed("units") && (
+                    <th 
+                      onClick={() => handleSort("units")}
+                      className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                    >
+                      Units {sortConfig.key === "units" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
+                  )}
+                  {isFieldAllowed("currentStock") && (
+                    <th 
+                      onClick={() => handleSort("totalQty")}
+                      className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                    >
+                      Current Stock {sortConfig.key === "totalQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
+                  )}
+                  {isFieldAllowed("pendingSales") && (
+                    <th 
+                      onClick={() => handleSort("pendingSales")}
+                      className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                    >
+                      ⏳ Pending Sales {sortConfig.key === "pendingSales" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
+                  )}
+                  {isFieldAllowed("available") && (
+                    <th 
+                      onClick={() => handleSort("available")}
+                      className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                    >
+                      ✓ Available {sortConfig.key === "available" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
+                  )}
+                  {isFieldAllowed("threshold") && (
+                    <th 
+                      onClick={() => handleSort("threshold")}
+                      className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                    >
+                      Threshold {sortConfig.key === "threshold" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
+                  )}
+                  {isFieldAllowed("restockQty") && (
+                    <th 
+                      onClick={() => handleSort("restockingQty")}
+                      className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                    >
+                      Restock Qty {sortConfig.key === "restockingQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
+                  )}
+                  {isFieldAllowed("preferredVendor") && (
+                    <th 
+                      onClick={() => handleSort("preferredVendor")}
+                      className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                    >
+                      Preferred Vendor {sortConfig.key === "preferredVendor" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
+                  )}
+                  {isFieldAllowed("status") && (
+                    <th 
+                      onClick={() => handleSort("status")}
+                      className="px-4 py-3 text-center text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors"
+                    >
+                      Status {sortConfig.key === "status" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
+                  )}
+                  {(isFieldAllowed("action_config") || isFieldAllowed("action_restock")) && (
                     <th className="px-4 py-3 text-center text-sm font-bold">Actions</th>
                   )}
                 </tr>
@@ -1647,47 +1671,61 @@ export default function BranchRecycling() {
                           className="w-5 h-5 cursor-pointer"
                         />
                       </td>
-                      <td className="px-4 py-3 font-semibold text-gray-800 text-sm">
-                        {product.name}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 text-sm">
-                        {product.units}
-                      </td>
-                      {fieldPermissions.totalQty !== false && (
-                        <>
-                          <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
-                            {product.totalQty}
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm">
-                            {pendingQty > 0 ? (
-                              <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full font-semibold">
-                                {pendingQty}
-                              </span>
-                            ) : (
-                              <span className="text-gray-500">-</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right font-semibold text-blue-700 text-sm">
-                            {availableQty}
-                          </td>
-                        </>
+                      {isFieldAllowed("productName") && (
+                        <td className="px-4 py-3 font-semibold text-gray-800 text-sm">
+                          {product.name}
+                        </td>
                       )}
-                      <td className="px-4 py-3 text-right text-gray-800 text-sm font-bold">
-                        {threshold}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
-                        {restockQty}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 text-sm">
-                        {product.preferredVendor || "-"}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        {stockStatus}
-                      </td>
-                      {(actionPermissions.edit !== false || actionPermissions.restock !== false) && (
+                      {isFieldAllowed("units") && (
+                        <td className="px-4 py-3 text-gray-700 text-sm">
+                          {product.units}
+                        </td>
+                      )}
+                      {isFieldAllowed("currentStock") && (
+                        <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
+                          {product.totalQty}
+                        </td>
+                      )}
+                      {isFieldAllowed("pendingSales") && (
+                        <td className="px-4 py-3 text-right text-sm">
+                          {pendingQty > 0 ? (
+                            <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full font-semibold">
+                              {pendingQty}
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">-</span>
+                          )}
+                        </td>
+                      )}
+                      {isFieldAllowed("available") && (
+                        <td className="px-4 py-3 text-right font-semibold text-blue-700 text-sm">
+                          {availableQty}
+                        </td>
+                      )}
+                      {isFieldAllowed("threshold") && (
+                        <td className="px-4 py-3 text-right text-gray-800 text-sm font-bold">
+                          {threshold}
+                        </td>
+                      )}
+                      {isFieldAllowed("restockQty") && (
+                        <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
+                          {restockQty}
+                        </td>
+                      )}
+                      {isFieldAllowed("preferredVendor") && (
+                        <td className="px-4 py-3 text-gray-700 text-sm">
+                          {product.preferredVendor || "-"}
+                        </td>
+                      )}
+                      {isFieldAllowed("status") && (
+                        <td className="px-4 py-3 text-sm">
+                          {stockStatus}
+                        </td>
+                      )}
+                      {(isFieldAllowed("action_config") || isFieldAllowed("action_restock")) && (
                         <td className="px-4 py-3 text-center">
                           <div className="flex gap-2 justify-center">
-                            {actionPermissions.edit !== false && (
+                            {isFieldAllowed("action_config") && (
                               <button
                                 onClick={() => openRestockingConfigModal(product)}
                                 className="px-3 py-1 bg-purple-500 text-white rounded font-semibold text-xs hover:bg-purple-600 transition"
@@ -1695,7 +1733,7 @@ export default function BranchRecycling() {
                                 📊 Config
                               </button>
                             )}
-                            {actionPermissions.restock !== false && (
+                            {isFieldAllowed("action_restock") && (
                               <button
                                 onClick={() => handleRestock(product)}
                                 disabled={restockingInProgress[product._id] || !restockQty}

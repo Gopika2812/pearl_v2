@@ -5,7 +5,17 @@ import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 const BranchPurchaseInvoices = () => {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
+  
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    // Global Super Admin or Branch Admin (local) bypass checks
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    
+    const key = `purchase-invoice-list_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true if not explicitly restricted
+  };
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedInvoices, setExpandedInvoices] = useState({});
@@ -97,53 +107,79 @@ const BranchPurchaseInvoices = () => {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold border-b">
                   <tr>
-                    <th className="px-6 py-4 text-left">Invoice ID</th>
-                    <th className="px-6 py-4 text-left">Order Reference</th>
-                    <th className="px-6 py-4 text-left">Vendor</th>
-                    <th className="px-6 py-4 text-left">Vendor Bill#</th>
-                    <th className="px-6 py-4 text-center">Bill Date</th>
-                    <th className="px-6 py-4 text-right">Grand Total</th>
-                    <th className="px-6 py-4 text-center">Entry Date</th>
+                    {isFieldAllowed("invoiceId") && <th className="px-6 py-4 text-left">Invoice ID</th>}
+                    {isFieldAllowed("orderRef") && <th className="px-6 py-4 text-left">Order Reference</th>}
+                    {isFieldAllowed("vendor") && <th className="px-6 py-4 text-left">Vendor</th>}
+                    {isFieldAllowed("vendorBillNo") && <th className="px-6 py-4 text-left">Vendor Bill#</th>}
+                    {isFieldAllowed("billDate") && <th className="px-6 py-4 text-center">Bill Date</th>}
+                    {isFieldAllowed("grandTotal") && <th className="px-6 py-4 text-right">Grand Total</th>}
+                    {isFieldAllowed("entryDate") && <th className="px-6 py-4 text-center">Entry Date</th>}
+                    {isFieldAllowed("action") && <th className="px-6 py-4 text-center">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {invoices.map((inv) => (
                     <React.Fragment key={inv._id}>
                       <tr className="hover:bg-gray-50 transition">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <button
-                               onClick={() => toggleExpanded(inv._id)}
-                               className="text-green-600 p-1"
+                        {isFieldAllowed("invoiceId") && (
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => toggleExpanded(inv._id)}
+                                className="text-green-600 p-1"
+                              >
+                                <FaChevronDown className={`transition-transform ${expandedInvoices[inv._id] ? "rotate-180" : ""}`} />
+                              </button>
+                              <span className="font-black text-green-700">{inv.purchaseInvoiceId}</span>
+                            </div>
+                          </td>
+                        )}
+                        {isFieldAllowed("orderRef") && (
+                          <td className="px-6 py-4 text-gray-500 font-medium text-xs">
+                            {inv.purchaseOrderId ? `PO Ref: ${inv.purchaseOrderId.invoiceId || inv.purchaseOrderId}` : "N/A"}
+                          </td>
+                        )}
+                        {isFieldAllowed("vendor") && (
+                          <td className="px-6 py-4 font-bold text-gray-800">{inv.vendor}</td>
+                        )}
+                        {isFieldAllowed("vendorBillNo") && (
+                          <td className="px-6 py-4 text-xs font-bold text-blue-600 italic">
+                            {inv.vendorBillNo || "N/A"}
+                          </td>
+                        )}
+                        {isFieldAllowed("billDate") && (
+                          <td className="px-6 py-4 text-center text-xs font-semibold text-gray-500">
+                            {inv.vendorDate ? new Date(inv.vendorDate).toLocaleDateString("en-IN") : "N/A"}
+                          </td>
+                        )}
+                        {isFieldAllowed("grandTotal") && (
+                          <td className="px-6 py-4 text-right font-black text-green-700">₹{(inv.grandTotal || 0).toLocaleString()}</td>
+                        )}
+                        {isFieldAllowed("entryDate") && (
+                          <td className="px-6 py-4 text-center">
+                            <p className="text-xs font-bold text-gray-700">{new Date(inv.createdAt).toLocaleDateString("en-IN")}</p>
+                            <p className="text-[10px] text-gray-400 font-bold mt-0.5">
+                              {new Date(inv.createdAt).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </td>
+                        )}
+                        {isFieldAllowed("action") && (
+                          <td className="px-6 py-4 text-center">
+                            <button 
+                              onClick={() => toast.info("Viewing details for " + inv.purchaseInvoiceId)}
+                              className="text-green-600 hover:bg-green-50 p-2 rounded-lg transition"
+                              title="View Details"
                             >
-                              <FaChevronDown className={`transition-transform ${expandedInvoices[inv._id] ? "rotate-180" : ""}`} />
+                              <FaFileAlt size={14} />
                             </button>
-                            <span className="font-black text-green-700">{inv.purchaseInvoiceId}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-gray-500 font-medium text-xs">
-                          {inv.purchaseOrderId ? `PO Ref: ${inv.purchaseOrderId.invoiceId || inv.purchaseOrderId}` : "N/A"}
-                        </td>
-                        <td className="px-6 py-4 font-bold text-gray-800">{inv.vendor}</td>
-                        <td className="px-6 py-4 text-xs font-bold text-blue-600 italic">
-                          {inv.vendorBillNo || "N/A"}
-                        </td>
-                        <td className="px-6 py-4 text-center text-xs font-semibold text-gray-500">
-                          {inv.vendorDate ? new Date(inv.vendorDate).toLocaleDateString("en-IN") : "N/A"}
-                        </td>
-                        <td className="px-6 py-4 text-right font-black text-green-700">₹{(inv.grandTotal || 0).toLocaleString()}</td>
-                        <td className="px-6 py-4 text-center">
-                          <p className="text-xs font-bold text-gray-700">{new Date(inv.createdAt).toLocaleDateString("en-IN")}</p>
-                          <p className="text-[10px] text-gray-400 font-bold mt-0.5">
-                             {new Date(inv.createdAt).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </td>
+                          </td>
+                        )}
                       </tr>
 
                       {/* EXPANDED SECTION */}
                       {expandedInvoices[inv._id] && (
                         <tr className="bg-gray-50">
-                          <td colSpan="5" className="px-6 py-4">
+                          <td colSpan="10" className="px-6 py-4">
                             <div className="space-y-6">
                               {/* INVOICE ITEMS */}
                               <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">

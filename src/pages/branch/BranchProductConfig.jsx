@@ -11,8 +11,16 @@ const labelClass = "block text-[13px] font-black text-slate-500 mb-2 uppercase t
 const cardClass = "bg-white p-6 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100";
 
 export default function BranchProductConfig() {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const branchId = currentBranch?._id || currentBranch?.id;
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    const key = `product-config_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false;
+  };
 
   const [products, setProducts] = useState([]);
   const [productGroups, setProductGroups] = useState([]);
@@ -302,19 +310,23 @@ export default function BranchProductConfig() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-100">
-                <th className="px-8 py-6 w-10">
-                  <input
-                    type="checkbox"
-                    className="w-5 h-5 rounded-lg border-2 border-slate-300 text-emerald-500 focus:ring-emerald-500 transition-all cursor-pointer"
-                    checked={filteredProducts.length > 0 && selectedIds.length === filteredProducts.length}
-                    onChange={toggleSelectAll}
-                  />
-                </th>
-                <th className="px-4 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Product Details</th>
-                <th className="px-4 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Available Qty</th>
-                <th className="px-4 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Unit Conversion</th>
-                <th className="px-4 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Prices</th>
-                <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
+                {isFieldAllowed("bar") && (
+                  <th className="px-8 py-6 w-10">
+                    <input
+                      type="checkbox"
+                      className="w-5 h-5 rounded-lg border-2 border-slate-300 text-emerald-500 focus:ring-emerald-500 transition-all cursor-pointer"
+                      checked={filteredProducts.length > 0 && selectedIds.length === filteredProducts.length}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                )}
+                {isFieldAllowed("details") && <th className="px-4 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Product Details</th>}
+                {isFieldAllowed("qty") && <th className="px-4 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Available Qty</th>}
+                {isFieldAllowed("unit") && <th className="px-4 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Unit Conversion</th>}
+                {isFieldAllowed("prices") && <th className="px-4 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500">Prices</th>}
+                {(isFieldAllowed("action_edit") || isFieldAllowed("action_delete")) && (
+                  <th className="px-8 py-6 text-[12px] font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 min-h-[400px]">
@@ -329,73 +341,89 @@ export default function BranchProductConfig() {
                 </tr>
               ) : filteredProducts.map(p => (
                 <tr key={p._id} className={`hover:bg-slate-50/50 transition-colors group ${selectedIds.includes(p._id) ? 'bg-emerald-50/30' : ''}`}>
-                  <td className="px-8 py-5">
-                    <input
-                      type="checkbox"
-                      className="w-5 h-5 rounded-lg border-2 border-slate-300 text-emerald-500 focus:ring-emerald-500 transition-all cursor-pointer"
-                      checked={selectedIds.includes(p._id)}
-                      onChange={() => toggleSelectRow(p._id)}
-                    />
-                  </td>
-                  <td className="px-4 py-5">
-                    <p className="font-black text-slate-800 text-lg">{p.name}</p>
-                    <p className="text-[12px] font-bold text-emerald-600 uppercase tracking-tighter mt-1">{p.productGroup?.name || "No Group"}</p>
-                  </td>
-                  <td className="px-4 py-5">
-                    <div className="flex flex-col">
-                      <span className="text-xl font-black text-slate-700">{p.totalQty || 0}</span>
-                      <span className="text-[11px] font-black text-slate-400 uppercase">{p.units || "Units"}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-5 font-bold text-slate-600">
-                    {p.unitConversion ? (
-                      <div className="flex items-center gap-2">
-                        <span className="bg-slate-100 px-3 py-1 rounded text-[12px] font-bold text-slate-600">{p.unitConversion.value} {p.unitConversion.unit}</span>
-                        <span className="text-slate-300 font-black">=</span>
-                        <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded text-[12px] font-black">{p.unitConversion.altValue} {p.unitConversion.altUnit}</span>
+                  {isFieldAllowed("bar") && (
+                    <td className="px-8 py-5">
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 rounded-lg border-2 border-slate-300 text-emerald-500 focus:ring-emerald-500 transition-all cursor-pointer"
+                        checked={selectedIds.includes(p._id)}
+                        onChange={() => toggleSelectRow(p._id)}
+                      />
+                    </td>
+                  )}
+                  {isFieldAllowed("details") && (
+                    <td className="px-4 py-5">
+                      <p className="font-black text-slate-800 text-lg">{p.name}</p>
+                      <p className="text-[12px] font-bold text-emerald-600 uppercase tracking-tighter mt-1">{p.productGroup?.name || "No Group"}</p>
+                    </td>
+                  )}
+                  {isFieldAllowed("qty") && (
+                    <td className="px-4 py-5">
+                      <div className="flex flex-col">
+                        <span className="text-xl font-black text-slate-700">{p.totalQty || 0}</span>
+                        <span className="text-[11px] font-black text-slate-400 uppercase">{p.units || "Units"}</span>
                       </div>
-                    ) : (
-                      <span className="text-slate-300 italic text-[12px]">No conversion set</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-5 whitespace-nowrap">
-                    <div className="flex items-center gap-4">
-                      <div className="flex flex-col text-[12px] font-bold">
-                        <div className="text-slate-400 font-black uppercase text-[9px] mb-0.5 tracking-widest">Master Rates</div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-slate-400">P: <span className="text-slate-800 text-sm">₹{(p.purchasingPrice || 0).toFixed(2)}</span></div>
-                          <div className="text-emerald-500">S: <span className="text-emerald-700 text-sm font-black">₹{(p.sellingPrice || 0).toFixed(2)}</span></div>
+                    </td>
+                  )}
+                  {isFieldAllowed("unit") && (
+                    <td className="px-4 py-5 font-bold text-slate-600">
+                      {p.unitConversion ? (
+                        <div className="flex items-center gap-2">
+                          <span className="bg-slate-100 px-3 py-1 rounded text-[12px] font-bold text-slate-600">{p.unitConversion.value} {p.unitConversion.unit}</span>
+                          <span className="text-slate-300 font-black">=</span>
+                          <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded text-[12px] font-black">{p.unitConversion.altValue} {p.unitConversion.altUnit}</span>
                         </div>
-                      </div>
+                      ) : (
+                        <span className="text-slate-300 italic text-[12px]">No conversion set</span>
+                      )}
+                    </td>
+                  )}
+                  {isFieldAllowed("prices") && (
+                    <td className="px-4 py-5 whitespace-nowrap">
+                      <div className="flex items-center gap-4">
+                        <div className="flex flex-col text-[12px] font-bold">
+                          <div className="text-slate-400 font-black uppercase text-[9px] mb-0.5 tracking-widest">Master Rates</div>
+                          <div className="flex items-center gap-4">
+                            <div className="text-slate-400">P: <span className="text-slate-800 text-sm">₹{(p.purchasingPrice || 0).toFixed(2)}</span></div>
+                            <div className="text-emerald-500">S: <span className="text-emerald-700 text-sm font-black">₹{(p.sellingPrice || 0).toFixed(2)}</span></div>
+                          </div>
+                        </div>
 
-                      <button
-                        onClick={() => {
-                          setHistoryProduct(p);
-                          setShowHistoryModal(true);
-                        }}
-                        className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:bg-[#319bab]/10 hover:text-[#319bab] transition border border-transparent hover:border-[#319bab]/20 group/icon"
-                        title="View Price Timeline"
-                      >
-                        <FaChartLine size={14} className="group-hover/icon:scale-110 transition-transform" />
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-8 py-5 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => openEditModal(p)}
-                        className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition shadow-sm border border-emerald-100"
-                      >
-                        <FaEdit size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteProduct(p._id)}
-                        className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-500 hover:text-white transition shadow-sm border border-rose-100"
-                      >
-                        <FaTrash size={16} />
-                      </button>
-                    </div>
-                  </td>
+                        <button
+                          onClick={() => {
+                            setHistoryProduct(p);
+                            setShowHistoryModal(true);
+                          }}
+                          className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:bg-[#319bab]/10 hover:text-[#319bab] transition border border-transparent hover:border-[#319bab]/20 group/icon"
+                          title="View Price Timeline"
+                        >
+                          <FaChartLine size={14} className="group-hover/icon:scale-110 transition-transform" />
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                  {(isFieldAllowed("action_edit") || isFieldAllowed("action_delete")) && (
+                    <td className="px-8 py-5 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {isFieldAllowed("action_edit") && (
+                          <button
+                            onClick={() => openEditModal(p)}
+                            className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition shadow-sm border border-emerald-100"
+                          >
+                            <FaEdit size={16} />
+                          </button>
+                        )}
+                        {isFieldAllowed("action_delete") && (
+                          <button
+                            onClick={() => handleDeleteProduct(p._id)}
+                            className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-500 hover:text-white transition shadow-sm border border-rose-100"
+                          >
+                            <FaTrash size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {filteredProducts.length === 0 && (

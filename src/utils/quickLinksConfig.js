@@ -14,7 +14,7 @@ export const QUICK_LINKS_CONFIG = {
     endpoint: "/voucher-types",
     displayFields: ["name", "orderType", "prefix", "counter"],
     editableFields: ["name", "orderType", "prefix", "counter"],
-    permissionFields: ["counter", "prefix"]
+    permissionFields: ["name", "orderType", "prefix", "counter", "action_edit", "action_delete"]
   },
   warehouse: {
     label: "Warehouse",
@@ -22,7 +22,7 @@ export const QUICK_LINKS_CONFIG = {
     endpoint: "/warehouses",
     displayFields: ["name"],
     editableFields: ["name"],
-    permissionFields: []
+    permissionFields: ["name", "action_edit", "action_delete"]
   },
   product_group: {
     label: "Product Group",
@@ -30,7 +30,7 @@ export const QUICK_LINKS_CONFIG = {
     endpoint: "/product-groups",
     displayFields: ["name", "description"],
     editableFields: ["name", "description"],
-    permissionFields: []
+    permissionFields: ["name", "description", "action_edit", "action_delete"]
   },
   product_category: {
     label: "Product Category",
@@ -38,7 +38,7 @@ export const QUICK_LINKS_CONFIG = {
     endpoint: "/product-categories",
     displayFields: ["name", "description"],
     editableFields: ["name", "description"],
-    permissionFields: []
+    permissionFields: ["name", "description", "action_edit", "action_delete"]
   },
   product: {
     label: "Product",
@@ -47,7 +47,7 @@ export const QUICK_LINKS_CONFIG = {
     displayFields: ["name", "hsnCode", "totalQty", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "productGroup", "productCategories", "warehouse"],
     editableFields: ["name", "hsnCode", "purchasingPrice", "sellingPrice", "adminMargin", "productGroup", "productCategories", "warehouse"],
     detailedFields: ["name", "hsnCode", "totalQty", "totalQtyUnit", "perQty", "units", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "gst"],
-    permissionFields: ["purchasingPrice", "adminMargin", "sellingPrice", "marginPercentage", "gst", "totalQty"]
+    permissionFields: ["name", "hsnCode", "totalQty", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "productGroup", "productCategories", "warehouse", "action_edit", "action_delete"]
   },
   customer_category: {
     label: "Customer Category",
@@ -55,7 +55,7 @@ export const QUICK_LINKS_CONFIG = {
     endpoint: "/customer-categories",
     displayFields: ["name", "description"],
     editableFields: ["name", "description"],
-    permissionFields: []
+    permissionFields: ["name", "description", "action_edit", "action_delete"]
   },
   customer_group: {
     label: "Customer Group",
@@ -63,7 +63,7 @@ export const QUICK_LINKS_CONFIG = {
     endpoint: "/customer-groups",
     displayFields: ["name", "description"],
     editableFields: ["name", "description"],
-    permissionFields: []
+    permissionFields: ["name", "description", "action_edit", "action_delete"]
   },
   customer: {
     label: "Customer",
@@ -72,7 +72,7 @@ export const QUICK_LINKS_CONFIG = {
     displayFields: ["name", "whatsapp", "email", "margin", "debit", "credit", "salesOwner", "customerCategory"],
     editableFields: ["name", "whatsapp", "email", "margin", "debit", "credit"],
     detailedFields: ["name", "whatsapp", "email", "address", "district", "state", "pincode", "registrationType", "gstin", "salesOwner", "margin", "credit", "debit"],
-    permissionFields: ["margin", "debit", "credit", "gstin"]
+    permissionFields: ["name", "whatsapp", "email", "margin", "debit", "credit", "salesOwner", "customerCategory", "gstin", "action_edit", "action_delete"]
   },
   vendor: {
     label: "Vendor",
@@ -80,7 +80,7 @@ export const QUICK_LINKS_CONFIG = {
     endpoint: "/vendors",
     displayFields: ["name", "gstin", "email", "phone"],
     editableFields: ["name", "gstin", "email"],
-    permissionFields: []
+    permissionFields: ["name", "gstin", "email", "phone", "action_edit", "action_delete"]
   },
   sales_owner: {
     label: "Sales Owner",
@@ -88,7 +88,7 @@ export const QUICK_LINKS_CONFIG = {
     endpoint: "/sales-owners",
     displayFields: ["name", "phone", "email"],
     editableFields: ["name", "phone", "email"],
-    permissionFields: []
+    permissionFields: ["name", "phone", "email", "action_edit", "action_delete"]
   },
   sales_man: {
     label: "Sales Man",
@@ -96,7 +96,7 @@ export const QUICK_LINKS_CONFIG = {
     endpoint: "/sales-men",
     displayFields: ["name", "phone", "email", "commissionPercentage"],
     editableFields: ["name", "phone", "email"],
-    permissionFields: ["commissionPercentage", "phone"]
+    permissionFields: ["name", "phone", "email", "commissionPercentage", "action_edit", "action_delete"]
   },
   delivery_man: {
     label: "Delivery Man",
@@ -104,7 +104,7 @@ export const QUICK_LINKS_CONFIG = {
     endpoint: "/delivery-men",
     displayFields: ["name", "phone", "email", "vehicleNumber"],
     editableFields: ["name", "phone", "email"],
-    permissionFields: ["phone", "vehicleNumber"]
+    permissionFields: ["name", "phone", "email", "vehicleNumber", "action_edit", "action_delete"]
   },
   token: {
     label: "Order Token",
@@ -112,7 +112,7 @@ export const QUICK_LINKS_CONFIG = {
     endpoint: "/tokens",
     displayFields: ["tokenId", "status", "customer", "assignedTo", "createdAt"],
     editableFields: ["status"],
-    permissionFields: []
+    permissionFields: ["tokenId", "status", "customer", "assignedTo", "createdAt"]
   }
 };
 

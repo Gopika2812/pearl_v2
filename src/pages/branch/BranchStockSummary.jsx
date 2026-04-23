@@ -11,8 +11,16 @@ import { useInventory } from "../../context/InventoryContext";
 import StockSummaryExportModal from "../../components/branch/StockSummaryExportModal";
 
 const BranchStockSummary = () => {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const { productGroups } = useInventory();
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    const key = `stock-summary_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false;
+  };
 
   // View States: 'GROUPS' | 'ITEMS' | 'LEDGER'
   const [viewLevel, setViewLevel] = useState("GROUPS");
@@ -487,12 +495,12 @@ const BranchStockSummary = () => {
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
                     <tr className="bg-gray-50/50 text-gray-400 uppercase text-[10px] font-black tracking-widest border-b">
-                      <th className="px-6 py-4">Stock Group Name</th>
-                      <th className="px-6 py-4 text-center">Opening</th>
-                      <th className="px-6 py-4 text-center">Inwards</th>
-                      <th className="px-6 py-4 text-center">Outwards</th>
-                      <th className="px-6 py-4 text-right">Closing Qty</th>
-                      <th className="px-6 py-4 text-right">Closing Value</th>
+                      {isFieldAllowed("groupName") && <th className="px-6 py-4">Stock Group Name</th>}
+                      {isFieldAllowed("opening") && <th className="px-6 py-4 text-center">Opening</th>}
+                      {isFieldAllowed("inwards") && <th className="px-6 py-4 text-center">Inwards</th>}
+                      {isFieldAllowed("outwards") && <th className="px-6 py-4 text-center">Outwards</th>}
+                      {isFieldAllowed("closingQty") && <th className="px-6 py-4 text-right">Closing Qty</th>}
+                      {isFieldAllowed("closingValue") && <th className="px-6 py-4 text-right">Closing Value</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -502,17 +510,19 @@ const BranchStockSummary = () => {
                         onClick={() => changeView("ITEMS", { _id: agg.id, name: agg.name })}
                         className="hover:bg-blue-50/50 cursor-pointer transition group"
                       >
-                        <td className="px-6 py-4 font-bold text-gray-700 flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary group-hover:bg-secondary group-hover:text-white transition">
-                            <FaChevronRight size={10} />
-                          </div>
-                          {agg.name}
-                        </td>
-                        <td className="px-6 py-4 text-center font-bold text-gray-400">{Math.round(agg.openingQty || 0)}</td>
-                        <td className="px-6 py-4 text-center font-bold text-green-600">{agg.inwards || 0}</td>
-                        <td className="px-6 py-4 text-center font-bold text-red-500">{agg.outwards || 0}</td>
-                        <td className="px-6 py-4 text-right font-black text-gray-600">{agg.closingQty}</td>
-                        <td className="px-6 py-4 text-right font-black text-secondary">₹{agg.closingValue.toLocaleString()}</td>
+                        {isFieldAllowed("groupName") && (
+                          <td className="px-6 py-4 font-bold text-gray-700 flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary group-hover:bg-secondary group-hover:text-white transition">
+                              <FaChevronRight size={10} />
+                            </div>
+                            {agg.name}
+                          </td>
+                        )}
+                        {isFieldAllowed("opening") && <td className="px-6 py-4 text-center font-bold text-gray-400">{Math.round(agg.openingQty || 0)}</td>}
+                        {isFieldAllowed("inwards") && <td className="px-6 py-4 text-center font-bold text-green-600">{agg.inwards || 0}</td>}
+                        {isFieldAllowed("outwards") && <td className="px-6 py-4 text-center font-bold text-red-500">{agg.outwards || 0}</td>}
+                        {isFieldAllowed("closingQty") && <td className="px-6 py-4 text-right font-black text-gray-600">{agg.closingQty}</td>}
+                        {isFieldAllowed("closingValue") && <td className="px-6 py-4 text-right font-black text-secondary">₹{agg.closingValue.toLocaleString()}</td>}
                       </tr>
                     ))}
                   </tbody>

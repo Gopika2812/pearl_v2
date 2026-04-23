@@ -590,17 +590,21 @@ const BranchSuppliers = () => {
             <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
               <tr>
                 <th className="w-10"></th>
-                <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("name")}>
-                  Supplier Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                </th>
+                {isFieldAllowed("supplierName") && (
+                  <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("name")}>
+                    Supplier Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  </th>
+                )}
                 {isFieldAllowed("gstin") && (
                   <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
                     GSTIN
                   </th>
                 )}
-                <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("outstandingPOs")}>
-                  POs {sortConfig.key === "outstandingPOs" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                </th>
+                {isFieldAllowed("pos") && (
+                  <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("outstandingPOs")}>
+                    POs {sortConfig.key === "outstandingPOs" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  </th>
+                )}
                 {isFieldAllowed("credit") && (
                   <th className="px-3 md:px-5 py-2 md:py-3 text-right text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("credit")}>
                     Credit {sortConfig.key === "credit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
@@ -611,9 +615,11 @@ const BranchSuppliers = () => {
                     Debit {sortConfig.key === "debit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
                 )}
-                <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
-                  Actions
-                </th>
+                  {(isFieldAllowed("action_pay") || isFieldAllowed("action_return") || isFieldAllowed("action_ledger")) && (
+                    <th className="px-3 md:px-5 py-2 md:py-3 text-center text-[10px] md:text-xs font-bold uppercase tracking-wider">
+                      Actions
+                    </th>
+                  )}
               </tr>
             </thead>
             <tbody>
@@ -629,17 +635,21 @@ const BranchSuppliers = () => {
                       <td className="px-4 py-3 text-center text-gray-400">
                         {isExpanded ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
                       </td>
-                      <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
-                        {supplier.name}
-                      </td>
+                      {isFieldAllowed("supplierName") && (
+                        <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
+                          {supplier.name}
+                        </td>
+                      )}
                       {isFieldAllowed("gstin") && (
                         <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
                           {supplier.gstin || "-"}
                         </td>
                       )}
-                      <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-semibold text-orange-600">
-                        {getOutstandingPOCount(supplier.name)}
-                      </td>
+                      {isFieldAllowed("pos") && (
+                        <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-semibold text-orange-600">
+                          {getOutstandingPOCount(supplier.name)}
+                        </td>
+                      )}
                       {isFieldAllowed("credit") && (
                         <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-right font-bold text-red-600">
                           ₹{(supplier.credit || 0).toFixed(2)}
@@ -650,28 +660,36 @@ const BranchSuppliers = () => {
                           ₹{(supplier.debit || 0).toFixed(2)}
                         </td>
                       )}
-                      <td className="px-3 md:px-5 py-2 md:py-3 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedPaySupplier(supplier); }}
-                            className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-md text-xs font-bold transition whitespace-nowrap flex items-center gap-1"
-                          >
-                            <FaMoneyBillWave className="text-[9px]" /> Pay
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedDnSupplier(supplier); }}
-                            className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-md text-xs font-bold transition whitespace-nowrap flex items-center gap-1"
-                          >
-                            <FaUndoAlt className="text-[9px]" /> Return
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedLedgerSupplier(supplier); }}
-                            className="bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 px-2.5 py-1 rounded-md text-xs font-bold transition whitespace-nowrap"
-                          >
-                            Ledger
-                          </button>
-                        </div>
-                      </td>
+                      {(isFieldAllowed("action_pay") || isFieldAllowed("action_return") || isFieldAllowed("action_ledger")) && (
+                        <td className="px-3 md:px-5 py-2 md:py-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {isFieldAllowed("action_pay") && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedPaySupplier(supplier); }}
+                                className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-md text-xs font-bold transition whitespace-nowrap flex items-center gap-1"
+                              >
+                                <FaMoneyBillWave className="text-[9px]" /> Pay
+                              </button>
+                            )}
+                            {isFieldAllowed("action_return") && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedDnSupplier(supplier); }}
+                                className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-md text-xs font-bold transition whitespace-nowrap flex items-center gap-1"
+                              >
+                                <FaUndoAlt className="text-[9px]" /> Return
+                              </button>
+                            )}
+                            {isFieldAllowed("action_ledger") && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedLedgerSupplier(supplier); }}
+                                className="bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 px-2.5 py-1 rounded-md text-xs font-bold transition whitespace-nowrap flex items-center gap-1"
+                              >
+                                <FaBook className="text-[9px]" /> Ledger
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                     {isExpanded && (
                       <tr className="bg-gray-50 border-b border-gray-200">

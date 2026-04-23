@@ -7,7 +7,17 @@ import { useNavigate } from "react-router-dom";
 const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 
 export default function BranchPaymentRecords() {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
+  
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    // Global Super Admin or Branch Admin (local) bypass checks
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    
+    const key = `payment-records_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true if not explicitly restricted
+  };
   const navigate = useNavigate();
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -158,46 +168,69 @@ export default function BranchPaymentRecords() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Payment ID</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Recipient / Description</th>
-                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Mode</th>
-                    <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Amount</th>
+                    {isFieldAllowed("paymentId") && <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Payment ID</th>}
+                    {isFieldAllowed("date") && <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>}
+                    {isFieldAllowed("type") && <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>}
+                    {isFieldAllowed("recipient") && <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Recipient / Description</th>}
+                    {isFieldAllowed("mode") && <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Mode</th>}
+                    {isFieldAllowed("amount") && <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Amount</th>}
+                    {isFieldAllowed("action") && <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filteredPayments.map((p) => (
                     <tr key={p._id} className="hover:bg-red-50/30 transition-colors group">
-                      <td className="px-6 py-4">
-                        <span className="font-bold text-red-600 group-hover:text-red-700">{p.paymentId}</span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {formatDateTime(p.paymentDate || p.createdAt)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`text-[10px] font-bold px-2 py-1 rounded border ${
-                          p.paymentType === 'vendor_payment' ? 'bg-orange-50 border-orange-200 text-orange-600' :
-                          p.paymentType === 'expense' ? 'bg-red-50 border-red-200 text-red-600' :
-                          'bg-gray-50 border-gray-200 text-gray-600'
-                        }`}>
-                          {p.paymentType?.replace('_', ' ').toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="font-semibold text-gray-800">{p.vendor?.name || p.description || "N/A"}</p>
-                        {p.purchaseOrder?.invoiceId && (
-                          <p className="text-xs text-gray-500 font-bold">PO: {p.purchaseOrder.invoiceId}</p>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="text-[10px] font-black px-2 py-1 bg-gray-100 text-gray-600 rounded uppercase">
-                          {p.paymentMethod}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <p className="text-lg font-black text-gray-900">₹{p.amount?.toLocaleString()}</p>
-                      </td>
+                      {isFieldAllowed("paymentId") && (
+                        <td className="px-6 py-4">
+                          <span className="font-bold text-red-600 group-hover:text-red-700">{p.paymentId}</span>
+                        </td>
+                      )}
+                      {isFieldAllowed("date") && (
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {formatDateTime(p.paymentDate || p.createdAt)}
+                        </td>
+                      )}
+                      {isFieldAllowed("type") && (
+                        <td className="px-6 py-4">
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded border ${
+                            p.paymentType === 'vendor_payment' ? 'bg-orange-50 border-orange-200 text-orange-600' :
+                            p.paymentType === 'expense' ? 'bg-red-50 border-red-200 text-red-600' :
+                            'bg-gray-50 border-gray-200 text-gray-600'
+                          }`}>
+                            {p.paymentType?.replace('_', ' ').toUpperCase()}
+                          </span>
+                        </td>
+                      )}
+                      {isFieldAllowed("recipient") && (
+                        <td className="px-6 py-4">
+                          <p className="font-semibold text-gray-800">{p.vendor?.name || p.description || "N/A"}</p>
+                          {p.purchaseOrder?.invoiceId && (
+                            <p className="text-xs text-gray-500 font-bold">PO: {p.purchaseOrder.invoiceId}</p>
+                          )}
+                        </td>
+                      )}
+                      {isFieldAllowed("mode") && (
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-[10px] font-black px-2 py-1 bg-gray-100 text-gray-600 rounded uppercase">
+                            {p.paymentMethod}
+                          </span>
+                        </td>
+                      )}
+                      {isFieldAllowed("amount") && (
+                        <td className="px-6 py-4 text-right">
+                          <p className="text-lg font-black text-gray-900">₹{p.amount?.toLocaleString()}</p>
+                        </td>
+                      )}
+                      {isFieldAllowed("action") && (
+                        <td className="px-6 py-4 text-center">
+                           <button 
+                            onClick={() => toast.info("Viewing record: " + p.paymentId)}
+                            className="text-red-600 hover:bg-red-50 p-2 rounded-lg transition"
+                           >
+                             <FaFileInvoiceDollar size={14} />
+                           </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

@@ -106,6 +106,16 @@ const BranchSalesInvoices = () => {
   const [voucherTypes, setVoucherTypes] = useState([]);
   const [filterVoucherPrefix, setFilterVoucherPrefix] = useState("");
   const [filterEinvoiceStatus, setFilterEinvoiceStatus] = useState("");
+  
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    // Global Super Admin or Branch Admin (local) bypass checks
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    
+    const key = `sales-invoice-list_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true if not explicitly restricted
+  };
 
   // --- SELECTIVE EXPORT STATE ---
   const [showColumnModal, setShowColumnModal] = useState(false);
@@ -774,196 +784,222 @@ const BranchSalesInvoices = () => {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50/80 text-slate-500 uppercase text-[10px] font-black border-b border-slate-100 tracking-wider">
                   <tr>
-                    <th className="px-6 py-5 text-left">Date & Time</th>
-                    <th className="px-6 py-5 text-left">Invoice ID (SI)</th>
-                    <th className="px-6 py-5 text-left">Order Ref (SO)</th>
-                    <th className="px-6 py-5 text-left">Customer Details</th>
-                    <th className="px-6 py-5 text-left">Created By</th>
-                    <th className="px-6 py-5 text-right">Grand Total</th>
-                    <th className="px-6 py-5 text-center">E-Invoice Status</th>
-                    <th className="px-6 py-5 text-center">Status</th>
-                    <th className="px-6 py-5 text-center">Actions</th>
+                    {isFieldAllowed("dateTime") && <th className="px-6 py-5 text-left">Date & Time</th>}
+                    {isFieldAllowed("siId") && <th className="px-6 py-5 text-left">Invoice ID (SI)</th>}
+                    {isFieldAllowed("soRef") && <th className="px-6 py-5 text-left">Order Ref (SO)</th>}
+                    {isFieldAllowed("customer") && <th className="px-6 py-5 text-left">Customer Details</th>}
+                    {isFieldAllowed("createdBy") && <th className="px-6 py-5 text-left">Created By</th>}
+                    {isFieldAllowed("grandTotal") && <th className="px-6 py-5 text-right">Grand Total</th>}
+                    {isFieldAllowed("einvoiceStatus") && <th className="px-6 py-5 text-center">E-Invoice Status</th>}
+                    {isFieldAllowed("status") && <th className="px-6 py-5 text-center">Status</th>}
+                    {(isFieldAllowed("action_return") || isFieldAllowed("action_ewb") || isFieldAllowed("action_cancel") || isFieldAllowed("action_pdf")) && (
+                      <th className="px-6 py-5 text-center">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {invoices.map((inv) => (
                     <React.Fragment key={inv._id}>
                       <tr className="hover:bg-indigo-50/30 transition group">
-                        <td className="px-6 py-5 whitespace-nowrap">
-                           <div className="text-[11px] font-black text-slate-700 tracking-tight">{formatIST(inv.invoiceDate)}</div>
-                           <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{new Date(inv.invoiceDate).toDateString() === new Date().toDateString() ? "TODAY" : ""}</div>
-                        </td>
-                        <td className="px-6 py-5">
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => toggleExpanded(inv._id)}
-                              className="text-indigo-600 p-2 hover:bg-white rounded-lg shadow-sm transition-all border border-transparent hover:border-indigo-100"
-                            >
-                              <FaChevronDown className={`transition-transform duration-300 ${expandedInvoices[inv._id] ? "rotate-180" : ""}`} />
-                            </button>
-                            <span className="font-black text-indigo-700 tracking-tight">{inv.invoiceNumber}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-5">
-                          <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-1 rounded">
-                            SO REF: {inv.salesOrderId?.invoiceId || "N/A"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5">
-                          <div className="font-black text-slate-800 text-xs">{inv.customer?.name}</div>
-                          <div className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-0.5">{inv.customer?.whatsapp || "No Contact"}</div>
-                        </td>
-                        <td className="px-6 py-5">
-                          <div className="flex flex-col gap-1.5">
-                            {inv.salesOrderId?.billingPerson && (inv.generatedBy || inv.billingPerson) !== inv.salesOrderId?.billingPerson && (
-                               <div className="flex items-center gap-1.5 opacity-60">
-                                  <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase tracking-widest border border-slate-200">SO</span>
-                                  <span className="text-[10px] font-bold text-slate-500 truncate max-w-[100px]">{inv.salesOrderId.billingPerson}</span>
-                               </div>
-                            )}
-                            <div className="flex items-center gap-1.5">
-                               <span className="text-[8px] font-black bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase tracking-widest border border-indigo-200">INV</span>
-                               <span className="text-[10px] font-black text-indigo-700 uppercase tracking-tight">
-                                  {inv.generatedBy || inv.billingPerson || inv.salesOrderId?.billingPerson || "SYSTEM"}
-                               </span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-5 text-right font-black text-indigo-700 tracking-tight text-base">
-                          ₹{(inv.grandTotal || 0).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-5 text-center">
-                          <div className="flex flex-col gap-2 scale-90">
-                            {inv.einvoiceStatus === "GENERATED" ? (
-                              <div className="flex flex-col items-center gap-1">
-                                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-green-200">
-                                  ✅ IRN READY
-                                </span>
-                                <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold truncate w-24" title={inv.irn}>{inv.irn?.substring(0, 12)}...</code>
-                              </div>
-                            ) : (
-                              <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-yellow-200">
-                                📄 SI PENDING
-                              </span>
-                            )}
-                            {inv.ewayBillNo ? (
-                              <div className="flex flex-col items-center gap-1">
-                                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-blue-200">
-                                  🚚 EWB READY
-                                </span>
-                                <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold">{inv.ewayBillNo}</code>
-                              </div>
-                            ) : inv.grandTotal > 10000 ? (
-                              <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-orange-200">
-                                📦 EWB REQD
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-6 py-5 text-center">
-                          {inv.salesOrderId?.reEditRequestStatus === "PENDING" ? (
-                            <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
-                              Re-Edit Requested
-                            </span>
-                          ) : inv.salesOrderId?.cancelRequestStatus === "PENDING" ? (
-                            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
-                              Cancellation Requested
-                            </span>
-                          ) : (
-                            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
-                              Finalized
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex items-center gap-2 justify-center flex-wrap">
-                            {inv.einvoiceStatus === "GENERATED" && !inv.ewayBillNo && inv.grandTotal > 10000 && (
+                        {isFieldAllowed("dateTime") && (
+                          <td className="px-6 py-5 whitespace-nowrap">
+                             <div className="text-[11px] font-black text-slate-700 tracking-tight">{formatIST(inv.invoiceDate)}</div>
+                             <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{new Date(inv.invoiceDate).toDateString() === new Date().toDateString() ? "TODAY" : ""}</div>
+                          </td>
+                        )}
+                        {isFieldAllowed("siId") && (
+                          <td className="px-6 py-5">
+                            <div className="flex items-center gap-3">
                               <button
-                                onClick={() => handleGenerateEWayBillOnly(inv)}
-                                disabled={requestingAction === inv._id}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-600 hover:text-white text-[10px] font-black transition-all"
+                                onClick={() => toggleExpanded(inv._id)}
+                                className="text-indigo-600 p-2 hover:bg-white rounded-lg shadow-sm transition-all border border-transparent hover:border-indigo-100"
                               >
-                                {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <><FaSync size={12} /> GEN EWB</>}
+                                <FaChevronDown className={`transition-transform duration-300 ${expandedInvoices[inv._id] ? "rotate-180" : ""}`} />
                               </button>
-                            )}
-                            <button
-                              onClick={() => handleDirectGenerateCN(inv)}
-                              disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-50 text-orange-600 border border-orange-100 hover:bg-orange-600 hover:text-white text-[10px] font-black transition-all shadow-sm disabled:opacity-50"
-                              title="Generate Full Return Credit Note"
-                            >
-                              {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaHistory size={12} />}
-                              RETURN (FULL)
-                            </button>
-                            <button
-                              onClick={() => handleGenerateEInvoice(inv)}
-                              disabled={requestingAction === inv._id}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo
-                                ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
-                                : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
-                                }`}
-                            >
-                              {requestingAction === inv._id ? <FaSync className="animate-spin" /> : (
-                                <>
-                                  {(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? <FaSync size={12} /> : <FaFileContract size={12} />}
-                                  {inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo ? "RE-GENERATE" : ((!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "GEN E-WAY BILL" : "GENERATE E-INV")}
-                                </>
+                              <span className="font-black text-indigo-700 tracking-tight">{inv.invoiceNumber}</span>
+                            </div>
+                          </td>
+                        )}
+                        {isFieldAllowed("soRef") && (
+                          <td className="px-6 py-5">
+                            <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-1 rounded">
+                              SO REF: {inv.salesOrderId?.invoiceId || "N/A"}
+                            </span>
+                          </td>
+                        )}
+                        {isFieldAllowed("customer") && (
+                          <td className="px-6 py-5">
+                            <div className="font-black text-slate-800 text-xs">{inv.customer?.name}</div>
+                            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter mt-0.5">{inv.customer?.whatsapp || "No Contact"}</div>
+                          </td>
+                        )}
+                        {isFieldAllowed("createdBy") && (
+                          <td className="px-6 py-5">
+                            <div className="flex flex-col gap-1.5">
+                              {inv.salesOrderId?.billingPerson && (inv.generatedBy || inv.billingPerson) !== inv.salesOrderId?.billingPerson && (
+                                 <div className="flex items-center gap-1.5 opacity-60">
+                                    <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase tracking-widest border border-slate-200">SO</span>
+                                    <span className="text-[10px] font-bold text-slate-500 truncate max-w-[100px]">{inv.salesOrderId.billingPerson}</span>
+                                 </div>
                               )}
-                            </button>
-                            {inv.einvoiceStatus === "GENERATED" && (
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    let fullInv = inv;
-                                    if (!inv.items || inv.items.length === 0) {
-                                      try {
-                                        setFetchingDetails(prev => ({ ...prev, [inv._id]: true }));
-                                        const res = await fetchWithAuth(`${API_BASE}/invoices/${inv._id}`);
-                                        const data = await res.json();
-                                        fullInv = data.success ? data.data : data;
-                                        // Also update main list so we don't have to fetch again
-                                        setInvoices(prev => prev.map(i => i._id === inv._id ? fullInv : i));
-                                      } catch (err) {
-                                        toast.error("Failed to load full invoice details");
-                                        return;
-                                      } finally {
-                                        setFetchingDetails(prev => ({ ...prev, [inv._id]: false }));
-                                      }
-                                    }
-                                    setShowEInvoiceModal(fullInv);
-                                  }}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white border border-indigo-600 hover:bg-indigo-700 text-[10px] font-black transition-all shadow-sm"
-                                  disabled={fetchingDetails[inv._id]}
-                                >
-                                  {fetchingDetails[inv._id] ? <FaSync className="animate-spin" size={12} /> : <FaFileAlt size={12} />}
-                                  PDF
-                                </button>
-                                {inv.ewayBillPdfUrl && (
-                                  <a
-                                    href={`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all shadow-sm"
-                                  >
-                                    🚚 EWB
-                                  </a>
-                                )}
+                              <div className="flex items-center gap-1.5">
+                                 <span className="text-[8px] font-black bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase tracking-widest border border-indigo-200">INV</span>
+                                 <span className="text-[10px] font-black text-indigo-700 uppercase tracking-tight">
+                                    {inv.generatedBy || inv.billingPerson || inv.salesOrderId?.billingPerson || "SYSTEM"}
+                                 </span>
                               </div>
+                            </div>
+                          </td>
+                        )}
+                        {isFieldAllowed("grandTotal") && (
+                          <td className="px-6 py-5 text-right font-black text-indigo-700 tracking-tight text-base">
+                            ₹{(inv.grandTotal || 0).toLocaleString()}
+                          </td>
+                        )}
+                        {isFieldAllowed("einvoiceStatus") && (
+                          <td className="px-6 py-5 text-center">
+                            <div className="flex flex-col gap-2 scale-90">
+                              {inv.einvoiceStatus === "GENERATED" ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-green-200">
+                                    ✅ IRN READY
+                                  </span>
+                                  <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold truncate w-24" title={inv.irn}>{inv.irn?.substring(0, 12)}...</code>
+                                </div>
+                              ) : (
+                                <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-yellow-200">
+                                  📄 SI PENDING
+                                </span>
+                              )}
+                              {inv.ewayBillNo ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-blue-200">
+                                    🚚 EWB READY
+                                  </span>
+                                  <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold">{inv.ewayBillNo}</code>
+                                </div>
+                              ) : inv.grandTotal > 10000 ? (
+                                <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-orange-200">
+                                  📦 EWB REQD
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
+                        )}
+                        {isFieldAllowed("status") && (
+                          <td className="px-6 py-5 text-center">
+                            {inv.salesOrderId?.reEditRequestStatus === "PENDING" ? (
+                              <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
+                                Re-Edit Requested
+                              </span>
+                            ) : inv.salesOrderId?.cancelRequestStatus === "PENDING" ? (
+                              <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
+                                Cancellation Requested
+                              </span>
+                            ) : (
+                              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+                                Finalized
+                              </span>
                             )}
-                            <button
-                              onClick={() => {
-                                setCancelReason("");
-                                setShowCancelModal(inv);
-                              }}
-                              disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white disabled:opacity-50"
-                            >
-                              {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash size={12} />}
-                              CANCEL
-                            </button>
-                          </div>
-                        </td>
+                          </td>
+                        )}
+                        {(isFieldAllowed("action_return") || isFieldAllowed("action_ewb") || isFieldAllowed("action_cancel") || isFieldAllowed("action_pdf")) && (
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex items-center gap-2 justify-center flex-wrap">
+                              {isFieldAllowed("action_ewb") && inv.einvoiceStatus === "GENERATED" && !inv.ewayBillNo && inv.grandTotal > 10000 && (
+                                <button
+                                  onClick={() => handleGenerateEWayBillOnly(inv)}
+                                  disabled={requestingAction === inv._id}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-600 hover:text-white text-[10px] font-black transition-all"
+                                >
+                                  {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <><FaSync size={12} /> GEN EWB</>}
+                                </button>
+                              )}
+                              {isFieldAllowed("action_return") && (
+                                <button
+                                  onClick={() => handleDirectGenerateCN(inv)}
+                                  disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-50 text-orange-600 border border-orange-100 hover:bg-orange-600 hover:text-white text-[10px] font-black transition-all shadow-sm disabled:opacity-50"
+                                  title="Generate Full Return Credit Note"
+                                >
+                                  {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaHistory size={12} />}
+                                  RETURN (FULL)
+                                </button>
+                              )}
+                              {isFieldAllowed("action_ewb") && (
+                                <button
+                                  onClick={() => handleGenerateEInvoice(inv)}
+                                  disabled={requestingAction === inv._id}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo
+                                    ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
+                                    : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
+                                    }`}
+                                >
+                                  {requestingAction === inv._id ? <FaSync className="animate-spin" /> : (
+                                    <>
+                                      {(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? <FaSync size={12} /> : <FaFileContract size={12} />}
+                                      {inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo ? "RE-GENERATE" : ((!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "GEN E-WAY BILL" : "GENERATE E-INV")}
+                                    </>
+                                  )}
+                                </button>
+                              )}
+                              {isFieldAllowed("action_pdf") && inv.einvoiceStatus === "GENERATED" && (
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      let fullInv = inv;
+                                      if (!inv.items || inv.items.length === 0) {
+                                        try {
+                                          setFetchingDetails(prev => ({ ...prev, [inv._id]: true }));
+                                          const res = await fetchWithAuth(`${API_BASE}/invoices/${inv._id}`);
+                                          const data = await res.json();
+                                          fullInv = data.success ? data.data : data;
+                                          // Also update main list so we don't have to fetch again
+                                          setInvoices(prev => prev.map(i => i._id === inv._id ? fullInv : i));
+                                        } catch (err) {
+                                          toast.error("Failed to load full invoice details");
+                                          return;
+                                        } finally {
+                                          setFetchingDetails(prev => ({ ...prev, [inv._id]: false }));
+                                        }
+                                      }
+                                      setShowEInvoiceModal(fullInv);
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white border border-indigo-600 hover:bg-indigo-700 text-[10px] font-black transition-all shadow-sm"
+                                    disabled={fetchingDetails[inv._id]}
+                                  >
+                                    {fetchingDetails[inv._id] ? <FaSync className="animate-spin" size={12} /> : <FaFileAlt size={12} />}
+                                    PDF
+                                  </button>
+                                  {inv.ewayBillPdfUrl && (
+                                    <a
+                                      href={`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all shadow-sm"
+                                    >
+                                      🚚 EWB
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                              {isFieldAllowed("action_cancel") && (
+                                <button
+                                  onClick={() => {
+                                    setCancelReason("");
+                                    setShowCancelModal(inv);
+                                  }}
+                                  disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white disabled:opacity-50"
+                                >
+                                  {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash size={12} />}
+                                  CANCEL
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                       {expandedInvoices[inv._id] && (
                         <tr className="bg-indigo-50/20 animate-in fade-in slide-in-from-top-2">

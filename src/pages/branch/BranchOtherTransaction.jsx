@@ -8,6 +8,15 @@ export default function BranchOtherTransaction({ type }) {
   const { currentBranch, user } = useBranch();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    const prefix = type.toLowerCase() === "payment" ? "other-payment" : "other-receipt";
+    const key = `${prefix}_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false;
+  };
   const [showModal, setShowModal] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -238,48 +247,84 @@ export default function BranchOtherTransaction({ type }) {
               <table className="w-full">
                 <thead className={`bg-${themeColor}-50 border-b border-${themeColor}-100`}>
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">ID</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Ledger Group</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Ledger Name</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Note</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Mode</th>
-                    <th className="px-6 py-4 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">GST %</th>
-                    <th className="px-6 py-4 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Action</th>
+                    {isFieldAllowed("id") && (
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">ID</th>
+                    )}
+                    {isFieldAllowed("date") && (
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Date</th>
+                    )}
+                    {isFieldAllowed("ledgerGroup") && (
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Ledger Group</th>
+                    )}
+                    {isFieldAllowed("ledgerName") && (
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Ledger Name</th>
+                    )}
+                    {isFieldAllowed("note") && (
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Note</th>
+                    )}
+                    {isFieldAllowed("mode") && (
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Mode</th>
+                    )}
+                    {isFieldAllowed("gst") && (
+                      <th className="px-6 py-4 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">GST %</th>
+                    )}
+                    {isFieldAllowed("amount") && (
+                      <th className="px-6 py-4 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">Amount</th>
+                    )}
+                    {isFieldAllowed("action_delete") && (
+                      <th className="px-6 py-4 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">Action</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {transactions.map((t) => (
                     <tr key={t._id} className="hover:bg-gray-50/50 transition duration-150">
-                      <td className="px-6 py-4 whitespace-nowrap font-mono text-xs font-bold text-gray-500">{t.transactionId}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                        {new Date(t.date).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-semibold">{t.ledgerGroup}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">{t.ledgerName}</td>
-                      <td className="px-6 py-4 max-w-xs truncate text-xs text-gray-500 italic">"{t.note || "-"}"</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-600">{t.gst}%</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${
-                          t.paymentMode === "CASH" ? "bg-green-100 text-green-700" :
-                          t.paymentMode === "UPI" ? "bg-blue-100 text-blue-700" :
-                          t.paymentMode === "BANK_TRANSFER" ? "bg-purple-100 text-purple-700" :
-                          "bg-orange-100 text-orange-700"
-                        }`}>
-                          {t.paymentMode?.replace("_", " ")}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-base font-black text-gray-900">
-                        ₹{Number(t.amount).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <button onClick={() => handleDelete(t._id)} className="text-red-400 hover:text-red-600 transition p-2 hover:bg-red-50 rounded-lg">
-                          <FaTrash size={14} />
-                        </button>
-                      </td>
+                      {isFieldAllowed("id") && (
+                        <td className="px-6 py-4 whitespace-nowrap font-mono text-xs font-bold text-gray-500">{t.transactionId}</td>
+                      )}
+                      {isFieldAllowed("date") && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                          {new Date(t.date).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+                      )}
+                      {isFieldAllowed("ledgerGroup") && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-semibold">{t.ledgerGroup}</span>
+                        </td>
+                      )}
+                      {isFieldAllowed("ledgerName") && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">{t.ledgerName}</td>
+                      )}
+                      {isFieldAllowed("note") && (
+                        <td className="px-6 py-4 max-w-xs truncate text-xs text-gray-500 italic">"{t.note || "-"}"</td>
+                      )}
+                      {isFieldAllowed("mode") && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${
+                            t.paymentMode === "CASH" ? "bg-green-100 text-green-700" :
+                            t.paymentMode === "UPI" ? "bg-blue-100 text-blue-700" :
+                            t.paymentMode === "BANK_TRANSFER" ? "bg-purple-100 text-purple-700" :
+                            "bg-orange-100 text-orange-700"
+                          }`}>
+                            {t.paymentMode?.replace("_", " ")}
+                          </span>
+                        </td>
+                      )}
+                      {isFieldAllowed("gst") && (
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-600">{t.gst}%</td>
+                      )}
+                      {isFieldAllowed("amount") && (
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-base font-black text-gray-900">
+                          ₹{Number(t.amount).toLocaleString()}
+                        </td>
+                      )}
+                      {isFieldAllowed("action_delete") && (
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <button onClick={() => handleDelete(t._id)} className="text-red-400 hover:text-red-600 transition p-2 hover:bg-red-50 rounded-lg">
+                            <FaTrash size={14} />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

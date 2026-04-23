@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { FaPlus, FaUndoAlt, FaSearch, FaFileInvoiceDollar, FaChevronDown, FaChevronUp, FaFileContract } from "react-icons/fa";
 import { toast } from "react-toastify";
 import SupplierDebitNoteModal from "../../components/inventory/SupplierDebitNoteModal";
@@ -6,7 +6,17 @@ import { useBranch } from "../../context/BranchContext";
 import { API_BASE, fetchWithAuth } from "../../api";
 
 export default function BranchDebitNote() {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
+  
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    // Global Super Admin or Branch Admin (local) bypass checks
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    
+    const key = `debit-note_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true if not explicitly restricted
+  };
   const [debitNotes, setDebitNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -110,39 +120,45 @@ export default function BranchDebitNote() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">DN ID</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Vendor</th>
-                    <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Items</th>
-                    <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Invoice Ref</th>
-                    <th className="px-10 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Details</th>
+                    {isFieldAllowed("dnId") && <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">DN ID</th>}
+                    {isFieldAllowed("date") && <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>}
+                    {isFieldAllowed("vendor") && <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Vendor</th>}
+                    {isFieldAllowed("items") && <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Items</th>}
+                    {isFieldAllowed("amount") && <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>}
+                    {isFieldAllowed("invoiceRef") && <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Invoice Ref</th>}
+                    {isFieldAllowed("details") && <th className="px-10 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Details</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filteredDN.map((dn) => (
                     <React.Fragment key={dn._id}>
                       <tr className="group hover:bg-rose-50/30 transition-all cursor-pointer">
-                        <td className="px-6 py-5 font-black text-rose-600 text-sm whitespace-nowrap">{dn.debitNoteId}</td>
-                        <td className="px-6 py-5 font-bold text-gray-600 text-xs whitespace-nowrap">{formatDate(dn.createdAt)}</td>
-                        <td className="px-6 py-5 font-black text-gray-800 text-xs uppercase">{dn.vendor?.name}</td>
-                        <td className="px-6 py-5 text-center">
-                            <span className="bg-gray-100 px-2 py-1 rounded-lg text-[10px] font-black text-gray-500">{dn.items?.length || 0} ITEMS</span>
-                        </td>
-                        <td className="px-6 py-5 text-right font-black text-gray-900 text-sm italic">₹{(dn.grandTotal || 0).toLocaleString()}</td>
-                        <td className="px-6 py-5">
-                            <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${!dn.originalPurchaseOrderId ? 'bg-orange-100 text-orange-600 truncate max-w-[100px] block' : 'bg-blue-100 text-blue-600 uppercase'}`}>
-                                {dn.originalInvoiceId || 'STANDALONE'}
-                            </span>
-                        </td>
-                        <td className="px-10 py-5 text-center">
-                            <button 
-                              onClick={() => toggleExpand(dn._id)}
-                              className="p-2 hover:bg-white rounded-xl text-rose-600 transition-all shadow-sm group-hover:shadow-md"
-                            >
-                                {expandedDN[dn._id] ? <FaChevronUp /> : <FaChevronDown />}
-                            </button>
-                        </td>
+                        {isFieldAllowed("dnId") && <td className="px-6 py-5 font-black text-rose-600 text-sm whitespace-nowrap">{dn.debitNoteId}</td>}
+                        {isFieldAllowed("date") && <td className="px-6 py-5 font-bold text-gray-600 text-xs whitespace-nowrap">{formatDate(dn.createdAt)}</td>}
+                        {isFieldAllowed("vendor") && <td className="px-6 py-5 font-black text-gray-800 text-xs uppercase">{dn.vendor?.name}</td>}
+                        {isFieldAllowed("items") && (
+                          <td className="px-6 py-5 text-center">
+                              <span className="bg-gray-100 px-2 py-1 rounded-lg text-[10px] font-black text-gray-500">{dn.items?.length || 0} ITEMS</span>
+                          </td>
+                        )}
+                        {isFieldAllowed("amount") && <td className="px-6 py-5 text-right font-black text-gray-900 text-sm italic">₹{(dn.grandTotal || 0).toLocaleString()}</td>}
+                        {isFieldAllowed("invoiceRef") && (
+                          <td className="px-6 py-5">
+                              <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${!dn.originalPurchaseOrderId ? 'bg-orange-100 text-orange-600 truncate max-w-[100px] block' : 'bg-blue-100 text-blue-600 uppercase'}`}>
+                                  {dn.originalInvoiceId || 'STANDALONE'}
+                              </span>
+                          </td>
+                        )}
+                        {isFieldAllowed("details") && (
+                          <td className="px-10 py-5 text-center">
+                              <button 
+                                onClick={() => toggleExpand(dn._id)}
+                                className="p-2 hover:bg-white rounded-xl text-rose-600 transition-all shadow-sm group-hover:shadow-md"
+                              >
+                                  {expandedDN[dn._id] ? <FaChevronUp /> : <FaChevronDown />}
+                              </button>
+                          </td>
+                        )}
                       </tr>
                       {expandedDN[dn._id] && (
                         <tr className="bg-gray-50/50">
@@ -198,4 +214,3 @@ export default function BranchDebitNote() {
   );
 }
 
-import React from "react";

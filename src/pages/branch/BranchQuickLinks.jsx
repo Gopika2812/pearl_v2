@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import InventoryAddWarehouseModal from "../../components/inventory/InventoryAddWarehouseModal";
 import CustomerCategoryAddModal from "../../components/inventory/CustomerCategoryAddModal";
 import CustomerGroupAddModal from "../../components/inventory/CustomerGroupAddModal";
@@ -22,6 +23,7 @@ import {
 import { QUICK_LINKS_CONFIG, QUICK_LINKS_CATEGORIES } from "../../utils/quickLinksConfig";
 
 export default function BranchQuickLinks() {
+  const location = useLocation();
   const {
     productGroups, productCategories, customerCategories,
     customerGroups, warehouses, updateData, addData,
@@ -31,6 +33,17 @@ export default function BranchQuickLinks() {
   const [activeModal, setActiveModal] = useState(null);
   const [viewingData, setViewingData] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
+
+  // Sync viewingData with URL query param
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const type = params.get("type");
+    if (type && QUICK_LINKS_CONFIG[type]) {
+      setViewingData(type);
+    } else {
+      setViewingData(null);
+    }
+  }, [location.search]);
 
   const branchId = currentBranch?._id;
 

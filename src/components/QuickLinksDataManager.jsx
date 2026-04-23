@@ -13,6 +13,15 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   const { currentBranch, user } = useBranch();
   const fieldPermissions = user?.fieldPermissions || {};
   const actionPermissions = user?.actionPermissions || {};
+  
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    const granularKey = `${type}_${fieldId}`;
+    return user.fieldPermissions?.[granularKey] !== false;
+  };
+
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
@@ -579,7 +588,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                         </div>
                       </th>
                     ))}
-                    {(actionPermissions.edit !== false || actionPermissions.delete !== false) && (
+                    {(actionPermissions.edit !== false || actionPermissions.delete !== false || isFieldAllowed("action_edit") || isFieldAllowed("action_delete")) && (
                       <th className="p-4 font-bold text-gray-700 uppercase text-xs tracking-wider text-right">Actions</th>
                     )}
                   </tr>
@@ -647,10 +656,10 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                             </td>
                           );
                         })}
-                        {(actionPermissions.edit !== false || actionPermissions.delete !== false) && (
+                        {(actionPermissions.edit !== false || actionPermissions.delete !== false || isFieldAllowed("action_edit") || isFieldAllowed("action_delete")) && (
                           <td className="p-4 text-right">
                             <div className="flex items-center justify-end gap-2 px-2">
-                              {actionPermissions.edit !== false && (
+                              {(actionPermissions.edit !== false && isFieldAllowed("action_edit")) && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -662,7 +671,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                                   <FaEdit size={14} />
                                 </button>
                               )}
-                              {actionPermissions.delete !== false && (
+                              {(actionPermissions.delete !== false && isFieldAllowed("action_delete")) && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -708,7 +717,8 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                                   key !== "branchId" &&
                                   key !== "__v" &&
                                   !key.includes("createdAt") &&
-                                  !key.includes("updatedAt") && (
+                                  !key.includes("updatedAt") && 
+                                  isFieldAllowed(key) && (
                                     <div key={key} className="space-y-1">
                                       <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
                                         {key.replace(/([A-Z])/g, " $1")}

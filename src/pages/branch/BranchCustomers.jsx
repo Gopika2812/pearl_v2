@@ -26,13 +26,13 @@ const BranchCustomers = () => {
     const key = `customers_${fieldId}`;
     return user.fieldPermissions?.[key] !== false; // Default to true
   };
-
   const {
     customerCategories, customerGroups, salesOwners, addData, updateData
   } = useInventory();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState("table"); // "table" or "card"
+  const [viewMode, setViewMode] = useState("table"); // 'table' or 'card'
+  
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({});
@@ -698,9 +698,11 @@ const BranchCustomers = () => {
                 <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                   <tr>
                     <th className="w-10"></th>
-                    <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("name")}>
-                      Customer Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                    </th>
+                    {isFieldAllowed("name") && (
+                      <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold cursor-pointer hover:bg-blue-800 transition" onClick={() => handleSort("name")}>
+                        Customer Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                    )}
                     {isFieldAllowed("gstin") && (
                       <th className="px-3 md:px-5 py-2 md:py-3 text-left text-xs md:text-sm font-bold">
                         GSTIN
@@ -721,9 +723,11 @@ const BranchCustomers = () => {
                         Credit {sortConfig.key === "credit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                       </th>
                     )}
-                    <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
-                      Action
-                    </th>
+                    {(isFieldAllowed("action_receipt") || isFieldAllowed("action_return") || isFieldAllowed("action_ledger")) && (
+                      <th className="px-3 md:px-5 py-2 md:py-3 text-center text-xs md:text-sm font-bold">
+                        Action
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -739,9 +743,11 @@ const BranchCustomers = () => {
                           <td className="px-4 py-3 text-center text-gray-400">
                             {isExpanded ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
                           </td>
-                          <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
-                            {customer.name}
-                          </td>
+                          {isFieldAllowed("name") && (
+                            <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
+                              {customer.name}
+                            </td>
+                          )}
                           {isFieldAllowed("gstin") && (
                             <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-gray-700">
                               {customer.gstin || "-"}
@@ -762,29 +768,36 @@ const BranchCustomers = () => {
                               ₹{(customer.credit || 0).toFixed(2)}
                             </td>
                           )}
-                          <td className="px-3 md:px-5 py-2 md:py-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setSelectedReceiptCustomer(customer); }}
-                                className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
-                              >
-                                Receipt
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setSelectedCreditNoteCustomer(customer); }}
-                                className="bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
-                              >
-                                Return
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); navigate(`/branch/customer-ledger/${customer._id}`); }}
-                                className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
-                              >
-                                Ledger
-                              </button>
-
-                            </div>
-                          </td>
+                          {(isFieldAllowed("action_receipt") || isFieldAllowed("action_return") || isFieldAllowed("action_ledger")) && (
+                            <td className="px-3 md:px-5 py-2 md:py-3 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                {isFieldAllowed("action_receipt") && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setSelectedReceiptCustomer(customer); }}
+                                    className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                                  >
+                                    Receipt
+                                  </button>
+                                )}
+                                {isFieldAllowed("action_return") && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setSelectedCreditNoteCustomer(customer); }}
+                                    className="bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                                  >
+                                    Return
+                                  </button>
+                                )}
+                                {isFieldAllowed("action_ledger") && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/branch/customer-ledger/${customer._id}`); }}
+                                    className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                                  >
+                                    Ledger
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          )}
                         </tr>
                         {isExpanded && (
                           <tr className="bg-gray-50 border-b border-gray-200">

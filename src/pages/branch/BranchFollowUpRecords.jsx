@@ -5,7 +5,15 @@ import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 const BranchFollowUpRecords = () => {
-    const { currentBranch } = useBranch();
+    const { currentBranch, user } = useBranch();
+    
+    // Permission helper
+    const isFieldAllowed = (fieldId) => {
+        if (!user) return false;
+        if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+        const key = `follow-up-records_${fieldId}`;
+        return user.fieldPermissions?.[key] !== false;
+    };
     const [records, setRecords] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -166,25 +174,39 @@ const BranchFollowUpRecords = () => {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-gray-50/50 border-b border-gray-100">
-                                    <th onClick={() => handleSort("createdAt")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
-                                        Date Logged <SortIcon column="createdAt" />
-                                    </th>
-                                    <th onClick={() => handleSort("customer")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
-                                        Customer <SortIcon column="customer" />
-                                    </th>
-                                    <th onClick={() => handleSort("followUpBy")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
-                                        Follow-up By <SortIcon column="followUpBy" />
-                                    </th>
-                                    <th onClick={() => handleSort("result")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
-                                        Result <SortIcon column="result" />
-                                    </th>
-                                    <th onClick={() => handleSort("balance")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right cursor-pointer hover:text-indigo-600 transition-colors">
-                                        Bal (Logged) <SortIcon column="balance" />
-                                    </th>
-                                    <th onClick={() => handleSort("nextFollowUpDate")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
-                                        Next Follow-up <SortIcon column="nextFollowUpDate" />
-                                    </th>
-                                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Remarks</th>
+                                    {isFieldAllowed("dateLogged") && (
+                                        <th onClick={() => handleSort("createdAt")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
+                                            Date Logged <SortIcon column="createdAt" />
+                                        </th>
+                                    )}
+                                    {isFieldAllowed("customer") && (
+                                        <th onClick={() => handleSort("customer")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
+                                            Customer <SortIcon column="customer" />
+                                        </th>
+                                    )}
+                                    {isFieldAllowed("followUpBy") && (
+                                        <th onClick={() => handleSort("followUpBy")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
+                                            Follow-up By <SortIcon column="followUpBy" />
+                                        </th>
+                                    )}
+                                    {isFieldAllowed("result") && (
+                                        <th onClick={() => handleSort("result")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
+                                            Result <SortIcon column="result" />
+                                        </th>
+                                    )}
+                                    {isFieldAllowed("balance") && (
+                                        <th onClick={() => handleSort("balance")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right cursor-pointer hover:text-indigo-600 transition-colors">
+                                            Bal (Logged) <SortIcon column="balance" />
+                                        </th>
+                                    )}
+                                    {isFieldAllowed("nextFollowUp") && (
+                                        <th onClick={() => handleSort("nextFollowUpDate")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
+                                            Next Follow-up <SortIcon column="nextFollowUpDate" />
+                                        </th>
+                                    )}
+                                    {isFieldAllowed("remarks") && (
+                                        <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">Remarks</th>
+                                    )}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
@@ -210,61 +232,75 @@ const BranchFollowUpRecords = () => {
                                 ) : (
                                     filteredRecords.map((r) => (
                                         <tr key={r._id} className="hover:bg-gray-50/80 transition-colors group">
-                                            <td className="px-6 py-5">
-                                                <p className="text-[10px] font-black text-gray-800 uppercase">
-                                                    {new Date(r.createdAt).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}
-                                                </p>
-                                                <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">
-                                                    {new Date(r.createdAt).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true })}
-                                                </p>
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">
-                                                        <FaUser size={12} />
+                                            {isFieldAllowed("dateLogged") && (
+                                                <td className="px-6 py-5">
+                                                    <p className="text-[10px] font-black text-gray-800 uppercase">
+                                                        {new Date(r.createdAt).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                    </p>
+                                                    <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">
+                                                        {new Date(r.createdAt).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                                    </p>
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("customer") && (
+                                                <td className="px-6 py-5">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                                            <FaUser size={12} />
+                                                        </div>
+                                                        <div>
+                                                            <p 
+                                                                className="text-xs font-black text-gray-800 truncate w-40 hover:text-indigo-600 cursor-pointer transition-colors"
+                                                                onClick={() => {
+                                                                    localStorage.setItem("followup_search", r.customerId?.name || "");
+                                                                    window.location.href = "/branch/follow-up";
+                                                                }}
+                                                            >
+                                                                {r.customerId?.name || "Unknown"}
+                                                            </p>
+                                                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight">{r.customerId?.whatsapp || "N/A"}</p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p 
-                                                            className="text-xs font-black text-gray-800 truncate w-40 hover:text-indigo-600 cursor-pointer transition-colors"
-                                                            onClick={() => {
-                                                                localStorage.setItem("followup_search", r.customerId?.name || "");
-                                                                window.location.href = "/branch/follow-up";
-                                                            }}
-                                                        >
-                                                            {r.customerId?.name || "Unknown"}
-                                                        </p>
-                                                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight">{r.customerId?.whatsapp || "N/A"}</p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                <p className="text-[10px] font-black text-indigo-600 uppercase tracking-tight">{r.followUpBy}</p>
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight ${getResultColor(r.result)}`}>
-                                                    {r.result}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-5 text-right font-black text-gray-800 text-xs">
-                                                ₹{r.closingBalance?.toLocaleString() || "0"}
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                {r.nextFollowUpDate ? (
-                                                    <div className="flex items-center gap-2 text-indigo-600">
-                                                        <span className="text-[10px] font-black uppercase">
-                                                            {new Date(r.nextFollowUpDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' })}
-                                                        </span>
-                                                        <span className="text-[9px] font-bold opacity-60">
-                                                            {new Date(r.nextFollowUpDate).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true })}
-                                                        </span>
-                                                    </div>
-                                                ) : <span className="text-[10px] text-gray-300">-</span>}
-                                            </td>
-                                            <td className="px-6 py-5 max-w-xs">
-                                                <p className="text-[10px] font-medium text-gray-600 line-clamp-2 italic leading-relaxed">
-                                                    "{r.remarks || "No remarks"}"
-                                                </p>
-                                            </td>
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("followUpBy") && (
+                                                <td className="px-6 py-5">
+                                                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-tight">{r.followUpBy}</p>
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("result") && (
+                                                <td className="px-6 py-5">
+                                                    <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight ${getResultColor(r.result)}`}>
+                                                        {r.result}
+                                                    </span>
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("balance") && (
+                                                <td className="px-6 py-5 text-right font-black text-gray-800 text-xs">
+                                                    ₹{r.closingBalance?.toLocaleString() || "0"}
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("nextFollowUp") && (
+                                                <td className="px-6 py-5">
+                                                    {r.nextFollowUpDate ? (
+                                                        <div className="flex items-center gap-2 text-indigo-600">
+                                                            <span className="text-[10px] font-black uppercase">
+                                                                {new Date(r.nextFollowUpDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' })}
+                                                            </span>
+                                                            <span className="text-[9px] font-bold opacity-60">
+                                                                {new Date(r.nextFollowUpDate).toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                                            </span>
+                                                        </div>
+                                                    ) : <span className="text-[10px] text-gray-300">-</span>}
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("remarks") && (
+                                                <td className="px-6 py-5 max-w-xs">
+                                                    <p className="text-[10px] font-medium text-gray-600 line-clamp-2 italic leading-relaxed">
+                                                        "{r.remarks || "No remarks"}"
+                                                    </p>
+                                                </td>
+                                            )}
                                         </tr>
                                     ))
                                 )}

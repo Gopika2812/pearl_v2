@@ -1,8 +1,8 @@
 import React from "react";
-import { 
-  FaHome, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign, 
-  FaTruck, FaHandshake, FaUsers, FaChartLine, FaLink, 
-  FaBook, FaHistory, FaCheckCircle, FaMoneyBillWave, 
+import {
+  FaHome, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign,
+  FaTruck, FaHandshake, FaUsers, FaChartLine, FaLink,
+  FaBook, FaHistory, FaCheckCircle, FaMoneyBillWave,
   FaDownload, FaLock, FaBookOpen, FaShieldAlt, FaPlusCircle,
   FaFileInvoice, FaList, FaUndo, FaMoneyCheckAlt, FaReceipt,
   FaBoxes, FaHandHoldingUsd, FaPlus, FaSync, FaTicketAlt, FaPhone
@@ -52,76 +52,98 @@ export const PAGE_CONFIG = [
   {
     category: "Purchase",
     items: [
-      { id: "purchase-dropdown", name: "Purchase Order", icon: "purchase", isDropdown: true, subItems: [
-        { id: "create-po", name: "Create PO", path: "/branch/po", icon: "add" },
-        { id: "purchase-list", name: "Purchase Order List", path: "/branch/purchase-orders", icon: "list", permissionFields: ["grandTotal", "totalPaid", "status"] },
-        { id: "purchase-invoice-list", name: "Purchase Invoice List", path: "/branch/purchase-invoices", icon: "invoice" },
-        { id: "debit-note", name: "Debit Note", path: "/branch/debit-note", icon: "return" },
-        { id: "payment-po", name: "PO Payment", path: "/branch/po-payment", icon: "payment" },
-        { id: "payment-records", name: "Payment Records", path: "/branch/payment-records", icon: "history" },
-      ]},
-      { id: "restocking", name: "Restocking (Recycling)", path: "/branch/recycling", icon: "sync" },
-      { id: "suppliers", name: "Suppliers (Creditors)", path: "/branch/suppliers", icon: "handshake", permissionFields: ["credit", "debit", "gstin"] },
+      {
+        id: "purchase-dropdown", name: "Purchase Order", icon: "purchase", isDropdown: true, subItems: [
+          { id: "create-po", name: "Create PO", path: "/branch/po", icon: "add" },
+          { id: "purchase-list", name: "Purchase Order List", path: "/branch/purchase-orders", icon: "list", permissionFields: ["soId", "vendor", "warehouse", "itemsCount", "totalAmount", "status", "date", "action_edit", "action_delete", "action_invoice", "action_slip"] },
+          { id: "purchase-invoice-list", name: "Purchase Invoice List", path: "/branch/purchase-invoices", icon: "invoice", permissionFields: ["invoiceId", "orderRef", "vendor", "vendorBill", "billDate", "grandTotal", "entryDate", "action_edit", "action_delete"] },
+          { id: "debit-note", name: "Debit Note", path: "/branch/debit-note", icon: "return", permissionFields: ["dnId", "date", "vendor", "items", "amount", "invoiceRef", "details", "action_edit", "action_delete"] },
+          { id: "payment-po", name: "PO Payment / Records", path: "/branch/po-payment", icon: "payment", permissionFields: ["invoiceId", "vendor", "warehouse", "items", "totalAmount", "paidAmount", "status", "poDate", "action", "paymentId", "paymentDate", "paymentType", "recipient", "mode", "amount"] },
+          { id: "payment-records", name: "Payment Records", path: "/branch/payment-records", icon: "payment", permissionFields: ["paymentId", "date", "type", "recipient", "mode", "amount", "action"] },
+          { id: "restocking", name: "Restocking", path: "/branch/recycling", icon: "sync", permissionFields: ["productName", "units", "currentStock", "pendingSales", "available", "threshold", "restockQty", "preferredVendor", "status", "action_config", "action_restock"] },
+          { id: "suppliers", name: "Suppliers", path: "/branch/suppliers", icon: "handshake", permissionFields: ["supplierName", "gstin", "pos", "credit", "debit", "action_pay", "action_return", "action_ledger"] },
+        ]
+      },
     ]
   },
   {
     category: "Sales",
     items: [
-      { id: "sales-dropdown", name: "Sales Order", icon: "sales", isDropdown: true, subItems: [
-        { id: "create-so", name: "Create SO", path: "/branch/sales-order", icon: "add" },
-        { id: "sales-order-list", name: "Sales Order List", path: "/branch/sales-orders", icon: "list" },
-        { id: "sales-invoice-list", name: "Sales Invoice List", path: "/branch/sales-invoices", icon: "invoice" },
-        { id: "claims", name: "Claims", path: "/branch/claims", icon: "claims" },
-        { id: "credit-note", name: "Credit Note", path: "/branch/credit-note", icon: "return" },
-        { id: "receipt", name: "Receipt Management", path: "/branch/receipt", icon: "receipt" },
-        { id: "receipt-records", name: "Receipt Records", path: "/branch/receipt-records", icon: "history" },
-      ]},
-      { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["margin", "debit", "credit", "gstin"] },
-      { id: "follow-up-dropdown", name: "Customer Follow-Up", icon: "phone", isDropdown: true, subItems: [
-        { id: "follow-up-form", name: "Log Follow-Up", path: "/branch/follow-up", icon: "add" },
-        { id: "follow-up-records", name: "Follow-Up Records", path: "/branch/follow-up-records", icon: "history" },
-      ]},
+      {
+        id: "sales-dropdown", name: "Sales Order", icon: "sales", isDropdown: true, subItems: [
+          { id: "create-so", name: "Create SO", path: "/branch/sales-order", icon: "add" },
+          { id: "sales-order-list", name: "Sales Order List", path: "/branch/sales-orders", icon: "list", permissionFields: ["soId", "siId", "voucherType", "customer", "items", "grandTotal", "status", "date", "action_si_bill", "action_gen_invoice", "action_cancel"] },
+          { id: "sales-invoice-list", name: "Sales Invoice List", path: "/branch/sales-invoices", icon: "invoice", permissionFields: ["dateTime", "siId", "soRef", "customer", "createdBy", "grandTotal", "einvoiceStatus", "status", "action_return", "action_ewb", "action_cancel", "action_pdf"] },
+          { id: "claims", name: "Claims", path: "/branch/claims", icon: "claims", permissionFields: ["claimId", "date", "customer", "items", "amount", "status", "action"] },
+          { id: "credit-note", name: "Credit Note", path: "/branch/credit-note", icon: "return", permissionFields: ["cnId", "date", "customer", "items", "amount", "invoiceRef", "action"] },
+          { id: "receipt", name: "Receipt Management", path: "/branch/receipt", icon: "receipt", permissionFields: ["receiptId", "date", "customer", "amount", "mode", "action"] },
+          { id: "receipt-records", name: "Receipt Records", path: "/branch/receipt-records", icon: "history", permissionFields: ["receiptId", "date", "customer", "amount", "mode", "action"] },
+        ]
+      },
+      { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["name", "gstin", "margin", "debit", "credit", "action_receipt", "action_return", "action_ledger"] },
+      {
+        id: "follow-up-dropdown", name: "Customer Follow-Up", icon: "phone", isDropdown: true, subItems: [
+          { id: "follow-up-form", name: "Log Follow-Up", path: "/branch/follow-up", icon: "add", permissionFields: ["name", "group", "category", "zone", "balance", "limit", "days", "token", "action_followup", "action_log", "action_ledger", "action_edit"] },
+          { id: "follow-up-records", name: "Follow-Up Records", path: "/branch/follow-up-records", icon: "history", permissionFields: ["dateLogged", "customer", "followUpBy", "result", "balance", "nextFollowUp", "remarks"] },
+        ]
+      },
     ]
   },
   {
     category: "Other Transactions",
     items: [
-      { id: "others-dropdown", name: "Other Transactions", icon: "plus", isDropdown: true, subItems: [
-        { id: "other-payment", name: "Other Payment", path: "/branch/other-payment", icon: "money" },
-        { id: "other-receipt", name: "Other Receipt", path: "/branch/other-receipt", icon: "download" },
-      ]}
+      {
+        id: "others-dropdown", name: "Other Transactions", icon: "plus", isDropdown: true, subItems: [
+          { id: "other-payment", name: "Other Payment", path: "/branch/other-payment", icon: "money", permissionFields: ["id", "date", "ledgerGroup", "ledgerName", "note", "mode", "gst", "amount", "action_delete"] },
+          { id: "other-receipt", name: "Other Receipt", path: "/branch/other-receipt", icon: "download", permissionFields: ["id", "date", "ledgerGroup", "ledgerName", "note", "mode", "gst", "amount", "action_delete"] },
+        ]
+      }
     ]
   },
   {
     category: "Directory",
     items: [
-      { id: "product-records", name: "Product Records", path: "/branch/product-records", icon: "box", permissionFields: ["purchasingPrice", "sellingPrice", "grossProfit"] },
-      { id: "product-config", name: "Product Configuration", path: "/branch/product-config", icon: "sync" },
+      { id: "product-records", name: "Product Records", path: "/branch/product-records", icon: "box", permissionFields: ["voucher", "customer", "purchasePrice", "sellingPrice", "margin", "qty", "gst", "discount", "profit"] },
+      { id: "product-config", name: "Product Configuration", path: "/branch/product-config", icon: "sync", permissionFields: ["bar", "details", "qty", "unit", "prices", "action_edit", "action_delete"] },
     ]
   },
   {
     category: "Accounts",
     items: [
-      { id: "locked-prices", name: "Locked Prices", path: "/branch/locked-prices", icon: "lock" },
-      { id: "ledgers", name: "Ledger", path: "/branch/ledger", icon: "book" },
+      { id: "locked-prices", name: "Locked Prices", path: "/branch/locked-prices", icon: "lock", permissionFields: ["productInfo", "customer", "cost", "stdPrice", "lockedPrice", "margin", "action"] },
+      { id: "ledgers", name: "Ledger", path: "/branch/ledger", icon: "book", permissionFields: ["details", "hierarchy", "nature", "tax", "debit", "credit", "net"] },
 
-      { id: "journals", name: "Journal Master", path: "/branch/journals", icon: "book" },
+      { id: "journals", name: "Journal Master", path: "/branch/journals", icon: "book", permissionFields: ["name", "group", "gstin", "type", "debit", "credit"] },
       { id: "stock-journal", name: "Stock Journal", path: "/branch/stock-journal", icon: "history" },
-      { id: "day-book", name: "Day Book", path: "/branch/day-book", icon: "bookOpen" },
-      { id: "extra-expense-ledger", name: "Extra Expense Ledger", path: "/branch/extra-expense-ledger", icon: "list" },
+      { id: "day-book", name: "Day Book", path: "/branch/day-book", icon: "bookOpen", permissionFields: ["date", "voucherType", "invoiceId", "accountName", "debit", "credit"] },
+      { id: "extra-expense-ledger", name: "Extra Expense Ledger", path: "/branch/extra-expense-ledger", icon: "list", permissionFields: ["date", "type", "invoiceId", "partyName", "expenseName", "baseAmount", "gstPercent", "gstAmount", "total"] },
     ]
   },
   {
     category: "Reports",
     items: [
       { id: "insights", name: "Insights & Analysis", path: "/branch/insights", icon: "chart" },
-      { id: "stock-summary", name: "Stock Summary (Tally)", path: "/branch/stock-summary", icon: "bookOpen" },
+      { id: "stock-summary", name: "Stock Summary (Tally)", path: "/branch/stock-summary", icon: "bookOpen", permissionFields: ["groupName", "opening", "inwards", "outwards", "closingQty", "closingValue"] },
     ]
   },
   {
     category: "Admin",
     items: [
-      { id: "quick-links", name: "Quick Links Hub", path: "/branch/quick-links", icon: "link" },
+      { id: "quick-links", name: "Quick Links Hub", path: "/branch/quick-links", icon: "link", isDropdown: true, subItems: [
+        { id: "voucher_type", name: "Voucher Type", path: "/branch/quick-links?type=voucher_type", icon: "file", permissionFields: ["name", "orderType", "prefix", "counter", "action_edit", "action_delete"] },
+        { id: "warehouse", name: "Warehouse", path: "/branch/quick-links?type=warehouse", icon: "inventory", permissionFields: ["name", "action_edit", "action_delete"] },
+        { id: "product_group", name: "Product Group", path: "/branch/quick-links?type=product_group", icon: "box", permissionFields: ["name", "description", "action_edit", "action_delete"] },
+        { id: "product_category", name: "Product Category", path: "/branch/quick-links?type=product_category", icon: "box", permissionFields: ["name", "description", "action_edit", "action_delete"] },
+        { id: "product", name: "Product Records (Master)", path: "/branch/quick-links?type=product", icon: "box", permissionFields: ["name", "hsnCode", "totalQty", "purchasingPrice", "sellingPrice", "marginPercentage", "adminMargin", "productGroup", "productCategories", "warehouse", "action_edit", "action_delete"] },
+        { id: "customer_category", name: "Customer Category", path: "/branch/quick-links?type=customer_category", icon: "users", permissionFields: ["name", "description", "action_edit", "action_delete"] },
+        { id: "customer_group", name: "Customer Group", path: "/branch/quick-links?type=customer_group", icon: "users", permissionFields: ["name", "description", "action_edit", "action_delete"] },
+        { id: "customer", name: "Customer Details", path: "/branch/quick-links?type=customer", icon: "users", permissionFields: ["name", "whatsapp", "email", "margin", "debit", "credit", "salesOwner", "customerCategory", "gstin", "action_edit", "action_delete"] },
+        { id: "vendor", name: "Vendor Details", path: "/branch/quick-links?type=vendor", icon: "handshake", permissionFields: ["name", "gstin", "email", "phone", "action_edit", "action_delete"] },
+        { id: "sales_owner", name: "Sales Owner", path: "/branch/quick-links?type=sales_owner", icon: "lock", permissionFields: ["name", "phone", "email", "action_edit", "action_delete"] },
+        { id: "sales_man", name: "Sales Man", path: "/branch/quick-links?type=sales_man", icon: "users", permissionFields: ["name", "phone", "email", "commissionPercentage", "action_edit", "action_delete"] },
+        { id: "delivery_man", name: "Delivery Man", path: "/branch/quick-links?type=delivery_man", icon: "truck", permissionFields: ["name", "phone", "email", "vehicleNumber", "action_edit", "action_delete"] },
+        { id: "token", name: "Order Token", path: "/branch/quick-links?type=token", icon: "token", permissionFields: ["tokenId", "status", "customer", "assignedTo", "createdAt"] },
+      ]},
       { id: "admin-requests", name: "Admin Requests", path: "/branch/admin-requests", icon: "shield" },
     ]
   }

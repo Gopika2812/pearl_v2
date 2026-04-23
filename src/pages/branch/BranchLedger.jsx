@@ -9,8 +9,16 @@ import { toast } from "react-toastify";
 import LedgerModal from "../../components/accounts/LedgerModal";
 
 const BranchLedger = () => {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
   const branchId = currentBranch?._id || currentBranch?.id;
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "SUPER_ADMIN" || user.role === "ADMIN") return true;
+    const key = `ledgers_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false;
+  };
   
   const [loading, setLoading] = useState(true);
   const [ledgers, setLedgers] = useState([]);
@@ -289,13 +297,13 @@ const BranchLedger = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-900 text-slate-400 uppercase text-[10px] font-black tracking-widest">
-                  <th className="px-8 py-6 text-left rounded-tl-[1.8rem]">Ledger Details</th>
-                  <th className="px-6 py-6 text-left">Group Hierarchy</th>
-                  <th className="px-6 py-6 text-left">Nature</th>
-                  <th className="px-6 py-6 text-left">Tax Details</th>
-                  <th className="px-6 py-6 text-right">Debit (Dr)</th>
-                  <th className="px-6 py-6 text-right">Credit (Cr)</th>
-                  <th className="px-8 py-6 text-right rounded-tr-[1.8rem]">Net Financial Position</th>
+                  {isFieldAllowed("details") && <th className="px-8 py-6 text-left rounded-tl-[1.8rem]">Ledger Details</th>}
+                  {isFieldAllowed("hierarchy") && <th className="px-6 py-6 text-left">Group Hierarchy</th>}
+                  {isFieldAllowed("nature") && <th className="px-6 py-6 text-left">Nature</th>}
+                  {isFieldAllowed("tax") && <th className="px-6 py-6 text-left">Tax Details</th>}
+                  {isFieldAllowed("debit") && <th className="px-6 py-6 text-right">Debit (Dr)</th>}
+                  {isFieldAllowed("credit") && <th className="px-6 py-6 text-right">Credit (Cr)</th>}
+                  {isFieldAllowed("net") && <th className="px-8 py-6 text-right rounded-tr-[1.8rem]">Net Financial Position</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -303,51 +311,65 @@ const BranchLedger = () => {
                   const net = (ledger.openingDebit || 0) - (ledger.openingCredit || 0);
                   return (
                     <tr key={ledger._id} className="hover:bg-slate-50/80 transition-all duration-300 group cursor-default">
-                      <td className="px-8 py-6">
-                        <div className="font-black text-slate-800 text-[14px] group-hover:text-emerald-700 transition-colors">{ledger.name}</div>
-                        {ledger.notes && (
-                          <div className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[200px] mt-1 tracking-wider italic">
-                            {ledger.notes}
+                      {isFieldAllowed("details") && (
+                        <td className="px-8 py-6">
+                          <div className="font-black text-slate-800 text-[14px] group-hover:text-emerald-700 transition-colors">{ledger.name}</div>
+                          {ledger.notes && (
+                            <div className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[200px] mt-1 tracking-wider italic">
+                              {ledger.notes}
+                            </div>
+                          )}
+                        </td>
+                      )}
+                      {isFieldAllowed("hierarchy") && (
+                        <td className="px-6 py-6">
+                          <span className="bg-slate-100 text-slate-500 px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-wider border border-slate-200/50 shadow-sm">
+                            {ledger.groupId?.name || "Global Account"}
+                          </span>
+                        </td>
+                      )}
+                      {isFieldAllowed("nature") && (
+                        <td className="px-6 py-6">
+                          <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm ${
+                            ledger.groupId?.nature === "Asset" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
+                            ledger.groupId?.nature === "Liability" ? "bg-rose-50 text-rose-600 border border-rose-100" :
+                            ledger.groupId?.nature === "Income" ? "bg-indigo-50 text-indigo-600 border border-indigo-100" :
+                            "bg-amber-50 text-amber-600 border border-amber-100"
+                          }`}>
+                            {ledger.groupId?.nature || "Internal"}
+                          </span>
+                        </td>
+                      )}
+                      {isFieldAllowed("tax") && (
+                        <td className="px-6 py-6">
+                           <div className="flex items-center gap-2 mb-1">
+                              <span className="px-1.5 py-0.5 bg-slate-900 text-white text-[8px] font-black rounded uppercase">{ledger.gst}% GST</span>
+                              <span className="text-[9px] font-black text-slate-600 truncate max-w-[100px]">{ledger.gstin || "-"}</span>
+                           </div>
+                           <div className="text-[9px] text-slate-400 font-bold tracking-widest uppercase">HSN: {ledger.hsn || "Not Req"}</div>
+                        </td>
+                      )}
+                      {isFieldAllowed("debit") && (
+                        <td className="px-6 py-6 text-right">
+                          <div className="text-[13px] font-bold text-slate-700">₹{ledger.openingDebit?.toLocaleString()}</div>
+                        </td>
+                      )}
+                      {isFieldAllowed("credit") && (
+                        <td className="px-6 py-6 text-right">
+                          <div className="text-[13px] font-bold text-slate-700">₹{ledger.openingCredit?.toLocaleString()}</div>
+                        </td>
+                      )}
+                      {isFieldAllowed("net") && (
+                        <td className="px-8 py-6 text-right">
+                          <div className={`font-black text-[15px] tracking-tight ${net >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                            <span className="text-[10px] mr-1 opacity-50 uppercase">{net >= 0 ? "DR" : "CR"}</span>
+                            ₹{Math.abs(net).toLocaleString()}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-6">
-                        <span className="bg-slate-100 text-slate-500 px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-wider border border-slate-200/50 shadow-sm">
-                          {ledger.groupId?.name || "Global Account"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-6">
-                        <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm ${
-                          ledger.groupId?.nature === "Asset" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
-                          ledger.groupId?.nature === "Liability" ? "bg-rose-50 text-rose-600 border border-rose-100" :
-                          ledger.groupId?.nature === "Income" ? "bg-indigo-50 text-indigo-600 border border-indigo-100" :
-                          "bg-amber-50 text-amber-600 border border-amber-100"
-                        }`}>
-                          {ledger.groupId?.nature || "Internal"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-6">
-                         <div className="flex items-center gap-2 mb-1">
-                            <span className="px-1.5 py-0.5 bg-slate-900 text-white text-[8px] font-black rounded uppercase">{ledger.gst}% GST</span>
-                            <span className="text-[9px] font-black text-slate-600 truncate max-w-[100px]">{ledger.gstin || "-"}</span>
-                         </div>
-                         <div className="text-[9px] text-slate-400 font-bold tracking-widest uppercase">HSN: {ledger.hsn || "Not Req"}</div>
-                      </td>
-                      <td className="px-6 py-6 text-right">
-                        <div className="text-[13px] font-bold text-slate-700">₹{ledger.openingDebit?.toLocaleString()}</div>
-                      </td>
-                      <td className="px-6 py-6 text-right">
-                        <div className="text-[13px] font-bold text-slate-700">₹{ledger.openingCredit?.toLocaleString()}</div>
-                      </td>
-                      <td className="px-8 py-6 text-right">
-                        <div className={`font-black text-[15px] tracking-tight ${net >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                          <span className="text-[10px] mr-1 opacity-50 uppercase">{net >= 0 ? "DR" : "CR"}</span>
-                          ₹{Math.abs(net).toLocaleString()}
-                        </div>
-                        <div className={`h-1.5 w-full bg-slate-100 rounded-full mt-2 overflow-hidden`}>
-                           <div className={`h-full rounded-full transition-all duration-1000 ${net >= 0 ? "bg-emerald-500 shadow-[0_0_8px_#10b981]" : "bg-rose-500 shadow-[0_0_8px_#f43f5e]"}`} style={{ width: '40%' }}></div>
-                        </div>
-                      </td>
+                          <div className={`h-1.5 w-full bg-slate-100 rounded-full mt-2 overflow-hidden`}>
+                             <div className={`h-full rounded-full transition-all duration-1000 ${net >= 0 ? "bg-emerald-500 shadow-[0_0_8px_#10b981]" : "bg-rose-500 shadow-[0_0_8px_#f43f5e]"}`} style={{ width: '40%' }}></div>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

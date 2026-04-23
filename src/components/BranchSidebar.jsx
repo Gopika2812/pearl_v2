@@ -118,7 +118,7 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
   };
 
   const renderDropdown = (item, isMobile = false) => {
-    const allowedSubItems = item.subItems.filter(sub => isAllowed(sub));
+    const allowedSubItems = item.subItems.filter(sub => isAllowed(sub) && !sub.hideInSidebar);
     if (allowedSubItems.length === 0) return null;
 
     const isOpen = !!openDropdowns[item.id];

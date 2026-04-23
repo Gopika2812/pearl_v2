@@ -7,6 +7,36 @@ import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
+ 
+// GET all tokens (filtered by branchId query param)
+router.get("/", auth, async (req, res) => {
+  try {
+    const { branchId, status } = req.query;
+    if (!branchId) return res.status(400).json({ success: false, message: "branchId is required" });
+
+    let query = { branchId };
+    
+    // Role-based visibility
+    if (req.user.role !== "ADMIN" && req.user.role !== "SUPER_ADMIN") {
+      query.$or = [
+        { "createdBy.id": req.user.id },
+        { "assignedTo.id": req.user.id }
+      ];
+    }
+
+    if (status && status !== "ALL") {
+      query.status = status;
+    }
+
+    const tokens = await Token.find(query)
+      .populate("assignedTo.id", "fullName username role")
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, data: tokens });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // GET: Fetch all active tokens for a branch
 router.get("/branch/:branchId", auth, async (req, res) => {
