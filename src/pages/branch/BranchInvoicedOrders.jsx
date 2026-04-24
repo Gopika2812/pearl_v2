@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { FaChevronDown, FaEdit, FaFileInvoice, FaSync, FaTrash, FaFilePdf, FaFileExcel, FaTruck, FaBan } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -15,6 +15,7 @@ import { getInvoiceHTML } from "../../utils/invoiceUtils";
 const BranchInvoicedOrders = () => {
   const { currentBranch, user } = useBranch();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -128,6 +129,21 @@ const BranchInvoicedOrders = () => {
   useEffect(() => {
     fetchVoucherTypes();
   }, [currentBranch?._id]);
+
+  // 🌍 HANDLE URL SEARCH PARAMS (Teleport from Audit Logs)
+  useEffect(() => {
+    const searchParam = searchParams.get("search");
+    const invIdParam = searchParams.get("invoiceId");
+    
+    if (searchParam || invIdParam) {
+      const term = searchParam || invIdParam;
+      setFilterInvoiceId(term);
+      // Clear dates to search globally across all history
+      setFilterFromDate("");
+      setFilterToDate("");
+      toast.info(`🔍 Searching for ${term}...`);
+    }
+  }, [searchParams]);
 
   const resetFilters = () => {
     setFilterInvoiceId("");

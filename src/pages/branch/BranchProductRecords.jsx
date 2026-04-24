@@ -8,7 +8,8 @@ import { useInventory } from "../../context/InventoryContext";
 
 const BranchProductRecords = () => {
   const { currentBranch, user } = useBranch();
-  const { productGroups, products } = useInventory();
+  const { productGroups, products, customers } = useInventory();
+  const [analysisMode, setAnalysisMode] = useState("product"); // 'product' or 'customer'
 
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -26,7 +27,10 @@ const BranchProductRecords = () => {
   const [toDate, setToDate] = useState("");
   const [selectedProductGroupId, setSelectedProductGroupId] = useState("");
   const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [productSearch, setProductSearch] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [groupSearch, setGroupSearch] = useState("");
 
   const fetchHistory = async () => {
     if (!currentBranch?._id) return;
@@ -38,6 +42,7 @@ const BranchProductRecords = () => {
       if (toDate) url += `&toDate=${toDate}`;
       if (selectedProductGroupId) url += `&productGroupId=${selectedProductGroupId}`;
       if (selectedProductId) url += `&productId=${selectedProductId}`;
+      if (selectedCustomerId) url += `&customerId=${selectedCustomerId}`;
 
       const res = await fetchWithAuth(url);
       const data = await res.json();
@@ -55,13 +60,14 @@ const BranchProductRecords = () => {
 
   useEffect(() => {
     fetchHistory();
-  }, [currentBranch?._id, selectedProductId, fromDate, toDate, selectedProductGroupId]);
+  }, [currentBranch?._id, selectedProductId, selectedCustomerId, fromDate, toDate, selectedProductGroupId]);
 
   const handleReset = () => {
     setFromDate("");
     setToDate("");
     setSelectedProductGroupId("");
     setSelectedProductId("");
+    setSelectedCustomerId("");
     // We'll need to call fetchHistory manually after states clear or use another useEffect
   };
 
@@ -134,6 +140,26 @@ const BranchProductRecords = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <div className="flex bg-gray-100 p-1 rounded-xl mr-2">
+              <button
+                onClick={() => {
+                  setAnalysisMode("product");
+                  handleReset();
+                }}
+                className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${analysisMode === "product" ? "bg-white text-[#319bab] shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+              >
+                Product Wise
+              </button>
+              <button
+                onClick={() => {
+                  setAnalysisMode("customer");
+                  handleReset();
+                }}
+                className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${analysisMode === "customer" ? "bg-white text-[#319bab] shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+              >
+                Customer Wise
+              </button>
+            </div>
             {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
               <button 
                 onClick={handleExportExcel}
@@ -180,52 +206,174 @@ const BranchProductRecords = () => {
           {/* LEFT SIDE: PRODUCT LIST */}
           <div className="lg:w-1/4 space-y-4">
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 h-fit">
-              <div className="mb-4">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Quick Search</label>
-                <div className="relative">
-                  <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
-                  <input 
-                    type="text"
-                    placeholder="Search product..."
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:border-[#319bab] transition"
-                  />
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Group Filter</label>
-                <select 
-                  value={selectedProductGroupId}
-                  onChange={(e) => setSelectedProductGroupId(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-xs outline-none focus:border-[#319bab] transition cursor-pointer"
-                >
-                  <option value="">All Groups</option>
-                  {productGroups.map(g => (
-                    <option key={g._id} value={g._id}>{g.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-                {filteredProducts.map(p => (
-                  <div 
-                    key={p._id}
-                    onClick={() => setSelectedProductId(p._id)}
-                    className={`p-3 rounded-lg cursor-pointer transition-all border ${
-                      selectedProductId === p._id 
-                        ? 'bg-[#319bab] border-[#319bab] text-white shadow-md' 
-                        : 'bg-white border-gray-50 hover:border-[#319bab]/30 hover:bg-gray-50 text-gray-700'
-                    }`}
-                  >
-                    <div className="font-bold text-xs truncate">{p.name}</div>
-                    <div className={`text-[9px] uppercase font-black ${selectedProductId === p._id ? 'text-[#319bab]-100' : 'text-gray-400'}`}>
-                      {p.productGroup?.name || "No Group"}
+              
+              {analysisMode === "product" ? (
+                <>
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Product Groups</label>
+                      <span className="text-[9px] bg-teal-50 px-2 py-0.5 rounded-full font-bold text-[#319bab]">{productGroups.length} Groups</span>
+                    </div>
+                    <div className="relative mb-2">
+                      <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={10} />
+                      <input 
+                        type="text"
+                        placeholder="Search groups..."
+                        value={groupSearch}
+                        onChange={(e) => setGroupSearch(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:border-[#319bab] transition"
+                      />
+                    </div>
+                    <div className="space-y-1 max-h-[25vh] overflow-y-auto pr-1 custom-scrollbar">
+                      <div 
+                        onClick={() => setSelectedProductGroupId("")}
+                        className={`p-2 rounded-lg cursor-pointer transition-all border text-center text-[10px] font-black uppercase tracking-widest ${
+                          selectedProductGroupId === "" 
+                            ? 'bg-[#319bab] border-[#319bab] text-white shadow-sm' 
+                            : 'bg-gray-50 border-gray-50 text-gray-400 hover:bg-gray-100'
+                        }`}
+                      >
+                        All Groups
+                      </div>
+                      {productGroups.filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase())).map(g => (
+                        <div 
+                          key={g._id}
+                          onClick={() => setSelectedProductGroupId(g._id === selectedProductGroupId ? "" : g._id)}
+                          className={`p-2 rounded-lg cursor-pointer transition-all border ${
+                            selectedProductGroupId === g._id 
+                              ? 'bg-[#319bab] border-[#319bab] text-white shadow-md' 
+                              : 'bg-white border-gray-50 hover:border-[#319bab]/30 hover:bg-gray-50 text-gray-700 font-bold text-xs'
+                          }`}
+                        >
+                          {g.name}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
-              </div>
+
+                  <div className="mb-4 pt-4 border-t border-gray-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Search Product</label>
+                      <span className="text-[9px] font-black text-[#319bab]">
+                        {selectedProductGroupId 
+                          ? `${products.filter(p => p.productGroup?._id === selectedProductGroupId).length} in Group`
+                          : `${products.length} Total`
+                        }
+                      </span>
+                    </div>
+                    <div className="relative mb-3">
+                      <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
+                      <input 
+                        type="text"
+                        placeholder={selectedProductGroupId ? "Search in this group..." : "Search all products..."}
+                        value={productSearch}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:border-[#319bab] transition"
+                      />
+                    </div>
+
+                    <div className="space-y-1 max-h-[40vh] overflow-y-auto pr-1 custom-scrollbar">
+                      {filteredProducts.map(p => (
+                        <div 
+                          key={p._id}
+                          onClick={() => setSelectedProductId(p._id === selectedProductId ? "" : p._id)}
+                          className={`p-3 rounded-lg cursor-pointer transition-all border ${
+                            selectedProductId === p._id 
+                              ? 'bg-[#319bab] border-[#319bab] text-white shadow-md' 
+                              : 'bg-white border-gray-50 hover:border-[#319bab]/30 hover:bg-gray-50 text-gray-700'
+                          }`}
+                        >
+                          <div className="font-bold text-xs truncate">{p.name}</div>
+                          <div className={`text-[9px] uppercase font-black ${selectedProductId === p._id ? 'text-indigo-100' : 'text-gray-400'}`}>
+                            {p.productGroup?.name || "No Group"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Search Customer</label>
+                      <span className="text-[9px] bg-indigo-50 px-2 py-0.5 rounded-full font-bold text-indigo-600">{customers.length} Total</span>
+                    </div>
+                    <div className="relative mb-3">
+                      <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
+                      <input 
+                        type="text"
+                        placeholder="Filter customers..."
+                        value={customerSearch}
+                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:border-indigo-600 transition shadow-sm"
+                      />
+                    </div>
+                    
+                    <div className="space-y-1 max-h-[35vh] overflow-y-auto pr-1 custom-scrollbar">
+                      {customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase())).map(c => (
+                        <div 
+                          key={c._id}
+                          onClick={() => setSelectedCustomerId(c._id === selectedCustomerId ? "" : c._id)}
+                          className={`p-3 rounded-lg cursor-pointer transition-all border ${
+                            selectedCustomerId === c._id 
+                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' 
+                              : 'bg-white border-gray-50 hover:border-indigo-100 hover:bg-gray-50 text-gray-700'
+                          }`}
+                        >
+                          <div className="font-bold text-xs truncate">{c.name}</div>
+                          <div className={`text-[9px] uppercase font-black ${selectedCustomerId === c._id ? 'text-indigo-100' : 'text-gray-400'}`}>
+                            {c.whatsapp || "No Contact"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mb-4 pt-4 border-t border-gray-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Search Product (Optional)</label>
+                      <span className="text-[9px] font-black text-indigo-600">{products.length} Items</span>
+                    </div>
+                    <div className="relative mb-3">
+                      <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
+                      <input 
+                        type="text"
+                        placeholder="Filter products..."
+                        value={productSearch}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:border-indigo-600 transition"
+                      />
+                    </div>
+                    
+                    <div className="space-y-1 max-h-[30vh] overflow-y-auto pr-1 custom-scrollbar">
+                      <div 
+                        onClick={() => setSelectedProductId("")}
+                        className={`p-2 rounded-lg cursor-pointer transition-all border text-center text-[10px] font-black uppercase tracking-widest ${
+                          selectedProductId === "" 
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm' 
+                            : 'bg-gray-50 border-gray-50 text-gray-400 hover:bg-gray-100'
+                        }`}
+                      >
+                        All Products
+                      </div>
+                      {products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).map(p => (
+                        <div 
+                          key={p._id}
+                          onClick={() => setSelectedProductId(p._id === selectedProductId ? "" : p._id)}
+                          className={`p-2 rounded-lg cursor-pointer transition-all border ${
+                            selectedProductId === p._id 
+                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' 
+                              : 'bg-white border-gray-50 hover:border-indigo-100 hover:bg-gray-50 text-gray-700'
+                          }`}
+                        >
+                          <div className="font-bold text-[11px] truncate">{p.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -265,7 +413,8 @@ const BranchProductRecords = () => {
               </div>
             </div>
 
-            {selectedProductId ? (
+            {/* SUMMARY CARDS & DATA TABLE */}
+            <div className="space-y-6">
               <>
                 {/* SUMMARY CARDS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -300,7 +449,9 @@ const BranchProductRecords = () => {
                 {/* DATA TABLE */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
-                    <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Generated Invoice Record</span>
+                    <span className="text-xs font-black text-gray-500 uppercase tracking-widest">
+                      {selectedProductId ? "Item Detailed Record" : "Global Branch Records (Last 500)"}
+                    </span>
                     <span className="text-[10px] text-[#319bab] font-bold">Showing {records.length} Entries</span>
                   </div>
                   <div className="overflow-x-auto">
@@ -308,10 +459,9 @@ const BranchProductRecords = () => {
                       <thead>
                         <tr className="bg-gray-50/50 text-gray-500 font-black uppercase text-[9px] tracking-widest border-b border-gray-100">
                           {isFieldAllowed("voucher") && <th className="px-4 py-3">Voucher / Time</th>}
-                          {isFieldAllowed("customer") && <th className="px-4 py-3">Customer</th>}
+                          <th className="px-4 py-3">{analysisMode === "product" ? "Customer" : "Product Name"}</th>
                           {isFieldAllowed("purchasePrice") && <th className="px-4 py-3 text-right">Purchase ₹</th>}
                           {isFieldAllowed("sellingPrice") && <th className="px-4 py-3 text-right">Selling ₹</th>}
-                          {isFieldAllowed("margin") && <th className="px-4 py-3 text-right">Margin (%)</th>}
                           {isFieldAllowed("qty") && <th className="px-4 py-3 text-center">Qty</th>}
                           {isFieldAllowed("gst") && <th className="px-4 py-3 text-center">GST %</th>}
                           {isFieldAllowed("discount") && <th className="px-4 py-3 text-right">Discount</th>}
@@ -344,11 +494,11 @@ const BranchProductRecords = () => {
                                     <div className="text-[9px] text-gray-400 font-bold">{r.invoiceId} | {new Date(r.date).toLocaleDateString()}</div>
                                   </td>
                                 )}
-                                {isFieldAllowed("customer") && (
-                                  <td className="px-4 py-3">
-                                    <div className="font-bold text-gray-700 text-xs">{r.customerName || "Walk-in"}</div>
-                                  </td>
-                                )}
+                                <td className="px-4 py-3">
+                                  <div className="font-bold text-gray-700 text-xs">
+                                    {analysisMode === "product" ? (r.customerName || "Walk-in") : r.productName}
+                                  </div>
+                                </td>
                                 {isFieldAllowed("purchasePrice") && (
                                   <td className="px-4 py-3 text-right text-gray-500 text-xs">
                                     ₹{r.purchasingPrice?.toFixed(2)}
@@ -357,11 +507,6 @@ const BranchProductRecords = () => {
                                 {isFieldAllowed("sellingPrice") && (
                                   <td className="px-4 py-3 text-right font-bold text-gray-800 text-xs">
                                     ₹{r.sellingPrice?.toFixed(2)}
-                                  </td>
-                                )}
-                                {isFieldAllowed("margin") && (
-                                  <td className={`px-4 py-3 text-right text-xs font-black ${profitPercent >= 0 ? 'text-[#319bab]' : 'text-red-500'}`}>
-                                    {profitPercent.toFixed(1)}%
                                   </td>
                                 )}
                                 {isFieldAllowed("qty") && (
@@ -405,17 +550,7 @@ const BranchProductRecords = () => {
                   </div>
                 </div>
               </>
-            ) : (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-20 text-center flex flex-col items-center justify-center gap-4">
-                <div className="bg-[#319bab]/5 p-6 rounded-full border border-[#319bab]/10">
-                  <FaSearch size={40} className="text-[#319bab] opacity-40" />
-                </div>
-                <div>
-                  <h3 className="text-gray-800 font-black uppercase tracking-tight text-lg">Select a Product</h3>
-                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Please choose a product from the sidebar to view detailed invoice records</p>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </div>

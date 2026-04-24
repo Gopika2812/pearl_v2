@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaFileExcel, FaTimes } from "react-icons/fa";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
 import { API_BASE, fetchWithAuth } from "../../api";
@@ -85,6 +86,7 @@ const ExportColumnSelectorModal = ({ show, onClose, columns, selected, onSelect,
 
 const BranchSalesInvoices = () => {
   const { currentBranch, user } = useBranch();
+  const [searchParams] = useSearchParams();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedInvoices, setExpandedInvoices] = useState({});
@@ -214,6 +216,18 @@ const BranchSalesInvoices = () => {
   useEffect(() => {
     fetchVoucherTypes();
   }, [currentBranch?._id]);
+
+  // 🌍 HANDLE URL SEARCH PARAMS (Teleport from Audit Logs)
+  useEffect(() => {
+    const searchParam = searchParams.get("search");
+    if (searchParam) {
+      setSearchTerm(searchParam);
+      // Clear dates to search globally
+      setFilterFromDate("");
+      setFilterToDate("");
+      toast.info(`🔍 Searching for ${searchParam}...`);
+    }
+  }, [searchParams]);
 
   const toggleExpanded = async (invoiceId) => {
     const isExpanding = !expandedInvoices[invoiceId];

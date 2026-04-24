@@ -4,6 +4,8 @@ import {
   FaSearch, FaChevronDown, FaChevronUp, FaFilter, FaTimes, FaFileExport
 } from "react-icons/fa";
 import { API_BASE } from "../api";
+import { useBranch } from "../context/BranchContext";
+import { useNavigate } from "react-router-dom";
 
 const ACTION_META = {
   LOGIN:            { label: "Login",             color: "text-purple-700 bg-purple-100 border-purple-200" },
@@ -61,6 +63,30 @@ const SuperAdminAuditLogs = () => {
     page: 1,
   });
   const [expandedLog, setExpandedLog] = useState(null);
+  const { setSuperAdminViewBranch } = useBranch();
+  const navigate = useNavigate();
+
+  const handleLogClick = (log) => {
+    if (!log.branchId) return;
+
+    // 1. Set the super admin view branch context (Teleport)
+    setSuperAdminViewBranch(log.branchId);
+
+    // 2. Extract ID from description (e.g., CSSO/649/26-27 or GFSI/038/26-27)
+    // Matches patterns like AA/123/22-23 or AAAA/123/22-23
+    const idMatch = log.description.match(/[A-Z]{1,5}\/\d{1,5}\/\d{2,4}-\d{2,4}/i);
+    const searchId = idMatch ? idMatch[0] : "";
+
+    // 3. Navigate based on action
+    const action = log.action.toUpperCase();
+    if (action.includes("INVOICE") || action.includes("BILL") || action.includes("PRINT")) {
+      navigate(`/branch/sales-invoices?search=${searchId}`);
+    } else if (action.includes("SO") || action.includes("ORDER")) {
+      navigate(`/branch/sales-orders?search=${searchId}`);
+    } else if (action.includes("CUSTOMER")) {
+      navigate(`/branch/customers?search=${searchId}`);
+    }
+  };
 
   useEffect(() => { fetchBranches(); }, []);
   useEffect(() => { fetchLogs(); }, [filters]);
@@ -397,16 +423,24 @@ const SuperAdminAuditLogs = () => {
 
                         {/* Details */}
                         <td className="px-5 py-4 max-w-sm">
-                          <p className="text-sm text-gray-600">{log.description}</p>
+                          <button
+                            onClick={() => handleLogClick(log)}
+                            className="text-sm text-left text-gray-600 hover:text-primary hover:underline transition-colors decoration-primary/30 underline-offset-4"
+                            title="Click to view this record"
+                          >
+                            {log.description}
+                          </button>
                           {log.changes && (log.changes.before || log.changes.after) && (
                             <>
-                              <button
-                                onClick={() => setExpandedLog(isExpanded ? null : log._id)}
-                                className="mt-1.5 text-primary hover:underline text-xs font-semibold inline-flex items-center gap-1"
-                              >
-                                {isExpanded ? "Hide Changes" : "Show Changes"}
-                                {isExpanded ? <FaChevronUp className="text-[8px]" /> : <FaChevronDown className="text-[8px]" />}
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => setExpandedLog(isExpanded ? null : log._id)}
+                                  className="mt-1.5 text-primary hover:underline text-xs font-semibold inline-flex items-center gap-1"
+                                >
+                                  {isExpanded ? "Hide Changes" : "Show Changes"}
+                                  {isExpanded ? <FaChevronUp className="text-[8px]" /> : <FaChevronDown className="text-[8px]" />}
+                                </button>
+                              </div>
                               {isExpanded && renderDiff(log.changes.before, log.changes.after)}
                             </>
                           )}

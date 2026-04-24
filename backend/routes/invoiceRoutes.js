@@ -374,6 +374,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           return res.status(404).json({ message: "Sales order not found" });
         }
 
+        const alreadyInvoiced = salesOrder.invoiceGenerated || salesOrder.status === "INVOICED";
         const branch = await Branch.findById(salesOrder.branchId).session(session);
 
         // 🔄 Use swapped customer if provided in body, else fallback to SO customer
@@ -744,13 +745,14 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         await salesOrder.save({ session });
 
         // ✅ LOG SUCCESSFUL INVOICE FINALIZATION
+        console.log(`📡 AUDIT LOG DEBUG: alreadyInvoiced=${alreadyInvoiced}, editHistory=${salesOrder.editHistory.length}`);
         await createAuditLog({
           userId: req.user.id,
           userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
           username: req.user.username,
           branchId: salesOrder.branchId,
-          action: "INVOICE_SO",
-          description: `Finalized Invoice: ${invoiceNumber} for Order: ${salesOrder.invoiceId}. Total: ₹${grandTotal}`,
+          action: alreadyInvoiced ? "RE_INVOICE_SO" : "INVOICE_SO",
+          description: `${alreadyInvoiced ? 'Regenerated' : 'Finalized'} Invoice: ${invoiceNumber} for Order: ${salesOrder.invoiceId}. Total: ₹${grandTotal}. Items: ${processedItems.slice(0, 3).map(i => i.productName || i.name).join(", ")}${processedItems.length > 3 ? "..." : ""}`,
           targetId: invoice._id,
           targetModel: "Invoice",
         });

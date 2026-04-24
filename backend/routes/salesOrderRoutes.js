@@ -208,7 +208,7 @@ router.get("/", async (req, res) => {
 // GET selling history (for Product Records)
 router.get("/history", cacheData(120), async (req, res) => {
   try {
-    const { branchId, fromDate, toDate, productGroupId, productId } = req.query;
+    const { branchId, fromDate, toDate, productGroupId, productId, customerId } = req.query;
 
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
@@ -216,7 +216,12 @@ router.get("/history", cacheData(120), async (req, res) => {
 
     const matchQuery = {
       branchId: new mongoose.Types.ObjectId(branchId),
+      status: { $ne: "CANCELLED" }
     };
+
+    if (customerId) {
+      matchQuery["customer.customerId"] = new mongoose.Types.ObjectId(customerId);
+    }
 
     if (fromDate || toDate) {
       matchQuery.createdAt = {};
@@ -313,7 +318,8 @@ router.get("/history", cacheData(120), async (req, res) => {
           }
         }
       },
-      { $sort: { date: -1 } }
+      { $sort: { date: -1 } },
+      { $limit: 500 }
     );
 
     const history = await SalesOrder.aggregate(aggregation);
@@ -805,7 +811,7 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
 
     const currentFY = getFinancialYear();
     const Invoice = mongoose.model("Invoice");
-    const isReInvoice = !!(salesOrder.salesInvoiceId && salesOrder.lastInvoicedItems?.length > 0);
+    const isReInvoice = salesOrder.invoiceGenerated || salesOrder.status === "INVOICED";
 
     // ─── BRANCH A: RE-INVOICE (DeltaRecalculation) ───────────────────────
     if (isReInvoice) {
@@ -969,13 +975,14 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
       });
 
       // Log Re-Invoice
+      console.log(`📡 AUDIT LOG DEBUG (SO Route): isReInvoice=${isReInvoice}`);
       await createAuditLog({
         userId: req.user.id,
         userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
         username: req.user.username,
         branchId: salesOrder.branchId,
-        action: "RE_INVOICE_SO",
-        description: `Re-Invoiced SO: ${salesOrder.invoiceId} (SI: ${salesOrder.salesInvoiceId}). Balance Delta: ₹${balanceDelta}`,
+        action: isReInvoice ? "RE_INVOICE_SO" : "INVOICE_SO",
+        description: `${isReInvoice ? 'Regenerated' : 'Finalized'} Invoice: ${salesOrder.salesInvoiceId} for Order: ${salesOrder.invoiceId}. Total: ₹${newTotal}. Items: ${allNewItems.slice(0, 3).map(i => i.productName || i.name).join(", ")}${allNewItems.length > 3 ? "..." : ""}`,
         targetId: salesOrder._id,
         targetModel: "SalesOrder",
         changes: {
@@ -1135,8 +1142,8 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
       userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
       username: req.user.username,
       branchId: salesOrder.branchId,
-      action: "INVOICE_SO",
-      description: `Generated Sales Invoice: ${siNumber} for PO: ${salesOrder.invoiceId}. Total: ₹${grandTotalToUse}`,
+      action: isReInvoice ? "RE_INVOICE_SO" : "INVOICE_SO",
+      description: `${isReInvoice ? 'Regenerated' : 'Finalized'} Invoice: ${siNumber} for PO: ${salesOrder.invoiceId}. Total: ₹${grandTotalToUse}. Items: ${allItems.slice(0, 3).map(i => i.productName || i.name).join(", ")}${allItems.length > 3 ? "..." : ""}`,
       targetId: salesOrder._id,
       targetModel: "SalesOrder",
     });

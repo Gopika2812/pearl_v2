@@ -482,7 +482,7 @@ router.get("/export/snapshot-mar31", async (req, res) => {
  */
 router.get("/", async (req, res) => {
   try {
-    const { page = 1, limit = 50, search = "", branchId, mini = false } = req.query;
+    const { page = 1, limit = 10000, search = "", branchId, mini = false } = req.query;
     const isMini = mini === "true" || mini === true;
 
     console.log("🔍 GET /customers endpoint hit");
@@ -500,7 +500,7 @@ router.get("/", async (req, res) => {
     const branchObjectId = new mongoose.Types.ObjectId(branchId);
 
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 50)); // Max 10000 per page
+    const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 10000)); // Max 10000 per page
     const skip = (pageNum - 1) * pageSize;
 
     // Build robust filter with branchId and optional multi-column criteria

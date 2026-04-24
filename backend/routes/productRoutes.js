@@ -144,7 +144,7 @@ router.post("/", async (req, res) => {
 // GET: Fetch All Products with Pagination
 router.get("/", async (req, res) => {
   try {
-    const { page = 1, limit = 50, search = "", diag = "", branchId } = req.query;
+    const { page = 1, limit = 10000, search = "", diag = "", branchId } = req.query;
 
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
@@ -161,7 +161,7 @@ router.get("/", async (req, res) => {
     }
 
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 50));
+    const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 10000));
     const skip = (pageNum - 1) * pageSize;
 
     // Build search filter with branchId (using ObjectId)

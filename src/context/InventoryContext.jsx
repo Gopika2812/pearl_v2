@@ -215,7 +215,7 @@ export const InventoryProvider = ({ children }) => {
       
       console.log(`🔌 Fetching Products for branchId: ${branchId}`);
       // ⚡ PERFORMANCE: Load only 100 products initially to prevent server crash
-      const res = await fetchWithAuth(`${API_BASE}/products?branchId=${branchId}&limit=100`);
+      const res = await fetchWithAuth(`${API_BASE}/products?branchId=${branchId}&limit=10000`);
       
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
@@ -282,7 +282,7 @@ export const InventoryProvider = ({ children }) => {
       if (!branchId) return;
       
       // ⚡ PERFORMANCE: Only fetch 50 customers initially
-      const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${branchId}&limit=50`);
+      const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${branchId}&limit=10000`);
       const json = await res.json();
       setCustomers(json.data || []);
     } catch (err) {

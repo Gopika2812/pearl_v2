@@ -13,9 +13,12 @@ router.get("/", async (req, res) => {
     if (userId) query.user = userId;
     if (action) query.action = action;
 
-    // Username search (case-insensitive partial match)
+    // Global search (Username or Description)
     if (username) {
-      query.username = { $regex: username, $options: "i" };
+      query.$or = [
+        { username: { $regex: username, $options: "i" } },
+        { description: { $regex: username, $options: "i" } }
+      ];
     }
 
     // Date range filter
@@ -33,7 +36,7 @@ router.get("/", async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const logs = await AuditLog.find(query)
-      .populate("branchId", "name code")
+      .populate("branchId")
       .sort({ createdAt: -1, _id: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -124,7 +127,13 @@ router.post("/sync-historical", async (req, res) => {
     for (const so of allOrders) {
       // A. Create the initial "CREATE_SO" log if missing
       const createDesc = `Historical: Created Sales Order: ${so.invoiceId} for ${so.customer?.name || "Customer"}. Total: ₹${so.grandTotal}`;
-      if (!existingMap.has(`${so._id.toString()}_CREATE_SO_${createDesc}`)) {
+      
+      const hasCreateLog = existingLogs.some(l => {
+        if (l.action !== "CREATE_SO") return false;
+        return l.targetId?.toString() === so._id.toString() && l.description === createDesc;
+      });
+
+      if (!hasCreateLog) {
         let creator = findUser(so.billingPerson);
         // Fallback: If billingPerson name is not a user, just use the first available SuperAdmin for the log record but keep the username
         const userId = creator?.id || (superAdmins[0]?._id); 
@@ -143,23 +152,34 @@ router.post("/sync-historical", async (req, res) => {
         });
       }
 
-      // B. Scan editHistory for versions (V1, V2, etc.)
       if (so.editHistory && so.editHistory.length > 0) {
         for (const history of so.editHistory) {
           let action = "UPDATE_SALES_ORDER";
-          if (history.editType === "INVOICED") action = "INVOICE_SO";
-          if (history.editType === "RE_INVOICED") action = "RE_INVOICE_SO";
+          if (history.editType === "INVOICED") {
+            action = (history.version > 1) ? "RE_INVOICE_SO" : "INVOICE_SO";
+          }
+          if (history.editType === "RE_INVOICED" || history.editType === "RE_EDIT_STARTED" || history.editType === "PRE_INVOICE_EDIT") {
+            action = "RE_INVOICE_SO";
+          }
 
-          // Robust check: See if ANY log exists for this SO with this action on this specific day
-          const historyDate = new Date(history.editedAt || so.updatedAt).toISOString().split('T')[0];
-          const hasLog = existingLogs.some(l => 
+          const historyDate = history.editedAt || so.updatedAt || new Date();
+          const historyDateStr = new Date(historyDate).toISOString().split('T')[0];
+
+          // 1. Check if ANY log exists for this specific history version
+          const existingLog = existingLogs.find(l => 
             l.targetId?.toString() === so._id.toString() && 
-            l.action === action &&
-            new Date(l.createdAt).toISOString().split('T')[0] === historyDate &&
-            (l.description.includes(`Total: ₹${history.grandTotal}`) || l.description.includes(`V${history.version}`))
+            (l.description.includes(`Total: ₹${history.grandTotal}`) || l.description.includes(`V${history.version}`) || l.description.includes(so.invoiceId)) &&
+            new Date(l.createdAt).toISOString().split('T')[0] === historyDateStr
           );
-          
-          if (!hasLog) {
+
+          if (existingLog) {
+            // If the log exists but has the WRONG action, we update it!
+            if (existingLog.action !== action) {
+              await AuditLog.findByIdAndUpdate(existingLog._id, { action });
+              syncCount++;
+            }
+          } else {
+            // Create new log if missing
             const editorName = history.editedBy || so.billingPerson || "System";
             let editor = findUser(editorName);
             const userId = editor?.id || (superAdmins[0]?._id);
@@ -174,7 +194,7 @@ router.post("/sync-historical", async (req, res) => {
               description: `Historical: ${history.note || `Version ${history.version} (${history.editType})`}. Total: ₹${history.grandTotal}`,
               targetId: so._id,
               targetModel: "SalesOrder",
-              createdAt: history.editedAt || so.updatedAt,
+              createdAt: historyDate,
             });
           }
         }
