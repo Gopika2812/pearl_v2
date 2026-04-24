@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaSync, FaFilter, FaSearch, FaHistory, FaFileExport } from "react-icons/fa";
+import { FaSync, FaFilter, FaSearch, FaHistory, FaFileExport, FaSort, FaSortAmountDown, FaSortAmountUp } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
@@ -31,6 +31,7 @@ const BranchProductRecords = () => {
   const [productSearch, setProductSearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
+  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
 
   const fetchHistory = async () => {
     if (!currentBranch?._id) return;
@@ -68,7 +69,46 @@ const BranchProductRecords = () => {
     setSelectedProductGroupId("");
     setSelectedProductId("");
     setSelectedCustomerId("");
-    // We'll need to call fetchHistory manually after states clear or use another useEffect
+  };
+
+  const handleSort = (key) => {
+    let direction = 'desc';
+    if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      direction = 'asc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedRecords = [...records].sort((a, b) => {
+    let aVal, bVal;
+
+    switch (sortConfig.key) {
+      case 'date': aVal = new Date(a.date); bVal = new Date(b.date); break;
+      case 'customer': aVal = a.customerName || ""; bVal = b.customerName || ""; break;
+      case 'product': aVal = a.productName || ""; bVal = b.productName || ""; break;
+      case 'purchase': aVal = a.purchasingPrice || 0; bVal = b.purchasingPrice || 0; break;
+      case 'selling': aVal = a.sellingPrice || 0; bVal = b.sellingPrice || 0; break;
+      case 'qty': aVal = a.qty || 0; bVal = b.qty || 0; break;
+      case 'gst': aVal = a.gst || 0; bVal = b.gst || 0; break;
+      case 'discount': aVal = a.discount || 0; bVal = b.discount || 0; break;
+      case 'profitPercent': 
+        aVal = a.purchasingPrice > 0 ? (a.grossProfit / a.purchasingPrice) : 0;
+        bVal = b.purchasingPrice > 0 ? (b.grossProfit / b.purchasingPrice) : 0;
+        break;
+      case 'profitCash': aVal = a.grossProfit || 0; bVal = b.grossProfit || 0; break;
+      default: return 0;
+    }
+
+    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) return <FaSort className="inline ml-1 text-gray-300" />;
+    return sortConfig.direction === 'asc' 
+      ? <FaSortAmountUp className="inline ml-1 text-[#319bab]" /> 
+      : <FaSortAmountDown className="inline ml-1 text-[#319bab]" />;
   };
 
   // Calculate total profit for the current view
@@ -168,29 +208,6 @@ const BranchProductRecords = () => {
                 <FaFileExport /> Export Excel
               </button>
             )}
-            <button
-              onClick={async () => {
-                if (!window.confirm("This will scan all past Purchase Invoices and update your price history. Proceed?")) return;
-                try {
-                  setLoading(true);
-                  const res = await fetchWithAuth(`${API_BASE}/products/sync-past-prices?branchId=${currentBranch._id}`, {
-                    method: "POST"
-                  });
-                  const data = await res.json();
-                  if (!res.ok) throw new Error(data.message);
-                  toast.success(data.message);
-                  fetchProducts();
-                } catch (err) {
-                  toast.error(err.message);
-                } finally {
-                  setLoading(false);
-                }
-              }}
-              className="flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-2 rounded-lg hover:bg-orange-200 transition shadow-sm font-bold text-sm"
-            >
-              <FaSync className={loading ? "animate-spin" : ""} />
-              Reconcile Past Prices
-            </button>
             <button 
               onClick={fetchHistory}
               disabled={loading}
@@ -458,29 +475,66 @@ const BranchProductRecords = () => {
                     <table className="w-full text-left text-sm border-collapse">
                       <thead>
                         <tr className="bg-gray-50/50 text-gray-500 font-black uppercase text-[9px] tracking-widest border-b border-gray-100">
-                          {isFieldAllowed("voucher") && <th className="px-4 py-3">Voucher / Time</th>}
-                          <th className="px-4 py-3">{analysisMode === "product" ? "Customer" : "Product Name"}</th>
-                          {isFieldAllowed("purchasePrice") && <th className="px-4 py-3 text-right">Purchase ₹</th>}
-                          {isFieldAllowed("sellingPrice") && <th className="px-4 py-3 text-right">Selling ₹</th>}
-                          {isFieldAllowed("qty") && <th className="px-4 py-3 text-center">Qty</th>}
-                          {isFieldAllowed("gst") && <th className="px-4 py-3 text-center">GST %</th>}
-                          {isFieldAllowed("discount") && <th className="px-4 py-3 text-right">Discount</th>}
-                          {isFieldAllowed("margin") && <th className="px-4 py-3 text-right font-black">Profit (%)</th>}
-                          {isFieldAllowed("profit") && <th className="px-4 py-3 text-right font-black">Profit (₹)</th>}
+                          {isFieldAllowed("voucher") && (
+                            <th className="px-4 py-3 cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('date')}>
+                              Voucher / Time {getSortIcon('date')}
+                            </th>
+                          )}
+                          <th className="px-4 py-3 cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('customer')}>
+                            Customer {getSortIcon('customer')}
+                          </th>
+                          <th className="px-4 py-3 cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('product')}>
+                            Product Name {getSortIcon('product')}
+                          </th>
+                          {isFieldAllowed("purchasePrice") && (
+                            <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('purchase')}>
+                              Purchase ₹ {getSortIcon('purchase')}
+                            </th>
+                          )}
+                          {isFieldAllowed("sellingPrice") && (
+                            <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('selling')}>
+                              Selling ₹ {getSortIcon('selling')}
+                            </th>
+                          )}
+                          {isFieldAllowed("qty") && (
+                            <th className="px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('qty')}>
+                              Qty {getSortIcon('qty')}
+                            </th>
+                          )}
+                          {isFieldAllowed("gst") && (
+                            <th className="px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('gst')}>
+                              GST % {getSortIcon('gst')}
+                            </th>
+                          )}
+                          {isFieldAllowed("discount") && (
+                            <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('discount')}>
+                              Discount {getSortIcon('discount')}
+                            </th>
+                          )}
+                          {isFieldAllowed("margin") && (
+                            <th className="px-4 py-3 text-right font-black cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('profitPercent')}>
+                              Profit (%) {getSortIcon('profitPercent')}
+                            </th>
+                          )}
+                          {isFieldAllowed("profit") && (
+                            <th className="px-4 py-3 text-right font-black cursor-pointer hover:bg-gray-100 transition" onClick={() => handleSort('profitCash')}>
+                              Profit (₹) {getSortIcon('profitCash')}
+                            </th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
                         {loading ? (
                           <tr>
-                            <td colSpan="10" className="px-6 py-20 text-center">
+                            <td colSpan="11" className="px-6 py-20 text-center">
                               <div className="flex flex-col items-center gap-2">
                                 <FaSync className="animate-spin text-[#319bab]" size={24} />
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Fetching Transaction Data...</span>
                               </div>
                             </td>
                           </tr>
-                        ) : records.length > 0 ? (
-                          records.map((r, i) => {
+                        ) : sortedRecords.length > 0 ? (
+                          sortedRecords.map((r, i) => {
                             const margin = (r.sellingPrice || 0) - (r.purchasingPrice || 0);
                             const profitPercent = r.purchasingPrice > 0 ? (r.grossProfit / r.purchasingPrice) * 100 : 0;
                             return (
@@ -495,8 +549,13 @@ const BranchProductRecords = () => {
                                   </td>
                                 )}
                                 <td className="px-4 py-3">
-                                  <div className="font-bold text-gray-700 text-xs">
-                                    {analysisMode === "product" ? (r.customerName || "Walk-in") : r.productName}
+                                  <div className="font-bold text-gray-700 text-[11px] truncate w-32" title={r.customerName || "Walk-in"}>
+                                    {r.customerName || "Walk-in"}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="font-bold text-gray-700 text-[11px] truncate w-40" title={r.productName}>
+                                    {r.productName}
                                   </div>
                                 </td>
                                 {isFieldAllowed("purchasePrice") && (
@@ -539,7 +598,7 @@ const BranchProductRecords = () => {
                           })
                         ) : (
                           <tr>
-                            <td colSpan="10" className="px-6 py-20 text-center text-gray-400">
+                            <td colSpan="11" className="px-6 py-20 text-center text-gray-400">
                               <FaHistory size={32} className="mx-auto mb-2 opacity-20" />
                               <p className="text-[10px] font-black uppercase tracking-widest">No transactions found for selected period</p>
                             </td>
