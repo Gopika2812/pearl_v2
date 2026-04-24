@@ -1057,11 +1057,7 @@ router.get("", async (req, res) => {
       .populate("customer.customerId", "name whatsapp")
       .populate("salesOrderId");
 
-    // ⚡ THIN FETCHING: Skip heavy items array unless explicitly requested for reports
-    if (includeItems !== "true") {
-      queryExec = queryExec.select("-items -__v");
-    }
-
+    // 🔥 ITEMS are now included by default to fix Receipt Management visibility
     const invoices = await queryExec
       .sort({ invoiceDate: -1, createdAt: -1 })
       .skip(skip)

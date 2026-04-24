@@ -1199,13 +1199,78 @@ router.get("/:id", async (req, res) => {
 router.get("/unpaid/:customerId", async (req, res) => {
   try {
     const { customerId } = req.params;
-    const unpaidOrders = await SalesOrder.find({
-      "customer.customerId": customerId,
-      status: "INVOICED",
-      closingBalance: { $gt: 0 }
-    }).sort({ createdAt: 1 }); // Oldest first (FIFO payment logic)
+    
+    if (!mongoose.Types.ObjectId.isValid(customerId)) {
+      return res.status(400).json({ success: false, message: "Invalid Customer ID" });
+    }
 
-    res.json({ success: true, data: unpaidOrders });
+    const customerObjectId = mongoose.Types.ObjectId.isValid(customerId) ? new mongoose.Types.ObjectId(customerId) : null;
+
+    // 1. Get the full customer record to get their exact name for fuzzy search
+    const Customer = mongoose.model("Customer");
+    const targetCustomer = await Customer.findById(customerId);
+    const customerName = targetCustomer?.name;
+
+    // 2. 🔥 BROAD SEARCH: Find invoices by ID OR by Name (Case-Insensitive Regex)
+    // This catches invoices even if the customer ID was changed or a duplicate record was used.
+    const query = {
+      $or: [
+        { "customer.customerId": customerObjectId },
+        { "customer.customerId": customerId },
+        ...(customerName ? [
+          { "customer.name": { $regex: new RegExp(`^${customerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } }
+        ] : [])
+      ],
+      status: { $ne: "CANCELLED" }
+    };
+
+    const unpaidInvoices = await Invoice.find(query)
+    .sort({ invoiceDate: -1 })
+    .lean();
+
+    console.log(`[DEBUG] Unpaid search for ${customerName} (${customerId}): Found ${unpaidInvoices.length} total.`);
+
+    console.log(`[DEBUG] Found ${unpaidInvoices.length} invoices for customer ${customerId}`);
+
+    // Calculate actual pending amount for each invoice
+    const enrichedOrders = await Promise.all(unpaidInvoices.map(async (inv) => {
+      // Use Invoice Number as the primary display ID
+      const displayKey = inv.invoiceNumber || inv._id;
+      const orderId = inv.salesOrderId?._id || inv.salesOrderId || inv._id;
+      
+      const receipts = await Receipt.find({ 
+        $or: [
+          { originalSalesOrderId: orderId },
+          { originalInvoiceId: inv.invoiceNumber }
+        ],
+        status: { $in: ["confirmed", "bounced"] }
+      });
+      
+      const totalReceived = (receipts || []).reduce((sum, r) => {
+        const isBounced = r.status === "bounced" || r.paymentMethod === "BOUNCED";
+        const amt = parseFloat(r.amount) || 0;
+        return isBounced ? sum - amt : sum + amt;
+      }, 0);
+
+      const invoiceTotal = parseFloat(inv.grandTotal || 0);
+      const pendingBalance = Math.max(0, invoiceTotal - totalReceived);
+      
+      const invObj = inv.toObject ? inv.toObject() : inv;
+      return { 
+        ...invObj,
+        _id: orderId, // Use Order ID for backend compatibility
+        originalInvoiceId: inv._id,
+        invoiceId: inv.invoiceNumber, // Map Invoice Number to the ID field
+        totalReceived, 
+        invoiceTotal,
+        pendingBalance: Number(pendingBalance.toFixed(2))
+      };
+    }));
+
+    const filtered = enrichedOrders.filter(o => o.pendingBalance > 0.1);
+    console.log(`[DEBUG] Customer ${customerId}: Found ${filtered.length} unpaid invoices.`);
+
+    res.json({ success: true, data: filtered });
   } catch (error) {
     console.error("Fetch Unpaid Orders Error:", error);
     res.status(500).json({ success: false, message: error.message });

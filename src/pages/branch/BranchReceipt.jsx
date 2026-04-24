@@ -3,7 +3,7 @@ import { FaChevronDown, FaChevronUp, FaFileAlt, FaPlus, FaSearch, FaHistory } fr
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import CustomerDebitReceiptModal from "../../components/sales/CustomerDebitReceiptModal";
-import ReceiptModal from "../../components/sales/ReceiptModal";
+import CustomerReceiptModal from "../../components/inventory/CustomerReceiptModal";
 import BounceChequeModal from "../../components/sales/BounceChequeModal";
 import { useBranch } from "../../context/BranchContext";
 
@@ -23,6 +23,7 @@ export default function BranchReceipt() {
   const [showDebitReceiptModal, setShowDebitReceiptModal] = useState(false);
   const [showBounceModal, setShowBounceModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedBounceInvoice, setSelectedBounceInvoice] = useState(null);
   const [expandedInvoices, setExpandedInvoices] = useState({});
 
@@ -45,17 +46,8 @@ export default function BranchReceipt() {
       setLoading(true);
       console.log("Fetching Branch Receipts for:", currentBranch?._id);
       
-      // 1. Fetch Sales Invoices
-      const soResponse = await fetch(`${API_BASE}/sales-orders?branchId=${currentBranch._id}`, {
-        headers: { "Content-Type": "application/json" },
-      });
-      const soResult = await soResponse.json();
-      const soArray = Array.isArray(soResult) ? soResult : (soResult.data || []);
-      const filteredSOs = soArray.filter((si) => si.invoiceGenerated && si.status !== "CANCELLED");
-      setSalesInvoices(filteredSOs);
-
-      // 2. Fetch Actual Invoice Documents
-      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}`, {
+      // 1. Fetch Sales Invoices (ACTUAL INVOICE DOCUMENTS)
+      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&includeItems=true`, {
         headers: { "Content-Type": "application/json" },
       });
       const invResult = await invResponse.json();
@@ -79,11 +71,10 @@ export default function BranchReceipt() {
       const cnArray = Array.isArray(cnResult) ? cnResult : (cnResult.data || []);
       setCreditNotes(cnArray);
 
-      // 5. Multi-Fetch receipts for each SO/Invoice for pending calculation
-      const allOrderIds = [...new Set([
-        ...filteredSOs.map(o => o._id),
+      // 4. Multi-Fetch receipts for each Invoice for pending calculation
+      const allOrderIds = [
         ...invArray.map(i => i.salesOrderId?._id || i.salesOrderId).filter(Boolean)
-      ])];
+      ];
 
       for (const id of allOrderIds) {
         fetchReceiptsForInvoice(id);
@@ -98,7 +89,8 @@ export default function BranchReceipt() {
 
   const fetchReceiptsForInvoice = async (invoiceId) => {
     try {
-      const response = await fetch(`${API_BASE}/receipts/order/${invoiceId}`, {
+      const branchId = currentBranch?._id || "";
+      const response = await fetch(`${API_BASE}/receipts/order/${invoiceId}?branchId=${branchId}`, {
         headers: { "Content-Type": "application/json" },
       });
       const result = await response.json();
@@ -124,13 +116,17 @@ export default function BranchReceipt() {
   // Prefer Invoice objects over SalesOrder objects if they refer to the same thing
   const combinedInvoicesMap = new Map();
 
-  salesInvoices.forEach(si => {
-    combinedInvoicesMap.set(si._id, { ...si, rowType: "ORDER" });
-  });
-
   invoices.forEach(inv => {
+    // Use Invoice Number as the primary display ID
+    const displayKey = inv.invoiceNumber || inv._id;
     const orderId = inv.salesOrderId?._id || inv.salesOrderId || inv._id;
-    combinedInvoicesMap.set(orderId, { ...inv, _id: orderId, rowType: "INVOICE" });
+    
+    combinedInvoicesMap.set(displayKey, { 
+      ...inv, 
+      _id: orderId, // Still use SO ID for receipt linking compatibility
+      invoiceId: inv.invoiceNumber,
+      rowType: "INVOICE" 
+    });
   });
 
   const allItems = [
@@ -148,6 +144,7 @@ export default function BranchReceipt() {
   const handleReceiptSuccess = () => {
     setShowReceiptModal(false);
     setSelectedInvoice(null);
+    setSelectedCustomer(null);
     fetchData();
   };
 
@@ -205,7 +202,26 @@ export default function BranchReceipt() {
   };
 
   const handleReceivePayment = (invoice, pending) => {
-    setSelectedInvoice({ ...invoice, pendingAmount: pending });
+    // We need the full customer object for the new modal
+    // Note: SalesOrder stores customer as an object with 'customerId' property
+    const cust = invoice.customer || {};
+    const customerId = cust.customerId || (typeof cust === 'string' ? cust : null);
+    const customerName = cust.name || "Unknown Customer";
+    
+    // Safely extract the ID string
+    let finalId = "";
+    if (typeof customerId === 'string') finalId = customerId;
+    else if (customerId && customerId._id) finalId = customerId._id.toString();
+    else if (customerId) finalId = customerId.toString();
+
+    if (!finalId || finalId === "[object Object]") {
+        console.error("❌ Invalid Customer ID extracted:", customerId);
+        return toast.error("Could not determine Customer ID");
+    }
+    
+    // Set both to trigger the modal correctly
+    setSelectedCustomer({ _id: finalId, name: customerName, branchId: invoice.branchId });
+    setSelectedInvoice(invoice);
     setShowReceiptModal(true);
   };
 
@@ -289,7 +305,7 @@ export default function BranchReceipt() {
                 <thead className="bg-gradient-to-r from-cyan-50 to-cyan-100 border-b">
                   <tr>
                     <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Expand</th>
-                    <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Order/Invoice ID</th>
+                    <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Invoice ID</th>
                     {isFieldAllowed("customerDetails") && <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Customer</th>}
                     <th className="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase">Warehouse</th>
                     <th className="px-4 py-4 text-center text-xs font-bold text-gray-700 uppercase">Items</th>
@@ -352,7 +368,7 @@ export default function BranchReceipt() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className="bg-cyan-600/10 text-cyan-600 px-3 py-1 rounded-full text-xs font-bold">
-                              {isOrder ? (item.items?.length || 0) : 1}
+                              {isOrder ? (item.items?.length || item.invoiceItems?.length || item.lastInvoicedItems?.length || 0) : 1}
                             </span>
                           </td>
                           {isFieldAllowed("amount") && (
@@ -413,13 +429,13 @@ export default function BranchReceipt() {
                           </td>
                         </tr>
 
-                        {/* ORDER DETAILS (Only if Order and Expanded) */}
+                        {/* INVOICE DETAILS (Only if Invoice and Expanded) */}
                         {isOrder && isExpanded && item.items && item.items.length > 0 && (
                           <tr>
                             <td colSpan="12" className="px-4 py-4 bg-gray-50">
                               <div className="ml-6">
                                 <h4 className="text-cyan-600 font-bold text-sm mb-3 uppercase flex items-center gap-2">
-                                  📦 Order Items Summary
+                                  📦 Invoice Items Summary
                                 </h4>
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-xs bg-white rounded-lg shadow-sm">
@@ -503,12 +519,18 @@ export default function BranchReceipt() {
         )}
       </div>
 
-      {/* RECEIPT MODAL */}
-      <ReceiptModal
-        invoice={selectedInvoice}
+      {/* RECEIPT MODAL (UPGRADED TO CUSTOMER-CENTRIC) */}
+      <CustomerReceiptModal
         isOpen={showReceiptModal}
-        onClose={() => setShowReceiptModal(false)}
-        onReceiptSuccess={handleReceiptSuccess}
+        onClose={() => {
+            setShowReceiptModal(false);
+            setSelectedCustomer(null);
+            setSelectedInvoice(null);
+        }}
+        customer={selectedCustomer}
+        branchId={currentBranch?._id}
+        initialInvoiceId={selectedInvoice?._id}
+        onPaymentSuccess={handleReceiptSuccess}
       />
 
       {/* CUSTOMER DEBIT RECEIPT MODAL */}

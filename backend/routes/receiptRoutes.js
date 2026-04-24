@@ -244,9 +244,19 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ success: false, message: "Sales order not found" });
     }
 
-    // Validate amount doesn't exceed invoice total
-    if (amount > (originalOrder.grandTotal || 0)) {
-      return res.status(400).json({ success: false, message: "Receipt amount exceeds invoice total" });
+    // Validate amount doesn't exceed invoice total (with a small margin for rounding)
+    const maxAllowed = Math.max(
+      originalOrder.grandTotal || 0,
+      originalOrder.invoiceGrandTotal || 0,
+      originalOrder.lastInvoicedGrandTotal || 0,
+      originalOrder.closingBalance || 0
+    );
+
+    if (amount > maxAllowed + 1) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Receipt amount (₹${amount}) exceeds invoice total (₹${maxAllowed})` 
+      });
     }
 
     // Generate Receipt ID
@@ -308,6 +318,15 @@ router.post("/", async (req, res) => {
 
       console.log(`✅ Customer balance updated: debit: ₹${currentDebit}, credit: ₹${currentCredit}, closingBalance: ₹${newClosingBalance}`);
     }
+
+    // 🔄 UPDATE SALES ORDER CLOSING BALANCE
+    const newOrderClosingBalance = Math.max(0, (originalOrder.closingBalance || 0) - amount);
+    await SalesOrder.findByIdAndUpdate(originalSalesOrderId, {
+      closingBalance: newOrderClosingBalance,
+      // If balance is fully paid, we could potentially update status, but keeping it as is for now
+      // to avoid side effects with other status-based logic.
+    });
+    console.log(`✅ SalesOrder ${originalOrder.invoiceId} closing balance updated to ₹${newOrderClosingBalance}`);
 
     res.json({
       success: true,
@@ -433,6 +452,112 @@ router.delete("/:receiptId", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to cancel receipt" });
+  }
+});
+
+// 📦 BULK CREATE receipts (for multiple invoices)
+router.post("/bulk", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const {
+      customerId,
+      payments, // Array of { salesOrderId, amount }
+      paymentMethod,
+      reference,
+      notes,
+      paymentDate,
+      branchId
+    } = req.body;
+
+    if (!customerId || !payments || !Array.isArray(payments) || payments.length === 0) {
+      return res.status(400).json({ success: false, message: "Invalid bulk payment data" });
+    }
+
+    const customer = await Customer.findById(customerId).session(session);
+    if (!customer) {
+      await session.abortTransaction();
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    const financialYear = getFinancialYear();
+    const createdReceipts = [];
+    let totalAmount = 0;
+
+    for (const p of payments) {
+      const order = await SalesOrder.findById(p.salesOrderId).session(session);
+      if (!order) continue;
+
+      const receiptId = await generateBranchSpecificReceiptId(branchId || order.branchId, financialYear);
+      
+      const receipt = new Receipt({
+        receiptId,
+        branchId: branchId || order.branchId,
+        originalSalesOrderId: order._id,
+        originalInvoiceId: order.invoiceId,
+        customer: {
+          customerId: customer._id,
+          name: customer.name,
+        },
+        amount: p.amount,
+        paymentMethod: paymentMethod || "CASH",
+        reference: reference || null,
+        notes: `${notes || ""} (Paid against ${order.invoiceId})`.trim(),
+        financialYear,
+        status: "confirmed",
+        paymentDate: paymentDate || new Date()
+      });
+
+      await receipt.save({ session });
+      createdReceipts.push(receipt);
+      totalAmount += p.amount;
+
+      // Update Order Balance
+      const newOrderClosingBalance = Math.max(0, (order.closingBalance || 0) - p.amount);
+      await SalesOrder.findByIdAndUpdate(order._id, { closingBalance: newOrderClosingBalance }).session(session);
+    }
+
+    // Update Customer Totals
+    let remainingAmount = totalAmount;
+    let currentDebit = customer.debit || 0;
+    let currentCredit = customer.credit || 0;
+
+    if (currentDebit >= remainingAmount) {
+      currentDebit -= remainingAmount;
+      remainingAmount = 0;
+    } else {
+      remainingAmount -= currentDebit;
+      currentDebit = 0;
+      currentCredit += remainingAmount;
+    }
+
+    const newClosingBalance = (customer.closingBalance || 0) - totalAmount;
+    await Customer.findByIdAndUpdate(customerId, {
+      debit: currentDebit,
+      credit: currentCredit,
+      closingBalance: newClosingBalance,
+      totalBalance: newClosingBalance,
+    }).session(session);
+
+    await createAuditLog({
+      userId: req.user?.id || "SYSTEM",
+      userModel: "BranchUser",
+      username: req.user?.username || "System",
+      branchId: branchId || customer.branchId,
+      action: "BULK_RECEIPT",
+      description: `Recorded bulk receipt for ${customer.name}. Total: ₹${totalAmount}. Invoices: ${createdReceipts.map(r => r.originalInvoiceId).join(", ")}`,
+      targetId: customer._id,
+      targetModel: "Customer"
+    });
+
+    await session.commitTransaction();
+    res.json({ success: true, message: `${createdReceipts.length} receipts recorded successfully`, data: createdReceipts });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("Bulk Receipt Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    session.endSession();
   }
 });
 

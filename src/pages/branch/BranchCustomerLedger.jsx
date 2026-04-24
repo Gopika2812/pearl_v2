@@ -197,8 +197,12 @@ const BranchCustomerLedger = () => {
       // Transactions
       transactions.forEach(txn => {
         let docId = "-";
+        const invMatch = txn.particulars?.match(/for Inv:\s*([^\s(]+)/i);
         const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note):\s*([^\s(]+)/i);
-        if (pm) docId = pm[1]; else if (txn.type === "INVOICE") docId = txn.particulars.split(": ")[1] || "-";
+        
+        if (invMatch) docId = invMatch[1];
+        else if (pm) docId = pm[1]; 
+        else if (txn.type === "INVOICE") docId = txn.particulars.split(": ")[1] || "-";
 
         let vt = "-";
         if (txn.type === "INVOICE") vt = "Z-1";
@@ -444,8 +448,12 @@ const BranchCustomerLedger = () => {
 
                 {transactions.map((txn, index) => {
                   let docId = "-";
+                  const invMatch = txn.particulars?.match(/for Inv:\s*([^\s(]+)/i);
                   const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note):\s*([^\s(]+)/i);
-                  if (pm) docId = pm[1]; else if (txn.type === "INVOICE") docId = txn.particulars.split(": ")[1] || "-";
+                  
+                  if (invMatch) docId = invMatch[1];
+                  else if (pm) docId = pm[1]; 
+                  else if (txn.type === "INVOICE") docId = txn.particulars.split(": ")[1] || "-";
 
                   return (
                     <tr key={txn.id} className="hover:bg-slate-50/80 transition-all duration-300 group cursor-default">
