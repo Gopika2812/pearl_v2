@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaArrowLeft, FaCheck, FaEye, FaFileInvoice } from "react-icons/fa";
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
 
 const inputClass =
@@ -160,14 +160,7 @@ export default function InventorySalesInvoice() {
   if (selectedOrder) {
     return (
       <div className="space-y-6">
-        <ToastContainer
-          position="top-right"
-          autoClose={2500}
-          newestOnTop
-          closeOnClick
-          pauseOnHover
-          theme="colored"
-        />
+
 
         {/* HEADER */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -313,7 +306,7 @@ export default function InventorySalesInvoice() {
 
   return (
     <div className="space-y-6">
-      <ToastContainer position="top-right" autoClose={2500} />
+
 
       {/* HEADER */}
       <div className="bg-gradient-to-r from-blue-500 to-teal-500 text-white p-6 rounded-2xl shadow-lg">

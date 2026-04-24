@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 
 const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave, branchId, editingItem }) => {
@@ -134,7 +133,7 @@ const InventoryAddVoucherTypeModal = ({ isOpen, onClose, onSave, branchId, editi
 
   return (
     <>
-      <ToastContainer />
+
 
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
         <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">

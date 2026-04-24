@@ -394,7 +394,25 @@ function AppContent() {
 
   return (
     <>
-      <ToastContainer />
+      <ToastContainer
+        position="top-right"
+        autoClose={2500}
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+        theme="colored"
+        toastStyle={{
+          background: "rgba(49, 155, 171, 0.95)",
+          color: "#fff",
+          backdropFilter: "blur(12px)",
+          borderRadius: "16px",
+          boxShadow: "0 10px 30px rgba(49,155,171,0.2)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          fontSize: "14px",
+          fontWeight: "600",
+          fontFamily: "Inter, sans-serif"
+        }}
+      />
       
           <div className="flex">
             {/* Sidebar logic:
