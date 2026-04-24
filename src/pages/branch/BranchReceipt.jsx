@@ -46,38 +46,34 @@ export default function BranchReceipt() {
       setLoading(true);
       console.log("Fetching Branch Receipts for:", currentBranch?._id);
       
-      // 1. Fetch Sales Invoices (ACTUAL INVOICE DOCUMENTS)
-      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&includeItems=true`, {
+      // 1. Fetch Sales Invoices (High capacity for full history)
+      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&includeItems=true&limit=1000`, {
         headers: { "Content-Type": "application/json" },
       });
       const invResult = await invResponse.json();
       const invArray = Array.isArray(invResult) ? invResult : (invResult.data || []);
       setInvoices(invArray);
 
-      // 3. Fetch General Standalone Receipts
-      const rResponse = await fetch(`${API_BASE}/receipts?branchId=${currentBranch._id}`, {
-        headers: { "Content-Type": "application/json" },
-      });
-      const rResult = await rResponse.json();
-      const rArray = Array.isArray(rResult) ? rResult : (rResult.data || []);
-      const standalone = rArray.filter(r => !r.originalSalesOrderId);
-      setGeneralReceipts(standalone);
-
-      // 4. Fetch Credit Notes
-      const cnResponse = await fetch(`${API_BASE}/credit-notes?branchId=${currentBranch._id}`, {
-        headers: { "Content-Type": "application/json" },
-      });
-      const cnResult = await cnResponse.json();
-      const cnArray = Array.isArray(cnResult) ? cnResult : (cnResult.data || []);
-      setCreditNotes(cnArray);
-
-      // 4. Multi-Fetch receipts for each Invoice for pending calculation
+      // 2. Optimized: Fetch all receipts for these invoices in ONE call
       const allOrderIds = [
         ...invArray.map(i => i.salesOrderId?._id || i.salesOrderId).filter(Boolean)
       ];
 
-      for (const id of allOrderIds) {
-        fetchReceiptsForInvoice(id);
+      if (allOrderIds.length > 0) {
+        const batchResponse = await fetch(`${API_BASE}/receipts/batch-summary`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderIds: allOrderIds })
+        });
+        const batchResult = await batchResponse.json();
+        if (batchResult.success) {
+          const summary = batchResult.data;
+          const newBalances = {};
+          Object.keys(summary).forEach(id => {
+            newBalances[id] = { totalReceived: summary[id], pending: 0 }; // pending will be recalculated in render
+          });
+          setBalances(newBalances);
+        }
       }
     } catch (error) {
       console.error("Error fetching receipt data:", error);
@@ -238,9 +234,9 @@ export default function BranchReceipt() {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4">
+      <div className="w-full px-2 sm:px-4 py-2">
         {/* HEADER */}
-        <div className="bg-gradient-to-r from-cyan-600 to-cyan-700 text-white rounded-2xl shadow-lg p-8 mb-8">
+        <div className="bg-gradient-to-r from-cyan-600 to-cyan-700 text-white shadow-lg p-6 mb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <FaFileAlt className="text-5xl opacity-80" />
@@ -268,7 +264,7 @@ export default function BranchReceipt() {
         </div>
 
         {/* SEARCH BAR */}
-        <div className="bg-white rounded-2xl shadow-md p-4 mb-8 flex items-center gap-4 border border-cyan-100">
+        <div className="bg-white shadow-md p-3 mb-4 flex items-center gap-4 border border-cyan-100">
           <div className="relative flex-1">
             <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
             <input
@@ -290,7 +286,7 @@ export default function BranchReceipt() {
         </div>
 
         {/* MAIN CONTENT */}
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="bg-white shadow-lg overflow-hidden">
           {loading ? (
             <div className="p-8 text-center">
               <p className="text-gray-600">Loading sales invoices...</p>

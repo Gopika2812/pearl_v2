@@ -179,7 +179,7 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess, ini
           </div>
       </div>
 
-      <div className="max-w-[1200px] mx-auto p-6 flex flex-col lg:flex-row gap-8">
+      <div className="w-full px-6 py-6 flex flex-col lg:flex-row gap-8">
           
           {/* Main Controls */}
           <div className="flex-1 space-y-6">

@@ -101,17 +101,46 @@ const generateBranchSpecificReceiptId = async (branchId, financialYear, prefix =
 router.get("/", async (req, res) => {
   try {
     const { branchId } = req.query;
-    if (!branchId) {
-      return res.json({ success: true, data: [] });
-    }
-    const query = { branchId };
-
-    const receipts = await Receipt.find(query)
-      .sort({ createdAt: -1 });
-
-    res.json({ success: true, data: receipts });
+    const query = branchId ? { branchId } : {};
+    const receipts = await Receipt.find(query).sort({ createdAt: -1 });
+    res.json({ data: receipts });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to fetch receipts" });
+    res.status(500).json({ message: "Failed to fetch receipts" });
+  }
+});
+
+// ⚡ SPEED OPTIMIZATION: Get summary for multiple orders in one call
+router.post("/batch-summary", async (req, res) => {
+  try {
+    const { orderIds } = req.body;
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.json({ data: {} });
+    }
+
+    // Convert to ObjectIds
+    const oIds = orderIds
+      .filter(id => mongoose.Types.ObjectId.isValid(id))
+      .map(id => new mongoose.Types.ObjectId(id));
+
+    const results = await Receipt.aggregate([
+      { $match: { originalSalesOrderId: { $in: oIds }, status: "confirmed" } },
+      {
+        $group: {
+          _id: "$originalSalesOrderId",
+          totalReceived: { $sum: "$amount" }
+        }
+      }
+    ]);
+
+    const summaryMap = {};
+    results.forEach(r => {
+      summaryMap[r._id.toString()] = r.totalReceived;
+    });
+
+    res.json({ success: true, data: summaryMap });
+  } catch (error) {
+    console.error("Batch summary error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
