@@ -412,7 +412,7 @@ const Tokenization = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 pt-20 md:pt-4 md:pl-20 px-4 pb-12">
-      <ToastContainer position="top-right" autoClose={3000} />
+
       
       {/* Header Section */}
       <div className="max-w-7xl mx-auto mb-8">

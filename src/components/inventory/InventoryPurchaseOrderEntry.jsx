@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { FaPlus, FaTrash } from "react-icons/fa";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
@@ -641,21 +640,7 @@ const InventoryPurchaseOrderEntry = ({
 
   return (
     <div className="space-y-6 font-sans">
-      <ToastContainer
-        position="top-right"
-        autoClose={2500}
-        newestOnTop
-        closeOnClick
-        pauseOnHover
-        theme="colored"
-        toastStyle={{
-          background: "rgba(49, 155, 171, 0.85)",
-          color: "#fff",
-          backdropFilter: "blur(6px)",
-          borderRadius: "12px",
-          boxShadow: "0 8px 20px rgba(49,155,171,0.25)",
-        }}
-      />
+
 
       {/* HEADER */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100

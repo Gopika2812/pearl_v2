@@ -10,6 +10,8 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess, ini
   const [paymentType, setPaymentType] = useState("general"); 
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState([]);
   const [selectedBank, setSelectedBank] = useState("");
+  const [selectedUpi, setSelectedUpi] = useState("");
+  const [useCredit, setUseCredit] = useState(false); // 🔥 New state for credit utilization
   
   const [formData, setFormData] = useState({
     amount: "",
@@ -34,6 +36,8 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess, ini
     setPaymentType("general");
     setSelectedInvoiceIds([]);
     setSelectedBank("");
+    setSelectedUpi("");
+    setUseCredit(false);
     setTimeout(() => setIsResetting(false), 50);
   };
 
@@ -119,7 +123,7 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess, ini
         customerId: customer._id,
         amount: parseFloat(formData.amount),
         paymentMethod: formData.paymentMethod,
-        reference: selectedBank ? `${selectedBank} - ${formData.reference}` : formData.reference,
+        reference: selectedBank ? `${selectedBank} - ${formData.reference}` : (selectedUpi ? `${selectedUpi} - ${formData.reference}` : formData.reference),
         notes: formData.notes,
         branchId: customer.branchId,
         paymentDate: formData.paymentDate
@@ -127,11 +131,59 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess, ini
 
       if (paymentType === "invoice" && selectedInvoiceIds.length > 0) {
         endpoint = `${API_BASE}/receipts/bulk`;
+        
+        let cashToDistribute = parseFloat(formData.amount) || 0;
+        let creditToDistribute = useCredit ? Math.min(fullCustomer?.credit || 0, (unpaidInvoices.filter(i => selectedInvoiceIds.includes(i._id)).reduce((s, i) => s + (i.pendingBalance || 0), 0)) - cashToDistribute) : 0;
+        
+        // Final sanity check: if credit exceeds remaining balance, cap it
+        const selectedInvoices = unpaidInvoices.filter(i => selectedInvoiceIds.includes(i._id));
+        const totalPendingSelected = selectedInvoices.reduce((s, i) => s + (i.pendingBalance || 0), 0);
+        if (cashToDistribute + creditToDistribute > totalPendingSelected + 1) {
+           creditToDistribute = Math.max(0, totalPendingSelected - cashToDistribute);
+        }
+
+        const payments = [];
+        let remainingCash = cashToDistribute;
+        let remainingCredit = creditToDistribute;
+
+        for (let i = 0; i < selectedInvoices.length; i++) {
+          const inv = selectedInvoices[i];
+          const pending = parseFloat(inv.pendingBalance) || 0;
+          
+          let payCash = 0;
+          let payCredit = 0;
+
+          // Distribute Cash first
+          if (remainingCash > 0) {
+             if (i === selectedInvoices.length - 1) {
+                payCash = remainingCash;
+                remainingCash = 0;
+             } else {
+                payCash = Math.min(remainingCash, pending);
+                remainingCash -= payCash;
+             }
+          }
+
+          // Distribute Credit to cover remaining pending on this invoice
+          const stillOwed = Math.max(0, pending - payCash);
+          if (remainingCredit > 0 && stillOwed > 0) {
+             payCredit = Math.min(remainingCredit, stillOwed);
+             remainingCredit -= payCredit;
+          }
+
+          if (payCash > 0 || payCredit > 0) {
+            payments.push({ 
+              salesOrderId: inv._id, 
+              amount: payCash, 
+              creditAmount: payCredit 
+            });
+          }
+        }
+
         payload = {
           ...payload,
-          payments: unpaidInvoices
-            .filter(i => selectedInvoiceIds.includes(i._id))
-            .map(i => ({ salesOrderId: i._id, amount: i.pendingBalance || 0 }))
+          payments,
+          totalCreditAmount: creditToDistribute
         };
       }
 
@@ -287,6 +339,12 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess, ini
                           <button type="button" onClick={() => setSelectedBank("SBI")} className={`flex-1 py-2 rounded border text-[10px] font-bold uppercase transition-all ${selectedBank === 'SBI' ? 'bg-blue-900 text-white border-blue-900' : 'bg-white text-blue-300 border-blue-200'}`}>STATE BANK</button>
                       </div>
                   )}
+                  {formData.paymentMethod === "UPI" && (
+                      <div className="col-span-2 flex gap-4 p-4 bg-purple-50 rounded-lg border border-purple-100">
+                          <button type="button" onClick={() => setSelectedUpi("ICICI")} className={`flex-1 py-2 rounded border text-[10px] font-bold uppercase transition-all ${selectedUpi === 'ICICI' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-400 border-blue-200'}`}>ICICI BANK</button>
+                          <button type="button" onClick={() => setSelectedUpi("SBI")} className={`flex-1 py-2 rounded border text-[10px] font-bold uppercase transition-all ${selectedUpi === 'SBI' ? 'bg-blue-900 text-white border-blue-900' : 'bg-white text-blue-300 border-blue-200'}`}>STATE BANK</button>
+                      </div>
+                  )}
                   <div className="col-span-2 space-y-1.5">
                       <label className="text-[10px] font-bold text-gray-400 uppercase">Remarks</label>
                       <textarea 
@@ -322,6 +380,41 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess, ini
                       </span>
                   </div>
               </div>
+
+              {/* CREDIT UTILIZATION BOX */}
+              {fullCustomer?.credit > 0 && paymentType === "invoice" && (
+                <div className={`p-4 rounded-xl border transition-all ${useCredit ? 'bg-green-50 border-green-200 shadow-inner' : 'bg-white border-gray-200'}`}>
+                    <div className="flex justify-between items-center mb-3">
+                        <div>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Customer Credit</p>
+                            <p className={`text-sm font-black ${useCredit ? 'text-green-700' : 'text-gray-700'}`}>₹{(fullCustomer.credit || 0).toLocaleString()}</p>
+                        </div>
+                        <button 
+                            type="button"
+                            onClick={() => {
+                                const newUseCredit = !useCredit;
+                                setUseCredit(newUseCredit);
+                                if (newUseCredit) {
+                                    // Auto-adjust amount
+                                    const totalPending = unpaidInvoices
+                                        .filter(i => selectedInvoiceIds.includes(i._id))
+                                        .reduce((s, i) => s + (i.pendingBalance || 0), 0);
+                                    const newAmount = Math.max(0, totalPending - (fullCustomer.credit || 0));
+                                    setFormData(f => ({ ...f, amount: newAmount.toFixed(2) }));
+                                }
+                            }}
+                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${useCredit ? 'bg-green-600 text-white shadow-lg' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                        >
+                            {useCredit ? 'Applied' : 'Apply Credit'}
+                        </button>
+                    </div>
+                    {useCredit && (
+                        <p className="text-[9px] text-green-600 font-bold italic">
+                            * System will utilize existing credit balance before charging cash.
+                        </p>
+                    )}
+                </div>
+              )}
 
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 space-y-4">
                   <div className="space-y-1.5">

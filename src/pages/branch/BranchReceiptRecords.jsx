@@ -14,6 +14,7 @@ export default function BranchReceiptRecords() {
   const [searchTerm, setSearchTerm] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [activeFilter, setActiveFilter] = useState("ALL"); // ALL, CASH, BANK, CHEQUE
 
   useEffect(() => {
     if (currentBranch?._id) fetchReceipts();
@@ -35,33 +36,41 @@ export default function BranchReceiptRecords() {
     }
   };
 
-  const filteredReceipts = receipts.filter(r => {
-    // 1. Term Filter
-    let matchesTerm = true;
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      const id = (r.receiptId || "").toLowerCase();
-      const inv = (r.originalInvoiceId || "").toLowerCase();
-      const cust = (r.customer?.name || "").toLowerCase();
-      matchesTerm = id.includes(searchLower) || inv.includes(searchLower) || cust.includes(searchLower);
-    }
+  const filteredReceipts = React.useMemo(() => {
+    return receipts.filter(r => {
+      // 1. Term Filter
+      let matchesTerm = true;
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const id = (r.receiptId || "").toLowerCase();
+        const inv = (r.originalInvoiceId || "").toLowerCase();
+        const cust = (r.customer?.name || "").toLowerCase();
+        matchesTerm = id.includes(searchLower) || inv.includes(searchLower) || cust.includes(searchLower);
+      }
 
-    // 2. Date Filter
-    let matchesDate = true;
-    const createdAt = new Date(r.createdAt);
-    if (startDate) {
-      const start = new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      if (createdAt < start) matchesDate = false;
-    }
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      if (createdAt > end) matchesDate = false;
-    }
+      // 2. Date Filter
+      let matchesDate = true;
+      const createdAt = new Date(r.createdAt);
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        if (createdAt < start) matchesDate = false;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (createdAt > end) matchesDate = false;
+      }
 
-    return matchesTerm && matchesDate;
-  });
+      // 3. Ledger/Mode Filter
+      let matchesFilter = true;
+      if (activeFilter === "CASH") matchesFilter = r.paymentMethod === "CASH";
+      else if (activeFilter === "BANK") matchesFilter = ["BANK_TRANSFER", "UPI", "CREDIT_CARD", "DEBIT_CARD"].includes(r.paymentMethod);
+      else if (activeFilter === "CHEQUE") matchesFilter = r.paymentMethod === "CHEQUE";
+
+      return matchesTerm && matchesDate && matchesFilter;
+    });
+  }, [receipts, searchTerm, startDate, endDate, activeFilter]);
 
   const formatDateTime = (dateString) => {
     return new Date(dateString).toLocaleString("en-IN", {
@@ -76,7 +85,7 @@ export default function BranchReceiptRecords() {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4">
+      <div className="w-full mx-auto px-3 sm:px-6 py-4">
         {/* HEADER */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-2xl shadow-lg p-8 mb-8">
           <div className="flex items-center justify-between">
@@ -141,6 +150,34 @@ export default function BranchReceiptRecords() {
           </div>
         </div>
 
+        {/* LEDGER FILTER BUTTONS */}
+        <div className="flex flex-wrap gap-4 mb-8">
+            <button 
+                onClick={() => setActiveFilter("CASH")}
+                className={`flex-1 min-w-[150px] py-4 rounded-2xl border-2 font-black uppercase tracking-widest text-xs transition-all shadow-sm ${activeFilter === "CASH" ? "bg-green-600 text-white border-green-600 shadow-green-200" : "bg-white text-gray-400 border-gray-100 hover:border-green-200"}`}
+            >
+                Cash Ledger
+            </button>
+            <button 
+                onClick={() => setActiveFilter("BANK")}
+                className={`flex-1 min-w-[150px] py-4 rounded-2xl border-2 font-black uppercase tracking-widest text-xs transition-all shadow-sm ${activeFilter === "BANK" ? "bg-purple-600 text-white border-purple-600 shadow-purple-200" : "bg-white text-gray-400 border-gray-100 hover:border-purple-200"}`}
+            >
+                Bank Receipt Ledger
+            </button>
+            <button 
+                onClick={() => setActiveFilter("CHEQUE")}
+                className={`flex-1 min-w-[150px] py-4 rounded-2xl border-2 font-black uppercase tracking-widest text-xs transition-all shadow-sm ${activeFilter === "CHEQUE" ? "bg-orange-600 text-white border-orange-600 shadow-orange-200" : "bg-white text-gray-400 border-gray-100 hover:border-orange-200"}`}
+            >
+                Cheque Ledger
+            </button>
+            <button 
+                onClick={() => setActiveFilter("ALL")}
+                className={`py-4 px-8 rounded-2xl border-2 font-black uppercase tracking-widest text-xs transition-all ${activeFilter === "ALL" ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-300 border-gray-100 hover:border-gray-200"}`}
+            >
+                Show All
+            </button>
+        </div>
+
         {/* MAIN TABLE */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
           {loading ? (
@@ -191,6 +228,11 @@ export default function BranchReceiptRecords() {
                         }`}>
                           {r.paymentMethod}
                         </span>
+                        {r.reference && (
+                          <p className="text-[9px] font-bold text-gray-400 mt-1 uppercase truncate max-w-[120px] mx-auto">
+                            {r.reference}
+                          </p>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <p className="text-lg font-black text-gray-900">₹{r.amount?.toLocaleString()}</p>

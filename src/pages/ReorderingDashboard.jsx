@@ -10,8 +10,7 @@ import {
   FaTimes,
   FaTimesCircle,
 } from "react-icons/fa";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { toast } from "react-toastify";
 import { API_BASE } from "../api";
 
 const ReorderingDashboard = () => {
@@ -329,15 +328,7 @@ const ReorderingDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 px-0 md:pl-20 pt-20 md:pt-4">
-      <ToastContainer
-        position="top-right"
-        autoClose={2500}
-        theme="colored"
-        toastStyle={{
-          background: "rgba(49, 155, 171, 0.85)",
-          borderRadius: "12px",
-        }}
-      />
+
 
       <div className="p-6 md:p-8">
         <div className="max-w-7xl">

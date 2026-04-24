@@ -125,10 +125,12 @@ export default function BranchReceipt() {
     });
   });
 
-  const allItems = [
-    ...Array.from(combinedInvoicesMap.values()),
-    ...generalReceipts.map(gr => ({ ...gr, rowType: "GENERAL_RECEIPT" }))
-  ].sort((a, b) => new Date(b.createdAt || b.invoiceDate) - new Date(a.createdAt || a.invoiceDate));
+  const allItems = React.useMemo(() => {
+    return [
+      ...Array.from(combinedInvoicesMap.values()),
+      ...generalReceipts.map(gr => ({ ...gr, rowType: "GENERAL_RECEIPT" }))
+    ].sort((a, b) => new Date(b.createdAt || b.invoiceDate) - new Date(a.createdAt || a.invoiceDate));
+  }, [invoices, generalReceipts]);
 
   const toggleExpandInvoice = (invoiceId) => {
     setExpandedInvoices((prev) => ({
@@ -155,17 +157,19 @@ export default function BranchReceipt() {
     fetchData();
   };
 
-  const filteredItems = allItems.filter(item => {
-    if (!searchTerm) return true;
-    
-    const searchLower = searchTerm.toLowerCase();
-    
-    const displayId = (item.invoiceNumber || item.invoiceId || item.receiptId || "").toString().toLowerCase();
-    const customerName = (typeof item.customer === "object" ? item.customer?.name : item.customer || "").toString().toLowerCase();
-    const totalAmount = (item.rowType === "ORDER" || item.rowType === "INVOICE" ? (item.grandTotal || 0) : (item.amount || 0)).toString().toLowerCase();
+  const filteredItems = React.useMemo(() => {
+    return allItems.filter(item => {
+      if (!searchTerm) return true;
+      
+      const searchLower = searchTerm.toLowerCase();
+      
+      const displayId = (item.invoiceNumber || item.invoiceId || item.receiptId || "").toString().toLowerCase();
+      const customerName = (typeof item.customer === "object" ? item.customer?.name : item.customer || "").toString().toLowerCase();
+      const totalAmount = (item.rowType === "ORDER" || item.rowType === "INVOICE" ? (item.grandTotal || 0) : (item.amount || 0)).toString().toLowerCase();
 
-    return displayId.includes(searchLower) || customerName.includes(searchLower) || totalAmount.includes(searchLower);
-  });
+      return displayId.includes(searchLower) || customerName.includes(searchLower) || totalAmount.includes(searchLower);
+    });
+  }, [allItems, searchTerm]);
 
   const getReceiptsForInvoice = (invoiceId) => {
     return receiptData[invoiceId]?.receipts || [];

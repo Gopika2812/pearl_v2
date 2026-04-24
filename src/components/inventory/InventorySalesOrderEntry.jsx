@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FaPlus, FaTrash } from "react-icons/fa";
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import InventoryAddCustomerModal from "./InventoryAddCustomerModal";
@@ -1315,21 +1315,7 @@ export default function InventorySalesOrderEntry({
   return (
     <div className="space-y-6 font-sans">
 
-      <ToastContainer
-        position="top-right"
-        autoClose={2500}
-        newestOnTop
-        closeOnClick
-        pauseOnHover
-        theme="colored"
-        toastStyle={{
-          background: "rgba(49, 155, 171, 0.85)",
-          color: "#fff",
-          backdropFilter: "blur(6px)",
-          borderRadius: "12px",
-          boxShadow: "0 8px 20px rgba(49,155,171,0.25)",
-        }}
-      />
+
 
       {/* ROW 1: HEADER, CUSTOMER & PROCESSORS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
