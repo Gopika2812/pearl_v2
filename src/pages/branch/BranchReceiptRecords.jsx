@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { FaFileAlt, FaSearch, FaArrowLeft } from "react-icons/fa";
+import { FaArrowLeft, FaFileAlt, FaSearch } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useBranch } from "../../context/BranchContext";
-import { useNavigate } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 
@@ -15,7 +15,6 @@ export default function BranchReceiptRecords() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [activeFilter, setActiveFilter] = useState("ALL"); // ALL, CASH, BANK, CHEQUE
-
   useEffect(() => {
     if (currentBranch?._id) fetchReceipts();
   }, [currentBranch]);
@@ -90,7 +89,7 @@ export default function BranchReceiptRecords() {
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-2xl shadow-lg p-8 mb-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <button 
+              <button
                 onClick={() => navigate("/branch/receipts")}
                 className="bg-white/20 hover:bg-white/30 p-3 rounded-xl transition"
               >
@@ -152,30 +151,30 @@ export default function BranchReceiptRecords() {
 
         {/* LEDGER FILTER BUTTONS */}
         <div className="flex flex-wrap gap-4 mb-8">
-            <button 
-                onClick={() => setActiveFilter("CASH")}
-                className={`flex-1 min-w-[150px] py-4 rounded-2xl border-2 font-black uppercase tracking-widest text-xs transition-all shadow-sm ${activeFilter === "CASH" ? "bg-green-600 text-white border-green-600 shadow-green-200" : "bg-white text-gray-400 border-gray-100 hover:border-green-200"}`}
-            >
-                Cash Ledger
-            </button>
-            <button 
-                onClick={() => setActiveFilter("BANK")}
-                className={`flex-1 min-w-[150px] py-4 rounded-2xl border-2 font-black uppercase tracking-widest text-xs transition-all shadow-sm ${activeFilter === "BANK" ? "bg-purple-600 text-white border-purple-600 shadow-purple-200" : "bg-white text-gray-400 border-gray-100 hover:border-purple-200"}`}
-            >
-                Bank Receipt Ledger
-            </button>
-            <button 
-                onClick={() => setActiveFilter("CHEQUE")}
-                className={`flex-1 min-w-[150px] py-4 rounded-2xl border-2 font-black uppercase tracking-widest text-xs transition-all shadow-sm ${activeFilter === "CHEQUE" ? "bg-orange-600 text-white border-orange-600 shadow-orange-200" : "bg-white text-gray-400 border-gray-100 hover:border-orange-200"}`}
-            >
-                Cheque Ledger
-            </button>
-            <button 
-                onClick={() => setActiveFilter("ALL")}
-                className={`py-4 px-8 rounded-2xl border-2 font-black uppercase tracking-widest text-xs transition-all ${activeFilter === "ALL" ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-300 border-gray-100 hover:border-gray-200"}`}
-            >
-                Show All
-            </button>
+          <button
+            onClick={() => setActiveFilter("CASH")}
+            className={`flex-1 min-w-[150px] py-4 rounded-2xl border-2 font-black uppercase tracking-widest text-xs transition-all shadow-sm ${activeFilter === "CASH" ? "bg-green-600 text-white border-green-600 shadow-green-200" : "bg-white text-gray-400 border-gray-100 hover:border-green-200"}`}
+          >
+            Cash Ledger
+          </button>
+          <button
+            onClick={() => setActiveFilter("BANK")}
+            className={`flex-1 min-w-[150px] py-4 rounded-2xl border-2 font-black uppercase tracking-widest text-xs transition-all shadow-sm ${activeFilter === "BANK" ? "bg-purple-600 text-white border-purple-600 shadow-purple-200" : "bg-white text-gray-400 border-gray-100 hover:border-purple-200"}`}
+          >
+            Bank Receipt Ledger
+          </button>
+          <button
+            onClick={() => setActiveFilter("CHEQUE")}
+            className={`flex-1 min-w-[150px] py-4 rounded-2xl border-2 font-black uppercase tracking-widest text-xs transition-all shadow-sm ${activeFilter === "CHEQUE" ? "bg-orange-600 text-white border-orange-600 shadow-orange-200" : "bg-white text-gray-400 border-gray-100 hover:border-orange-200"}`}
+          >
+            Cheque Ledger
+          </button>
+          <button
+            onClick={() => setActiveFilter("ALL")}
+            className={`py-4 px-8 rounded-2xl border-2 font-black uppercase tracking-widest text-xs transition-all ${activeFilter === "ALL" ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-300 border-gray-100 hover:border-gray-200"}`}
+          >
+            Show All
+          </button>
         </div>
 
         {/* MAIN TABLE */}
@@ -221,11 +220,10 @@ export default function BranchReceiptRecords() {
                         <p className="font-semibold text-gray-800">{r.customer?.name || "N/A"}</p>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase ${
-                          r.paymentMethod === 'CASH' ? 'bg-green-100 text-green-700' :
-                          r.paymentMethod === 'CHEQUE' ? 'bg-orange-100 text-orange-700' :
-                          'bg-purple-100 text-purple-700'
-                        }`}>
+                        <span className={`text-[10px] font-black px-2 py-1 rounded-md uppercase ${r.paymentMethod === 'CASH' ? 'bg-green-100 text-green-700' :
+                            r.paymentMethod === 'CHEQUE' ? 'bg-orange-100 text-orange-700' :
+                              'bg-purple-100 text-purple-700'
+                          }`}>
                           {r.paymentMethod}
                         </span>
                         {r.reference && (
