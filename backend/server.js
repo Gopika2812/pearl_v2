@@ -56,6 +56,7 @@ import warehouseRoutes from "./routes/warehouseRoutes.js";
 import ledgerRoutes from "./routes/ledgerRoutes.js";
 import tokenRoutes from "./routes/tokenRoutes.js";
 import followUpRoutes from "./routes/followUpRoutes.js";
+import deliveryReceiptRoutes from "./routes/deliveryReceiptRoutes.js";
 
 
 
@@ -136,6 +137,7 @@ app.use("/api/price-requests", priceRequestRoutes);
 app.use("/api/ledgers", ledgerRoutes);
 app.use("/api/tokens", tokenRoutes);
 app.use("/api/follow-ups", followUpRoutes);
+app.use("/api/delivery-receipts", deliveryReceiptRoutes);
 
 
 
