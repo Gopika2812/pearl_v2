@@ -1057,7 +1057,11 @@ router.get("", async (req, res) => {
       .populate("customer.customerId", "name whatsapp")
       .populate("salesOrderId");
 
-    // 🔥 ITEMS are now included by default to fix Receipt Management visibility
+    // ⚡ SPEED OPTIMIZATION: If full items are not requested, only return their IDs to calculate length
+    if (includeItems !== "true") {
+      queryExec = queryExec.select({ items: { _id: 1 }, invoiceNumber: 1, invoiceDate: 1, customer: 1, grandTotal: 1, status: 1, branchId: 1, salesOrderId: 1, createdAt: 1 });
+    }
+
     const invoices = await queryExec
       .sort({ invoiceDate: -1, createdAt: -1 })
       .skip(skip)

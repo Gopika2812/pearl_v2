@@ -46,8 +46,8 @@ export default function BranchReceipt() {
       setLoading(true);
       console.log("Fetching Branch Receipts for:", currentBranch?._id);
       
-      // 1. Fetch Sales Invoices (High capacity for full history)
-      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&includeItems=true&limit=1000`, {
+      // 1. Fetch Sales Invoices (High capacity, Slimmed data)
+      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&limit=1000`, {
         headers: { "Content-Type": "application/json" },
       });
       const invResult = await invResponse.json();
@@ -68,11 +68,11 @@ export default function BranchReceipt() {
         const batchResult = await batchResponse.json();
         if (batchResult.success) {
           const summary = batchResult.data;
-          const newBalances = {};
+          const newReceiptData = {};
           Object.keys(summary).forEach(id => {
-            newBalances[id] = { totalReceived: summary[id], pending: 0 }; // pending will be recalculated in render
+            newReceiptData[id] = { totalReceived: summary[id], pending: 0 }; 
           });
-          setBalances(newBalances);
+          setReceiptData(newReceiptData);
         }
       }
     } catch (error) {
