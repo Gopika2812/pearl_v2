@@ -211,25 +211,25 @@ export default function BranchProductConfig() {
     });
   };
 
-  const handleSave = async () => {
-    if (!selectedProduct) return toast.warning("Select a product to save configuration");
+  const handleSave = async (id) => {
     setIsSaving(true);
-
     try {
-      const res = await fetchWithAuth(`${API_BASE}/products/${selectedProduct}`, {
+      const res = await fetchWithAuth(`${API_BASE}/products/${id}`, {
         method: "PUT",
         body: JSON.stringify({
-          productGroup: config.productGroup,
-          productCategories: config.productCategories,
-          unitConversion: config.unitConversion,
-          openingQty: Number(config.openingQty),
-          manualOpeningDate: config.manualOpeningDate
+          name: editConfig.name,
+          productGroup: editConfig.productGroup,
+          productCategories: editConfig.productCategories,
+          unitConversion: editConfig.unitConversion,
+          openingQty: Number(editConfig.openingQty),
+          manualOpeningDate: editConfig.manualOpeningDate
         })
       });
 
       if (res.ok) {
-        toast.success("Product configuration updated successfully!");
-        fetchProductsByGroup(selectedGroup, debouncedSearch); // Refresh the group list
+        toast.success("Updated successfully!");
+        fetchProductsByGroup(selectedGroup, debouncedSearch);
+        cancelEdit();
       } else {
         const error = await res.json();
         throw new Error(error.message || "Failed to update");
@@ -238,7 +238,6 @@ export default function BranchProductConfig() {
       toast.error(err.message || "Server Error while saving");
     } finally {
       setIsSaving(false);
-      setShowEditModal(false);
     }
   };
 

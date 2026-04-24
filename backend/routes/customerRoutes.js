@@ -32,7 +32,6 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: "Excel file required" });
     }
-
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
     }
@@ -106,7 +105,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     const existingCustomers = await Customer.find({ branchId }, { name: 1, whatsapp: 1 });
     // Normalize DB names: lowercase and collapse multiple spaces into one
     const nameMap = new Map(existingCustomers.map(c => [
-      c.name.toLowerCase().replace(/\s+/g, " ").trim(), 
+      c.name.toLowerCase().replace(/\s+/g, " ").trim(),
       c._id
     ]));
     const whatsappMap = new Map(existingCustomers.filter(c => c.whatsapp).map(c => [c.whatsapp.replace(/\D/g, ""), c._id]));
@@ -161,17 +160,17 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       if (normalizedRow.state !== undefined) customerData.state = normalizedRow.state;
       if (normalizedRow.gstin !== undefined) customerData.gstin = normalizedRow.gstin;
       if (normalizedRow.creditlimit !== undefined) {
-          const rawVal = String(normalizedRow.creditlimit).trim();
-          if (rawVal === "") {
-              customerData.creditLimit = 0; // Clear it if empty in Excel
-          } else {
-              const sanitizedVal = rawVal.replace(/[^0-9.-]+/g, "");
-              customerData.creditLimit = parseFloat(sanitizedVal) || 0;
-          }
+        const rawVal = String(normalizedRow.creditlimit).trim();
+        if (rawVal === "") {
+          customerData.creditLimit = 0; // Clear it if empty in Excel
+        } else {
+          const sanitizedVal = rawVal.replace(/[^0-9.-]+/g, "");
+          customerData.creditLimit = parseFloat(sanitizedVal) || 0;
+        }
       }
       if (normalizedRow.creditdays !== undefined || normalizedRow.creditlimitdays !== undefined) {
-          const rawVal = (normalizedRow.creditdays || normalizedRow.creditlimitdays || "").trim();
-          customerData.creditLimitDays = rawVal === "" ? 0 : (parseInt(rawVal) || 0);
+        const rawVal = (normalizedRow.creditdays || normalizedRow.creditlimitdays || "").trim();
+        customerData.creditLimitDays = rawVal === "" ? 0 : (parseInt(rawVal) || 0);
       }
 
       // 💰 FINANCIAL CALCULATIONS (ONLY in opening_balance mode)
@@ -204,18 +203,18 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       if (normalizedRow.salesowner && salesOwnerMap.has(normalizedRow.salesowner.toLowerCase())) {
         customerData.salesOwner = salesOwnerMap.get(normalizedRow.salesowner.toLowerCase());
       }
-      
+
       // Category mapping
       const catKeyRaw = normalizedRow.customercategory || normalizedRow.customercategories || normalizedRow.category;
       if (catKeyRaw !== undefined) {
         const catKey = String(catKeyRaw).trim();
         if (catKey === "") {
-            customerData.customerCategories = [];
-            customerData.customerCategory = null;
+          customerData.customerCategories = [];
+          customerData.customerCategory = null;
         } else if (customerCategoryMap.has(catKey.toLowerCase())) {
-            const catId = customerCategoryMap.get(catKey.toLowerCase());
-            customerData.customerCategories = [catId];
-            customerData.customerCategory = catId;
+          const catId = customerCategoryMap.get(catKey.toLowerCase());
+          customerData.customerCategories = [catId];
+          customerData.customerCategory = catId;
         }
       }
 
@@ -224,12 +223,12 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       if (groupKeyRaw !== undefined) {
         const groupKey = String(groupKeyRaw).trim();
         if (groupKey === "") {
-            customerData.customerGroups = [];
-            customerData.customerGroup = null;
+          customerData.customerGroups = [];
+          customerData.customerGroup = null;
         } else if (customerGroupMap.has(groupKey.toLowerCase())) {
-            const groupId = customerGroupMap.get(groupKey.toLowerCase());
-            customerData.customerGroups = [groupId];
-            customerData.customerGroup = groupId;
+          const groupId = customerGroupMap.get(groupKey.toLowerCase());
+          customerData.customerGroups = [groupId];
+          customerData.customerGroup = groupId;
         }
       }
 
@@ -273,7 +272,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       updatedCount,
       skippedCount: skipped.length,
       skipped,
-      info: updateMode === "info_only" 
+      info: updateMode === "info_only"
         ? "Only customer information was updated. Financial balances were NOT touched."
         : "Balances adjusted as of March 31st cutoff. April transactions were preserved."
     });
@@ -504,14 +503,14 @@ router.get("/", async (req, res) => {
     const skip = (pageNum - 1) * pageSize;
 
     // Build robust filter with branchId and optional multi-column criteria
-    const { 
-      customerGroupId, 
-      customerCategoryId, 
-      riskStatus, 
-      sortBy = "createdAt", 
-      sortOrder = "desc" 
+    const {
+      customerGroupId,
+      customerCategoryId,
+      riskStatus,
+      sortBy = "createdAt",
+      sortOrder = "desc"
     } = req.query;
-    
+
     const filter = { branchId: branchObjectId };
     const andConditions = [];
 
@@ -541,13 +540,13 @@ router.get("/", async (req, res) => {
     if (riskStatus && riskStatus !== "All") {
       if (riskStatus === "safe_zone") {
         // Safe Zone filter includes customers with explicit 'safe_zone' or missing status
-        andConditions.push({ 
+        andConditions.push({
           $or: [
             { riskStatus: "safe_zone" },
             { riskStatus: { $exists: false } },
             { riskStatus: null },
             { riskStatus: "" }
-          ] 
+          ]
         });
       } else {
         andConditions.push({ riskStatus });
@@ -1120,12 +1119,12 @@ router.get("/:id/ledger", async (req, res) => {
       status: "FINALIZED",
       invoiceDate: { $gte: start }
     })
-    .select("grandTotal invoiceDate invoiceNumber salesOrderId status generatedBy deliveryPerson")
-    .populate({
-      path: "salesOrderId",
-      select: "deliveryMan billingPerson",
-      populate: { path: "deliveryMan", select: "name" }
-    });
+      .select("grandTotal invoiceDate invoiceNumber salesOrderId status generatedBy deliveryPerson")
+      .populate({
+        path: "salesOrderId",
+        select: "deliveryMan billingPerson",
+        populate: { path: "deliveryMan", select: "name" }
+      });
 
     // Credits: Receipts after startDate
     const receiptsAfterStart = await Receipt.find({
@@ -1140,7 +1139,7 @@ router.get("/:id/ledger", async (req, res) => {
       status: "Created",
       date: { $gte: start }
     })
-    .select("grandTotal date creditNoteId reasonForReturn");
+      .select("grandTotal date creditNoteId reasonForReturn");
 
     // 🧮 Opening Balance = Current_Balance - (Debits after Start) + (Credits after Start)
     const totalDebitsAfterStart = invoicesAfterStart.reduce((sum, s) => sum + (s.grandTotal || 0), 0);
