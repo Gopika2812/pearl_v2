@@ -145,10 +145,11 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                 <thead>
                   <tr>
                     <th style="width: 5%; text-align: center;">#</th>
-                    <th style="width: 37%;">${isCN ? 'Returned Product' : 'Product Name'}</th>
+                    <th style="width: 32%;">${isCN ? 'Returned Product' : 'Product Name'}</th>
                     <th>HSN</th>
                     <th style="text-align: right;">Qty</th>
                     <th style="text-align: right;">Rate</th>
+                    <th style="text-align: right;">Disc %</th>
                     <th style="text-align: right;">Total</th>
                   </tr>
                 </thead>
@@ -160,7 +161,8 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                       <td>${item.hsn || "-"}</td>
                       <td style="text-align: right;">${item.qty} ${item.unit || ""}</td>
                       <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
-                      <td style="text-align: right;">₹${(item.qty * item.sellingPrice).toFixed(2)}</td>
+                      <td style="text-align: right;">${item.discountPercent || 0}%</td>
+                      <td style="text-align: right;">₹${(item.total || (item.qty * item.sellingPrice)).toFixed(2)}</td>
                     </tr>
                   `).join("")}
                 </tbody>

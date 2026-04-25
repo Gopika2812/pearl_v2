@@ -98,39 +98,8 @@ router.get("/", async (req, res) => {
       .populate("originalPurchaseOrderId", "invoiceId")
       .sort({ createdAt: -1 });
 
-    // ⚡ LIVE REPAIR: Populate missing Invoice Ref/Date and fix missing qty for old records
-    let repaired = false;
-    for (const dn of debitNotes) {
-      // 1. Repair missing Invoice Dates (Standard Mongoose)
-      if (!dn.originalInvoiceDate && dn.originalPurchaseOrderId) {
-        const po = await PurchaseOrder.findById(dn.originalPurchaseOrderId);
-        if (po) {
-          dn.originalInvoiceId = po.vendorBillNo || po.invoiceId || dn.originalInvoiceId;
-          dn.originalInvoiceDate = po.vendorDate || po.date;
-          repaired = true;
-        }
-      }
-
-      // 2. ⚡ FINANCIAL RECONSTRUCTION: Fix missing qty by reverse-calculating from totals
-      let qtyFixed = false;
-      const updatedItems = dn.items.map((item) => {
-        // If qty is missing/0 but we have a total and price, calculate it
-        if ((item.qty === undefined || item.qty === null || item.qty === 0) && (item.total > 0 && item.purchasePrice > 0)) {
-          const calculatedQty = Math.round(item.total / item.purchasePrice);
-          if (calculatedQty > 0) {
-            qtyFixed = true;
-            item.qty = calculatedQty;
-          }
-        }
-        return item;
-      });
-
-      if (qtyFixed || repaired) {
-        dn.markModified('items');
-        await dn.save();
-        repaired = true;
-      }
-    }
+    // 🔥 PERFORMANCE FIX: Removed the heavy financial-reconstruction loop.
+    // This was checking/saving every record on every fetch, which is very slow.
     
     if (repaired) {
         // Re-fetch to get fresh data after repairs

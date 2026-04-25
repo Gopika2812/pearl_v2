@@ -238,28 +238,23 @@ const BranchSalesInvoices = () => {
       [invoiceId]: isExpanding,
     }));
 
-    // If expanding and items are missing (due to Thin Fetching), fetch them now!
+    // If expanding, always try to fetch full details to ensure items/QR/EWB links are fresh
     if (isExpanding) {
-        const inv = invoices.find(i => i._id === invoiceId);
-        if (inv && (!inv.items || inv.items.length === 0)) {
-            setFetchingDetails(prev => ({ ...prev, [invoiceId]: true }));
-            try {
-                const res = await fetchWithAuth(`${API_BASE}/invoices/${invoiceId}`);
-                const data = await res.json();
-                
-                // Allow both wrapped {success, data} and direct object response
-                const invoiceData = data.success ? data.data : data;
-                
-                if (invoiceData && invoiceData.items) {
-                    // Update the local invoices array with the full data
-                    setInvoices(prev => prev.map(i => i._id === invoiceId ? invoiceData : i));
-                }
-            } catch (err) {
-                console.error("Failed to fetch invoice details:", err);
-                toast.error("Failed to load invoice items");
-            } finally {
-                setFetchingDetails(prev => ({ ...prev, [invoiceId]: false }));
+        setFetchingDetails(prev => ({ ...prev, [invoiceId]: true }));
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/invoices/${invoiceId}`);
+            const data = await res.json();
+            const invoiceData = data.success ? data.data : data;
+            
+            if (invoiceData) {
+                // Force update with fresh data
+                setInvoices(prev => prev.map(i => i._id === invoiceId ? { ...i, ...invoiceData } : i));
             }
+        } catch (err) {
+            console.error("Failed to fetch invoice details:", err);
+            toast.error("Failed to load invoice items");
+        } finally {
+            setFetchingDetails(prev => ({ ...prev, [invoiceId]: false }));
         }
     }
   };
@@ -351,6 +346,10 @@ const BranchSalesInvoices = () => {
       if (data.success) {
         toast.success(`✅ E-Invoice ${data.ewayBillNo ? "& E-Way Bill " : ""}Generated Successfully`);
         setShowTransportModal(null);
+        // 🔥 FORCE RELOAD THIS INVOICE IN STATE
+        if (data.data) {
+          setInvoices(prev => prev.map(i => i._id === invoice._id ? { ...i, ...data.data } : i));
+        }
         fetchInvoices();
       } else {
         toast.error(`❌ Error: ${data.error || data.message || "Failed to generate"}`);
@@ -870,26 +869,23 @@ const BranchSalesInvoices = () => {
                                   )}
                                 </button>
                               )}
-                              {isFieldAllowed("action_pdf") && inv.einvoiceStatus === "GENERATED" && (
+                              {isFieldAllowed("action_pdf") && (inv.einvoiceStatus === "GENERATED" || inv.irn) && (
                                 <div className="flex gap-1">
                                   <button
                                     onClick={async (e) => {
                                       e.stopPropagation();
                                       let fullInv = inv;
-                                      if (!inv.items || inv.items.length === 0) {
-                                        try {
-                                          setFetchingDetails(prev => ({ ...prev, [inv._id]: true }));
-                                          const res = await fetchWithAuth(`${API_BASE}/invoices/${inv._id}`);
-                                          const data = await res.json();
-                                          fullInv = data.success ? data.data : data;
-                                          // Also update main list so we don't have to fetch again
-                                          setInvoices(prev => prev.map(i => i._id === inv._id ? fullInv : i));
-                                        } catch (err) {
-                                          toast.error("Failed to load full invoice details");
-                                          return;
-                                        } finally {
-                                          setFetchingDetails(prev => ({ ...prev, [inv._id]: false }));
-                                        }
+                                      // ALWAYS fetch fresh details for PDF/QR to ensure links are valid
+                                      try {
+                                        setFetchingDetails(prev => ({ ...prev, [inv._id]: true }));
+                                        const res = await fetchWithAuth(`${API_BASE}/invoices/${inv._id}`);
+                                        const data = await res.json();
+                                        fullInv = data.success ? data.data : data;
+                                        setInvoices(prev => prev.map(i => i._id === inv._id ? { ...i, ...fullInv } : i));
+                                      } catch (err) {
+                                        console.warn("Failed to refresh PDF details, using local data");
+                                      } finally {
+                                        setFetchingDetails(prev => ({ ...prev, [inv._id]: false }));
                                       }
                                       setShowEInvoiceModal(fullInv);
                                     }}
@@ -899,15 +895,20 @@ const BranchSalesInvoices = () => {
                                     {fetchingDetails[inv._id] ? <FaSync className="animate-spin" size={12} /> : <FaFileAlt size={12} />}
                                     PDF
                                   </button>
-                                  {inv.ewayBillPdfUrl && (
-                                    <a
-                                      href={`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
+                                  {(inv.ewayBillPdfUrl || inv.ewayBillNo) && (
+                                    <button
+                                      onClick={() => {
+                                        if (inv.ewayBillPdfUrl) {
+                                          window.open(`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`, "_blank");
+                                        } else {
+                                          toast.info("E-Way Bill ready but PDF link pending. Please try again in 5 seconds.");
+                                          fetchInvoices();
+                                        }
+                                      }}
                                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all shadow-sm"
                                     >
                                       🚚 EWB
-                                    </a>
+                                    </button>
                                   )}
                                 </div>
                               )}
@@ -952,12 +953,12 @@ const BranchSalesInvoices = () => {
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {(inv.items || [])
-                                        .filter(item => Number(item.qty || 0) > 0)
+                                      {(inv.items?.length > 0 ? inv.items : (inv.salesOrderId?.invoiceItems || []))
+                                        .filter(item => item && (Number(item.qty || 0) > 0 || (item.total || 0) > 0 || Number(item.confirmedQty || 0) > 0))
                                         .map((item, idx) => (
                                           <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition">
-                                            <td className="py-3 font-bold text-slate-700">{item.name}</td>
-                                            <td className="py-3 text-center font-black text-indigo-600 bg-indigo-50/50 rounded-lg">{item.qty} {item.unit || "Units"}</td>
+                                            <td className="py-3 font-bold text-slate-700">{item.name || "Unknown Product"}</td>
+                                            <td className="py-3 text-center font-black text-indigo-600 bg-indigo-50/50 rounded-lg">{item.qty || 0} {item.unit || "Units"}</td>
                                             <td className="py-3 text-right">
                                               <div className="text-xs font-bold text-slate-400">{item.discountPercent || 0}%</div>
                                               <div className="text-[10px] text-red-500 font-black">-₹{(item.discountAmount || 0).toLocaleString()}</div>
@@ -976,7 +977,9 @@ const BranchSalesInvoices = () => {
                                     <div className="space-y-3 text-xs">
                                       <div className="flex justify-between border-b border-slate-50 pb-2">
                                         <span className="text-slate-500 font-bold uppercase tracking-tighter">Subtotal</span>
-                                        <span className="font-black text-slate-800">₹{(inv.subtotal || 0).toLocaleString()}</span>
+                                        <span className="font-black text-slate-800">
+                                          ₹{((inv.subtotal || 0) > 0 ? inv.subtotal : (inv.items || []).reduce((acc, it) => acc + (it.total || 0), 0) / 1.12).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                        </span>
                                       </div>
                                       <div className="flex justify-between border-b border-slate-50 pb-2">
                                         <span className="text-slate-500 font-bold uppercase tracking-tighter">Generated At</span>

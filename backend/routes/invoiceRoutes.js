@@ -1057,9 +1057,29 @@ router.get("", async (req, res) => {
       .populate("customer.customerId", "name whatsapp")
       .populate("salesOrderId");
 
-    // ⚡ SPEED OPTIMIZATION: If full items are not requested, only return their IDs to calculate length
+    // ⚡ SPEED OPTIMIZATION: If full items are not requested, return essential fields for the list view
     if (includeItems !== "true") {
-      queryExec = queryExec.select({ items: { _id: 1 }, invoiceNumber: 1, invoiceDate: 1, customer: 1, grandTotal: 1, status: 1, branchId: 1, salesOrderId: 1, createdAt: 1 });
+      queryExec = queryExec.select({ 
+        items: { _id: 1 }, 
+        invoiceNumber: 1, 
+        invoiceDate: 1, 
+        customer: 1, 
+        grandTotal: 1, 
+        subtotal: 1,
+        totalTax: 1,
+        commonDiscount: 1,
+        transportCharge: 1,
+        extraExpenseAmount: 1,
+        einvoiceStatus: 1,
+        ewayBillNo: 1,
+        irn: 1,
+        billingPerson: 1,
+        generatedBy: 1,
+        status: 1, 
+        branchId: 1, 
+        salesOrderId: 1, 
+        createdAt: 1 
+      });
     }
 
     const invoices = await queryExec
@@ -1093,8 +1113,7 @@ router.get("/:id", async (req, res) => {
       .populate("customer.customerId")
       .populate("salesOrderId")
       .populate("branchId")
-      .populate("items.productId") // ✨ NEW: Needed for HSN fallback in Credit Notes
-      .select("+items")
+      .populate("items.productId")
       .lean();
 
     if (!invoice) return res.status(404).json({ success: false, message: "Invoice not found" });

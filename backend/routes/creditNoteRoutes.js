@@ -149,69 +149,8 @@ router.get("/", async (req, res) => {
       .populate("branchId")
       .sort({ createdAt: -1 });
 
-    // ⚡ LIVE REPAIR: Ensure all notes have addresses and GSTIN snapshots
-    // This fixes older records on-the-fly when viewed in the list
-    for (let cn of creditNotes) {
-      let changed = false;
-      if (!cn.seller?.gstin || cn.customer?.address === "Address Not Provided" || !cn.customer?.gstin || cn.customer.gstin === "URP" || cn.items.some(it => !it.hsn)) {
-        const branch = cn.branchId;
-        const customer = await Customer.findById(cn.customer?.customerId);
-        
-        // Repair Seller/Customer snapshots
-        if (branch && (!cn.seller?.gstin || !cn.seller?.address)) {
-          cn.seller = {
-            name: branch.name || "PEARL AGENCY",
-            address: branch.address || "Address Not Provided",
-            gstin: branch.gstin || "N/A",
-            state: branch.state || "TAMIL NADU",
-            stateCode: branch.stateCode || "33",
-            pincode: branch.pincode || "",
-            phone: branch.phone || "",
-          };
-          changed = true;
-        }
-
-        if (customer && (!cn.customer?.address || !cn.customer?.gstin || cn.customer.gstin === "URP")) {
-          cn.customer = {
-            customerId: customer._id,
-            name: customer.name,
-            address: customer.address || "",
-            gstin: (customer.gstin && customer.gstin.trim()) ? customer.gstin : "URP",
-            state: customer.state || "TAMIL NADU",
-            stateCode: customer.stateCode || "33",
-            pincode: customer.pincode || "",
-            district: customer.district || "",
-          };
-          changed = true;
-        }
-
-        // 🔍 REPAIR HSN CODES
-        for (let item of cn.items) {
-          if (!item.hsn && item.productId) {
-            const product = await Product.findById(item.productId);
-            if (product) {
-              item.hsn = product.hsnCode || product.hsn || "";
-              changed = true;
-            }
-          }
-        }
-
-        // 🔍 RETROACTIVE INVOICE DATE REPAIR
-        if (!cn.originalInvoiceDate && cn.originalInvoiceId && cn.originalInvoiceId !== "STANDALONE") {
-          const Invoice = mongoose.model("Invoice");
-          const sourceInv = await Invoice.findOne({ invoiceNumber: cn.originalInvoiceId, branchId: cn.branchId });
-          if (sourceInv) {
-            cn.originalInvoiceDate = sourceInv.invoiceDate;
-            changed = true;
-          }
-        }
-
-        if (changed) {
-          await cn.save();
-          console.log(`✅ [LIST REPAIR] Fixed snapshots/HSN for ${cn.creditNoteId}`);
-        }
-      }
-    }
+    // 🔥 PERFORMANCE FIX: Removed the heavy live-repair loop that was checking every record on every fetch.
+    // Repairs should be handled via a dedicated migration script or on-demand for single records.
 
     res.json({ success: true, data: creditNotes });
   } catch (error) {
