@@ -1139,9 +1139,11 @@ router.get("/:id/ledger", async (req, res) => {
       "customer.customerId": id,
       status: { $in: ["confirmed", "bounced", "cancelled"] },
       createdAt: { $gte: start }
-    }).select("amount createdAt receiptId paymentMethod originalInvoiceId status generatedBy cancelledBy cancelReason")
+    }).select("amount createdAt receiptId paymentMethod originalInvoiceId relatedOrders originalSalesOrderId status generatedBy cancelledBy cancelReason")
       .populate("generatedBy", "name")
-      .populate("cancelledBy", "name");
+      .populate("cancelledBy", "name")
+      .populate("originalSalesOrderId", "salesInvoiceId invoiceId")
+      .populate("relatedOrders.salesOrderId", "salesInvoiceId invoiceId");
 
     // Credits: Credit Notes after startDate
     const cnAfterStart = await CreditNote.find({
@@ -1194,7 +1196,11 @@ router.get("/:id/ledger", async (req, res) => {
           id: `rcp-${r._id}`,
           date: r.createdAt,
           type: r.status === "bounced" ? "BOUNCED" : (r.status === "cancelled" ? "CANCELLED" : "RECEIPT"),
-          particulars: `${r.status === "bounced" ? "BOUNCED: " : (r.status === "cancelled" ? "CANCELLED: " : "Receipt: ")}${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})${r.originalInvoiceId ? ` - for Inv: ${r.originalInvoiceId}` : ""}${r.status === 'cancelled' ? ` [By: ${canceller}${r.cancelReason ? ` | Reason: ${r.cancelReason}` : ""}]` : ""}`,
+          particulars: `${r.status === "bounced" ? "BOUNCED: " : (r.status === "cancelled" ? "CANCELLED: " : "Receipt: ")}${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})${
+            r.relatedOrders && r.relatedOrders.length > 0 
+              ? ` - for Invoices: ${r.relatedOrders.map(ro => ro.salesOrderId?.salesInvoiceId || ro.salesOrderId?.invoiceId || ro.invoiceId).join(", ")}`
+              : (r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId ? ` - for Inv: ${r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId}` : "")
+          }${r.status === 'cancelled' ? ` [By: ${canceller}${r.cancelReason ? ` | Reason: ${r.cancelReason}` : ""}]` : ""}`,
           debit: r.status === "bounced" ? (r.amount || 0) : 0,
           credit: (r.status === "bounced" || r.status === "cancelled") ? 0 : (r.amount || 0),
           originalAmount: r.amount || 0,

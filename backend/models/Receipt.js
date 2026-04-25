@@ -7,12 +7,22 @@ const receiptSchema = new mongoose.Schema(
     generatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "BranchUser", required: false },
 
     // Reference to original sales order (Optional for general debit receipts)
+    // For multiple bills, we use relatedOrders array
     originalSalesOrderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "SalesOrder",
       required: false,
     },
     originalInvoiceId: { type: String, required: false },
+
+    // 🔥 NEW: For single receipt covering multiple bills
+    relatedOrders: [
+      {
+        salesOrderId: { type: mongoose.Schema.Types.ObjectId, ref: "SalesOrder" },
+        invoiceId: String,
+        amount: Number,
+      }
+    ],
 
     // Customer Info
     customer: {
