@@ -812,7 +812,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                         <div style="font-weight: bold; color: #b91c1c;">${item.discountPercent || 0}%</div>
                         <div style="font-size: 8px; color: #64748b;">-₹${(item.discountAmount || 0).toFixed(2)}</div>
                       </td>
-                      <td style="text-align: right; font-weight: bold; color: #000;">₹${(item.total || ((item.qty || item.confirmedQty) * item.sellingPrice - (item.discountAmount || 0))).toFixed(2)}</td>
+                      <td style="text-align: right; font-weight: bold; color: #000;">₹${((item.qty || item.confirmedQty) * (item.sellingPrice || 0)).toFixed(2)}</td>
                     </tr>
                   `).join("")}
                 </tbody>
