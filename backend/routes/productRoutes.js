@@ -543,7 +543,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       // 💰 STOCK AUDIT LOGIC (SIMPLE REPLACE MODE)
-      const rawQty = normalizedRow.totalqty || normalizedRow.qty || normalizedRow.openingquantity || normalizedRow.openingstock || "";
+      const rawQty = normalizedRow.totalqty || normalizedRow.qty || normalizedRow.openingquantity || normalizedRow.openingstock || normalizedRow.closingqty || "";
       if (rawQty !== "") {
         const qty = parseFloat(String(rawQty).replace(/[^0-9.-]+/g, "")) || 0;
         productData.totalQty = Math.round(qty * 100) / 100;
@@ -871,10 +871,10 @@ router.put("/:id", auth, async (req, res) => {
           { $group: { _id: null, total: { $sum: "$invoiceItems.qty" } } }
         ]),
         DebitNote.aggregate([
-          { $match: { branchId: branchOid, status: "confirmed", "items.productId": oldProduct._id, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+          { $match: { branchId: branchOid, status: "Created", "items.productId": oldProduct._id, createdAt: { $gt: HARD_ANCHOR_DATE } } },
           { $unwind: "$items" },
           { $match: { "items.productId": oldProduct._id } },
-          { $group: { _id: null, total: { $sum: "$items.returnedQty" } } }
+          { $group: { _id: null, total: { $sum: "$items.qty" } } }
         ]),
         CreditNote.aggregate([
           { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, "items.productId": oldProduct._id, createdAt: { $gt: HARD_ANCHOR_DATE } } },
@@ -1077,10 +1077,10 @@ router.get("/available/:productId", async (req, res) => {
         { $group: { _id: null, total: { $sum: "$invoiceItems.qty" } } }
       ]),
       DebitNote.aggregate([
-        { $match: { branchId: branchOid, status: "confirmed", "items.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: "Created", "items.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         { $match: { "items.productId": pOid } },
-        { $group: { _id: null, total: { $sum: "$items.returnedQty" } } }
+        { $group: { _id: null, total: { $sum: "$items.qty" } } }
       ]),
       CreditNote.aggregate([
         { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, "items.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
@@ -1161,12 +1161,12 @@ router.get("/stock-group-summary", async (req, res) => {
         } }
       ]),
       DebitNote.aggregate([
-        { $match: { branchId: branchOid, status: "confirmed", date: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: "Created", date: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         { $group: { 
             _id: "$items.productId", 
-            outBeforeReport: { $sum: { $cond: [{ $lt: ["$date", reportStart] }, "$items.returnedQty", 0] } },
-            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$date", reportStart] }, { $lte: ["$date", reportEnd] }] }, "$items.returnedQty", 0] } }
+            outBeforeReport: { $sum: { $cond: [{ $lt: ["$date", reportStart] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } },
+            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$date", reportStart] }, { $lte: ["$date", reportEnd] }] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } }
         } }
       ]),
       CreditNote.aggregate([
@@ -1285,12 +1285,12 @@ router.get("/stock-journal", async (req, res) => {
         } }
       ]),
       DebitNote.aggregate([
-        { $match: { branchId: branchOid, status: "confirmed", date: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: "Created", date: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         { $group: { 
             _id: "$items.productId", 
-            outBeforeReport: { $sum: { $cond: [{ $lt: ["$date", reportStart] }, "$items.returnedQty", 0] } },
-            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$date", reportStart] }, { $lte: ["$date", reportEnd] }] }, "$items.returnedQty", 0] } }
+            outBeforeReport: { $sum: { $cond: [{ $lt: ["$date", reportStart] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } },
+            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$date", reportStart] }, { $lte: ["$date", reportEnd] }] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } }
         } }
       ]),
       CreditNote.aggregate([
@@ -1423,10 +1423,10 @@ router.get("/:id/ledger", auth, async (req, res) => {
         { $group: { _id: null, total: { $sum: "$effectiveItems.qty" } } }
       ]),
       DebitNote.aggregate([
-        { $match: { branchId: branchOid, status: "confirmed", date: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
+        { $match: { branchId: branchOid, status: "Created", date: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
         { $unwind: "$items" },
         { $match: { "items.productId": productOid } },
-        { $group: { _id: null, total: { $sum: "$items.returnedQty" } } }
+        { $group: { _id: null, total: { $sum: { $ifNull: ["$items.qty", "$items.returnedQty", 0] } } } }
       ]),
       CreditNote.aggregate([
         { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
@@ -1457,10 +1457,19 @@ router.get("/:id/ledger", auth, async (req, res) => {
         { $project: { type: "INWARD", date: "$date", voucherType: { $ifNull: ["$voucherType", "Purchase"] }, invoiceId: 1, particulars: { $ifNull: ["$vendor", "Supplier"] }, qty: "$items.qty", rate: "$items.purchasePrice", value: { $multiply: ["$items.qty", "$items.purchasePrice"] } } }
       ]),
       DebitNote.aggregate([
-        { $match: { branchId: branchOid, status: "confirmed", date: { $gte: start, $lte: end } } },
+        { $match: { branchId: branchOid, status: "Created", date: { $gte: start, $lte: end } } },
         { $unwind: "$items" },
         { $match: { "items.productId": productOid } },
-        { $project: { type: "OUTWARD", date: "$date", voucherType: { $literal: "Debit Note" }, invoiceId: 1, particulars: { $literal: "Pur. Return" }, qty: "$items.returnedQty", rate: { $literal: 0 }, value: { $literal: 0 } } }
+        { $project: { 
+            type: "OUTWARD", 
+            date: "$date", 
+            voucherType: { $literal: "Debit Note" }, 
+            invoiceId: 1, 
+            particulars: { $literal: "Pur. Return" }, 
+            qty: { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 
+            rate: { $literal: 0 }, 
+            value: { $literal: 0 } 
+        } }
       ]),
       CreditNote.aggregate([
         { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gte: start, $lte: end } } },
@@ -1743,9 +1752,9 @@ router.post("/reconcile-stock", async (req, res) => {
         { $group: { _id: "$effectiveItems.productId", totalQty: { $sum: "$effectiveItems.qty" } } }
       ]),
       DebitNote.aggregate([
-        { $match: { branchId: branchOid, status: "confirmed", date: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: "Created", date: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
-        { $group: { _id: "$items.productId", totalQty: { $sum: "$items.returnedQty" } } }
+        { $group: { _id: "$items.productId", totalQty: { $sum: { $ifNull: ["$items.qty", "$items.returnedQty", 0] } } } }
       ]),
       CreditNote.aggregate([
         { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gt: HARD_ANCHOR_DATE } } },

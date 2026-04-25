@@ -397,7 +397,7 @@ export default function BranchReceipt() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center text-gray-600 text-[10px] leading-tight">
-                            {formatDateTime(item.date || item.createdAt)}
+                            {formatDateTime(item.createdAt || item.date || item.invoiceDate)}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <div className="flex justify-center gap-2">

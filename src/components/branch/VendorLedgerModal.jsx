@@ -133,9 +133,17 @@ const VendorLedgerModal = ({ isOpen, onClose, supplier }) => {
   };
 
   // Helper for formatting date
-  const formatDate = (dateStr) => {
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: '2-digit', month: 'short', year: 'numeric'
+  const formatDate = (dateStr, includeTime = false) => {
+    if (!dateStr) return "-";
+    const options = { day: '2-digit', month: 'short', year: 'numeric' };
+    if (includeTime) {
+      options.hour = '2-digit';
+      options.minute = '2-digit';
+      options.hour12 = true;
+    }
+    return new Date(dateStr).toLocaleString('en-IN', {
+      ...options,
+      timeZone: 'Asia/Kolkata'
     });
   };
 
@@ -270,8 +278,8 @@ const VendorLedgerModal = ({ isOpen, onClose, supplier }) => {
                         key={txn.id} 
                         className={`hover:bg-gray-50 transition-colors group ${txn.type === 'PAYMENT' ? 'bg-green-50/20' : txn.type === 'DEBIT_NOTE' ? 'bg-orange-50/20' : ''}`}
                       >
-                        <td className="px-6 py-4 text-gray-600 text-xs font-bold">
-                          {formatDate(txn.date)}
+                        <td className="px-6 py-4 text-gray-600 text-xs font-bold whitespace-nowrap">
+                          {formatDate(txn.date, true)}
                         </td>
                         <td className="px-6 py-4">
                           <span className="font-bold text-gray-800 text-xs uppercase tracking-tight">{txn.particulars}</span>

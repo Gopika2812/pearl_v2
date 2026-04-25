@@ -11,6 +11,7 @@ const creditNoteSchema = new mongoose.Schema(
       required: false, // Changed from true to allow standalone/migrated returns
     },
     originalInvoiceId: String,
+    originalInvoiceDate: Date,
     
     branchId: {
       type: mongoose.Schema.Types.ObjectId,

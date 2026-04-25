@@ -131,9 +131,15 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                   ${previewData?.customer?.district ? previewData?.customer?.district + ', ' : ''}${previewData?.customer?.state || ""} ${previewData?.customer?.pincode || ""}<br/>
                   Mobile: ${previewData?.customer?.whatsapp || previewData?.customer?.customerId?.whatsapp || "-"}<br/>
                   GSTIN: ${previewData?.customer?.gstin || previewData?.customer?.customerId?.gstin || "N/A"}<br/>
-                  ${isCN && order?.originalInvoiceId ? `<strong>Orig. Invoice:</strong> ${order.originalInvoiceId}` : ''}
                 </div>
               </div>
+
+              ${isCN && order?.originalInvoiceId ? `
+                <div style="font-size: 10px; margin-top: -5px; margin-bottom: 10px; background: #f0fdfa; padding: 6px 10px; border: 1px solid #0d9488; border-radius: 4px; display: inline-block;">
+                  <strong style="color: #0d9488;">ISSUED AGAINST INVOICE:</strong> ${order.originalInvoiceId} 
+                  ${order.originalInvoiceDate ? ` | <strong>DATE:</strong> ${new Date(order.originalInvoiceDate).toLocaleDateString("en-IN")}` : ''}
+                </div>
+              ` : ''}
 
               <table>
                 <thead>

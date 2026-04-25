@@ -740,7 +740,7 @@ const BranchSalesInvoices = () => {
                       <tr className="hover:bg-indigo-50/30 transition group">
                         {isFieldAllowed("dateTime") && (
                           <td className="px-6 py-5 whitespace-nowrap">
-                             <div className="text-[11px] font-black text-slate-700 tracking-tight">{formatIST(inv.invoiceDate)}</div>
+                             <div className="text-[11px] font-black text-slate-700 tracking-tight">{formatIST(inv.createdAt || inv.invoiceDate)}</div>
                              <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{new Date(inv.invoiceDate).toDateString() === new Date().toDateString() ? "TODAY" : ""}</div>
                           </td>
                         )}

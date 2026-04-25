@@ -11,6 +11,7 @@ const debitNoteSchema = new mongoose.Schema(
       required: false,
     },
     originalInvoiceId: String,
+    originalInvoiceDate: Date,
     
     branchId: {
       type: mongoose.Schema.Types.ObjectId,

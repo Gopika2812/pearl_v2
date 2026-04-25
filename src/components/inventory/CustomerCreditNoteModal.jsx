@@ -296,7 +296,12 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
             <h3 className="text-xl font-black text-gray-900 tracking-tight leading-none uppercase italic">{editData ? "Edit Credit Note" : "Process Return / Issue Credit Note"}</h3>
             <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1.5 flex items-center gap-2">
               <span className="text-[#319bab]">REFERENCE ID: {nextId || "GETTING ID..."}</span>
-              <span className="px-2 py-0.5 bg-gray-100 rounded text-gray-500">{formatDate(new Date())}</span>
+              <span className="px-2 py-0.5 bg-gray-100 rounded text-gray-500">{formatDate(editData?.createdAt || new Date())}</span>
+              {editData?.originalInvoiceId && editData.originalInvoiceId !== "STANDALONE" && (
+                <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded font-black border border-blue-100 uppercase tracking-tighter">
+                  Against Inv: {editData.originalInvoiceId}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -379,38 +384,7 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
             </div>
 
             {/* Step 2: Source Selection (Invoice List or Product Search) */}
-            <div className="bg-white rounded-2xl p-8 border border-gray-100 shadow-sm space-y-6">
-              {returnType === "invoice" ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 pb-2 border-b border-gray-50">
-                    <span className="p-1.5 bg-purple-50 text-purple-500 rounded-lg"><FaFileInvoice size={14} /></span>
-                    <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest">Generated Invoices</h4>
-                  </div>
-                  {!customer ? (
-                    <p className="text-center py-6 text-xs font-bold text-gray-400 uppercase italic">Select a customer first to view invoices</p>
-                  ) : loading ? (
-                    <div className="flex justify-center py-6"><FaSpinner className="animate-spin text-[#319bab]" /></div>
-                  ) : invoices.length === 0 ? (
-                    <p className="text-center py-6 text-xs font-bold text-gray-400 uppercase italic">No invoices found for this customer</p>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {invoices.map(inv => (
-                        <div 
-                          key={inv._id}
-                          onClick={() => handleSelectInvoice(inv)}
-                          className={`p-4 border-2 rounded-xl transition-all cursor-pointer flex flex-col justify-between h-28 ${selectedInvoice?._id === inv._id ? 'border-[#319bab] bg-[#319bab]/5' : 'border-gray-50 hover:border-[#319bab]/30'}`}
-                        >
-                          <p className="text-xs font-black text-gray-400 uppercase flex justify-between">
-                            #{inv.invoiceNumber}
-                            <span className="text-[#319bab]">{formatDate(inv.invoiceDate || inv.createdAt)}</span>
-                          </p>
-                          <p className="text-base font-black text-gray-900 mt-2">₹{(inv.grandTotal || 0).toLocaleString()}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
+              <div className="bg-white rounded-2xl p-8 border border-gray-100 shadow-sm space-y-6">
                 <div className="space-y-6">
                   <div className="flex items-center gap-2 pb-2 border-b border-gray-50">
                     <span className="p-1.5 bg-orange-50 text-orange-500 rounded-lg"><FaSearch size={14} /></span>
@@ -454,8 +428,39 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                     )}
                   </div>
                 </div>
-              )}
-            </div>
+
+                {returnType === "invoice" && (
+                  <div className="space-y-4 pt-6 border-t border-gray-100">
+                    <div className="flex items-center gap-2 pb-2">
+                      <span className="p-1.5 bg-purple-50 text-purple-500 rounded-lg"><FaFileInvoice size={14} /></span>
+                      <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest">Linked Invoice Items</h4>
+                    </div>
+                    {!customer ? (
+                      <p className="text-center py-6 text-xs font-bold text-gray-400 uppercase italic">Select a customer first to view invoices</p>
+                    ) : loading ? (
+                      <div className="flex justify-center py-6"><FaSpinner className="animate-spin text-[#319bab]" /></div>
+                    ) : invoices.length === 0 ? (
+                      <p className="text-center py-6 text-xs font-bold text-gray-400 uppercase italic">No invoices found for this customer</p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {invoices.map(inv => (
+                          <div 
+                            key={inv._id}
+                            onClick={() => handleSelectInvoice(inv)}
+                            className={`p-4 border-2 rounded-xl transition-all cursor-pointer flex flex-col justify-between h-28 ${selectedInvoice?._id === inv._id ? 'border-[#319bab] bg-[#319bab]/5' : 'border-gray-50 hover:border-[#319bab]/30'}`}
+                          >
+                            <p className="text-xs font-black text-gray-400 uppercase flex justify-between">
+                              #{inv.invoiceNumber}
+                              <span className="text-[#319bab]">{formatDate(inv.invoiceDate || inv.createdAt)}</span>
+                            </p>
+                            <p className="text-base font-black text-gray-900 mt-2">₹{(inv.grandTotal || 0).toLocaleString()}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
             {/* Step 3: Return Items List */}
             {selectedItems.length > 0 && (
@@ -494,7 +499,7 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                         <div>
                           <label className={labelClass}>Returned Qty</label>
                           <input 
@@ -505,16 +510,25 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                           />
                         </div>
                         <div>
-                          <label className={labelClass}>Selling Price (₹)</label>
+                          <label className={labelClass}>Price (₹)</label>
                           <input 
                             type="number"
                             disabled={returnType === "invoice"}
                             className={`${inputClass} ${returnType === "invoice" ? 'bg-gray-50 text-gray-400' : ''}`}
                             value={item.sellingPrice}
                             onChange={(e) => {
-                              if (returnType === "standalone") {
-                                setSelectedItems(selectedItems.map(si => (si.productId === item.productId ? { ...si, sellingPrice: Number(e.target.value) } : si)));
-                              }
+                              setSelectedItems(selectedItems.map(si => ((si.productId === item.productId || si._id === item._id) ? { ...si, sellingPrice: Number(e.target.value) } : si)));
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label className={labelClass}>Disc %</label>
+                          <input 
+                            type="number"
+                            className={inputClass}
+                            value={item.discountPercent || 0}
+                            onChange={(e) => {
+                              setSelectedItems(selectedItems.map(si => ((si.productId === item.productId || si._id === item._id) ? { ...si, discountPercent: Number(e.target.value) } : si)));
                             }}
                           />
                         </div>
@@ -526,16 +540,14 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                             className={`${inputClass} ${returnType === "invoice" ? 'bg-gray-50 text-gray-400' : ''}`}
                             value={item.gst}
                             onChange={(e) => {
-                              if (returnType === "standalone") {
-                                setSelectedItems(selectedItems.map(si => (si.productId === item.productId ? { ...si, gst: Number(e.target.value) } : si)));
-                              }
+                              setSelectedItems(selectedItems.map(si => ((si.productId === item.productId || si._id === item._id) ? { ...si, gst: Number(e.target.value) } : si)));
                             }}
                           />
                         </div>
                         <div>
-                          <label className={labelClass}>Line Total (Inc. GST)</label>
+                          <label className={labelClass}>Line Total</label>
                           <div className={inputClass + " bg-teal-50 border-teal-100 flex items-center justify-end"}>
-                            ₹{((item.returnQty || item.qty) * item.sellingPrice * (1 + item.gst/100)).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            ₹{((item.returnQty || item.qty) * item.sellingPrice * (1 - (item.discountPercent || 0)/100) * (1 + item.gst/100)).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                           </div>
                         </div>
                       </div>

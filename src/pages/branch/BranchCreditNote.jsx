@@ -204,9 +204,16 @@ export default function BranchCreditNote() {
                         </td>
                         <td className="px-6 py-5 text-right font-black text-indigo-700 text-sm">₹{(cn.grandTotal || 0).toLocaleString()}</td>
                         <td className="px-6 py-5">
-                            <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${cn.originalInvoiceId === 'STANDALONE' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600 uppercase'}`}>
-                                {cn.originalInvoiceId}
-                            </span>
+                            <div className="flex flex-col">
+                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${cn.originalInvoiceId === 'STANDALONE' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600 uppercase'}`}>
+                                    {cn.originalInvoiceId}
+                                </span>
+                                {cn.originalInvoiceDate && (
+                                    <span className="text-[9px] text-gray-400 font-bold ml-1 mt-0.5">
+                                        Dt: {new Date(cn.originalInvoiceDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' })}
+                                    </span>
+                                )}
+                            </div>
                         </td>
                         <td className="px-6 py-5 text-center">
                           <div className="flex flex-col gap-1 items-center scale-90">
@@ -292,10 +299,15 @@ export default function BranchCreditNote() {
                                     {cn.items?.map((item, idx) => (
                                         <div key={idx} className="flex justify-between items-center text-xs border-b border-gray-50 pb-2 last:border-0 last:pb-0">
                                             <div className="flex items-center gap-3">
-                                                <span className="text-[10px] font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">x{item.qty}</span>
-                                                <span className="font-bold text-gray-700">{item.name}</span>
+                                                <div className="flex flex-col items-center justify-center min-w-[40px] bg-indigo-600 text-white rounded-lg py-1 px-2 shadow-sm">
+                                                  <span className="text-[8px] font-black uppercase leading-none mb-0.5">Qty</span>
+                                                  <span className="text-sm font-black leading-none">{item.qty || item.returnedQty || 0}</span>
+                                                </div>
+                                                <span className="font-black text-gray-700 uppercase tracking-tight">{item.name}</span>
                                             </div>
-                                            <span className="font-black text-gray-900">₹{(item.total || 0).toLocaleString()}</span>
+                                            <div className="flex items-center gap-4">
+                                              <span className="font-black text-gray-900">₹{(item.total || 0).toLocaleString()}</span>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>

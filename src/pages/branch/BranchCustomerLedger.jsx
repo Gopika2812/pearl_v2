@@ -253,9 +253,17 @@ const BranchCustomerLedger = () => {
     }
   };
 
-  const formatDate = (dateStr) => {
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: '2-digit', month: 'short', year: 'numeric'
+  const formatDate = (dateStr, includeTime = false) => {
+    if (!dateStr) return "-";
+    const options = { day: '2-digit', month: 'short', year: 'numeric' };
+    if (includeTime) {
+      options.hour = '2-digit';
+      options.minute = '2-digit';
+      options.hour12 = true;
+    }
+    return new Date(dateStr).toLocaleString('en-IN', {
+      ...options,
+      timeZone: 'Asia/Kolkata'
     });
   };
 
@@ -458,7 +466,7 @@ const BranchCustomerLedger = () => {
                   return (
                     <tr key={txn.id} className="hover:bg-slate-50/80 transition-all duration-300 group cursor-default">
                       <td className="px-8 py-6 text-slate-300 group-hover:text-indigo-400 transition-colors">{index + 1}</td>
-                      <td className="px-6 py-6 text-slate-500">{formatDate(txn.date)}</td>
+                      <td className="px-6 py-6 text-slate-500 whitespace-nowrap">{formatDate(txn.date, true)}</td>
                       <td className="px-6 py-6">
                         <div className={`text-slate-800 group-hover:text-slate-900 transition-colors uppercase tracking-tight ${txn.type === 'CANCELLED' ? 'line-through text-slate-400' : ''}`}>{docId}</div>
                         <div className={`text-[10px] text-slate-400 font-bold italic truncate max-w-[200px] mt-0.5 ${txn.type === 'CANCELLED' ? 'line-through' : ''}`}>{txn.particulars}</div>
@@ -568,7 +576,7 @@ const BranchCustomerLedger = () => {
                 </tr>
                 {transactions.map(t => (
                   <tr key={t.id}>
-                    <td>{formatDate(t.date)}</td>
+                    <td style={{ fontSize: '10px', whiteSpace: 'nowrap' }}>{formatDate(t.date, true)}</td>
                     <td>{t.particulars}</td>
                     <td>{t.type}</td>
                     <td>{t.user || "-"}</td>

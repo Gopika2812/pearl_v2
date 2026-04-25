@@ -528,7 +528,7 @@ router.get("/:id/ledger", async (req, res) => {
       "vendor.vendorId": id,
       status: "Created",
       createdAt: { $gte: start }
-    }).select("grandTotal createdAt debitNoteId reason").lean();
+    }).select("grandTotal createdAt debitNoteId reason originalInvoiceId originalInvoiceDate").lean();
 
     // Opening Balance = Current_Balance - (Credits after Start) + (Debits after Start)
     const totalCreditsAfterStart = pisAfterStart.reduce((sum, pi) => sum + (pi.grandTotal || 0), 0);
@@ -565,7 +565,7 @@ router.get("/:id/ledger", async (req, res) => {
         id: `dn-${dn._id}`,
         date: dn.createdAt,
         type: "DEBIT_NOTE",
-        particulars: `Debit Note: ${dn.debitNoteId} (${dn.reason || "General"})`,
+        particulars: `Debit Note: ${dn.debitNoteId} (${dn.reason || "General"})${dn.originalInvoiceId ? ` [Against Inv: ${dn.originalInvoiceId}${dn.originalInvoiceDate ? ` Dt: ${new Date(dn.originalInvoiceDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' })}` : ""}]` : ""}`,
         debit: dn.grandTotal || 0,
         credit: 0
       }))

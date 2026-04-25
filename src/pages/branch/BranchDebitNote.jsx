@@ -144,9 +144,10 @@ export default function BranchDebitNote() {
                         {isFieldAllowed("amount") && <td className="px-6 py-5 text-right font-black text-gray-900 text-sm italic">₹{(dn.grandTotal || 0).toLocaleString()}</td>}
                         {isFieldAllowed("invoiceRef") && (
                           <td className="px-6 py-5">
-                              <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${!dn.originalPurchaseOrderId ? 'bg-orange-100 text-orange-600 truncate max-w-[100px] block' : 'bg-blue-100 text-blue-600 uppercase'}`}>
-                                  {dn.originalInvoiceId || 'STANDALONE'}
-                              </span>
+                              <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${!dn.originalPurchaseOrderId ? 'bg-orange-100 text-orange-600 truncate max-w-[150px] block' : 'bg-blue-100 text-blue-600 uppercase'}`}>
+                                   {dn.originalInvoiceId || 'STANDALONE'}
+                                   {dn.originalInvoiceDate && ` (Dt: ${new Date(dn.originalInvoiceDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' })})`}
+                               </span>
                           </td>
                         )}
                         {isFieldAllowed("details") && (
@@ -172,7 +173,10 @@ export default function BranchDebitNote() {
                                     {dn.items?.map((item, idx) => (
                                         <div key={idx} className="flex justify-between items-center text-xs border-b border-gray-50 pb-2 last:border-0 last:pb-0 group/item">
                                             <div className="flex items-center gap-3">
-                                                <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-1 rounded-lg">x{item.returnedQty || item.qty}</span>
+                                                <div className="flex flex-col items-center justify-center min-w-[40px] bg-rose-600 text-white rounded-lg py-1 px-2 shadow-sm">
+                                                  <span className="text-[8px] font-black uppercase leading-none mb-0.5">Qty</span>
+                                                  <span className="text-sm font-black leading-none">{item.qty || item.returnedQty || 0}</span>
+                                                </div>
                                                 <span className="font-black text-gray-700 uppercase tracking-tight">{item.name}</span>
                                             </div>
                                             <div className="flex items-center gap-4">

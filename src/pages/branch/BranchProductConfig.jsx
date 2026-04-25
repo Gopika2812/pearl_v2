@@ -205,9 +205,9 @@ export default function BranchProductConfig() {
       unitConversion: p.unitConversion || { value: 1, unit: p.units || "pcs", altValue: 1, altUnit: "box" },
       sellingPrice: p.sellingPrice || 0,
       purchasingPrice: p.purchasingPrice || 0,
-      availableQty: p.totalQty || 0,
       openingQty: p.openingQty || 0,
-      manualOpeningDate: p.manualOpeningDate ? new Date(p.manualOpeningDate).toISOString().split('T')[0] : "2026-03-31"
+      manualOpeningDate: p.manualOpeningDate ? new Date(p.manualOpeningDate).toISOString().split('T')[0] : "2026-03-31",
+      anchorNote: "Opening Qty is the stock as of Mar 31st. April 1st opening balance is derived from this."
     });
   };
 
@@ -386,13 +386,14 @@ export default function BranchProductConfig() {
                     <td className="px-4 py-5">
                       {editingId === p._id ? (
                         <div className="space-y-1">
-                          <label className="text-[8px] font-black text-orange-600 uppercase">Opening Qty</label>
+                          <label className="text-[8px] font-black text-orange-600 uppercase tracking-tighter">Mar 31st Anchor (Opening)</label>
                           <input 
                             type="number"
                             className="w-20 border border-orange-200 rounded-lg px-2 py-1 text-sm font-black focus:ring-2 focus:ring-orange-500 outline-none"
                             value={editConfig.openingQty}
                             onChange={(e) => setEditConfig({...editConfig, openingQty: e.target.value})}
                           />
+                          <p className="text-[7px] font-bold text-slate-400 leading-none">Sets Apr 1st Balance</p>
                         </div>
                       ) : (
                         <div className="flex flex-col">

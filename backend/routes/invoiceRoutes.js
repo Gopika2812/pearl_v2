@@ -328,7 +328,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       formattedClosingBalance: formatBalance(closingBalance),
       notes,
       invoiceType,
-      invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
+      invoiceDate: new Date(), // Reflect actual current time in preview
     };
 
     res.json(previewData);
@@ -654,7 +654,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         } else {
           invoice = new Invoice({
             invoiceNumber,
-            invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
+            invoiceDate: new Date(), // Always use current timestamp for precise finalization time
             financialYear,
             salesOrderId: salesOrder._id,
             branchId: salesOrder.branchId,

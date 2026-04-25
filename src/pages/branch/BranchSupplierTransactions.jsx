@@ -46,9 +46,15 @@ export default function BranchSupplierTransactions() {
     fetchAll();
   }, [currentBranch]);
 
-  const formatDate = (d) => {
+  const formatDate = (d, includeTime = false) => {
     if (!d) return "—";
-    return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    const options = { day: "2-digit", month: "short", year: "numeric" };
+    if (includeTime) {
+      options.hour = '2-digit';
+      options.minute = '2-digit';
+      options.hour12 = true;
+    }
+    return new Date(d).toLocaleString("en-IN", { ...options, timeZone: 'Asia/Kolkata' });
   };
 
   // Combine and filter
@@ -255,7 +261,7 @@ export default function BranchSupplierTransactions() {
                         )}
                       </td>
                       <td className="px-5 py-3.5 font-semibold text-gray-800">{rec.supplier}</td>
-                      <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{formatDate(rec.date)}</td>
+                      <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{formatDate(rec.date, true)}</td>
                       <td className="px-5 py-3.5 text-right font-black text-gray-800">
                         ₹{(rec.amount || 0).toLocaleString()}
                       </td>

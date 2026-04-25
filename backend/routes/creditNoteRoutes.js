@@ -196,6 +196,16 @@ router.get("/", async (req, res) => {
           }
         }
 
+        // 🔍 RETROACTIVE INVOICE DATE REPAIR
+        if (!cn.originalInvoiceDate && cn.originalInvoiceId && cn.originalInvoiceId !== "STANDALONE") {
+          const Invoice = mongoose.model("Invoice");
+          const sourceInv = await Invoice.findOne({ invoiceNumber: cn.originalInvoiceId, branchId: cn.branchId });
+          if (sourceInv) {
+            cn.originalInvoiceDate = sourceInv.invoiceDate;
+            changed = true;
+          }
+        }
+
         if (changed) {
           await cn.save();
           console.log(`✅ [LIST REPAIR] Fixed snapshots/HSN for ${cn.creditNoteId}`);
@@ -379,6 +389,7 @@ router.post("/", async (req, res) => {
       creditNoteId,
       originalSalesOrderId: originalSalesOrderId || null,
       originalInvoiceId: originalOrder?.invoiceId || "STANDALONE",
+      originalInvoiceDate: originalOrder?.invoiceDate || null,
       branchId: finalBranchId,
       customer: {
         customerId: customer._id,

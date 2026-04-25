@@ -98,6 +98,49 @@ router.get("/", async (req, res) => {
       .populate("originalPurchaseOrderId", "invoiceId")
       .sort({ createdAt: -1 });
 
+    // ⚡ LIVE REPAIR: Populate missing Invoice Ref/Date and fix missing qty for old records
+    let repaired = false;
+    for (const dn of debitNotes) {
+      // 1. Repair missing Invoice Dates (Standard Mongoose)
+      if (!dn.originalInvoiceDate && dn.originalPurchaseOrderId) {
+        const po = await PurchaseOrder.findById(dn.originalPurchaseOrderId);
+        if (po) {
+          dn.originalInvoiceId = po.vendorBillNo || po.invoiceId || dn.originalInvoiceId;
+          dn.originalInvoiceDate = po.vendorDate || po.date;
+          repaired = true;
+        }
+      }
+
+      // 2. ⚡ FINANCIAL RECONSTRUCTION: Fix missing qty by reverse-calculating from totals
+      let qtyFixed = false;
+      const updatedItems = dn.items.map((item) => {
+        // If qty is missing/0 but we have a total and price, calculate it
+        if ((item.qty === undefined || item.qty === null || item.qty === 0) && (item.total > 0 && item.purchasePrice > 0)) {
+          const calculatedQty = Math.round(item.total / item.purchasePrice);
+          if (calculatedQty > 0) {
+            qtyFixed = true;
+            item.qty = calculatedQty;
+          }
+        }
+        return item;
+      });
+
+      if (qtyFixed || repaired) {
+        dn.markModified('items');
+        await dn.save();
+        repaired = true;
+      }
+    }
+    
+    if (repaired) {
+        // Re-fetch to get fresh data after repairs
+        const freshNotes = await DebitNote.find({ branchId })
+          .populate("vendor.vendorId", "name")
+          .populate("originalPurchaseOrderId", "invoiceId")
+          .sort({ createdAt: -1 });
+        return res.json({ success: true, data: freshNotes });
+    }
+
     res.json({
       success: true,
       data: debitNotes,
@@ -258,16 +301,23 @@ router.post("/", async (req, res) => {
 
     const finalGrandTotal = Math.round(subtotal + totalTax);
 
+    // ⚡ FIX: Map returnedQty to qty for database compatibility
+    const mappedItems = items.map(item => ({
+      ...item,
+      qty: item.returnedQty || item.qty || 0
+    }));
+
     const debitNote = new DebitNote({
       debitNoteId,
       branchId,
       originalPurchaseOrderId: originalPO?._id || null,
-      originalInvoiceId: originalPO?.invoiceId || null,
+      originalInvoiceId: originalPO?.vendorBillNo || originalPO?.invoiceId || "STANDALONE",
+      originalInvoiceDate: originalPO?.vendorDate || originalPO?.date || null,
       vendor: {
         vendorId: vendor?.vendorId || null,
         name: vendor?.name || originalPO?.vendor || "Unknown",
       },
-      items: items || [],
+      items: mappedItems,
       subtotal: Math.round(subtotal),
       totalTax: Math.round(totalTax),
       grandTotal: finalGrandTotal,
@@ -280,15 +330,15 @@ router.post("/", async (req, res) => {
     // ✅ SKIP INVENTORY & PO UPDATES for general adjustments
     if (!isGeneralAdjustment && originalPO) {
       // Reduce product inventory
-      for (const item of items) {
+      for (const item of mappedItems) {
         try {
           if (item.productId && item.productId !== "000000000000000000000000") {
             const product = await Product.findByIdAndUpdate(
               item.productId,
-              { $inc: { totalQty: -item.returnedQty } },
+              { $inc: { totalQty: -item.qty } },
               { new: true }
             );
-            if (product) console.log(`✅ Inventory reduced: ${product.name} -${item.returnedQty}`);
+            if (product) console.log(`✅ Inventory reduced: ${product.name} -${item.qty}`);
           }
         } catch (err) {
           console.error(`⚠️ Failed to update product inventory:`, err.message);

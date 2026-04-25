@@ -295,9 +295,15 @@ const BranchStockSummary = () => {
                   </>
                 )}
               </h1>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">
-                Inventory Movement & Valuation
-              </p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                  Inventory Movement & Valuation
+                </p>
+                <span className="h-1 w-1 rounded-full bg-gray-300"></span>
+                <p className="text-[9px] font-bold text-secondary uppercase bg-secondary/5 px-2 py-0.5 rounded-md border border-secondary/10">
+                  Formula: Opening (Mar 31 Anchor) + In - Out
+                </p>
+              </div>
             </div>
           </div>
 
@@ -341,7 +347,7 @@ const BranchStockSummary = () => {
 
             <button
               onClick={async () => {
-                if (!window.confirm("CRITICAL: This will force ALL 'Available Qty' to match your 31st March Anchor + April Trades. Proceed?")) return;
+                if (!window.confirm("CRITICAL RECONCILIATION:\n\nThis will force your Current Stock to match:\n[Mar 31st Anchor] + [Total Inwards] - [Total Outwards].\n\nUse this if your 'Available Qty' looks wrong. Proceed?")) return;
                 setLoading(true);
                 try {
                   const res = await fetchWithAuth(`${API_BASE}/products/reconcile-stock`, {
@@ -611,8 +617,9 @@ const BranchStockSummary = () => {
 
                     {filteredLedgerData.map((txn, idx) => {
                       if (idx === 0) runningBalance = ledgerData.openingBalance;
-                      if (txn.type === "INWARD") runningBalance += txn.qty;
-                      else runningBalance -= txn.qty;
+                      const amount = Number(txn.qty) || 0;
+                      if (txn.type === "INWARD") runningBalance += amount;
+                      else runningBalance -= amount;
 
                       return (
                         <tr key={idx} className="hover:bg-gray-50 transition border-l-4 border-transparent hover:border-secondary">

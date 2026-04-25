@@ -1177,7 +1177,7 @@ router.get("/:id/ledger", async (req, res) => {
 
         return {
           id: `inv-${s._id}`,
-          date: s.invoiceDate,
+          date: s.createdAt || s.invoiceDate,
           type: "INVOICE",
           particulars: `Sales Invoice: ${s.invoiceNumber}`,
           debit: s.grandTotal || 0,
@@ -1206,7 +1206,7 @@ router.get("/:id/ledger", async (req, res) => {
         id: `cn-${cn._id}`,
         date: cn.date || cn.createdAt,
         type: "CREDIT_NOTE",
-        particulars: `Credit Note: ${cn.creditNoteId} (${cn.reasonForReturn || "Customer Return"})`,
+        particulars: `Credit Note: ${cn.creditNoteId} (${cn.reasonForReturn || "Customer Return"})${cn.originalInvoiceId ? ` [Inv: ${cn.originalInvoiceId}${cn.originalInvoiceDate ? ` | ${new Date(cn.originalInvoiceDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' })}` : ''}]` : ""}`,
         debit: 0,
         credit: cn.grandTotal || 0,
         user: "-",
