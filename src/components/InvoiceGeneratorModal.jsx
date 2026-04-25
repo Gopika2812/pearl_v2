@@ -1,3 +1,4 @@
+import html2canvas from "html2canvas";
 import { useEffect, useRef, useState } from "react";
 import {
   FaCheck,
@@ -10,7 +11,6 @@ import {
   FaWhatsapp,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import html2canvas from "html2canvas";
 import { API_BASE, fetchWithAuth } from "../api";
 import { useBranch } from "../context/BranchContext";
 import { useInventory } from "../context/InventoryContext";
@@ -31,7 +31,6 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
 
   const initializationRef = useRef(false);
 
-  // 🏥 Name Repair Helper
   const repairName = (pId, currentName) => {
     if (!currentName || currentName === "Product Name Missing") {
       const match = products?.find(p => p._id?.toString() === pId?.toString());
@@ -93,19 +92,19 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                 if (repairedName && repairedName !== item.name) {
                   return { ...item, name: repairedName };
                 }
-                
+
                 // Also check freshOrder directly if repair failed
                 if (!item.name || item.name === "Product Name Missing" || item.name === "") {
                   const freshPool = [
-                    ...(freshOrder.invoiceItems || []), 
+                    ...(freshOrder.invoiceItems || []),
                     ...(freshOrder.items || []),
                     ...(freshOrder.lastInvoicedItems || [])
                   ];
                   const match = freshPool.find(f => (f.productId?._id || f.productId)?.toString() === (item.productId?._id || item.productId)?.toString());
                   if (match) {
-                    return { 
-                      ...item, 
-                      name: match.name || match.productId?.name || item.name 
+                    return {
+                      ...item,
+                      name: match.name || match.productId?.name || item.name
                     };
                   }
                 }
@@ -159,10 +158,10 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
 
           const rawName = item.name || item.productId?.name || "";
           const repairedName = repairName(pId, rawName);
-          
+
           // CRITICAL: Prioritize repaired names, but if it returns "Product Name Missing" AND we already have a rawName, keep the rawName
-          const finalName = (repairedName && repairedName !== "Product Name Missing") 
-            ? repairedName 
+          const finalName = (repairedName && repairedName !== "Product Name Missing")
+            ? repairedName
             : (rawName || "Product Name Missing");
 
           finalItems.push({
@@ -812,7 +811,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                         <div style="font-weight: bold; color: #b91c1c;">${item.discountPercent || 0}%</div>
                         <div style="font-size: 8px; color: #64748b;">-₹${(item.discountAmount || 0).toFixed(2)}</div>
                       </td>
-                      <td style="text-align: right; font-weight: bold; color: #000;">₹${(item.total || ((item.qty || item.confirmedQty) * item.sellingPrice - (item.discountAmount || 0))).toFixed(2)}</td>
+                      <td style="text-align: right; font-weight: bold; color: #000;">₹${((item.qty || item.confirmedQty) * (item.sellingPrice || 0)).toFixed(2)}</td>
                     </tr>
                   `).join("")}
                 </tbody>

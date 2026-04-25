@@ -66,9 +66,10 @@ export default function BranchReceiptRecords() {
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
         const id = (r.receiptId || "").toLowerCase();
-        const inv = (r.originalInvoiceId || "").toLowerCase();
+        const inv = (r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId || "").toLowerCase();
+        const relatedInvs = (r.relatedOrders || []).map(ro => (ro.salesOrderId?.salesInvoiceId || ro.salesOrderId?.invoiceId || ro.invoiceId || "").toLowerCase());
         const cust = (r.customer?.name || "").toLowerCase();
-        matchesTerm = id.includes(searchLower) || inv.includes(searchLower) || cust.includes(searchLower);
+        matchesTerm = id.includes(searchLower) || inv.includes(searchLower) || relatedInvs.some(rinv => rinv.includes(searchLower)) || cust.includes(searchLower);
       }
 
       // 2. Ledger/Mode Filter (Date is now handled by backend)
@@ -239,8 +240,17 @@ export default function BranchReceiptRecords() {
                         {formatDateTime(r.createdAt)}
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-xs font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                          {r.originalInvoiceId || "STANDALONE"}
+                        <span 
+                          className="text-xs font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded max-w-[200px] inline-block truncate" 
+                          title={
+                            r.relatedOrders && r.relatedOrders.length > 0 
+                              ? r.relatedOrders.map(ro => ro.salesOrderId?.salesInvoiceId || ro.salesOrderId?.invoiceId || ro.invoiceId).join(", ") 
+                              : (r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId)
+                          }
+                        >
+                          {r.relatedOrders && r.relatedOrders.length > 0 
+                            ? r.relatedOrders.map(ro => ro.salesOrderId?.salesInvoiceId || ro.salesOrderId?.invoiceId || ro.invoiceId).join(", ") 
+                            : (r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId || "STANDALONE")}
                         </span>
                       </td>
                       <td className="px-6 py-4">

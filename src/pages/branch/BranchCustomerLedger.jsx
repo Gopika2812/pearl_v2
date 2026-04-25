@@ -195,7 +195,7 @@ const BranchCustomerLedger = () => {
       ]);
 
       // Transactions
-      transactions.forEach(txn => {
+      transactions.filter(txn => !String(txn.type).toUpperCase().includes("CANCEL")).forEach(txn => {
         let docId = "-";
         const invMatch = txn.particulars?.match(/for Inv:\s*([^\s(]+)/i);
         const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note):\s*([^\s(]+)/i);
@@ -270,8 +270,8 @@ const BranchCustomerLedger = () => {
   const balanceColor = (bal) => bal > 0 ? "text-red-600" : bal < 0 ? "text-green-600" : "text-gray-800";
   const balanceLabel = (bal) => bal > 0 ? "Dr" : bal < 0 ? "Cr" : "";
 
-  const totalDebit = transactions.reduce((sum, t) => sum + t.debit, 0);
-  const totalCredit = transactions.reduce((sum, t) => sum + t.credit, 0);
+  const totalDebit = transactions.filter(t => !String(t.type).toUpperCase().includes("CANCEL")).reduce((sum, t) => sum + t.debit, 0);
+  const totalCredit = transactions.filter(t => !String(t.type).toUpperCase().includes("CANCEL")).reduce((sum, t) => sum + t.credit, 0);
 
   if (!customer) return null;
 
@@ -456,11 +456,11 @@ const BranchCustomerLedger = () => {
 
                 {transactions.map((txn, index) => {
                   let docId = "-";
-                  const invMatch = txn.particulars?.match(/for Inv:\s*([^\s(]+)/i);
-                  const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note):\s*([^\s(]+)/i);
+                  const invMatch = txn.particulars?.match(/for Invoice?s?:\s*([^\[(]+)/i);
+                  const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note):\s*([^\[(]+)/i);
                   
-                  if (invMatch) docId = invMatch[1];
-                  else if (pm) docId = pm[1]; 
+                  if (invMatch) docId = invMatch[1].trim();
+                  else if (pm) docId = pm[1].trim(); 
                   else if (txn.type === "INVOICE") docId = txn.particulars.split(": ")[1] || "-";
 
                   return (
@@ -468,8 +468,8 @@ const BranchCustomerLedger = () => {
                       <td className="px-8 py-6 text-slate-300 group-hover:text-indigo-400 transition-colors">{index + 1}</td>
                       <td className="px-6 py-6 text-slate-500 whitespace-nowrap">{formatDate(txn.date, true)}</td>
                       <td className="px-6 py-6">
-                        <div className={`text-slate-800 group-hover:text-slate-900 transition-colors uppercase tracking-tight ${txn.type === 'CANCELLED' ? 'line-through text-slate-400' : ''}`}>{docId}</div>
-                        <div className={`text-[10px] text-slate-400 font-bold italic truncate max-w-[200px] mt-0.5 ${txn.type === 'CANCELLED' ? 'line-through' : ''}`}>{txn.particulars}</div>
+                        <div className={`text-slate-800 group-hover:text-slate-900 transition-colors uppercase tracking-tight font-black ${txn.type === 'CANCELLED' ? 'line-through text-slate-400' : ''}`} title={docId}>{docId}</div>
+                        <div className={`text-[10px] text-slate-400 font-bold italic truncate max-w-[300px] mt-0.5 ${txn.type === 'CANCELLED' ? 'line-through' : ''}`} title={txn.particulars}>{txn.particulars}</div>
                       </td>
                       <td className="px-6 py-6 text-center">
                         <span className={`px-2.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm border ${
@@ -574,7 +574,7 @@ const BranchCustomerLedger = () => {
                   <td style={{ textAlign: 'right' }}>-</td>
                   <td style={{ textAlign: 'right' }}>₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</td>
                 </tr>
-                {transactions.map(t => (
+                {transactions.filter(t => !String(t.type).toUpperCase().includes("CANCEL")).map(t => (
                   <tr key={t.id}>
                     <td style={{ fontSize: '10px', whiteSpace: 'nowrap' }}>{formatDate(t.date, true)}</td>
                     <td>{t.particulars}</td>

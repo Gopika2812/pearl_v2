@@ -1060,20 +1060,16 @@ router.get("", async (req, res) => {
         { "customer.name": { $regex: search, $options: "i" } },
         { "customer.whatsapp": { $regex: search, $options: "i" } },
       ];
-      if (query.$or) {
-        query.$and = [{ $or: query.$or }, { $or: searchOR }];
-        delete query.$or;
-      } else {
-        query.$or = searchOR;
-      }
     }
 
-    // 5. Date Filter (Dynamic based on status)
-    if (fromDate) {
-      const start = new Date(fromDate);
-      start.setHours(0, 0, 0, 0);
+    // 5. Date Filtering (Cumulative – applies unless dates are explicitly cleared or searching all-time)
+    // In this dashboard, if fromDate/toDate are passed, we stick to them.
+    if (fromDate || toDate) {
+      const start = fromDate ? new Date(fromDate) : new Date();
+      if (!fromDate) start.setHours(0, 0, 0, 0);
+
       const end = toDate ? new Date(toDate) : new Date(start);
-      end.setHours(23, 59, 59, 999);
+      end.setHours(23, 59, 59, 999); // Always set to end of day
 
       let dateFilter = {};
       if (deliveryStatus === "COMPLETED") {
@@ -1433,7 +1429,7 @@ router.delete("/:invoiceId", async (req, res) => {
 // Helper to generate Delivery Log ID (DL)
 const generateDeliveryLogId = async (branchId) => {
   if (!mongoose.Types.ObjectId.isValid(branchId)) return null;
-  
+
   const branch = await Branch.findById(branchId);
   const branchCode = branch?.code || "BR";
   const prefix = `DL-${branchCode}-`;

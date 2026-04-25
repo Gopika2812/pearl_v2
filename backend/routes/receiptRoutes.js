@@ -105,7 +105,7 @@ router.get("/", async (req, res) => {
 
     if (fromDate || toDate) {
       const start = fromDate ? new Date(fromDate) : new Date();
-      if (!fromDate) start.setHours(0, 0, 0, 0);
+      start.setHours(0, 0, 0, 0);
 
       const end = toDate ? new Date(toDate) : new Date(start);
       end.setHours(23, 59, 59, 999);
@@ -116,6 +116,8 @@ router.get("/", async (req, res) => {
     const receipts = await Receipt.find(query)
       .populate("generatedBy", "name")
       .populate("cancelledBy", "name")
+      .populate("originalSalesOrderId", "salesInvoiceId invoiceId")
+      .populate("relatedOrders.salesOrderId", "salesInvoiceId invoiceId")
       .sort({ createdAt: -1 });
     res.json({ data: receipts });
   } catch (error) {
@@ -255,7 +257,10 @@ router.post("/general", async (req, res) => {
 router.get("/order/:salesOrderId", async (req, res) => {
   try {
     const receipts = await Receipt.find({
-      originalSalesOrderId: req.params.salesOrderId,
+      $or: [
+        { originalSalesOrderId: req.params.salesOrderId },
+        { "relatedOrders.salesOrderId": req.params.salesOrderId }
+      ],
       status: { $in: ["confirmed", "bounced"] }
     });
 
@@ -526,65 +531,83 @@ router.post("/bulk", async (req, res) => {
 
     const financialYear = getFinancialYear();
     const createdReceipts = [];
-    let totalAmount = 0;
+    let totalCashAmount = 0;
+    const cashRelatedOrders = [];
+    const creditReceipts = [];
+
+    // 1. Process all payments to build the data
     for (const p of payments) {
       const order = await SalesOrder.findById(p.salesOrderId).session(session);
       if (!order) continue;
 
-      // 1. CASH RECEIPT (if any cash provided for this order)
+      const totalApplied = (p.amount || 0) + (p.creditAmount || 0);
       if (p.amount > 0) {
-        const receiptId = await generateBranchSpecificReceiptId(branchId || order.branchId, financialYear);
-        const receipt = new Receipt({
-          receiptId,
-          branchId: branchId || order.branchId,
-          originalSalesOrderId: order._id,
-          originalInvoiceId: order.invoiceId,
-          customer: { customerId: customer._id, name: customer.name },
-          amount: p.amount,
-          paymentMethod: paymentMethod || "CASH",
-          reference: reference || null,
-          notes: `${notes || ""} (Paid against ${order.invoiceId})`.trim(),
-          financialYear,
-          status: "confirmed",
-          paymentDate: paymentDate || new Date(),
-          generatedBy: req.user?.id || null
+        const actualInvoiceId = order.salesInvoiceId || order.invoiceId;
+        totalCashAmount += p.amount;
+        cashRelatedOrders.push({
+          salesOrderId: order._id,
+          invoiceId: actualInvoiceId,
+          amount: p.amount
         });
-        await receipt.save({ session });
-        createdReceipts.push(receipt);
-        totalAmount += p.amount;
       }
 
-      // 2. CREDIT UTILIZATION RECEIPT (if credit applied for this order)
       if (p.creditAmount > 0) {
+        const actualInvoiceId = order.salesInvoiceId || order.invoiceId;
+        // Credit receipts remain separate for accounting (CRD prefix)
         const creditReceiptId = await generateBranchSpecificReceiptId(branchId || order.branchId, financialYear, "CRD");
         const creditReceipt = new Receipt({
           receiptId: creditReceiptId,
           branchId: branchId || order.branchId,
           originalSalesOrderId: order._id,
-          originalInvoiceId: order.invoiceId,
+          originalInvoiceId: actualInvoiceId,
           customer: { customerId: customer._id, name: customer.name },
           amount: p.creditAmount,
           paymentMethod: "CREDIT",
           reference: "Credit Applied",
-          notes: `Utilized existing customer credit against ${order.invoiceId}`,
+          notes: `Utilized existing customer credit against ${actualInvoiceId}`,
           financialYear,
           status: "confirmed",
           paymentDate: paymentDate || new Date(),
           generatedBy: req.user?.id || null
         });
         await creditReceipt.save({ session });
-        createdReceipts.push(creditReceipt);
-        // We DON'T add creditAmount to totalAmount because it's not "new money"
+        creditReceipts.push(creditReceipt);
       }
 
       // Update Order Balance
-      const totalApplied = (p.amount || 0) + (p.creditAmount || 0);
       const newOrderClosingBalance = Math.max(0, (order.closingBalance || 0) - totalApplied);
       await SalesOrder.findByIdAndUpdate(order._id, { closingBalance: newOrderClosingBalance }).session(session);
     }
 
+    // 2. Create the SINGLE Master Cash/Bank Receipt
+    if (totalCashAmount > 0) {
+      const receiptId = await generateBranchSpecificReceiptId(branchId, financialYear);
+      const masterReceipt = new Receipt({
+        receiptId,
+        branchId,
+        customer: { customerId: customer._id, name: customer.name },
+        amount: totalCashAmount,
+        paymentMethod: paymentMethod || "CASH",
+        reference: reference || null,
+        notes: notes || "Consolidated payment for multiple invoices",
+        relatedOrders: cashRelatedOrders,
+        // For backwards compatibility, set the first order as the main one
+        originalSalesOrderId: cashRelatedOrders[0]?.salesOrderId,
+        originalInvoiceId: cashRelatedOrders[0]?.invoiceId,
+        financialYear,
+        status: "confirmed",
+        paymentDate: paymentDate || new Date(),
+        generatedBy: req.user?.id || null
+      });
+      await masterReceipt.save({ session });
+      createdReceipts.push(masterReceipt);
+    }
+
+    // Add credit receipts to the results
+    createdReceipts.push(...creditReceipts);
+
     // Update Customer Totals
-    let remainingAmount = totalAmount; // This is NEW cash/bank money
+    let remainingAmount = totalCashAmount; // This is NEW cash/bank money
     let currentDebit = customer.debit || 0;
     let currentCredit = customer.credit || 0;
 
@@ -606,7 +629,7 @@ router.post("/bulk", async (req, res) => {
        currentCredit -= actualCreditToUse;
     }
 
-    const newClosingBalance = (customer.closingBalance || 0) - totalAmount;
+    const newClosingBalance = (customer.closingBalance || 0) - totalCashAmount;
     await Customer.findByIdAndUpdate(customerId, {
       debit: currentDebit,
       credit: currentCredit,
@@ -620,7 +643,7 @@ router.post("/bulk", async (req, res) => {
       username: req.user?.username || "System",
       branchId: branchId || customer.branchId,
       action: "BULK_RECEIPT",
-      description: `Recorded bulk receipt for ${customer.name}. Total: ₹${totalAmount}. Invoices: ${createdReceipts.map(r => r.originalInvoiceId).join(", ")}`,
+      description: `Recorded bulk receipt for ${customer.name}. Total: ₹${totalCashAmount}. Invoices: ${cashRelatedOrders.map(ro => ro.invoiceId).join(", ")}`,
       targetId: customer._id,
       targetModel: "Customer"
     });
@@ -690,7 +713,13 @@ router.post("/:id/cancel", async (req, res) => {
     }).session(session);
 
     // 2. REVERSE SALES ORDER BALANCE (if linked)
-    if (receipt.originalSalesOrderId) {
+    if (receipt.relatedOrders && receipt.relatedOrders.length > 0) {
+      for (const ro of receipt.relatedOrders) {
+        await SalesOrder.findByIdAndUpdate(ro.salesOrderId, { 
+          $inc: { closingBalance: ro.amount } 
+        }).session(session);
+      }
+    } else if (receipt.originalSalesOrderId) {
       const order = await SalesOrder.findById(receipt.originalSalesOrderId).session(session);
       if (order) {
         const newOrderBalance = (order.closingBalance || 0) + amount;

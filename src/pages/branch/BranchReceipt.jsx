@@ -30,6 +30,7 @@ export default function BranchReceipt() {
   // Pagination & Data Control
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalInvoicesCount, setTotalInvoicesCount] = useState(0);
   const [limit] = useState(50); // Show 50 per page for better performance
 
   // Date filters
@@ -48,21 +49,27 @@ export default function BranchReceipt() {
   
   useEffect(() => {
     if (currentBranch?._id) fetchData();
-  }, [currentBranch, fromDate, toDate, currentPage]);
+  }, [currentBranch, fromDate, toDate, currentPage, searchTerm]);
+
+  // Reset to page 1 when dates or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [fromDate, toDate, searchTerm]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       console.log("Fetching Branch Receipts for:", currentBranch?._id);
       
-      // 1. Fetch Sales Invoices (Paginated & Filtered)
-      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&page=${currentPage}&limit=${limit}`, {
+      // 1. Fetch Sales Invoices (Paginated & Filtered - GLOBAL SEARCH)
+      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&page=${currentPage}&limit=${limit}&search=${encodeURIComponent(searchTerm)}`, {
         headers: { "Content-Type": "application/json" },
       });
       const invResult = await invResponse.json();
       const invArray = invResult.data || [];
       setInvoices(invArray);
       setTotalPages(invResult.pagination?.pages || 1);
+      setTotalInvoicesCount(invResult.pagination?.total || invArray.length);
 
       // 2. Optimized: Fetch all receipts for these invoices in ONE call
       const allOrderIds = [
@@ -121,22 +128,22 @@ export default function BranchReceipt() {
 
   // Combine items for the same table with deduplication
   // Prefer Invoice objects over SalesOrder objects if they refer to the same thing
-  const combinedInvoicesMap = new Map();
-
-  invoices.forEach(inv => {
-    // Use Invoice Number as the primary display ID
-    const displayKey = inv.invoiceNumber || inv._id;
-    const orderId = inv.salesOrderId?._id || inv.salesOrderId || inv._id;
-    
-    combinedInvoicesMap.set(displayKey, { 
-      ...inv, 
-      _id: orderId, // Still use SO ID for receipt linking compatibility
-      invoiceId: inv.invoiceNumber,
-      rowType: "INVOICE" 
-    });
-  });
-
   const allItems = React.useMemo(() => {
+    const combinedInvoicesMap = new Map();
+
+    invoices.forEach(inv => {
+      // Use Invoice Number as the primary display ID
+      const displayKey = inv.invoiceNumber || inv._id;
+      const orderId = inv.salesOrderId?._id || inv.salesOrderId || inv._id;
+      
+      combinedInvoicesMap.set(displayKey, { 
+        ...inv, 
+        _id: orderId, // Still use SO ID for receipt linking compatibility
+        invoiceId: inv.invoiceNumber,
+        rowType: "INVOICE" 
+      });
+    });
+
     return [
       ...Array.from(combinedInvoicesMap.values()),
       ...generalReceipts.map(gr => ({ ...gr, rowType: "GENERAL_RECEIPT" }))
@@ -172,18 +179,10 @@ export default function BranchReceipt() {
   };
 
   const filteredItems = React.useMemo(() => {
-    return allItems.filter(item => {
-      if (!searchTerm) return true;
-      
-      const searchLower = searchTerm.toLowerCase();
-      
-      const displayId = (item.invoiceNumber || item.invoiceId || item.receiptId || "").toString().toLowerCase();
-      const customerName = (typeof item.customer === "object" ? item.customer?.name : item.customer || "").toString().toLowerCase();
-      const totalAmount = (item.rowType === "ORDER" || item.rowType === "INVOICE" ? (item.grandTotal || 0) : (item.amount || 0)).toString().toLowerCase();
-
-      return displayId.includes(searchLower) || customerName.includes(searchLower) || totalAmount.includes(searchLower);
-    });
-  }, [allItems, searchTerm]);
+    // Note: Search is now handled globally by the backend!
+    // We just need to return the allItems which are already filtered by the API
+    return allItems;
+  }, [allItems]);
 
   const getReceiptsForInvoice = (invoiceId) => {
     return receiptData[invoiceId]?.receipts || [];
@@ -364,152 +363,86 @@ export default function BranchReceipt() {
                     <th className="px-4 py-4 text-center text-xs font-bold text-gray-700 uppercase">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
-                  {filteredItems.map((item) => {
-                    const isOrder = item.rowType === "ORDER" || item.rowType === "INVOICE";
-                    const isExpanded = expandedInvoices[item._id] || false;
-                    
-                    // Unified calculations
-                    const displayId = item.invoiceNumber || item.invoiceId || item.receiptId;
-                    const customerName = typeof item.customer === "object" ? item.customer?.name : item.customer;
-                    const totalAmount = isOrder ? (item.grandTotal || 0) : (item.amount || 0);
-                    const credNotes = isOrder ? getCreditNoteAmount(item) : 0;
-                    const received = isOrder ? getTotalReceivedAmount(item) : (item.amount || 0);
-                    const pending = isOrder ? Math.max(0, totalAmount - credNotes - received) : 0;
-                    
-                    // LATEST REQUIREMENT: Hide fully settled/credited bills
-                    if (isOrder && pending <= 0 && credNotes > 0) return null;
-
-                    const statusText = isOrder ? getReceiptStatus(item) : `Paid via ${item.paymentMethod || 'CASH'}`;
-                    const WarehouseName = isOrder ? (item.warehouse?.name || item.warehouse || "N/A") : "Direct Settle";
-
-                    return (
-                      <React.Fragment key={item._id}>
-                        {/* MAIN ROW */}
-                        <tr className={`${!isOrder ? "bg-gray-50/50" : ""} hover:bg-gray-50 transition`}>
-                          <td className="px-2 py-3 text-center">
-                            {isOrder ? (
-                              <button
-                                onClick={() => toggleExpandInvoice(item._id)}
-                                className="text-cyan-600 hover:text-cyan-700 transition"
-                              >
-                                {isExpanded ? <FaChevronUp /> : <FaChevronDown />}
-                              </button>
-                            ) : "-"}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-cyan-600">
-                            {displayId}
-                          </td>
-                          {isFieldAllowed("customerDetails") && (
-                            <td className="px-4 py-3 font-semibold text-gray-800">
-                              {customerName}
-                            </td>
-                          )}
-                          <td className="px-4 py-3 text-gray-600 text-sm">
-                            {WarehouseName}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span className="bg-cyan-600/10 text-cyan-600 px-3 py-1 rounded-full text-xs font-bold">
-                              {isOrder ? (item.items?.length || item.invoiceItems?.length || item.lastInvoicedItems?.length || 0) : 1}
-                            </span>
-                          </td>
-                          {isFieldAllowed("amount") && (
-                            <>
-                              <td className="px-4 py-3 text-right font-bold">
-                                ₹{totalAmount.toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3 text-right font-bold text-red-500">
-                                {credNotes > 0 ? `- ₹${credNotes.toLocaleString()}` : "-"}
-                              </td>
-                              <td className="px-4 py-3 text-right font-bold text-green-600">
-                                ₹{received.toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3 text-right font-bold text-orange-600">
-                                ₹{pending.toLocaleString()}
-                              </td>
-                            </>
-                          )}
-                          <td className="px-4 py-3 text-center">
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                isOrder ? getStatusColor(item) : "bg-purple-100 text-purple-700"
-                              }`}
-                            >
-                              {statusText}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center text-gray-600 text-[10px] leading-tight">
-                            {formatDateTime(item.createdAt || item.date || item.invoiceDate)}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                             <div className="flex justify-center gap-2">
-                               {isOrder ? (
-                                 <>
-                                   {pending > 0 ? (
-                                     <button
-                                       onClick={() => handleReceivePayment(item, pending)}
-                                       className="inline-flex items-center gap-2 bg-cyan-600 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-cyan-700 transition shadow-sm"
-                                     >
-                                       RECEIVE
-                                     </button>
-                                   ) : (
-                                     <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 px-3 py-1.5 rounded-lg font-bold text-[10px]">
-                                       ✓ Paid
-                                     </span>
-                                   )}
-                                   <button
-                                     onClick={() => handleBounceClick(item)}
-                                     className="inline-flex items-center gap-2 bg-red-100 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-red-200 transition"
-                                   >
-                                     Bounce
-                                   </button>
-                                 </>
-                               ) : (
-                                 <span className="text-[10px] text-gray-400 font-bold italic bg-gray-50 px-2 py-1 rounded">Settlement Log</span>
-                               )}
-                             </div>
-                          </td>
-                        </tr>
-
-                        {/* INVOICE DETAILS (Only if Invoice and Expanded) */}
-                        {isOrder && isExpanded && item.items && item.items.length > 0 && (
-                          <tr>
-                            <td colSpan="12" className="px-4 py-4 bg-gray-50">
-                              <div className="ml-6">
-                                <h4 className="text-cyan-600 font-bold text-sm mb-3 uppercase flex items-center gap-2">
-                                  📦 Invoice Items Summary
-                                </h4>
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-xs bg-white rounded-lg shadow-sm">
-                                    <thead>
-                                      <tr className="border-b bg-gray-50/50">
-                                        <th className="px-3 py-2 text-left font-bold text-gray-700">Product Name</th>
-                                        <th className="px-3 py-2 text-center font-bold text-gray-700">Qty</th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">Unit Price</th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">Item Total</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y">
-                                      {item.items.map((prod, idx) => (
-                                        <tr key={idx} className="hover:bg-gray-50 transition">
-                                          <td className="px-3 py-2 font-semibold text-gray-800">{prod.name}</td>
-                                          <td className="px-3 py-2 text-center font-bold bg-gray-50/50">{prod.qty}</td>
-                                          <td className="px-3 py-2 text-right">₹{prod.sellingPrice}</td>
-                                          <td className="px-3 py-2 text-right font-bold text-cyan-600">₹{prod.total}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
+                <tbody className="divide-y">                  {filteredItems.map((item) => (
+                    <ReceiptRow
+                      key={item._id}
+                      item={item}
+                      isExpanded={expandedInvoices[item._id]}
+                      onToggleExpand={toggleExpandInvoice}
+                      onReceive={handleReceivePayment}
+                      onBounce={handleBounceClick}
+                      receipts={getReceiptsForInvoice(item._id)}
+                      isFieldAllowed={isFieldAllowed}
+                      formatDateTime={formatDateTime}
+                      getStatusColor={getStatusColor}
+                      getReceiptStatus={getReceiptStatus}
+                      getTotalReceivedAmount={getTotalReceivedAmount}
+                      getCreditNoteAmount={getCreditNoteAmount}
+                    />
+                  ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* PAGINATION CONTROLS */}
+          {totalPages > 1 && (
+            <div className="bg-gray-50 px-4 py-4 border-t flex items-center justify-between">
+              <div className="text-xs font-bold text-gray-500 uppercase">
+                Page <span className="text-cyan-600">{currentPage}</span> of <span className="text-cyan-600">{totalPages}</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  className={`px-4 py-2 rounded-lg font-bold text-xs transition ${
+                    currentPage === 1 
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed" 
+                      : "bg-white border border-cyan-200 text-cyan-600 hover:bg-cyan-50 shadow-sm"
+                  }`}
+                >
+                  PREVIOUS
+                </button>
+                
+                {/* Simple Page Numbers */}
+                <div className="hidden md:flex gap-1">
+                  {[...Array(totalPages)].map((_, i) => {
+                    const pageNum = i + 1;
+                    // Only show 5 pages around current
+                    if (pageNum === 1 || pageNum === totalPages || (pageNum >= currentPage - 2 && pageNum <= currentPage + 2)) {
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`w-8 h-8 rounded-lg font-bold text-xs transition ${
+                            currentPage === pageNum
+                              ? "bg-cyan-600 text-white shadow-md"
+                              : "bg-white border border-gray-200 text-gray-600 hover:border-cyan-400"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    }
+                    if (pageNum === currentPage - 3 || pageNum === currentPage + 3) {
+                      return <span key={pageNum} className="px-1 text-gray-400">...</span>;
+                    }
+                    return null;
+                  })}
+                </div>
+
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  className={`px-4 py-2 rounded-lg font-bold text-xs transition ${
+                    currentPage === totalPages 
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed" 
+                      : "bg-cyan-600 text-white hover:bg-cyan-700 shadow-md"
+                  }`}
+                >
+                  NEXT
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -520,7 +453,7 @@ export default function BranchReceipt() {
             <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-blue-500">
               <p className="text-gray-600 text-sm uppercase font-bold mb-2">Total Invoices</p>
               <p className="text-3xl font-black text-gray-800">
-                {filteredItems.filter(i => i.rowType === "ORDER" || i.rowType === "INVOICE").length}
+                {totalInvoicesCount}
               </p>
             </div>
 
@@ -595,3 +528,171 @@ export default function BranchReceipt() {
     </div>
   );
 }
+
+// ⚡ PERFORMANCE OPTIMIZATION: Memoized Row Component to prevent unnecessary re-renders
+const ReceiptRow = React.memo(({ 
+  item, 
+  isExpanded, 
+  onToggleExpand, 
+  onReceive, 
+  onBounce, 
+  receipts, 
+  isFieldAllowed, 
+  formatDateTime,
+  getStatusColor,
+  getReceiptStatus,
+  getTotalReceivedAmount,
+  getCreditNoteAmount
+}) => {
+  const isOrder = item.rowType === "ORDER" || item.rowType === "INVOICE";
+  
+  // Unified calculations
+  const displayId = item.invoiceNumber || item.invoiceId || item.receiptId;
+  const customerName = typeof item.customer === "object" ? item.customer?.name : item.customer;
+  const totalAmount = isOrder ? (item.grandTotal || 0) : (item.amount || 0);
+  const credNotes = isOrder ? getCreditNoteAmount(item) : 0;
+  const received = isOrder ? getTotalReceivedAmount(item) : (item.amount || 0);
+  const pending = isOrder ? Math.max(0, totalAmount - credNotes - received) : 0;
+  
+  // LATEST REQUIREMENT: Hide fully settled/credited bills
+  if (isOrder && pending <= 0 && credNotes > 0) return null;
+
+  const statusText = isOrder ? getReceiptStatus(item) : `Paid via ${item.paymentMethod || 'CASH'}`;
+  const WarehouseName = isOrder ? (item.warehouse?.name || item.warehouse || "N/A") : "Direct Settle";
+
+  return (
+    <React.Fragment>
+      {/* MAIN ROW */}
+      <tr className={`${!isOrder ? "bg-gray-50/50" : ""} hover:bg-gray-50 transition`}>
+        <td className="px-2 py-3 text-center">
+          {isOrder ? (
+            <button
+              onClick={() => onToggleExpand(item._id)}
+              className="text-cyan-600 hover:text-cyan-700 transition"
+            >
+              {isExpanded ? <FaChevronUp /> : <FaChevronDown />}
+            </button>
+          ) : "-"}
+        </td>
+        <td className="px-4 py-3 font-bold text-cyan-600">
+          {displayId}
+        </td>
+        {isFieldAllowed("customerDetails") && (
+          <td className="px-4 py-3 font-semibold text-gray-800">
+            {customerName}
+          </td>
+        )}
+        <td className="px-4 py-3 text-gray-600 text-sm">
+          {WarehouseName}
+        </td>
+        <td className="px-4 py-3 text-center">
+          <span className="bg-cyan-600/10 text-cyan-600 px-3 py-1 rounded-full text-xs font-bold">
+            {isOrder ? (item.items?.length || item.invoiceItems?.length || item.lastInvoicedItems?.length || 0) : 1}
+          </span>
+        </td>
+        {isFieldAllowed("amount") && (
+          <>
+            <td className="px-4 py-3 text-right font-bold">
+              ₹{totalAmount.toLocaleString()}
+            </td>
+            <td className="px-4 py-3 text-right font-bold text-red-500">
+              {credNotes > 0 ? `- ₹${credNotes.toLocaleString()}` : "-"}
+            </td>
+            <td className="px-4 py-3 text-right font-bold text-green-600">
+              ₹{received.toLocaleString()}
+            </td>
+            <td className="px-4 py-3 text-right font-bold text-orange-600">
+              ₹{pending.toLocaleString()}
+            </td>
+          </>
+        )}
+        <td className="px-4 py-3 text-center">
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-bold ${
+              isOrder ? getStatusColor(item) : "bg-purple-100 text-purple-700"
+            }`}
+          >
+            {statusText}
+          </span>
+        </td>
+        <td className="px-4 py-3 text-center text-gray-600 text-[10px] leading-tight">
+          {formatDateTime(item.createdAt || item.date || item.invoiceDate)}
+        </td>
+        <td className="px-4 py-3 text-center">
+           <div className="flex justify-center gap-2">
+             {isOrder ? (
+               <>
+                 {pending > 0 ? (
+                   <button
+                     onClick={() => onReceive(item, pending)}
+                     className="inline-flex items-center gap-2 bg-cyan-600 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-cyan-700 transition shadow-sm"
+                   >
+                     RECEIVE
+                   </button>
+                 ) : (
+                   <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 px-3 py-1.5 rounded-lg font-bold text-[10px]">
+                     ✓ Paid
+                   </span>
+                 )}
+                 <button
+                   onClick={() => onBounce(item)}
+                   className="inline-flex items-center gap-2 bg-red-100 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-red-200 transition"
+                 >
+                   Bounce
+                 </button>
+               </>
+             ) : (
+               <span className="text-[10px] text-gray-400 font-bold italic bg-gray-50 px-2 py-1 rounded">Settlement Log</span>
+             )}
+           </div>
+        </td>
+      </tr>
+      {/* EXPANDED SECTION */}
+      {isExpanded && (
+        <tr>
+           <td colSpan={11} className="p-0">
+              <div className="bg-cyan-50/50 p-4 border-b border-cyan-100">
+                 <div className="flex items-center gap-2 mb-3 text-xs font-black text-cyan-700 uppercase tracking-widest">
+                    <FaHistory size={14} /> Payment History for {displayId}
+                 </div>
+                 <div className="bg-white rounded-xl shadow-sm border border-cyan-100 overflow-hidden">
+                    <table className="w-full text-xs">
+                       <thead className="bg-cyan-50 text-cyan-600 uppercase font-black tracking-tighter">
+                          <tr>
+                             <th className="px-4 py-2 text-left">Receipt ID</th>
+                             <th className="px-4 py-2 text-left">Date</th>
+                             <th className="px-4 py-2 text-center">Mode</th>
+                             <th className="px-4 py-2 text-right">Amount</th>
+                             <th className="px-4 py-2 text-center">Reference</th>
+                          </tr>
+                       </thead>
+                       <tbody className="divide-y divide-cyan-50">
+                          {receipts.length === 0 ? (
+                             <tr>
+                                <td colSpan={5} className="py-4 text-center text-gray-400 font-medium italic">
+                                   No payment receipts found for this transaction.
+                                </td>
+                             </tr>
+                          ) : (
+                             receipts.map((r, ri) => (
+                                <tr key={ri} className="hover:bg-cyan-50/30 transition">
+                                   <td className="px-4 py-2 font-bold text-cyan-700">{r.receiptId}</td>
+                                   <td className="px-4 py-2 text-gray-500 font-medium">{formatDateTime(r.createdAt)}</td>
+                                   <td className="px-4 py-2 text-center">
+                                      <span className="bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{r.paymentMethod}</span>
+                                   </td>
+                                   <td className="px-4 py-2 text-right font-black text-gray-800">₹{r.amount.toLocaleString()}</td>
+                                   <td className="px-4 py-2 text-center text-gray-400 font-medium">{r.reference || "-"}</td>
+                                </tr>
+                             ))
+                          )}
+                       </tbody>
+                    </table>
+                 </div>
+              </div>
+           </td>
+        </tr>
+      )}
+    </React.Fragment>
+  );
+});
