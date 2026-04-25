@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaArrowLeft, FaFileAlt, FaSearch } from "react-icons/fa";
+import { FaArrowLeft, FaFileAlt, FaSearch, FaTimesCircle } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useBranch } from "../../context/BranchContext";
@@ -32,6 +32,30 @@ export default function BranchReceiptRecords() {
       toast.error("Failed to load receipt records");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCancel = async (id) => {
+    const reason = window.prompt("Enter reason for cancellation (Narration):");
+    if (reason === null) return; // User cancelled prompt
+    if (!reason.trim()) return toast.error("Cancellation reason is required");
+
+    try {
+      const response = await fetch(`${API_BASE}/receipts/${id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason })
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success("Receipt cancelled successfully");
+        fetchReceipts();
+      } else {
+        toast.error(result.message || "Failed to cancel receipt");
+      }
+    } catch (error) {
+      console.error("Cancel error:", error);
+      toast.error("Error connecting to server");
     }
   };
 
@@ -200,13 +224,17 @@ export default function BranchReceiptRecords() {
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Customer</th>
                     <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Mode</th>
                     <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filteredReceipts.map((r) => (
-                    <tr key={r._id} className="hover:bg-blue-50/30 transition-colors group">
+                    <tr key={r._id} className={`hover:bg-blue-50/30 transition-colors group ${r.status === 'cancelled' ? 'opacity-60 grayscale-[0.5]' : ''}`}>
                       <td className="px-6 py-4">
                         <span className="font-bold text-blue-600 group-hover:text-blue-700">{r.receiptId}</span>
+                        {r.generatedBy?.name && (
+                            <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">By: {r.generatedBy.name}</p>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">
                         {formatDateTime(r.createdAt)}
@@ -231,9 +259,27 @@ export default function BranchReceiptRecords() {
                             {r.reference}
                           </p>
                         )}
+                        {r.status === 'cancelled' && r.cancelReason && (
+                             <p className="text-[8px] text-red-400 italic mt-1 max-w-[120px] mx-auto line-through">Reason: {r.cancelReason}</p>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <p className="text-lg font-black text-gray-900">₹{r.amount?.toLocaleString()}</p>
+                        <p className={`text-lg font-black ${r.status === 'cancelled' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                          ₹{r.amount?.toLocaleString()}
+                        </p>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {r.status !== 'cancelled' ? (
+                          <button 
+                            onClick={() => handleCancel(r._id)}
+                            className="text-red-400 hover:text-red-600 transition p-2 hover:bg-red-50 rounded-lg"
+                            title="Cancel Receipt"
+                          >
+                            <FaTimesCircle size={16} />
+                          </button>
+                        ) : (
+                          <span className="text-[10px] font-bold text-red-600 uppercase italic bg-red-50 px-2 py-1 rounded">Cancelled</span>
+                        )}
                       </td>
                     </tr>
                   ))}

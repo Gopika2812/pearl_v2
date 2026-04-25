@@ -102,7 +102,10 @@ router.get("/", async (req, res) => {
   try {
     const { branchId } = req.query;
     const query = branchId ? { branchId } : {};
-    const receipts = await Receipt.find(query).sort({ createdAt: -1 });
+    const receipts = await Receipt.find(query)
+      .populate("generatedBy", "name")
+      .populate("cancelledBy", "name")
+      .sort({ createdAt: -1 });
     res.json({ data: receipts });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch receipts" });
@@ -532,7 +535,8 @@ router.post("/bulk", async (req, res) => {
           notes: `${notes || ""} (Paid against ${order.invoiceId})`.trim(),
           financialYear,
           status: "confirmed",
-          paymentDate: paymentDate || new Date()
+          paymentDate: paymentDate || new Date(),
+          generatedBy: req.user?.id || null
         });
         await receipt.save({ session });
         createdReceipts.push(receipt);
@@ -554,7 +558,8 @@ router.post("/bulk", async (req, res) => {
           notes: `Utilized existing customer credit against ${order.invoiceId}`,
           financialYear,
           status: "confirmed",
-          paymentDate: paymentDate || new Date()
+          paymentDate: paymentDate || new Date(),
+          generatedBy: req.user?.id || null
         });
         await creditReceipt.save({ session });
         createdReceipts.push(creditReceipt);
@@ -614,6 +619,97 @@ router.post("/bulk", async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     console.error("Bulk Receipt Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  } finally {
+    session.endSession();
+  }
+});
+
+/**
+ * POST: Cancel a Receipt
+ */
+router.post("/:id/cancel", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const receipt = await Receipt.findById(id).session(session);
+
+    if (!receipt) {
+      return res.status(404).json({ success: false, message: "Receipt not found" });
+    }
+
+    if (receipt.status === "cancelled") {
+      return res.status(400).json({ success: false, message: "Receipt already cancelled" });
+    }
+
+    const customer = await Customer.findById(receipt.customer.customerId).session(session);
+    if (!customer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
+
+    // 1. REVERSE CUSTOMER BALANCE
+    const amount = receipt.amount || 0;
+    let currentDebit = customer.debit || 0;
+    let currentCredit = customer.credit || 0;
+
+    if (receipt.paymentMethod === "CREDIT") {
+      // It was credit utilization: Reversed logic
+      currentDebit += amount;
+      currentCredit += amount;
+    } else {
+      // Regular payment reversal: Reduce credit first, then increase debit
+      let remainingToReverse = amount;
+      const creditToRemove = Math.min(currentCredit, remainingToReverse);
+      currentCredit -= creditToRemove;
+      remainingToReverse -= creditToRemove;
+      currentDebit += remainingToReverse;
+    }
+
+    const newClosingBalance = (customer.closingBalance || 0) + (receipt.paymentMethod === "CREDIT" ? 0 : amount);
+
+    await Customer.findByIdAndUpdate(customer._id, {
+      debit: currentDebit,
+      credit: currentCredit,
+      closingBalance: newClosingBalance,
+      totalBalance: newClosingBalance,
+    }).session(session);
+
+    // 2. REVERSE SALES ORDER BALANCE (if linked)
+    if (receipt.originalSalesOrderId) {
+      const order = await SalesOrder.findById(receipt.originalSalesOrderId).session(session);
+      if (order) {
+        const newOrderBalance = (order.closingBalance || 0) + amount;
+        await SalesOrder.findByIdAndUpdate(order._id, { closingBalance: newOrderBalance }).session(session);
+      }
+    }
+
+    // 3. UPDATE RECEIPT STATUS
+    receipt.status = "cancelled";
+    receipt.cancelledBy = req.user?.id || null;
+    receipt.cancelReason = reason || "No reason provided";
+    await receipt.save({ session });
+
+    // 4. AUDIT LOG
+    await createAuditLog({
+      userId: req.user?.id || "SYSTEM",
+      userModel: "BranchUser",
+      username: req.user?.username || "System",
+      branchId: receipt.branchId,
+      action: "RECEIPT_CANCEL",
+      description: `Cancelled receipt ${receipt.receiptId} for ₹${amount}. Customer: ${customer.name}.`,
+      targetId: receipt._id,
+      targetModel: "Receipt"
+    });
+
+    await session.commitTransaction();
+    res.json({ success: true, message: "Receipt cancelled successfully" });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("Cancel Receipt Error:", error);
     res.status(500).json({ success: false, message: error.message });
   } finally {
     session.endSession();

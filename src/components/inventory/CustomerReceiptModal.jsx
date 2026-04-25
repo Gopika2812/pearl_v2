@@ -12,6 +12,7 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess, ini
   const [selectedBank, setSelectedBank] = useState("");
   const [selectedUpi, setSelectedUpi] = useState("");
   const [useCredit, setUseCredit] = useState(false); // 🔥 New state for credit utilization
+  const [calculatedOpeningBalance, setCalculatedOpeningBalance] = useState(0);
   
   const [formData, setFormData] = useState({
     amount: "",
@@ -46,6 +47,7 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess, ini
       resetForm();
       fetchUnpaidInvoices();
       fetchCustomerDetails();
+      fetchLedgerSummary();
     }
   }, [isOpen, customer?._id]);
 
@@ -59,6 +61,19 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess, ini
           if (result.success) setFullCustomer(result.data);
           else if (result._id) setFullCustomer(result);
       } catch (err) { console.error(err); }
+  };
+
+  const fetchLedgerSummary = async () => {
+    const cId = customer._id?.toString() || (typeof customer === 'string' ? customer : "");
+    if (!cId || cId === "[object Object]") return;
+
+    try {
+      const response = await fetchWithAuth(`${API_BASE}/customers/${cId}/ledger`);
+      const result = await response.json();
+      if (result.success) {
+        setCalculatedOpeningBalance(result.data.openingBalance || 0);
+      }
+    } catch (err) { console.error(err); }
   };
 
   const fetchUnpaidInvoices = async () => {
@@ -223,7 +238,7 @@ const CustomerReceiptModal = ({ isOpen, onClose, customer, onPaymentSuccess, ini
           <div className="flex items-center gap-6">
               <div className="text-right">
                   <p className="text-[10px] text-gray-400 uppercase font-bold">Opening Balance</p>
-                  <p className="text-xs font-bold text-gray-700">₹{(fullCustomer?.openingBalance || 0).toLocaleString()}</p>
+                  <p className="text-xs font-bold text-gray-700">₹{(calculatedOpeningBalance || fullCustomer?.openingBalance || 0).toLocaleString()}</p>
               </div>
               <button onClick={onClose} className="text-gray-300 hover:text-red-500 transition-all">
                   <FaTimes size={18} />

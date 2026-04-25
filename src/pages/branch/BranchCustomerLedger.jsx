@@ -460,13 +460,14 @@ const BranchCustomerLedger = () => {
                       <td className="px-8 py-6 text-slate-300 group-hover:text-indigo-400 transition-colors">{index + 1}</td>
                       <td className="px-6 py-6 text-slate-500">{formatDate(txn.date)}</td>
                       <td className="px-6 py-6">
-                        <div className="text-slate-800 group-hover:text-slate-900 transition-colors uppercase tracking-tight">{docId}</div>
-                        <div className="text-[10px] text-slate-400 font-bold italic truncate max-w-[200px] mt-0.5">{txn.particulars}</div>
+                        <div className={`text-slate-800 group-hover:text-slate-900 transition-colors uppercase tracking-tight ${txn.type === 'CANCELLED' ? 'line-through text-slate-400' : ''}`}>{docId}</div>
+                        <div className={`text-[10px] text-slate-400 font-bold italic truncate max-w-[200px] mt-0.5 ${txn.type === 'CANCELLED' ? 'line-through' : ''}`}>{txn.particulars}</div>
                       </td>
                       <td className="px-6 py-6 text-center">
                         <span className={`px-2.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm border ${
                           txn.type === "INVOICE" ? "bg-rose-50 text-rose-600 border-rose-100" : 
                           txn.type === "RECEIPT" || txn.type === "BOUNCED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" : 
+                          txn.type === "CANCELLED" ? "bg-slate-100 text-slate-400 border-slate-200" :
                           "bg-indigo-50 text-indigo-600 border-indigo-100"
                         }`}>
                           {txn.type === "RECEIPT" ? (txn.particulars?.match(/\(([^)]+)\)/)?.[1]?.toUpperCase() || "CASH") : txn.type}
@@ -486,6 +487,8 @@ const BranchCustomerLedger = () => {
                       <td className="px-6 py-6 text-right">
                         {txn.credit > 0 ? (
                           <div className="text-[13px] font-bold text-emerald-600">₹{txn.credit.toLocaleString()}</div>
+                        ) : txn.type === "CANCELLED" ? (
+                          <div className="text-[13px] font-bold text-slate-400 line-through">₹{txn.originalAmount?.toLocaleString()}</div>
                         ) : "-"}
                       </td>
                       <td className={`px-8 py-6 text-right font-black text-[14px] ${balanceColor(txn.balance)}`}>

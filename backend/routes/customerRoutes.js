@@ -831,6 +831,8 @@ router.post("/", async (req, res) => {
       branch,
       upi,
       isLockedPriceEnabled: isLockedPriceEnabled === true || isLockedPriceEnabled === "true",
+      openingBalance: (Number(debit) || 0) - (Number(credit) || 0),
+      manualOpeningDate: new Date(),
     });
 
     const savedCustomer = await customer.save();
@@ -898,6 +900,12 @@ router.put("/:id", async (req, res) => {
     }
     if (updates.debit !== undefined) {
       updates.debit = Number(updates.debit) || 0;
+    }
+    
+    // If openingBalance is not set but debit/credit are, initialize it
+    if (updates.openingBalance === undefined && (updates.debit !== undefined || updates.credit !== undefined)) {
+        // We only want to set this if it was previously 0 or null to avoid overwriting legitimate historical opening balances
+        // But for now, let's just make it available if explicitly provided
     }
 
     // Validate registrationType if provided
@@ -1129,9 +1137,11 @@ router.get("/:id/ledger", async (req, res) => {
     // Credits: Receipts after startDate
     const receiptsAfterStart = await Receipt.find({
       "customer.customerId": id,
-      status: { $in: ["confirmed", "bounced"] },
+      status: { $in: ["confirmed", "bounced", "cancelled"] },
       createdAt: { $gte: start }
-    }).select("amount createdAt receiptId paymentMethod originalInvoiceId status");
+    }).select("amount createdAt receiptId paymentMethod originalInvoiceId status generatedBy cancelledBy cancelReason")
+      .populate("generatedBy", "name")
+      .populate("cancelledBy", "name");
 
     // Credits: Credit Notes after startDate
     const cnAfterStart = await CreditNote.find({
@@ -1146,6 +1156,7 @@ router.get("/:id/ledger", async (req, res) => {
 
     const totalCreditsAfterStart =
       receiptsAfterStart.reduce((sum, r) => {
+        if (r.status === "cancelled") return sum;
         return sum + (r.status === "bounced" ? -(r.amount || 0) : (r.amount || 0));
       }, 0) +
       cnAfterStart.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
@@ -1175,16 +1186,22 @@ router.get("/:id/ledger", async (req, res) => {
           deliveryMan: dMan
         };
       }),
-      ...inRangeReceipts.map(r => ({
-        id: `rcp-${r._id}`,
-        date: r.createdAt,
-        type: r.status === "bounced" ? "BOUNCED" : "RECEIPT",
-        particulars: `${r.status === "bounced" ? "BOUNCED: " : "Receipt: "}${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})${r.originalInvoiceId ? ` - for Inv: ${r.originalInvoiceId}` : ""}`,
-        debit: r.status === "bounced" ? (r.amount || 0) : 0,
-        credit: r.status === "bounced" ? 0 : (r.amount || 0),
-        user: "-",
-        deliveryMan: "-"
-      })),
+      ...inRangeReceipts.map(r => {
+        const creator = r.generatedBy?.name || "-";
+        const canceller = r.cancelledBy?.name || "";
+        
+        return {
+          id: `rcp-${r._id}`,
+          date: r.createdAt,
+          type: r.status === "bounced" ? "BOUNCED" : (r.status === "cancelled" ? "CANCELLED" : "RECEIPT"),
+          particulars: `${r.status === "bounced" ? "BOUNCED: " : (r.status === "cancelled" ? "CANCELLED: " : "Receipt: ")}${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})${r.originalInvoiceId ? ` - for Inv: ${r.originalInvoiceId}` : ""}${r.status === 'cancelled' ? ` [By: ${canceller}${r.cancelReason ? ` | Reason: ${r.cancelReason}` : ""}]` : ""}`,
+          debit: r.status === "bounced" ? (r.amount || 0) : 0,
+          credit: (r.status === "bounced" || r.status === "cancelled") ? 0 : (r.amount || 0),
+          originalAmount: r.amount || 0,
+          user: creator,
+          deliveryMan: "-"
+        };
+      }),
       ...inRangeCNs.map(cn => ({
         id: `cn-${cn._id}`,
         date: cn.date || cn.createdAt,

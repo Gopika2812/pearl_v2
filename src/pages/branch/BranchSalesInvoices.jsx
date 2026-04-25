@@ -397,87 +397,6 @@ const BranchSalesInvoices = () => {
   /**
    * ⚡ DIRECT GENERATE CREDIT NOTE: Creates a full return and prints immediately.
    */
-  const handleDirectGenerateCN = async (inv) => {
-    if (!window.confirm(`Create a FULL RETURN (Credit Note) for ${inv.invoiceNumber}? This will return 100% of all items.`)) {
-      return;
-    }
-
-    setRequestingAction(inv._id);
-    try {
-      // 1. Fetch full details (populated on backend with items.productId for HSN fallback)
-      const res = await fetchWithAuth(`${API_BASE}/invoices/${inv._id}`);
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message || "Failed to fetch invoice details");
-      const fullInv = data.data || data;
-
-      // 2. Prepare Credit Note Payload (Full Return)
-      const cnPayload = {
-        branchId: currentBranch._id,
-        customerId: fullInv.customer?.customerId?._id || fullInv.customer?._id,
-        originalInvoiceId: fullInv.invoiceNumber,
-        items: (fullInv.items || []).map(item => ({
-          productId: item.productId?._id || item.productId,
-          name: item.name,
-          hsn: item.hsn || item.productId?.hsnCode || item.productId?.hsn || "",
-          qty: item.qty, // Full Return
-          sellingPrice: item.sellingPrice,
-          gst: item.gst,
-          cgst: item.cgst,
-          sgst: item.sgst,
-          igst: item.igst,
-          unit: item.unit,
-          total: item.total
-        })),
-        subtotal: fullInv.subtotal,
-        totalTax: fullInv.totalTax,
-        roundingOff: fullInv.roundingOff || 0,
-        grandTotal: fullInv.grandTotal,
-        reasonForReturn: "Full Return Generated from Invoice History",
-        createdBy: user?.id || user?._id,
-        createdByUsername: user?.username || "System"
-      };
-
-      // 3. Create the Credit Note
-      const cnRes = await fetchWithAuth(`${API_BASE}/credit-notes`, {
-        method: "POST",
-        body: JSON.stringify(cnPayload)
-      });
-
-      const cnData = await cnRes.json();
-      if (!cnRes.ok) throw new Error(cnData.message || "Failed to create Credit Note");
-
-      const createdCN = cnData.data || cnData;
-
-      // 4. Trigger Direct Print (Formal Layout)
-      const printWindow = window.open("", "_blank");
-      if (!printWindow) {
-        toast.warning("🔔 Pop-up blocked! Please allow pop-ups to print.");
-      } else {
-        const previewData = {
-          ...cnPayload,
-          seller: fullInv.seller || {},
-          customer: fullInv.customer || {},
-          invoiceDate: new Date()
-        };
-        const html = getInvoiceHTML(previewData, 2, createdCN, createdCN, 'CREDIT_NOTE');
-        printWindow.document.write(html);
-        printWindow.document.close();
-        setTimeout(() => {
-          printWindow.print();
-          setTimeout(() => printWindow.close(), 1000);
-        }, 500);
-      }
-
-      toast.success("✅ Credit Note created and print triggered!");
-      fetchInvoices();
-    } catch (err) {
-      console.error("Direct CN failed:", err);
-      toast.error(err.message || "Failed to generate Credit Note");
-    } finally {
-      setRequestingAction(null);
-    }
-  };
-
   const [showTransportModal, setShowTransportModal] = useState(null);
   const [exporting, setExporting] = useState(false);
 
@@ -933,17 +852,7 @@ const BranchSalesInvoices = () => {
                                   {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <><FaSync size={12} /> GEN EWB</>}
                                 </button>
                               )}
-                              {isFieldAllowed("action_return") && (
-                                <button
-                                  onClick={() => handleDirectGenerateCN(inv)}
-                                  disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-50 text-orange-600 border border-orange-100 hover:bg-orange-600 hover:text-white text-[10px] font-black transition-all shadow-sm disabled:opacity-50"
-                                  title="Generate Full Return Credit Note"
-                                >
-                                  {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaHistory size={12} />}
-                                  RETURN (FULL)
-                                </button>
-                              )}
+                              {/* RETURN (FULL) BUTTON REMOVED PER USER REQUEST */}
                               {isFieldAllowed("action_ewb") && (
                                 <button
                                   onClick={() => handleGenerateEInvoice(inv)}
