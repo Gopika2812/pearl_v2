@@ -9,7 +9,6 @@ const TrialBalancePage = () => {
   const [totalDebits, setTotalDebits] = useState(0);
   const [totalCredits, setTotalCredits] = useState(0);
   const [isBalanced, setIsBalanced] = useState(false);
-
   useEffect(() => {
     fetchTrialBalance();
   }, []);
@@ -102,9 +101,8 @@ const TrialBalancePage = () => {
         </div>
 
         {/* Status Card */}
-        <div className={`mb-8 p-6 rounded-lg text-white font-bold text-lg ${
-          isBalanced ? "bg-gradient-to-r from-green-500 to-green-600" : "bg-gradient-to-r from-red-500 to-red-600"
-        }`}>
+        <div className={`mb-8 p-6 rounded-lg text-white font-bold text-lg ${isBalanced ? "bg-gradient-to-r from-green-500 to-green-600" : "bg-gradient-to-r from-red-500 to-red-600"
+          }`}>
           {isBalanced ? "✓ Trial Balance is Balanced" : "✗ Trial Balance is NOT Balanced"}
         </div>
 
@@ -179,8 +177,8 @@ const TrialBalancePage = () => {
           {/* Verification Info */}
           <div className="bg-gray-100 px-6 py-4 border-t text-sm text-gray-700">
             <p>
-              <span className="font-bold">Verification:</span> Total Debits (₹{totalDebits.toFixed(2)}) 
-              {" "} {isBalanced ? "=" : "≠"} {" "} 
+              <span className="font-bold">Verification:</span> Total Debits (₹{totalDebits.toFixed(2)})
+              {" "} {isBalanced ? "=" : "≠"} {" "}
               Total Credits (₹{totalCredits.toFixed(2)})
             </p>
           </div>
