@@ -1333,5 +1333,63 @@ router.delete("/:invoiceId", async (req, res) => {
   }
 });
 
+// PATCH - Update delivery flow tracking fields
+router.patch("/:invoiceId/delivery-flow", async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    const { 
+      area, 
+      storageMan, 
+      storageManComment, 
+      stockChecker, 
+      stockCheckerComment, 
+      deliveryPersonComment,
+      deliveryStatus,
+      updatedBy
+    } = req.body;
+
+    const updateData = {};
+    if (area !== undefined) updateData.area = area;
+    if (storageMan !== undefined) updateData.storageMan = storageMan;
+    if (storageManComment !== undefined) updateData.storageManComment = storageManComment;
+    if (stockChecker !== undefined) updateData.stockChecker = stockChecker;
+    if (stockCheckerComment !== undefined) updateData.stockCheckerComment = stockCheckerComment;
+    if (deliveryPersonComment !== undefined) updateData.deliveryPersonComment = deliveryPersonComment;
+    
+    if (deliveryStatus !== undefined) {
+      updateData.deliveryStatus = deliveryStatus;
+      if (deliveryStatus === "COMPLETED") {
+        updateData.deliveryCompletedAt = new Date();
+      }
+    }
+
+    const invoice = await Invoice.findByIdAndUpdate(
+      invoiceId,
+      { $set: updateData },
+      { new: true }
+    );
+
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: "Invoice not found" });
+    }
+
+    // Optional: Log this action
+    await createAuditLog({
+      userId: updatedBy || "System",
+      username: updatedBy || "System",
+      branchId: invoice.branchId,
+      action: "UPDATE_DELIVERY_FLOW",
+      description: `Updated delivery flow for Invoice: ${invoice.invoiceNumber}. Status: ${invoice.deliveryStatus}`,
+      targetId: invoice._id,
+      targetModel: "Invoice"
+    });
+
+    res.json({ success: true, data: invoice });
+  } catch (error) {
+    console.error("Error updating delivery flow:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
 export default router;
 

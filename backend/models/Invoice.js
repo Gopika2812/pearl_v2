@@ -203,6 +203,20 @@ const invoiceSchema = new mongoose.Schema(
     vehicleType: { type: String, enum: ["REGULAR", "OVERSIZED"], default: "REGULAR" },
     transporterId: { type: String, default: "" },
     transporterName: { type: String, default: "" },
+
+    // Delivery Flow Tracking
+    area: { type: String, default: "" },
+    storageMan: { type: String, default: "" },
+    storageManComment: { type: String, default: "" },
+    stockChecker: { type: String, default: "" },
+    stockCheckerComment: { type: String, default: "" },
+    deliveryPersonComment: { type: String, default: "" },
+    deliveryStatus: { 
+      type: String, 
+      enum: ["PENDING", "PICKED", "COMPLETED"], 
+      default: "PENDING" 
+    },
+    deliveryCompletedAt: { type: Date },
   },
   { timestamps: true }
 );

@@ -101,6 +101,17 @@ export const PAGE_CONFIG = [
     ]
   },
   {
+    category: "Delivery",
+    items: [
+      {
+        id: "delivery-dropdown", name: "Delivery", icon: "truck", isDropdown: true, subItems: [
+          { id: "delivery-flow", name: "Delivery Flow", path: "/branch/delivery-flow", icon: "list" },
+          { id: "delivery-receipt", name: "Delivery Receipt", path: "/branch/delivery-receipt", icon: "receipt" },
+        ]
+      }
+    ]
+  },
+  {
     category: "Directory",
     items: [
       { id: "product-records", name: "Product Records", path: "/branch/product-records", icon: "box", permissionFields: ["voucher", "customer", "purchasePrice", "sellingPrice", "margin", "qty", "gst", "discount", "profit"] },

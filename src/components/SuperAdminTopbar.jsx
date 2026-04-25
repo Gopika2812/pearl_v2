@@ -35,12 +35,22 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
         const res = await fetch(`${API_BASE}/tokens/stats/super-admin`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
+
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          throw new TypeError("Expected JSON response but received something else");
+        }
+
         const data = await res.json();
         if (data.success) {
           setTokenStats(data.data);
         }
       } catch (err) {
-        console.error("Failed to fetch super admin token stats:", err);
+        console.error("Failed to fetch super admin token stats:", err.message);
       }
     };
 
