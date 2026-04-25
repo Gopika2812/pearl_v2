@@ -62,5 +62,10 @@ const receiptSchema = new mongoose.Schema(
 // Create composite unique index: branchId + receiptId (Allows duplicates across branches, global uniqueness for (branch + ID))
 receiptSchema.index({ branchId: 1, receiptId: 1 }, { unique: true });
 
+// ⚡ PERFORMANCE INDEXES
+receiptSchema.index({ branchId: 1, createdAt: -1 });
+receiptSchema.index({ originalSalesOrderId: 1, status: 1 });
+receiptSchema.index({ "customer.customerId": 1, createdAt: -1 });
+
 const Receipt = mongoose.model("Receipt", receiptSchema);
 export default Receipt;

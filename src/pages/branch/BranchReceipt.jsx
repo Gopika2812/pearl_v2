@@ -27,6 +27,11 @@ export default function BranchReceipt() {
   const [selectedBounceInvoice, setSelectedBounceInvoice] = useState(null);
   const [expandedInvoices, setExpandedInvoices] = useState({});
 
+  // Pagination & Data Control
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [limit] = useState(50); // Show 50 per page for better performance
+
   // Date filters
   const [fromDate, setFromDate] = useState(new Date().toISOString().split('T')[0]);
   const [toDate, setToDate] = useState(new Date().toISOString().split('T')[0]);
@@ -43,20 +48,21 @@ export default function BranchReceipt() {
   
   useEffect(() => {
     if (currentBranch?._id) fetchData();
-  }, [currentBranch, fromDate, toDate]);
+  }, [currentBranch, fromDate, toDate, currentPage]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       console.log("Fetching Branch Receipts for:", currentBranch?._id);
       
-      // 1. Fetch Sales Invoices (Filtered by date for performance)
-      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&limit=1000`, {
+      // 1. Fetch Sales Invoices (Paginated & Filtered)
+      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&page=${currentPage}&limit=${limit}`, {
         headers: { "Content-Type": "application/json" },
       });
       const invResult = await invResponse.json();
-      const invArray = Array.isArray(invResult) ? invResult : (invResult.data || []);
+      const invArray = invResult.data || [];
       setInvoices(invArray);
+      setTotalPages(invResult.pagination?.pages || 1);
 
       // 2. Optimized: Fetch all receipts for these invoices in ONE call
       const allOrderIds = [
@@ -103,6 +109,7 @@ export default function BranchReceipt() {
       setReceiptData((prev) => ({
         ...prev,
         [invoiceId]: {
+          ...prev[invoiceId],
           receipts: receipts || [],
           totalReceived,
         },
@@ -137,6 +144,9 @@ export default function BranchReceipt() {
   }, [invoices, generalReceipts]);
 
   const toggleExpandInvoice = (invoiceId) => {
+    if (!expandedInvoices[invoiceId]) {
+      fetchReceiptsForInvoice(invoiceId);
+    }
     setExpandedInvoices((prev) => ({
       ...prev,
       [invoiceId]: !prev[invoiceId],
@@ -311,6 +321,7 @@ export default function BranchReceipt() {
                   setFromDate(new Date().toISOString().split('T')[0]);
                   setToDate(new Date().toISOString().split('T')[0]);
                   setSearchTerm("");
+                  setCurrentPage(1);
                 }}
                 className="bg-cyan-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-cyan-700 transition flex-shrink-0"
               >
@@ -431,32 +442,32 @@ export default function BranchReceipt() {
                             {formatDateTime(item.createdAt || item.date || item.invoiceDate)}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <div className="flex justify-center gap-2">
-                              {isOrder ? (
-                                pending > 0 ? (
-                                  <button
-                                    onClick={() => handleReceivePayment(item, pending)}
-                                    className="inline-flex items-center gap-2 bg-cyan-600 text-white px-3 py-1 rounded-lg font-bold text-xs hover:bg-cyan-700 transition"
-                                  >
-                                    <FaFileAlt /> Receive
-                                  </button>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 px-3 py-1 rounded-lg font-bold text-xs">
-                                    ✓ Paid
-                                  </span>
-                                )
-                              ) : (
-                                <span className="text-xs text-gray-400 font-bold italic">Settlement Log</span>
-                              )}
-                              {isOrder && (
-                                <button
-                                  onClick={() => handleBounceClick(item)}
-                                  className="inline-flex items-center gap-2 bg-red-100 text-red-600 border border-red-200 px-3 py-1 rounded-lg font-bold text-xs hover:bg-red-200 transition"
-                                >
-                                  Bounce
-                                </button>
-                              )}
-                            </div>
+                             <div className="flex justify-center gap-2">
+                               {isOrder ? (
+                                 <>
+                                   {pending > 0 ? (
+                                     <button
+                                       onClick={() => handleReceivePayment(item, pending)}
+                                       className="inline-flex items-center gap-2 bg-cyan-600 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-cyan-700 transition shadow-sm"
+                                     >
+                                       RECEIVE
+                                     </button>
+                                   ) : (
+                                     <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 px-3 py-1.5 rounded-lg font-bold text-[10px]">
+                                       ✓ Paid
+                                     </span>
+                                   )}
+                                   <button
+                                     onClick={() => handleBounceClick(item)}
+                                     className="inline-flex items-center gap-2 bg-red-100 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-red-200 transition"
+                                   >
+                                     Bounce
+                                   </button>
+                                 </>
+                               ) : (
+                                 <span className="text-[10px] text-gray-400 font-bold italic bg-gray-50 px-2 py-1 rounded">Settlement Log</span>
+                               )}
+                             </div>
                           </td>
                         </tr>
 
