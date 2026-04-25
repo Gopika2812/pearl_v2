@@ -97,11 +97,22 @@ const generateBranchSpecificReceiptId = async (branchId, financialYear, prefix =
   return candidateId;
 };
 
-// GET all receipts (optional branch filtering)
+// GET all receipts (optional branch filtering and date filtering)
 router.get("/", async (req, res) => {
   try {
-    const { branchId } = req.query;
+    const { branchId, fromDate, toDate } = req.query;
     const query = branchId ? { branchId } : {};
+
+    if (fromDate || toDate) {
+      const start = fromDate ? new Date(fromDate) : new Date();
+      if (!fromDate) start.setHours(0, 0, 0, 0);
+
+      const end = toDate ? new Date(toDate) : new Date(start);
+      end.setHours(23, 59, 59, 999);
+
+      query.createdAt = { $gte: start, $lte: end };
+    }
+
     const receipts = await Receipt.find(query)
       .populate("generatedBy", "name")
       .populate("cancelledBy", "name")

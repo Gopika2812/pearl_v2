@@ -12,17 +12,17 @@ export default function BranchReceiptRecords() {
   const [receipts, setReceipts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [activeFilter, setActiveFilter] = useState("ALL"); // ALL, CASH, BANK, CHEQUE
   useEffect(() => {
     if (currentBranch?._id) fetchReceipts();
-  }, [currentBranch]);
+  }, [currentBranch, startDate, endDate]);
 
   const fetchReceipts = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/receipts?branchId=${currentBranch._id}`, {
+      const response = await fetch(`${API_BASE}/receipts?branchId=${currentBranch._id}&fromDate=${startDate}&toDate=${endDate}`, {
         headers: { "Content-Type": "application/json" },
       });
       const result = await response.json();
@@ -71,27 +71,13 @@ export default function BranchReceiptRecords() {
         matchesTerm = id.includes(searchLower) || inv.includes(searchLower) || cust.includes(searchLower);
       }
 
-      // 2. Date Filter
-      let matchesDate = true;
-      const createdAt = new Date(r.createdAt);
-      if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        if (createdAt < start) matchesDate = false;
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        if (createdAt > end) matchesDate = false;
-      }
-
-      // 3. Ledger/Mode Filter
+      // 2. Ledger/Mode Filter (Date is now handled by backend)
       let matchesFilter = true;
       if (activeFilter === "CASH") matchesFilter = r.paymentMethod === "CASH";
       else if (activeFilter === "BANK") matchesFilter = ["BANK_TRANSFER", "UPI", "CREDIT_CARD", "DEBIT_CARD"].includes(r.paymentMethod);
       else if (activeFilter === "CHEQUE") matchesFilter = r.paymentMethod === "CHEQUE";
-
-      return matchesTerm && matchesDate && matchesFilter;
+      
+      return matchesTerm && matchesFilter;
     });
   }, [receipts, searchTerm, startDate, endDate, activeFilter]);
 
@@ -163,12 +149,25 @@ export default function BranchReceiptRecords() {
             {/* End Date */}
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">End Date</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-4 py-3 bg-blue-50/20 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 font-medium"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-4 py-3 bg-blue-50/20 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 font-medium"
+                />
+                <button
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    setStartDate(today);
+                    setEndDate(today);
+                    setSearchTerm("");
+                  }}
+                  className="bg-blue-600 text-white px-4 py-3 rounded-xl text-xs font-bold hover:bg-blue-700 transition flex-shrink-0"
+                >
+                  TODAY
+                </button>
+              </div>
             </div>
           </div>
         </div>

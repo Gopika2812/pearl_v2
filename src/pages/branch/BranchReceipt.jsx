@@ -27,6 +27,10 @@ export default function BranchReceipt() {
   const [selectedBounceInvoice, setSelectedBounceInvoice] = useState(null);
   const [expandedInvoices, setExpandedInvoices] = useState({});
 
+  // Date filters
+  const [fromDate, setFromDate] = useState(new Date().toISOString().split('T')[0]);
+  const [toDate, setToDate] = useState(new Date().toISOString().split('T')[0]);
+
   // Permission helper
   const isFieldAllowed = (fieldId) => {
     if (!user) return false;
@@ -39,15 +43,15 @@ export default function BranchReceipt() {
   
   useEffect(() => {
     if (currentBranch?._id) fetchData();
-  }, [currentBranch]);
+  }, [currentBranch, fromDate, toDate]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       console.log("Fetching Branch Receipts for:", currentBranch?._id);
       
-      // 1. Fetch Sales Invoices (High capacity, Slimmed data)
-      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&limit=1000`, {
+      // 1. Fetch Sales Invoices (Filtered by date for performance)
+      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&limit=1000`, {
         headers: { "Content-Type": "application/json" },
       });
       const invResult = await invResponse.json();
@@ -267,26 +271,53 @@ export default function BranchReceipt() {
           </div>
         </div>
 
-        {/* SEARCH BAR */}
-        <div className="bg-white shadow-md p-3 mb-4 flex items-center gap-4 border border-cyan-100">
-          <div className="relative flex-1">
-            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
+        {/* FILTERS BAR */}
+        <div className="bg-white shadow-md p-4 mb-4 grid grid-cols-1 md:grid-cols-4 gap-4 border border-cyan-100 items-end">
+          <div className="md:col-span-2 relative">
+            <label className="block text-[10px] font-bold text-cyan-600 uppercase mb-1">Search Records</label>
+            <div className="relative">
+              <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400" />
+              <input
+                type="text"
+                placeholder="Search by Order / Invoice ID, Customer..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-11 pr-4 py-2.5 bg-cyan-50/30 border border-cyan-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all text-sm font-medium"
+              />
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-[10px] font-bold text-cyan-600 uppercase mb-1">From Date</label>
             <input
-              type="text"
-              placeholder="Search by Order / Invoice ID, Customer, or Amount..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-cyan-50/30 border border-cyan-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all font-medium text-gray-700"
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="w-full px-4 py-2 bg-cyan-50/30 border border-cyan-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all text-sm font-medium"
             />
           </div>
-          {searchTerm && (
-            <button 
-              onClick={() => setSearchTerm("")}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg font-bold transition shadow-sm"
-            >
-              Clear
-            </button>
-          )}
+
+          <div>
+            <label className="block text-[10px] font-bold text-cyan-600 uppercase mb-1">To Date</label>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="w-full px-4 py-2 bg-cyan-50/30 border border-cyan-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all text-sm font-medium"
+              />
+              <button 
+                onClick={() => {
+                  setFromDate(new Date().toISOString().split('T')[0]);
+                  setToDate(new Date().toISOString().split('T')[0]);
+                  setSearchTerm("");
+                }}
+                className="bg-cyan-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-cyan-700 transition flex-shrink-0"
+              >
+                TODAY
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* MAIN CONTENT */}
