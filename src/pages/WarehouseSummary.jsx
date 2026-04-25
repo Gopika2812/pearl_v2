@@ -13,7 +13,6 @@ const WarehouseSummary = () => {
   const [showSearchBox, setShowSearchBox] = useState(false);
   const [searchValue, setSearchValue] = useState("");
 
-  // Fetch warehouses data
   const fetchWarehouses = async () => {
     try {
       setLoading(true);
