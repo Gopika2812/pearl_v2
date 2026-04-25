@@ -7,32 +7,42 @@ const deliveryReceiptSchema = new mongoose.Schema(
       ref: "Branch",
       required: true,
     },
+    receiptId: {
+      type: String, // e.g., DR-20260425-001
+      required: true,
+      unique: true,
+    },
     date: {
       type: Date,
       default: Date.now,
     },
     deliveryPerson: {
-      type: String, // Can be name or ObjectId string
+      type: String, 
       required: true,
     },
-    customer: {
-      customerId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Customer",
-      },
-      name: String,
-    },
-    collectedAmount: {
+    collections: [
+      {
+        customer: {
+          customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
+          name: String,
+        },
+        amount: { type: Number, default: 0 },
+        paymentMode: { type: String, enum: ["CASH", "UPI"], default: "CASH" },
+      }
+    ],
+    expenses: [
+      {
+        amount: { type: Number, default: 0 },
+        note: { type: String, default: "" },
+      }
+    ],
+    totalCollected: {
       type: Number,
       default: 0,
     },
-    expenseAmount: {
+    totalExpense: {
       type: Number,
       default: 0,
-    },
-    expenseNote: {
-      type: String,
-      default: "",
     },
     netAmount: {
       type: Number,

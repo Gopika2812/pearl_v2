@@ -3,8 +3,8 @@ import mongoose from "mongoose";
 const invoiceSchema = new mongoose.Schema(
   {
     // Basic Info
-    invoiceNumber: { 
-      type: String, 
+    invoiceNumber: {
+      type: String,
       required: true,
       maxlength: [16, "Invoice number must be at most 16 characters for GST/E-Invoicing compliance."]
     }, // unique index handled per-branch
@@ -27,6 +27,11 @@ const invoiceSchema = new mongoose.Schema(
     warehouse: String,
     billingPerson: String,
     deliveryPerson: String,
+    deliveryMan: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DeliveryMan",
+    },
+
 
     // Customer Details
     customer: {
@@ -186,7 +191,7 @@ const invoiceSchema = new mongoose.Schema(
     qrCodeUrl: String,
     signedInvoice: String,
     signedQrCode: String,
-    
+
     ewayBillNo: String,
     ewayBillDate: String,
     ewayBillValidUntil: String,
@@ -211,12 +216,17 @@ const invoiceSchema = new mongoose.Schema(
     stockChecker: { type: String, default: "" },
     stockCheckerComment: { type: String, default: "" },
     deliveryPersonComment: { type: String, default: "" },
-    deliveryStatus: { 
-      type: String, 
-      enum: ["PENDING", "PICKED", "COMPLETED"], 
-      default: "PENDING" 
+    deliveryStatus: {
+      type: String,
+      enum: ["PENDING", "PICKED", "COMPLETED"],
+      default: "PENDING"
     },
     deliveryCompletedAt: { type: Date },
+    deliveryPaymentType: { type: String, default: "NONE" }, // Can be comma-separated if multiple (e.g. "CASH,CHEQUE")
+    deliveryPaymentAmount: { type: Number, default: 0 },
+    deliverySignature: { type: String }, // Base64 or image URL
+    isReverted: { type: Boolean, default: false },
+    deliveryLogId: { type: String }, // e.g., DL-BR01-0001
   },
   { timestamps: true }
 );

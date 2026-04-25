@@ -849,6 +849,7 @@ const BranchInvoicedOrders = () => {
                     {isFieldAllowed("grandTotal") && <th className="px-6 py-4 text-right">Grand Total</th>}
                     {isFieldAllowed("status") && <th className="px-6 py-4 text-center">Status</th>}
                     {isFieldAllowed("date") && <th className="px-6 py-4 text-center">Date</th>}
+                    <th className="px-6 py-4 text-left">Delivery Man</th>
                     {(isFieldAllowed("action_si_bill") || isFieldAllowed("action_gen_invoice") || isFieldAllowed("action_cancel")) && (
                       <th className="px-6 py-4 text-center">Action</th>
                     )}
@@ -973,6 +974,21 @@ const BranchInvoicedOrders = () => {
                             })()}
                           </td>
                         )}
+                        <td className="px-6 py-4">
+                           <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                                 <FaTruck size={14} />
+                              </div>
+                              <div>
+                                 <div className="font-black text-slate-800 text-[10px] uppercase tracking-tight">
+                                    {order.deliveryMan?.name || "-"}
+                                 </div>
+                                 <div className="text-[9px] text-slate-400 font-bold tracking-widest">
+                                    {order.deliveryMan?.phone || "N/A"}
+                                 </div>
+                              </div>
+                           </div>
+                        </td>
                         {(isFieldAllowed("action_si_bill") || isFieldAllowed("action_gen_invoice") || isFieldAllowed("action_cancel")) && (
                           <td className="px-6 py-4 text-center">
                             <div className="flex items-center gap-2 justify-center flex-wrap">

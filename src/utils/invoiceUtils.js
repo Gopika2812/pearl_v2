@@ -118,7 +118,8 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                 <div class="order-header-col" style="text-align: right;">
                   ${!isCN ? `
                     <strong>Customer:</strong> ${previewData?.customer?.name || "CASH CUSTOMER"}<br/>
-                    <strong>Contact:</strong> ${previewData?.customer?.whatsapp || "-"}
+                    <strong>Contact:</strong> ${previewData?.customer?.whatsapp || "-"}<br/>
+                    <strong>Delivery:</strong> ${previewData?.deliveryMan || order?.deliveryMan?.name || generatedInvoice?.deliveryMan?.name || generatedInvoice?.salesOrderId?.deliveryMan?.name || "-"}
                   ` : ''}
                 </div>
               </div>

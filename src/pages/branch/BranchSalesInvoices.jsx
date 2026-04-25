@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaFileExcel, FaTimes } from "react-icons/fa";
+import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaFileExcel, FaTimes, FaTruck } from "react-icons/fa";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
@@ -7,6 +7,7 @@ import { API_BASE, fetchWithAuth } from "../../api";
 import EInvoicePrintModal from "../../components/branch/EInvoicePrintModal";
 import { useBranch } from "../../context/BranchContext";
 import { getInvoiceHTML } from "../../utils/invoiceUtils";
+import FilterableSelect from "../../components/FilterableSelect";
 
 const ExportColumnSelectorModal = ({ show, onClose, columns, selected, onSelect, exporting, onExport }) => {
   if (!show) return null;
@@ -108,6 +109,7 @@ const BranchSalesInvoices = () => {
   const [voucherTypes, setVoucherTypes] = useState([]);
   const [filterVoucherPrefix, setFilterVoucherPrefix] = useState("");
   const [filterEinvoiceStatus, setFilterEinvoiceStatus] = useState("");
+  const [branchUsers, setBranchUsers] = useState([]);
   
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -216,6 +218,44 @@ const BranchSalesInvoices = () => {
   useEffect(() => {
     fetchVoucherTypes();
   }, [currentBranch?._id]);
+
+  const fetchBranchUsers = async () => {
+    if (!currentBranch?._id) return;
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/users?branchId=${currentBranch._id}`);
+      const data = await res.json();
+      if (data.success) {
+        setBranchUsers(data.data || []);
+      }
+    } catch (err) {
+      console.error("Error fetching branch users:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchBranchUsers();
+  }, [currentBranch?._id]);
+
+  const handleUpdateDeliveryPerson = async (invoiceId, person) => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/invoices/${invoiceId}/delivery-flow`, {
+        method: "PATCH",
+        body: JSON.stringify({ 
+            deliveryPerson: person,
+            updatedBy: user?.username || "System" 
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Delivery Person updated");
+        setInvoices(prev => prev.map(inv => inv._id === invoiceId ? { ...inv, deliveryPerson: person } : inv));
+      } else {
+        toast.error(data.message || "Update failed");
+      }
+    } catch (err) {
+      toast.error("Error updating delivery person");
+    }
+  };
 
   // 🌍 HANDLE URL SEARCH PARAMS (Teleport from Audit Logs)
   useEffect(() => {
@@ -726,6 +766,7 @@ const BranchSalesInvoices = () => {
                     {isFieldAllowed("customer") && <th className="px-6 py-5 text-left">Customer Details</th>}
                     {isFieldAllowed("createdBy") && <th className="px-6 py-5 text-left">Created By</th>}
                     {isFieldAllowed("grandTotal") && <th className="px-6 py-5 text-right">Grand Total</th>}
+                    {isFieldAllowed("deliveryMan") && <th className="px-6 py-5 text-left">Delivery Man</th>}
                     {isFieldAllowed("einvoiceStatus") && <th className="px-6 py-5 text-center">E-Invoice Status</th>}
                     {isFieldAllowed("status") && <th className="px-6 py-5 text-center">Status</th>}
                     {(isFieldAllowed("action_return") || isFieldAllowed("action_ewb") || isFieldAllowed("action_cancel") || isFieldAllowed("action_pdf")) && (
@@ -790,6 +831,23 @@ const BranchSalesInvoices = () => {
                         {isFieldAllowed("grandTotal") && (
                           <td className="px-6 py-5 text-right font-black text-indigo-700 tracking-tight text-base">
                             ₹{(inv.grandTotal || 0).toLocaleString()}
+                          </td>
+                        )}
+                        {isFieldAllowed("deliveryMan") && (
+                          <td className="px-6 py-5">
+                             <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                                   <FaTruck size={14} />
+                                </div>
+                                <div>
+                                   <div className="font-black text-slate-800 text-[11px] uppercase tracking-tight">
+                                      {inv.deliveryMan?.name || inv.salesOrderId?.deliveryMan?.name || inv.deliveryPerson || "-"}
+                                   </div>
+                                   <div className="text-[9px] text-slate-400 font-bold tracking-widest">
+                                      {inv.deliveryMan?.phone || inv.salesOrderId?.deliveryMan?.phone || "NO CONTACT"}
+                                   </div>
+                                </div>
+                             </div>
                           </td>
                         )}
                         {isFieldAllowed("einvoiceStatus") && (
@@ -984,6 +1042,19 @@ const BranchSalesInvoices = () => {
                                       <div className="flex justify-between border-b border-slate-50 pb-2">
                                         <span className="text-slate-500 font-bold uppercase tracking-tighter">Generated At</span>
                                         <span className="font-black text-slate-800">{formatIST(inv.createdAt || inv.invoiceDate)}</span>
+                                      </div>
+                                      <div className="flex flex-col gap-1.5 border-b border-slate-50 pb-3">
+                                        <span className="text-slate-500 font-bold uppercase tracking-tighter">Delivery Person</span>
+                                        <FilterableSelect
+                                          options={[
+                                            { _id: "", name: "NONE" },
+                                            ...branchUsers.map(u => ({ _id: u.name, name: u.name }))
+                                          ]}
+                                          value={inv.deliveryPerson}
+                                          onChange={(val) => handleUpdateDeliveryPerson(inv._id, val)}
+                                          placeholder="Select Delivery Person"
+                                          className="!py-1.5 !text-[11px] !font-bold"
+                                        />
                                       </div>
                                       {inv.commonDiscount > 0 && (
                                         <div className="flex justify-between border-b border-slate-50 pb-2">

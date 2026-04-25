@@ -22,6 +22,7 @@ const BranchDeliveryFlow = () => {
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
   const [updatingId, setUpdatingId] = useState(null);
   const [branchUsers, setBranchUsers] = useState([]);
+  const [rowPayments, setRowPayments] = useState({}); // { invoiceId: ['CASH', 'SIGNATURE'] }
 
   const fetchBranchUsers = async () => {
     if (!currentBranch?._id) return;
@@ -79,10 +80,16 @@ const BranchDeliveryFlow = () => {
   }, [searchTerm]);
 
   const handleUpdateField = async (invoiceId, field, value) => {
+    // Show a small indicator that we are saving
+    const updateToast = toast.info(`Saving ${field}...`, { autoClose: 1000 });
     try {
       const res = await fetchWithAuth(`${API_BASE}/invoices/${invoiceId}/delivery-flow`, {
         method: "PATCH",
-        body: JSON.stringify({ [field]: value, updatedBy: user?.username || "System" })
+        body: JSON.stringify({ 
+          [field]: value, 
+          updatedBy: user?.username || "System",
+          updatedById: user?._id || user?.id || null
+        })
       });
       const data = await res.json();
       if (data.success) {
@@ -95,21 +102,65 @@ const BranchDeliveryFlow = () => {
     }
   };
 
-  const handleMarkStatus = async (invoiceId, status) => {
-    const confirmMsg = status === "COMPLETED" 
-      ? "Mark this delivery as COMPLETED?" 
-      : "Mark this delivery as PICKED?";
+  const handleMarkStatus = async (invoiceId, status, paymentType = "NONE") => {
+    // Permission Check: Only Admin/SuperAdmin can revert to PENDING
+    if (status === "PENDING" && user?.role !== "ADMIN" && user?.role !== "SUPER_ADMIN") {
+      toast.error("Only Admins can revert status");
+      return;
+    }
+
+    const inv = invoices.find(i => i._id === invoiceId);
+    if (status === "PICKED" || status === "COMPLETED") {
+        const missing = [];
+        if (!inv?.storageMan || inv.storageMan === "NONE") missing.push("Storage Man");
+        if (!inv?.stockChecker || inv.stockChecker === "NONE") missing.push("Stock Checker");
+        if (!inv?.deliveryPerson || inv.deliveryPerson === "NONE") {
+            // Check both string field and populated object
+            if (!inv.deliveryMan && !inv.deliveryPerson) missing.push("Delivery Person");
+        }
+
+        if (missing.length > 0) {
+            alert(`Mandatory Assignment Missing: ${missing.join(", ")}. Please assign everyone before marking status.`);
+            return;
+        }
+    }
+
+    const confirmMsg = status === "PICKED" ? "Mark this delivery as PICKED?" : 
+                       status === "COMPLETED" ? `Mark as Delivered with selected options?` : 
+                       "Revert this delivery to PENDING?";
     
     if (!window.confirm(confirmMsg)) return;
+
+    // Get payments for this row if completing
+    const paymentTypes = status === "COMPLETED" ? (rowPayments[invoiceId] || []).join(",") : "NONE";
+
     setUpdatingId(invoiceId);
     try {
+      const updatePayload = { 
+        deliveryStatus: status, 
+        updatedBy: user?.username || "System",
+        updatedById: user?._id || user?.id || null,
+        deliveryPaymentType: paymentTypes,
+        deliveryCompletedAt: status === "COMPLETED" ? new Date() : null,
+        isReverted: status === "PENDING" && inv.deliveryStatus === "COMPLETED"
+      };
+
+      // ⚡ REFRESH/CLEAR FIELDS IF REVERTING TO PENDING
+      if (status === "PENDING") {
+        updatePayload.storageMan = "";
+        updatePayload.storageManComment = "";
+        updatePayload.stockChecker = "";
+        updatePayload.stockCheckerComment = "";
+        updatePayload.deliveryPerson = "";
+        updatePayload.deliveryPersonComment = "";
+        updatePayload.deliveryPaymentType = "NONE";
+        updatePayload.deliveryPaymentAmount = 0;
+        updatePayload.deliverySignature = "";
+      }
+
       const res = await fetchWithAuth(`${API_BASE}/invoices/${invoiceId}/delivery-flow`, {
         method: "PATCH",
-        body: JSON.stringify({ 
-          deliveryStatus: status, 
-          updatedBy: user?.username || "System",
-          deliveryCompletedAt: status === "COMPLETED" ? new Date() : null
-        })
+        body: JSON.stringify(updatePayload)
       });
       const data = await res.json();
       if (data.success) {
@@ -123,6 +174,14 @@ const BranchDeliveryFlow = () => {
     } finally {
       setUpdatingId(null);
     }
+  };
+
+
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+
+  const isFieldLocked = (inv, personField, commentField) => {
+    // Locked only if completed
+    return inv.deliveryStatus === "COMPLETED";
   };
 
   const handleViewInvoice = async (invoice) => {
@@ -152,7 +211,8 @@ const BranchDeliveryFlow = () => {
 
   const formatIST = (dateStr) => {
     if (!dateStr) return "N/A";
-    return new Date(dateStr).toLocaleString("en-IN", {
+    const date = new Date(dateStr);
+    return date.toLocaleString("en-IN", {
       timeZone: "Asia/Kolkata",
       day: "2-digit",
       month: "2-digit",
@@ -243,16 +303,16 @@ const BranchDeliveryFlow = () => {
           </div>
         </div>
 
-        {/* TABLE */}
+        {/* MOBILE CARDS & TABLE WRAPPER */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Desktop Table View (Hidden on mobile) */}
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/50 border-b border-slate-100">
-                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">S.No</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">S.No</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">SI ID / Date</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer / Area</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Billed Person</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Storage Man</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Stock Checker</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Delivery Person</th>
@@ -262,20 +322,20 @@ const BranchDeliveryFlow = () => {
               <tbody className="divide-y divide-slate-50">
                 {loading ? (
                   <tr>
-                    <td colSpan="8" className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                    <td colSpan="7" className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
                       <FaSync className="animate-spin inline-block mr-2" /> Loading Deliveries...
                     </td>
                   </tr>
                 ) : invoices.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                    <td colSpan="7" className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
                       No matching records found.
                     </td>
                   </tr>
                 ) : (
                   invoices.map((inv, idx) => (
-                    <tr key={inv._id} className={`hover:bg-slate-50/50 transition-colors ${inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/20' : ''}`}>
-                      <td className="px-6 py-4">
+                    <tr key={inv._id} className={`hover:bg-slate-50/50 transition-colors ${inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/10' : ''}`}>
+                      <td className="px-6 py-4 text-center">
                         <span className="text-xs font-black text-slate-400">{(currentPage - 1) * 50 + idx + 1}</span>
                       </td>
                       <td className="px-6 py-4">
@@ -286,7 +346,7 @@ const BranchDeliveryFlow = () => {
                           >
                             {inv.invoiceNumber}
                           </button>
-                          <span className="text-[9px] font-bold text-slate-400">{formatIST(inv.invoiceDate)}</span>
+                          <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{formatIST(inv.createdAt || inv.invoiceDate)}</div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -299,144 +359,103 @@ const BranchDeliveryFlow = () => {
                               value={inv.area || inv.customer?.address || ""}
                               onChange={(e) => handleUpdateField(inv._id, 'area', e.target.value)}
                               placeholder="Enter Area"
-                              className="text-[10px] font-bold text-indigo-600 bg-transparent border-b border-transparent hover:border-indigo-200 focus:border-indigo-500 outline-none w-full"
+                              disabled={!isAdmin && !!inv.area}
+                              className={`text-[10px] font-bold text-indigo-600 bg-transparent border-b border-transparent hover:border-indigo-200 focus:border-indigo-500 outline-none w-full ${(!isAdmin && !!inv.area) ? 'opacity-70 cursor-not-allowed' : ''}`}
                             />
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded-md">{inv.billingPerson || inv.generatedBy || "-"}</span>
-                      </td>
                       
                       {/* STORAGE MAN */}
-                      <td className="px-6 py-4 min-w-[150px]">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <FaUser className="text-[10px] text-slate-300" />
-                            <FilterableSelect
-                              options={branchUsers.map(u => ({ _id: u.name, name: u.name }))}
-                              value={inv.storageMan}
-                              onChange={(val) => handleUpdateField(inv._id, 'storageMan', val)}
-                              placeholder="Select User"
-                              className="border-none bg-transparent !p-0 !text-xs !font-bold text-slate-700"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                            <FaCommentDots className="text-[10px] text-slate-300" />
-                            <input 
-                              type="text"
-                              value={inv.storageManComment || ""}
-                              onChange={(e) => handleUpdateField(inv._id, 'storageManComment', e.target.value)}
-                              placeholder="Comment"
-                              className="text-[9px] font-medium text-slate-500 bg-transparent outline-none w-full"
-                            />
-                          </div>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1.5 p-2 bg-slate-50/50 rounded-xl border border-slate-100 hover:border-indigo-100 hover:bg-white transition-all group min-w-[160px]">
+                          <FilterableSelect
+                            options={[{ _id: "", name: "NONE" }, ...branchUsers.map(u => ({ _id: u.name, name: u.name }))]}
+                            value={inv.storageMan}
+                            onChange={(val) => handleUpdateField(inv._id, 'storageMan', val)}
+                            placeholder="Assign Storage"
+                            disabled={isFieldLocked(inv, 'storageMan', 'storageManComment')}
+                            className="!text-[10px] !font-black !uppercase"
+                          />
+                          <input 
+                            type="text"
+                            value={inv.storageManComment || ""}
+                            onChange={(e) => handleUpdateField(inv._id, 'storageManComment', e.target.value)}
+                            placeholder="Add note..."
+                            disabled={isFieldLocked(inv, 'storageMan', 'storageManComment')}
+                            className="text-[9px] font-bold text-slate-600 bg-white px-2 py-1 rounded border border-slate-100 outline-none"
+                          />
                         </div>
                       </td>
 
                       {/* STOCK CHECKER */}
-                      <td className="px-6 py-4 min-w-[150px]">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <FaUser className="text-[10px] text-slate-300" />
-                            <FilterableSelect
-                              options={branchUsers.map(u => ({ _id: u.name, name: u.name }))}
-                              value={inv.stockChecker}
-                              onChange={(val) => handleUpdateField(inv._id, 'stockChecker', val)}
-                              placeholder="Select User"
-                              className="border-none bg-transparent !p-0 !text-xs !font-bold text-slate-700"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                            <FaCommentDots className="text-[10px] text-slate-300" />
-                            <input 
-                              type="text"
-                              value={inv.stockCheckerComment || ""}
-                              onChange={(e) => handleUpdateField(inv._id, 'stockCheckerComment', e.target.value)}
-                              placeholder="Comment"
-                              className="text-[9px] font-medium text-slate-500 bg-transparent outline-none w-full"
-                            />
-                          </div>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1.5 p-2 bg-slate-50/50 rounded-xl border border-slate-100 hover:border-indigo-100 hover:bg-white transition-all group min-w-[160px]">
+                          <FilterableSelect
+                            options={[{ _id: "", name: "NONE" }, ...branchUsers.map(u => ({ _id: u.name, name: u.name }))]}
+                            value={inv.stockChecker}
+                            onChange={(val) => handleUpdateField(inv._id, 'stockChecker', val)}
+                            placeholder="Assign Checker"
+                            disabled={isFieldLocked(inv, 'stockChecker', 'stockCheckerComment')}
+                            className="!text-[10px] !font-black !uppercase"
+                          />
+                          <input 
+                            type="text"
+                            value={inv.stockCheckerComment || ""}
+                            onChange={(e) => handleUpdateField(inv._id, 'stockCheckerComment', e.target.value)}
+                            placeholder="Add note..."
+                            disabled={isFieldLocked(inv, 'stockChecker', 'stockCheckerComment')}
+                            className="text-[9px] font-bold text-slate-600 bg-white px-2 py-1 rounded border border-slate-100 outline-none"
+                          />
                         </div>
                       </td>
 
                       {/* DELIVERY PERSON */}
-                      <td className="px-6 py-4 min-w-[150px]">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <FaUser className="text-[10px] text-slate-300" />
-                            <FilterableSelect
-                              options={branchUsers.map(u => ({ _id: u.name, name: u.name }))}
-                              value={inv.deliveryPerson}
-                              onChange={(val) => handleUpdateField(inv._id, 'deliveryPerson', val)}
-                              placeholder="Select User"
-                              className="border-none bg-transparent !p-0 !text-xs !font-bold text-slate-700"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                            <FaCommentDots className="text-[10px] text-slate-300" />
-                            <input 
-                              type="text"
-                              value={inv.deliveryPersonComment || ""}
-                              onChange={(e) => handleUpdateField(inv._id, 'deliveryPersonComment', e.target.value)}
-                              placeholder="Comment"
-                              className="text-[9px] font-medium text-slate-500 bg-transparent outline-none w-full"
-                            />
-                          </div>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1.5 p-2 bg-slate-50/50 rounded-xl border border-slate-100 hover:border-indigo-100 hover:bg-white transition-all group min-w-[160px]">
+                          <FilterableSelect
+                            options={[
+                              ...(inv.salesOrderId?.deliveryMan?.name ? [{ _id: inv.salesOrderId.deliveryMan.name, name: inv.salesOrderId.deliveryMan.name }] : []),
+                              ...branchUsers.map(u => ({ _id: u.name, name: u.name }))
+                            ].filter((v, i, a) => a.findIndex(t => t._id === v._id) === i)}
+                            value={inv.deliveryPerson || inv.deliveryMan?.name || ""}
+                            onChange={(val) => handleUpdateField(inv._id, 'deliveryPerson', val)}
+                            placeholder="Assign Delivery"
+                            disabled={isFieldLocked(inv, 'deliveryPerson', 'deliveryPersonComment')}
+                            className="!text-[10px] !font-black !uppercase"
+                          />
+                          <input 
+                            type="text"
+                            value={inv.deliveryPersonComment || ""}
+                            onChange={(e) => handleUpdateField(inv._id, 'deliveryPersonComment', e.target.value)}
+                            placeholder="Add note..."
+                            disabled={isFieldLocked(inv, 'deliveryPerson', 'deliveryPersonComment')}
+                            className="text-[9px] font-bold text-slate-600 bg-white px-2 py-1 rounded border border-slate-100 outline-none"
+                          />
                         </div>
                       </td>
 
-                      <td className="px-6 py-4 text-center min-w-[140px]">
-                        {inv.deliveryStatus === "COMPLETED" ? (
-                          <div className="flex flex-col items-center gap-2">
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-widest">
-                              <FaCheckCircle />
-                              Completed
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          {inv.deliveryStatus === "COMPLETED" ? (
+                            <>
+                              <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-widest">Delivered</span>
+                              <span className="text-[8px] font-bold text-slate-400">{inv.deliveryPaymentType}</span>
+                              {isAdmin && (
+                                <button onClick={() => handleMarkStatus(inv._id, "PENDING")} className="text-[9px] font-bold text-indigo-500 underline">Revert</button>
+                              )}
+                            </>
+                          ) : (
+                            <div className="flex flex-col gap-2">
+                               {inv.deliveryStatus === "PENDING" && (
+                                 <button onClick={() => handleMarkStatus(inv._id, "PICKED")} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">Mark Picked</button>
+                               )}
+                               {inv.deliveryStatus === "PICKED" && (
+                                 <button onClick={() => handleMarkStatus(inv._id, "COMPLETED")} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">Complete</button>
+                               )}
                             </div>
-                            <span className="text-[8px] font-bold text-slate-400">{formatIST(inv.deliveryCompletedAt)}</span>
-                            <button
-                              onClick={() => handleMarkStatus(inv._id, "PENDING")}
-                              className="text-[9px] font-bold text-indigo-500 hover:text-indigo-700 uppercase tracking-widest underline underline-offset-4"
-                            >
-                              Revert to Pending
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-2">
-                            {inv.deliveryStatus === "PICKED" && (
-                              <div className="flex flex-col items-center gap-1 mb-1">
-                                <div className="flex items-center justify-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-[9px] font-black uppercase tracking-widest">
-                                  <FaCheckCircle size={10} />
-                                  Picked
-                                </div>
-                                <button
-                                  onClick={() => handleMarkStatus(inv._id, "PENDING")}
-                                  className="text-[8px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest underline"
-                                >
-                                  Revert
-                                </button>
-                              </div>
-                            )}
-                            {(inv.deliveryStatus === "PENDING" || !inv.deliveryStatus) && (
-                              <button
-                                onClick={() => handleMarkStatus(inv._id, "PICKED")}
-                                disabled={updatingId === inv._id}
-                                className="inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-amber-600 transition shadow-lg shadow-amber-100 disabled:opacity-50"
-                              >
-                                {updatingId === inv._id ? <FaSync className="animate-spin" /> : <FaTruck />}
-                                Mark Picked
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleMarkStatus(inv._id, "COMPLETED")}
-                              disabled={updatingId === inv._id}
-                              className="inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 disabled:opacity-50"
-                            >
-                              {updatingId === inv._id ? <FaSync className="animate-spin" /> : <FaCheckCircle />}
-                              Mark Complete
-                            </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -444,7 +463,182 @@ const BranchDeliveryFlow = () => {
               </tbody>
             </table>
           </div>
-          
+
+          {/* Mobile Card View (Visible on small screens) */}
+          <div className="lg:hidden divide-y divide-slate-100">
+            {loading ? (
+              <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                <FaSync className="animate-spin inline-block mb-2" /><br />Loading...
+              </div>
+            ) : invoices.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+                No records found
+              </div>
+            ) : (
+              invoices.map((inv, idx) => (
+                <div key={inv._id} className={`p-4 ${inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/20' : 'bg-white'}`}>
+                  {/* Card Header: SI & Status */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black text-slate-400 tracking-tighter">#{(currentPage - 1) * 50 + idx + 1}</span>
+                        <button onClick={() => handleViewInvoice(inv)} className="text-sm font-black text-indigo-600 tracking-tight">{inv.invoiceNumber}</button>
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">{formatIST(inv.createdAt || inv.invoiceDate)}</div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      {inv.deliveryStatus === 'COMPLETED' ? (
+                        <span className="px-2.5 py-1 bg-emerald-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">Delivered</span>
+                      ) : inv.deliveryStatus === 'PICKED' ? (
+                        <span className="px-2.5 py-1 bg-amber-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">In Transit</span>
+                      ) : (
+                        <span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-200">Pending</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Customer Info */}
+                  <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="text-xs font-black text-slate-800 uppercase tracking-tight mb-1">{inv.customer?.name}</div>
+                    <div className="flex items-center gap-1.5">
+                      <FaMapMarkerAlt className="text-indigo-400 text-[10px]" />
+                      <input 
+                        type="text"
+                        value={inv.area || inv.customer?.address || ""}
+                        onChange={(e) => handleUpdateField(inv._id, 'area', e.target.value)}
+                        placeholder="Assign Area"
+                        className="text-[10px] font-bold text-indigo-600 bg-transparent outline-none w-full"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Assignments */}
+                  <div className="grid grid-cols-1 gap-3 mb-4">
+                    {/* Storage */}
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Storage & Note</label>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <FilterableSelect
+                            options={[{ _id: "", name: "NONE" }, ...branchUsers.map(u => ({ _id: u.name, name: u.name }))]}
+                            value={inv.storageMan}
+                            onChange={(val) => handleUpdateField(inv._id, 'storageMan', val)}
+                            placeholder="Storage"
+                            className="!py-2 !text-[11px] !font-black !uppercase"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <input 
+                            type="text"
+                            value={inv.storageManComment || ""}
+                            onChange={(e) => handleUpdateField(inv._id, 'storageManComment', e.target.value)}
+                            placeholder="Note..."
+                            className="w-full text-[10px] font-bold text-slate-600 bg-white border border-slate-100 rounded-xl px-3 py-2 shadow-sm outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Checker */}
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Checker & Note</label>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <FilterableSelect
+                            options={[{ _id: "", name: "NONE" }, ...branchUsers.map(u => ({ _id: u.name, name: u.name }))]}
+                            value={inv.stockChecker}
+                            onChange={(val) => handleUpdateField(inv._id, 'stockChecker', val)}
+                            placeholder="Checker"
+                            className="!py-2 !text-[11px] !font-black !uppercase"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <input 
+                            type="text"
+                            value={inv.stockCheckerComment || ""}
+                            onChange={(e) => handleUpdateField(inv._id, 'stockCheckerComment', e.target.value)}
+                            placeholder="Note..."
+                            className="w-full text-[10px] font-bold text-slate-600 bg-white border border-slate-100 rounded-xl px-3 py-2 shadow-sm outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Delivery */}
+                    <div className="space-y-1">
+                      <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Delivery & Note</label>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <FilterableSelect
+                            options={[
+                              ...(inv.salesOrderId?.deliveryMan?.name ? [{ _id: inv.salesOrderId.deliveryMan.name, name: inv.salesOrderId.deliveryMan.name }] : []),
+                              ...branchUsers.map(u => ({ _id: u.name, name: u.name }))
+                            ].filter((v, i, a) => a.findIndex(t => t._id === v._id) === i)}
+                            value={inv.deliveryPerson || inv.deliveryMan?.name || ""}
+                            onChange={(val) => handleUpdateField(inv._id, 'deliveryPerson', val)}
+                            placeholder="Delivery"
+                            className="!py-2 !text-[11px] !font-black !uppercase"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <input 
+                            type="text"
+                            value={inv.deliveryPersonComment || ""}
+                            onChange={(e) => handleUpdateField(inv._id, 'deliveryPersonComment', e.target.value)}
+                            placeholder="Note..."
+                            className="w-full text-[10px] font-bold text-slate-600 bg-white border border-slate-100 rounded-xl px-3 py-2 shadow-sm outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Checkboxes & Action */}
+                  <div className="pt-3 border-t border-slate-50">
+                    {inv.deliveryStatus !== 'COMPLETED' ? (
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap gap-2">
+                           {['CASH', 'CHEQUE', 'OLD_PAYMENT', 'SPOT_PAYMENT', 'SIGNATURE'].map(opt => (
+                              <label key={opt} className="flex items-center gap-1 px-2 py-1.5 bg-slate-50 border border-slate-100 rounded-lg cursor-pointer">
+                                <input 
+                                  type="checkbox"
+                                  className="w-3 h-3 rounded text-indigo-600"
+                                  checked={(rowPayments[inv._id] || []).includes(opt)}
+                                  onChange={(e) => {
+                                    const current = rowPayments[inv._id] || [];
+                                    const next = e.target.checked ? [...current, opt] : current.filter(x => x !== opt);
+                                    setRowPayments({ ...rowPayments, [inv._id]: next });
+                                  }}
+                                />
+                                <span className="text-[9px] font-black text-slate-500 tracking-tighter uppercase">{opt.replace('_', ' ')}</span>
+                              </label>
+                           ))}
+                        </div>
+                        <div className="flex gap-2">
+                           {inv.deliveryStatus === 'PENDING' && (
+                             <button onClick={() => handleMarkStatus(inv._id, 'PICKED')} className="flex-1 py-3 bg-amber-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-100">Pick Up</button>
+                           )}
+                           <button 
+                             onClick={() => handleMarkStatus(inv._id, 'COMPLETED')} 
+                             disabled={(rowPayments[inv._id] || []).length === 0}
+                             className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 disabled:opacity-50"
+                           >
+                             Complete Delivery
+                           </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                         <div className="text-[10px] font-bold text-slate-400 uppercase">Paid via: {inv.deliveryPaymentType}</div>
+                         {isAdmin && <button onClick={() => handleMarkStatus(inv._id, 'PENDING')} className="text-[10px] font-black text-indigo-500 underline uppercase tracking-widest">Revert</button>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
           {/* PAGINATION */}
           <div className="bg-slate-50/50 p-4 border-t border-slate-100 flex items-center justify-between">
              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -469,8 +663,12 @@ const BranchDeliveryFlow = () => {
           </div>
         </div>
       </div>
+
+      {/* DELIVERY COMPLETION MODAL REMOVED */}
+
     </div>
   );
 };
+
 
 export default BranchDeliveryFlow;

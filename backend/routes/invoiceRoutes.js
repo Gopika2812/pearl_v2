@@ -207,10 +207,10 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
       const parts = cleanSoId.split('/');
       const soMainPrefix = parts[0];
-      
+
       // Convert SO prefix to SI
-      let siPrefix = soMainPrefix.endsWith("SO") 
-        ? soMainPrefix.replace(/SO$/i, "SI") 
+      let siPrefix = soMainPrefix.endsWith("SO")
+        ? soMainPrefix.replace(/SO$/i, "SI")
         : (soMainPrefix.endsWith("-SO") ? soMainPrefix.replace(/-SO$/i, "-SI") : (soMainPrefix.endsWith("O") ? soMainPrefix.replace(/O$/i, "I") : `${soMainPrefix}SI`));
 
       if (useSoNumber) {
@@ -407,9 +407,9 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
           const parts = cleanSoId.split('/');
           const soMainPrefix = parts[0];
-          
-          let siPrefix = soMainPrefix.endsWith("SO") 
-            ? soMainPrefix.replace(/SO$/i, "SI") 
+
+          let siPrefix = soMainPrefix.endsWith("SO")
+            ? soMainPrefix.replace(/SO$/i, "SI")
             : (soMainPrefix.endsWith("-SO") ? soMainPrefix.replace(/-SO$/i, "-SI") : (soMainPrefix.endsWith("O") ? soMainPrefix.replace(/O$/i, "I") : `${soMainPrefix}SI`));
 
           if (useSoNumber) {
@@ -528,9 +528,9 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         const commonDiscount = customCommonDiscount !== undefined ? Number(customCommonDiscount) : (salesOrder.commonDiscount || 0);
         const tCharge = customTransportCharge !== undefined ? Number(customTransportCharge) : (salesOrder.transportCharge || 0);
         const extraExpenseAmount = customExtraExpenseAmount !== undefined ? Number(customExtraExpenseAmount) : (salesOrder.extraExpenseAmount || 0);
-        
-        const tGstPercent = customTransportGstPercent !== undefined 
-          ? Number(customTransportGstPercent) 
+
+        const tGstPercent = customTransportGstPercent !== undefined
+          ? Number(customTransportGstPercent)
           : (salesOrder.transportGstPercent || 0);
         const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
         const totalTax = {
@@ -650,6 +650,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           invoice.grandTotal = grandTotal;
           invoice.billingPerson = finalizedByUsername || invoice.billingPerson || "System";
           invoice.generatedBy = finalizedByUsername || invoice.generatedBy || "System";
+          invoice.deliveryMan = salesOrder.deliveryMan;
           await invoice.save({ session });
         } else {
           invoice = new Invoice({
@@ -673,6 +674,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             grandTotal,
             billingPerson: finalizedByUsername || "System",
             generatedBy: finalizedByUsername || "System",
+            deliveryMan: salesOrder.deliveryMan,
             status: "FINALIZED",
           });
           await invoice.save({ session });
@@ -1012,7 +1014,7 @@ router.put("/:invoiceId/cancel", async (req, res) => {
 // GET sales invoices with pagination and filtering (Sales Reports)
 router.get("", async (req, res) => {
   try {
-    const { branchId, fromDate, toDate, search, page = 1, limit = 20, vPrefix, einvoiceStatus, includeItems } = req.query;
+    const { branchId, fromDate, toDate, search, page = 1, limit = 20, vPrefix, einvoiceStatus, includeItems, deliveryStatus, storageMan, stockChecker, deliveryPerson } = req.query;
     const query = {};
 
     // 1. Branch Filter
@@ -1030,41 +1032,99 @@ router.get("", async (req, res) => {
       query.einvoiceStatus = einvoiceStatus;
     }
 
+    // 4. Delivery Status Filter
+    if (deliveryStatus && deliveryStatus !== "ALL") {
+      if (deliveryStatus === "PENDING") {
+        // For PENDING in history, only show those that were actually reverted from a completion
+        query.isReverted = true;
+      } else {
+        query.deliveryStatus = deliveryStatus;
+      }
+    } else if (deliveryStatus === "ALL") {
+      // For "ALL" history, show what's in progress or what was previously completed (reverted)
+      query.$or = [
+        { deliveryStatus: { $in: ["COMPLETED", "PICKED"] } },
+        { isReverted: true }
+      ];
+    }
+
+    // Staff Filters
+    if (storageMan) query.storageMan = storageMan;
+    if (stockChecker) query.stockChecker = stockChecker;
+    if (deliveryPerson) query.deliveryPerson = deliveryPerson;
+
     // 4. Search (Customer or Number)
     if (search) {
-      query.$or = [
+      const searchOR = [
         { invoiceNumber: { $regex: search, $options: "i" } },
         { "customer.name": { $regex: search, $options: "i" } },
         { "customer.whatsapp": { $regex: search, $options: "i" } },
       ];
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, { $or: searchOR }];
+        delete query.$or;
+      } else {
+        query.$or = searchOR;
+      }
     }
 
-    // 5. Date Filtering (Cumulative – applies unless dates are explicitly cleared or searching all-time)
-    // In this dashboard, if fromDate/toDate are passed, we stick to them.
-    if (fromDate || toDate) {
-      const start = fromDate ? new Date(fromDate) : new Date();
-      if (!fromDate) start.setHours(0, 0, 0, 0);
-
+    // 5. Date Filter (Dynamic based on status)
+    if (fromDate) {
+      const start = new Date(fromDate);
+      start.setHours(0, 0, 0, 0);
       const end = toDate ? new Date(toDate) : new Date(start);
       end.setHours(23, 59, 59, 999);
 
-      query.invoiceDate = { $gte: start, $lte: end };
-    } 
+      let dateFilter = {};
+      if (deliveryStatus === "COMPLETED") {
+        dateFilter = { deliveryCompletedAt: { $gte: start, $lte: end } };
+      } else if (deliveryStatus === "ALL") {
+        dateFilter = {
+          $or: [
+            { invoiceDate: { $gte: start, $lte: end } },
+            { deliveryCompletedAt: { $gte: start, $lte: end } }
+          ]
+        };
+      } else {
+        dateFilter = { invoiceDate: { $gte: start, $lte: end } };
+      }
+
+      // Merge date filter into query safely
+      if (query.$and) {
+        query.$and.push(dateFilter);
+      } else if (query.$or) {
+        // If we have a search $or, wrap it in $and with the date filter
+        const existingOR = query.$or;
+        delete query.$or;
+        query.$and = [{ $or: existingOR }, dateFilter];
+      } else {
+        // No search $or, but dateFilter might be an $or (for "ALL")
+        if (dateFilter.$or) {
+          query.$or = dateFilter.$or;
+        } else {
+          Object.assign(query, dateFilter);
+        }
+      }
+    }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     let queryExec = Invoice.find(query)
       .populate("customer.customerId", "name whatsapp")
-      .populate("salesOrderId");
+      .populate({
+        path: "salesOrderId",
+        populate: { path: "deliveryMan", select: "name phone" }
+      })
+      .populate("deliveryMan", "name phone");
 
     // ⚡ SPEED OPTIMIZATION: If full items are not requested, return essential fields for the list view
     if (includeItems !== "true") {
-      queryExec = queryExec.select({ 
-        items: { _id: 1 }, 
-        invoiceNumber: 1, 
-        invoiceDate: 1, 
-        customer: 1, 
-        grandTotal: 1, 
+      queryExec = queryExec.select({
+        items: { _id: 1 },
+        invoiceNumber: 1,
+        invoiceDate: 1,
+        customer: 1,
+        grandTotal: 1,
         subtotal: 1,
         totalTax: 1,
         commonDiscount: 1,
@@ -1075,10 +1135,23 @@ router.get("", async (req, res) => {
         irn: 1,
         billingPerson: 1,
         generatedBy: 1,
-        status: 1, 
-        branchId: 1, 
-        salesOrderId: 1, 
-        createdAt: 1 
+        status: 1,
+        branchId: 1,
+        salesOrderId: 1,
+        createdAt: 1,
+        area: 1,
+        storageMan: 1,
+        storageManComment: 1,
+        stockChecker: 1,
+        stockCheckerComment: 1,
+        deliveryPerson: 1,
+        deliveryMan: 1,
+
+        deliveryPersonComment: 1,
+        deliveryStatus: 1,
+        deliveryCompletedAt: 1,
+        deliveryPaymentType: 1,
+        isReverted: 1
       });
     }
 
@@ -1092,6 +1165,7 @@ router.get("", async (req, res) => {
     const pages = Math.ceil(total / parseInt(limit));
 
     res.json({
+      success: true,
       data: invoices,
       pagination: {
         total,
@@ -1111,9 +1185,13 @@ router.get("/:id", async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id)
       .populate("customer.customerId")
-      .populate("salesOrderId")
+      .populate({
+        path: "salesOrderId",
+        populate: { path: "deliveryMan" }
+      })
       .populate("branchId")
       .populate("items.productId")
+      .populate("deliveryMan")
       .lean();
 
     if (!invoice) return res.status(404).json({ success: false, message: "Invoice not found" });
@@ -1352,20 +1430,54 @@ router.delete("/:invoiceId", async (req, res) => {
   }
 });
 
+// Helper to generate Delivery Log ID (DL)
+const generateDeliveryLogId = async (branchId) => {
+  if (!mongoose.Types.ObjectId.isValid(branchId)) return null;
+  
+  const branch = await Branch.findById(branchId);
+  const branchCode = branch?.code || "BR";
+  const prefix = `DL-${branchCode}-`;
+
+  // Find the last invoice with a DL ID for this branch
+  const lastInvoice = await Invoice.findOne({
+    branchId: new mongoose.Types.ObjectId(branchId),
+    deliveryLogId: { $regex: `^${prefix}` }
+  }).sort({ deliveryLogId: -1 });
+
+  let nextNum = 1;
+  if (lastInvoice && lastInvoice.deliveryLogId) {
+    const parts = lastInvoice.deliveryLogId.split("-");
+    const lastNum = parseInt(parts[parts.length - 1]);
+    if (!isNaN(lastNum)) {
+      nextNum = lastNum + 1;
+    }
+  }
+
+  return `${prefix}${nextNum.toString().padStart(4, "0")}`;
+};
+
 // PATCH - Update delivery flow tracking fields
 router.patch("/:invoiceId/delivery-flow", async (req, res) => {
   try {
     const { invoiceId } = req.params;
-    const { 
-      area, 
-      storageMan, 
-      storageManComment, 
-      stockChecker, 
-      stockCheckerComment, 
+    const {
+      area,
+      storageMan,
+      storageManComment,
+      stockChecker,
+      stockCheckerComment,
+      deliveryPerson,
       deliveryPersonComment,
       deliveryStatus,
-      updatedBy
+      updatedBy,
+      updatedById,
+      deliveryPaymentType,
+      deliveryPaymentAmount,
+      deliverySignature
     } = req.body;
+
+    const inv = await Invoice.findById(invoiceId);
+    if (!inv) return res.status(404).json({ success: false, message: "Invoice not found" });
 
     const updateData = {};
     if (area !== undefined) updateData.area = area;
@@ -1373,12 +1485,22 @@ router.patch("/:invoiceId/delivery-flow", async (req, res) => {
     if (storageManComment !== undefined) updateData.storageManComment = storageManComment;
     if (stockChecker !== undefined) updateData.stockChecker = stockChecker;
     if (stockCheckerComment !== undefined) updateData.stockCheckerComment = stockCheckerComment;
+    if (deliveryPerson !== undefined) updateData.deliveryPerson = deliveryPerson;
     if (deliveryPersonComment !== undefined) updateData.deliveryPersonComment = deliveryPersonComment;
-    
+    if (req.body.isReverted !== undefined) updateData.isReverted = req.body.isReverted;
+
+    if (deliveryPaymentType !== undefined) updateData.deliveryPaymentType = deliveryPaymentType;
+    if (deliveryPaymentAmount !== undefined) updateData.deliveryPaymentAmount = deliveryPaymentAmount;
+    if (deliverySignature !== undefined) updateData.deliverySignature = deliverySignature;
+
     if (deliveryStatus !== undefined) {
       updateData.deliveryStatus = deliveryStatus;
       if (deliveryStatus === "COMPLETED") {
         updateData.deliveryCompletedAt = new Date();
+        updateData.isReverted = false;
+        if (!inv.deliveryLogId) {
+          updateData.deliveryLogId = await generateDeliveryLogId(inv.branchId);
+        }
       }
     }
 
@@ -1392,9 +1514,27 @@ router.patch("/:invoiceId/delivery-flow", async (req, res) => {
       return res.status(404).json({ success: false, message: "Invoice not found" });
     }
 
+    // ⚡ SYNC DELIVERY MAN TO SALES ORDER & INVOICE OBJECTID
+    // If the delivery person name is updated, try to match it with a DeliveryMan record
+    if (invoice.salesOrderId && deliveryPerson !== undefined) {
+      if (!deliveryPerson || deliveryPerson === "NONE") {
+        await SalesOrder.findByIdAndUpdate(invoice.salesOrderId, { $unset: { deliveryMan: 1 } });
+        await Invoice.findByIdAndUpdate(invoice._id, { $unset: { deliveryMan: 1 } });
+      } else {
+        const dMan = await DeliveryMan.findOne({
+          name: { $regex: new RegExp(`^${deliveryPerson}$`, 'i') },
+          branchId: invoice.branchId
+        });
+        if (dMan) {
+          await SalesOrder.findByIdAndUpdate(invoice.salesOrderId, { deliveryMan: dMan._id });
+          await Invoice.findByIdAndUpdate(invoice._id, { deliveryMan: dMan._id });
+        }
+      }
+    }
+
     // Optional: Log this action
     await createAuditLog({
-      userId: updatedBy || "System",
+      userId: mongoose.Types.ObjectId.isValid(updatedById) ? updatedById : invoice.branchId, // Use branchId as fallback if no valid userId
       username: updatedBy || "System",
       branchId: invoice.branchId,
       action: "UPDATE_DELIVERY_FLOW",

@@ -60,6 +60,7 @@ import BranchFollowUpRecords from "./pages/branch/BranchFollowUpRecords";
 import BranchProductConfig from "./pages/branch/BranchProductConfig";
 import BranchCustomerLedger from "./pages/branch/BranchCustomerLedger";
 import BranchDeliveryFlow from "./pages/branch/BranchDeliveryFlow";
+import BranchDeliveryRecords from "./pages/branch/BranchDeliveryRecords";
 import BranchDeliveryReceipt from "./pages/branch/BranchDeliveryReceipt";
 
 
@@ -106,6 +107,16 @@ function AppContent() {
     isCheckingTokens, 
     refreshBlockingTokens 
   } = useBranch();
+
+  // Security: Prevent Copy/Select on Branch Routes
+  useEffect(() => {
+    if (location.pathname.startsWith("/branch/")) {
+      document.body.classList.add("no-copy");
+    } else {
+      document.body.classList.remove("no-copy");
+    }
+    return () => document.body.classList.remove("no-copy");
+  }, [location.pathname]);
 
   // Reminder Tracking
   useEffect(() => {
@@ -241,6 +252,7 @@ function AppContent() {
         "/branch/payment-records": "payment-po",
         "/branch/summary": "summary",
         "/branch/delivery-flow": "delivery-flow",
+        "/branch/delivery-records": "delivery-records",
         "/branch/delivery-receipt": "delivery-receipt",
       };
 
@@ -272,6 +284,91 @@ function AppContent() {
 
     verifyAccess();
   }, [location.pathname, isBranchRoute, superAdminViewBranch, navigate, user]);
+
+  const [securityOverlay, setSecurityOverlay] = useState(false);
+
+  // 🛡️ SECURITY PROTECTION: Prevent Right-Click, Selection, and Sensitive Shortcuts
+  useEffect(() => {
+    // Only apply to branch users, not super admins
+    if (!isBranchRoute || user?.role === "SUPER_ADMIN" || !user) return;
+
+    const triggerOverlay = () => {
+      setSecurityOverlay(true);
+      setTimeout(() => setSecurityOverlay(false), 3000);
+    };
+
+    const handleContextMenu = (e) => {
+      e.preventDefault();
+    };
+
+    const handleKeyDown = (e) => {
+      // Disable F12, Ctrl+Shift+I (DevTools), Ctrl+U (View Source), Ctrl+S (Save), PrintScreen
+      if (
+        e.key === "F12" ||
+        (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "J" || e.key === "C" || e.key === "K")) ||
+        (e.ctrlKey && (e.key === "u" || e.key === "U" || e.key === "s" || e.key === "S")) ||
+        e.key === "PrintScreen"
+      ) {
+        if (e.key === "PrintScreen") {
+          e.preventDefault();
+          navigator.clipboard.writeText("Screenshot restricted.");
+          triggerOverlay();
+        } else {
+          e.preventDefault();
+          toast.warn("⚠️ Security: This action is restricted.");
+        }
+        return false;
+      }
+    };
+
+    // Prevent drag and drop of images
+    const handleDragStart = (e) => {
+      if (e.target.tagName === 'IMG') e.preventDefault();
+    };
+
+    // Mobile Screenshot Detection (Best effort: Window blur often occurs during screenshot)
+    const handleBlur = () => {
+       // Only trigger if we are on a sensitive branch route
+       if (isBranchRoute) {
+          triggerOverlay();
+       }
+    };
+
+    document.addEventListener("contextmenu", handleContextMenu);
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("dragstart", handleDragStart);
+    window.addEventListener("blur", handleBlur);
+
+    // Apply CSS-based selection block
+    document.body.classList.add("select-none");
+
+    return () => {
+      document.removeEventListener("contextmenu", handleContextMenu);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("dragstart", handleDragStart);
+      window.removeEventListener("blur", handleBlur);
+      document.body.classList.remove("select-none");
+    };
+  }, [isBranchRoute, user]);
+
+  const SecurityOverlay = () => {
+    if (!securityOverlay) return null;
+    return (
+      <div className="fixed inset-0 z-[100000] bg-slate-900/95 backdrop-blur-2xl flex flex-col items-center justify-center p-8 animate-in fade-in duration-300">
+        <div className="w-24 h-24 bg-rose-500/20 rounded-full flex items-center justify-center mb-6 border border-rose-500/50">
+          <FaExclamationTriangle className="text-5xl text-rose-500 animate-bounce" />
+        </div>
+        <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 text-center">Screenshot Restricted</h1>
+        <p className="text-rose-200 font-bold text-sm uppercase tracking-widest text-center max-w-md leading-relaxed">
+          For security reasons, screenshots are not allowed in the Pearl Agency ERP.
+          Your action has been logged.
+        </p>
+        <div className="mt-12 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">
+          Access Protected by Security Protocol
+        </div>
+      </div>
+    );
+  };
 
 
 
@@ -413,6 +510,8 @@ function AppContent() {
           fontFamily: "Inter, sans-serif"
         }}
       />
+
+      <SecurityOverlay />
       
           <div className="flex">
             {/* Sidebar logic:
@@ -518,6 +617,7 @@ function AppContent() {
                   <Route path="/branch/follow-up-records" element={<ProtectedRoute element={<BranchFollowUpRecords />} />} />
                   <Route path="/branch/tokenization" element={<ProtectedRoute element={<Tokenization />} />} />
                   <Route path="/branch/delivery-flow" element={<ProtectedRoute element={<BranchDeliveryFlow />} />} />
+                  <Route path="/branch/delivery-records" element={<ProtectedRoute element={<BranchDeliveryRecords />} />} />
                   <Route path="/branch/delivery-receipt" element={<ProtectedRoute element={<BranchDeliveryReceipt />} />} />
 
                   {/* LEGACY ROUTES */}
