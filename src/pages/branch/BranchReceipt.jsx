@@ -30,6 +30,7 @@ export default function BranchReceipt() {
   // Pagination & Data Control
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalInvoicesCount, setTotalInvoicesCount] = useState(0);
   const [limit] = useState(50); // Show 50 per page for better performance
 
   // Date filters
@@ -48,21 +49,27 @@ export default function BranchReceipt() {
   
   useEffect(() => {
     if (currentBranch?._id) fetchData();
-  }, [currentBranch, fromDate, toDate, currentPage]);
+  }, [currentBranch, fromDate, toDate, currentPage, searchTerm]);
+
+  // Reset to page 1 when dates or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [fromDate, toDate, searchTerm]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       console.log("Fetching Branch Receipts for:", currentBranch?._id);
       
-      // 1. Fetch Sales Invoices (Paginated & Filtered)
-      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&page=${currentPage}&limit=${limit}`, {
+      // 1. Fetch Sales Invoices (Paginated & Filtered - GLOBAL SEARCH)
+      const invResponse = await fetch(`${API_BASE}/invoices?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&page=${currentPage}&limit=${limit}&search=${encodeURIComponent(searchTerm)}`, {
         headers: { "Content-Type": "application/json" },
       });
       const invResult = await invResponse.json();
       const invArray = invResult.data || [];
       setInvoices(invArray);
       setTotalPages(invResult.pagination?.pages || 1);
+      setTotalInvoicesCount(invResult.pagination?.total || invArray.length);
 
       // 2. Optimized: Fetch all receipts for these invoices in ONE call
       const allOrderIds = [
@@ -172,18 +179,10 @@ export default function BranchReceipt() {
   };
 
   const filteredItems = React.useMemo(() => {
-    return allItems.filter(item => {
-      if (!searchTerm) return true;
-      
-      const searchLower = searchTerm.toLowerCase();
-      
-      const displayId = (item.invoiceNumber || item.invoiceId || item.receiptId || "").toString().toLowerCase();
-      const customerName = (typeof item.customer === "object" ? item.customer?.name : item.customer || "").toString().toLowerCase();
-      const totalAmount = (item.rowType === "ORDER" || item.rowType === "INVOICE" ? (item.grandTotal || 0) : (item.amount || 0)).toString().toLowerCase();
-
-      return displayId.includes(searchLower) || customerName.includes(searchLower) || totalAmount.includes(searchLower);
-    });
-  }, [allItems, searchTerm]);
+    // Note: Search is now handled globally by the backend!
+    // We just need to return the allItems which are already filtered by the API
+    return allItems;
+  }, [allItems]);
 
   const getReceiptsForInvoice = (invoiceId) => {
     return receiptData[invoiceId]?.receipts || [];
@@ -385,6 +384,67 @@ export default function BranchReceipt() {
               </table>
             </div>
           )}
+
+          {/* PAGINATION CONTROLS */}
+          {totalPages > 1 && (
+            <div className="bg-gray-50 px-4 py-4 border-t flex items-center justify-between">
+              <div className="text-xs font-bold text-gray-500 uppercase">
+                Page <span className="text-cyan-600">{currentPage}</span> of <span className="text-cyan-600">{totalPages}</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  className={`px-4 py-2 rounded-lg font-bold text-xs transition ${
+                    currentPage === 1 
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed" 
+                      : "bg-white border border-cyan-200 text-cyan-600 hover:bg-cyan-50 shadow-sm"
+                  }`}
+                >
+                  PREVIOUS
+                </button>
+                
+                {/* Simple Page Numbers */}
+                <div className="hidden md:flex gap-1">
+                  {[...Array(totalPages)].map((_, i) => {
+                    const pageNum = i + 1;
+                    // Only show 5 pages around current
+                    if (pageNum === 1 || pageNum === totalPages || (pageNum >= currentPage - 2 && pageNum <= currentPage + 2)) {
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`w-8 h-8 rounded-lg font-bold text-xs transition ${
+                            currentPage === pageNum
+                              ? "bg-cyan-600 text-white shadow-md"
+                              : "bg-white border border-gray-200 text-gray-600 hover:border-cyan-400"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    }
+                    if (pageNum === currentPage - 3 || pageNum === currentPage + 3) {
+                      return <span key={pageNum} className="px-1 text-gray-400">...</span>;
+                    }
+                    return null;
+                  })}
+                </div>
+
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  className={`px-4 py-2 rounded-lg font-bold text-xs transition ${
+                    currentPage === totalPages 
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed" 
+                      : "bg-cyan-600 text-white hover:bg-cyan-700 shadow-md"
+                  }`}
+                >
+                  NEXT
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* RECEIPT SUMMARY */}
@@ -393,7 +453,7 @@ export default function BranchReceipt() {
             <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-blue-500">
               <p className="text-gray-600 text-sm uppercase font-bold mb-2">Total Invoices</p>
               <p className="text-3xl font-black text-gray-800">
-                {filteredItems.filter(i => i.rowType === "ORDER" || i.rowType === "INVOICE").length}
+                {totalInvoicesCount}
               </p>
             </div>
 
