@@ -1039,14 +1039,13 @@ router.get("", async (req, res) => {
       ];
     }
 
-    // 5. Date Filtering (Cumulative – applies unless dates are explicitly cleared or searching all-time)
-    // In this dashboard, if fromDate/toDate are passed, we stick to them.
+    // 5. Date Filtering (Inclusive of full days)
     if (fromDate || toDate) {
       const start = fromDate ? new Date(fromDate) : new Date();
-      if (!fromDate) start.setHours(0, 0, 0, 0);
+      start.setHours(0, 0, 0, 0); // Always set to beginning of day
 
       const end = toDate ? new Date(toDate) : new Date(start);
-      end.setHours(23, 59, 59, 999);
+      end.setHours(23, 59, 59, 999); // Always set to end of day
 
       query.invoiceDate = { $gte: start, $lte: end };
     } 

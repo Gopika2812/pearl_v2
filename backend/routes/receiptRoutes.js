@@ -105,7 +105,7 @@ router.get("/", async (req, res) => {
 
     if (fromDate || toDate) {
       const start = fromDate ? new Date(fromDate) : new Date();
-      if (!fromDate) start.setHours(0, 0, 0, 0);
+      start.setHours(0, 0, 0, 0);
 
       const end = toDate ? new Date(toDate) : new Date(start);
       end.setHours(23, 59, 59, 999);
