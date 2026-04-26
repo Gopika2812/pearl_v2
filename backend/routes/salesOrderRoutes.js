@@ -14,6 +14,17 @@ import { cacheData, clearCachePrefix } from "../middleware/cacheMiddleware.js";
 
 const router = express.Router();
 
+const isToday = (date) => {
+  if (!date) return true;
+  const d = new Date(date);
+  const today = new Date();
+  return (
+    d.getDate() === today.getDate() &&
+    d.getMonth() === today.getMonth() &&
+    d.getFullYear() === today.getFullYear()
+  );
+};
+
 // RECORD PAYMENT for sales order
 router.post("/:id/record-payment", clearCachePrefix("/api/sales-orders"), async (req, res) => {
   try {
@@ -481,6 +492,7 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
         stateCode: customer.stateCode || "33",
         pincode: customer.pincode,
         gstin: customer.gstin,
+        customerGroup: customer.customerGroup,
       },
       openingBalance: Math.round(openingBalance),
       closingBalance,
@@ -618,6 +630,15 @@ router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, r
 
     // 🔄 REVERT EFFECTS IF INVOICED
     if (salesOrder.status === "INVOICED") {
+      // 🛡️ CHECK: Edit Previous Day Permission
+      if (req.user.role !== "SUPER_ADMIN") {
+        const associatedInvoice = await Invoice.findOne({ salesOrderId: salesOrder._id });
+        if (associatedInvoice && !isToday(associatedInvoice.invoiceDate)) {
+          if (req.user.actionPermissions?.editPreviousDay === false) {
+            return res.status(403).json({ success: false, message: "Permission Denied: You cannot cancel invoices from a previous day." });
+          }
+        }
+      }
       const Customer = mongoose.model("Customer");
       const Product = mongoose.model("Product");
       const Commission = mongoose.model("Commission");
@@ -726,6 +747,16 @@ router.patch("/:id/request-reedit", auth, clearCachePrefix("/api/sales-orders"),
 
     // Snapshot current state before edit starts
     if (order.status === "INVOICED" || order.invoiceGenerated) {
+      // 🛡️ CHECK: Edit Previous Day Permission
+      if (req.user.role !== "SUPER_ADMIN") {
+        const associatedInvoice = await Invoice.findOne({ salesOrderId: order._id });
+        if (associatedInvoice && !isToday(associatedInvoice.invoiceDate)) {
+          if (req.user.actionPermissions?.editPreviousDay === false) {
+            return res.status(403).json({ success: false, message: "Permission Denied: You cannot re-edit invoices from a previous day." });
+          }
+        }
+      }
+
       order.editHistory.push({
         version: (order.editHistory.length || 0) + 1,
         editType: 'RE_EDIT_STARTED',
@@ -1282,11 +1313,15 @@ router.get("/unpaid/:customerId", async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, commonDiscount, extraExpenses, extraExpenseAmount, customer, transportCharge, transportGstPercent, transportGstAmount, roundOff } = req.body;
+    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, commonDiscount, extraExpenses, extraExpenseAmount, customer, transportCharge, transportGstPercent, transportGstAmount, roundOff, orderDate } = req.body;
 
     const salesOrder = await SalesOrder.findById(id);
     if (!salesOrder) {
       return res.status(404).json({ message: "Sales order not found" });
+    }
+
+    if (orderDate) {
+      salesOrder.orderDate = new Date(orderDate);
     }
 
     const beforeState = {

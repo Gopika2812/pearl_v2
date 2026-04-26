@@ -213,21 +213,16 @@ export const InventoryProvider = ({ children }) => {
         return;
       }
       
-      console.log(`🔌 Fetching Products for branchId: ${branchId}`);
-      // ⚡ PERFORMANCE: Load only 100 products initially to prevent server crash
-      const res = await fetchWithAuth(`${API_BASE}/products?branchId=${branchId}&limit=10000`);
+      console.log(`🔌 Fetching initial Products for branchId: ${branchId}`);
+      // ⚡ PERFORMANCE: Load only a small set initially. Use search for full access.
+      const res = await fetchWithAuth(`${API_BASE}/products?branchId=${branchId}&limit=100`);
       
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
       }
       
       const json = await res.json();
-      console.log(`🔌 Products raw response:`, json);
-      console.log(`🔌 Is array? ${Array.isArray(json)}`);
-      
       const productsData = Array.isArray(json) ? json : (json.data || []);
-      console.log(`🔌 Processed products: ${productsData.length} items`, productsData.map(p => ({ _id: p._id, name: p.name })));
-      
       setProducts(productsData);
     } catch (err) {
       console.error("❌ Product fetch failed", err);
@@ -281,8 +276,8 @@ export const InventoryProvider = ({ children }) => {
       const branchId = currentBranch?._id;
       if (!branchId) return;
       
-      // ⚡ PERFORMANCE: Only fetch 50 customers initially
-      const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${branchId}&limit=10000`);
+      // ⚡ PERFORMANCE: Only fetch a small set initially
+      const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${branchId}&limit=100`);
       const json = await res.json();
       setCustomers(json.data || []);
     } catch (err) {

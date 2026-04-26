@@ -452,28 +452,7 @@ export default function InventorySalesOrderEntry({
     return () => clearTimeout(timer);
   }, [itemSearch, branchId, productGroup, localProducts]);
 
-  // Sync available quantity for fetched products
-  useEffect(() => {
-    if (fetchedProducts.length === 0) return;
 
-    const syncAvailableQty = async () => {
-      const newCache = { ...availableQtyCache };
-      for (const p of fetchedProducts) {
-        if (newCache[p._id] === undefined) {
-          try {
-            const res = await fetchWithAuth(`${API_BASE}/products/available/${p._id}`);
-            const data = await res.json();
-            newCache[p._id] = data.data?.availableQty || 0;
-          } catch (err) {
-            newCache[p._id] = p.totalQty || 0;
-          }
-        }
-      }
-      setAvailableQtyCache(newCache);
-    };
-
-    syncAvailableQty();
-  }, [fetchedProducts]);
 
   // Fetch products for SAMPLE PRODUCTS section when sampleProductGroup changes
   useEffect(() => {
@@ -510,33 +489,7 @@ export default function InventorySalesOrderEntry({
     fetchSampleProductsByGroup();
   }, [sampleProductGroup, localProducts]);
 
-  // Fetch available qty for all filtered products
-  useEffect(() => {
-    if (filteredProducts.length === 0) {
-      setAvailableQtyCache({});
-      return;
-    }
 
-    const fetchAvailableQtyForAll = async () => {
-      const newCache = {};
-
-      for (const product of filteredProducts) {
-        try {
-          const res = await fetchWithAuth(`${API_BASE}/products/available/${product._id}`);
-          const data = await res.json();
-          newCache[product._id] = data.data?.availableQty || 0;
-        } catch (err) {
-          console.error(`Failed to fetch available qty for ${product._id}:`, err);
-          // Fallback to totalQty from product if available
-          newCache[product._id] = product.totalQty || 0;
-        }
-      }
-
-      setAvailableQtyCache(newCache);
-    };
-
-    fetchAvailableQtyForAll();
-  }, [filteredProducts]);
 
   const filteredProducts_unused = useMemo(() => {
     return productGroup
@@ -722,6 +675,20 @@ export default function InventorySalesOrderEntry({
       // Fetch customer-specific locked price
       fetchCustomerLockedPrice(customerId, id);
     }
+
+    // ⚡ PERFORMANCE: Targeted fetch for live available quantity only for selected item
+    const fetchLiveQty = async () => {
+      try {
+        const res = await fetchWithAuth(`${API_BASE}/products/available/${id}`);
+        const data = await res.json();
+        if (data.success) {
+          setAvailableQtyCache(prev => ({ ...prev, [id]: data.data.availableQty }));
+        }
+      } catch (err) {
+        console.error("Failed to fetch live qty:", err);
+      }
+    };
+    fetchLiveQty();
   };
 
   const fetchCustomerLockedPrice = async (cId, pId) => {
@@ -1094,6 +1061,9 @@ export default function InventorySalesOrderEntry({
         pincode: selectedCustomer.pincode,
 
         gstin: selectedCustomer.gstin,
+        customerGroup: selectedCustomer?.customerGroups?.[0]?.name || 
+                        selectedCustomer?.customerGroup?.name || 
+                        (typeof selectedCustomer?.customerGroup === 'string' ? selectedCustomer.customerGroup : ""),
         openingBalance: selectedCustomer.totalBalance,
         balanceType: selectedCustomer.balanceType,
       }
@@ -1469,6 +1439,20 @@ export default function InventorySalesOrderEntry({
                   )}
                 </div>
               )}
+            </div>
+
+            <div>
+              <label className={labelClass}>Customer Group</label>
+              <input
+                className={`${inputClass} font-bold text-[#319bab]`}
+                value={
+                  selectedCustomer?.customerGroups?.[0]?.name || 
+                  selectedCustomer?.customerGroup?.name || 
+                  (typeof selectedCustomer?.customerGroup === 'string' ? selectedCustomer.customerGroup : "") || 
+                  ""
+                }
+                readOnly
+              />
             </div>
 
             <div>

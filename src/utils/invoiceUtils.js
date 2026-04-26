@@ -112,7 +112,8 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
 
               <div class="order-header">
                 <div class="order-header-col">
-                  <strong>${idLabel}:</strong> ${isCN ? (generatedInvoice?.creditNoteId || order?.creditNoteId) : (generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING")}<br/>
+                  <strong>${idLabel}:</strong> ${isCN ? (generatedInvoice?.creditNoteId || order?.creditNoteId) : (generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING")}
+                  ${(!isCN && (previewData?.customer?.customerGroup || order?.customer?.customerGroup)) ? `(${String(previewData?.customer?.customerGroup || order?.customer?.customerGroup).charAt(0).toUpperCase()})` : ''}<br/>
                   <strong>${dateLabel}:</strong> ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
                 </div>
                 <div class="order-header-col" style="text-align: right;">
@@ -312,6 +313,53 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
     });
 
     html += "</body></html>";
+    return html;
+};
+
+export const getMiniChallanHTML = (previewData) => {
+    const style = `
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: monospace; font-size: 14px; padding: 20px; color: #000; }
+        .header { margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        .customer { font-size: 18px; font-weight: bold; margin-bottom: 15px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { text-align: left; border-bottom: 1px solid #000; padding: 5px; font-weight: bold; }
+        td { padding: 8px 5px; border-bottom: 1px dotted #ccc; }
+        .footer { margin-top: 30px; font-size: 12px; font-style: italic; }
+      </style>
+    `;
+
+    let html = `<!DOCTYPE html><html><head><title>CHALLAN</title>${style}</head><body>`;
+    
+    html += `
+      <div class="header">
+        <div class="customer">CUSTOMER: ${previewData?.customer?.name || "CASH CUSTOMER"}</div>
+        <div>Date: ${new Date().toLocaleDateString("en-IN")}</div>
+      </div>
+      
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 70%;">PRODUCT</th>
+            <th style="text-align: right;">COUNT</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(previewData?.items || []).filter(item => item.qty > 0).map(item => `
+            <tr>
+              <td>${item.name}</td>
+              <td style="text-align: right;"><strong>${item.qty} ${item.unit || ""}</strong></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      
+      <div class="footer">
+        Generated for internal verification.
+      </div>
+    </body></html>`;
+    
     return html;
 };
 

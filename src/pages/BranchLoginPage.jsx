@@ -82,7 +82,7 @@ export default function BranchLoginPage() {
       // Redirect to branch home
       setTimeout(() => {
         navigate("/branch-home");
-      }, 1000);
+      }, 100);
     } catch (error) {
       console.error("Login error:", error);
       toast.error("Login failed. Please try again.");

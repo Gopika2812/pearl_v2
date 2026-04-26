@@ -19,6 +19,17 @@ import { createAuditLog } from "../utils/logUtil.js";
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+const isToday = (date) => {
+  if (!date) return true;
+  const d = new Date(date);
+  const today = new Date();
+  return (
+    d.getDate() === today.getDate() &&
+    d.getMonth() === today.getMonth() &&
+    d.getFullYear() === today.getFullYear()
+  );
+};
+
 // GET sales order for invoice generation (shows pending items for back order calculation)
 router.get("/prepare/:salesOrderId", async (req, res) => {
   try {
@@ -69,7 +80,10 @@ router.post("/preview/:salesOrderId", async (req, res) => {
 
     const salesOrder = await SalesOrder.findById(salesOrderId)
       .populate("branchId")
-      .populate("customer.customerId");
+      .populate({
+        path: "customer.customerId",
+        populate: { path: "customerGroup" }
+      });
 
     if (!salesOrder) {
       return res.status(404).json({ message: "Sales order not found" });
@@ -251,7 +265,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     let isCustomerSwapped = false;
 
     if (bodyCustomerId && bodyCustomerId !== customerToUse?._id?.toString()) {
-      customerToUse = await Customer.findById(bodyCustomerId).lean();
+      customerToUse = await Customer.findById(bodyCustomerId).populate("customerGroup").lean();
       isCustomerSwapped = true;
     }
 
@@ -280,6 +294,14 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       return val >= 0 ? `₹${absVal} Dr` : `₹${absVal} Cr`;
     };
 
+    // 🏦 SECURE SELLER DATA (Ensure branch info is fetched even if populate was shallow)
+    let sellerInfo = salesOrder.branchId;
+    if (sellerInfo && !sellerInfo.name) {
+      // If it's just an ID or missing fields, fetch it fresh
+      const branchData = await Branch.findById(sellerInfo._id || sellerInfo).lean();
+      if (branchData) sellerInfo = branchData;
+    }
+
     const previewData = {
       invoiceNumber: predictedSI,
       salesOrderId,
@@ -295,18 +317,22 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         stateCode: customerToUse.stateCode,
         pincode: customerToUse.pincode,
         gstin: customerToUse.gstin,
-      } : salesOrder.customer,
+        customerGroup: customerToUse.customerGroup?.name || customerToUse.customerGroup || salesOrder.customer?.customerGroup || "",
+      } : {
+        ...salesOrder.customer,
+        customerGroup: salesOrder.customer?.customerId?.customerGroup?.name || salesOrder.customer?.customerGroup || ""
+      },
       seller: {
-        name: salesOrder.branchId?.name || "PEARL AGENCY",
-        address: salesOrder.branchId?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003",
-        state: salesOrder.branchId?.state || "Tamil Nadu",
-        pincode: salesOrder.branchId?.pincode || "627003",
-        gstin: salesOrder.branchId?.gstin || "33DULPS2600Q1Z6",
-        phone: salesOrder.branchId?.phone || "9429692970",
-        gpayNo: salesOrder.branchId?.gpayNo || "",
-        upiId: salesOrder.branchId?.upiId || "",
-        stateCode: salesOrder.branchId?.stateCode || "33",
-        logo: salesOrder.branchId?.logo || "/logo.jpeg",
+        name: sellerInfo?.name || "PEARL AGENCY",
+        address: sellerInfo?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003",
+        state: sellerInfo?.state || "Tamil Nadu",
+        pincode: sellerInfo?.pincode || "627003",
+        gstin: sellerInfo?.gstin || "33DULPS2600Q1Z6",
+        phone: sellerInfo?.phone || "9429692970",
+        gpayNo: sellerInfo?.gpayNo || "",
+        upiId: sellerInfo?.upiId || "",
+        stateCode: sellerInfo?.stateCode || "33",
+        logo: sellerInfo?.logo || "/logo.jpeg",
       },
       items: recalculatedItems,
       backOrderItems,
@@ -328,7 +354,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       formattedClosingBalance: formatBalance(closingBalance),
       notes,
       invoiceType,
-      invoiceDate: new Date(), // Reflect actual current time in preview
+      invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(), // Use SO date if available
     };
 
     res.json(previewData);
@@ -376,6 +402,18 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
 
         const alreadyInvoiced = salesOrder.invoiceGenerated || salesOrder.status === "INVOICED";
         const branch = await Branch.findById(salesOrder.branchId).session(session);
+
+        // 🛡️ CHECK: Edit Previous Day Permission
+        if (alreadyInvoiced && req.user.role !== "SUPER_ADMIN") {
+          const existingInvoice = await Invoice.findOne({ salesOrderId: salesOrder._id }).session(session);
+          if (existingInvoice && !isToday(existingInvoice.invoiceDate)) {
+            if (req.user.actionPermissions?.editPreviousDay === false) {
+              await session.abortTransaction();
+              session.endSession();
+              return res.status(403).json({ success: false, message: "Permission Denied: You cannot edit invoices from a previous day." });
+            }
+          }
+        }
 
         // 🔄 Use swapped customer if provided in body, else fallback to SO customer
         const bodyCustomerId = req.body.customerId;
@@ -651,11 +689,12 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           invoice.billingPerson = finalizedByUsername || invoice.billingPerson || "System";
           invoice.generatedBy = finalizedByUsername || invoice.generatedBy || "System";
           invoice.deliveryMan = salesOrder.deliveryMan;
+          invoice.invoiceDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
           await invoice.save({ session });
         } else {
           invoice = new Invoice({
             invoiceNumber,
-            invoiceDate: new Date(), // Always use current timestamp for precise finalization time
+            invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(), // Use SO date for finalization
             financialYear,
             salesOrderId: salesOrder._id,
             branchId: salesOrder.branchId,
@@ -1128,7 +1167,10 @@ router.get("", async (req, res) => {
         extraExpenseAmount: 1,
         einvoiceStatus: 1,
         ewayBillNo: 1,
+        ewayBillPdfUrl: 1,
+        invoicePdfUrl: 1,
         irn: 1,
+        signedQrCodeImgUrl: 1,
         billingPerson: 1,
         generatedBy: 1,
         status: 1,
@@ -1142,7 +1184,6 @@ router.get("", async (req, res) => {
         stockCheckerComment: 1,
         deliveryPerson: 1,
         deliveryMan: 1,
-
         deliveryPersonComment: 1,
         deliveryStatus: 1,
         deliveryCompletedAt: 1,
@@ -1221,7 +1262,7 @@ router.get("/legacy", async (req, res) => {
 });
 
 // PUT - Soft Cancel Invoice
-router.put("/:invoiceId/cancel", async (req, res) => {
+router.put("/:invoiceId/cancel", auth, async (req, res) => {
   const { invoiceId } = req.params;
   const { reason, cancelledBy } = req.body;
 
@@ -1239,6 +1280,15 @@ router.put("/:invoiceId/cancel", async (req, res) => {
         await session.abortTransaction();
         session.endSession();
         return res.status(404).json({ message: "Invoice not found or already cancelled" });
+      }
+
+      // 🛡️ CHECK: Edit Previous Day Permission
+      if (req.user.role !== "SUPER_ADMIN" && !isToday(invoice.invoiceDate)) {
+        if (req.user.actionPermissions?.editPreviousDay === false) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(403).json({ success: false, message: "Permission Denied: You cannot cancel invoices from a previous day." });
+        }
       }
 
       // 1. Revert Stock Atomically
@@ -1328,7 +1378,7 @@ router.put("/:invoiceId/cancel", async (req, res) => {
 });
 
 // DELETE - Delete invoice and revert all changes (Stock & Balance) - With Retry
-router.delete("/:invoiceId", async (req, res) => {
+router.delete("/:invoiceId", auth, async (req, res) => {
   const { invoiceId } = req.params;
   const { deletedBy } = req.query;
 
@@ -1342,6 +1392,15 @@ router.delete("/:invoiceId", async (req, res) => {
         await session.abortTransaction();
         session.endSession();
         return res.status(404).json({ message: "Invoice not found" });
+      }
+
+      // 🛡️ CHECK: Edit Previous Day Permission
+      if (req.user.role !== "SUPER_ADMIN" && !isToday(invoice.invoiceDate)) {
+        if (req.user.actionPermissions?.editPreviousDay === false) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(403).json({ success: false, message: "Permission Denied: You cannot delete invoices from a previous day." });
+        }
       }
 
       // 1. Revert Stock Atomically

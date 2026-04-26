@@ -41,7 +41,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
 
   const [editedItems, setEditedItems] = useState([]);
   const [notes, setNotes] = useState("");
-  const [invoiceType, setInvoiceType] = useState("ORDER_DETAILS");
+  const [invoiceType, setInvoiceType] = useState(useSoNumber ? "ORDER_DETAILS" : "TAX_INVOICE");
   const [commonDiscount, setCommonDiscount] = useState(0);
   const [transportCharge, setTransportCharge] = useState(0);
   const [transportGstPercent, setTransportGstPercent] = useState(18);
@@ -505,7 +505,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
         toast.warning("🔔 Pop-up blocked! Please allow pop-ups for this site to print.");
         return;
       }
-      printWindow.document.write(getInvoiceHTML());
+      printWindow.document.write(getInvoiceHTML(invoiceType));
       printWindow.document.close();
       setTimeout(() => {
         if (printWindow) printWindow.print();
@@ -531,8 +531,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
       // Show uploading toast
       const uploadToastId = toast.loading("📤 Uploading invoices to cloud...");
 
-      // Generate images for each format
-      const formats = ["ORDER_DETAILS", "TAX_INVOICE"]; // Back order now merged into TAX_INVOICE
+      // Generate images for the selected format
+      const formats = [invoiceType]; 
       const cloudinaryUrls = {};
 
       for (const fmt of formats) {
@@ -599,9 +599,14 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
       // Prepare WhatsApp message with links
       let waMessage = `Hi ${previewData?.customer?.name},\n\n`;
       waMessage += `Your invoice #${generatedInvoice.invoiceNumber} is ready!\n\n`;
-      waMessage += `📋 Order Details:\n${cloudinaryUrls.ORDER_DETAILS}\n\n`;
-      waMessage += `🧾 Tax Invoice (with Back Order if applicable):\n${cloudinaryUrls.TAX_INVOICE}`;
-      waMessage += `\n\nTotal: ₹${previewData?.grandTotal?.toLocaleString?.() || 0}\nThank you!`;
+      
+      if (invoiceType === "ORDER_DETAILS") {
+        waMessage += `📋 Order Details (Dummy Bill):\n${cloudinaryUrls.ORDER_DETAILS}\n\n`;
+      } else {
+        waMessage += `🧾 Tax Invoice (with Back Order if applicable):\n${cloudinaryUrls.TAX_INVOICE}\n\n`;
+      }
+      
+      waMessage += `Total: ₹${previewData?.grandTotal?.toLocaleString?.() || 0}\nThank you!`;
 
       const waLink = `https://wa.me/${phone}?text=${encodeURIComponent(waMessage)}`;
       window.open(waLink, "_blank");
@@ -697,12 +702,30 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
           display: flex;
           justify-content: space-between;
           border-bottom: 1px dotted #000;
-          padding-bottom: 2px;
+        }
+        
+        .watermark {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-30deg);
+          font-size: 50px;
+          color: rgba(220, 38, 38, 0.12);
+          white-space: nowrap;
+          pointer-events: none;
+          z-index: 0;
+          font-weight: 900;
+          text-transform: uppercase;
+          text-align: center;
+          line-height: 1.1;
+          border: 6px solid rgba(220, 38, 38, 0.12);
+          padding: 20px;
+          border-radius: 15px;
         }
         
         @media print { 
           body { margin: 0; padding: 0; } 
-          .page { margin: 0 auto; padding: 5mm; page-break-after: always !important; }
+          .page { margin: 0 auto; padding: 5mm; page-break-after: always !important; position: relative; }
         }
       </style>
     `;
@@ -710,7 +733,43 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
     let html = `<!DOCTYPE html><html><head><meta charset="UTF-8">${style}</head><body>`;
 
     // If specific format requested, generate only that
-    const formats = format ? [format] : ["ORDER_DETAILS", "TAX_INVOICE"];
+    if (format === "MINI_SLIP" || (invoiceType === "MINI_SLIP" && !format)) {
+      let miniHtml = `<!DOCTYPE html><html><head><title>MINI SLIP</title><style>
+        body { font-family: monospace; font-size: 16px; padding: 20px; color: #000; }
+        .cust { font-size: 22px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; border-bottom: 1px solid #000; padding: 8px 0; }
+        td { padding: 10px 0; border-bottom: 1px dotted #ccc; font-weight: bold; }
+        .footer { margin-top: 40px; font-size: 12px; font-style: italic; }
+      </style></head><body>`;
+      
+      miniHtml += `
+        <div class="cust">CUSTOMER: ${previewData?.customer?.name || "CASH CUSTOMER"}</div>
+        <div style="margin-bottom: 20px;">Date: ${new Date().toLocaleDateString("en-IN")} | SO: ${order.invoiceId}</div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 70%;">PRODUCT NAME</th>
+              <th style="text-align: right;">COUNT</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0).map(item => `
+              <tr>
+                <td>${item.name}</td>
+                <td style="text-align: right; font-size: 20px;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        
+        <div class="footer">Simple Print | Generated: ${new Date().toLocaleString("en-IN")}</div>
+      </body></html>`;
+      return miniHtml;
+    }
+
+    const formats = format === "TAX_INVOICE" ? ["ORDER_DETAILS", "TAX_INVOICE"] : ["ORDER_DETAILS"];
 
     // Define copies to generate
     const isReEdited = !!order.isReEdited || !!order.invoiceGenerated;
@@ -721,11 +780,15 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
     const copiesToGenerate = baseTitles.slice(0, numCopies);
 
     copiesToGenerate.forEach(copyTitle => {
-      // Invoice Format 1: ORDER DETAILS
+      // Invoice Format 1: ORDER DETAILS / PRODUCT DETAILS
       if (formats.includes("ORDER_DETAILS")) {
+        const isDummy = format === "ORDER_DETAILS";
         html += `
-          <div class="page">
-            <div class="page-content">
+          <div class="page" style="position: relative; overflow: hidden;">
+            ${isDummy ? '<div class="watermark">NOT FOR SALE<br/>(DUMMY BILL)</div>' : ''}
+            <div class="page-content" style="position: relative; z-index: 1;">
+              
+              ${!isDummy ? `
               <!-- QUICK REF HEADER -->
               <div class="quick-info">
                 <span>INV: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</span>
@@ -739,7 +802,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                   <div class="company-address">
                     <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
                     Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
-                    GPAY No: ${previewData?.seller?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
+                    GPAY No: ${previewData?.seller?.gpayNo || currentBranch?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
                 ${previewData?.seller?.upiId ? `
@@ -748,54 +811,57 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                   <div class="upi-qr-label">Scan to Pay</div>
                 </div>` : ''}
               </div>
+              ` : ''}
 
-              <div class="section-title">📋 ORDER DETAILS</div>
-
-              <!-- ORDER INFO -->
-              <div class="order-header">
-                <div class="order-header-col">
-                  <div class="label">Invoice No:</div>
-                  <div style="font-weight: bold; color: #000;">${generatedInvoice?.invoiceNumber || previewData?.invoiceNumber || order?.invoiceId || "PENDING"}</div>
-                </div>
-                <div class="order-header-col">
-                  <div class="label">Date:</div>
-                  <div style="font-weight: bold;">${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}</div>
-                </div>
-                <div class="order-header-col">
-                  <div class="label">Billing:</div>
-                  <div style="font-weight: bold;">${previewData?.billingPerson || "-"}</div>
-                </div>
-                <div class="order-header-col">
-                  <div class="label">Delivery:</div>
-                  <div style="font-weight: bold;">${previewData?.deliveryMan || "-"}</div>
-                </div>
+              <div class="section-title" style="background: ${isDummy ? '#ef4444' : '#000'};">
+                ${isDummy ? '📋 DUMMY BILL (NOT FOR SALE)' : '📋 PRODUCT DETAILS'}
               </div>
 
-              <!-- BUYER (BILL TO) -->
-              <div class="sender-buyer">
-                <div class="sender-buyer-col">
-                  <strong>BUYER (BILL TO)</strong>
-                  ${previewData?.customer?.name}<br/>
-                  ${previewData?.customer?.address}<br/>
-                  ${previewData?.customer?.district ? previewData?.customer?.district + ', ' : ''}${previewData?.customer?.state || ""} ${previewData?.customer?.pincode || ""}<br/>
-                  Mobile: ${previewData?.customer?.whatsapp || previewData?.customer?.customerId?.whatsapp || "-"}<br/>
-                  GSTIN: ${previewData?.customer?.gstin || previewData?.customer?.customerId?.gstin || "N/A"}
+              <!-- BUYER (BILL TO) / ORDER INFO -->
+              <div class="order-header">
+                <div class="order-header-col">
+                  ${!isDummy ? `
+                    <div class="label" style="text-transform: uppercase; letter-spacing: 1px; font-size: 9px; margin-bottom: 2px;">Buyer (Bill To)</div>
+                    <div style="font-weight: bold; color: #000; font-size: 15px; margin-bottom: 4px;">${previewData?.customer?.name || "CASH CUSTOMER"}</div>
+                    <div style="font-size: 10px; color: #000; line-height: 1.4;">
+                      ${previewData?.customer?.address || "No Address Provided"}<br/>
+                      ${previewData?.customer?.district ? previewData?.customer?.district + ', ' : ''}${previewData?.customer?.state || ""} ${previewData?.customer?.pincode || ""}<br/>
+                      <strong>Phone:</strong> ${previewData?.customer?.whatsapp || previewData?.customer?.customerId?.whatsapp || "-"}<br/>
+                      <strong>GSTIN:</strong> ${previewData?.customer?.gstin || previewData?.customer?.customerId?.gstin || "N/A"}
+                    </div>
+                  ` : `
+                    <div class="label">Customer Name:</div>
+                    <div style="font-weight: bold; color: #000; font-size: 14px;">${previewData?.customer?.name || "CASH CUSTOMER"}</div>
+                  `}
+                </div>
+                <div class="order-header-col" style="text-align: right; display: flex; flex-direction: column; justify-content: center;">
+                  <div class="label">Date:</div>
+                  <div style="font-weight: bold;">${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}</div>
+                  <div class="label" style="margin-top: 6px;">Invoice No:</div>
+                  <div style="font-weight: bold; color: #dc2626;">${generatedInvoice?.invoiceNumber || previewData?.invoiceNumber || order?.invoiceId || "PENDING"}</div>
+                  ${(previewData?.customer?.customerGroup || order?.customer?.customerGroup) ? `
+                    <div style="font-weight: black; color: #000; font-size: 14px; margin-top: 2px;">
+                      (${String(previewData?.customer?.customerGroup || order?.customer?.customerGroup).charAt(0).toUpperCase()})
+                    </div>
+                  ` : ''}
                 </div>
               </div>
 
               <!-- PRODUCT DETAILS TABLE -->
-              <div class="section-title" style="background: #2563eb; color: #fff;">📦 PRODUCT DETAILS</div>
               <table>
                 <thead>
                   <tr>
                     <th style="width: 5%; text-align: center;">#</th>
-                    <th style="width: 23%;">Product Name</th>
-                    <th>HSN</th>
-                    <th>GST</th>
-                    <th style="text-align: right;">Qty</th>
-                    <th style="text-align: right;">Rate</th>
-                    <th style="text-align: right;">Discount</th>
-                    <th style="text-align: right;">Total Amount</th>
+                    <th style="width: ${isDummy ? '75%' : '40%'};">Product Name</th>
+                    ${!isDummy ? `
+                      <th>HSN</th>
+                      <th>GST</th>
+                    ` : ''}
+                    <th style="text-align: center;">Qty (Counts)</th>
+                    ${!isDummy ? `
+                      <th style="text-align: right;">Rate</th>
+                      <th style="text-align: right;">Total</th>
+                    ` : ''}
                   </tr>
                 </thead>
                 <tbody>
@@ -803,15 +869,15 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                     <tr>
                       <td style="text-align: center; color: #64748b; font-size: 10px;">${idx + 1}</td>
                       <td style="font-weight: bold; color: #1e293b;">${item.name}</td>
-                      <td style="text-align: center; color: #475569;">${item.hsn || "-"}</td>
-                      <td style="text-align: center; color: #475569;">${item.gst || 0}%</td>
-                      <td style="text-align: right; font-weight: bold; color: #1e293b;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
-                      <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
-                      <td style="text-align: right;">
-                        <div style="font-weight: bold; color: #b91c1c;">${item.discountPercent || 0}%</div>
-                        <div style="font-size: 8px; color: #64748b;">-₹${(item.discountAmount || 0).toFixed(2)}</div>
-                      </td>
-                      <td style="text-align: right; font-weight: bold; color: #000;">₹${((item.qty || item.confirmedQty) * (item.sellingPrice || 0)).toFixed(2)}</td>
+                      ${!isDummy ? `
+                        <td style="text-align: center; color: #475569;">${item.hsn || "-"}</td>
+                        <td style="text-align: center; color: #475569;">${item.gst || 0}%</td>
+                      ` : ''}
+                      <td style="text-align: center; font-weight: bold; color: #1e293b; font-size: 13px;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
+                      ${!isDummy ? `
+                        <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
+                        <td style="text-align: right; font-weight: bold; color: #000;">₹${((item.qty || item.confirmedQty) * (item.sellingPrice || 0)).toFixed(2)}</td>
+                      ` : ''}
                     </tr>
                   `).join("")}
                 </tbody>
@@ -820,25 +886,23 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
               <!-- SAMPLE PRODUCTS TABLE -->
               ${previewData?.sampleItems?.length > 0 ? `
                 <div class="sample-section">
-                  <strong>🎁 SAMPLE PRODUCTS (NOT BILLED)</strong>
+                  <strong style="font-size: 11px; color: #92400e;">🎁 SAMPLE PRODUCTS (NOT BILLED)</strong>
                   <table style="margin-top: 5px;">
                     <thead>
                       <tr>
-                        <th style="width: 40%;">Product Name</th>
-                        <th>HSN</th>
-                        <th style="text-align: right;">Qty</th>
-                        <th style="text-align: right;">Rate</th>
-                        <th style="text-align: center;">Per</th>
+                        <th style="width: ${isDummy ? '80%' : '40%'};">Product Name</th>
+                        ${!isDummy ? `<th>HSN</th>` : ''}
+                        <th style="text-align: center;">Qty</th>
+                        ${!isDummy ? `<th style="text-align: right;">Rate</th>` : ''}
                       </tr>
                     </thead>
                     <tbody>
                       ${previewData.sampleItems.map(item => `
                         <tr>
                           <td>${item.name}</td>
-                          <td>${item.hsn || "-"}</td>
-                          <td style="text-align: right;">${item.qty} ${item.unit || ""} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
-                          <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
-                          <td style="text-align: center; text-transform: uppercase;">${item.unit || ""}</td>
+                          ${!isDummy ? `<td>${item.hsn || "-"}</td>` : ''}
+                          <td style="text-align: center; font-weight: bold;">${item.qty} ${item.unit || ""}</td>
+                          ${!isDummy ? `<td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>` : ''}
                         </tr>
                       `).join("")}
                     </tbody>
@@ -846,6 +910,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                 </div>
               ` : ""}
 
+              ${!isDummy ? `
               <!-- TOTALS AND BALANCE -->
               <div style="display: flex; gap: 10px;">
                    <!-- BALANCE INFO -->
@@ -854,32 +919,20 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                      <div style="margin-top: 4px;"><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
                    </div>
 
-                  
-                  <!-- NOTES -->
-                  ${previewData?.notes ? `<div style="margin: 5px 0; padding: 5px; background: #f9f9f9; font-size: 7px; border: 1px solid #eee;"><strong>Notes:</strong> ${previewData.notes}</div>` : ""}
-                </div>
-
-                <div class="total-section" style="flex: 1;">
-                  <div style="font-size: 11px;">Subtotal (Gross): <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
-                  
-                  ${previewData?.totalTax?.igst > 0 ?
-            `<div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` :
-            `<div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
-                     <div style="font-size: 11px;">SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
-          }
-                  
-                  ${previewData?.commonDiscount > 0 ? `<div style="font-size: 11px;">Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
-                  ${previewData?.transportCharge > 0 ? `<div style="font-size: 11px;">Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
-                  ${previewData?.extraExpenseAmount > 0 ? `<div style="font-size: 11px;">Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
-                  ${previewData?.roundingOff !== 0 ? `<div style="font-size: 11px;">Rounding Off: <strong>${previewData.roundingOff > 0 ? '+' : ''}₹${previewData.roundingOff.toFixed(2)}</strong></div>` : ""}
-                  
-                  <div class="grand-total">GRAND TOTAL: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
-                </div>
+                  <div class="total-section" style="flex: 1;">
+                    <div style="font-size: 11px;">Subtotal: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
+                    <div class="grand-total" style="font-size: 16px;">GRAND TOTAL: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
+                  </div>
               </div>
 
               <div class="certification">Certified that the particulars given above are true and correct.</div>
               <div class="copy-label">${copyTitle} - PAGE 1</div>
-              <div class="footer">E. & O.E. | Generated on ${new Date().toLocaleString("en-IN")} (Original Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")})</div>
+              <div class="footer">E. & O.E. | Generated on ${new Date().toLocaleString("en-IN")}</div>
+              ` : `
+              <div style="margin-top: 40px; text-align: center; border-top: 2px dashed #eee; pt-4; font-size: 10px; color: #999;">
+                This is a computer generated dummy document for order verification only.
+              </div>
+              `}
             </div>
           </div>
         `;
@@ -903,7 +956,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                   <div class="company-address">
                     <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
                     Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
-                    GPAY No: ${previewData?.seller?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
+                    GPAY No: ${previewData?.seller?.gpayNo || currentBranch?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
                 ${previewData?.seller?.upiId ? `
@@ -1078,9 +1131,10 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                 <label className="block font-semibold mb-3">Invoice Type:</label>
                 <div className="flex flex-wrap gap-4">
                   {[
-                    { val: "ORDER_DETAILS", label: "📋 Order Details" },
+                    { val: "ORDER_DETAILS", label: "📋 Order Details (Dummy Bill)" },
                     { val: "TAX_INVOICE", label: "🧾 Tax Invoice (with Back Order if applicable)" },
-                  ].map((option) => (
+                    { val: "MINI_SLIP", label: "📄 Mini Slip (No Tax/Header/Footer)" },
+                  ].filter(opt => !useSoNumber || opt.val === "ORDER_DETAILS" || opt.val === "MINI_SLIP").map((option) => (
                     <label key={option.val} className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
@@ -1089,9 +1143,14 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                         onChange={(e) => setInvoiceType(e.target.value)}
                         className="w-4 h-4"
                       />
-                      <span>{option.label}</span>
+                      <span className={useSoNumber && option.val === "TAX_INVOICE" ? "opacity-50 line-through" : ""}>{option.label}</span>
                     </label>
                   ))}
+                  {useSoNumber && (
+                    <p className="text-[10px] text-orange-600 font-bold mt-2 uppercase tracking-tight">
+                      ⚠️ Note: "Re-generate" mode only supports Dummy Bill format. Use SI Bill for official invoices.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1611,7 +1670,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
 
               {/* All Invoices Preview */}
               <div className="border-2 border-gray-300 rounded-lg p-4 bg-gray-50 max-h-96 overflow-y-auto">
-                <div dangerouslySetInnerHTML={{ __html: getInvoiceHTML() }}
+                <div dangerouslySetInnerHTML={{ __html: getInvoiceHTML(invoiceType) }}
                   style={{ zoom: '0.75', transformOrigin: 'top left', width: '133.33%' }} />
               </div>
             </div>

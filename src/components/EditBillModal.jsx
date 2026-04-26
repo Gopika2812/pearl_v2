@@ -41,6 +41,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   const [transportCharge, setTransportCharge] = useState(0);
   const [transportGstPercent, setTransportGstPercent] = useState(0);
   const [commonDiscount, setCommonDiscount] = useState(0);
+  const [orderDate, setOrderDate] = useState("");
 
 
   // Initialize items from order
@@ -69,6 +70,14 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       setCommonDiscount(order.commonDiscount || order.invoiceCommonDiscount || 0);
       setSelectedCustomer(order.customer);
       setCustomerSearch(order.customer?.name || "");
+      
+      // Initialize orderDate from order
+      if (order.orderDate) {
+        setOrderDate(new Date(order.orderDate).toISOString().split("T")[0]);
+      } else if (order.createdAt) {
+        setOrderDate(new Date(order.createdAt).toISOString().split("T")[0]);
+      }
+      
       fetchProducts();
       fetchCustomers();
     }
@@ -439,8 +448,10 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
           address: selectedCustomer.address,
           district: selectedCustomer.district,
           state: selectedCustomer.state,
+          stateCode: selectedCustomer.stateCode,
           pincode: selectedCustomer.pincode,
-        } : order.customer
+        } : order.customer,
+        orderDate: orderDate
       };
 
 
@@ -478,46 +489,58 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
           {/* CUSTOMER SELECTION */}
           <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
             <h3 className="text-sm font-bold text-gray-500 uppercase tracking-tight mb-3">👤 Customer Information</h3>
-            <div className="relative">
-              <label className="block text-xs font-bold text-gray-600 mb-1">Select Customer</label>
-              <input
-                type="text"
-                placeholder="Search and change customer..."
-                value={customerSearch}
-                onChange={(e) => {
-                  setCustomerSearch(e.target.value);
-                  setShowCustomerDropdown(true);
-                }}
-                onFocus={() => setShowCustomerDropdown(true)}
-                onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
-                className="w-full md:w-1/2 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#319bab] outline-none font-semibold text-gray-800"
-              />
-              {showCustomerDropdown && (
-                <ul className="absolute z-20 w-full md:w-1/2 bg-white border border-gray-300 rounded-lg mt-1 max-h-60 overflow-y-auto shadow-xl">
-                  {customers
-                    .map((c) => (
-                      <li
-                        key={c._id}
-                        className="px-4 py-3 hover:bg-[#319bab]/10 cursor-pointer border-b last:border-0 flex justify-between items-center"
-                        onMouseDown={() => {
-                          setSelectedCustomer({
-                            ...c,
-                            customerId: c._id // Harmonize ID field names
-                          });
-                          setCustomerSearch(c.name);
-                          setShowCustomerDropdown(false);
-                          toast.info(`Customer changed to: ${c.name}`);
-                        }}
-                      >
-                        <div>
-                          <p className="font-bold text-gray-800">{c.name}</p>
-                          <p className="text-xs text-gray-500">{c.whatsapp || "No phone"}</p>
-                        </div>
-                        <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded font-bold text-gray-400">SELECT</span>
-                      </li>
-                    ))}
-                </ul>
-              )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="relative">
+                <label className="block text-xs font-bold text-gray-600 mb-1">Select Customer</label>
+                <input
+                  type="text"
+                  placeholder="Search and change customer..."
+                  value={customerSearch}
+                  onChange={(e) => {
+                    setCustomerSearch(e.target.value);
+                    setShowCustomerDropdown(true);
+                  }}
+                  onFocus={() => setShowCustomerDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#319bab] outline-none font-semibold text-gray-800"
+                />
+                {showCustomerDropdown && (
+                  <ul className="absolute z-20 w-full bg-white border border-gray-300 rounded-lg mt-1 max-h-60 overflow-y-auto shadow-xl">
+                    {customers
+                      .map((c) => (
+                        <li
+                          key={c._id}
+                          className="px-4 py-3 hover:bg-[#319bab]/10 cursor-pointer border-b last:border-0 flex justify-between items-center"
+                          onMouseDown={() => {
+                            setSelectedCustomer({
+                              ...c,
+                              customerId: c._id // Harmonize ID field names
+                            });
+                            setCustomerSearch(c.name);
+                            setShowCustomerDropdown(false);
+                            toast.info(`Customer changed to: ${c.name}`);
+                          }}
+                        >
+                          <div>
+                            <p className="font-bold text-gray-800">{c.name}</p>
+                            <p className="text-xs text-gray-500">{c.whatsapp || "No phone"}</p>
+                          </div>
+                          <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded font-bold text-gray-400">SELECT</span>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Order Date</label>
+                <input
+                  type="date"
+                  value={orderDate}
+                  onChange={(e) => setOrderDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#319bab] outline-none font-semibold text-gray-800"
+                />
+              </div>
             </div>
             {selectedCustomer && (
               <div className="mt-3 flex gap-4 text-xs text-gray-600 italic">

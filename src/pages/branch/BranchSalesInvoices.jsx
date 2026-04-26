@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaFileExcel, FaTimes, FaTruck } from "react-icons/fa";
+import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaFileExcel, FaTimes, FaTruck, FaFilePdf } from "react-icons/fa";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
@@ -538,6 +538,67 @@ const BranchSalesInvoices = () => {
     }
   };
 
+  const handleExportRegisteredReport = async () => {
+    if (!currentBranch?._id) return;
+    setExporting(true);
+    try {
+      // 1. Fetch matching invoices for the current filters
+      let url = `${API_BASE}/invoices?branchId=${currentBranch._id}&limit=5000`;
+      if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
+      if (filterFromDate) url += `&fromDate=${filterFromDate}`;
+      if (filterToDate) url += `&toDate=${filterToDate}`;
+      if (filterVoucherPrefix) url += `&vPrefix=${encodeURIComponent(filterVoucherPrefix)}`;
+
+      const res = await fetchWithAuth(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to fetch for report");
+
+      const allInvoices = data.data || [];
+      
+      // 2. Filter for Un-generated E-Invoice AND Registered Customers (Have GSTIN)
+      const filtered = allInvoices.filter(inv => {
+        const isNotGenerated = inv.einvoiceStatus !== "GENERATED";
+        const gstin = inv.customer?.gstin || "";
+        const isRegistered = gstin && gstin.toUpperCase() !== "URP" && gstin.length >= 15;
+        return isNotGenerated && isRegistered;
+      });
+
+      if (filtered.length === 0) {
+        toast.warn("No un-generated e-invoices found for registered customers in this range.");
+        return;
+      }
+
+      // 3. Prepare Excel rows
+      const headerRow = ["Date", "Invoice Number", "Customer Name", "Phone Number", "Address", "GSTIN Number", "Grand Total"];
+      const rows = [headerRow];
+
+      filtered.forEach(inv => {
+        rows.push([
+          inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('en-IN') : "-",
+          inv.invoiceNumber || "-",
+          inv.customer?.name || "CASH CUSTOMER",
+          inv.customer?.whatsapp || "-",
+          inv.customer?.address || "-",
+          inv.customer?.gstin || "-",
+          inv.grandTotal || 0
+        ]);
+      });
+
+      // 4. Download Excel
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Registered_Report");
+      XLSX.writeFile(workbook, `Registered_EInvoice_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      toast.success(`Exported ${filtered.length} records successfully!`);
+    } catch (err) {
+      console.error("Export Error:", err);
+      toast.error("Export failed: " + err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
 
   const handleToggleColumn = (colId) => {
     if (colId === 'ALL') {
@@ -645,6 +706,14 @@ const BranchSalesInvoices = () => {
                   >
                     {exporting ? <FaSync className="animate-spin" /> : <FaFileExcel />}
                     QUICK REPORT
+                  </button>
+                  <button
+                    onClick={handleExportRegisteredReport}
+                    disabled={exporting}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-200 text-xs font-black"
+                  >
+                    {exporting ? <FaSync className="animate-spin" /> : <FaFileAlt />}
+                    REG REPORT
                   </button>
                 </>
               )}
@@ -927,49 +996,65 @@ const BranchSalesInvoices = () => {
                                   )}
                                 </button>
                               )}
-                              {isFieldAllowed("action_pdf") && (inv.einvoiceStatus === "GENERATED" || inv.irn) && (
-                                <div className="flex gap-1">
-                                  <button
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      let fullInv = inv;
-                                      // ALWAYS fetch fresh details for PDF/QR to ensure links are valid
-                                      try {
-                                        setFetchingDetails(prev => ({ ...prev, [inv._id]: true }));
-                                        const res = await fetchWithAuth(`${API_BASE}/invoices/${inv._id}`);
-                                        const data = await res.json();
-                                        fullInv = data.success ? data.data : data;
-                                        setInvoices(prev => prev.map(i => i._id === inv._id ? { ...i, ...fullInv } : i));
-                                      } catch (err) {
-                                        console.warn("Failed to refresh PDF details, using local data");
-                                      } finally {
-                                        setFetchingDetails(prev => ({ ...prev, [inv._id]: false }));
-                                      }
-                                      setShowEInvoiceModal(fullInv);
-                                    }}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white border border-indigo-600 hover:bg-indigo-700 text-[10px] font-black transition-all shadow-sm"
-                                    disabled={fetchingDetails[inv._id]}
-                                  >
-                                    {fetchingDetails[inv._id] ? <FaSync className="animate-spin" size={12} /> : <FaFileAlt size={12} />}
-                                    PDF
-                                  </button>
-                                  {(inv.ewayBillPdfUrl || inv.ewayBillNo) && (
-                                    <button
-                                      onClick={() => {
-                                        if (inv.ewayBillPdfUrl) {
-                                          window.open(`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`, "_blank");
-                                        } else {
-                                          toast.info("E-Way Bill ready but PDF link pending. Please try again in 5 seconds.");
-                                          fetchInvoices();
-                                        }
-                                      }}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all shadow-sm"
-                                    >
-                                      🚚 EWB
-                                    </button>
-                                  )}
-                                </div>
-                              )}
+                               {isFieldAllowed("action_pdf") && (inv.einvoiceStatus === "GENERATED" || inv.irn || inv.ewayBillNo) && (
+                                 <div className="flex gap-1">
+                                   {(inv.einvoiceStatus === "GENERATED" || inv.irn) && (
+                                     <>
+                                       <button
+                                         onClick={async (e) => {
+                                           e.stopPropagation();
+                                           let fullInv = inv;
+                                           // ALWAYS fetch fresh details for PDF/QR to ensure links are valid
+                                           try {
+                                             setFetchingDetails(prev => ({ ...prev, [inv._id]: true }));
+                                             const res = await fetchWithAuth(`${API_BASE}/invoices/${inv._id}`);
+                                             const data = await res.json();
+                                             fullInv = data.success ? data.data : data;
+                                             setInvoices(prev => prev.map(i => i._id === inv._id ? { ...i, ...fullInv } : i));
+                                           } catch (err) {
+                                             console.warn("Failed to refresh PDF details, using local data");
+                                           } finally {
+                                             setFetchingDetails(prev => ({ ...prev, [inv._id]: false }));
+                                           }
+                                           setShowEInvoiceModal(fullInv);
+                                         }}
+                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white border border-indigo-600 hover:bg-indigo-700 text-[10px] font-black transition-all shadow-sm"
+                                         disabled={fetchingDetails[inv._id]}
+                                       >
+                                         {fetchingDetails[inv._id] ? <FaSync className="animate-spin" size={12} /> : <FaFileAlt size={12} />}
+                                         PDF
+                                       </button>
+                                       {inv.invoicePdfUrl && (
+                                         <button
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             window.open(`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.invoicePdfUrl}`, "_blank");
+                                           }}
+                                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-600 hover:text-white text-[10px] font-black transition-all shadow-sm"
+                                         >
+                                           <FaFilePdf size={12} /> E-INV PDF
+                                         </button>
+                                       )}
+                                     </>
+                                   )}
+                                   {(inv.ewayBillPdfUrl || inv.ewayBillNo) && (
+                                     <button
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         if (inv.ewayBillPdfUrl) {
+                                           window.open(`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`, "_blank");
+                                         } else {
+                                           toast.info("E-Way Bill ready but PDF link pending. Please try again in 5 seconds.");
+                                           fetchInvoices();
+                                         }
+                                       }}
+                                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all shadow-sm"
+                                     >
+                                       🚚 EWB
+                                     </button>
+                                   )}
+                                 </div>
+                               )}
                               {isFieldAllowed("action_cancel") && (
                                 <button
                                   onClick={() => {

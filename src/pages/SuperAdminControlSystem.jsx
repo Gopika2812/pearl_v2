@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { FaBuilding, FaCheck, FaShieldAlt, FaUser, FaUsers, FaUsersCog, FaLock, FaGlobe, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign, FaTruck, FaHandshake, FaChartLine, FaLink, FaBook, FaChartBar, FaChevronRight, FaEdit, FaTrash, FaCheckCircle, FaPlus, FaFileInvoice, FaFilePdf } from "react-icons/fa";
+import { 
+  FaBuilding, FaCheck, FaShieldAlt, FaUser, FaUsers, FaUsersCog, 
+  FaLock, FaGlobe, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign, 
+  FaTruck, FaHandshake, FaChartLine, FaLink, FaBook, FaChartBar, 
+  FaChevronRight, FaEdit, FaTrash, FaCheckCircle, FaPlus, 
+  FaFileInvoice, FaFilePdf, FaUndo, FaCalendar 
+} from "react-icons/fa";
 import { QUICK_LINKS_CONFIG, QUICK_LINKS_CATEGORIES } from "../utils/quickLinksConfig";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -192,7 +198,7 @@ export default function SuperAdminControlSystem() {
       
       // 2. Actions
       const newActionPerms = {};
-      ["edit", "delete", "restock", "create_shortcuts", "export"].forEach(a => newActionPerms[a] = true);
+      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export"].forEach(a => newActionPerms[a] = true);
       setActionPermissions(newActionPerms);
       
       // 3. Field Visibility
@@ -213,7 +219,7 @@ export default function SuperAdminControlSystem() {
       setUserPermissions([]);
       
       const newActionPerms = {};
-      ["edit", "delete", "restock", "create_shortcuts", "export"].forEach(a => newActionPerms[a] = false);
+      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export"].forEach(a => newActionPerms[a] = false);
       setActionPermissions(newActionPerms);
       
       const newFieldPerms = {};
@@ -552,6 +558,11 @@ export default function SuperAdminControlSystem() {
                         { id: "edit", name: "Allow Edit", icon: <FaEdit /> },
                         { id: "delete", name: "Allow Delete", icon: <FaTrash /> },
                         { id: "restock", name: "Allow Restock", icon: <FaBox /> },
+                        { id: "editPreviousDay", name: "Edit Previous Day", icon: <FaCalendar /> },
+                        { id: "action_pdf", name: "Print/PDF (SI)", icon: <FaFilePdf /> },
+                        { id: "action_ewb", name: "E-Way Bill (SI)", icon: <FaTruck /> },
+                        { id: "action_cancel", name: "Cancel (SI)", icon: <FaTrash /> },
+                        { id: "action_return", name: "Sales Return", icon: <FaUndo /> },
                         { id: "create_shortcuts", name: "Shortcuts", icon: <FaLink /> }
                       ].map(action => (
                         <div
