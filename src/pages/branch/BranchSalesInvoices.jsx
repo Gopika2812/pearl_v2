@@ -97,11 +97,7 @@ const BranchSalesInvoices = () => {
   const [showEInvoiceModal, setShowEInvoiceModal] = useState(null);
   const [showCancelModal, setShowCancelModal] = useState(null); // Invoice to be cancelled
   const [cancelReason, setCancelReason] = useState("");
-  const [filterFromDate, setFilterFromDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return d.toISOString().split("T")[0];
-  });
+  const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split("T")[0]);
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split("T")[0]);
   const [fetchingDetails, setFetchingDetails] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
@@ -110,6 +106,8 @@ const BranchSalesInvoices = () => {
   const [filterVoucherPrefix, setFilterVoucherPrefix] = useState("");
   const [filterEinvoiceStatus, setFilterEinvoiceStatus] = useState("");
   const [branchUsers, setBranchUsers] = useState([]);
+  const [sortField, setSortField] = useState("invoiceNumber");
+  const [sortOrder, setSortOrder] = useState("desc");
   
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -181,6 +179,7 @@ const BranchSalesInvoices = () => {
       if (filterToDate) url += `&toDate=${filterToDate}`;
       if (filterVoucherPrefix) url += `&vPrefix=${encodeURIComponent(filterVoucherPrefix)}`;
       if (filterEinvoiceStatus) url += `&einvoiceStatus=${filterEinvoiceStatus}`;
+      if (sortField) url += `&sortBy=${sortField}&sortOrder=${sortOrder}`;
 
       const res = await fetchWithAuth(url);
       const data = await res.json();
@@ -198,7 +197,7 @@ const BranchSalesInvoices = () => {
 
   useEffect(() => {
     fetchInvoices();
-  }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate, filterVoucherPrefix, filterEinvoiceStatus, currentPage]);
+  }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate, filterVoucherPrefix, filterEinvoiceStatus, currentPage, sortField, sortOrder]);
 
   const fetchVoucherTypes = async () => {
     if (!currentBranch?._id) return;
@@ -830,7 +829,23 @@ const BranchSalesInvoices = () => {
                 <thead className="bg-slate-50/80 text-slate-500 uppercase text-[10px] font-black border-b border-slate-100 tracking-wider">
                   <tr>
                     {isFieldAllowed("dateTime") && <th className="px-6 py-5 text-left">Date & Time</th>}
-                    {isFieldAllowed("siId") && <th className="px-6 py-5 text-left">Invoice ID (SI)</th>}
+                    {isFieldAllowed("siId") && (
+                      <th 
+                        className="px-6 py-5 text-left cursor-pointer hover:bg-slate-100 transition-colors group"
+                        onClick={() => {
+                          const newOrder = sortField === "invoiceNumber" && sortOrder === "desc" ? "asc" : "desc";
+                          setSortField("invoiceNumber");
+                          setSortOrder(newOrder);
+                        }}
+                      >
+                        <div className="flex items-center gap-1">
+                          Invoice ID (SI)
+                          <div className={`flex flex-col text-[8px] transition-opacity ${sortField === "invoiceNumber" ? "opacity-100" : "opacity-0 group-hover:opacity-40"}`}>
+                            <FaChevronDown className={`transition-transform ${sortField === "invoiceNumber" && sortOrder === "asc" ? "rotate-180" : ""}`} />
+                          </div>
+                        </div>
+                      </th>
+                    )}
                     {isFieldAllowed("soRef") && <th className="px-6 py-5 text-left">Order Ref (SO)</th>}
                     {isFieldAllowed("customer") && <th className="px-6 py-5 text-left">Customer Details</th>}
                     {isFieldAllowed("createdBy") && <th className="px-6 py-5 text-left">Created By</th>}

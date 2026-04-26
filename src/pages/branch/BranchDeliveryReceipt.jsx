@@ -14,11 +14,7 @@ const BranchDeliveryReceipt = () => {
   const [receipts, setReceipts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState([]);
-  const [filterFromDate, setFilterFromDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().split("T")[0];
-  });
+  const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split("T")[0]);
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split("T")[0]);
   const [filterDeliveryPerson, setFilterDeliveryPerson] = useState("");
   const [filterReceiptId, setFilterReceiptId] = useState("");

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaHistory, FaSearch, FaSync, FaTruck, FaCheckCircle, FaUser, FaCommentDots, FaMapMarkerAlt } from "react-icons/fa";
+import { FaHistory, FaSearch, FaSync, FaTruck, FaCheckCircle, FaUser, FaCommentDots, FaMapMarkerAlt, FaChevronDown } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -12,17 +12,17 @@ const BranchDeliveryFlow = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("ALL"); // ALL, PENDING, PICKED, COMPLETED
-  const [filterFromDate, setFilterFromDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().split("T")[0];
-  });
+  const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split("T")[0]);
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split("T")[0]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
   const [updatingId, setUpdatingId] = useState(null);
   const [branchUsers, setBranchUsers] = useState([]);
   const [rowPayments, setRowPayments] = useState({}); // { invoiceId: ['CASH', 'SIGNATURE'] }
+  const [voucherTypes, setVoucherTypes] = useState([]);
+  const [filterVoucherPrefix, setFilterVoucherPrefix] = useState("");
+  const [sortField, setSortField] = useState("invoiceNumber");
+  const [sortOrder, setSortOrder] = useState("desc");
 
   const fetchBranchUsers = async () => {
     if (!currentBranch?._id) return;
@@ -45,6 +45,8 @@ const BranchDeliveryFlow = () => {
       if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
       if (filterFromDate) url += `&fromDate=${filterFromDate}`;
       if (filterToDate) url += `&toDate=${filterToDate}`;
+      if (filterVoucherPrefix) url += `&vPrefix=${encodeURIComponent(filterVoucherPrefix)}`;
+      if (sortField) url += `&sortBy=${sortField}&sortOrder=${sortOrder}`;
       
       const res = await fetchWithAuth(url);
       const data = await res.json();
@@ -69,7 +71,22 @@ const BranchDeliveryFlow = () => {
   useEffect(() => {
     fetchInvoices();
     fetchBranchUsers();
-  }, [currentBranch?._id, filterFromDate, filterToDate, currentPage, filterStatus]);
+    fetchVoucherTypes();
+  }, [currentBranch?._id, filterFromDate, filterToDate, currentPage, filterStatus, filterVoucherPrefix, sortField, sortOrder]);
+  
+  const fetchVoucherTypes = async () => {
+    if (!currentBranch?._id) return;
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/voucher-types?branchId=${currentBranch._id}`);
+      const data = await res.json();
+      if (data.success) {
+        const siTypes = (data.data || []).filter(v => v.orderType === "SI");
+        setVoucherTypes(siTypes);
+      }
+    } catch (err) {
+      console.error("Error fetching voucher types:", err);
+    }
+  };
 
   // Debounced search
   useEffect(() => {
@@ -300,6 +317,19 @@ const BranchDeliveryFlow = () => {
                 onChange={(e) => setFilterToDate(e.target.value)}
               />
             </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Voucher Prefix</label>
+              <select
+                className="w-full bg-slate-50/50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm font-bold focus:bg-white focus:border-indigo-500 transition-all outline-none"
+                value={filterVoucherPrefix}
+                onChange={(e) => setFilterVoucherPrefix(e.target.value)}
+              >
+                <option value="">ALL SERIES</option>
+                {voucherTypes.map((v) => (
+                  <option key={v._id} value={v.prefix}> {v.name.toUpperCase()} SERIES </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -311,8 +341,22 @@ const BranchDeliveryFlow = () => {
               <thead>
                 <tr className="bg-slate-50/50 border-b border-slate-100">
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">S.No</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">SI ID / Date</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer / Area</th>
+                  <th 
+                    className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors group"
+                    onClick={() => {
+                      const newOrder = sortField === "invoiceNumber" && sortOrder === "desc" ? "asc" : "desc";
+                      setSortField("invoiceNumber");
+                      setSortOrder(newOrder);
+                    }}
+                  >
+                    <div className="flex items-center gap-1">
+                      SI ID / Date
+                      <div className={`flex flex-col text-[8px] transition-opacity ${sortField === "invoiceNumber" ? "opacity-100" : "opacity-0 group-hover:opacity-40"}`}>
+                        <FaChevronDown className={`transition-transform ${sortField === "invoiceNumber" && sortOrder === "asc" ? "rotate-180" : ""}`} />
+                      </div>
+                    </div>
+                  </th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer Information</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Storage Man</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Stock Checker</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Delivery Person</th>
@@ -352,16 +396,11 @@ const BranchDeliveryFlow = () => {
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="text-xs font-bold text-slate-700">{inv.customer?.name}</span>
-                          <div className="flex items-center gap-1 mt-0.5">
+                          <div className="flex items-center gap-1 mt-0.5 opacity-60">
                             <FaMapMarkerAlt className="text-[10px] text-indigo-400" />
-                            <input 
-                              type="text"
-                              value={inv.area || inv.customer?.address || ""}
-                              onChange={(e) => handleUpdateField(inv._id, 'area', e.target.value)}
-                              placeholder="Enter Area"
-                              disabled={!isAdmin && !!inv.area}
-                              className={`text-[10px] font-bold text-indigo-600 bg-transparent border-b border-transparent hover:border-indigo-200 focus:border-indigo-500 outline-none w-full ${(!isAdmin && !!inv.area) ? 'opacity-70 cursor-not-allowed' : ''}`}
-                            />
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                               {inv.area || inv.customer?.address || "NO AREA"}
+                            </span>
                           </div>
                         </div>
                       </td>
@@ -415,10 +454,11 @@ const BranchDeliveryFlow = () => {
                         <div className="flex flex-col gap-1.5 p-2 bg-slate-50/50 rounded-xl border border-slate-100 hover:border-indigo-100 hover:bg-white transition-all group min-w-[160px]">
                           <FilterableSelect
                             options={[
+                              ...(inv.deliveryMan?.name ? [{ _id: inv.deliveryMan.name, name: inv.deliveryMan.name }] : []),
                               ...(inv.salesOrderId?.deliveryMan?.name ? [{ _id: inv.salesOrderId.deliveryMan.name, name: inv.salesOrderId.deliveryMan.name }] : []),
                               ...branchUsers.map(u => ({ _id: u.name, name: u.name }))
                             ].filter((v, i, a) => a.findIndex(t => t._id === v._id) === i)}
-                            value={inv.deliveryPerson || inv.deliveryMan?.name || ""}
+                            value={inv.deliveryPerson || inv.deliveryMan?.name || inv.salesOrderId?.deliveryMan?.name || ""}
                             onChange={(val) => handleUpdateField(inv._id, 'deliveryPerson', val)}
                             placeholder="Assign Delivery"
                             disabled={isFieldLocked(inv, 'deliveryPerson', 'deliveryPersonComment')}
@@ -502,13 +542,9 @@ const BranchDeliveryFlow = () => {
                     <div className="text-xs font-black text-slate-800 uppercase tracking-tight mb-1">{inv.customer?.name}</div>
                     <div className="flex items-center gap-1.5">
                       <FaMapMarkerAlt className="text-indigo-400 text-[10px]" />
-                      <input 
-                        type="text"
-                        value={inv.area || inv.customer?.address || ""}
-                        onChange={(e) => handleUpdateField(inv._id, 'area', e.target.value)}
-                        placeholder="Assign Area"
-                        className="text-[10px] font-bold text-indigo-600 bg-transparent outline-none w-full"
-                      />
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">
+                        {inv.area || inv.customer?.address || "No Area"}
+                      </span>
                     </div>
                   </div>
 
@@ -571,10 +607,11 @@ const BranchDeliveryFlow = () => {
                         <div className="flex-1">
                           <FilterableSelect
                             options={[
+                              ...(inv.deliveryMan?.name ? [{ _id: inv.deliveryMan.name, name: inv.deliveryMan.name }] : []),
                               ...(inv.salesOrderId?.deliveryMan?.name ? [{ _id: inv.salesOrderId.deliveryMan.name, name: inv.salesOrderId.deliveryMan.name }] : []),
                               ...branchUsers.map(u => ({ _id: u.name, name: u.name }))
                             ].filter((v, i, a) => a.findIndex(t => t._id === v._id) === i)}
-                            value={inv.deliveryPerson || inv.deliveryMan?.name || ""}
+                            value={inv.deliveryPerson || inv.deliveryMan?.name || inv.salesOrderId?.deliveryMan?.name || ""}
                             onChange={(val) => handleUpdateField(inv._id, 'deliveryPerson', val)}
                             placeholder="Delivery"
                             className="!py-2 !text-[11px] !font-black !uppercase"

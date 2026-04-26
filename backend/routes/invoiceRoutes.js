@@ -1143,6 +1143,10 @@ router.get("", async (req, res) => {
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { sortBy = "invoiceDate", sortOrder = "desc" } = req.query;
+    const sortObj = {};
+    sortObj[sortBy] = sortOrder === "asc" ? 1 : -1;
+    if (sortBy !== "createdAt") sortObj.createdAt = -1; // Secondary sort for stability
 
     let queryExec = Invoice.find(query)
       .populate("customer.customerId", "name whatsapp")
@@ -1193,7 +1197,7 @@ router.get("", async (req, res) => {
     }
 
     const invoices = await queryExec
-      .sort({ invoiceDate: -1, createdAt: -1 })
+      .sort(sortObj)
       .skip(skip)
       .limit(parseInt(limit))
       .lean();
