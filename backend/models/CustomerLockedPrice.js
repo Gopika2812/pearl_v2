@@ -32,6 +32,18 @@ const customerLockedPriceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    updatedBy: {
+      type: String,
+      default: "System",
+    },
+    updatedById: {
+      type: mongoose.Schema.Types.ObjectId,
+      refPath: "updatedByModel",
+    },
+    updatedByModel: {
+      type: String,
+      enum: ["BranchUser", "SuperAdmin"],
+    },
   },
   { timestamps: true }
 );

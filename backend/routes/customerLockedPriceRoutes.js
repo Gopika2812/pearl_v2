@@ -5,6 +5,8 @@ import XLSX from "xlsx";
 import CustomerLockedPrice from "../models/CustomerLockedPrice.js";
 import Customer from "../models/Customer.js";
 import Product from "../models/Product.js";
+import auth from "../middleware/auth.js";
+import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
 
@@ -17,8 +19,8 @@ const upload = multer({
 /**
  * POST: Bulk Upload Customer Locked Prices
  */
-router.post("/bulk-upload", upload.single("file"), async (req, res) => {
-  console.log("🔥 BULK UPLOAD LOCKED PRICES HIT");
+router.post("/bulk-upload", auth, upload.single("file"), async (req, res) => {
+  console.log("🔥 BULK UPLOAD LOCKED PRICES HIT BY:", req.user?.username);
 
   try {
     if (!req.file) {
@@ -129,7 +131,10 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
             $set: { 
               lockedPrice: Math.round(lockedPrice * 100) / 100,
               purchasingPrice: pPrice,
-              margin: margin
+              margin: margin,
+              updatedBy: req.user.username || req.user.name,
+              updatedById: req.user.id || req.user._id,
+              updatedByModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser"
             } 
           },
           upsert: true
@@ -142,6 +147,16 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       const result = await CustomerLockedPrice.bulkWrite(bulkOps, { ordered: false });
       updatedCount = result.upsertedCount + result.modifiedCount;
     }
+
+    // Log the bulk upload
+    await createAuditLog({
+      userId: req.user.id || req.user._id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username || req.user.name,
+      branchId,
+      action: "LOCKED_PRICE_BULK_UPLOAD",
+      description: `Bulk uploaded ${updatedCount} locked prices via Excel.`,
+    });
 
     res.json({
       success: true,
@@ -161,7 +176,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 /**
  * POST: Save or Update Customer Locked Price
  */
-router.post("/", async (req, res) => {
+router.post("/", auth, async (req, res) => {
   try {
     const { branchId, customerId, productId, lockedPrice } = req.body;
 
@@ -173,7 +188,9 @@ router.post("/", async (req, res) => {
     }
 
     // Get current product cost for margin calculation
-    const product = await Product.findById(productId).select("purchasingPrice");
+    const product = await Product.findById(productId).select("name purchasingPrice");
+    const customer = await Customer.findById(customerId).select("name");
+    
     if (!product) {
        return res.status(404).json({ success: false, message: "Product not found" });
     }
@@ -186,10 +203,26 @@ router.post("/", async (req, res) => {
       { 
         lockedPrice: Number(lockedPrice),
         purchasingPrice: pPrice,
-        margin: margin
+        margin: margin,
+        updatedBy: req.user.username || req.user.name,
+        updatedById: req.user.id || req.user._id,
+        updatedByModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser"
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+
+    // Audit Log
+    await createAuditLog({
+      userId: req.user.id || req.user._id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username || req.user.name,
+      branchId,
+      action: "LOCKED_PRICE_SAVE",
+      description: `Locked price set for ${product.name} at ₹${lockedPrice} (Customer: ${customer?.name || 'Unknown'}).`,
+      targetId: result._id,
+      targetModel: "CustomerLockedPrice",
+      changes: { after: { lockedPrice, customerId, productId } }
+    });
 
     res.status(200).json({
       success: true,
@@ -209,7 +242,7 @@ router.post("/", async (req, res) => {
 /**
  * PUT: Update Customer Locked Price by ID
  */
-router.put("/:id", async (req, res) => {
+router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { customerId, productId, lockedPrice } = req.body;
@@ -222,10 +255,14 @@ router.put("/:id", async (req, res) => {
     }
 
     // Get current product cost for margin calculation
-    const product = await Product.findById(productId).select("purchasingPrice");
+    const product = await Product.findById(productId).select("name purchasingPrice");
+    const customer = await Customer.findById(customerId).select("name");
+
     if (!product) {
        return res.status(404).json({ success: false, message: "Product not found" });
     }
+
+    const oldEntry = await CustomerLockedPrice.findById(id);
     const pPrice = product.purchasingPrice || 0;
     const margin = Math.round((Number(lockedPrice) - pPrice) * 100) / 100;
 
@@ -236,7 +273,10 @@ router.put("/:id", async (req, res) => {
         productId, 
         lockedPrice: Number(lockedPrice),
         purchasingPrice: pPrice,
-        margin: margin
+        margin: margin,
+        updatedBy: req.user.username || req.user.name,
+        updatedById: req.user.id || req.user._id,
+        updatedByModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser"
       },
       { new: true }
     );
@@ -244,6 +284,22 @@ router.put("/:id", async (req, res) => {
     if (!updated) {
       return res.status(404).json({ success: false, message: "Locked price record not found" });
     }
+
+    // Audit Log
+    await createAuditLog({
+      userId: req.user.id || req.user._id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username || req.user.name,
+      branchId: updated.branchId,
+      action: "LOCKED_PRICE_UPDATE",
+      description: `Price Change for ${product.name}: ₹${oldEntry?.lockedPrice || 0} → ₹${lockedPrice} (Customer: ${customer?.name || 'Unknown'}).`,
+      targetId: updated._id,
+      targetModel: "CustomerLockedPrice",
+      changes: { 
+        before: { lockedPrice: oldEntry?.lockedPrice },
+        after: { lockedPrice }
+      }
+    });
 
     res.status(200).json({
       success: true,
@@ -355,6 +411,7 @@ router.get("/branch/:branchId", async (req, res) => {
         _id: 1,
         lockedPrice: 1,
         updatedAt: 1,
+        updatedBy: 1,
         marginPercent: 1,
         margin: 1,
         customerId: { _id: "$customer._id", name: "$customer.name" },
@@ -434,7 +491,7 @@ router.get("/:customerId/:productId", async (req, res) => {
 /**
  * DELETE: Bulk Remove Customer Locked Prices
  */
-router.delete("/bulk-delete", async (req, res) => {
+router.delete("/bulk-delete", auth, async (req, res) => {
   try {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
@@ -443,6 +500,15 @@ router.delete("/bulk-delete", async (req, res) => {
 
     const result = await CustomerLockedPrice.deleteMany({ _id: { $in: ids } });
     
+    // Audit Log
+    await createAuditLog({
+      userId: req.user.id || req.user._id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username || req.user.name,
+      action: "LOCKED_PRICE_BULK_DELETE",
+      description: `Bulk deleted ${result.deletedCount} locked price records.`,
+    });
+
     res.status(200).json({ 
       success: true, 
       message: `${result.deletedCount} locked prices removed successfully`,
@@ -457,13 +523,27 @@ router.delete("/bulk-delete", async (req, res) => {
 /**
  * DELETE: Remove Customer Locked Price
  */
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
+    const entry = await CustomerLockedPrice.findById(id).populate("productId customerId");
     const deleted = await CustomerLockedPrice.findByIdAndDelete(id);
     if (!deleted) {
       return res.status(404).json({ success: false, message: "Record not found" });
     }
+
+    // Audit Log
+    await createAuditLog({
+      userId: req.user.id || req.user._id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username || req.user.name,
+      branchId: entry?.branchId,
+      action: "LOCKED_PRICE_DELETE",
+      description: `Locked price for ${entry?.productId?.name || 'Unknown'} (Customer: ${entry?.customerId?.name || 'Unknown'}) removed.`,
+      targetId: id,
+      targetModel: "CustomerLockedPrice",
+    });
+
     res.status(200).json({ success: true, message: "Locked price removed" });
   } catch (error) {
     console.error("Delete Locked Price Error:", error);

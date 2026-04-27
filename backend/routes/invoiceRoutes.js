@@ -432,6 +432,118 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         const financialYear = getFinancialYear();
 
         // ==========================================
+        // 0️⃣ PERMISSION CHECK & DIFFING (MODIFICATIONS)
+        // ==========================================
+        const baselineItems = salesOrder.invoiceItems && salesOrder.invoiceItems.length > 0 ? salesOrder.invoiceItems : salesOrder.items;
+        
+        let modificationDetails = [];
+        let isModified = false;
+
+        // A. Check for Added Items
+        const addedItems = items.filter(item => !item._id);
+        if (addedItems.length > 0) {
+          isModified = true;
+          addedItems.forEach(i => modificationDetails.push(`Added: ${i.name} (Qty: ${i.qty}, Price: ₹${i.sellingPrice})`));
+        }
+
+        // B. Check for Deleted Items
+        const currentItemIds = items.filter(i => i._id).map(i => i._id.toString());
+        baselineItems.forEach(bi => {
+          if (!currentItemIds.includes(bi._id.toString())) {
+            isModified = true;
+            modificationDetails.push(`Removed: ${bi.name}`);
+          }
+        });
+
+        // C. Check for Modified Items (Price, Qty, Discount)
+        items.filter(i => i._id).forEach(item => {
+          const original = baselineItems.find(bi => bi._id.toString() === item._id);
+          if (original) {
+            const currentConfirmedQty = Number(item.confirmedQty || item.qty || 0);
+            const originalQty = Number(original.confirmedQty || original.qty || 0);
+            const currentPrice = Number(item.sellingPrice);
+            const originalPrice = Number(original.sellingPrice);
+            const currentDisc = Number(item.discountPercent || 0);
+            const originalDisc = Number(original.discountPercent || 0);
+
+            if (currentPrice !== originalPrice) {
+              isModified = true;
+              modificationDetails.push(`${item.name} Price: ${originalPrice} - ${currentPrice}`);
+            }
+            if (currentDisc !== originalDisc) {
+              isModified = true;
+              modificationDetails.push(`${item.name} Discount: ${originalDisc}% - ${currentDisc}%`);
+            }
+            if (currentConfirmedQty !== originalQty) {
+              isModified = true;
+              modificationDetails.push(`${item.name} Qty: ${originalQty} - ${currentConfirmedQty}`);
+            }
+          }
+        });
+
+        // D. Check Global Fields
+        if (customCommonDiscount !== undefined && Number(customCommonDiscount) !== (salesOrder.commonDiscount || 0)) {
+          isModified = true;
+          modificationDetails.push(`Spl. Discount: ₹${salesOrder.commonDiscount || 0} → ₹${customCommonDiscount}`);
+        }
+        if (customTransportCharge !== undefined && Number(customTransportCharge) !== (salesOrder.transportCharge || 0)) {
+          isModified = true;
+          modificationDetails.push(`Transport: ₹${salesOrder.transportCharge || 0} → ₹${customTransportCharge}`);
+        }
+
+        // 🛡️ ENFORCE PERMISSION (Granular)
+        if (isModified && req.user.role !== "SUPER_ADMIN") {
+          const fieldPerms = req.user.fieldPermissions || {};
+          const pageId = "sales-order-list";
+
+          // A. Check Add
+          if (addedItems.length > 0 && fieldPerms[`${pageId}_action_wb_add`] === false) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(403).json({ success: false, message: "Permission Denied: You cannot add items in the workbench." });
+          }
+
+          // B. Check Delete
+          const deletedCount = baselineItems.filter(bi => !currentItemIds.includes(bi._id.toString())).length;
+          if (deletedCount > 0 && fieldPerms[`${pageId}_action_wb_delete`] === false) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(403).json({ success: false, message: "Permission Denied: You cannot remove items from the workbench." });
+          }
+
+          // C. Check Modif (Price, Qty, Discount)
+          for (const item of items.filter(i => i._id)) {
+            const original = baselineItems.find(bi => bi._id.toString() === item._id);
+            if (!original) continue;
+
+            if (Number(item.sellingPrice) !== Number(original.sellingPrice) && fieldPerms[`${pageId}_action_wb_price`] === false) {
+              await session.abortTransaction();
+              session.endSession();
+              return res.status(403).json({ success: false, message: "Permission Denied: You cannot modify prices in the workbench." });
+            }
+            if (Number(item.discountPercent || 0) !== Number(original.discountPercent || 0) && fieldPerms[`${pageId}_action_wb_discount`] === false) {
+              await session.abortTransaction();
+              session.endSession();
+              return res.status(403).json({ success: false, message: "Permission Denied: You cannot modify discounts in the workbench." });
+            }
+            if (Number(item.confirmedQty || item.qty) !== Number(original.confirmedQty || original.qty) && fieldPerms[`${pageId}_action_wb_qty`] === false) {
+              await session.abortTransaction();
+              session.endSession();
+              return res.status(403).json({ success: false, message: "Permission Denied: You cannot modify quantities (Backorder) in the workbench." });
+            }
+          }
+
+          // D. Check Global Financials
+          if (customCommonDiscount !== undefined && Number(customCommonDiscount) !== (salesOrder.commonDiscount || 0) && fieldPerms[`${pageId}_action_wb_discount`] === false) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(403).json({ success: false, message: "Permission Denied: You cannot modify special discounts." });
+          }
+        }
+
+        const modificationSummary = modificationDetails.length > 0 ? ` Changes: ${modificationDetails.join(" | ")}` : "";
+
+        // ==========================================
         // 1️⃣ GENERATE OR REUSE INVOICE NUMBER
         // ==========================================
         let invoice = await Invoice.findOne({ salesOrderId: salesOrder._id }).session(session);
@@ -792,8 +904,8 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
           username: req.user.username,
           branchId: salesOrder.branchId,
-          action: alreadyInvoiced ? "RE_INVOICE_SO" : "INVOICE_SO",
-          description: `${alreadyInvoiced ? 'Regenerated' : 'Finalized'} Invoice: ${invoiceNumber} for Order: ${salesOrder.invoiceId}. Total: ₹${grandTotal}. Items: ${processedItems.slice(0, 3).map(i => i.productName || i.name).join(", ")}${processedItems.length > 3 ? "..." : ""}`,
+          action: isModified ? "BACK_ORDER_EDIT" : (alreadyInvoiced ? "RE_INVOICE_SO" : "INVOICE_SO"),
+          description: `${alreadyInvoiced ? 'Regenerated' : 'Finalized'} Invoice: ${invoiceNumber} for Order: ${salesOrder.invoiceId}. Total: ₹${grandTotal}.${modificationSummary}`,
           targetId: invoice._id,
           targetModel: "Invoice",
         });
