@@ -219,8 +219,8 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                           <td style="text-align: center;">${item.hsn || "-"}</td>
                           <td style="text-align: center;">${order?.reasonForReturn || "Good"}</td>
                           <td style="text-align: right;">${rate.toFixed(2)}</td>
-                          <td style="text-align: right;">${netPrice.toFixed(2)}</td>
-                          <td style="text-align: right;">${(item.mrp || rate).toFixed(2)}</td>
+                          <td style="text-align: right;">${(netPrice * (1 + gstRate/100)).toFixed(2)}</td>
+                          <td style="text-align: right;">${((item.mrp || rate) * (1 + gstRate/100)).toFixed(2)}</td>
                           <td style="text-align: center;">${qty}</td>
                           <td style="text-align: center;">${item.unit || "Pcs"}</td>
                           <td style="text-align: center;">${(gstRate/2).toFixed(2)}%</td>
