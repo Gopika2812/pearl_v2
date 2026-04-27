@@ -27,6 +27,8 @@ const creditNoteSchema = new mongoose.Schema(
         required: true,
       },
       name: String,
+      whatsapp: String,
+      phone: String,
       address: String,
       district: String,
       state: String,

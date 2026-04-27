@@ -839,11 +839,16 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                   <div style="font-weight: bold;">${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}</div>
                   <div class="label" style="margin-top: 6px;">Invoice No:</div>
                   <div style="font-weight: bold; color: #dc2626;">${generatedInvoice?.invoiceNumber || previewData?.invoiceNumber || order?.invoiceId || "PENDING"}</div>
-                  ${(previewData?.customer?.customerGroup || order?.customer?.customerGroup) ? `
-                    <div style="font-weight: black; color: #000; font-size: 14px; margin-top: 2px;">
-                      (${String(previewData?.customer?.customerGroup || order?.customer?.customerGroup).charAt(0).toUpperCase()})
-                    </div>
-                  ` : ''}
+                  ${(() => {
+                    const groupObj = previewData?.customer?.customerGroup || previewData?.customer?.customerId?.customerGroup || order?.customer?.customerGroup || order?.customer?.customerId?.customerGroup;
+                    const groupName = typeof groupObj === 'object' ? groupObj.name : groupObj;
+                    if (!groupName) return '';
+                    return `
+                      <div style="font-weight: 900; color: #000; font-size: 16px; margin-top: 4px; text-align: right;">
+                        (${String(groupName).charAt(0).toUpperCase()})
+                      </div>
+                    `;
+                  })()}
                 </div>
               </div>
 
@@ -920,8 +925,14 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                    </div>
 
                   <div class="total-section" style="flex: 1;">
-                    <div style="font-size: 11px;">Subtotal: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
-                    <div class="grand-total" style="font-size: 16px;">GRAND TOTAL: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
+                    <div style="font-size: 11px;">Subtotal: <strong>₹${(previewData?.subtotal || 0).toFixed(2)}</strong></div>
+                    ${previewData?.totalTax?.igst > 0 ? `
+                      <div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>
+                    ` : `
+                      <div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
+                      <div style="font-size: 11px;">SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>
+                    `}
+                    <div class="grand-total" style="font-size: 16px;">GRAND TOTAL: ₹${(previewData?.grandTotal || 0).toFixed(2)}</div>
                   </div>
               </div>
 

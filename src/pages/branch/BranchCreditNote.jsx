@@ -13,6 +13,9 @@ export default function BranchCreditNote() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [summary, setSummary] = useState({ totalValue: 0, total: 0 });
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [expandedCN, setExpandedCN] = useState({});
   const [requestingAction, setRequestingAction] = useState(null);
   const [showEInvoiceModal, setShowEInvoiceModal] = useState(null);
@@ -20,16 +23,41 @@ export default function BranchCreditNote() {
   const [showTransportModal, setShowTransportModal] = useState(null);
 
   useEffect(() => {
-    if (currentBranch?._id) fetchCreditNotes();
+    if (currentBranch?._id) {
+      setPage(1);
+      setCreditNotes([]);
+      fetchCreditNotes(1, searchQuery);
+    }
   }, [currentBranch]);
 
-  const fetchCreditNotes = async () => {
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (currentBranch?._id) {
+        setPage(1);
+        setCreditNotes([]);
+        fetchCreditNotes(1, searchQuery);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const fetchCreditNotes = async (pageNum = 1, search = "") => {
     try {
-      setLoading(true);
-      const response = await fetchWithAuth(`${API_BASE}/credit-notes?branchId=${currentBranch._id}`);
+      if (pageNum === 1) setLoading(true);
+      const response = await fetchWithAuth(`${API_BASE}/credit-notes?branchId=${currentBranch._id}&page=${pageNum}&search=${search}`);
       const result = await response.json();
       if (result.success) {
-        setCreditNotes(result.data || []);
+        if (pageNum === 1) {
+          setCreditNotes(result.data || []);
+        } else {
+          setCreditNotes(prev => [...prev, ...(result.data || [])]);
+        }
+        setSummary({
+          totalValue: result.summary?.totalValue || 0,
+          total: result.pagination?.total || 0
+        });
+        setHasMore(pageNum < result.pagination.pages);
       }
     } catch (error) {
       console.error("Error fetching credit notes:", error);
@@ -39,16 +67,19 @@ export default function BranchCreditNote() {
     }
   };
 
+  const handleLoadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    fetchCreditNotes(nextPage, searchQuery);
+  };
+
   const formatDate = (date) => new Date(date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
   const toggleExpand = (id) => {
     setExpandedCN(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const filteredCN = creditNotes.filter(cn => 
-    cn.creditNoteId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    cn.customer?.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredCN = creditNotes; // Now handled by backend
 
   const handleGenerateEInvoice = async (cn, transportDetails = null) => {
     // Check if transport details are required (>50k or as needed)
@@ -89,12 +120,12 @@ export default function BranchCreditNote() {
   };
 
   /**
-   * 🖨️ HANDLE LOCAL PRINT: Uses the custom Pearl layout.
+   * 🖨️ HANDLE PRINT: Supports both Standard and Professional layouts
    */
-  const handleLocalPrint = (cn) => {
+  const handlePrint = (cn, layoutType = 'STANDARD') => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
-      toast.warning("🔔 Pop-up blocked! Please allow pop-ups to print.");
+      toast.warning("Pop-up blocked! Please allow pop-ups to print.");
       return;
     }
 
@@ -105,7 +136,9 @@ export default function BranchCreditNote() {
       invoiceDate: cn.createdAt
     };
 
-    const html = getInvoiceHTML(previewData, 2, cn, cn, 'CREDIT_NOTE');
+    const mode = layoutType === 'PROFESSIONAL' ? 'CREDIT_NOTE_PROFESSIONAL' : 'CREDIT_NOTE';
+    const html = getInvoiceHTML(previewData, 2, cn, cn, mode);
+    
     printWindow.document.write(html);
     printWindow.document.close();
     setTimeout(() => {
@@ -144,11 +177,11 @@ export default function BranchCreditNote() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Notes</p>
-                <p className="text-3xl font-black text-gray-900">{filteredCN.length}</p>
+                <p className="text-3xl font-black text-gray-900">{summary.total}</p>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Credit Value</p>
-                <p className="text-3xl font-black text-indigo-600">₹{filteredCN.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0).toLocaleString()}</p>
+                <p className="text-3xl font-black text-indigo-600">₹{summary.totalValue.toLocaleString()}</p>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4 relative overflow-hidden">
                 <FaSearch className="absolute -right-4 -bottom-4 text-8xl text-gray-50 -rotate-12" />
@@ -274,11 +307,19 @@ export default function BranchCreditNote() {
                             </button>
 
                             <button 
-                              onClick={() => handleLocalPrint(cn)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-600 hover:text-white text-[10px] font-black transition-all shadow-sm"
-                              title="Local Formal Print"
+                              onClick={() => handlePrint(cn, 'STANDARD')}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 text-[10px] font-black transition-all shadow-sm"
+                              title="Standard Layout"
                             >
-                              <FaPrint size={12} /> PRINT
+                              <FaPrint size={12} /> STD
+                            </button>
+
+                            <button 
+                              onClick={() => handlePrint(cn, 'PROFESSIONAL')}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-600 hover:text-white text-[10px] font-black transition-all shadow-sm"
+                              title="Professional Layout"
+                            >
+                              <FaPrint size={12} /> PROF
                             </button>
 
                             <button 
@@ -326,6 +367,17 @@ export default function BranchCreditNote() {
             </div>
           )}
         </div>
+
+        {hasMore && !loading && (
+          <div className="mt-8 flex justify-center">
+            <button
+              onClick={handleLoadMore}
+              className="px-8 py-3 bg-white border-2 border-indigo-600 text-indigo-600 font-black rounded-2xl hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm"
+            >
+              LOAD MORE RECORDS
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Standalone/Unified Creation Modal */}

@@ -129,30 +129,60 @@ router.get("/", async (req, res) => {
       return res.status(400).json({ success: false, message: "Valid branchId is required" });
     }
 
-    // ⚡ LIVE REPAIR: Find any notes for this branch's customers that are missing branchId
-    const legacyNotes = await CreditNote.find({ 
-      branchId: { $exists: false },
-      "customer.customerId": { $exists: true }
-    });
+    const { page = 1, limit = 50, search = "", fromDate, toDate } = req.query;
     
-    if (legacyNotes.length > 0) {
-      console.log(`🔧 Migrating ${legacyNotes.length} legacy credit notes...`);
-      for (const cn of legacyNotes) {
-        const customer = await Customer.findById(cn.customer.customerId);
-        if (customer && customer.branchId) {
-          await CreditNote.findByIdAndUpdate(cn._id, { branchId: customer.branchId });
-        }
-      }
+    const query = { branchId };
+
+    // 1. Search Filter
+    if (search) {
+      query.$or = [
+        { creditNoteId: { $regex: search, $options: "i" } },
+        { "customer.name": { $regex: search, $options: "i" } }
+      ];
     }
 
-    const creditNotes = await CreditNote.find({ branchId })
+    // 2. Date Filter
+    if (fromDate && toDate) {
+      query.createdAt = {
+        $gte: new Date(fromDate),
+        $lte: new Date(new Date(toDate).setHours(23, 59, 59, 999))
+      };
+    }
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    const creditNotes = await CreditNote.find(query)
       .populate("branchId")
-      .sort({ createdAt: -1 });
+      .populate("customer.customerId", "name whatsapp phone closingBalance debit credit")
+      .populate("deliveryMan", "name phone")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
 
-    // 🔥 PERFORMANCE FIX: Removed the heavy live-repair loop that was checking every record on every fetch.
-    // Repairs should be handled via a dedicated migration script or on-demand for single records.
+    const total = await CreditNote.countDocuments(query);
+    
+    // Summary data for the whole branch (matching filters)
+    const summaryAggregation = await CreditNote.aggregate([
+      { $match: query },
+      { $group: { _id: null, totalValue: { $sum: "$grandTotal" } } }
+    ]);
+    const totalValue = summaryAggregation.length > 0 ? summaryAggregation[0].totalValue : 0;
 
-    res.json({ success: true, data: creditNotes });
+    res.json({ 
+      success: true, 
+      data: creditNotes,
+      summary: {
+        totalValue
+      },
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(total / limitNum)
+      }
+    });
   } catch (error) {
     console.error("Credit Note Fetch Error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch credit notes" });
@@ -333,12 +363,15 @@ router.post("/", async (req, res) => {
       customer: {
         customerId: customer._id,
         name: customer.name,
+        whatsapp: customer.whatsapp || "",
+        phone: customer.phone || "",
         address: customer.address || "",
         gstin: customer.gstin || "URP",
         state: customer.state || "TAMIL NADU",
         stateCode: customer.stateCode || "33",
         pincode: customer.pincode || "",
         district: customer.district || "",
+        closingBalance: customer.closingBalance || 0,
       },
       seller: {
         name: branch?.name || "",

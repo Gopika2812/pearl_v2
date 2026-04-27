@@ -52,15 +52,19 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
         setNextId(editData.creditNoteId);
         setCustomer(editData.customer?.customerId ? { _id: editData.customer.customerId, name: editData.customer.name } : null);
         setCustomerSearch(editData.customer?.name || "");
+        
+        // Initial set of items from the credit note
         setSelectedItems(editData.items.map(item => ({
           ...item,
           productId: item.productId?._id || item.productId
         })));
+        
         setFormData({
           reason: editData.reasonForReturn || "",
           date: new Date(editData.createdAt || Date.now()).toISOString().split("T")[0]
         });
         setReturnType(editData.originalInvoiceId === "STANDALONE" ? "standalone" : "invoice");
+        setSelectedInvoice(null); // Reset to allow auto-select to trigger
       } else {
         fetchNextId();
         fetchCustomers();
@@ -70,9 +74,49 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
         setCustomerSearch(initialCustomer?.name || "");
         setSelectedItems([]);
         setFormData({ reason: "", date: new Date().toISOString().split("T")[0] });
+        setSelectedInvoice(null);
       }
     }
   }, [isOpen, editData]);
+
+  // Auto-select invoice and merge items in edit mode
+  useEffect(() => {
+    if (isOpen && editData && invoices.length > 0 && returnType === "invoice" && !selectedInvoice) {
+      const matchedInvoice = invoices.find(inv => 
+        inv.salesOrderId === editData.originalSalesOrderId || 
+        inv._id === editData.originalSalesOrderId ||
+        inv.invoiceNumber === editData.originalInvoiceId
+      );
+      
+      if (matchedInvoice) {
+        // Use a specialized merge for initial edit load
+        setSelectedInvoice(matchedInvoice);
+        const invoiceItems = matchedInvoice.items.map(item => ({
+          ...item,
+          productId: item.productId._id || item.productId,
+          maxQty: item.qty,
+          qty: 0,
+          returnQty: 0
+        }));
+
+        const merged = invoiceItems.map(invItem => {
+          const existing = editData.items.find(ei => (ei.productId?._id || ei.productId) === invItem.productId);
+          if (existing) {
+            return { ...invItem, ...existing, maxQty: invItem.qty, returnQty: existing.qty || existing.qty };
+          }
+          return invItem;
+        });
+
+        // Add manual items from editData if any
+        const manualItems = editData.items.filter(ei => {
+          const eiId = ei.productId?._id || ei.productId;
+          return !invoiceItems.some(invItem => invItem.productId === eiId);
+        }).map(item => ({ ...item, productId: item.productId?._id || item.productId }));
+
+        setSelectedItems([...merged, ...manualItems]);
+      }
+    }
+  }, [isOpen, editData, invoices, returnType, selectedInvoice]);
 
   // Sync initial customer
   useEffect(() => {
@@ -159,14 +203,29 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
 
   const handleSelectInvoice = (inv) => {
     setSelectedInvoice(inv);
-    const populatedItems = inv.items.map(item => ({
+    const invoiceItems = inv.items.map(item => ({
       ...item,
       productId: item.productId._id || item.productId,
       maxQty: item.qty,
       qty: 0, // Default to 0 for partial returns
       returnQty: 0 
     }));
-    setSelectedItems(populatedItems);
+
+    // Merge with current selectedItems to prevent losing manual additions
+    const merged = invoiceItems.map(invItem => {
+      const existing = selectedItems.find(ei => (ei.productId?._id || ei.productId) === invItem.productId);
+      if (existing) {
+        return { ...invItem, ...existing, maxQty: invItem.qty };
+      }
+      return invItem;
+    });
+
+    const manualItems = selectedItems.filter(ei => {
+      const eiId = ei.productId?._id || ei.productId;
+      return !invoiceItems.some(invItem => invItem.productId === eiId);
+    });
+
+    setSelectedItems([...merged, ...manualItems]);
   };
 
   const handleReturnAll = () => {
@@ -513,8 +572,7 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                           <label className={labelClass}>Price (₹)</label>
                           <input 
                             type="number"
-                            disabled={returnType === "invoice"}
-                            className={`${inputClass} ${returnType === "invoice" ? 'bg-gray-50 text-gray-400' : ''}`}
+                            className={inputClass}
                             value={item.sellingPrice}
                             onChange={(e) => {
                               setSelectedItems(selectedItems.map(si => ((si.productId === item.productId || si._id === item._id) ? { ...si, sellingPrice: Number(e.target.value) } : si)));
@@ -536,8 +594,7 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                           <label className={labelClass}>GST %</label>
                           <input 
                             type="number"
-                            disabled={returnType === "invoice"}
-                            className={`${inputClass} ${returnType === "invoice" ? 'bg-gray-50 text-gray-400' : ''}`}
+                            className={inputClass}
                             value={item.gst}
                             onChange={(e) => {
                               setSelectedItems(selectedItems.map(si => ((si.productId === item.productId || si._id === item._id) ? { ...si, gst: Number(e.target.value) } : si)));

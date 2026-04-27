@@ -5,309 +5,449 @@
  */
 
 export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generatedInvoice = {}, mode = 'INVOICE') => {
-    const isCN = mode === 'CREDIT_NOTE';
-    const documentTitle = isCN ? "CREDIT NOTE" : "TAX INVOICE";
+    const isCNProf = mode === 'CREDIT_NOTE_PROFESSIONAL';
+    const isCNStd = mode === 'CREDIT_NOTE';
+    const isCN = isCNProf || isCNStd;
+    
+    const documentTitle = isCN ? "SALES RETURN / CREDIT NOTE" : "TAX INVOICE";
     const idLabel = isCN ? "Credit Note ID" : "Invoice No";
     const dateLabel = isCN ? "Note Date" : "Invoice Date";
+    
+    // 🧮 Robust Tax Breakdown Helper
+    const tax = (() => {
+        if (typeof previewData?.totalTax === 'object' && previewData?.totalTax !== null) {
+            return {
+                cgst: previewData.totalTax.cgst || 0,
+                sgst: previewData.totalTax.sgst || 0,
+                igst: previewData.totalTax.igst || 0,
+                total: previewData.totalTax.total || 0
+            };
+        }
+        // Fallback for Credit Notes (Sum from items)
+        const breakdown = { cgst: 0, sgst: 0, igst: 0, total: Number(previewData?.totalTax || 0) };
+        (previewData?.items || []).forEach(item => {
+            // Check for explicit cgst/sgst fields or calculate from total tax
+            const itemTax = Number(item.tax || (item.total - (item.sellingPrice * item.qty)) || 0);
+            if (item.cgst !== undefined) {
+                breakdown.cgst += Number(item.cgst || 0);
+                breakdown.sgst += Number(item.sgst || 0);
+                breakdown.igst += Number(item.igst || 0);
+            } else if (itemTax > 0) {
+                // If breakdown is missing but total item tax exists, assume 50/50 for CGST/SGST if not IGST
+                if (item.igst_amount > 0) {
+                    breakdown.igst += itemTax;
+                } else {
+                    breakdown.cgst += itemTax / 2;
+                    breakdown.sgst += itemTax / 2;
+                }
+            }
+        });
+        // If total is missing but breakdown is there
+        if (!breakdown.total) breakdown.total = breakdown.cgst + breakdown.sgst + breakdown.igst;
+        return breakdown;
+    })();
 
     const style = `
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.5; color: #000; }
-        .page { width: 148mm; min-height: 210mm; padding: 6mm; margin: 0 auto; page-break-after: always; background: white; border-bottom: 1px solid #eee; }
-        .page-content { max-width: 136mm; margin: 0 auto; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.4; color: #000; background: #fff; }
+        .page { width: 210mm; min-height: 297mm; padding: 10mm; margin: 0 auto; page-break-after: always; background: white; }
+        .page-content { width: 100%; }
         
-        .top-header { display: flex; gap: 12px; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 8px; align-items: flex-start; }
-        .logo-box { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 6px; flex-shrink: 0; overflow: hidden; }
-        .logo-box img { width: 100%; height: 100%; object-fit: contain; }
-        .company-header { flex: 1; }
-        .company-name { font-size: 18px; font-weight: bold; color: #000; margin-bottom: 3px; text-transform: uppercase; }
-        .company-address { font-size: 11px; color: #000; line-height: 1.3; margin-bottom: 3px; }
-        .upi-qr-box { flex-shrink: 0; text-align: center; }
-        .upi-qr-box img { width: 70px; height: 70px; display: block; border: 1px solid #ddd; border-radius: 4px; }
-        .upi-qr-label { font-size: 7px; color: #374151; margin-top: 2px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.3px; }
+        /* Layout Styles */
+        .header-section { text-align: center; margin-bottom: 15px; position: relative; }
+        .header-section h1 { font-size: 22px; font-weight: 900; text-decoration: underline; margin-bottom: 10px; }
+        .cn-id-top { position: absolute; right: 0; top: 0; font-size: 18px; font-weight: 900; }
         
-        .order-header { display: flex; justify-content: space-between; margin: 10px 0; font-size: 11px; border-bottom: 1px dashed #000; padding-bottom: 8px; color: #000; }
-        .order-header-col { flex: 1; }
-        .section-title { 
-          font-size: 13px; 
-          font-weight: bold; 
-          color: #fff; 
-          background: ${isCN ? '#0d9488' : '#000'}; 
-          padding: 4px 10px; 
-          margin: 10px 0 8px 0;
-          border-radius: 4px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
+        .top-grid { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 15px; align-items: flex-start; }
+        .seller-info { flex: 1.5; font-size: 11px; }
+        .seller-name { font-size: 14px; font-weight: 900; text-transform: uppercase; margin-bottom: 2px; }
         
-        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10px; }
-        th { background: #000; color: white; padding: 6px; text-align: left; border: 1px solid #000; font-weight: 600; }
-        td { border: 1px solid #000; padding: 5px 6px; color: #000; }
+        .info-box { flex: 1; border: 1px solid #000; padding: 10px; border-radius: 4px; font-size: 10px; }
+        .net-amount-box { text-align: right; border-bottom: 1px solid #000; padding-bottom: 5px; margin-bottom: 8px; }
+        .net-amount-label { font-size: 14px; font-weight: bold; margin-right: 10px; }
+        .net-amount-val { font-size: 18px; font-weight: 900; }
+        .info-row { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 3px; }
+        .info-label { font-weight: bold; width: 100px; text-align: right; }
+        .info-val { width: 120px; text-align: right; }
+        .status-badge { background: #10b981; color: white; padding: 1px 6px; border-radius: 3px; font-weight: 900; font-size: 9px; text-transform: uppercase; }
+
+        .bill-to { border: 1px solid #000; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 10px; background: #fff; }
+        .bill-to-title { font-weight: 900; text-decoration: underline; margin-bottom: 4px; font-size: 11px; }
         
-        .total-section { text-align: right; margin: 15px 0; font-size: 11px; line-height: 1.5; color: #000; }
-        .grand-total { font-size: 16px; font-weight: bold; color: #000; margin-top: 8px; border-top: 2px solid #000; padding-top: 4px; }
-        .footer { text-align: center; font-size: 10px; color: #94a3b8; margin-top: 20px; }
-        .copy-label { 
-          text-align: right; 
-          font-weight: 800; 
-          color: #dc2626; 
-          font-size: 12px; 
-          margin-top: 15px;
-          border-top: 1px solid #e5e7eb;
-          padding-top: 10px;
-          letter-spacing: 1.1px;
-          text-transform: uppercase;
-        }
-        .balance-info { background: #f8fafc; padding: 10px; margin: 12px 0; font-size: 11px; border-left: 4px solid #000; border-radius: 4px; }
-        .sample-section { background: #fffbeb; padding: 10px; margin: 12px 0; border: 1px solid #fef3c7; border-radius: 6px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        th { border: 1px solid #000; padding: 4px; font-size: 9px; font-weight: 900; text-transform: uppercase; background: #f9fafb; text-align: center; }
+        td { border: 1px solid #000; padding: 4px; font-size: 10px; vertical-align: middle; }
         
-        .sender-buyer { display: flex; gap: 12px; margin: 10px 0; border: 1px solid #000; padding: 10px; border-radius: 6px; background: #f8fafc; color: #000; }
-        .sender-buyer-col { flex: 1; font-size: 10px; line-height: 1.4; }
-        .sender-buyer-col strong { font-size: 11px; display: block; margin-bottom: 3px; color: #000; }
-        
-        .quick-info { font-size: 9px; color: #000; margin-bottom: 5px; display: flex; justify-content: space-between; border-bottom: 1px dotted #000; padding-bottom: 2px; }
-        
+        .totals-section { display: flex; justify-content: flex-end; margin-top: 10px; }
+        .totals-table { width: 300px; }
+        .totals-table td { border: none; padding: 2px 0; text-align: right; font-size: 11px; }
+        .totals-table .label { text-align: right; font-weight: bold; padding-right: 15px; text-transform: uppercase; }
+        .totals-table .val { width: 100px; font-weight: 900; }
+        .grand-total-row { border-top: 2px solid #000 !important; margin-top: 5px; padding-top: 5px; }
+
+        .footer-grid { display: flex; justify-content: space-between; margin-top: 20px; font-size: 10px; }
+        .bank-details { border: 1px solid #000; padding: 8px; border-radius: 4px; width: 250px; }
+        .declaration { font-size: 9px; max-width: 500px; margin-top: 10px; }
+        .signature-box { text-align: right; margin-top: 20px; }
+        .signature-line { border-top: 1px solid #000; width: 180px; margin-top: 40px; display: inline-block; text-align: center; font-weight: bold; }
+
         @media print { 
-          body { margin: 0; padding: 0; } 
-          .page { margin: 0 auto; padding: 5mm; page-break-after: always !important; border-bottom: none; }
+          .page { margin: 0; padding: 10mm; } 
         }
+
+        /* --- STANDARD LAYOUT STYLES --- */
+        .quick-info { text-align: left; font-size: 10px; margin-bottom: 5px; }
+        .top-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+        .logo-box img { max-height: 80px; width: auto; object-fit: contain; }
+        .company-header { flex: 1; text-align: center; padding: 0 20px; }
+        .company-name { font-size: 24px; font-weight: 900; text-transform: uppercase; line-height: 1; margin-bottom: 5px; }
+        .company-address { font-size: 11px; line-height: 1.3; }
+        .upi-qr-box { text-align: center; min-width: 80px; }
+        .upi-qr-label { font-size: 8px; font-weight: bold; margin-top: 2px; text-transform: uppercase; }
+        
+        .section-title { background: #000; color: #fff; padding: 6px; text-align: center; font-weight: 900; margin-bottom: 15px; font-size: 12px; letter-spacing: 1px; }
+        
+        .order-header { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 15px; }
+        .order-header-col { flex: 1; line-height: 1.5; }
+        
+        .sender-buyer { display: flex; gap: 0; margin-bottom: 15px; border: 1px solid #000; }
+        .sender-buyer-col { flex: 1; padding: 8px; font-size: 11px; line-height: 1.4; }
+        .sender-buyer-col:first-child { border-right: 1px solid #000; }
+        
+        .total-section { margin-top: 15px; font-size: 12px; }
+        .grand-total { font-size: 18px; font-weight: 900; margin-top: 5px; border-top: 2px solid #000; padding-top: 5px; }
+        
+        .copy-label { text-align: center; font-size: 10px; font-weight: bold; color: #666; margin-top: 30px; text-transform: uppercase; border-top: 1px dashed #ccc; padding-top: 10px; }
       </style>
     `;
 
     let html = `<!DOCTYPE html><html><head><title>${documentTitle}</title><meta charset="UTF-8">${style}</head><body>`;
 
-    const isReEdited = !!order.isReEdited || !!order.invoiceGenerated;
-    let baseTitles = isCN 
-      ? ["CN ORIGINAL", "CN OFFICE COPY", "CN EXTRA COPY"]
-      : (isReEdited ? ["RE-EDIT ORIGINAL", "RE-EDIT COPY 1", "RE-EDIT COPY 2"] : ["ORIGINAL INVOICE", "OFFICE COPY", "EXTRA COPY"]);
+    const baseTitles = isCN 
+      ? ["ORIGINAL COPY", "OFFICE COPY"] 
+      : ["ORIGINAL INVOICE", "OFFICE COPY", "EXTRA COPY"];
     
     const copiesToGenerate = baseTitles.slice(0, numCopies);
 
-    copiesToGenerate.forEach(copyTitle => {
-        // --- PAGE 1: DOCUMENT DETAILS ---
-        html += `
-          <div class="page">
-            <div class="page-content">
-              <div class="quick-info">
-                <span>${isCN ? 'CN' : 'INV'}: ${isCN ? (generatedInvoice?.creditNoteId || order?.creditNoteId) : (generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING")}</span>
-              </div>
-              <div class="top-header">
-                <div class="logo-box"><img src="${previewData?.seller?.logo || "/logo.jpeg"}" alt="Logo" /></div>
-                <div class="company-header">
-                  <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
-                  <div class="company-address">
-                    <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
-                    Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
-                  </div>
-                </div>
-                ${(!isCN && previewData?.seller?.upiId) ? `
-                <div class="upi-qr-box">
-                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=70x70&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" alt="UPI QR" />
-                  <div class="upi-qr-label">Scan to Pay</div>
-                </div>` : ''}
-              </div>
-
-              <div class="section-title">📋 ${documentTitle} DETAILS</div>
-
-              <div class="order-header">
-                <div class="order-header-col">
-                  <strong>${idLabel}:</strong> ${isCN ? (generatedInvoice?.creditNoteId || order?.creditNoteId) : (generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING")}
-                  ${(!isCN && (previewData?.customer?.customerGroup || order?.customer?.customerGroup)) ? `(${String(previewData?.customer?.customerGroup || order?.customer?.customerGroup).charAt(0).toUpperCase()})` : ''}<br/>
-                  <strong>${dateLabel}:</strong> ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
-                </div>
-                <div class="order-header-col" style="text-align: right;">
-                  ${!isCN ? `
-                    <strong>Customer:</strong> ${previewData?.customer?.name || "CASH CUSTOMER"}<br/>
-                    <strong>Contact:</strong> ${previewData?.customer?.whatsapp || "-"}<br/>
-                    <strong>Delivery:</strong> ${previewData?.deliveryMan || order?.deliveryMan?.name || generatedInvoice?.deliveryMan?.name || generatedInvoice?.salesOrderId?.deliveryMan?.name || "-"}
-                  ` : ''}
-                </div>
-              </div>
-
-              <div class="sender-buyer">
-                <div class="sender-buyer-col">
-                  <strong>${isCN ? 'RETURN FROM' : 'BUYER (BILL TO)'}</strong>
-                  ${previewData?.customer?.name}<br/>
-                  ${previewData?.customer?.address || "N/A"}<br/>
-                  ${previewData?.customer?.district ? previewData?.customer?.district + ', ' : ''}${previewData?.customer?.state || ""} ${previewData?.customer?.pincode || ""}<br/>
-                  Mobile: ${previewData?.customer?.whatsapp || previewData?.customer?.customerId?.whatsapp || "-"}<br/>
-                  GSTIN: ${previewData?.customer?.gstin || previewData?.customer?.customerId?.gstin || "N/A"}<br/>
-                </div>
-              </div>
-
-              ${isCN && order?.originalInvoiceId ? `
-                <div style="font-size: 10px; margin-top: -5px; margin-bottom: 10px; background: #f0fdfa; padding: 6px 10px; border: 1px solid #0d9488; border-radius: 4px; display: inline-block;">
-                  <strong style="color: #0d9488;">ISSUED AGAINST INVOICE:</strong> ${order.originalInvoiceId} 
-                  ${order.originalInvoiceDate ? ` | <strong>DATE:</strong> ${new Date(order.originalInvoiceDate).toLocaleDateString("en-IN")}` : ''}
-                </div>
-              ` : ''}
-
-              <table>
-                <thead>
-                  <tr>
-                    <th style="width: 5%; text-align: center;">#</th>
-                    <th style="width: 32%;">${isCN ? 'Returned Product' : 'Product Name'}</th>
-                    <th>HSN</th>
-                    <th style="text-align: right;">Qty</th>
-                    <th style="text-align: right;">Rate</th>
-                    <th style="text-align: right;">Disc %</th>
-                    <th style="text-align: right;">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${(previewData?.items || []).filter(item => item.qty > 0).map((item, idx) => `
-                    <tr>
-                      <td style="text-align: center; color: #64748b; font-size: 10px;">${idx + 1}</td>
-                      <td>${item.name}</td>
-                      <td>${item.hsn || "-"}</td>
-                      <td style="text-align: right;">${item.qty} ${item.unit || ""}</td>
-                      <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
-                      <td style="text-align: right;">${item.discountPercent || 0}%</td>
-                      <td style="text-align: right;">₹${(item.total || (item.qty * item.sellingPrice)).toFixed(2)}</td>
-                    </tr>
-                  `).join("")}
-                </tbody>
-              </table>
-              
-              <!-- SAMPLE PRODUCTS -->
-              ${(!isCN && previewData?.sampleItems?.length > 0) ? `
-                <div class="sample-section">
-                  <strong style="font-size: 11px; color: #92400e;">🎁 SAMPLE PRODUCTS (NOT BILLED)</strong>
-                  <table style="margin-top: 5px;">
-                    <thead>
-                      <tr>
-                        <th style="width: 40%; background: #92400e;">Product Name</th>
-                        <th style="background: #92400e;">HSN</th>
-                        <th style="text-align: right; background: #92400e;">Qty</th>
-                        <th style="text-align: right; background: #92400e;">Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${previewData.sampleItems.map(item => `
-                        <tr>
-                          <td>${item.name}</td>
-                          <td>${item.hsn || "-"}</td>
-                          <td style="text-align: right;">${item.qty} ${item.unit || ""}</td>
-                          <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
-                        </tr>
-                      `).join("")}
-                    </tbody>
-                  </table>
-                </div>
-              ` : ""}
-
-              <div class="total-section" style="display: flex; gap: 10px; margin-top: 15px;">
-                <div style="flex: 1; text-align: left;">
-                  ${!isCN ? `
-                    <div style="background: #f8fafc; padding: 10px; margin: 12px 0; font-size: 13px; border-left: 4px solid #000; border-radius: 4px;">
-                      <div><strong>Previous Balance:</strong> ${previewData?.formattedOpeningBalance || (previewData?.openingBalance >= 0 ? '₹' + (previewData?.openingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.openingBalance || 0).toFixed(2) + ' Cr')}</div>
-                      <div style="margin-top: 4px;"><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
-                    </div>
-                  ` : ''}
-                  ${isCN ? `<div style="font-size: 11px; color: #1e293b; margin-top: 10px; border-bottom: 2px solid #0d9488; padding-bottom: 4px; display: inline-block;"><strong>Reason for Return:</strong> ${order.reasonForReturn || 'Product Return'}</div>` : ''}
-                </div>
-
-                <div style="flex: 1; text-align: right;">
-                  <div style="font-size: 11px;">Subtotal: <strong>₹${(previewData?.subtotal || 0).toFixed(2)}</strong></div>
-                  ${(previewData?.totalTax?.igst > 0 || previewData?.totalTax?.total > 0) ? (
-                    previewData?.totalTax?.igst > 0 ? 
-                    `<div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` : 
-                    `<div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
-                     <div style="font-size: 11px;">SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
-                  ) : ''}
-                  ${(previewData?.totalTax?.total > 0) ? `<div style="font-size: 11px; margin-top: 2px; border-top: 1px dashed #ccc; padding-top: 2px;">Total Tax Value: <strong>₹${(previewData?.totalTax?.total || 0).toFixed(2)}</strong></div>` : ''}
-                  ${(previewData?.commonDiscount || 0) > 0 ? `<div style="font-size: 11px; color: red;">Discount: -₹${Number(previewData.commonDiscount).toFixed(2)}</div>` : ""}
-                  ${(previewData?.roundingOff || 0) !== 0 ? `<div style="font-size: 11px; color: #666;">Rounding Off: <strong>${previewData.roundingOff > 0 ? '+' : ''}₹${Number(previewData.roundingOff).toFixed(2)}</strong></div>` : ""}
-                  <div class="grand-total">${isCN ? 'CREDIT AMOUNT' : 'GRAND TOTAL'}: ₹${(previewData?.grandTotal || 0).toFixed(2)}</div>
-                  ${isCN && previewData?.totalTax?.total > 0 ? `<div style="font-size: 9px; margin-top: -2px; opacity: 0.8;">(Includes Total GST of ₹${(previewData?.totalTax?.total || 0).toFixed(2)})</div>` : ''}
-                </div>
-              </div>
-              </div>
-
-              <div class="copy-label">${copyTitle} - PAGE 1</div>
-              <div class="footer">${isCN ? 'Credit details' : 'Order details'} generated on ${new Date().toLocaleString("en-IN")} (Record Date: ${new Date(order?.createdAt || new Date()).toLocaleDateString("en-IN")})</div>
-            </div>
-          </div>
-        `;
-
-        // --- PAGE 2: TAX SUMMARY (HSN) ---
-        if (!isCN) {
+    copiesToGenerate.forEach((copyTitle, copyIdx) => {
+        if (isCNProf) {
+          // --- NEW PROFESSIONAL CREDIT NOTE LAYOUT ---
           html += `
             <div class="page">
-            <div class="page-content">
-              <div class="quick-info">
-                <span>${isCN ? 'CN' : 'INV'}: ${isCN ? (generatedInvoice?.creditNoteId || order?.creditNoteId) : (generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING")}</span>
-              </div>
-              <div class="top-header">
-                <div class="logo-box"><img src="${previewData?.seller?.logo || "/logo.jpeg"}" alt="Logo" /></div>
-                <div class="company-header">
-                  <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
-                  <div class="company-address">
-                    <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
-                    Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
+              <div class="page-content">
+                <div class="header-section">
+                  <h1>${documentTitle}</h1>
+                  <div class="cn-id-top">${generatedInvoice?.creditNoteId || order?.creditNoteId || "NEW"}</div>
+                </div>
+
+                <div class="top-grid">
+                  <div class="seller-info">
+                    <div class="seller-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
+                    <div>${previewData?.seller?.address || "N/A"}</div>
+                    <div>GST : ${previewData?.seller?.gstin || "N/A"}</div>
+                  </div>
+                  <div class="info-box">
+                    <div class="net-amount-box">
+                      <span class="net-amount-label">Net Amount :</span>
+                      <span class="net-amount-val">₹${(previewData?.grandTotal || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                    </div>
+                    <div class="info-row">
+                      <span class="info-label">Return Status :</span>
+                      <span class="info-val"><span class="status-badge">Returned</span></span>
+                    </div>
+                    <div class="info-row">
+                      <span class="info-label">Return Invoice Date :</span>
+                      <span class="info-val">${new Date(previewData?.invoiceDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}</span>
+                    </div>
+                    <div class="info-row">
+                      <span class="info-label">Invoice No :</span>
+                      <span class="info-val">${order?.originalInvoiceId || "-"}</span>
+                    </div>
+                    <div class="info-row">
+                      <span class="info-label">Invoice Date :</span>
+                      <span class="info-val">${order?.originalInvoiceDate ? new Date(order.originalInvoiceDate).toLocaleDateString("en-IN") : "-"}</span>
+                    </div>
+                    <div class="info-row">
+                      <span class="info-label">Place of Supply :</span>
+                      <span class="info-val">${previewData?.customer?.state || "Tamil Nadu"}(${previewData?.customer?.stateCode || "33"})</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div class="section-title">🧾 ${isCN ? 'CREDIT NOTE' : 'TAX INVOICE'} - HSN SUMMARY</div>
+                <div class="bill-to">
+                  <div class="bill-to-title">Bill To</div>
+                  <div><strong>${previewData?.customer?.name || "N/A"}</strong></div>
+                  <div>${previewData?.customer?.address || "N/A"}</div>
+                  <div>GST : ${previewData?.customer?.gstin || "N/A"}</div>
+                  <div>Contact No : ${previewData?.customer?.whatsapp || previewData?.customer?.phone || "N/A"}</div>
+                </div>
 
-              <div style="text-align: center; margin-bottom: 20px; font-size: 11px;">
-                <strong>${idLabel}: ${isCN ? (generatedInvoice?.creditNoteId || order?.creditNoteId) : (generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING")}</strong> | Date: ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
-              </div>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>HSN Code</th>
-                    <th style="text-align: right;">Taxable Value</th>
-                    <th style="text-align: right;">CGST (Amt)</th>
-                    <th style="text-align: right;">SGST (Amt)</th>
-                    <th style="text-align: right;">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                   ${(() => {
-                    const hsnMap = {};
-                    (previewData?.items || []).forEach(item => {
-                      const hsn = item.hsn || "N/A";
-                      if (!hsnMap[hsn]) {
-                        hsnMap[hsn] = { taxable: 0, cgst: 0, sgst: 0, total: 0 };
-                      }
-                      const totalInclusive = item.total || 0;
-                      const gstRate = (item.gst || 0);
-                      const taxable = totalInclusive / (1 + (gstRate / 100));
-                      const cgstAmt = (taxable * (item.cgst || 0)) / 100;
-                      const sgstAmt = (taxable * (item.sgst || 0)) / 100;
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width: 30px;">#</th>
+                      <th style="text-align: left;">ITEM</th>
+                      <th>BRAND</th>
+                      <th>HSN</th>
+                      <th>REASON</th>
+                      <th>BASE PRICE</th>
+                      <th>NET PRICE</th>
+                      <th>MRP</th>
+                      <th>QTY</th>
+                      <th>UOM</th>
+                      <th>CGST</th>
+                      <th>SGST</th>
+                      <th>TOTAL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${(previewData?.items || []).map((item, idx) => {
+                      const qty = Number(item.qty || 0);
+                      const price = Number(item.sellingPrice || 0);
+                      const gstRate = Number(item.gst || 0);
+                      const discount = Number(item.discountPercent || 0);
                       
-                      hsnMap[hsn].taxable += taxable;
-                      hsnMap[hsn].cgst += cgstAmt;
-                      hsnMap[hsn].sgst += sgstAmt;
-                      hsnMap[hsn].total += totalInclusive;
-                    });
-                    return Object.entries(hsnMap).map(([hsn, data]) => `
-                      <tr>
-                        <td>${hsn}</td>
-                        <td style="text-align: right;">₹${data.taxable.toFixed(2)}</td>
-                        <td style="text-align: right;">₹${data.cgst.toFixed(2)}</td>
-                        <td style="text-align: right;">₹${data.sgst.toFixed(2)}</td>
-                        <td style="text-align: right;">₹${data.total.toFixed(2)}</td>
-                      </tr>
-                    `).join("");
-                  })()}
-                </tbody>
-              </table>
+                      const netPrice = price * (1 - discount/100);
+                      const basePrice = netPrice / (1 + gstRate/100);
+                      const itemTotal = netPrice * qty * (1 + gstRate/100);
+                      
+                      return `
+                        <tr>
+                          <td style="text-align: center;">${idx + 1}</td>
+                          <td style="font-weight: bold;">${item.name}</td>
+                          <td style="text-align: center;">${item.brand || "-"}</td>
+                          <td style="text-align: center;">${item.hsn || "-"}</td>
+                          <td style="text-align: center;">${order?.reasonForReturn || "Good"}</td>
+                          <td style="text-align: right;">${basePrice.toFixed(2)}</td>
+                          <td style="text-align: right;">${netPrice.toFixed(2)}</td>
+                          <td style="text-align: right;">${(item.mrp || price).toFixed(2)}</td>
+                          <td style="text-align: center;">${qty}</td>
+                          <td style="text-align: center;">${item.unit || "Pcs"}</td>
+                          <td style="text-align: center;">${(gstRate/2).toFixed(2)}%</td>
+                          <td style="text-align: center;">${(gstRate/2).toFixed(2)}%</td>
+                          <td style="text-align: right; font-weight: bold;">${(item.total || itemTotal).toFixed(2)}</td>
+                        </tr>
+                      `;
+                    }).join("")}
+                    <tr style="font-weight: 900; background: #f9fafb;">
+                      <td colspan="8" style="text-align: left;">Total</td>
+                      <td style="text-align: center;">${previewData?.items?.reduce((sum, i) => sum + Number(i.qty || 0), 0)}</td>
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                      <td style="text-align: right;">₹${(previewData?.grandTotal || 0).toFixed(2)}</td>
+                    </tr>
+                  </tbody>
+                </table>
 
-              <div class="total-section">
-                <div style="font-size: 10px;">Taxable Subtotal: <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
-                <div style="font-size: 10px;">Total GST: <strong>₹${(previewData?.totalTax?.total || 0).toFixed(2)}</strong></div>
-                <div class="grand-total">${isCN ? 'TOTAL CREDIT' : 'TOTAL AMOUNT'}: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
+                <div class="totals-section">
+                  <table class="totals-table">
+                    <tr>
+                      <td class="label">TOTAL AMOUNT :</td>
+                      <td class="val">₹${(previewData?.subtotal || 0).toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                      <td class="label">TOTAL DISCOUNT :</td>
+                      <td class="val">(-)₹${(previewData?.commonDiscount || 0).toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                      <td class="label">CGST :</td>
+                      <td class="val">₹${(tax.cgst || 0).toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                      <td class="label">SGST :</td>
+                      <td class="val">₹${(tax.sgst || 0).toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                      <td class="label">IGST :</td>
+                      <td class="val">₹${(tax.igst || 0).toFixed(2)}</td>
+                    </tr>
+                    <tr class="grand-total-row">
+                      <td class="label" style="font-size: 12px; color: #000;">TOTAL AMOUNT (Inc Tax) :</td>
+                      <td class="val" style="font-size: 14px; color: #000;">₹${(previewData?.grandTotal || 0).toFixed(2)}</td>
+                    </tr>
+                  </table>
+                </div>
+
+                <div class="footer-grid">
+                  <div class="bank-details">
+                    <strong>Bank Details</strong><br/>
+                    Bank Name : ${previewData?.seller?.bankName || "FEDERAL BANK"}<br/>
+                    Account No.: ${previewData?.seller?.accountNo || "20110200006271"}<br/>
+                    Branch Name: ${previewData?.seller?.bankBranch || "KOVILPATTI"}<br/>
+                    IFSC Code : ${previewData?.seller?.ifsc || "FDRL0002011"}
+                  </div>
+                  <div style="flex: 1; padding-left: 20px;">
+                    <div class="bill-to-title">Declaration</div>
+                    <div class="declaration">We declare that this invoice shows the actual price of the goods described and that particulars are true and correct</div>
+                  </div>
+                </div>
+
+                <div class="cn-footer">
+                   <div>
+                    <strong>Total Outstanding : ₹${(() => {
+                        const cust = previewData?.customer?.customerId || previewData?.customer || {};
+                        const bal = (cust.debit !== undefined && cust.credit !== undefined) 
+                          ? (Number(cust.debit || 0) - Number(cust.credit || 0))
+                          : (cust.closingBalance || previewData?.closingBalance || 0);
+                        return Number(bal).toLocaleString(undefined, {minimumFractionDigits: 2});
+                      })()}</strong><br/>
+                     <span style="font-size: 9px;">As Of - ${new Date().toLocaleDateString("en-IN")}</span>
+                   </div>
+                   <div class="signature-box">
+                     <div style="font-weight: 900;">For ${previewData?.seller?.name || "PEARL AGENCY"}</div>
+                     <div class="signature-line">Authorized Signature</div>
+                   </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 20px; font-size: 9px; color: #666; text-transform: uppercase; border-top: 1px dashed #ccc; padding-top: 5px;">
+                  ${copyTitle} | Generated on ${new Date().toLocaleString("en-IN")}
+                </div>
               </div>
-
-              <div class="copy-label">${copyTitle} - PAGE 2</div>
-              <div class="footer">Document generated as per GST regulations | Generated on ${new Date().toLocaleString("en-IN")}</div>
             </div>
-          </div>
+          `;
+        } else {
+          // --- EXISTING INVOICE LAYOUT ---
+          html += `
+            <div class="page">
+              <div class="page-content">
+                <div class="quick-info">
+                  <span>INV: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</span>
+                </div>
+                <div class="top-header">
+                  <div class="logo-box"><img src="${previewData?.seller?.logo || "/logo.jpeg"}" alt="Logo" /></div>
+                  <div class="company-header">
+                    <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
+                    <div class="company-address">
+                      <strong>${previewData?.seller?.address || "N/A"}</strong><br/>
+                      Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
+                    </div>
+                  </div>
+                  ${previewData?.seller?.upiId ? `
+                  <div class="upi-qr-box">
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=70x70&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" alt="UPI QR" />
+                    <div class="upi-qr-label">Scan to Pay</div>
+                  </div>` : ''}
+                </div>
+
+                <div class="section-title">📋 ${documentTitle} DETAILS</div>
+
+                <div class="order-header">
+                  <div class="order-header-col">
+                    <strong>Invoice No:</strong> ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}<br/>
+                    <strong>Invoice Date:</strong> ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
+                  </div>
+                  <div class="order-header-col" style="text-align: right;">
+                    <strong>Customer:</strong> ${previewData?.customer?.name || "CASH CUSTOMER"}<br/>
+                    <strong>Contact:</strong> ${previewData?.customer?.whatsapp || previewData?.customer?.phone || previewData?.customer?.customerId?.whatsapp || "-"}<br/>
+                    <strong>Delivery:</strong> ${previewData?.deliveryMan?.name || previewData?.deliveryMan || order?.deliveryMan?.name || "-"}
+                  </div>
+                </div>
+
+                <div class="sender-buyer">
+                  <div class="sender-buyer-col">
+                    <strong>BUYER (BILL TO)</strong>
+                    ${previewData?.customer?.name}<br/>
+                    ${previewData?.customer?.address || "N/A"}<br/>
+                    Mobile: ${previewData?.customer?.whatsapp || "-"}<br/>
+                    GSTIN: ${previewData?.customer?.gstin || "N/A"}<br/>
+                  </div>
+                </div>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width: 5%; text-align: center;">#</th>
+                      <th style="width: 40%;">Product Name</th>
+                      <th>HSN</th>
+                      <th style="text-align: right;">Qty</th>
+                      <th style="text-align: right;">Rate</th>
+                      <th style="text-align: right;">Disc %</th>
+                      <th style="text-align: right;">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${(previewData?.items || []).filter(item => item.qty > 0).map((item, idx) => `
+                      <tr>
+                        <td style="text-align: center;">${idx + 1}</td>
+                        <td>${item.name}</td>
+                        <td>${item.hsn || "-"}</td>
+                        <td style="text-align: right;">${item.qty} ${item.unit || ""}</td>
+                        <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
+                        <td style="text-align: right;">${item.discountPercent || 0}%</td>
+                        <td style="text-align: right;">₹${(item.qty * (item.sellingPrice || 0)).toFixed(2)}</td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+
+                <div class="total-section" style="display: flex; gap: 10px;">
+                  <div style="flex: 1; text-align: left;">
+                    <div style="background: #f8fafc; padding: 10px; font-size: 11px; border-left: 4px solid #000; border-radius: 4px;">
+                      <div><strong>Closing Balance:</strong> ₹${(() => {
+                        const cust = previewData?.customer?.customerId || previewData?.customer || {};
+                        const bal = (cust.debit !== undefined && cust.credit !== undefined) 
+                          ? (Number(cust.debit || 0) - Number(cust.credit || 0))
+                          : (cust.closingBalance || previewData?.closingBalance || 0);
+                        return Number(bal).toFixed(2);
+                      })()}</div>
+                    </div>
+                  </div>
+                  <div style="flex: 1; text-align: right;">
+                    <div>Subtotal: <strong>₹${(previewData?.subtotal || 0).toFixed(2)}</strong></div>
+                    ${tax.igst > 0 ? `<div>IGST: <strong>₹${tax.igst.toFixed(2)}</strong></div>` : `
+                    <div>CGST: <strong>₹${tax.cgst.toFixed(2)}</strong></div>
+                    <div>SGST: <strong>₹${tax.sgst.toFixed(2)}</strong></div>`}
+                    <div class="grand-total">GRAND TOTAL: ₹${(previewData?.grandTotal || 0).toFixed(2)}</div>
+                  </div>
+                </div>
+                
+                <div class="copy-label">${copyTitle}</div>
+              </div>
+            </div>
+
+            <!-- PAGE 2: HSN SUMMARY -->
+            <div class="page">
+              <div class="page-content">
+                <div class="section-title">🧾 HSN SUMMARY</div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>HSN</th>
+                      <th style="text-align: right;">Taxable Value</th>
+                      <th style="text-align: right;">CGST</th>
+                      <th style="text-align: right;">SGST</th>
+                      <th style="text-align: right;">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${(() => {
+                      const hsnMap = {};
+                      (previewData?.items || []).forEach(item => {
+                        const hsn = item.hsn || "N/A";
+                        if (!hsnMap[hsn]) hsnMap[hsn] = { taxable: 0, cgst: 0, sgst: 0, total: 0 };
+                        const total = item.total || 0;
+                        const taxable = total / (1 + (item.gst / 100));
+                        hsnMap[hsn].taxable += taxable;
+                        hsnMap[hsn].cgst += (taxable * (item.gst/2)) / 100;
+                        hsnMap[hsn].sgst += (taxable * (item.gst/2)) / 100;
+                        hsnMap[hsn].total += total;
+                      });
+                      return Object.entries(hsnMap).map(([hsn, data]) => `
+                        <tr>
+                          <td>${hsn}</td>
+                          <td style="text-align: right;">₹${data.taxable.toFixed(2)}</td>
+                          <td style="text-align: right;">₹${data.cgst.toFixed(2)}</td>
+                          <td style="text-align: right;">₹${data.sgst.toFixed(2)}</td>
+                          <td style="text-align: right;">₹${data.total.toFixed(2)}</td>
+                        </tr>
+                      `).join("");
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           `;
         }
     });

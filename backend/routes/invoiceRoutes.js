@@ -1094,7 +1094,7 @@ router.get("", async (req, res) => {
 
     // 4. Search (Customer or Number)
     if (search) {
-      const searchOR = [
+      query.$or = [
         { invoiceNumber: { $regex: search, $options: "i" } },
         { "customer.name": { $regex: search, $options: "i" } },
         { "customer.whatsapp": { $regex: search, $options: "i" } },
