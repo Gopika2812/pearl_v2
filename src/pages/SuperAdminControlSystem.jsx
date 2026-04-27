@@ -198,7 +198,7 @@ export default function SuperAdminControlSystem() {
       
       // 2. Actions
       const newActionPerms = {};
-      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export"].forEach(a => newActionPerms[a] = true);
+      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems"].forEach(a => newActionPerms[a] = true);
       setActionPermissions(newActionPerms);
       
       // 3. Field Visibility
@@ -219,7 +219,7 @@ export default function SuperAdminControlSystem() {
       setUserPermissions([]);
       
       const newActionPerms = {};
-      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export"].forEach(a => newActionPerms[a] = false);
+      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems"].forEach(a => newActionPerms[a] = false);
       setActionPermissions(newActionPerms);
       
       const newFieldPerms = {};
@@ -404,6 +404,11 @@ export default function SuperAdminControlSystem() {
     vehicleNumber: "Vehicle Number",
     tokenId: "Token ID",
     assignedTo: "Assigned To",
+    action_wb_add: "WB: Add Item",
+    action_wb_price: "WB: Edit Price",
+    action_wb_qty: "WB: Edit Qty",
+    action_wb_discount: "WB: Edit Disc",
+    action_wb_delete: "WB: Delete Item",
   };
 
   return (
@@ -563,6 +568,7 @@ export default function SuperAdminControlSystem() {
                         { id: "action_ewb", name: "E-Way Bill (SI)", icon: <FaTruck /> },
                         { id: "action_cancel", name: "Cancel (SI)", icon: <FaTrash /> },
                         { id: "action_return", name: "Sales Return", icon: <FaUndo /> },
+                        { id: "editInvoiceItems", name: "Edit Workbench Items", icon: <FaEdit /> },
                         { id: "create_shortcuts", name: "Shortcuts", icon: <FaLink /> }
                       ].map(action => (
                         <div

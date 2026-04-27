@@ -314,7 +314,10 @@ const BranchLockedPrices = () => {
     try {
       const resp = await fetch(`${API_BASE}/customer-locked-prices/bulk-delete`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
         body: JSON.stringify({ ids: selectedIds })
       });
       const data = await resp.json();
@@ -351,7 +354,10 @@ const BranchLockedPrices = () => {
     try {
       const resp = await fetch(`${API_BASE}/customer-locked-prices`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
         body: JSON.stringify({
           branchId: currentBranch._id,
           customerId: selectedCustomer._id,
@@ -384,7 +390,10 @@ const BranchLockedPrices = () => {
     try {
       // Assuming a delete route exists or using the POST with lockedPrice: 0 logic if needed
       // But we should ideally have a DELETE route. For now, let's assume we can delete.
-      const resp = await fetch(`${API_BASE}/customer-locked-prices/${id}`, { method: "DELETE" });
+      const resp = await fetch(`${API_BASE}/customer-locked-prices/${id}`, { 
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
       if (resp.ok) {
         toast.success("Locked price removed");
         fetchLockedPrices();
@@ -424,7 +433,10 @@ const BranchLockedPrices = () => {
     try {
       const res = await fetch(`${API_BASE}/customer-locked-prices/${editingId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
+        },
         body: JSON.stringify({
           customerId: editCustomer._id,
           productId: editProduct._id,
@@ -459,6 +471,7 @@ const BranchLockedPrices = () => {
     try {
       const res = await fetch(`${API_BASE}/customer-locked-prices/bulk-upload`, {
         method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         body: formData,
       });
 
@@ -728,7 +741,16 @@ const BranchLockedPrices = () => {
                           </div>
                         </th>
                       )}
-                      {isFieldAllowed("action") && <th className="px-6 py-5 text-center">Actions</th>}
+                      <th 
+                        className="px-6 py-5 text-left cursor-pointer hover:bg-slate-100 transition-colors group"
+                        onClick={() => handleSort("updatedAt")}
+                      >
+                         <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Last Updated By</span>
+                            {sortField === "updatedAt" && (sortOrder === 1 ? <FaChevronDown className="rotate-180" /> : <FaChevronDown />)}
+                         </div>
+                      </th>
+                      {(isFieldAllowed("action_edit") || isFieldAllowed("action_delete")) && <th className="px-6 py-5 text-center">Actions</th>}
                     </tr>
 
                     {/* NEW ROW INLINE */}
@@ -880,14 +902,14 @@ const BranchLockedPrices = () => {
                    <tbody className="divide-y divide-slate-50">
                     {loading ? (
                       <tr>
-                        <td colSpan="8" className="px-6 py-20 text-center">
+                        <td colSpan="9" className="px-6 py-20 text-center">
                           <FaSync className="animate-spin text-[#319bab] mx-auto mb-2" size={32} />
                           <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Optimizing Data Stream...</p>
                         </td>
                       </tr>
                     ) : lockedPrices.length === 0 ? (
                       <tr>
-                        <td colSpan="8" className="px-6 py-20 text-center">
+                        <td colSpan="9" className="px-6 py-20 text-center">
                           <div className="opacity-20 flex flex-col items-center">
                              <FaSearch size={48} className="mb-3 text-slate-300" />
                              <p className="text-sm font-black uppercase text-slate-400 tracking-tighter">No Locked Records Found</p>
@@ -1045,7 +1067,7 @@ const BranchLockedPrices = () => {
                                     <div className="bg-orange-50 text-orange-700 font-black px-3 py-1.5 rounded-lg border border-orange-100 inline-block text-sm shadow-sm">
                                       ₹{lp.lockedPrice?.toFixed(2)}
                                     </div>
-                                    <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-1.5 rounded">Linked to Cost</span>
+                                    <span className={`text-[8px] font-black ${lp.lockedPrice < purchasingPrice ? 'text-red-600 bg-red-50 animate-pulse' : 'text-emerald-600 bg-emerald-50'} uppercase tracking-widest px-1.5 rounded`}>{lp.lockedPrice < purchasingPrice ? "Below Cost!" : "Linked to Cost"}</span>
                                   </div>
                                 )}
                               </td>
@@ -1055,7 +1077,15 @@ const BranchLockedPrices = () => {
                                 {mp.toFixed(1)}%
                               </td>
                             )}
-                            {isFieldAllowed("action") && (
+                            <td className="px-6 py-5 text-left">
+                                <div className="flex flex-col">
+                                   <span className="text-[10px] font-black text-slate-700 uppercase">{lp.updatedBy || "System"}</span>
+                                   <span className="text-[8px] font-bold text-slate-400">
+                                      {lp.updatedAt ? new Date(lp.updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : "Initial Setup"}
+                                   </span>
+                                </div>
+                             </td>
+                            {(isFieldAllowed("action_edit") || isFieldAllowed("action_delete")) && (
                               <td className="px-6 py-5 text-center">
                                 {isEditing ? (
                                   <div className="flex items-center justify-center gap-2">
@@ -1077,20 +1107,24 @@ const BranchLockedPrices = () => {
                                   </div>
                                 ) : (
                                   <div className="flex items-center justify-center gap-2">
-                                    <button 
-                                      onClick={() => startInlineEdit(lp)}
-                                      className="text-blue-400 hover:text-blue-600 p-2 transition-all hover:bg-blue-50 rounded-lg"
-                                      title="Edit Price"
-                                    >
-                                      <FaEdit size={14} />
-                                    </button>
-                                    <button 
-                                      onClick={() => handleDelete(lp._id)}
-                                      className="text-slate-300 hover:text-red-500 p-2 transition-all hover:bg-red-50 rounded-lg"
-                                      title="Delete Record"
-                                    >
-                                      <FaTrash size={14} />
-                                    </button>
+                                    {isFieldAllowed("action_edit") && (
+                                      <button 
+                                        onClick={() => startInlineEdit(lp)}
+                                        className="text-blue-400 hover:text-blue-600 p-2 transition-all hover:bg-blue-50 rounded-lg"
+                                        title="Edit Price"
+                                      >
+                                        <FaEdit size={14} />
+                                      </button>
+                                    )}
+                                    {isFieldAllowed("action_delete") && (
+                                      <button 
+                                        onClick={() => handleDelete(lp._id)}
+                                        className="text-slate-300 hover:text-red-500 p-2 transition-all hover:bg-red-50 rounded-lg"
+                                        title="Delete Record"
+                                      >
+                                        <FaTrash size={14} />
+                                      </button>
+                                    )}
                                   </div>
                                 )}
                               </td>

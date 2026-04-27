@@ -18,6 +18,12 @@ import { useInventory } from "../context/InventoryContext";
 const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false }) => {
   const { currentBranch, user } = useBranch();
   const { products } = useInventory();
+  const isSuperAdmin = user?.role?.toUpperCase() === "SUPER_ADMIN";
+  const canAdd = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_add"] !== false;
+  const canEditPrice = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_price"] !== false;
+  const canEditQty = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_qty"] !== false;
+  const canEditDiscount = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_discount"] !== false;
+  const canDelete = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_delete"] !== false;
   const [activeTab, setActiveTab] = useState("edit");
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -1247,8 +1253,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                         }}
                         onFocus={() => setShowItemDropdown(true)}
                         onBlur={() => setTimeout(() => setShowItemDropdown(false), 200)}
-                        placeholder="Select or search product..."
-                        className="w-full p-2.5 border-2 border-green-100 rounded-lg bg-white focus:ring-2 focus:ring-green-500 outline-none font-bold text-gray-800 transition-all placeholder:text-gray-300"
+                        placeholder={canAdd ? "Select or search product..." : "Add Restricted"}
+                        className={`w-full p-2.5 border-2 border-green-100 rounded-lg outline-none font-bold text-gray-800 transition-all placeholder:text-gray-300 ${!canAdd ? "bg-gray-50 cursor-not-allowed opacity-60" : "bg-white focus:ring-2 focus:ring-green-500"}`}
+                        disabled={!canAdd}
                       />
                       {showItemDropdown && (
                         <div className="absolute top-full left-0 right-0 bg-white border shadow-2xl z-[60] max-h-60 overflow-auto rounded-b-xl border-t-0 animate-in slide-in-from-top-1 duration-200">
@@ -1294,7 +1301,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                         onChange={(e) => setNewItem({ ...newItem, qty: e.target.value })}
                         onKeyDown={(e) => e.key === 'Enter' && confirmAddItem()}
                         placeholder="0"
-                        className="w-full p-2.5 border-2 border-green-100 rounded-lg bg-white focus:ring-2 focus:ring-green-500 outline-none font-black text-center text-green-700 transition-all"
+                        className={`w-full p-2.5 border-2 border-green-100 rounded-lg outline-none font-black text-center text-green-700 transition-all ${!canAdd ? "bg-gray-50 cursor-not-allowed opacity-60" : "bg-white focus:ring-2 focus:ring-green-500"}`}
+                        disabled={!canAdd}
                       />
                     </div>
 
@@ -1307,10 +1315,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                           type="number"
                           value={newItem.sellingPrice}
                           onChange={(e) => setNewItem({ ...newItem, sellingPrice: e.target.value })}
-                          className={`w-full p-2.5 pl-6 border-2 border-green-100 rounded-lg focus:ring-2 focus:ring-green-500 outline-none font-black text-blue-700 transition-all text-xs ${!(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN")
-                            ? "bg-gray-50 cursor-not-allowed"
+                          className={`w-full p-2.5 pl-6 border-2 border-green-100 rounded-lg focus:ring-2 focus:ring-green-500 outline-none font-black text-blue-700 transition-all text-xs ${!canAdd || !canEditPrice
+                            ? "bg-gray-50 cursor-not-allowed opacity-60"
                             : "bg-white cursor-text focus:border-green-600"
                             }`}
+                          disabled={!canAdd || !canEditPrice}
                         />
                       </div>
                     </div>
@@ -1324,8 +1333,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                         max="100"
                         value={newItem.discountPercent}
                         onChange={(e) => setNewItem({ ...newItem, discountPercent: e.target.value })}
-                        className="w-full p-2.5 border-2 border-orange-100 rounded-lg bg-white focus:ring-2 focus:ring-orange-500 outline-none font-black text-center text-orange-600 transition-all text-xs"
+                        className={`w-full p-2.5 border-2 border-orange-100 rounded-lg outline-none font-black text-center text-orange-600 transition-all text-xs ${(!canAdd || !canEditDiscount) ? "bg-gray-50 cursor-not-allowed opacity-60" : "bg-white focus:ring-2 focus:ring-orange-500"}`}
                         placeholder="0"
+                        disabled={!canAdd || !canEditDiscount}
                       />
                     </div>
 
@@ -1333,7 +1343,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                     <div className="md:col-span-2">
                       <button
                         onClick={confirmAddItem}
-                        disabled={!newItem.productId}
+                        disabled={!newItem.productId || !canAdd}
                         className="w-full bg-green-600 text-white p-3 rounded-lg hover:bg-green-700 transition-all font-black uppercase text-xs shadow-lg shadow-green-200 flex items-center justify-center gap-2 disabled:opacity-50"
                       >
                         <FaPlus /> Add
@@ -1404,7 +1414,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                             min="0"
                             value={item.confirmedQty}
                             onChange={(e) => handleQtyChange(idx, parseFloat(e.target.value) || 0)}
-                            className="w-24 p-2 border rounded text-right font-bold bg-white focus:ring-2 focus:ring-blue-400"
+                            className={`w-24 p-2 border rounded text-right font-bold transition-all ${!canEditQty ? "bg-gray-50 cursor-not-allowed opacity-60" : "bg-white focus:ring-2 focus:ring-blue-400"}`}
+                            disabled={!canEditQty}
                           />
                         </td>
                         <td className="p-3 text-right font-bold text-red-600">
@@ -1419,7 +1430,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                               step="0.1"
                               value={item.discountPercent || 0}
                               onChange={(e) => handleDiscountChange(idx, parseFloat(e.target.value) || 0)}
-                              className="w-14 p-1.5 border-2 border-orange-200 rounded text-center font-black text-orange-600 focus:ring-2 focus:ring-orange-400 outline-none text-sm bg-orange-50"
+                              className={`w-14 p-1.5 border-2 border-orange-200 rounded text-center font-black text-orange-600 outline-none text-sm transition-all ${!canEditDiscount ? "bg-gray-50 cursor-not-allowed opacity-60" : "bg-orange-50 focus:ring-2 focus:ring-orange-400"}`}
+                              disabled={!canEditDiscount}
                             />
                             <span className="text-xs font-bold text-orange-500">%</span>
                           </div>
@@ -1428,7 +1440,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                           -₹{(item.discountAmount || 0).toFixed(2)}
                         </td>
                         <td className="p-3 text-right">
-                          {(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN") ? (
+                          {canEditPrice ? (
                             <div className="relative">
                               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">₹</span>
                               <input
@@ -1449,13 +1461,15 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                           ₹{(item.total || 0).toFixed(2)}
                         </td>
                         <td className="p-3 text-center">
-                          <button
-                            onClick={() => handleDeleteProduct(idx)}
-                            className="p-2 text-red-500 hover:bg-red-50 rounded-full transition"
-                            title="Remove from invoice"
-                          >
-                            <FaTrash />
-                          </button>
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDeleteProduct(idx)}
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-full transition"
+                              title="Remove from invoice"
+                            >
+                              <FaTrash />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1530,8 +1544,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                             value={commonDiscount || ""}
                             onChange={(e) => setCommonDiscount(e.target.value === "" ? "" : parseFloat(e.target.value))}
                             placeholder="0"
-                            className="w-28 p-1.5 bg-slate-700 border border-orange-500/50 rounded-lg text-right font-black text-orange-300 outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                            className={`w-28 p-1.5 bg-slate-700 border border-orange-500/50 rounded-lg text-right font-black text-orange-300 outline-none focus:ring-2 focus:ring-orange-500 text-sm ${!canEditDiscount ? "opacity-50 cursor-not-allowed" : ""}`}
                             min="0"
+                            disabled={!canEditDiscount}
                           />
                         </div>
                       </div>
@@ -1545,8 +1560,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                             value={transportCharge || ""}
                             onChange={(e) => setTransportCharge(e.target.value === "" ? "" : parseFloat(e.target.value))}
                             placeholder="0"
-                            className="w-28 p-1.5 bg-slate-700 border border-purple-500/50 rounded-lg text-right font-black text-purple-300 outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                            className={`w-28 p-1.5 bg-slate-700 border border-purple-500/50 rounded-lg text-right font-black text-purple-300 outline-none focus:ring-2 focus:ring-purple-500 text-sm ${!canEditPrice ? "opacity-50 cursor-not-allowed" : ""}`}
                             min="0"
+                            disabled={!canEditPrice}
                           />
                           <div className="flex flex-col gap-0.5 ml-2">
                             <span className="text-[8px] text-gray-500 uppercase font-black">GST %</span>
@@ -1554,7 +1570,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                               type="number"
                               value={transportGstPercent}
                               onChange={(e) => setTransportGstPercent(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                              className="w-12 p-1 bg-slate-800 border-b border-slate-600 text-center text-[10px] text-purple-200 focus:outline-none"
+                              className={`w-12 p-1 bg-slate-800 border-b border-slate-600 text-center text-[10px] text-purple-200 focus:outline-none ${!canEditPrice ? "opacity-50 cursor-not-allowed" : ""}`}
+                              disabled={!canEditPrice}
                             />
                           </div>
                         </div>

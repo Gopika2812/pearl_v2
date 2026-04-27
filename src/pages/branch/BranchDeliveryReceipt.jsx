@@ -41,7 +41,7 @@ const BranchDeliveryReceipt = () => {
   const fetchCustomers = async () => {
     if (!currentBranch?._id) return;
     try {
-      const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${currentBranch._id}&limit=1000`);
+      const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${currentBranch._id}&limit=10000&mini=true`);
       const data = await res.json();
       if (data.success) {
         setCustomers(data.data.map(c => ({ _id: c._id, name: c.name })));

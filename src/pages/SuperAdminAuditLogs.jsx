@@ -15,6 +15,7 @@ const ACTION_META = {
   CANCEL_SO:        { label: "Cancel SO",         color: "text-red-700 bg-red-100 border-red-200" },
   INVOICE_SO:       { label: "Invoice SO",        color: "text-indigo-700 bg-indigo-100 border-indigo-200" },
   RE_INVOICE_SO:    { label: "Re-Invoice SO",     color: "text-cyan-700 bg-cyan-100 border-cyan-200" },
+  BACK_ORDER_EDIT:  { label: "Back Order Edit",   color: "text-orange-700 bg-orange-100 border-orange-200" },
   REQUEST_REEDIT:   { label: "Request Re-Edit",   color: "text-amber-700 bg-amber-100 border-amber-200" },
   APPROVE_REEDIT:   { label: "Approve Re-Edit",   color: "text-emerald-700 bg-emerald-100 border-emerald-200" },
   CANCEL_BILL:      { label: "Cancel Bill",       color: "text-rose-700 bg-rose-100 border-rose-200" },
@@ -423,13 +424,32 @@ const SuperAdminAuditLogs = () => {
 
                         {/* Details */}
                         <td className="px-5 py-4 max-w-sm">
-                          <button
-                            onClick={() => handleLogClick(log)}
-                            className="text-sm text-left text-gray-600 hover:text-primary hover:underline transition-colors decoration-primary/30 underline-offset-4"
-                            title="Click to view this record"
-                          >
-                            {log.description}
-                          </button>
+                          <div className="flex flex-col">
+                            <button
+                              onClick={() => handleLogClick(log)}
+                              className="text-sm text-left text-gray-600 hover:text-primary hover:underline transition-colors decoration-primary/30 underline-offset-4 font-medium"
+                              title="Click to view this record"
+                            >
+                              {log.description.includes(" Changes: ") ? log.description.split(" Changes: ")[0] : log.description}
+                            </button>
+                            
+                            {log.description.includes(" Changes: ") && (
+                              <div className="mt-3 bg-orange-50/50 p-3 rounded-xl border border-orange-100/50 shadow-sm">
+                                <div className="text-[9px] font-black text-orange-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></div>
+                                  MODIFICATION RECORDS
+                                </div>
+                                <div className="grid grid-cols-1 gap-1.5">
+                                  {log.description.split(" Changes: ")[1].split(" | ").map((change, idx) => (
+                                    <div key={idx} className="flex items-start gap-2 text-[10px] text-gray-700 bg-white/60 p-1.5 rounded-md border border-orange-50/50">
+                                      <span className="text-orange-400 font-bold mt-0.5">•</span>
+                                      <span className="font-bold leading-tight">{change}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                           {log.changes && (log.changes.before || log.changes.after) && (
                             <>
                               <div className="flex items-center gap-2">
