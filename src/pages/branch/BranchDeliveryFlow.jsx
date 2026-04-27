@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { FaHistory, FaSearch, FaSync, FaTruck, FaCheckCircle, FaUser, FaCommentDots, FaMapMarkerAlt, FaChevronDown, FaBoxOpen, FaClipboardCheck, FaUndo } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import FilterableSelect from "../../components/FilterableSelect";
 import { getInvoiceHTML } from "../../utils/invoiceUtils";
+import ScrollToggleButton from "../../components/ScrollToggleButton";
 
 const BranchDeliveryFlow = () => {
   const { currentBranch, user } = useBranch();
@@ -53,6 +54,14 @@ const BranchDeliveryFlow = () => {
       setCompletingAnim(prev => { const n = { ...prev }; delete n[invoiceId]; return n; });
       handleMarkStatus(invoiceId, 'COMPLETED');
     }, 1600);
+  };
+
+  // Check if all 3 notes are filled for an invoice
+  const areNotesFilled = (inv) => {
+    const sc = localComments[`${inv._id}_storageManComment`] ?? inv.storageManComment;
+    const cc = localComments[`${inv._id}_stockCheckerComment`] ?? inv.stockCheckerComment;
+    const dc = localComments[`${inv._id}_deliveryPersonComment`] ?? inv.deliveryPersonComment;
+    return !!(sc && sc.trim()) && !!(cc && cc.trim()) && !!(dc && dc.trim());
   };
 
   const fetchBranchUsers = async () => {
@@ -127,9 +136,48 @@ const BranchDeliveryFlow = () => {
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
+  const debounceTimers = useRef({});
+  const [localComments, setLocalComments] = useState({}); // { `${invoiceId}_${field}`: value }
+
   const handleUpdateField = async (invoiceId, field, value) => {
-    // Show a small indicator that we are saving
-    const updateToast = toast.info(`Saving ${field}...`, { autoClose: 1000 });
+    // For comment fields, debounce to avoid spamming API on every keystroke
+    const isComment = field.toLowerCase().includes('comment');
+
+    if (isComment) {
+      // Update local state immediately for responsive typing
+      const key = `${invoiceId}_${field}`;
+      setLocalComments(prev => ({ ...prev, [key]: value }));
+
+      // Clear previous debounce timer
+      if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
+
+      // Set new debounce timer (save after 800ms of no typing)
+      debounceTimers.current[key] = setTimeout(async () => {
+        try {
+          const res = await fetchWithAuth(`${API_BASE}/invoices/${invoiceId}/delivery-flow`, {
+            method: "PATCH",
+            body: JSON.stringify({ 
+              [field]: value, 
+              updatedBy: user?.username || "System",
+              updatedById: user?._id || user?.id || null
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            toast.success(`Note saved`, { autoClose: 1500, toastId: key });
+            setInvoices(prev => prev.map(inv => inv._id === invoiceId ? data.data : inv));
+            setLocalComments(prev => { const n = { ...prev }; delete n[key]; return n; });
+          } else {
+            toast.error(data.message || "Failed to save note");
+          }
+        } catch (err) {
+          toast.error("Failed to save note");
+        }
+      }, 800);
+      return;
+    }
+
+    // For non-comment fields (dropdowns), save immediately
     try {
       const res = await fetchWithAuth(`${API_BASE}/invoices/${invoiceId}/delivery-flow`, {
         method: "PATCH",
@@ -226,10 +274,20 @@ const BranchDeliveryFlow = () => {
 
 
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  // Check if invoice is 2+ days old (not today or yesterday)
+  const isOldRecord = (inv) => {
+    const invDate = new Date(inv.createdAt || inv.invoiceDate);
+    invDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.floor((today - invDate) / (1000 * 60 * 60 * 24));
+    return diffDays >= 2;
+  };
 
   const isFieldLocked = (inv, personField, commentField) => {
-    // Locked only if completed
-    return inv.deliveryStatus === "COMPLETED";
+    // Locked if completed OR if record is 2+ days old
+    return inv.deliveryStatus === "COMPLETED" || isOldRecord(inv);
   };
 
   const handleViewInvoice = async (invoice) => {
@@ -272,7 +330,8 @@ const BranchDeliveryFlow = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
+    <div className="relative min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
+      <ScrollToggleButton />
       {/* Pick Animation Keyframes */}
       <style>{`
         @keyframes pickSpin {
@@ -439,7 +498,7 @@ const BranchDeliveryFlow = () => {
                   </tr>
                 ) : (
                   invoices.map((inv, idx) => (
-                    <tr key={inv._id} className={`hover:bg-slate-50/50 transition-colors ${inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/10' : ''}`}>
+                    <tr key={inv._id} className={`transition-colors ${isOldRecord(inv) ? 'opacity-50 bg-slate-100/50 pointer-events-none' : inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/10 hover:bg-slate-50/50' : 'hover:bg-slate-50/50'}`}>
                       <td className="px-6 py-4 text-center">
                         <span className="text-xs font-black text-slate-400">{(currentPage - 1) * 50 + idx + 1}</span>
                       </td>
@@ -479,7 +538,7 @@ const BranchDeliveryFlow = () => {
                           />
                           <input 
                             type="text"
-                            value={inv.storageManComment || ""}
+                            value={localComments[`${inv._id}_storageManComment`] ?? inv.storageManComment ?? ""}
                             onChange={(e) => handleUpdateField(inv._id, 'storageManComment', e.target.value)}
                             placeholder="Add note..."
                             disabled={isFieldLocked(inv, 'storageMan', 'storageManComment')}
@@ -501,7 +560,7 @@ const BranchDeliveryFlow = () => {
                           />
                           <input 
                             type="text"
-                            value={inv.stockCheckerComment || ""}
+                            value={localComments[`${inv._id}_stockCheckerComment`] ?? inv.stockCheckerComment ?? ""}
                             onChange={(e) => handleUpdateField(inv._id, 'stockCheckerComment', e.target.value)}
                             placeholder="Add note..."
                             disabled={isFieldLocked(inv, 'stockChecker', 'stockCheckerComment')}
@@ -527,7 +586,7 @@ const BranchDeliveryFlow = () => {
                           />
                           <input 
                             type="text"
-                            value={inv.deliveryPersonComment || ""}
+                            value={localComments[`${inv._id}_deliveryPersonComment`] ?? inv.deliveryPersonComment ?? ""}
                             onChange={(e) => handleUpdateField(inv._id, 'deliveryPersonComment', e.target.value)}
                             placeholder="Add note..."
                             disabled={isFieldLocked(inv, 'deliveryPerson', 'deliveryPersonComment')}
@@ -564,7 +623,7 @@ const BranchDeliveryFlow = () => {
                             )}
                             {/* Payment checkboxes */}
                             <div className="flex flex-wrap gap-1">
-                              {['CASH', 'CHEQUE', 'OLD_PAYMENT', 'SPOT_PAYMENT', 'SIGNATURE'].map(opt => (
+                              {['CHEQUE', 'OLD_PAYMENT', 'SPOT_CASH', 'SPOT_UPI', 'CASH_UPI', 'SIGNATURE'].map(opt => (
                                 <label key={opt} className="flex items-center gap-1 px-1.5 py-1 bg-slate-50 border border-slate-100 rounded-md cursor-pointer hover:bg-indigo-50 hover:border-indigo-100 transition-all">
                                   <input
                                     type="checkbox"
@@ -576,7 +635,7 @@ const BranchDeliveryFlow = () => {
                                       setRowPayments({ ...rowPayments, [inv._id]: next });
                                     }}
                                   />
-                                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">{opt.replace('_', ' ')}</span>
+                                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">{{ CHEQUE: 'Cheque', OLD_PAYMENT: 'Old Payment', SPOT_CASH: 'Spot Payment Cash', SPOT_UPI: 'Spot Payment UPI', CASH_UPI: 'Cash & UPI', SIGNATURE: 'Signature' }[opt]}</span>
                                 </label>
                               ))}
                             </div>
@@ -614,8 +673,8 @@ const BranchDeliveryFlow = () => {
                                 </button>
                               )}
                               <button
-                                onClick={() => !completingAnim[inv._id] && (rowPayments[inv._id] || []).length > 0 && handleCompleteWithAnimation(inv._id)}
-                                disabled={(rowPayments[inv._id] || []).length === 0 || !!completingAnim[inv._id]}
+                                onClick={() => !completingAnim[inv._id] && (rowPayments[inv._id] || []).length > 0 && areNotesFilled(inv) && handleCompleteWithAnimation(inv._id)}
+                                disabled={(rowPayments[inv._id] || []).length === 0 || !areNotesFilled(inv) || !!completingAnim[inv._id]}
                                 className={`group flex-[2] flex items-center justify-center gap-1.5 py-2 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-md transition-all duration-500 ${
                                   completingAnim[inv._id] === 'done'
                                     ? 'bg-emerald-500 shadow-emerald-200 scale-105'
@@ -665,7 +724,7 @@ const BranchDeliveryFlow = () => {
               </div>
             ) : (
               invoices.map((inv, idx) => (
-                <div key={inv._id} className={`p-4 ${inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/20' : 'bg-white'}`}>
+                <div key={inv._id} className={`p-4 ${isOldRecord(inv) ? 'opacity-50 bg-slate-100 pointer-events-none' : inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/20' : 'bg-white'}`}>
                   {/* Card Header: SI & Status */}
                   <div className="flex items-start justify-between mb-4">
                     <div>
@@ -715,7 +774,7 @@ const BranchDeliveryFlow = () => {
                         <div className="flex-1">
                           <input 
                             type="text"
-                            value={inv.storageManComment || ""}
+                            value={localComments[`${inv._id}_storageManComment`] ?? inv.storageManComment ?? ""}
                             onChange={(e) => handleUpdateField(inv._id, 'storageManComment', e.target.value)}
                             placeholder="Note..."
                             className="w-full text-[10px] font-bold text-slate-600 bg-white border border-slate-100 rounded-xl px-3 py-2 shadow-sm outline-none"
@@ -740,7 +799,7 @@ const BranchDeliveryFlow = () => {
                         <div className="flex-1">
                           <input 
                             type="text"
-                            value={inv.stockCheckerComment || ""}
+                            value={localComments[`${inv._id}_stockCheckerComment`] ?? inv.stockCheckerComment ?? ""}
                             onChange={(e) => handleUpdateField(inv._id, 'stockCheckerComment', e.target.value)}
                             placeholder="Note..."
                             className="w-full text-[10px] font-bold text-slate-600 bg-white border border-slate-100 rounded-xl px-3 py-2 shadow-sm outline-none"
@@ -769,7 +828,7 @@ const BranchDeliveryFlow = () => {
                         <div className="flex-1">
                           <input 
                             type="text"
-                            value={inv.deliveryPersonComment || ""}
+                            value={localComments[`${inv._id}_deliveryPersonComment`] ?? inv.deliveryPersonComment ?? ""}
                             onChange={(e) => handleUpdateField(inv._id, 'deliveryPersonComment', e.target.value)}
                             placeholder="Note..."
                             className="w-full text-[10px] font-bold text-slate-600 bg-white border border-slate-100 rounded-xl px-3 py-2 shadow-sm outline-none"
@@ -784,7 +843,7 @@ const BranchDeliveryFlow = () => {
                     {inv.deliveryStatus !== 'COMPLETED' ? (
                       <div className="space-y-3">
                         <div className="flex flex-wrap gap-2">
-                           {['CASH', 'CHEQUE', 'OLD_PAYMENT', 'SPOT_PAYMENT', 'SIGNATURE'].map(opt => (
+                           {['CHEQUE', 'OLD_PAYMENT', 'SPOT_CASH', 'SPOT_UPI', 'CASH_UPI', 'SIGNATURE'].map(opt => (
                               <label key={opt} className="flex items-center gap-1 px-2 py-1.5 bg-slate-50 border border-slate-100 rounded-lg cursor-pointer">
                                 <input 
                                   type="checkbox"
@@ -796,7 +855,7 @@ const BranchDeliveryFlow = () => {
                                     setRowPayments({ ...rowPayments, [inv._id]: next });
                                   }}
                                 />
-                                <span className="text-[9px] font-black text-slate-500 tracking-tighter uppercase">{opt.replace('_', ' ')}</span>
+                                <span className="text-[9px] font-black text-slate-500 tracking-tighter uppercase">{{ CHEQUE: 'Cheque', OLD_PAYMENT: 'Old Payment', SPOT_CASH: 'Spot Payment Cash', SPOT_UPI: 'Spot Payment UPI', CASH_UPI: 'Cash & UPI', SIGNATURE: 'Signature' }[opt]}</span>
                               </label>
                            ))}
                         </div>
@@ -835,8 +894,8 @@ const BranchDeliveryFlow = () => {
                                </button>
                              )}
                             <button 
-                               onClick={() => !completingAnim[inv._id] && (rowPayments[inv._id] || []).length > 0 && handleCompleteWithAnimation(inv._id)} 
-                               disabled={(rowPayments[inv._id] || []).length === 0 || !!completingAnim[inv._id]}
+                               onClick={() => !completingAnim[inv._id] && (rowPayments[inv._id] || []).length > 0 && areNotesFilled(inv) && handleCompleteWithAnimation(inv._id)} 
+                               disabled={(rowPayments[inv._id] || []).length === 0 || !areNotesFilled(inv) || !!completingAnim[inv._id]}
                                className={`group flex-[2] flex items-center justify-center gap-2 py-3.5 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all duration-500 ${
                                  completingAnim[inv._id] === 'done'
                                    ? 'bg-emerald-500 shadow-emerald-200 scale-[1.05]'

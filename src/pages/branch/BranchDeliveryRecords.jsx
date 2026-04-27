@@ -5,6 +5,7 @@ import {
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import ScrollToggleButton from "../../components/ScrollToggleButton";
 
 const BranchDeliveryRecords = () => {
   const { currentBranch, user } = useBranch();
@@ -92,7 +93,8 @@ const BranchDeliveryRecords = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] p-4 md:p-8 font-poppins">
+    <div className="relative min-h-screen bg-[#f8fafc] p-4 md:p-8 font-poppins">
+      <ScrollToggleButton />
       {/* HEADER SECTION */}
       <div className="mb-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

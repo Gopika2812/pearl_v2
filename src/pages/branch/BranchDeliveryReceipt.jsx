@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import FilterableSelect from "../../components/FilterableSelect";
+import ScrollToggleButton from "../../components/ScrollToggleButton";
 
 const BranchDeliveryReceipt = () => {
   const { currentBranch, user } = useBranch();
@@ -165,7 +166,8 @@ const BranchDeliveryReceipt = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-8 md:pl-24 pr-4 pb-12 font-poppins">
+    <div className="relative min-h-screen bg-[#f8fafc] pt-20 md:pt-8 md:pl-24 pr-4 pb-12 font-poppins">
+      <ScrollToggleButton />
       <div className="max-w-[1400px] mx-auto">
         {/* HEADER SECTION */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
