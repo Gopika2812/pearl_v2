@@ -1,9 +1,8 @@
 import mongoose from "mongoose";
-
 const creditNoteSchema = new mongoose.Schema(
   {
     creditNoteId: { type: String, required: true },
-    
+
     // Reference to original sales order
     originalSalesOrderId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -12,13 +11,13 @@ const creditNoteSchema = new mongoose.Schema(
     },
     originalInvoiceId: String,
     originalInvoiceDate: Date,
-    
+
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Branch",
       required: true,
     },
-    
+
     // Customer Info
     customer: {
       customerId: {
@@ -37,7 +36,7 @@ const creditNoteSchema = new mongoose.Schema(
       gstin: String,
       closingBalance: Number,
     },
-    
+
     // Seller Details
     seller: {
       name: String,
@@ -48,7 +47,7 @@ const creditNoteSchema = new mongoose.Schema(
       phone: String,
       stateCode: String,
     },
-    
+
     // Returned Items
     items: [
       {
@@ -72,13 +71,13 @@ const creditNoteSchema = new mongoose.Schema(
         total: Number,
       },
     ],
-    
+
     // Financial Details
     subtotal: Number,
     totalDiscount: Number,
     totalTax: Number,
     grandTotal: Number,
-    
+
     // Sales Personnel (same as original order)
     salesOwner: String,
     salesOwnerId: mongoose.Schema.Types.ObjectId,
@@ -87,13 +86,13 @@ const creditNoteSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "DeliveryMan",
     },
-    
+
     // Financial Year
     financialYear: String,
-    
+
     // Reason for return
     reasonForReturn: String,
-    
+
     // Status
     status: {
       type: String,
@@ -117,7 +116,7 @@ const creditNoteSchema = new mongoose.Schema(
     qrCodeUrl: String,
     signedInvoice: String,
     signedQrCode: String,
-    
+
     ewayBillNo: String,
     ewayBillDate: String,
     ewayBillValidUntil: String,
@@ -143,10 +142,10 @@ creditNoteSchema.index({ branchId: 1, creditNoteId: 1 }, { unique: true });
 
 
 // POST-DELETE HOOK: Reverse the credit note impact
-creditNoteSchema.post("findByIdAndDelete", async function(doc) {
+creditNoteSchema.post("findByIdAndDelete", async function (doc) {
   try {
     if (!doc) return;
-    
+
     // Lazy load models
     const Commission = mongoose.model("Commission");
     const Customer = mongoose.model("Customer");
@@ -154,16 +153,16 @@ creditNoteSchema.post("findByIdAndDelete", async function(doc) {
     const SalesMan = mongoose.model("SalesMan");
     const DeliveryMan = mongoose.model("DeliveryMan");
     const Product = mongoose.model("Product");
-    
+
     console.log(`🔄 Reversing credit note: ${doc.creditNoteId}`);
-    
+
     // 1️⃣ RESTORE PRODUCTS TO INVENTORY (undo the return)
     for (const item of doc.items) {
       await Product.findByIdAndUpdate(item.productId, {
         $inc: { totalQty: -item.qty } // Remove from stock since we're cancelling the return
       });
     }
-    
+
     // 2️⃣ RESTORE CUSTOMER BALANCE (undo the balance reduction)
     const customerId = doc.customer?.customerId;
     if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
@@ -177,7 +176,7 @@ creditNoteSchema.post("findByIdAndDelete", async function(doc) {
         console.log(`✅ Customer balance restored: ₹${restoredBalance}`);
       }
     }
-    
+
     // 3️⃣ RESTORE COMMISSIONS (undo the commission reduction)
     const commission = await Commission.findOne({ salesOrderId: doc.originalSalesOrderId });
     if (commission) {
@@ -200,7 +199,7 @@ creditNoteSchema.post("findByIdAndDelete", async function(doc) {
         console.log(`✅ Delivery Man commission restored`);
       }
     }
-    
+
   } catch (error) {
     console.error("❌ Error in credit note delete hook:", error.message);
   }
