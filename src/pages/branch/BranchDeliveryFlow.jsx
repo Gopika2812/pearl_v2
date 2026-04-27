@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaHistory, FaSearch, FaSync, FaTruck, FaCheckCircle, FaUser, FaCommentDots, FaMapMarkerAlt, FaChevronDown } from "react-icons/fa";
+import { FaHistory, FaSearch, FaSync, FaTruck, FaCheckCircle, FaUser, FaCommentDots, FaMapMarkerAlt, FaChevronDown, FaBoxOpen, FaClipboardCheck, FaUndo } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -23,6 +23,37 @@ const BranchDeliveryFlow = () => {
   const [filterVoucherPrefix, setFilterVoucherPrefix] = useState("");
   const [sortField, setSortField] = useState("invoiceNumber");
   const [sortOrder, setSortOrder] = useState("desc");
+  const [pickingAnim, setPickingAnim] = useState({}); // { invoiceId: 'packing' | 'done' }
+
+  const handlePickWithAnimation = (invoiceId) => {
+    // Phase 1: Packing (box spins)
+    setPickingAnim(prev => ({ ...prev, [invoiceId]: 'packing' }));
+    // Phase 2: Done (green checkmark)
+    setTimeout(() => {
+      setPickingAnim(prev => ({ ...prev, [invoiceId]: 'done' }));
+    }, 800);
+    // Phase 3: Fire API & cleanup
+    setTimeout(() => {
+      setPickingAnim(prev => { const n = { ...prev }; delete n[invoiceId]; return n; });
+      handleMarkStatus(invoiceId, 'PICKED');
+    }, 1600);
+  };
+
+  const [completingAnim, setCompletingAnim] = useState({}); // { invoiceId: 'processing' | 'done' }
+
+  const handleCompleteWithAnimation = (invoiceId) => {
+    // Phase 1: Processing (clipboard spins)
+    setCompletingAnim(prev => ({ ...prev, [invoiceId]: 'processing' }));
+    // Phase 2: Done (green checkmark)
+    setTimeout(() => {
+      setCompletingAnim(prev => ({ ...prev, [invoiceId]: 'done' }));
+    }, 800);
+    // Phase 3: Fire API & cleanup
+    setTimeout(() => {
+      setCompletingAnim(prev => { const n = { ...prev }; delete n[invoiceId]; return n; });
+      handleMarkStatus(invoiceId, 'COMPLETED');
+    }, 1600);
+  };
 
   const fetchBranchUsers = async () => {
     if (!currentBranch?._id) return;
@@ -242,6 +273,36 @@ const BranchDeliveryFlow = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
+      {/* Pick Animation Keyframes */}
+      <style>{`
+        @keyframes pickSpin {
+          0% { transform: rotateY(0deg) scale(1); }
+          50% { transform: rotateY(180deg) scale(1.3); }
+          100% { transform: rotateY(360deg) scale(1); }
+        }
+        @keyframes pickPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+        @keyframes pickBounceIn {
+          0% { transform: scale(0); opacity: 0; }
+          50% { transform: scale(1.2); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes pickTextSlide {
+          0% { transform: translateX(10px); opacity: 0; }
+          100% { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes completeSpin {
+          0% { transform: rotateY(0deg) scale(1); }
+          50% { transform: rotateY(180deg) scale(1.3); }
+          100% { transform: rotateY(360deg) scale(1); }
+        }
+        @keyframes completePulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.6; }
+        }
+      `}</style>
       <div className="w-full mx-auto px-4 sm:px-8 py-4">
         {/* HEADER */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
@@ -475,27 +536,115 @@ const BranchDeliveryFlow = () => {
                         </div>
                       </td>
 
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex flex-col items-center gap-2">
-                          {inv.deliveryStatus === "COMPLETED" ? (
-                            <>
-                              <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-widest">Delivered</span>
-                              <span className="text-[8px] font-bold text-slate-400">{inv.deliveryPaymentType}</span>
-                              {isAdmin && (
-                                <button onClick={() => handleMarkStatus(inv._id, "PENDING")} className="text-[9px] font-bold text-indigo-500 underline">Revert</button>
-                              )}
-                            </>
-                          ) : (
-                            <div className="flex flex-col gap-2">
-                               {inv.deliveryStatus === "PENDING" && (
-                                 <button onClick={() => handleMarkStatus(inv._id, "PICKED")} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">Mark Picked</button>
-                               )}
-                               {inv.deliveryStatus === "PICKED" && (
-                                 <button onClick={() => handleMarkStatus(inv._id, "COMPLETED")} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">Complete</button>
-                               )}
+                      <td className="px-4 py-3">
+                        {inv.deliveryStatus === 'COMPLETED' ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <span className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
+                              <FaCheckCircle size={9} /> Completed
+                            </span>
+                            <span className="text-[8px] font-bold text-slate-400">{inv.deliveryPaymentType}</span>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleMarkStatus(inv._id, 'PENDING')}
+                                className="group flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-rose-400 hover:text-rose-600 border border-rose-100 hover:border-rose-300 transition-all"
+                              >
+                                <FaUndo className="transition-transform duration-300 group-hover:[transform:rotateY(180deg)]" />
+                                Revert
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-2 min-w-[200px]">
+                            {/* Status pill for PICKED */}
+                            {inv.deliveryStatus === 'PICKED' && (
+                              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-lg">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest">📦 Picked</span>
+                              </div>
+                            )}
+                            {/* Payment checkboxes */}
+                            <div className="flex flex-wrap gap-1">
+                              {['CASH', 'CHEQUE', 'OLD_PAYMENT', 'SPOT_PAYMENT', 'SIGNATURE'].map(opt => (
+                                <label key={opt} className="flex items-center gap-1 px-1.5 py-1 bg-slate-50 border border-slate-100 rounded-md cursor-pointer hover:bg-indigo-50 hover:border-indigo-100 transition-all">
+                                  <input
+                                    type="checkbox"
+                                    className="w-2.5 h-2.5 rounded accent-indigo-600"
+                                    checked={(rowPayments[inv._id] || []).includes(opt)}
+                                    onChange={(e) => {
+                                      const current = rowPayments[inv._id] || [];
+                                      const next = e.target.checked ? [...current, opt] : current.filter(x => x !== opt);
+                                      setRowPayments({ ...rowPayments, [inv._id]: next });
+                                    }}
+                                  />
+                                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">{opt.replace('_', ' ')}</span>
+                                </label>
+                              ))}
                             </div>
-                          )}
-                        </div>
+                            {/* Action buttons */}
+                            <div className="flex gap-1.5">
+                              {inv.deliveryStatus === 'PENDING' && (
+                                <button
+                                  onClick={() => !pickingAnim[inv._id] && handlePickWithAnimation(inv._id)}
+                                  disabled={!!pickingAnim[inv._id]}
+                                  className={`group flex-1 flex items-center justify-center gap-1.5 py-2 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-md transition-all duration-500 ${
+                                    pickingAnim[inv._id] === 'done'
+                                      ? 'bg-emerald-500 shadow-emerald-200 scale-105'
+                                      : pickingAnim[inv._id] === 'packing'
+                                        ? 'bg-amber-600 shadow-amber-300'
+                                        : 'bg-amber-500 shadow-amber-200 hover:bg-amber-600 hover:scale-105 active:scale-95'
+                                  }`}
+                                  style={{ perspective: '400px' }}
+                                >
+                                  {pickingAnim[inv._id] === 'done' ? (
+                                    <>
+                                      <FaCheckCircle style={{ animation: 'pickBounceIn 0.4s ease-out forwards' }} />
+                                      <span style={{ animation: 'pickTextSlide 0.3s ease-out 0.1s both' }}>Picked!</span>
+                                    </>
+                                  ) : pickingAnim[inv._id] === 'packing' ? (
+                                    <>
+                                      <FaBoxOpen style={{ animation: 'pickSpin 0.8s ease-in-out forwards' }} />
+                                      <span style={{ animation: 'pickPulse 0.5s ease-in-out infinite' }}>Packing...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FaBoxOpen className="transition-transform duration-500 group-hover:[transform:rotateY(360deg)] drop-shadow-sm" />
+                                      Mark Picked
+                                    </>
+                                  )}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => !completingAnim[inv._id] && (rowPayments[inv._id] || []).length > 0 && handleCompleteWithAnimation(inv._id)}
+                                disabled={(rowPayments[inv._id] || []).length === 0 || !!completingAnim[inv._id]}
+                                className={`group flex-[2] flex items-center justify-center gap-1.5 py-2 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-md transition-all duration-500 ${
+                                  completingAnim[inv._id] === 'done'
+                                    ? 'bg-emerald-500 shadow-emerald-200 scale-105'
+                                    : completingAnim[inv._id] === 'processing'
+                                      ? 'bg-indigo-700 shadow-indigo-300'
+                                      : 'bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700 hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100'
+                                }`}
+                                style={{ perspective: '400px' }}
+                              >
+                                {completingAnim[inv._id] === 'done' ? (
+                                  <>
+                                    <FaCheckCircle style={{ animation: 'pickBounceIn 0.4s ease-out forwards' }} />
+                                    <span style={{ animation: 'pickTextSlide 0.3s ease-out 0.1s both' }}>Completed!</span>
+                                  </>
+                                ) : completingAnim[inv._id] === 'processing' ? (
+                                  <>
+                                    <FaClipboardCheck style={{ animation: 'completeSpin 0.8s ease-in-out forwards' }} />
+                                    <span style={{ animation: 'completePulse 0.5s ease-in-out infinite' }}>Delivering...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <FaClipboardCheck className="transition-transform duration-500 group-hover:[transform:rotateY(360deg)] drop-shadow-sm" />
+                                    Mark Complete
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -652,17 +801,71 @@ const BranchDeliveryFlow = () => {
                            ))}
                         </div>
                         <div className="flex gap-2">
-                           {inv.deliveryStatus === 'PENDING' && (
-                             <button onClick={() => handleMarkStatus(inv._id, 'PICKED')} className="flex-1 py-3 bg-amber-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-100">Pick Up</button>
-                           )}
-                           <button 
-                             onClick={() => handleMarkStatus(inv._id, 'COMPLETED')} 
-                             disabled={(rowPayments[inv._id] || []).length === 0}
-                             className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 disabled:opacity-50"
-                           >
-                             Complete Delivery
-                           </button>
-                        </div>
+                             {inv.deliveryStatus === 'PENDING' && (
+                               <button
+                                 onClick={() => !pickingAnim[inv._id] && handlePickWithAnimation(inv._id)}
+                                 disabled={!!pickingAnim[inv._id]}
+                                 className={`group flex-1 flex items-center justify-center gap-2 py-3.5 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all duration-500 ${
+                                   pickingAnim[inv._id] === 'done'
+                                     ? 'bg-emerald-500 shadow-emerald-200 scale-[1.05]'
+                                     : pickingAnim[inv._id] === 'packing'
+                                       ? 'bg-amber-600 shadow-amber-300'
+                                       : 'bg-amber-500 shadow-amber-200 hover:bg-amber-600 hover:scale-[1.03] active:scale-95'
+                                 }`}
+                                 style={{ perspective: '600px' }}
+                               >
+                                 {pickingAnim[inv._id] === 'done' ? (
+                                   <>
+                                     <FaCheckCircle size={16} style={{ animation: 'pickBounceIn 0.4s ease-out forwards' }} />
+                                     <span style={{ animation: 'pickTextSlide 0.3s ease-out 0.1s both' }}>Picked!</span>
+                                   </>
+                                 ) : pickingAnim[inv._id] === 'packing' ? (
+                                   <>
+                                     <FaBoxOpen size={16} style={{ animation: 'pickSpin 0.8s ease-in-out forwards' }} />
+                                     <span style={{ animation: 'pickPulse 0.5s ease-in-out infinite' }}>Packing...</span>
+                                   </>
+                                 ) : (
+                                   <>
+                                     <span className="inline-block transition-transform duration-500 group-hover:[transform:rotateY(360deg)]">
+                                       <FaBoxOpen size={14} />
+                                     </span>
+                                     Mark Picked
+                                   </>
+                                 )}
+                               </button>
+                             )}
+                            <button 
+                               onClick={() => !completingAnim[inv._id] && (rowPayments[inv._id] || []).length > 0 && handleCompleteWithAnimation(inv._id)} 
+                               disabled={(rowPayments[inv._id] || []).length === 0 || !!completingAnim[inv._id]}
+                               className={`group flex-[2] flex items-center justify-center gap-2 py-3.5 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all duration-500 ${
+                                 completingAnim[inv._id] === 'done'
+                                   ? 'bg-emerald-500 shadow-emerald-200 scale-[1.05]'
+                                   : completingAnim[inv._id] === 'processing'
+                                     ? 'bg-indigo-700 shadow-indigo-300'
+                                     : 'bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700 hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:hover:scale-100'
+                               }`}
+                               style={{ perspective: '600px' }}
+                             >
+                               {completingAnim[inv._id] === 'done' ? (
+                                 <>
+                                   <FaCheckCircle size={16} style={{ animation: 'pickBounceIn 0.4s ease-out forwards' }} />
+                                   <span style={{ animation: 'pickTextSlide 0.3s ease-out 0.1s both' }}>Completed!</span>
+                                 </>
+                               ) : completingAnim[inv._id] === 'processing' ? (
+                                 <>
+                                   <FaClipboardCheck size={16} style={{ animation: 'completeSpin 0.8s ease-in-out forwards' }} />
+                                   <span style={{ animation: 'completePulse 0.5s ease-in-out infinite' }}>Delivering...</span>
+                                 </>
+                               ) : (
+                                 <>
+                                   <span className="inline-block transition-transform duration-500 group-hover:[transform:rotateY(360deg)]">
+                                     <FaClipboardCheck size={14} />
+                                   </span>
+                                   Mark Complete
+                                 </>
+                               )}
+                             </button>
+                         </div>
                       </div>
                     ) : (
                       <div className="flex items-center justify-between">
