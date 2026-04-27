@@ -204,13 +204,12 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                   <tbody>
                     ${(previewData?.items || []).map((item, idx) => {
                       const qty = Number(item.qty || 0);
-                      const price = Number(item.sellingPrice || 0);
+                      const rate = Number(item.sellingPrice || 0);
                       const gstRate = Number(item.gst || 0);
-                      const discount = Number(item.discountPercent || 0);
+                      const discountP = Number(item.discountPercent || 0);
                       
-                      const netPrice = price * (1 - discount/100);
-                      const basePrice = netPrice / (1 + gstRate/100);
-                      const itemTotal = netPrice * qty * (1 + gstRate/100);
+                      const netPrice = rate * (1 - discountP/100);
+                      const taxableTotal = netPrice * qty;
                       
                       return `
                         <tr>
@@ -219,14 +218,14 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                           <td style="text-align: center;">${item.brand || "-"}</td>
                           <td style="text-align: center;">${item.hsn || "-"}</td>
                           <td style="text-align: center;">${order?.reasonForReturn || "Good"}</td>
-                          <td style="text-align: right;">${basePrice.toFixed(2)}</td>
+                          <td style="text-align: right;">${rate.toFixed(2)}</td>
                           <td style="text-align: right;">${netPrice.toFixed(2)}</td>
-                          <td style="text-align: right;">${(item.mrp || price).toFixed(2)}</td>
+                          <td style="text-align: right;">${(item.mrp || rate).toFixed(2)}</td>
                           <td style="text-align: center;">${qty}</td>
                           <td style="text-align: center;">${item.unit || "Pcs"}</td>
                           <td style="text-align: center;">${(gstRate/2).toFixed(2)}%</td>
                           <td style="text-align: center;">${(gstRate/2).toFixed(2)}%</td>
-                          <td style="text-align: right; font-weight: bold;">${(item.total || itemTotal).toFixed(2)}</td>
+                          <td style="text-align: right; font-weight: bold;">${(item.total || (taxableTotal * (1 + gstRate/100))).toFixed(2)}</td>
                         </tr>
                       `;
                     }).join("")}
@@ -271,13 +270,15 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                 </div>
 
                 <div class="footer-grid">
+                  ${previewData?.seller?.bankName ? `
                   <div class="bank-details">
                     <strong>Bank Details</strong><br/>
-                    Bank Name : ${previewData?.seller?.bankName || "FEDERAL BANK"}<br/>
-                    Account No.: ${previewData?.seller?.accountNo || "20110200006271"}<br/>
-                    Branch Name: ${previewData?.seller?.bankBranch || "KOVILPATTI"}<br/>
-                    IFSC Code : ${previewData?.seller?.ifsc || "FDRL0002011"}
+                    Bank Name : ${previewData?.seller?.bankName}<br/>
+                    Account No.: ${previewData?.seller?.accountNo}<br/>
+                    Branch Name: ${previewData?.seller?.bankBranch}<br/>
+                    IFSC Code : ${previewData?.seller?.ifsc}
                   </div>
+                  ` : '<div style="flex: 1;"></div>'}
                   <div style="flex: 1; padding-left: 20px;">
                     <div class="bill-to-title">Declaration</div>
                     <div class="declaration">We declare that this invoice shows the actual price of the goods described and that particulars are true and correct</div>
