@@ -166,7 +166,7 @@ const BranchFollowUp = () => {
     };
 
     const openLedger = (customer) => {
-        navigate(`/branch/customer-ledger/${customer._id}`);
+        window.open(`/branch/customer-ledger/${customer._id}`, '_blank');
     };
 
 
@@ -208,53 +208,46 @@ const BranchFollowUp = () => {
 
     return (
         <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20 pb-10">
-
-            <div className="w-full max-w-full mx-auto px-4 sm:px-8 py-6">
+            <div className="w-full max-w-full mx-auto px-2 sm:px-4 py-4">
                 
-                {/* HEADER */}
-                <div className="bg-white p-10 rounded-[3.5rem] shadow-sm border border-gray-100 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all hover:shadow-2xl hover:shadow-indigo-500/10">
-                    <div className="flex items-center gap-8">
-                        <div className="w-24 h-24 bg-gradient-to-br from-indigo-700 to-indigo-900 rounded-[2.5rem] flex items-center justify-center shadow-[0_20px_40px_-15px_rgba(67,56,202,0.4)] transform hover:scale-105 transition-transform duration-500">
-                            <FaPhone className="text-white text-4xl" />
+                {/* HEADER & FILTERS */}
+                <div className="flex flex-col gap-4 mb-4">
+                    {/* Header Row */}
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-md">
+                                <FaPhone className="text-white text-lg" />
+                            </div>
+                            <div>
+                                <h1 className="text-2xl font-black text-gray-900 leading-none">Follow-Up Hub</h1>
+                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Recovery Dashboard</p>
+                            </div>
                         </div>
-                        <div>
-                            <h1 className="text-5xl font-black text-gray-900 tracking-tighter leading-tight">Follow-Up Hub</h1>
-                            <p className="text-[12px] text-indigo-600/60 uppercase font-black tracking-[0.4em] mt-2 flex items-center gap-2">
-                                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse"></span>
-                                Precision Recovery Dashboard
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <div className="bg-indigo-50/50 px-10 py-6 rounded-[2.5rem] border border-indigo-100 shadow-inner">
-                            <p className="text-4xl font-black text-indigo-900 tracking-tighter">
+                        <div className="bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-lg">
+                            <p className="text-lg font-black text-indigo-700">
                                 {loading ? "..." : `₹${customers.reduce((sum, c) => sum + Math.max(0, getBalance(c)), 0).toLocaleString()}`}
                             </p>
                         </div>
                     </div>
-                </div>
 
-                {/* FILTERS & SEARCH */}
-                <div className="bg-white/80 backdrop-blur-2xl p-6 rounded-[3.5rem] border border-white shadow-2xl shadow-gray-200/50 mb-10 flex flex-col xl:flex-row items-center gap-6">
-                    <div className="flex-1 w-full relative group">
-                        <div className="absolute left-8 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-600 transition-colors">
-                            <FaSearch size={22} />
+                    {/* Filters Row */}
+                    <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3 w-full">
+                        <div className="flex-1 relative">
+                            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                                <FaSearch size={14} />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Search by name, mobile, or ID..."
+                                className="w-full bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-9 pr-3 py-2 text-sm font-semibold text-gray-800 outline-none transition-all"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
                         </div>
-                        <input
-                            type="text"
-                            placeholder="Search by name, mobile, or ID..."
-                            className="w-full bg-gray-50/100 border-2 border-transparent focus:border-indigo-100 rounded-[2.5rem] px-20 py-7 focus:ring-12 focus:ring-indigo-500/5 outline-none text-lg font-black text-gray-800 transition-all placeholder:text-gray-400 shadow-inner"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
 
-                    <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto">
-                        {/* Group Filter */}
-                        <div className="relative flex-1 xl:flex-none min-w-[240px]">
+                        <div className="relative min-w-[150px]">
                             <select
-                                className="w-full appearance-none bg-gray-50 border-2 border-transparent focus:border-indigo-100 rounded-[2.5rem] pl-10 pr-14 py-7 text-xs font-black uppercase tracking-[0.2em] text-gray-700 outline-none cursor-pointer transition-all shadow-inner"
+                                className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
                                 value={groupFilter}
                                 onChange={(e) => setGroupFilter(e.target.value)}
                             >
@@ -263,13 +256,12 @@ const BranchFollowUp = () => {
                                     <option key={g._id} value={g._id}>{g.name}</option>
                                 ))}
                             </select>
-                            <FaFilter className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={14} />
+                            <FaFilter className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
                         </div>
 
-                        {/* Category Filter */}
-                        <div className="relative flex-1 xl:flex-none min-w-[240px]">
+                        <div className="relative min-w-[150px]">
                             <select
-                                className="w-full appearance-none bg-gray-50 border-2 border-transparent focus:border-indigo-100 rounded-[2.5rem] pl-10 pr-14 py-7 text-xs font-black uppercase tracking-[0.2em] text-gray-700 outline-none cursor-pointer transition-all shadow-inner"
+                                className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
                                 value={categoryFilter}
                                 onChange={(e) => setCategoryFilter(e.target.value)}
                             >
@@ -278,13 +270,12 @@ const BranchFollowUp = () => {
                                     <option key={cat._id} value={cat._id}>{cat.name}</option>
                                 ))}
                             </select>
-                            <FaTag className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={14} />
+                            <FaTag className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
                         </div>
 
-                        {/* Zone Filter */}
-                        <div className="relative flex-1 xl:flex-none min-w-[240px]">
+                        <div className="relative min-w-[150px]">
                             <select
-                                className="w-full appearance-none bg-gray-50 border-2 border-transparent focus:border-indigo-100 rounded-[2.5rem] pl-10 pr-14 py-7 text-xs font-black uppercase tracking-[0.2em] text-gray-700 outline-none cursor-pointer transition-all shadow-inner"
+                                className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
                                 value={zoneFilter}
                                 onChange={(e) => setZoneFilter(e.target.value)}
                             >
@@ -293,24 +284,23 @@ const BranchFollowUp = () => {
                                 <option value="medium_zone">Medium Zone</option>
                                 <option value="risk_zone">Risk Zone</option>
                             </select>
-                            <FaClock className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={14} />
+                            <FaClock className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
                         </div>
 
-                        {/* Manage Button (Super Admin) */}
                         {user?.role === "SUPER_ADMIN" && (
                             <button 
                                 onClick={() => setIsManageCategoriesOpen(true)}
-                                className="h-[84px] w-[84px] bg-white border-2 border-indigo-50 rounded-[2.5rem] flex items-center justify-center text-indigo-500 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-sm active:scale-95 group"
+                                className="w-9 h-9 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all shrink-0"
                                 title="Manage Master Data"
                             >
-                                <FaCog size={26} className="group-hover:rotate-90 transition-transform duration-700" />
+                                <FaCog size={16} />
                             </button>
                         )}
                     </div>
                 </div>
 
                 {/* MAIN TABLE */}
-                <div className="bg-white rounded-[4.5rem] shadow-[0_64px_128px_-32px_rgba(0,0,0,0.08)] border border-white overflow-hidden p-6 min-h-[800px] flex flex-col">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden min-h-[800px] flex flex-col">
                     {loading ? (
                         <div className="flex flex-col items-center justify-center h-[600px]">
                             <div className="relative w-28 h-28 mb-8">
@@ -322,181 +312,161 @@ const BranchFollowUp = () => {
                     ) : (
                         <>
                             <div className="overflow-x-auto flex-1">
-                                <table className="w-full border-separate border-spacing-0">
+                                <table className="w-full border-collapse">
                                     <thead>
-                                        <tr className="bg-gray-950 text-gray-400 uppercase text-sm font-black tracking-widest sticky top-0 z-10">
+                                        <tr className="bg-gray-100 text-gray-600 uppercase text-xs font-bold tracking-wider sticky top-0 z-10">
                                             {isFieldAllowed("name") && (
-                                                <th onClick={() => handleSort("name")} className="px-12 py-10 text-left rounded-tl-[4rem] cursor-pointer hover:bg-white/5 hover:text-white transition-all">
+                                                <th onClick={() => handleSort("name")} className="px-4 py-3 text-left border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
                                                     <div className="flex items-center">Name <SortIcon column="name" /></div>
                                                 </th>
                                             )}
                                             {isFieldAllowed("group") && (
-                                                <th onClick={() => handleSort("group")} className="px-6 py-10 text-left cursor-pointer hover:bg-white/5 hover:text-white transition-all">
+                                                <th onClick={() => handleSort("group")} className="px-4 py-3 text-left border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
                                                     <div className="flex items-center">Group <SortIcon column="group" /></div>
                                                 </th>
                                             )}
                                             {isFieldAllowed("category") && (
-                                                <th onClick={() => handleSort("category")} className="px-6 py-10 text-left cursor-pointer hover:bg-white/5 hover:text-white transition-all">
+                                                <th onClick={() => handleSort("category")} className="px-4 py-3 text-left border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
                                                     <div className="flex items-center">Category <SortIcon column="category" /></div>
                                                 </th>
                                             )}
                                             {isFieldAllowed("zone") && (
-                                                <th className="px-6 py-10 text-left">
+                                                <th className="px-4 py-3 text-left border-b border-gray-200">
                                                     <div className="flex items-center">Zone</div>
                                                 </th>
                                             )}
                                             {isFieldAllowed("balance") && (
-                                                <th onClick={() => handleSort("balance")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
+                                                <th onClick={() => handleSort("balance")} className="px-4 py-3 text-right border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
                                                     <div className="flex items-center justify-end">Balance <SortIcon column="balance" /></div>
                                                 </th>
                                             )}
                                             {isFieldAllowed("limit") && (
-                                                <th onClick={() => handleSort("limit")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
+                                                <th onClick={() => handleSort("limit")} className="px-4 py-3 text-right border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
                                                     <div className="flex items-center justify-end">Limit <SortIcon column="limit" /></div>
                                                 </th>
                                             )}
                                             {isFieldAllowed("days") && (
-                                                <th onClick={() => handleSort("days")} className="px-6 py-10 text-right cursor-pointer hover:bg-white/5 hover:text-white transition-all">
+                                                <th onClick={() => handleSort("days")} className="px-4 py-3 text-right border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
                                                     <div className="flex items-center justify-end">Days <SortIcon column="days" /></div>
                                                 </th>
                                             )}
                                             {isFieldAllowed("token") && (
-                                                <th className="px-6 py-10 text-center">
+                                                <th className="px-4 py-3 text-center border-b border-gray-200">
                                                     <div className="flex items-center justify-center">Token</div>
                                                 </th>
                                             )}
                                             {(isFieldAllowed("action_followup") || isFieldAllowed("action_log") || isFieldAllowed("action_ledger") || isFieldAllowed("action_edit")) && (
-                                                <th className="px-12 py-10 text-center rounded-tr-[4rem]">Actions</th>
+                                                <th className="px-4 py-3 text-center border-b border-gray-200">Actions</th>
                                             )}
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-50">
+                                    <tbody className="divide-y divide-gray-100">
                                         {paginatedCustomers.map((customer) => {
                                             const balance = getBalance(customer);
                                             const primaryGroup = customer.customerGroups?.[0]?.name || customer.customerGroup?.name || "None";
                                             const primaryCategory = customer.customerCategories?.[0]?.name || customer.customerCategory?.name || "Unassigned";
 
                                             return (
-                                                <tr key={customer._id} className="group hover:bg-indigo-50/50 transition-all duration-500">
+                                                <tr key={customer._id} className="hover:bg-gray-50 transition-colors">
                                                     {isFieldAllowed("name") && (
-                                                        <td className="px-12 py-8">
-                                                            <div className="flex items-center gap-6">
-                                                                <div className="w-16 h-16 bg-white border-2 border-gray-100 text-indigo-700 rounded-[1.8rem] flex items-center justify-center shrink-0 shadow-sm group-hover:shadow-indigo-500/10 transition-all group-hover:-rotate-3">
-                                                                    <FaUser size={20} />
-                                                                </div>
-                                                                <div>
-                                                                    <div className="text-gray-950 text-xl font-black tracking-tight leading-none mb-1.5">{customer.name}</div>
-                                                                    <div className="text-[12px] text-gray-400 font-black uppercase tracking-widest">{customer.whatsapp || "Inactive Contact"}</div>
-                                                                </div>
+                                                        <td className="px-4 py-3">
+                                                            <div className="flex flex-col">
+                                                                <div className="text-gray-900 text-sm font-semibold">{customer.name}</div>
+                                                                <div className="text-[11px] text-gray-500">{customer.whatsapp || "Inactive Contact"}</div>
                                                             </div>
                                                         </td>
                                                     )}
                                                     {isFieldAllowed("group") && (
-                                                        <td className="px-6 py-8">
-                                                            <span className="bg-indigo-50 text-indigo-700 px-6 py-3 rounded-[1.2rem] text-[12px] font-black uppercase tracking-[0.1em] border border-indigo-100/50 block w-fit whitespace-nowrap shadow-sm">
-                                                                {primaryGroup}
-                                                            </span>
+                                                        <td className="px-4 py-3 text-sm text-gray-700">
+                                                            {primaryGroup}
                                                         </td>
                                                     )}
                                                     {isFieldAllowed("category") && (
-                                                        <td className="px-6 py-8">
-                                                            <span className="bg-emerald-50 text-emerald-700 px-6 py-3 rounded-[1.2rem] text-[12px] font-black uppercase tracking-[0.1em] border border-emerald-100/50 block w-fit whitespace-nowrap shadow-sm">
-                                                                {primaryCategory}
-                                                            </span>
+                                                        <td className="px-4 py-3 text-sm text-gray-700">
+                                                            {primaryCategory}
                                                         </td>
                                                     )}
                                                     {isFieldAllowed("zone") && (
-                                                        <td className="px-6 py-8">
+                                                        <td className="px-4 py-3">
                                                             {customer.riskStatus === "risk_zone" ? (
-                                                                <span className="bg-rose-100 text-rose-700 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border border-rose-200 shadow-sm animate-pulse">
-                                                                    Risk Zone
-                                                                </span>
+                                                                <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold">Risk</span>
                                                             ) : customer.riskStatus === "medium_zone" ? (
-                                                                <span className="bg-amber-100 text-amber-700 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border border-amber-200 shadow-sm">
-                                                                    Medium Zone
-                                                                </span>
+                                                                <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-[10px] font-bold">Medium</span>
                                                             ) : (
-                                                                <span className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border border-emerald-200 shadow-sm opacity-60">
-                                                                    Safe Zone
-                                                                </span>
+                                                                <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold">Safe</span>
                                                             )}
                                                         </td>
                                                     )}
                                                     {isFieldAllowed("balance") && (
-                                                        <td className={`px-6 py-8 text-right font-black text-2xl tracking-tighter ${balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                                                        <td className={`px-4 py-3 text-right font-bold text-sm ${balance > 0 ? "text-red-600" : "text-green-600"}`}>
                                                             {customer.debit !== undefined ? (
                                                                 <>
-                                                                    <span className="text-[12px] font-black opacity-30 mr-2 align-middle">{balance > 0 ? "DR" : "CR"}</span>
+                                                                    <span className="text-[10px] mr-1">{balance > 0 ? "DR" : "CR"}</span>
                                                                     ₹{Math.abs(balance).toLocaleString()}
                                                                 </>
                                                             ) : (
-                                                                <span className="text-xs text-gray-300 animate-pulse font-normal tracking-normal italic uppercase">Calculating...</span>
+                                                                <span className="text-xs text-gray-400 italic">Calculating...</span>
                                                             )}
                                                         </td>
                                                     )}
                                                     {isFieldAllowed("limit") && (
-                                                        <td className="px-6 py-8 text-right text-gray-900 text-lg font-black tracking-tight">
+                                                        <td className="px-4 py-3 text-right text-gray-700 text-sm">
                                                             ₹{(customer.creditLimit || 200000).toLocaleString()}
                                                         </td>
                                                     )}
                                                     {isFieldAllowed("days") && (
-                                                        <td className="px-6 py-8 text-right">
-                                                            <div className="flex flex-col items-end">
-                                                                <span className="text-gray-900 text-lg font-black leading-none">{customer.creditLimitDays || 0}</span>
-                                                                <span className="text-[11px] text-gray-400 font-black uppercase tracking-widest mt-1.5">Days</span>
-                                                            </div>
+                                                        <td className="px-4 py-3 text-right text-sm text-gray-700">
+                                                            {customer.creditLimitDays || 0}
                                                         </td>
                                                     )}
                                                     {isFieldAllowed("token") && (
-                                                        <td className="px-6 py-8 text-center">
+                                                        <td className="px-4 py-3 text-center">
                                                             <button 
                                                                 onClick={() => openToken(customer)}
-                                                                className="w-[64px] h-[64px] bg-white border-2 border-indigo-50 text-indigo-500 rounded-2xl flex items-center justify-center hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-sm active:scale-95 group mx-auto"
+                                                                className="text-indigo-600 hover:text-indigo-800 transition-colors mx-auto"
                                                                 title="Token Manager"
                                                             >
-                                                                <FaTicketAlt size={22} className="group-hover:rotate-12 transition-transform" />
+                                                                <FaTicketAlt size={16} />
                                                             </button>
                                                         </td>
                                                     )}
                                                     {(isFieldAllowed("action_followup") || isFieldAllowed("action_log") || isFieldAllowed("action_ledger") || isFieldAllowed("action_edit")) && (
-                                                        <td className="px-12 py-8 text-center">
-                                                            <div className="flex items-center justify-center gap-3">
-                                                                <div className="flex flex-col gap-1.5 min-w-[130px]">
-                                                                    {isFieldAllowed("action_followup") && (
-                                                                        <button 
-                                                                            onClick={() => openFollowUp(customer)}
-                                                                            className="flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/10 active:scale-95 whitespace-nowrap"
-                                                                            title="Record New Follow-Up"
-                                                                        >
-                                                                            <FaPhone size={10} /> Follow Up
-                                                                        </button>
-                                                                    )}
-                                                                    {isFieldAllowed("action_log") && (
-                                                                        <button 
-                                                                            onClick={() => openHistory(customer)}
-                                                                            className="flex items-center justify-center gap-2 bg-gray-900 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-gray-900/10 active:scale-95 whitespace-nowrap"
-                                                                            title="View History Logs"
-                                                                        >
-                                                                            <FaHistory size={10} /> Log
-                                                                        </button>
-                                                                    )}
-                                                                </div>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                {isFieldAllowed("action_followup") && (
+                                                                    <button 
+                                                                        onClick={() => openFollowUp(customer)}
+                                                                        className="bg-indigo-600 text-white px-3 py-1.5 rounded text-[11px] font-bold hover:bg-indigo-700 transition-colors"
+                                                                        title="Record New Follow-Up"
+                                                                    >
+                                                                        Follow Up
+                                                                    </button>
+                                                                )}
+                                                                {isFieldAllowed("action_log") && (
+                                                                    <button 
+                                                                        onClick={() => openHistory(customer)}
+                                                                        className="bg-gray-800 text-white px-3 py-1.5 rounded text-[11px] font-bold hover:bg-black transition-colors"
+                                                                        title="View History Logs"
+                                                                    >
+                                                                        Log
+                                                                    </button>
+                                                                )}
                                                                 {isFieldAllowed("action_ledger") && (
                                                                     <button 
                                                                         onClick={() => openLedger(customer)}
-                                                                        className="flex items-center gap-3 bg-white text-indigo-600 border-2 border-indigo-50 px-7 py-5 rounded-2xl text-[12px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-sm active:scale-95 whitespace-nowrap"
+                                                                        className="bg-white text-indigo-600 border border-indigo-200 px-3 py-1.5 rounded text-[11px] font-bold hover:bg-indigo-50 transition-colors"
                                                                         title="View Full Ledger"
                                                                     >
-                                                                        <FaBook size={14} /> Ledger
+                                                                        Ledger
                                                                     </button>
                                                                 )}
                                                                 {isFieldAllowed("action_edit") && (
                                                                     <button 
                                                                         onClick={() => openEditCustomer(customer)}
-                                                                        className="w-[64px] h-[64px] flex items-center justify-center bg-gray-50 text-gray-400 border-2 border-gray-100 rounded-2xl hover:bg-amber-50 hover:text-amber-600 hover:border-amber-100 transition-all active:scale-95"
+                                                                        className="text-gray-500 hover:text-indigo-600 transition-colors p-1"
                                                                         title="Edit Profile"
                                                                     >
-                                                                        <FaEdit size={16} />
+                                                                        <FaEdit size={14} />
                                                                     </button>
                                                                 )}
                                                             </div>

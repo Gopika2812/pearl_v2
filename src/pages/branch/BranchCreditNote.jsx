@@ -299,9 +299,8 @@ export default function BranchCreditNote() {
 
                             <button 
                               onClick={() => { setEditCN(cn); setShowModal(true); }}
-                              disabled={cn.einvoiceStatus === "GENERATED"}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[10px] font-black transition-all shadow-sm ${cn.einvoiceStatus === "GENERATED" ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-600 hover:text-white'}`}
-                              title={cn.einvoiceStatus === "GENERATED" ? "Cannot edit after E-Invoice generation" : "Edit Credit Note"}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[10px] font-black transition-all shadow-sm bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-600 hover:text-white`}
+                              title="Edit Credit Note"
                             >
                               EDIT
                             </button>

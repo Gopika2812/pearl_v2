@@ -5,7 +5,7 @@ import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 const BranchFollowUpRecords = () => {
-    const { currentBranch, user } = useBranch();
+    const { currentBranch, user, customers } = useBranch();
     
     // Permission helper
     const isFieldAllowed = (fieldId) => {
@@ -106,8 +106,7 @@ const BranchFollowUpRecords = () => {
 
     return (
         <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20">
-
-            <div className="w-full max-w-full mx-auto px-4 sm:px-8 py-6">
+            <div className="w-full max-w-full mx-auto px-2 sm:px-4 py-4">
                 
                 {/* HEADER */}
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-6">
@@ -182,6 +181,11 @@ const BranchFollowUpRecords = () => {
                                     {isFieldAllowed("customer") && (
                                         <th onClick={() => handleSort("customer")} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer hover:text-indigo-600 transition-colors">
                                             Customer <SortIcon column="customer" />
+                                        </th>
+                                    )}
+                                    {isFieldAllowed("customer") && (
+                                        <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                            Category
                                         </th>
                                     )}
                                     {isFieldAllowed("followUpBy") && (
@@ -261,6 +265,16 @@ const BranchFollowUpRecords = () => {
                                                             <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight">{r.customerId?.whatsapp || "N/A"}</p>
                                                         </div>
                                                     </div>
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("customer") && (
+                                                <td className="px-6 py-5">
+                                                    <span className="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border border-emerald-100/50 block w-fit whitespace-nowrap shadow-sm">
+                                                        {(() => {
+                                                            const fullCustomer = customers?.find(c => c._id === r.customerId?._id) || r.customerId;
+                                                            return fullCustomer?.customerCategories?.[0]?.name || fullCustomer?.customerCategory?.name || "Unassigned";
+                                                        })()}
+                                                    </span>
                                                 </td>
                                             )}
                                             {isFieldAllowed("followUpBy") && (

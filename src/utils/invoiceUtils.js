@@ -94,7 +94,37 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
 
         @media print { 
           .page { margin: 0; padding: 10mm; } 
+          @page { size: ${isCNProf ? 'A5 portrait' : 'A4 portrait'}; margin: 0; }
         }
+
+        /* --- A5 OVERRIDES --- */
+        .page.a5-page { width: 148mm; min-height: 210mm; padding: 5mm; font-size: 9px; line-height: 1.2; }
+        .a5-page .header-section h1 { font-size: 16px; margin-bottom: 5px; }
+        .a5-page .cn-id-top { font-size: 12px; }
+        .a5-page .top-grid { margin-bottom: 8px; gap: 10px; }
+        .a5-page .seller-info { font-size: 9px; }
+        .a5-page .seller-name { font-size: 12px; }
+        .a5-page .info-box { padding: 5px; font-size: 8px; }
+        .a5-page .net-amount-label { font-size: 10px; }
+        .a5-page .net-amount-val { font-size: 14px; }
+        .a5-page .info-row { gap: 5px; margin-bottom: 2px; }
+        .a5-page .info-label { width: 80px; }
+        .a5-page .info-val { width: 100px; }
+        .a5-page .bill-to { padding: 5px; font-size: 9px; margin-bottom: 8px; }
+        .a5-page .bill-to-title { font-size: 10px; margin-bottom: 2px; }
+        .a5-page table { margin-bottom: 5px; }
+        .a5-page th { padding: 2px; font-size: 8px; }
+        .a5-page td { padding: 2px; font-size: 8px; }
+        .a5-page .totals-table { width: 220px; }
+        .a5-page .totals-table td { font-size: 9px; padding: 1px 0; }
+        .a5-page .grand-total-row .label { font-size: 10px !important; }
+        .a5-page .grand-total-row .val { font-size: 12px !important; }
+        .a5-page .footer-grid { margin-top: 10px; }
+        .a5-page .bank-details { padding: 5px; width: 180px; font-size: 8px; }
+        .a5-page .declaration { font-size: 8px; margin-top: 5px; }
+        .a5-page .signature-box { margin-top: 10px; }
+        .a5-page .signature-line { margin-top: 20px; width: 120px; font-size: 8px; }
+        .a5-page .cn-footer { font-size: 9px; display: flex; justify-content: space-between; align-items: flex-end; margin-top: 10px; }
 
         /* --- STANDARD LAYOUT STYLES --- */
         .quick-info { text-align: left; font-size: 10px; margin-bottom: 5px; }
@@ -134,7 +164,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
         if (isCNProf) {
           // --- NEW PROFESSIONAL CREDIT NOTE LAYOUT ---
           html += `
-            <div class="page">
+            <div class="page a5-page">
               <div class="page-content">
                 <div class="header-section">
                   <h1>${documentTitle}</h1>
@@ -294,10 +324,10 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                           : (cust.closingBalance || previewData?.closingBalance || 0);
                         return Number(bal).toLocaleString(undefined, {minimumFractionDigits: 2});
                       })()}</strong><br/>
-                     <span style="font-size: 9px;">As Of - ${new Date().toLocaleDateString("en-IN")}</span>
+                     <span style="font-size: 8px;">As Of - ${new Date().toLocaleDateString("en-IN")}</span>
                    </div>
                    <div class="signature-box">
-                     <div style="font-weight: 900;">For ${previewData?.seller?.name || "PEARL AGENCY"}</div>
+                     <div style="font-weight: 900; font-size: 9px;">For ${previewData?.seller?.name || "PEARL AGENCY"}</div>
                      <div class="signature-line">Authorized Signature</div>
                    </div>
                 </div>
