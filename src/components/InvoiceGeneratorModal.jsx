@@ -938,6 +938,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                       <div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
                       <div style="font-size: 11px;">SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>
                     `}
+                    ${previewData?.commonDiscount > 0 ? `<div style="font-size: 11px; color: #dc2626; font-weight: bold;">Discount: <strong>-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
+                    ${previewData?.transportCharge > 0 ? `<div style="font-size: 11px;">Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
                     <div class="grand-total" style="font-size: 16px;">GRAND TOTAL: ₹${(previewData?.grandTotal || 0).toFixed(2)}</div>
                   </div>
               </div>

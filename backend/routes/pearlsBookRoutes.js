@@ -507,6 +507,7 @@ async function generateInvoiceOrderPage(sale, copyTitle = "ORIGINAL INVOICE", is
                `<div class="summary-row"><span>CGST:</span><span>₹${(sale.totalTax?.cgst || 0).toFixed(2)}</span></div>
                 <div class="summary-row"><span>SGST:</span><span>₹${(sale.totalTax?.sgst || 0).toFixed(2)}</span></div>`
              }
+             ${(sale.commonDiscount || sale.invoiceCommonDiscount) > 0 ? `<div class="summary-row"><span>Discount:</span><span style="color: #dc2626; font-weight: bold;">-₹${((sale.commonDiscount || sale.invoiceCommonDiscount) || 0).toFixed(2)}</span></div>` : ''}
              <div class="summary-row"><span>Transport:</span><span>₹${(sale.transportCharge || 0).toFixed(2)}</span></div>
              <div class="summary-row total"><span>GRAND TOTAL:</span><span>₹${sale.grandTotal?.toFixed(2) || '0.00'}</span></div>
           </div>
@@ -948,6 +949,7 @@ async function generateEwayBillImage(sale) {
         <div class="summary">
           <div class="summary-row">Sub Total: <strong>₹${sale.subtotal.toFixed(2)}</strong></div>
           <div class="summary-row">Tax: <strong>₹${sale.totalTax.toFixed(2)}</strong></div>
+          ${(sale.commonDiscount || sale.invoiceCommonDiscount) > 0 ? `<div class="summary-row">Discount: <strong style="color: #dc2626;">-₹${((sale.commonDiscount || sale.invoiceCommonDiscount) || 0).toFixed(2)}</strong></div>` : ''}
           <div class="summary-row">Transport: <strong>₹${(sale.transportCharge || 0).toFixed(2)}</strong></div>
           <div class="summary-row" style="border-top: 2px solid #ddd; padding-top: 8px; margin-top: 8px;">
             Grand Total: <strong style="font-size: 13px;">₹${sale.grandTotal.toFixed(2)}</strong>

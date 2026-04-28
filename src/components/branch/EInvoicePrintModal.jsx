@@ -231,6 +231,7 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
                   <td class="text-right">₹${(typeof invoice.totalTax === 'object' ? (invoice.totalTax?.sgst || 0) : (invoice.totalTax || 0) / 2).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                 </tr>
                 ${invoice.totalTax?.igst > 0 ? `<tr><td>IGST:</td><td class="text-right">₹${invoice.totalTax.igst.toFixed(2)}</td></tr>` : ""}
+                ${(invoice.commonDiscount || invoice.invoiceCommonDiscount) > 0 ? `<tr><td style="color: #dc2626; font-weight: bold;">Discount:</td><td class="text-right" style="color: #dc2626; font-weight: bold;">-₹${((invoice.commonDiscount || invoice.invoiceCommonDiscount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td></tr>` : ""}
                 ${invoice.transportCharge > 0 ? `<tr><td>Transport:</td><td class="text-right">₹${invoice.transportCharge.toFixed(2)}</td></tr>` : ""}
                 <tr class="grand-total">
                   <td>Grand Total:</td>
