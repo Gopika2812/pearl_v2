@@ -94,7 +94,7 @@ router.get("/", async (req, res) => {
     }
 
     const debitNotes = await DebitNote.find({ branchId })
-      .populate("vendor.vendorId", "name")
+      .populate("vendor.vendorId")
       .populate("originalPurchaseOrderId", "invoiceId")
       .sort({ createdAt: -1 });
 
@@ -105,7 +105,7 @@ router.get("/", async (req, res) => {
     if (legacyNotes.length > 0) {
         // Re-fetch to get fresh data after legacy branch repairs
         finalNotes = await DebitNote.find({ branchId })
-          .populate("vendor.vendorId", "name")
+          .populate("vendor.vendorId")
           .populate("originalPurchaseOrderId", "invoiceId")
           .sort({ createdAt: -1 });
     }
@@ -253,6 +253,7 @@ router.post("/", async (req, res) => {
             const product = await Product.findById(item.productId);
             if (product) {
               item.name = product.name;
+              item.hsn = product.hsn || item.hsn;
               gstRate = product.gst || 0;
             }
           } else {
@@ -260,9 +261,27 @@ router.post("/", async (req, res) => {
           }
         } catch (e) { /* ignore */ }
 
+        const itemQty = Number(item.returnedQty || item.qty || 0);
+        item.qty = itemQty; // Ensure it's set on the item object
+        
         item.discountPercent = disc;
         item.taxableAmount = taxable;
         const itemTax = (taxable * gstRate) / 100;
+        
+        // Calculate Breakdown
+        if (itemTax > 0) {
+          // Assume local (CGST/SGST) unless we can determine IGST
+          // For now, let's look at branch and vendor state if possible, 
+          // but defaulting to 50/50 is safer than 0.
+          item.cgst = itemTax / 2;
+          item.sgst = itemTax / 2;
+          item.igst = 0;
+        } else {
+          item.cgst = 0;
+          item.sgst = 0;
+          item.igst = 0;
+        }
+
         item.total = Math.round(taxable + itemTax);
         totalTax += itemTax;
       }
@@ -273,7 +292,8 @@ router.post("/", async (req, res) => {
     // ⚡ FIX: Map returnedQty to qty for database compatibility
     const mappedItems = items.map(item => ({
       ...item,
-      qty: item.returnedQty || item.qty || 0
+      qty: Number(item.qty || item.returnedQty || 0),
+      hsn: item.hsn || ""
     }));
 
     const debitNote = new DebitNote({

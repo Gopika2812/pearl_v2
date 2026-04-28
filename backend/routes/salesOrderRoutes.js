@@ -1439,6 +1439,38 @@ router.put("/:id", auth, async (req, res) => {
   }
 });
 
+// 🔓 MOVE FROM CLAIM TO SALES ORDER
+router.patch("/:id/unclaim", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const salesOrder = await SalesOrder.findById(id);
+    if (!salesOrder) {
+      return res.status(404).json({ message: "Sales order not found" });
+    }
+
+    salesOrder.isClaim = false;
+    await salesOrder.save();
+
+    // Log the move
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: salesOrder.branchId,
+      action: "UNCLAIM_ORDER",
+      description: `Moved Order ${salesOrder.invoiceId} from Claims to regular Sales Orders`,
+      targetId: salesOrder._id,
+      targetModel: "SalesOrder",
+    });
+
+    res.json({ success: true, message: "Moved to Sales Orders successfully", data: salesOrder });
+  } catch (err) {
+    console.error("❌ Unclaim Error:", err.message);
+    res.status(500).json({ message: "Failed to move to sales orders" });
+  }
+});
+
+
 // 📨 REQUEST RE-EDIT PERMISSION
 router.patch("/:id/request-re-edit", auth, async (req, res) => {
   try {

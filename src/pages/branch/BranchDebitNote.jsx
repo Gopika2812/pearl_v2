@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { FaPlus, FaUndoAlt, FaSearch, FaFileInvoiceDollar, FaChevronDown, FaChevronUp, FaFileContract } from "react-icons/fa";
+import { FaPlus, FaUndoAlt, FaSearch, FaFileInvoiceDollar, FaChevronDown, FaChevronUp, FaFileContract, FaPrint } from "react-icons/fa";
 import { toast } from "react-toastify";
 import SupplierDebitNoteModal from "../../components/inventory/SupplierDebitNoteModal";
 import { useBranch } from "../../context/BranchContext";
 import { API_BASE, fetchWithAuth } from "../../api";
+import { getInvoiceHTML } from "../../utils/invoiceUtils";
 
 export default function BranchDebitNote() {
   const { currentBranch, user } = useBranch();
@@ -53,6 +54,31 @@ export default function BranchDebitNote() {
   );
 
   const formatDate = (date) => new Date(date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+  const handlePrint = (dn, layoutType = 'PROFESSIONAL') => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.warning("Pop-up blocked! Please allow pop-ups to print.");
+      return;
+    }
+
+    const previewData = {
+      ...dn,
+      seller: currentBranch || {}, 
+      vendor: dn.vendor || {},
+      invoiceDate: dn.createdAt
+    };
+
+    const mode = layoutType === 'PROFESSIONAL' ? 'DEBIT_NOTE_PROFESSIONAL' : 'DEBIT_NOTE';
+    const html = getInvoiceHTML(previewData, 2, dn, dn, mode);
+    
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.print();
+      setTimeout(() => printWindow.close(), 1000);
+    }, 500);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
@@ -152,12 +178,28 @@ export default function BranchDebitNote() {
                         )}
                         {isFieldAllowed("details") && (
                           <td className="px-10 py-5 text-center">
-                              <button 
-                                onClick={() => toggleExpand(dn._id)}
-                                className="p-2 hover:bg-white rounded-xl text-rose-600 transition-all shadow-sm group-hover:shadow-md"
-                              >
-                                  {expandedDN[dn._id] ? <FaChevronUp /> : <FaChevronDown />}
-                              </button>
+                              <div className="flex items-center gap-2 justify-center">
+                                <button 
+                                  onClick={() => handlePrint(dn, 'STANDARD')}
+                                  className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all text-[10px] font-black border border-blue-100"
+                                  title="Print Standard Layout"
+                                >
+                                    STD
+                                </button>
+                                <button 
+                                  onClick={() => handlePrint(dn, 'PROFESSIONAL')}
+                                  className="px-2 py-1 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-600 hover:text-white transition-all text-[10px] font-black border border-rose-100"
+                                  title="Print Professional Layout"
+                                >
+                                    PROF
+                                </button>
+                                <button 
+                                  onClick={() => toggleExpand(dn._id)}
+                                  className="p-2 hover:bg-white rounded-xl text-rose-600 transition-all shadow-sm group-hover:shadow-md border border-transparent hover:border-rose-100"
+                                >
+                                    {expandedDN[dn._id] ? <FaChevronUp /> : <FaChevronDown />}
+                                </button>
+                              </div>
                           </td>
                         )}
                       </tr>

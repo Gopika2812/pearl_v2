@@ -31,35 +31,40 @@ const BranchSuppliers = () => {
   const [viewMode, setViewMode] = useState("table");
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
-  const [purchaseOrders, setPurchaseOrders] = useState([]);
-  const [payments, setPayments] = useState([]);
+  // const [purchaseOrders, setPurchaseOrders] = useState([]);
+  // const [payments, setPayments] = useState([]);
   const [selectedLedgerSupplier, setSelectedLedgerSupplier] = useState(null);
   const [selectedPaySupplier, setSelectedPaySupplier] = useState(null);
   const [selectedDnSupplier, setSelectedDnSupplier] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const limit = 50;
 
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
+      setPage(1); // Reset to page 1 on new search
     }, 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
   useEffect(() => {
     if (branchLoaded && branchId) {
-      fetchSuppliers(debouncedSearchTerm);
+      fetchSuppliers(debouncedSearchTerm, page);
     }
-  }, [branchLoaded, branchId, debouncedSearchTerm]);
+  }, [branchLoaded, branchId, debouncedSearchTerm, page]);
 
-  const fetchSuppliers = async (search = "") => {
+  const fetchSuppliers = async (search = "", pageNum = 1) => {
     try {
       setLoading(true);
 
-      // Fetch vendors with search and a higher limit to ensure visibility
-      const vendorUrl = `${API_BASE}/vendors?branchId=${branchId}&search=${encodeURIComponent(search)}&limit=1000`;
+      // Fetch vendors with search and pagination
+      const vendorUrl = `${API_BASE}/vendors?branchId=${branchId}&search=${encodeURIComponent(search)}&page=${pageNum}&limit=${limit}`;
       const vendorResponse = await fetchWithAuth(vendorUrl);
 
       if (!vendorResponse.ok) {
@@ -68,51 +73,17 @@ const BranchSuppliers = () => {
 
       let vendorData = await vendorResponse.json();
       let suppliers = vendorData.data || [];
-
-      // Fetch purchase orders and payments for credit calculation
-      // NOTE: Fetching ALL POs, then filtering by branchId in the app
-      const poUrl = `${API_BASE}/purchase-orders`;
-      const poResponse = await fetchWithAuth(poUrl);
-
-      const paymentUrl = `${API_BASE}/payments`;
-      const paymentResponse = await fetchWithAuth(paymentUrl);
-
-      let purchaseOrders = [];
-      let payments = [];
-
-      if (poResponse.ok) {
-        const poResult = await poResponse.json();
-        purchaseOrders = poResult.data || poResult || [];
-        setPurchaseOrders(purchaseOrders);
-        console.log(`✅ Fetched ${purchaseOrders.length} Purchase Orders`);
-      } else {
-        console.warn("Failed to fetch POs, status:", poResponse.status);
-      }
-
-      if (paymentResponse.ok) {
-        const paymentResult = await paymentResponse.json();
-        payments = paymentResult.data || paymentResult || [];
-        setPayments(payments);
-        console.log(`✅ Fetched ${payments.length} Payments`);
-      } else {
-        console.warn("Failed to fetch Payments, status:", paymentResponse.status);
-      }
-
-      // Calculate credit for each supplier
-      // The backend updates vendor.credit on every invoice/re-invoice (single source of truth)
-      // DO NOT add outstanding POs on top — that causes double-counting
-      suppliers = suppliers.map((supplier) => {
-        return {
-          ...supplier,
-          credit: supplier.credit || 0,
-          debit: supplier.debit || 0,
-        };
-      });
-
+      
       setSuppliers(suppliers);
+      setTotalPages(vendorData.pagination?.pages || 1);
+      setTotalItems(vendorData.pagination?.total || 0);
+
       if (suppliers.length === 0) {
-        toast.info("No suppliers found for this branch");
+        toast.info("No suppliers found");
       }
+    } catch (err) {
+      console.error("Error fetching suppliers:", err);
+      toast.error("Failed to load suppliers");
     } finally {
       setLoading(false);
     }
@@ -138,42 +109,9 @@ const BranchSuppliers = () => {
 
 
   // Helper function to get outstanding PO count for a supplier
+  // Helper function removed for performance
   const getOutstandingPOCount = (supplierName) => {
-    const normalizedBranchId = typeof branchId === 'string' ? branchId : branchId?.toString();
-
-    const supplierPOs = purchaseOrders.filter(
-      (po) => {
-        const poBranchId = typeof po.branchId === 'string' ? po.branchId : po.branchId?.toString();
-        return (
-          po.vendor === supplierName &&
-          poBranchId === normalizedBranchId &&
-          po.status !== "CANCELLED"
-        );
-      }
-    );
-
-    let outstandingCount = 0;
-    supplierPOs.forEach((po) => {
-      const poAmount = po.grandTotal || 0;
-      const poPayments = payments.filter(
-        (payment) => {
-          const rawId = payment.purchaseOrder?.poId;
-          const paymentPoId = rawId?._id ? rawId._id.toString() : rawId?.toString();
-          const poId = po._id?.toString() || po._id;
-          return paymentPoId === poId && payment.status === "completed";
-        }
-      );
-      const totalPaidForPO = poPayments.reduce(
-        (sum, payment) => sum + (payment.amount || 0),
-        0
-      );
-      const outstanding = poAmount - totalPaidForPO;
-      if (outstanding > 0) {
-        outstandingCount++;
-      }
-    });
-
-    return outstandingCount;
+    return 0; // Simplified for speed
   };
 
   const handleSort = (key) => {
@@ -216,15 +154,7 @@ const BranchSuppliers = () => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const filteredSuppliers = getSortedSuppliers(
-    searchTerm
-      ? suppliers.filter((supplier) =>
-        supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        supplier.gstin?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        supplier.email?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-      : suppliers
-  );
+  const filteredSuppliers = getSortedSuppliers(suppliers);
 
   const handleExportExcel = () => {
     try {
@@ -442,6 +372,11 @@ const BranchSuppliers = () => {
               />
             </div>
 
+            {/* Pagination Info */}
+            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
+              Showing {suppliers.length} of {totalItems} Suppliers
+            </div>
+
             {/* View Toggle */}
             <div className="flex gap-2 bg-gray-100 p-1 rounded-lg">
               <button
@@ -536,8 +471,8 @@ const BranchSuppliers = () => {
                     <p className="text-sm md:text-base font-bold text-red-600 mt-1">
                       ₹{(supplier.credit || 0).toFixed(2)}
                     </p>
-                    <p className="text-xs text-red-600 mt-1">
-                      {getOutstandingPOCount(supplier.name)} PO{getOutstandingPOCount(supplier.name) !== 1 ? 's' : ''}
+                    <p className="text-xs text-red-600 mt-1 uppercase">
+                       Balance to Pay
                     </p>
                   </div>
                 )}
@@ -650,8 +585,8 @@ const BranchSuppliers = () => {
                         </td>
                       )}
                       {isFieldAllowed("pos") && (
-                        <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-semibold text-orange-600">
-                          {getOutstandingPOCount(supplier.name)}
+                        <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm text-center font-semibold text-gray-400">
+                           -
                         </td>
                       )}
                       {isFieldAllowed("credit") && (
@@ -756,13 +691,57 @@ const BranchSuppliers = () => {
         </div>
       )}
 
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="mt-8 flex items-center justify-center gap-2 pb-10">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-4 py-2 bg-white border border-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+          >
+            Previous
+          </button>
+          
+          <div className="flex items-center gap-1">
+            {[...Array(totalPages)].map((_, i) => {
+               const pNum = i + 1;
+               // Show current, first, last and 2 neighbors
+               if (pNum === 1 || pNum === totalPages || (pNum >= page - 1 && pNum <= page + 1)) {
+                 return (
+                   <button
+                     key={pNum}
+                     onClick={() => setPage(pNum)}
+                     className={`w-10 h-10 rounded-xl font-bold transition-all ${
+                       page === pNum 
+                         ? "bg-blue-600 text-white shadow-md scale-110" 
+                         : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                     }`}
+                   >
+                     {pNum}
+                   </button>
+                 );
+               } else if (pNum === page - 2 || pNum === page + 2) {
+                 return <span key={pNum} className="text-gray-400 font-bold px-1">...</span>;
+               }
+               return null;
+            })}
+          </div>
+
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="px-4 py-2 bg-white border border-gray-200 rounded-xl font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+          >
+            Next
+          </button>
+        </div>
+      )}
+
       {/* VENDOR LEDGER MODAL */}
       <VendorLedgerModal
         isOpen={!!selectedLedgerSupplier}
         onClose={() => setSelectedLedgerSupplier(null)}
         supplier={selectedLedgerSupplier}
-        purchaseOrders={purchaseOrders}
-        payments={payments}
       />
 
       {/* SUPPLIER PAYMENT MODAL */}

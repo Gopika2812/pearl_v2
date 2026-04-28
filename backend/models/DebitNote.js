@@ -38,6 +38,7 @@ const debitNoteSchema = new mongoose.Schema(
           required: true,
         },
         name: String,
+        hsn: String,
         qty: Number,
         purchasePrice: Number,
         discountType: String,

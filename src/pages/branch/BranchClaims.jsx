@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaEdit, FaFileInvoice, FaSync } from "react-icons/fa";
+import { FaChevronDown, FaEdit, FaFileInvoice, FaSync, FaExchangeAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import EditBillModal from "../../components/EditBillModal";
 import InvoiceGeneratorModal from "../../components/InvoiceGeneratorModal";
 import AggregateSlipModal from "../../components/branch/AggregateSlipModal";
@@ -98,6 +98,27 @@ const BranchClaims = () => {
     } catch (err) {
       console.error("Error updating claim:", err);
       toast.error(err.message || "Failed to update claim");
+    }
+  };
+
+  const handleMoveToSalesOrder = async (order) => {
+    if (!window.confirm(`Are you sure you want to move Order ${order.invoiceId} to regular Sales Orders?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/sales-orders/${order._id}/unclaim`, {
+        method: "PATCH",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to move order");
+
+      setSalesOrders((prev) => prev.filter((o) => o._id !== order._id));
+      toast.success("Moved to Sales Orders successfully!");
+    } catch (err) {
+      console.error("Error moving order:", err);
+      toast.error(err.message || "Failed to move order");
     }
   };
 
@@ -355,12 +376,25 @@ const BranchClaims = () => {
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center gap-2 justify-center flex-wrap">
                             <button
+                              onClick={() => handleMoveToSalesOrder(order)}
+                              disabled={order.invoiceGenerated}
+                              className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
+                                order.invoiceGenerated
+                                  ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-50"
+                                  : "bg-indigo-500 text-white hover:bg-indigo-600 shadow-sm"
+                              }`}
+                              title="Move back to Sales Order list"
+                            >
+                              <FaExchangeAlt />
+                              To Sales Order
+                            </button>
+                            <button
                               onClick={() => handleEditBill(order)}
                               disabled={order.invoiceGenerated}
                               className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
                                 order.invoiceGenerated
                                   ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-50"
-                                  : "bg-orange-500 text-white hover:bg-orange-600"
+                                  : "bg-orange-500 text-white hover:bg-orange-600 shadow-sm"
                               }`}
                             >
                               <FaEdit />
@@ -372,7 +406,7 @@ const BranchClaims = () => {
                               className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold ${
                                 order.invoiceGenerated
                                   ? "bg-gray-400 text-gray-700 cursor-not-allowed opacity-50"
-                                  : "bg-[#319bab] text-white hover:bg-[#257f87]"
+                                  : "bg-[#319bab] text-white hover:bg-[#257f87] shadow-sm"
                               }`}
                             >
                               <FaFileInvoice />

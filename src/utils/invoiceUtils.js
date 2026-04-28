@@ -7,11 +7,17 @@
 export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generatedInvoice = {}, mode = 'INVOICE') => {
     const isCNProf = mode === 'CREDIT_NOTE_PROFESSIONAL';
     const isCNStd = mode === 'CREDIT_NOTE';
-    const isCN = isCNProf || isCNStd;
+    const isDNProf = mode === 'DEBIT_NOTE_PROFESSIONAL';
+    const isDNStd = mode === 'DEBIT_NOTE';
     
-    const documentTitle = isCN ? "SALES RETURN / CREDIT NOTE" : "TAX INVOICE";
-    const idLabel = isCN ? "Credit Note ID" : "Invoice No";
-    const dateLabel = isCN ? "Note Date" : "Invoice Date";
+    const isCN = isCNProf || isCNStd;
+    const isDN = isDNProf || isDNStd;
+    const isReturn = isCN || isDN;
+    const isProf = isCNProf || isDNProf;
+    
+    const documentTitle = isDN ? "PURCHASE RETURN / DEBIT NOTE" : (isCN ? "SALES RETURN / CREDIT NOTE" : "TAX INVOICE");
+    const idLabel = isDN ? "Debit Note ID" : (isCN ? "Credit Note ID" : "Invoice No");
+    const dateLabel = isReturn ? "Note Date" : "Invoice Date";
     
     // 🧮 Robust Tax Breakdown Helper
     const tax = (() => {
@@ -26,15 +32,19 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
         // Fallback for Credit Notes (Sum from items)
         const breakdown = { cgst: 0, sgst: 0, igst: 0, total: Number(previewData?.totalTax || 0) };
         (previewData?.items || []).forEach(item => {
+            const qty = isDN ? (item.returnedQty || item.qty || 0) : (item.qty || 0);
+            const price = isDN ? (item.purchasePrice || 0) : (item.sellingPrice || 0);
+            
             // Check for explicit cgst/sgst fields or calculate from total tax
-            const itemTax = Number(item.tax || (item.total - (item.sellingPrice * item.qty)) || 0);
+            const itemTax = Number(item.cgst !== undefined ? (item.cgst + item.sgst + (item.igst || 0)) : (item.tax || (item.total - (price * qty)) || 0));
+            
             if (item.cgst !== undefined) {
                 breakdown.cgst += Number(item.cgst || 0);
                 breakdown.sgst += Number(item.sgst || 0);
                 breakdown.igst += Number(item.igst || 0);
             } else if (itemTax > 0) {
                 // If breakdown is missing but total item tax exists, assume 50/50 for CGST/SGST if not IGST
-                if (item.igst_amount > 0) {
+                if (item.igst_amount > 0 || item.igst > 0) {
                     breakdown.igst += itemTax;
                 } else {
                     breakdown.cgst += itemTax / 2;
@@ -94,7 +104,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
 
         @media print { 
           .page { margin: 0; padding: 10mm; } 
-          @page { size: ${isCNProf ? 'A5 portrait' : 'A4 portrait'}; margin: 0; }
+          @page { size: ${isProf ? 'A5 portrait' : 'A4 portrait'}; margin: 0; }
         }
 
         /* --- A5 OVERRIDES --- */
@@ -161,14 +171,18 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
     const copiesToGenerate = baseTitles.slice(0, numCopies);
 
     copiesToGenerate.forEach((copyTitle, copyIdx) => {
-        if (isCNProf) {
-          // --- NEW PROFESSIONAL CREDIT NOTE LAYOUT ---
+        const party = isDN ? (previewData?.vendor || {}) : (previewData?.customer || {});
+        
+        if (isProf) {
+          // --- NEW PROFESSIONAL RETURN NOTE LAYOUT (A5) ---
+          const returnId = isDN ? (generatedInvoice?.debitNoteId || order?.debitNoteId) : (generatedInvoice?.creditNoteId || order?.creditNoteId);
+          
           html += `
             <div class="page a5-page">
               <div class="page-content">
                 <div class="header-section">
                   <h1>${documentTitle}</h1>
-                  <div class="cn-id-top">${generatedInvoice?.creditNoteId || order?.creditNoteId || "NEW"}</div>
+                  <div class="cn-id-top">${returnId || "NEW"}</div>
                 </div>
 
                 <div class="top-grid">
@@ -206,11 +220,11 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                 </div>
 
                 <div class="bill-to">
-                  <div class="bill-to-title">Bill To</div>
-                  <div><strong>${previewData?.customer?.name || "N/A"}</strong></div>
-                  <div>${previewData?.customer?.address || "N/A"}</div>
-                  <div>GST : ${previewData?.customer?.gstin || "N/A"}</div>
-                  <div>Contact No : ${previewData?.customer?.whatsapp || previewData?.customer?.phone || "N/A"}</div>
+                  <div class="bill-to-title">${isDN ? 'Vendor Info' : 'Bill To'}</div>
+                  <div><strong>${party?.name || party?.vendorId?.name || "N/A"}</strong></div>
+                  <div>${party?.address || party?.vendorId?.address || "N/A"}</div>
+                  <div>GST : ${party?.gstin || party?.vendorId?.gstin || "N/A"}</div>
+                  <div>Contact No : ${party?.whatsapp || party?.phone || party?.vendorId?.whatsapp || party?.vendorId?.phone || "-"}</div>
                 </div>
 
                 <table>
@@ -233,8 +247,8 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                   </thead>
                   <tbody>
                     ${(previewData?.items || []).map((item, idx) => {
-                      const qty = Number(item.qty || 0);
-                      const rate = Number(item.sellingPrice || 0);
+                      const qty = Number(isDN ? (item.returnedQty || item.qty || 0) : (item.qty || 0));
+                      const rate = Number(isDN ? (item.purchasePrice || 0) : (item.sellingPrice || 0));
                       const gstRate = Number(item.gst || 0);
                       const discountP = Number(item.discountPercent || 0);
                       
@@ -316,16 +330,19 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                 </div>
 
                 <div class="cn-footer">
-                   <div>
-                    <strong>Total Outstanding : ₹${(() => {
-                        const cust = previewData?.customer?.customerId || previewData?.customer || {};
-                        const bal = (cust.debit !== undefined && cust.credit !== undefined) 
-                          ? (Number(cust.debit || 0) - Number(cust.credit || 0))
-                          : (cust.closingBalance || previewData?.closingBalance || 0);
-                        return Number(bal).toLocaleString(undefined, {minimumFractionDigits: 2});
-                      })()}</strong><br/>
-                     <span style="font-size: 8px;">As Of - ${new Date().toLocaleDateString("en-IN")}</span>
-                   </div>
+                   <div style="background: #f1f5f9; padding: 10px; border-radius: 8px; font-size: 11px;">
+                      <div style="color: #64748b; font-weight: bold; margin-bottom: 2px;">CLOSING BALANCE</div>
+                      <div style="font-size: 14px; font-weight: 900;">₹${(() => {
+                        const actualParty = party?.customerId || party?.vendorId || party || {};
+                        const debit = Number(actualParty.debit || 0);
+                        const credit = Number(actualParty.credit || 0);
+                        const bal = isDN ? (credit - debit) : (debit - credit);
+                        const label = isDN 
+                          ? (bal > 0 ? "Cr" : bal < 0 ? "Dr" : "") 
+                          : (bal > 0 ? "Dr" : bal < 0 ? "Cr" : "");
+                        return `${Math.abs(bal).toFixed(2)} ${label}`;
+                      })()}</div>
+                    </div>
                    <div class="signature-box">
                      <div style="font-weight: 900; font-size: 9px;">For ${previewData?.seller?.name || "PEARL AGENCY"}</div>
                      <div class="signature-line">Authorized Signature</div>
@@ -344,7 +361,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
             <div class="page">
               <div class="page-content">
                 <div class="quick-info">
-                  <span>INV: ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}</span>
+                  <span>${idLabel}: ${isDN ? (generatedInvoice?.debitNoteId || order?.debitNoteId) : (isCN ? (generatedInvoice?.creditNoteId || order?.creditNoteId) : (generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"))}</span>
                 </div>
                 <div class="top-header">
                   <div class="logo-box"><img src="${previewData?.seller?.logo || "/logo.jpeg"}" alt="Logo" /></div>
@@ -366,23 +383,23 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
 
                 <div class="order-header">
                   <div class="order-header-col">
-                    <strong>Invoice No:</strong> ${generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"}<br/>
-                    <strong>Invoice Date:</strong> ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
+                    <strong>${idLabel}:</strong> ${isDN ? (generatedInvoice?.debitNoteId || order?.debitNoteId) : (isCN ? (generatedInvoice?.creditNoteId || order?.creditNoteId) : (generatedInvoice?.invoiceNumber || order?.invoiceId || "PENDING"))}<br/>
+                    <strong>${dateLabel}:</strong> ${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}
                   </div>
                   <div class="order-header-col" style="text-align: right;">
-                    <strong>Customer:</strong> ${previewData?.customer?.name || "CASH CUSTOMER"}<br/>
-                    <strong>Contact:</strong> ${previewData?.customer?.whatsapp || previewData?.customer?.phone || previewData?.customer?.customerId?.whatsapp || "-"}<br/>
-                    <strong>Delivery:</strong> ${previewData?.deliveryMan?.name || previewData?.deliveryMan || order?.deliveryMan?.name || "-"}
+                    <strong>${isDN ? 'Vendor' : 'Customer'}:</strong> ${party?.name || party?.vendorId?.name || (isDN ? "N/A" : "CASH CUSTOMER")}<br/>
+                    <strong>Contact:</strong> ${party?.whatsapp || party?.phone || party?.vendorId?.whatsapp || party?.vendorId?.phone || "-"}<br/>
+                    ${!isReturn ? `<strong>Delivery:</strong> ${previewData?.deliveryMan?.name || previewData?.deliveryMan || order?.deliveryMan?.name || "-"}` : ''}
                   </div>
                 </div>
 
                 <div class="sender-buyer">
                   <div class="sender-buyer-col">
-                    <strong>BUYER (BILL TO)</strong>
-                    ${previewData?.customer?.name}<br/>
-                    ${previewData?.customer?.address || "N/A"}<br/>
-                    Mobile: ${previewData?.customer?.whatsapp || "-"}<br/>
-                    GSTIN: ${previewData?.customer?.gstin || "N/A"}<br/>
+                    <strong>${isDN ? 'VENDOR (FROM)' : 'BUYER (BILL TO)'}</strong>
+                    ${isDN ? (party?.name || party?.vendorId?.name || "N/A") : (party?.name || "N/A")}<br/>
+                    ${isDN ? (party?.address || party?.vendorId?.address || "N/A") : (party?.address || "N/A")}<br/>
+                    Mobile: ${isDN ? (party?.whatsapp || party?.phone || party?.vendorId?.whatsapp || party?.vendorId?.phone || "-") : (party?.whatsapp || "-")}<br/>
+                    GSTIN: ${isDN ? (party?.gstin || party?.vendorId?.gstin || "N/A") : (party?.gstin || "N/A")}<br/>
                   </div>
                 </div>
 
@@ -399,17 +416,23 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                     </tr>
                   </thead>
                   <tbody>
-                    ${(previewData?.items || []).filter(item => item.qty > 0).map((item, idx) => `
-                      <tr>
-                        <td style="text-align: center;">${idx + 1}</td>
-                        <td>${item.name}</td>
-                        <td>${item.hsn || "-"}</td>
-                        <td style="text-align: right;">${item.qty} ${item.unit || ""}</td>
-                        <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
-                        <td style="text-align: right;">${item.discountPercent || 0}%</td>
-                        <td style="text-align: right;">₹${(item.qty * (item.sellingPrice || 0)).toFixed(2)}</td>
-                      </tr>
-                    `).join("")}
+                    ${(previewData?.items || []).filter(item => (isDN ? (item.returnedQty || item.qty) : item.qty) > 0).map((item, idx) => {
+                      const qty = isDN ? (item.returnedQty || item.qty || 0) : (item.qty || 0);
+                      const price = isDN ? (item.purchasePrice || 0) : (item.sellingPrice || 0);
+                      const rowTotal = item.total || (qty * price);
+                      
+                      return `
+                        <tr>
+                          <td style="text-align: center;">${idx + 1}</td>
+                          <td>${item.name || item.productName || "N/A"}</td>
+                          <td>${item.hsn || "-"}</td>
+                          <td style="text-align: right;">${qty} ${item.unit || ""}</td>
+                          <td style="text-align: right;">₹${Number(price).toFixed(2)}</td>
+                          <td style="text-align: right;">${item.discountPercent || 0}%</td>
+                          <td style="text-align: right;">₹${Number(rowTotal).toFixed(2)}</td>
+                        </tr>
+                      `;
+                    }).join("")}
                   </tbody>
                 </table>
 
@@ -417,11 +440,19 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                   <div style="flex: 1; text-align: left;">
                     <div style="background: #f8fafc; padding: 10px; font-size: 11px; border-left: 4px solid #000; border-radius: 4px;">
                       <div><strong>Closing Balance:</strong> ₹${(() => {
-                        const cust = previewData?.customer?.customerId || previewData?.customer || {};
-                        const bal = (cust.debit !== undefined && cust.credit !== undefined) 
-                          ? (Number(cust.debit || 0) - Number(cust.credit || 0))
-                          : (cust.closingBalance || previewData?.closingBalance || 0);
-                        return Number(bal).toFixed(2);
+                        const actualParty = party?.customerId || party?.vendorId || party || {};
+                        const debit = Number(actualParty.debit || 0);
+                        const credit = Number(actualParty.credit || 0);
+                        
+                        // For Vendors (isDN), Balance = Credit - Debit
+                        // For Customers, Balance = Debit - Credit
+                        const bal = isDN ? (credit - debit) : (debit - credit);
+                        const absBal = Math.abs(bal).toFixed(2);
+                        const label = isDN 
+                          ? (bal > 0 ? "Cr" : bal < 0 ? "Dr" : "") 
+                          : (bal > 0 ? "Dr" : bal < 0 ? "Cr" : "");
+                        
+                        return `${absBal} ${label}`;
                       })()}</div>
                     </div>
                   </div>
