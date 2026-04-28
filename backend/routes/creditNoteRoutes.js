@@ -353,12 +353,23 @@ router.post("/", async (req, res) => {
     const Branch = mongoose.model("Branch");
     const branch = await Branch.findById(finalBranchId);
 
+    let finalInvoiceDate = originalOrder?.invoiceDate || null;
+    let finalInvoiceNumber = originalOrder?.invoiceId || "STANDALONE";
+    if (originalSalesOrderId) {
+      const Invoice = mongoose.model("Invoice");
+      const linkedInvoice = await Invoice.findOne({ salesOrderId: originalSalesOrderId });
+      if (linkedInvoice && linkedInvoice.invoiceNumber) {
+        finalInvoiceNumber = linkedInvoice.invoiceNumber;
+        finalInvoiceDate = linkedInvoice.invoiceDate || finalInvoiceDate;
+      }
+    }
+
     // Create credit note
     const creditNote = new CreditNote({
       creditNoteId,
       originalSalesOrderId: originalSalesOrderId || null,
-      originalInvoiceId: originalOrder?.invoiceId || "STANDALONE",
-      originalInvoiceDate: originalOrder?.invoiceDate || null,
+      originalInvoiceId: finalInvoiceNumber,
+      originalInvoiceDate: finalInvoiceDate,
       branchId: finalBranchId,
       customer: {
         customerId: customer._id,

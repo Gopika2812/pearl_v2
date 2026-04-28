@@ -101,18 +101,18 @@ router.get("/", async (req, res) => {
     // 🔥 PERFORMANCE FIX: Removed the heavy financial-reconstruction loop.
     // This was checking/saving every record on every fetch, which is very slow.
     
-    if (repaired) {
-        // Re-fetch to get fresh data after repairs
-        const freshNotes = await DebitNote.find({ branchId })
+    let finalNotes = debitNotes;
+    if (legacyNotes.length > 0) {
+        // Re-fetch to get fresh data after legacy branch repairs
+        finalNotes = await DebitNote.find({ branchId })
           .populate("vendor.vendorId", "name")
           .populate("originalPurchaseOrderId", "invoiceId")
           .sort({ createdAt: -1 });
-        return res.json({ success: true, data: freshNotes });
     }
 
     res.json({
       success: true,
-      data: debitNotes,
+      data: finalNotes,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to fetch debit notes", error: err.message });

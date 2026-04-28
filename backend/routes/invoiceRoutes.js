@@ -1042,19 +1042,7 @@ router.get("/customer/:customerId", async (req, res) => {
       query.branchId = branchId;
     }
 
-    // 🔥 Filter out invoices that already have a Credit Note
-    const existingCNs = await CreditNote.find({
-      "customer.customerId": customerId,
-      status: "Created",
-      originalSalesOrderId: { $ne: null }
-    }).select("originalSalesOrderId");
-
-    const creditedSalesOrderIds = existingCNs.map(cn => cn.originalSalesOrderId.toString());
-
-    const invoices = await Invoice.find({
-      ...query,
-      salesOrderId: { $nin: creditedSalesOrderIds }
-    })
+    const invoices = await Invoice.find(query)
       .populate("salesOrderId")
       .sort({ invoiceDate: -1 })
       .lean();
