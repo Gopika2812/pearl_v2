@@ -110,6 +110,8 @@ router.post("/", async (req, res) => {
       perQty: Math.round((Number(perQty) || 0) * 100) / 100,
       units,
       totalQty: Math.round((Number(totalQty) || 0) * 100) / 100,
+      openingQty: Math.round((Number(totalQty) || 0) * 100) / 100,
+      manualOpeningDate: new Date("2026-03-31T23:59:59.999Z"),
       purchasingPrice: pPrice,
       sellingPrice: sPrice,
       adminMargin: Math.round((Number(adminMargin) || 0) * 100) / 100,
@@ -543,8 +545,10 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       // 💰 STOCK AUDIT LOGIC (SIMPLE REPLACE MODE)
-      const rawQty = normalizedRow.totalqty || normalizedRow.qty || normalizedRow.openingquantity || normalizedRow.openingstock || normalizedRow.closingqty || "";
-      if (rawQty !== "") {
+      const hasStockColumn = 'totalqty' in normalizedRow || 'qty' in normalizedRow || 'openingquantity' in normalizedRow || 'openingstock' in normalizedRow || 'closingqty' in normalizedRow || 'openingqty' in normalizedRow;
+      
+      if (hasStockColumn) {
+        const rawQty = normalizedRow.totalqty || normalizedRow.qty || normalizedRow.openingquantity || normalizedRow.openingstock || normalizedRow.closingqty || normalizedRow.openingqty || "";
         const qty = parseFloat(String(rawQty).replace(/[^0-9.-]+/g, "")) || 0;
         productData.totalQty = Math.round(qty * 100) / 100;
         productData.openingQty = productData.totalQty;
@@ -675,7 +679,7 @@ router.get("/export/snapshot-mar31", async (req, res) => {
 
     // 2. April Outwards (Sales + Purchase Returns)
     const sales = await SalesOrder.aggregate([
-      { $match: { branchId: branchOid, invoiceGenerated: true, createdAt: { $gte: startOfApril } } },
+      { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, createdAt: { $gte: startOfApril } } },
       { $unwind: "$invoiceItems" },
       { $group: { _id: "$invoiceItems.productId", qty: { $sum: "$invoiceItems.qty" } } }
     ]);
@@ -859,13 +863,13 @@ router.put("/:id", auth, async (req, res) => {
       // Calculate movements for this product ONLY
       const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
         PurchaseOrder.aggregate([
-          { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, "items.productId": oldProduct._id, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+          { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, "items.productId": oldProduct._id, createdAt: { $gt: HARD_ANCHOR_DATE } } },
           { $unwind: "$items" },
           { $match: { "items.productId": oldProduct._id } },
           { $group: { _id: null, total: { $sum: "$items.qty" } } }
         ]),
         SalesOrder.aggregate([
-          { $match: { branchId: branchOid, invoiceGenerated: true, "invoiceItems.productId": oldProduct._id, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+          { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, "invoiceItems.productId": oldProduct._id, createdAt: { $gt: HARD_ANCHOR_DATE } } },
           { $unwind: "$invoiceItems" },
           { $match: { "invoiceItems.productId": oldProduct._id } },
           { $group: { _id: null, total: { $sum: "$invoiceItems.qty" } } }
@@ -886,11 +890,20 @@ router.put("/:id", auth, async (req, res) => {
 
       const tIn = (purchases[0]?.total || 0) + (creditNotes[0]?.total || 0);
       const tOut = (sales[0]?.total || 0) + (debitNotes[0]?.total || 0);
-      const anchor = openingQty !== undefined ? Number(openingQty) : (oldProduct.openingQty || 0);
       
-      updateData.totalQty = anchor + tIn - tOut;
-    } else if (totalQty !== undefined) {
-      updateData.totalQty = Math.round(Number(totalQty) * 100) / 100;
+      let anchor = oldProduct.openingQty || 0;
+      
+      // If openingQty is explicitly updated, use it
+      if (openingQty !== undefined) {
+        anchor = Number(openingQty);
+        updateData.openingQty = anchor;
+        updateData.totalQty = anchor + tIn - tOut;
+      } 
+      // If ONLY totalQty is updated (e.g. from UI form edit), DO NOT reverse calculate openingQty!
+      // The anchor must remain strictly what was imported. 
+      else if (totalQty !== undefined) {
+        updateData.totalQty = Math.round(Number(totalQty) * 100) / 100;
+      }
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(
@@ -1065,13 +1078,13 @@ router.get("/available/:productId", async (req, res) => {
     // 🧮 Calculate ALL movements after the anchor for this specific product
     const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
       PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, "items.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, "items.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         { $match: { "items.productId": pOid } },
         { $group: { _id: null, total: { $sum: "$items.qty" } } }
       ]),
       SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, "invoiceItems.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, "invoiceItems.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$invoiceItems" },
         { $match: { "invoiceItems.productId": pOid } },
         { $group: { _id: null, total: { $sum: "$invoiceItems.qty" } } }
@@ -1142,7 +1155,7 @@ router.get("/stock-group-summary", async (req, res) => {
 
     const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
       PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, date: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, date: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         { $group: { 
             _id: "$items.productId", 
@@ -1151,7 +1164,7 @@ router.get("/stock-group-summary", async (req, res) => {
         } }
       ]),
       SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, orderDate: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, orderDate: { $gt: HARD_ANCHOR_DATE } } },
         { $addFields: { effectiveItems: { $cond: [ { $gt: [ { $size: { $ifNull: ["$invoiceItems", []] } }, 0 ] }, "$invoiceItems", "$items" ] } } },
         { $unwind: "$effectiveItems" },
         { $group: { 
@@ -1266,7 +1279,7 @@ router.get("/stock-journal", async (req, res) => {
 
     const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
       PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, date: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, date: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         { $group: { 
             _id: "$items.productId", 
@@ -1275,7 +1288,7 @@ router.get("/stock-journal", async (req, res) => {
         } }
       ]),
       SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, orderDate: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, orderDate: { $gt: HARD_ANCHOR_DATE } } },
         { $addFields: { effectiveItems: { $cond: [ { $gt: [ { $size: { $ifNull: ["$invoiceItems", []] } }, 0 ] }, "$invoiceItems", "$items" ] } } },
         { $unwind: "$effectiveItems" },
         { $group: { 
@@ -1410,13 +1423,13 @@ router.get("/:id/ledger", auth, async (req, res) => {
     // 🧮 1. Calculate Movements BEFORE Report Start (Post-Anchor)
     const [pBefore, sBefore, dnBefore, cnBefore] = await Promise.all([
       PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: "INVOICED", date: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
+        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, date: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
         { $unwind: "$items" },
         { $match: { "items.productId": productOid } },
         { $group: { _id: null, total: { $sum: "$items.qty" } } }
       ]),
       SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, orderDate: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
+        { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, orderDate: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
         { $addFields: { effectiveItems: { $cond: [ { $gt: [ { $size: { $ifNull: ["$invoiceItems", []] } }, 0 ] }, "$invoiceItems", "$items" ] } } },
         { $unwind: "$effectiveItems" },
         { $match: { "effectiveItems.productId": productOid } },
@@ -1444,14 +1457,14 @@ router.get("/:id/ledger", auth, async (req, res) => {
     // 💸 2. Fetch Movements DURING Report Period
     const [sales, purchases, debitNotes, creditNotes] = await Promise.all([
       SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, orderDate: { $gte: start, $lte: end } } },
+        { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, orderDate: { $gte: start, $lte: end } } },
         { $addFields: { effectiveItems: { $cond: [ { $gt: [ { $size: { $ifNull: ["$invoiceItems", []] } }, 0 ] }, "$invoiceItems", "$items" ] } } },
         { $unwind: "$effectiveItems" },
         { $match: { "effectiveItems.productId": productOid } },
         { $project: { type: "OUTWARD", date: "$orderDate", voucherType: "$voucherType", invoiceId: 1, particulars: "$customer.name", qty: "$effectiveItems.qty", rate: "$effectiveItems.sellingPrice", value: { $multiply: ["$effectiveItems.qty", "$effectiveItems.sellingPrice"] } } }
       ]),
       PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: "INVOICED", date: { $gte: start, $lte: end } } },
+        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, date: { $gte: start, $lte: end } } },
         { $unwind: "$items" },
         { $match: { "items.productId": productOid } },
         { $project: { type: "INWARD", date: "$date", voucherType: { $ifNull: ["$voucherType", "Purchase"] }, invoiceId: 1, particulars: { $ifNull: ["$vendor", "Supplier"] }, qty: "$items.qty", rate: "$items.purchasePrice", value: { $multiply: ["$items.qty", "$items.purchasePrice"] } } }
@@ -1741,12 +1754,12 @@ router.post("/reconcile-stock", async (req, res) => {
     // 2. Fetch ALL movements after the anchor
     const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
       PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "INVOICED"] }, date: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, date: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         { $group: { _id: "$items.productId", totalQty: { $sum: "$items.qty" } } }
       ]),
       SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, orderDate: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, orderDate: { $gt: HARD_ANCHOR_DATE } } },
         { $addFields: { effectiveItems: { $cond: [ { $gt: [ { $size: { $ifNull: ["$invoiceItems", []] } }, 0 ] }, "$invoiceItems", "$items" ] } } },
         { $unwind: "$effectiveItems" },
         { $group: { _id: "$effectiveItems.productId", totalQty: { $sum: "$effectiveItems.qty" } } }

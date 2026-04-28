@@ -1028,6 +1028,7 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
 
       salesOrder.lastInvoicedItems = allNewItems;
       salesOrder.invoiceItems = allNewItems;
+      salesOrder.items = allNewItems;
       salesOrder.lastInvoicedGrandTotal = newTotal;
       salesOrder.lastInvoicedCustomerId = currentCustomerId;
       salesOrder.status = "INVOICED";
@@ -1159,6 +1160,7 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
     salesOrder.editHistory.push(invoiceSnapshot);
     salesOrder.lastInvoicedItems = allItems;
     salesOrder.invoiceItems = allItems;
+    salesOrder.items = allItems;
     salesOrder.lastInvoicedGrandTotal = grandTotalToUse;
     salesOrder.lastInvoicedCustomerId = salesOrder.customer?.customerId;
     salesOrder.status = "INVOICED";
