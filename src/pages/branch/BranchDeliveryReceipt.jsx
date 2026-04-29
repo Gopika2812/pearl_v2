@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import { 
   FaHistory, FaSearch, FaSync, FaReceipt, FaUser, FaWallet, 
   FaHandHoldingUsd, FaPlus, FaTrash, FaPlusCircle, FaMinusCircle, 
-  FaCoins, FaCalculator, FaFileInvoiceDollar, FaCheckCircle, FaCalendarAlt, FaMapMarkerAlt
+  FaCoins, FaCalculator, FaFileInvoiceDollar, FaCheckCircle, FaCalendarAlt, FaMapMarkerAlt,
+  FaChevronDown, FaChevronUp
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
@@ -19,6 +20,7 @@ const BranchDeliveryReceipt = () => {
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split("T")[0]);
   const [filterDeliveryPerson, setFilterDeliveryPerson] = useState("");
   const [filterReceiptId, setFilterReceiptId] = useState("");
+  const [expandedId, setExpandedId] = useState(null);
 
   // Batch Form State
   const [collections, setCollections] = useState([
@@ -435,8 +437,9 @@ const BranchDeliveryReceipt = () => {
                      </tr>
                    ) : (
                      receipts.map((r) => (
-                       <tr key={r._id} className="hover:bg-slate-50/50 transition-colors group">
-                         <td className="px-8 py-6">
+                       <React.Fragment key={r._id}>
+                         <tr className="hover:bg-slate-50/50 transition-colors group">
+                           <td className="px-8 py-6">
                             <div className="flex items-center gap-3">
                                <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-black text-[10px]">
                                  DR
@@ -473,14 +476,70 @@ const BranchDeliveryReceipt = () => {
                             </div>
                          </td>
                          <td className="px-8 py-6 text-center">
-                            <button 
-                             onClick={() => handleDelete(r._id)}
-                             className="w-10 h-10 flex items-center justify-center bg-white border border-slate-100 text-slate-300 hover:text-rose-500 hover:border-rose-100 rounded-xl transition-all shadow-sm"
-                            >
-                              <FaTrash size={12} />
-                            </button>
+                            <div className="flex items-center justify-center gap-2">
+                              <button 
+                               onClick={() => setExpandedId(expandedId === r._id ? null : r._id)}
+                               className="w-10 h-10 flex items-center justify-center bg-white border border-slate-100 text-slate-400 hover:text-emerald-500 hover:border-emerald-100 rounded-xl transition-all shadow-sm"
+                              >
+                                {expandedId === r._id ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
+                              </button>
+                              <button 
+                               onClick={() => handleDelete(r._id)}
+                               className="w-10 h-10 flex items-center justify-center bg-white border border-slate-100 text-slate-300 hover:text-rose-500 hover:border-rose-100 rounded-xl transition-all shadow-sm"
+                              >
+                                <FaTrash size={12} />
+                              </button>
+                            </div>
                          </td>
                        </tr>
+                       {expandedId === r._id && (
+                         <tr className="bg-slate-50/50">
+                           <td colSpan="6" className="p-0">
+                             <div className="p-6 md:px-12 border-b border-slate-100">
+                               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                 <div>
+                                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                     <FaWallet className="text-emerald-500" /> Collections
+                                   </h4>
+                                   {r.collections?.length > 0 ? (
+                                     <div className="space-y-2">
+                                       {r.collections.map((c, i) => (
+                                         <div key={i} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                                           <div className="flex flex-col">
+                                             <span className="text-xs font-black text-slate-700">{c.customer?.name || "Unknown"}</span>
+                                             <span className="text-[9px] font-bold text-slate-400 uppercase">{c.paymentMode}</span>
+                                           </div>
+                                           <span className="text-xs font-black text-emerald-600">₹{c.amount?.toLocaleString()}</span>
+                                         </div>
+                                       ))}
+                                     </div>
+                                   ) : (
+                                     <div className="text-xs font-bold text-slate-400 italic">No collections</div>
+                                   )}
+                                 </div>
+                                 <div>
+                                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                     <FaHandHoldingUsd className="text-rose-500" /> Expenses
+                                   </h4>
+                                   {r.expenses?.length > 0 ? (
+                                     <div className="space-y-2">
+                                       {r.expenses.map((e, i) => (
+                                         <div key={i} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                                           <span className="text-xs font-bold text-slate-600">{e.note || "No note"}</span>
+                                           <span className="text-xs font-black text-rose-500">₹{e.amount?.toLocaleString()}</span>
+                                         </div>
+                                       ))}
+                                     </div>
+                                   ) : (
+                                     <div className="text-xs font-bold text-slate-400 italic">No expenses</div>
+                                   )}
+                                 </div>
+                               </div>
+                             </div>
+                           </td>
+                         </tr>
+                       )}
+                     </React.Fragment>
                      ))
                    )}
                  </tbody>
@@ -503,12 +562,20 @@ const BranchDeliveryReceipt = () => {
                               {new Date(r.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                             </div>
                          </div>
-                         <button 
-                           onClick={() => handleDelete(r._id)}
-                           className="p-3 bg-rose-50 text-rose-500 rounded-xl"
-                         >
-                            <FaTrash size={12} />
-                         </button>
+                         <div className="flex items-center gap-2">
+                           <button 
+                             onClick={() => setExpandedId(expandedId === r._id ? null : r._id)}
+                             className="p-3 bg-slate-50 text-slate-500 rounded-xl"
+                           >
+                             {expandedId === r._id ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
+                           </button>
+                           <button 
+                             onClick={() => handleDelete(r._id)}
+                             className="p-3 bg-rose-50 text-rose-500 rounded-xl"
+                           >
+                              <FaTrash size={12} />
+                           </button>
+                         </div>
                       </div>
                       
                       <div className="bg-slate-50 p-4 rounded-2xl mb-4">
@@ -531,6 +598,49 @@ const BranchDeliveryReceipt = () => {
                             </div>
                          </div>
                       </div>
+
+                      {/* Expandable Details */}
+                      {expandedId === r._id && (
+                        <div className="mt-4 pt-4 border-t border-slate-100 space-y-4">
+                          <div>
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                              <FaWallet className="text-emerald-500" /> Collections
+                            </h4>
+                            {r.collections?.length > 0 ? (
+                              <div className="space-y-2">
+                                {r.collections.map((c, i) => (
+                                  <div key={i} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                                    <div className="flex flex-col">
+                                      <span className="text-xs font-black text-slate-700">{c.customer?.name || "Unknown"}</span>
+                                      <span className="text-[9px] font-bold text-slate-400 uppercase">{c.paymentMode}</span>
+                                    </div>
+                                    <span className="text-xs font-black text-emerald-600">₹{c.amount?.toLocaleString()}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-xs font-bold text-slate-400 italic">No collections</div>
+                            )}
+                          </div>
+                          <div>
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                              <FaHandHoldingUsd className="text-rose-500" /> Expenses
+                            </h4>
+                            {r.expenses?.length > 0 ? (
+                              <div className="space-y-2">
+                                {r.expenses.map((e, i) => (
+                                  <div key={i} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                                    <span className="text-xs font-bold text-slate-600">{e.note || "No note"}</span>
+                                    <span className="text-xs font-black text-rose-500">₹{e.amount?.toLocaleString()}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-xs font-bold text-slate-400 italic">No expenses</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                    </div>
                  ))
                )}
