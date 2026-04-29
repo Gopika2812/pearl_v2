@@ -198,7 +198,7 @@ export default function SuperAdminControlSystem() {
       
       // 2. Actions
       const newActionPerms = {};
-      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems"].forEach(a => newActionPerms[a] = true);
+      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice"].forEach(a => newActionPerms[a] = true);
       setActionPermissions(newActionPerms);
       
       // 3. Field Visibility
@@ -219,7 +219,7 @@ export default function SuperAdminControlSystem() {
       setUserPermissions([]);
       
       const newActionPerms = {};
-      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems"].forEach(a => newActionPerms[a] = false);
+      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice"].forEach(a => newActionPerms[a] = false);
       setActionPermissions(newActionPerms);
       
       const newFieldPerms = {};
@@ -569,7 +569,8 @@ export default function SuperAdminControlSystem() {
                         { id: "action_cancel", name: "Cancel (SI)", icon: <FaTrash /> },
                         { id: "action_return", name: "Sales Return", icon: <FaUndo /> },
                         { id: "editInvoiceItems", name: "Edit Workbench Items", icon: <FaEdit /> },
-                        { id: "create_shortcuts", name: "Shortcuts", icon: <FaLink /> }
+                        { id: "create_shortcuts", name: "Shortcuts", icon: <FaLink /> },
+                        { id: "editSellingPrice", name: "Edit Selling Price", icon: <FaDollarSign /> }
                       ].map(action => (
                         <div
                           key={action.id}
