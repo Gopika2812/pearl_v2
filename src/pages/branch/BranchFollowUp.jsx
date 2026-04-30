@@ -261,11 +261,6 @@ const BranchFollowUp = () => {
                                 <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Recovery Dashboard</p>
                             </div>
                         </div>
-                        <div className="bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-lg">
-                            <p className="text-lg font-black text-indigo-700">
-                                {loading ? "..." : `₹${customers.reduce((sum, c) => sum + Math.max(0, getBalance(c)), 0).toLocaleString()}`}
-                            </p>
-                        </div>
                     </div>
 
                     {/* Filters Row */}

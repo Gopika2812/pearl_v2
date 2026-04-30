@@ -629,6 +629,9 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             discountAmount,
             sellingPrice,
             gst: gstPercent,
+            cgst: item.cgst !== undefined ? Number(item.cgst) : (originalItem ? (originalItem.cgst || 0) : (item.igst ? 0 : gstPercent / 2)),
+            sgst: item.sgst !== undefined ? Number(item.sgst) : (originalItem ? (originalItem.sgst || 0) : (item.igst ? 0 : gstPercent / 2)),
+            igst: item.igst !== undefined ? Number(item.igst) : (originalItem ? (originalItem.igst || 0) : 0),
             name: item.name || (originalItem ? originalItem.name : "Unknown Product"),
             hsn: item.hsn || (originalItem ? originalItem.hsn : "")
           };
