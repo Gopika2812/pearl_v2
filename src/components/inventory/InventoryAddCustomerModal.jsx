@@ -4,7 +4,7 @@ import { API_BASE, fetchWithAuth } from "../../api";
 import FilterableCheckboxList from "../FilterableCheckboxList";
 import FilterableSelect from "../FilterableSelect";
 
-const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], customerCategories = [], customerGroups = [], branchId, editingItem }) => {
+const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], customerCategories = [], customerGroups = [], branchId, editingItem, user }) => {
   const [customer, setCustomer] = useState({
     _id: null,
     name: "",
@@ -560,30 +560,32 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4 border-t border-gray-50">
-                  <div>
-                    <label className={labelClass}>Default Margin (%)</label>
-                    <input type="number" step="0.01" className={inputClass} value={customer.margin} onChange={(e) => setCustomer({ ...customer, margin: e.target.value })} />
+                {user?.role === "SUPER_ADMIN" && (
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4 border-t border-gray-50">
+                    <div>
+                      <label className={labelClass}>Default Margin (%)</label>
+                      <input type="number" step="0.01" className={inputClass} value={customer.margin} onChange={(e) => setCustomer({ ...customer, margin: e.target.value })} />
+                    </div>
+                    <div className="bg-blue-50/50 p-3 rounded-2xl border border-blue-100">
+                      <label className={`${labelClass} !text-blue-600`}>🔒 Fixed 31st Mar Bal</label>
+                      <input 
+                          type="number" 
+                          className={`${inputClass} !bg-white !p-2 !h-10`} 
+                          value={customer.openingBalance} 
+                          onChange={(e) => setCustomer({ ...customer, openingBalance: e.target.value })} 
+                      />
+                      <p className="text-[8px] text-blue-400 font-bold mt-1 leading-none uppercase">Static Vault</p>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Total Debit</label>
+                      <input type="number" className={`${inputClass} !p-2 !h-10`} value={customer.debit} onChange={(e) => setCustomer({ ...customer, debit: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Total Credit</label>
+                      <input type="number" className={`${inputClass} !p-2 !h-10`} value={customer.credit} onChange={(e) => setCustomer({ ...customer, credit: e.target.value })} />
+                    </div>
                   </div>
-                  <div className="bg-blue-50/50 p-3 rounded-2xl border border-blue-100">
-                    <label className={`${labelClass} !text-blue-600`}>🔒 Fixed 31st Mar Bal</label>
-                    <input 
-                        type="number" 
-                        className={`${inputClass} !bg-white !p-2 !h-10`} 
-                        value={customer.openingBalance} 
-                        onChange={(e) => setCustomer({ ...customer, openingBalance: e.target.value })} 
-                    />
-                    <p className="text-[8px] text-blue-400 font-bold mt-1 leading-none uppercase">Static Vault</p>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Total Debit</label>
-                    <input type="number" className={`${inputClass} !p-2 !h-10`} value={customer.debit} onChange={(e) => setCustomer({ ...customer, debit: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Total Credit</label>
-                    <input type="number" className={`${inputClass} !p-2 !h-10`} value={customer.credit} onChange={(e) => setCustomer({ ...customer, credit: e.target.value })} />
-                  </div>
-                </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-50">
                   <div>

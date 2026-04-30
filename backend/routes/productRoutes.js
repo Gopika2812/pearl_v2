@@ -185,11 +185,56 @@ router.get("/", async (req, res) => {
       .limit(pageSize)
       .lean();
 
-    // ⚡ Return product with current ground-truth totalQty from DB
+    // ⚡ SYNC: Fetch financial totals for the returned products to calculate "Tally Stock"
+    const productIds = products.map(p => p._id);
+    
+    const [salesTotals, purchaseTotals, cnTotals, dnTotals] = await Promise.all([
+      Invoice.aggregate([
+        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+        { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+      ]),
+      PurchaseInvoice.aggregate([
+        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+        { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+      ]),
+      CreditNote.aggregate([
+        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+        { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+      ]),
+      DebitNote.aggregate([
+        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+        { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+      ])
+    ]);
+
+    // Create lookup maps for fast access
+    const salesMap = new Map(salesTotals.map(t => [t._id.toString(), t.total]));
+    const purchaseMap = new Map(purchaseTotals.map(t => [t._id.toString(), t.total]));
+    const cnMap = new Map(cnTotals.map(t => [t._id.toString(), t.total]));
+    const dnMap = new Map(dnTotals.map(t => [t._id.toString(), t.total]));
+
+    // ⚡ Return product with current ground-truth "Tally Stock"
     const enhancedProducts = products.map((product) => {
+      const pId = product._id.toString();
+      const opening = Number(product.openingQty || 0);
+      const inwardPurchases = Number(purchaseMap.get(pId) || 0);
+      const inwardCreditNotes = Number(cnMap.get(pId) || 0);
+      const outwardSales = Number(salesMap.get(pId) || 0);
+      const outwardDebitNotes = Number(dnMap.get(pId) || 0);
+
+      const closingStock = (opening + inwardPurchases + inwardCreditNotes) - (outwardSales + outwardDebitNotes);
+
       return {
         ...product,
-        availableQty: product.totalQty || 0  // Use DB ground truth
+        availableQty: Math.round(closingStock * 100) / 100
       };
     });
 
@@ -264,7 +309,64 @@ router.get("/group/:productGroupId", async (req, res) => {
       .sort({ name: 1 })
       .lean();
 
-    console.log(`✅ Found ${products.length} products for group ${productGroupId}`);
+    // ⚡ SYNC: Fetch financial totals for the returned products to calculate "Tally Stock"
+    const productIds = products.map(p => p._id);
+    const branchObjectId = products.length > 0 ? products[0].branchId : null;
+
+    if (products.length > 0 && branchObjectId) {
+      const [salesTotals, purchaseTotals, cnTotals, dnTotals] = await Promise.all([
+        Invoice.aggregate([
+          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+          { $unwind: "$items" },
+          { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+          { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+        ]),
+        PurchaseInvoice.aggregate([
+          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+          { $unwind: "$items" },
+          { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+          { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+        ]),
+        CreditNote.aggregate([
+          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+          { $unwind: "$items" },
+          { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+          { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+        ]),
+        DebitNote.aggregate([
+          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+          { $unwind: "$items" },
+          { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
+          { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+        ])
+      ]);
+
+      const salesMap = new Map(salesTotals.map(t => [t._id.toString(), t.total]));
+      const purchaseMap = new Map(purchaseTotals.map(t => [t._id.toString(), t.total]));
+      const cnMap = new Map(cnTotals.map(t => [t._id.toString(), t.total]));
+      const dnMap = new Map(dnTotals.map(t => [t._id.toString(), t.total]));
+
+      const enhancedProducts = products.map((product) => {
+        const pId = product._id.toString();
+        const opening = Number(product.openingQty || 0);
+        const inwardPurchases = Number(purchaseMap.get(pId) || 0);
+        const inwardCreditNotes = Number(cnMap.get(pId) || 0);
+        const outwardSales = Number(salesMap.get(pId) || 0);
+        const outwardDebitNotes = Number(dnMap.get(pId) || 0);
+
+        const closingStock = (opening + inwardPurchases + inwardCreditNotes) - (outwardSales + outwardDebitNotes);
+
+        return {
+          ...product,
+          availableQty: Math.round(closingStock * 100) / 100
+        };
+      });
+
+      return res.json({
+        success: true,
+        data: enhancedProducts,
+      });
+    }
 
     res.json({
       success: true,

@@ -2404,6 +2404,7 @@ export default function InventorySalesOrderEntry({
         salesOwners={salesOwners}
         customerCategories={customerCategories}
         customerGroups={customerGroups}
+        user={user}
         onSave={(newCustomer) => {
           // Because the frontend expects the customer object to be in `customers` or `fetchedCustomers` for proper display
           setLocalCustomers(prev => [...prev, newCustomer]);

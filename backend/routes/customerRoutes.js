@@ -932,9 +932,9 @@ router.post("/", async (req, res) => {
       margin: Math.round(Number(margin) * 100) / 100 || 0,
       credit: Number(credit) || 0,
       debit: Number(debit) || 0,
-      salesOwner: salesOwner || null,
-      customerCategories: Array.isArray(customerCategories) ? customerCategories : [],
-      customerGroups: Array.isArray(customerGroups) ? customerGroups : [],
+      salesOwner: salesOwner && salesOwner !== "" ? salesOwner : null,
+      customerCategories: Array.isArray(customerCategories) ? customerCategories.filter(c => c && c !== "") : [],
+      customerGroups: Array.isArray(customerGroups) ? customerGroups.filter(g => g && g !== "") : [],
       accountHolder,
       accountNumber,
       ifsc,
@@ -1050,12 +1050,27 @@ router.put("/:id", async (req, res) => {
         console.log(`🔒 Security Audit Log created for financial change on customer ${oldCustomer.name}`);
     }
 
-    // Ensure arrays stay as arrays
-    if (updates.customerCategories && !Array.isArray(updates.customerCategories)) {
-      updates.customerCategories = [updates.customerCategories];
+    // 3️⃣ SANITIZE OBJECTID FIELDS (Prevent CastErrors from empty strings)
+    if (updates.salesOwner === "") {
+        updates.salesOwner = null;
     }
-    if (updates.customerGroups && !Array.isArray(updates.customerGroups)) {
-      updates.customerGroups = [updates.customerGroups];
+    
+    if (updates.customerCategories === "") {
+        updates.customerCategories = [];
+    } else if (updates.customerCategories && !Array.isArray(updates.customerCategories)) {
+        updates.customerCategories = [updates.customerCategories];
+    } else if (Array.isArray(updates.customerCategories)) {
+        // Remove empty strings from array
+        updates.customerCategories = updates.customerCategories.filter(id => id && id !== "");
+    }
+
+    if (updates.customerGroups === "") {
+        updates.customerGroups = [];
+    } else if (updates.customerGroups && !Array.isArray(updates.customerGroups)) {
+        updates.customerGroups = [updates.customerGroups];
+    } else if (Array.isArray(updates.customerGroups)) {
+        // Remove empty strings from array
+        updates.customerGroups = updates.customerGroups.filter(id => id && id !== "");
     }
 
     const customer = await Customer.findByIdAndUpdate(id, updates, {
@@ -1064,11 +1079,6 @@ router.put("/:id", async (req, res) => {
     })
       .populate('customerCategories', '_id name')
       .populate('customerGroups', '_id name');
-
-    res.json({ success: true, data: customer });
-
-    console.log(`✅ Customer Updated! StateCode: ${customer.stateCode}`);
-    console.log(`✓ Complete Customer: ${JSON.stringify({ name: customer.name, stateCode: customer.stateCode })}\n`);
 
     res.json({
       success: true,

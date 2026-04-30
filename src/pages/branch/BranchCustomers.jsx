@@ -922,6 +922,7 @@ const BranchCustomers = () => {
           customerCategories={customerCategories}
           customerGroups={customerGroups}
           branchId={branchId}
+          user={user}
         />
       )}
     </div>

@@ -649,6 +649,7 @@ const BranchFollowUp = () => {
                 customerCategories={customerCategories}
                 customerGroups={customerGroups}
                 salesOwners={salesOwners}
+                user={user}
             />
         </div>
     );

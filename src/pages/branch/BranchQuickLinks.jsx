@@ -281,6 +281,7 @@ export default function BranchQuickLinks() {
         customerGroups={customerGroups}
         editingItem={editingItem}
         branchId={branchId}
+        user={user}
       />
 
       <InventoryAddVendorModal
