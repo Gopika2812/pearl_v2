@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { FaCheck, FaTimes, FaUser, FaShieldAlt, FaHistory, FaBuilding, FaWhatsapp, FaCreditCard } from "react-icons/fa";
+import React, { useEffect, useState } from "react";
+import { FaCheck, FaTimes, FaShieldAlt, FaHistory, FaBuilding, FaUser, FaChevronDown, FaChevronUp, FaExternalLinkAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -9,6 +9,7 @@ export default function SuperAdminCreditRequests() {
   const [creditRequests, setCreditRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
   // Check if user is super admin
   useEffect(() => {
@@ -70,12 +71,16 @@ export default function SuperAdminCreditRequests() {
     }
   };
 
+  const toggleExpand = (id) => {
+    setExpandedId(expandedId === id ? null : id);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-secondary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-secondary font-black uppercase tracking-widest text-xs">Accessing Requests...</p>
+          <p className="text-secondary font-black uppercase tracking-widest text-[10px]">Accessing Requests...</p>
         </div>
       </div>
     );
@@ -84,129 +89,183 @@ export default function SuperAdminCreditRequests() {
   return (
     <div className="min-h-screen bg-[#f8fafc] p-4 md:p-8 font-poppins text-secondary">
       <div className="max-w-[1400px] mx-auto">
-        {/* Header */}
-        <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-black text-secondary flex items-center gap-4 tracking-tight">
-              <div className="p-3 bg-rose-500 rounded-2xl text-white shadow-xl shadow-rose-500/20">
-                <FaShieldAlt size={24} />
-              </div>
-              Credit Limit Requests
-            </h1>
-            <p className="text-secondary/60 mt-1 font-medium text-sm italic">Review and authorize billing bypass requests across all branches</p>
+        
+        {/* Compact Header */}
+        <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-secondary rounded-2xl flex items-center justify-center text-white shadow-lg">
+              <FaShieldAlt size={20} />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-secondary tracking-tight uppercase">Credit Requests</h1>
+              <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-[0.2em]">Live Authorization Stream</p>
+            </div>
           </div>
           
-          <div className="bg-white px-6 py-3 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-             <div className="text-right">
-                <p className="text-[10px] font-black text-secondary/30 uppercase tracking-widest">Active Requests</p>
-                <p className="text-xl font-black text-rose-500">{creditRequests.length}</p>
-             </div>
-             <div className="w-px h-8 bg-gray-100"></div>
-             <FaHistory className="text-gray-300 text-xl" />
+          <div className="flex items-center gap-2">
+            <div className="bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm">
+                <span className="text-[9px] font-black text-secondary/30 uppercase tracking-widest mr-2">Pending</span>
+                <span className="text-sm font-black text-rose-500">{creditRequests.length}</span>
+            </div>
+            <button 
+              onClick={fetchCreditRequests}
+              className="p-2.5 bg-white border border-gray-100 rounded-xl hover:bg-gray-50 transition shadow-sm text-secondary/40 hover:text-secondary"
+            >
+               <FaHistory size={14} />
+            </button>
           </div>
         </div>
 
-        {/* Requests List */}
-        {creditRequests.length === 0 ? (
-          <div className="bg-white border border-dashed border-gray-200 p-20 rounded-[40px] text-center">
-            <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-500 mx-auto mb-4">
-              <FaCheck size={32} />
-            </div>
-            <p className="text-secondary font-black text-lg">No Pending Requests</p>
-            <p className="text-secondary/40 text-sm font-medium mt-1">All credit limit bypasses have been processed.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {creditRequests.map((req) => (
-              <div
-                key={req._id}
-                className="bg-white border border-gray-100 rounded-[32px] overflow-hidden shadow-sm hover:shadow-xl hover:shadow-secondary/5 transition-all animate-in fade-in slide-in-from-bottom-2 duration-500"
-              >
-                {/* Branch Banner */}
-                <div className="bg-secondary/5 px-8 py-2 flex items-center justify-between border-b border-gray-100">
-                   <div className="flex items-center gap-2 text-[10px] font-black text-secondary/40 uppercase tracking-widest">
-                      <FaBuilding size={10} />
-                      {req.branchId?.name} ({req.branchId?.code})
-                   </div>
-                   <div className="text-[9px] font-black text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
-                      SECURE OVERRIDE REQ
-                   </div>
-                </div>
-
-                <div className="p-8">
-                  <div className="flex justify-between items-start mb-8">
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 rounded-2xl bg-secondary flex items-center justify-center text-white text-xl font-black shadow-lg shadow-secondary/20">
-                        {req.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-black text-secondary tracking-tight">{req.name}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                           <FaWhatsapp className="text-emerald-500" size={12} />
-                           <p className="text-xs font-bold text-secondary/40">{req.whatsapp}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                       <div className="bg-amber-100 text-amber-700 px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm border border-amber-200">
-                          <FaHistory size={12} />
-                          <span className="text-[10px] font-black uppercase tracking-tighter">{req.historyCount || 0} Lifetime Requests</span>
-                       </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 mb-8">
-                    <div className="p-5 bg-rose-50 rounded-2xl border border-rose-100 shadow-inner">
-                      <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest block mb-2">Current Debt</span>
-                      <span className="text-2xl font-black text-rose-600 italic">₹{req.debit?.toLocaleString()}</span>
-                    </div>
-                    <div className="p-5 bg-gray-50 rounded-2xl border border-gray-100">
-                      <span className="text-[9px] font-black text-secondary/30 uppercase tracking-widest block mb-2">Approved Limit</span>
-                      <span className="text-2xl font-black text-secondary italic">₹{req.creditLimit?.toLocaleString()}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-secondary/5 rounded-2xl mb-8 border border-secondary/10">
-                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-secondary shadow-sm">
-                           <FaUser size={12} />
-                        </div>
-                        <div>
-                           <p className="text-[9px] font-black text-secondary/40 uppercase tracking-widest">Requested By</p>
-                           <p className="text-xs font-bold text-secondary">{req.creditLimitRequestBy}</p>
-                        </div>
-                     </div>
-                     <div className="text-right">
-                        <p className="text-[9px] font-black text-secondary/40 uppercase tracking-widest">Date & Time</p>
-                        <p className="text-xs font-bold text-secondary">{new Date(req.creditLimitRequestAt).toLocaleString()}</p>
-                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <button
-                      onClick={() => handleAction(req._id, "approve")}
-                      disabled={processingId === req._id}
-                      className="bg-emerald-500 text-white font-black py-4 rounded-2xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 flex items-center justify-center gap-3 uppercase tracking-widest text-xs active:scale-95"
-                    >
-                      <FaCheck />
-                      {processingId === req._id ? "Processing..." : "Approve Bypass"}
-                    </button>
-                    
-                    <button
-                      onClick={() => handleAction(req._id, "reject")}
-                      disabled={processingId === req._id}
-                      className="bg-white border-2 border-rose-200 text-rose-500 font-black py-4 rounded-2xl hover:bg-rose-50 transition-all disabled:opacity-50 flex items-center justify-center gap-3 uppercase tracking-widest text-xs active:scale-95"
-                    >
-                      <FaTimes />
-                      {processingId === req._id ? "Processing..." : "Reject Access"}
-                    </button>
-                  </div>
-                </div>
+        {/* Table View */}
+        <div className="bg-white rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden">
+          {creditRequests.length === 0 ? (
+            <div className="py-20 text-center">
+              <div className="w-16 h-16 bg-emerald-50 rounded-3xl flex items-center justify-center text-emerald-500 mx-auto mb-4">
+                <FaCheck size={32} />
               </div>
-            ))}
-          </div>
-        )}
+              <p className="text-secondary font-black text-lg">System Clear</p>
+              <p className="text-secondary/40 text-[10px] font-bold uppercase tracking-widest">All authorization requests processed</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/80 text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em] border-b border-gray-100">
+                    <th className="px-6 py-5">Customer Name</th>
+                    <th className="px-6 py-5">Branch</th>
+                    <th className="px-6 py-5 text-right">Debit / Limit</th>
+                    <th className="px-6 py-5 text-center">History</th>
+                    <th className="px-6 py-5 text-center">Actions</th>
+                    <th className="px-6 py-5 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {creditRequests.map((req) => (
+                    <React.Fragment key={req._id}>
+                      <tr 
+                        className={`group transition-all cursor-pointer ${expandedId === req._id ? "bg-secondary/5" : "hover:bg-gray-50/50"}`}
+                        onClick={() => toggleExpand(req._id)}
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-secondary text-white flex items-center justify-center text-[10px] font-black shadow-sm">
+                              {req.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-xs font-black text-secondary tracking-tight">{req.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-secondary/80 uppercase tracking-tighter">{req.branchId?.code}</span>
+                            <span className="text-[9px] font-bold text-secondary/30">{req.branchId?.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-black text-rose-600 italic">₹{req.debit?.toLocaleString()}</span>
+                            <span className="text-[9px] font-bold text-secondary/30 tracking-widest uppercase">Limit: ₹{req.creditLimit?.toLocaleString()}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                           <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${req.historyCount > 5 ? "bg-rose-100 text-rose-600" : "bg-amber-100 text-amber-600"}`}>
+                              {req.historyCount || 0} REQS
+                           </span>
+                        </td>
+                        <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                           <div className="flex items-center justify-center gap-2">
+                              <button 
+                                onClick={() => handleAction(req._id, "approve")}
+                                disabled={processingId === req._id}
+                                className="h-8 w-24 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm shadow-emerald-500/20"
+                              >
+                                <FaCheck size={10} />
+                                <span className="text-[9px] font-black uppercase tracking-widest">Approve</span>
+                              </button>
+                              <button 
+                                onClick={() => handleAction(req._id, "reject")}
+                                disabled={processingId === req._id}
+                                className="h-8 w-24 border border-rose-100 text-rose-500 hover:bg-rose-50 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95"
+                              >
+                                <FaTimes size={10} />
+                                <span className="text-[9px] font-black uppercase tracking-widest">Reject</span>
+                              </button>
+                           </div>
+                        </td>
+                        <td className="px-6 py-4 text-center text-secondary/20 group-hover:text-secondary/40 transition-colors">
+                           {expandedId === req._id ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
+                        </td>
+                      </tr>
+                      
+                      {/* Expandable Section */}
+                      {expandedId === req._id && (
+                        <tr className="bg-white border-x-4 border-secondary/10">
+                          <td colSpan="6" className="px-12 py-6">
+                             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                <div className="space-y-4">
+                                   <p className="text-[10px] font-black text-secondary/30 uppercase tracking-[0.2em] border-b pb-2">Requester Details</p>
+                                   <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-secondary/40">
+                                         <FaUser size={14} />
+                                      </div>
+                                      <div>
+                                         <p className="text-xs font-black text-secondary tracking-tight uppercase">{req.creditLimitRequestBy}</p>
+                                         <p className="text-[9px] font-bold text-secondary/40 tracking-widest">STAFF MEMBER</p>
+                                      </div>
+                                   </div>
+                                   <div>
+                                      <p className="text-[9px] font-black text-secondary/30 uppercase tracking-widest mb-1">Time Stamp</p>
+                                      <p className="text-xs font-bold text-secondary italic">{new Date(req.creditLimitRequestAt).toLocaleString()}</p>
+                                   </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                   <p className="text-[10px] font-black text-secondary/30 uppercase tracking-[0.2em] border-b pb-2">Context & Metrics</p>
+                                   <div className="grid grid-cols-2 gap-4">
+                                      <div className="p-3 bg-gray-50 rounded-xl">
+                                         <p className="text-[8px] font-black text-secondary/30 uppercase mb-1 tracking-widest">Over Limit By</p>
+                                         <p className="text-sm font-black text-rose-500 italic">₹{(req.debit - req.creditLimit).toLocaleString()}</p>
+                                      </div>
+                                      <div className="p-3 bg-gray-50 rounded-xl">
+                                         <p className="text-[8px] font-black text-secondary/30 uppercase mb-1 tracking-widest">Risk Factor</p>
+                                         <p className="text-sm font-black text-amber-600">{Math.round((req.debit / req.creditLimit) * 100)}%</p>
+                                      </div>
+                                   </div>
+                                   <div className="flex items-center gap-2 text-primary font-black text-[10px] uppercase tracking-widest">
+                                      <FaHistory /> View Full History Log <FaExternalLinkAlt size={8} />
+                                   </div>
+                                </div>
+
+                                <div className="bg-secondary/5 p-6 rounded-2xl flex flex-col justify-between border border-secondary/10">
+                                   <p className="text-[10px] font-black text-secondary/40 uppercase tracking-widest leading-relaxed">
+                                      Security Note: Approval will allow this branch to process the current order. Permanent credit limit remains unchanged.
+                                   </p>
+                                   <div className="mt-4 flex gap-2">
+                                      <div className="h-1.5 flex-1 bg-rose-200 rounded-full overflow-hidden">
+                                         <div className="h-full bg-rose-500" style={{ width: '80%' }}></div>
+                                      </div>
+                                      <span className="text-[9px] font-black text-rose-600">HIGH PRIORITY</span>
+                                   </div>
+                                </div>
+                             </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
+// Add CSS for hiding scrollbars but keeping functionality
+const style = document.createElement('style');
+style.textContent = `
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+`;
+document.head.appendChild(style);

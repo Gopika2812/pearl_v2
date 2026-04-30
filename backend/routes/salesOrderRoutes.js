@@ -11,6 +11,7 @@ import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
 import { cacheData, clearCachePrefix } from "../middleware/cacheMiddleware.js";
+import moment from "moment-timezone";
 
 const router = express.Router();
 
@@ -171,31 +172,28 @@ router.get("/", async (req, res) => {
     // 5. Date Filter
     // 📅 Date Filtering: Respect specific dates if provided, or default to "Today" if no global search is active.
     if (fromDate || toDate || (!search && !voucherType && !customerName)) {
-      const parseDate = (dateStr, isEnd) => {
-        if (!dateStr) return isEnd ? new Date() : new Date();
-        
-        let d = new Date(dateStr);
-        // If Invalid Date and contains dashes, try DD-MM-YYYY
-        if (isNaN(d.getTime()) && dateStr.includes("-")) {
-          const parts = dateStr.split("-");
-          if (parts.length === 3) {
-            // Assume DD-MM-YYYY if parts[0] > 12 or if parts[2] is 4 digits
-            if (parts[2].length === 4) {
-              d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-            }
-          }
-        }
-        return d;
-      };
+      let start, end;
+      const IST = "Asia/Kolkata";
 
-      const start = parseDate(fromDate, false);
-      if (!isNaN(start.getTime())) start.setHours(0, 0, 0, 0);
+      if (fromDate) {
+        start = moment.tz(fromDate, IST).startOf("day").toDate();
+      } else {
+        start = moment.tz(IST).startOf("day").toDate();
+      }
 
-      const end = parseDate(toDate, true);
-      if (!isNaN(end.getTime())) end.setHours(23, 59, 59, 999);
+      if (toDate) {
+        end = moment.tz(toDate, IST).endOf("day").toDate();
+      } else {
+        end = moment.tz(IST).endOf("day").toDate();
+      }
 
-      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-        query.orderDate = { $gte: start, $lte: end };
+      if (start && end) {
+        // 🎯 ROBUST FILTER: Check both orderDate and createdAt so we don't miss anything
+        query.$or = [
+          { orderDate: { $gte: start, $lte: end } },
+          { createdAt: { $gte: start, $lte: end } }
+        ];
+        console.log(`📅 [DEBUG] Date Range (IST): ${moment(start).tz(IST).format()} to ${moment(end).tz(IST).format()}`);
       }
     }
 
@@ -255,13 +253,10 @@ router.get("/history", cacheData(120), async (req, res) => {
     }
 
     if (fromDate || toDate) {
+      const IST = "Asia/Kolkata";
       matchQuery.createdAt = {};
-      if (fromDate) matchQuery.createdAt.$gte = new Date(fromDate);
-      if (toDate) {
-        const end = new Date(toDate);
-        end.setHours(23, 59, 59, 999);
-        matchQuery.createdAt.$lte = end;
-      }
+      if (fromDate) matchQuery.createdAt.$gte = moment.tz(fromDate, IST).startOf("day").toDate();
+      if (toDate) matchQuery.createdAt.$lte = moment.tz(toDate, IST).endOf("day").toDate();
     }
 
     const aggregation = [
@@ -728,10 +723,24 @@ router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, r
       note: `Order CANCELLED by ${req.user.username || "Admin"}. Reason: ${narration || "No narration provided"}. All stock and customer balance effects reverted.`
     });
 
+    // 🛡️ Mark associated invoice as CANCELLED and update delivery status
+    const Invoice = mongoose.model("Invoice");
+    await Invoice.findOneAndUpdate(
+      { salesOrderId: salesOrder._id },
+      { 
+        status: "CANCELLED",
+        deliveryStatus: "CANCELLED", // ✨ Reset delivery status
+        cancelledAt: new Date(),
+        cancelledBy: req.user.username || req.user.id,
+        cancelReason: narration || "Cancelled via Sales Order"
+      }
+    );
+
     salesOrder.status = "CANCELLED";
     salesOrder.cancelNarration = narration || "";
     salesOrder.cancelledBy = req.user.username || req.user.id;
     salesOrder.cancelledAt = new Date();
+
     await salesOrder.save();
 
     // Log the cancellation
@@ -1821,10 +1830,66 @@ router.delete("/:id/cancel", auth, async (req, res) => {
 
     if (invoiceGenerated) {
       const Invoice = mongoose.model("Invoice");
-      await Invoice.deleteOne({ salesOrderId: id });
+      // Instead of deleting, we cancel the invoice if it exists
+      await Invoice.findOneAndUpdate({ salesOrderId: id }, { status: "CANCELLED", cancelReason: "Sales Order Cancelled" });
     }
 
-    await SalesOrder.findByIdAndDelete(id);
+    // Update status to CANCELLED instead of deleting
+    salesOrder.status = "CANCELLED";
+    salesOrder.cancelRequestStatus = "NONE"; // Clear any pending requests
+    salesOrder.editHistory.push({
+      version: (salesOrder.editHistory.length || 0) + 1,
+      editType: "CANCELLED",
+      items: salesOrder.items,
+      subtotal: salesOrder.subtotal,
+      totalTax: salesOrder.totalTax,
+      grandTotal: salesOrder.grandTotal,
+      editedAt: new Date(),
+      editedBy: username,
+      note: `Sales Order CANCELLED. Reason: ${req.body.narration || "No reason"}`
+    });
+
+    await salesOrder.save();
+
+    // Manually trigger the reversal logic since we didn't delete the doc
+    const SalesOrderModel = mongoose.model("SalesOrder");
+    
+    // 1. Revert Customer Balance
+    const Customer = mongoose.model("Customer");
+    const Product = mongoose.model("Product");
+    const targetCustomerId = salesOrder.lastInvoicedCustomerId || salesOrder.customer?.customerId;
+    if (targetCustomerId) {
+      const customer = await Customer.findById(targetCustomerId);
+      if (customer) {
+        const amountToRevert = (salesOrder.invoiceGenerated || salesOrder.status === "INVOICED") ? (salesOrder.lastInvoicedGrandTotal || salesOrder.invoiceGrandTotal || 0) : 0;
+        if (amountToRevert > 0) {
+          let curDebit = customer.debit || 0;
+          let curCredit = customer.credit || 0;
+          if (curDebit >= amountToRevert) {
+            curDebit -= amountToRevert;
+          } else {
+            const excess = amountToRevert - curDebit;
+            curDebit = 0;
+            curCredit += excess;
+          }
+          customer.debit = Math.round(curDebit);
+          customer.credit = Math.round(curCredit);
+          customer.closingBalance = Math.round((customer.closingBalance || 0) - amountToRevert);
+          customer.totalBalance = customer.closingBalance;
+          await customer.save();
+        }
+      }
+    }
+
+    // 2. Restore Stock
+    if (salesOrder.invoiceGenerated) {
+      const itemsToRestore = (salesOrder.invoiceItems && salesOrder.invoiceItems.length > 0) ? salesOrder.invoiceItems : salesOrder.items;
+      for (const item of itemsToRestore) {
+        if (item.productId && item.qty > 0) {
+          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty } });
+        }
+      }
+    }
 
     await createAuditLog({
       userId: req.user.id,
@@ -1849,3 +1914,91 @@ router.delete("/:id/cancel", auth, async (req, res) => {
 });
 
 export default router;
+
+// PUT - Revoke (Restore) Cancelled Sales Order
+router.put("/:id/revoke", auth, async (req, res) => {
+  return res.status(403).json({ success: false, message: "Revoke functionality has been disabled." });
+  try {
+    const { id } = req.params;
+    const username = req.user.username;
+
+    const salesOrder = await SalesOrder.findById(id);
+    if (!salesOrder) {
+      return res.status(404).json({ success: false, message: "Sales order not found" });
+    }
+
+    if (salesOrder.status !== "CANCELLED") {
+      return res.status(400).json({ success: false, message: "Only cancelled orders can be revoked" });
+    }
+
+    // 1. RESTORE CUSTOMER BALANCE
+    const Customer = mongoose.model("Customer");
+    const targetCustomerId = salesOrder.customer?.customerId;
+    if ((salesOrder.invoiceGenerated || salesOrder.status === "INVOICED") && targetCustomerId) {
+      const customer = await Customer.findById(targetCustomerId);
+      if (customer && salesOrder.invoiceGenerated) {
+        const amountToRestore = salesOrder.lastInvoicedGrandTotal || salesOrder.invoiceGrandTotal || 0;
+        if (amountToRestore > 0) {
+          let curDebit = customer.debit || 0;
+          let curCredit = customer.credit || 0;
+          if (curCredit >= amountToRestore) {
+            curCredit -= amountToRestore;
+          } else {
+            const excess = amountToRestore - curCredit;
+            curCredit = 0;
+            curDebit += excess;
+          }
+          customer.debit = Math.round(curDebit);
+          customer.credit = Math.round(curCredit);
+          customer.closingBalance = Math.round((customer.closingBalance || 0) + amountToRestore);
+          customer.totalBalance = customer.closingBalance;
+          await customer.save();
+        }
+      }
+    }
+
+    // 2. RESTORE STOCK
+    if (salesOrder.invoiceGenerated) {
+      const Product = mongoose.model("Product");
+      const itemsToRestore = (salesOrder.invoiceItems && salesOrder.invoiceItems.length > 0) ? salesOrder.invoiceItems : salesOrder.items;
+      for (const item of itemsToRestore) {
+        if (item.productId && item.qty > 0) {
+          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -item.qty } });
+        }
+      }
+    }
+
+    // 3. UPDATE STATUS
+    salesOrder.status = "PLACED"; 
+    salesOrder.invoiceGenerated = false;
+    salesOrder.salesInvoiceId = undefined;
+    salesOrder.editHistory.push({
+      version: (salesOrder.editHistory.length || 0) + 1,
+      editType: "GENERAL_EDIT",
+      items: salesOrder.items,
+      subtotal: salesOrder.subtotal,
+      totalTax: salesOrder.totalTax,
+      grandTotal: salesOrder.grandTotal,
+      editedAt: new Date(),
+      editedBy: username,
+      note: `Sales Order REVOKED/RESTORED by ${username}.`
+    });
+    await salesOrder.save();
+
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: username,
+      branchId: salesOrder.branchId,
+      action: "GENERAL_EDIT",
+      description: `Revoked/Restored Sales Order: ${salesOrder.invoiceId}.`,
+      targetId: id,
+      targetModel: "SalesOrder",
+    });
+
+    res.status(200).json({ success: true, message: `Sales Order ${salesOrder.invoiceId} restored successfully.` });
+  } catch (error) {
+    console.error("❌ Revoke Order Error:", error);
+    res.status(500).json({ success: false, message: "Failed to restore order", error: error.message });
+  }
+});

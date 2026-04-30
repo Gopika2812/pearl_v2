@@ -1,18 +1,19 @@
 import express from "express";
+import moment from "moment-timezone";
 import mongoose from "mongoose";
 import multer from "multer";
 import XLSX from "xlsx";
 import CreditNote from "../models/CreditNote.js";
+import CustomerLockedPrice from "../models/CustomerLockedPrice.js";
 import DebitNote from "../models/DebitNote.js";
 import Invoice from "../models/Invoice.js";
 import Product from "../models/Product.js";
 import ProductCategory from "../models/ProductCategory.js";
 import ProductGroup from "../models/ProductGroup.js";
+import PurchaseInvoice from "../models/PurchaseInvoice.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SalesOrder from "../models/SalesOrder.js";
 import Warehouse from "../models/Warehouse.js";
-import CustomerLockedPrice from "../models/CustomerLockedPrice.js";
-import moment from "moment-timezone";
 
 import auth from "../middleware/auth.js";
 import { createAuditLog } from "../utils/logUtil.js";
@@ -546,7 +547,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
       // 💰 STOCK AUDIT LOGIC (SIMPLE REPLACE MODE)
       const hasStockColumn = 'totalqty' in normalizedRow || 'qty' in normalizedRow || 'openingquantity' in normalizedRow || 'openingstock' in normalizedRow || 'closingqty' in normalizedRow || 'openingqty' in normalizedRow;
-      
+
       if (hasStockColumn) {
         const rawQty = normalizedRow.totalqty || normalizedRow.qty || normalizedRow.openingquantity || normalizedRow.openingstock || normalizedRow.closingqty || normalizedRow.openingqty || "";
         const qty = parseFloat(String(rawQty).replace(/[^0-9.-]+/g, "")) || 0;
@@ -558,7 +559,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       if (existingProductId) {
         if (skipExisting === true || skipExisting === "true") {
           alreadyExistsCount++;
-          continue; 
+          continue;
         }
         // Queue for update
         productsToBulkUpdate.push({
@@ -609,18 +610,18 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       if (updatedProductIds.length > 0) {
         console.log(`📡 Bulk Sync: Triggering price sync for ${updatedProductIds.length} products...`);
         const updatedProducts = await Product.find({ _id: { $in: updatedProductIds } }, { _id: 1, purchasingPrice: 1, name: 1 });
-        
+
         for (const p of updatedProducts) {
           const lockedPrices = await CustomerLockedPrice.find({ productId: p._id });
           if (lockedPrices.length > 0) {
             const lpOps = lockedPrices.map(lp => ({
               updateOne: {
                 filter: { _id: lp._id },
-                update: { 
-                  $set: { 
+                update: {
+                  $set: {
                     lockedPrice: Math.round((p.purchasingPrice + (lp.margin || 0)) * 100) / 100,
-                    purchasingPrice: p.purchasingPrice 
-                  } 
+                    purchasingPrice: p.purchasingPrice
+                  }
                 }
               }
             }));
@@ -629,6 +630,18 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
           }
         }
       }
+    }
+
+    // 3️⃣ Log the Bulk Action
+    if (insertedCount > 0 || updatedCount > 0) {
+      await createAuditLog({
+        userId: req.user.id,
+        userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+        username: req.user.username,
+        branchId,
+        action: "PRODUCT_BULK_UPLOAD",
+        description: `Bulk product upload completed. Inserted: ${insertedCount}, Updated: ${updatedCount}.`,
+      });
     }
 
     console.log(`✅ Uploaded: ${insertedCount}, 🔄 Updated: ${updatedCount}, ⚠️ Skipped: ${skipped.length}, ⏩ Already Existed: ${alreadyExistsCount}`);
@@ -777,9 +790,9 @@ router.post("/sync-past-prices", auth, async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { 
-      name, productGroup, productCategories = [], perQty, units, totalQty, 
-      purchasingPrice, sellingPrice, adminMargin, marginPercentage, lockedPrice, margin, 
+    const {
+      name, productGroup, productCategories = [], perQty, units, totalQty,
+      purchasingPrice, sellingPrice, adminMargin, marginPercentage, lockedPrice, margin,
       hsnCode, gst, branchId, unitConversion, openingQty, manualOpeningDate,
       totalQtyUnit, mrp, reorderLevel, reorderQty, leadTime, checkPeriod,
       preferredVendor, minStockQty, maxStockQty, restockingDays, restockingConfig
@@ -890,15 +903,15 @@ router.put("/:id", auth, async (req, res) => {
 
       const tIn = (purchases[0]?.total || 0) + (creditNotes[0]?.total || 0);
       const tOut = (sales[0]?.total || 0) + (debitNotes[0]?.total || 0);
-      
+
       let anchor = oldProduct.openingQty || 0;
-      
+
       // If openingQty is explicitly updated, use it
       if (openingQty !== undefined) {
         anchor = Number(openingQty);
         updateData.openingQty = anchor;
         updateData.totalQty = anchor + tIn - tOut;
-      } 
+      }
       // If ONLY totalQty is updated (e.g. from UI form edit), DO NOT reverse calculate openingQty!
       // The anchor must remain strictly what was imported. 
       else if (totalQty !== undefined) {
@@ -914,6 +927,25 @@ router.put("/:id", auth, async (req, res) => {
       .populate("productGroup", "name")
       .populate("productCategories", "name")
       .populate("warehouse", "name");
+
+    // Log openingQty changes (Inventory Anchor)
+    const openingQtyChanged = openingQty !== undefined && Number(openingQty) !== oldProduct.openingQty;
+    if (openingQtyChanged) {
+      await createAuditLog({
+        userId: req.user.id,
+        userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+        username: req.user.username,
+        branchId: req.user.branch || oldProduct.branchId,
+        action: "UPDATE_PRODUCT_OPENING_QTY",
+        description: `Updated Opening Stock for ${updatedProduct.name}: ${oldProduct.openingQty} -> ${openingQty}.`,
+        targetId: updatedProduct._id,
+        targetModel: "Product",
+        changes: {
+          before: { openingQty: oldProduct.openingQty },
+          after: { openingQty: Number(openingQty) }
+        }
+      });
+    }
 
     // Log price changes if any
     const priceChanged =
@@ -1069,7 +1101,7 @@ router.get("/available/:productId", async (req, res) => {
 
     const branchOid = product.branchId || new mongoose.Types.ObjectId(branchId);
     if (!branchOid) {
-       return res.status(400).json({ success: false, message: "branchId is required" });
+      return res.status(400).json({ success: false, message: "branchId is required" });
     }
 
     // ⚓ ANCHOR POINT: March 31st, 2026 (IST)
@@ -1077,35 +1109,36 @@ router.get("/available/:productId", async (req, res) => {
 
     // 🧮 Calculate ALL movements after the anchor for this specific product
     const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
-      PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, "items.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+      PurchaseInvoice.aggregate([
+        { $match: { branchId: branchOid, "items.productId": pOid, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         { $match: { "items.productId": pOid } },
         { $group: { _id: null, total: { $sum: "$items.qty" } } }
       ]),
-      SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, "invoiceItems.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
-        { $unwind: "$invoiceItems" },
-        { $match: { "invoiceItems.productId": pOid } },
-        { $group: { _id: null, total: { $sum: "$invoiceItems.qty" } } }
+      Invoice.aggregate([
+        { $match: { branchId: branchOid, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": pOid } },
+        { $group: { _id: null, total: { $sum: "$items.qty" } } }
       ]),
       DebitNote.aggregate([
-        { $match: { branchId: branchOid, status: "Created", "items.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: { $ne: "Cancelled" }, date: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
-        { $match: { "items.productId": pOid } },
-        { $group: { _id: null, total: { $sum: "$items.qty" } } }
+        { $match: { "items.productId": pOid, $or: [{ "items.qty": { $gt: 0 } }, { "items.returnedQty": { $gt: 0 } }] } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ["$items.qty", "$items.returnedQty", 0] } } } }
       ]),
       CreditNote.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, "items.productId": pOid, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: { $ne: "Cancelled" }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $addFields: { effectiveDate: { $ifNull: ["$date", "$createdAt"] } } },
         { $unwind: "$items" },
-        { $match: { "items.productId": pOid } },
-        { $group: { _id: null, total: { $sum: "$items.qty" } } }
+        { $match: { "items.productId": pOid, $or: [{ "items.qty": { $gt: 0 } }, { "items.returnedQty": { $gt: 0 } }] } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ["$items.qty", "$items.returnedQty", 0] } } } }
       ])
     ]);
 
     const inwards = (purchases[0]?.total || 0) + (creditNotes[0]?.total || 0);
     const outwards = (sales[0]?.total || 0) + (debitNotes[0]?.total || 0);
-    
+
     // Final Live Closing Stock
     const availableQty = (product.openingQty || 0) + inwards - outwards;
 
@@ -1139,13 +1172,13 @@ router.get("/stock-group-summary", async (req, res) => {
     }
 
     const branchOid = new mongoose.Types.ObjectId(branchId);
-    
+
     // 🌍 LOCAL TIMEZONE LOCK: Asia/Kolkata
     // Start of Day IST converted to UTC for DB query
     const reportStart = moment.tz(startDate, "Asia/Kolkata").startOf('day').toDate();
     // End of Day IST converted to UTC
     const reportEnd = moment.tz(endDate, "Asia/Kolkata").endOf('day').toDate();
-    
+
     // Hard cutoff at the start of original Excel implementation (April 1st IST)
     // Mar 31, 2026 23:59:59 IST = 2026-03-31T18:29:59.999Z
     const HARD_ANCHOR_DATE = moment.tz("2026-03-31 23:59:59", "Asia/Kolkata").toDate();
@@ -1154,43 +1187,53 @@ router.get("/stock-group-summary", async (req, res) => {
     const products = await Product.find({ branchId }).select("productGroup totalQty purchasingPrice manualOpeningDate openingQty").lean();
 
     const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
-      PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, date: { $gt: HARD_ANCHOR_DATE } } },
+      PurchaseInvoice.aggregate([
+        { $match: { branchId: branchOid, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
-        { $group: { 
-            _id: "$items.productId", 
-            inBeforeReport: { $sum: { $cond: [{ $lt: ["$date", reportStart] }, "$items.qty", 0] } },
-            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$date", reportStart] }, { $lte: ["$date", reportEnd] }] }, "$items.qty", 0] } }
-        } }
+        {
+          $group: {
+            _id: "$items.productId",
+            inBeforeReport: { $sum: { $cond: [{ $lt: ["$invoiceDate", reportStart] }, "$items.qty", 0] } },
+            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$invoiceDate", reportStart] }, { $lte: ["$invoiceDate", reportEnd] }] }, "$items.qty", 0] } }
+          }
+        }
       ]),
-      SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, orderDate: { $gt: HARD_ANCHOR_DATE } } },
-        { $addFields: { effectiveItems: { $cond: [ { $gt: [ { $size: { $ifNull: ["$invoiceItems", []] } }, 0 ] }, "$invoiceItems", "$items" ] } } },
-        { $unwind: "$effectiveItems" },
-        { $group: { 
-            _id: "$effectiveItems.productId", 
-            outBeforeReport: { $sum: { $cond: [{ $lt: ["$orderDate", reportStart] }, "$effectiveItems.qty", 0] } },
-            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$orderDate", reportStart] }, { $lte: ["$orderDate", reportEnd] }] }, "$effectiveItems.qty", 0] } }
-        } }
+      Invoice.aggregate([
+        { $match: { branchId: branchOid, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $match: { "items.qty": { $gt: 0 } } },
+        {
+          $group: {
+            _id: "$items.productId",
+            outBeforeReport: { $sum: { $cond: [{ $lt: ["$invoiceDate", reportStart] }, "$items.qty", 0] } },
+            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$invoiceDate", reportStart] }, { $lte: ["$invoiceDate", reportEnd] }] }, "$items.qty", 0] } }
+          }
+        }
       ]),
       DebitNote.aggregate([
-        { $match: { branchId: branchOid, status: "Created", date: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: { $ne: "Cancelled" }, date: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
-        { $group: { 
-            _id: "$items.productId", 
+        { $match: { $or: [{ "items.qty": { $gt: 0 } }, { "items.returnedQty": { $gt: 0 } }] } },
+        {
+          $group: {
+            _id: "$items.productId",
             outBeforeReport: { $sum: { $cond: [{ $lt: ["$date", reportStart] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } },
             outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$date", reportStart] }, { $lte: ["$date", reportEnd] }] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } }
-        } }
+          }
+        }
       ]),
       CreditNote.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: { $ne: "Cancelled" }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $addFields: { effectiveDate: { $ifNull: ["$date", "$createdAt"] } } },
         { $unwind: "$items" },
-        { $group: { 
-            _id: "$items.productId", 
-            inBeforeReport: { $sum: { $cond: [{ $lt: ["$effectiveDate", reportStart] }, "$items.qty", 0] } },
-            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$effectiveDate", reportStart] }, { $lte: ["$effectiveDate", reportEnd] }] }, "$items.qty", 0] } }
-        } }
+        { $match: { $or: [{ "items.qty": { $gt: 0 } }, { "items.returnedQty": { $gt: 0 } }] } },
+        {
+          $group: {
+            _id: "$items.productId",
+            inBeforeReport: { $sum: { $cond: [{ $lt: ["$effectiveDate", reportStart] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } },
+            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$effectiveDate", reportStart] }, { $lte: ["$effectiveDate", reportEnd] }] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } }
+          }
+        }
       ])
     ]);
 
@@ -1203,7 +1246,7 @@ router.get("/stock-group-summary", async (req, res) => {
     products.forEach(product => {
       const gid = (product.productGroup || "uncategorized").toString();
       const pid = product._id.toString();
-      
+
       const ps = pMap.get(pid) || { inBeforeReport: 0, inDuringPeriod: 0 };
       const ss = sMap.get(pid) || { outBeforeReport: 0, outDuringPeriod: 0 };
       const dns = dnMap.get(pid) || { outBeforeReport: 0, outDuringPeriod: 0 };
@@ -1214,18 +1257,18 @@ router.get("/stock-group-summary", async (req, res) => {
       const excelAnchor = product.openingQty || 0;
       const inBefore = ps.inBeforeReport + cns.inBeforeReport;
       const outBefore = ss.outBeforeReport + dns.outBeforeReport;
-      
+
       const openingQty = excelAnchor + inBefore - outBefore;
-      
+
       // 2. Movements during the selected report period
       const inwards = ps.inDuringPeriod + cns.inDuringPeriod;
       const outwards = ss.outDuringPeriod + dns.outDuringPeriod;
-      
+
       // 3. Closing = Opening + Inwards - Outwards
       const closingQty = openingQty + inwards - outwards;
 
       if (!groupTotals[gid]) groupTotals[gid] = { openingQty: 0, openingValue: 0, inwards: 0, outwards: 0, closingQty: 0, closingValue: 0 };
-      
+
       groupTotals[gid].openingQty += openingQty;
       groupTotals[gid].openingValue += (openingQty * (product.purchasingPrice || 0));
       groupTotals[gid].inwards += inwards;
@@ -1253,7 +1296,7 @@ router.get("/stock-journal", async (req, res) => {
     }
 
     const branchOid = new mongoose.Types.ObjectId(branchId);
-    
+
     // 🌍 LOCAL TIMEZONE LOCK: Asia/Kolkata
     const reportStart = moment.tz(startDate, "Asia/Kolkata").startOf('day').toDate();
     const reportEnd = moment.tz(endDate, "Asia/Kolkata").endOf('day').toDate();
@@ -1278,43 +1321,53 @@ router.get("/stock-journal", async (req, res) => {
     }
 
     const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
-      PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, date: { $gt: HARD_ANCHOR_DATE } } },
+      PurchaseInvoice.aggregate([
+        { $match: { branchId: branchOid, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
-        { $group: { 
-            _id: "$items.productId", 
-            inBeforeReport: { $sum: { $cond: [{ $lt: ["$date", reportStart] }, "$items.qty", 0] } },
-            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$date", reportStart] }, { $lte: ["$date", reportEnd] }] }, "$items.qty", 0] } }
-        } }
+        {
+          $group: {
+            _id: "$items.productId",
+            inBeforeReport: { $sum: { $cond: [{ $lt: ["$invoiceDate", reportStart] }, "$items.qty", 0] } },
+            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$invoiceDate", reportStart] }, { $lte: ["$invoiceDate", reportEnd] }] }, "$items.qty", 0] } }
+          }
+        }
       ]),
-      SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, orderDate: { $gt: HARD_ANCHOR_DATE } } },
-        { $addFields: { effectiveItems: { $cond: [ { $gt: [ { $size: { $ifNull: ["$invoiceItems", []] } }, 0 ] }, "$invoiceItems", "$items" ] } } },
-        { $unwind: "$effectiveItems" },
-        { $group: { 
-            _id: "$effectiveItems.productId", 
-            outBeforeReport: { $sum: { $cond: [{ $lt: ["$orderDate", reportStart] }, "$effectiveItems.qty", 0] } },
-            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$orderDate", reportStart] }, { $lte: ["$orderDate", reportEnd] }] }, "$effectiveItems.qty", 0] } }
-        } }
+      Invoice.aggregate([
+        { $match: { branchId: branchOid, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
+        { $unwind: "$items" },
+        { $match: { "items.qty": { $gt: 0 } } },
+        {
+          $group: {
+            _id: "$items.productId",
+            outBeforeReport: { $sum: { $cond: [{ $lt: ["$invoiceDate", reportStart] }, "$items.qty", 0] } },
+            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$invoiceDate", reportStart] }, { $lte: ["$invoiceDate", reportEnd] }] }, "$items.qty", 0] } }
+          }
+        }
       ]),
       DebitNote.aggregate([
-        { $match: { branchId: branchOid, status: "Created", date: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: { $ne: "Cancelled" }, date: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
-        { $group: { 
-            _id: "$items.productId", 
+        { $match: { $or: [{ "items.qty": { $gt: 0 } }, { "items.returnedQty": { $gt: 0 } }] } },
+        {
+          $group: {
+            _id: "$items.productId",
             outBeforeReport: { $sum: { $cond: [{ $lt: ["$date", reportStart] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } },
             outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$date", reportStart] }, { $lte: ["$date", reportEnd] }] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } }
-        } }
+          }
+        }
       ]),
       CreditNote.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $match: { branchId: branchOid, status: { $ne: "Cancelled" }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
         { $addFields: { effectiveDate: { $ifNull: ["$date", "$createdAt"] } } },
         { $unwind: "$items" },
-        { $group: { 
-            _id: "$items.productId", 
-            inBeforeReport: { $sum: { $cond: [{ $lt: ["$effectiveDate", reportStart] }, "$items.qty", 0] } },
-            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$effectiveDate", reportStart] }, { $lte: ["$effectiveDate", reportEnd] }] }, "$items.qty", 0] } }
-        } }
+        { $match: { $or: [{ "items.qty": { $gt: 0 } }, { "items.returnedQty": { $gt: 0 } }] } },
+        {
+          $group: {
+            _id: "$items.productId",
+            inBeforeReport: { $sum: { $cond: [{ $lt: ["$effectiveDate", reportStart] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } },
+            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$effectiveDate", reportStart] }, { $lte: ["$effectiveDate", reportEnd] }] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } }
+          }
+        }
       ])
     ]);
 
@@ -1430,7 +1483,7 @@ router.get("/:id/ledger", auth, async (req, res) => {
       ]),
       SalesOrder.aggregate([
         { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, orderDate: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
-        { $addFields: { effectiveItems: { $cond: [ { $gt: [ { $size: { $ifNull: ["$invoiceItems", []] } }, 0 ] }, "$invoiceItems", "$items" ] } } },
+        { $addFields: { effectiveItems: { $cond: [{ $gt: [{ $size: { $ifNull: ["$invoiceItems", []] } }, 0] }, "$invoiceItems", "$items"] } } },
         { $unwind: "$effectiveItems" },
         { $match: { "effectiveItems.productId": productOid } },
         { $group: { _id: null, total: { $sum: "$effectiveItems.qty" } } }
@@ -1450,64 +1503,67 @@ router.get("/:id/ledger", auth, async (req, res) => {
       ])
     ]);
 
-    const openingBalance = (product.openingQty || 0) + 
-                          (pBefore[0]?.total || 0) + (cnBefore[0]?.total || 0) - 
-                          (sBefore[0]?.total || 0) - (dnBefore[0]?.total || 0);
+    const openingBalance = (product.openingQty || 0) +
+      (pBefore[0]?.total || 0) + (cnBefore[0]?.total || 0) -
+      (sBefore[0]?.total || 0) - (dnBefore[0]?.total || 0);
 
     // 💸 2. Fetch Movements DURING Report Period
     const [sales, purchases, debitNotes, creditNotes] = await Promise.all([
-      SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, orderDate: { $gte: start, $lte: end } } },
-        { $addFields: { effectiveItems: { $cond: [ { $gt: [ { $size: { $ifNull: ["$invoiceItems", []] } }, 0 ] }, "$invoiceItems", "$items" ] } } },
-        { $unwind: "$effectiveItems" },
-        { $match: { "effectiveItems.productId": productOid } },
-        { $project: { type: "OUTWARD", date: "$orderDate", voucherType: "$voucherType", invoiceId: 1, particulars: "$customer.name", qty: "$effectiveItems.qty", rate: "$effectiveItems.sellingPrice", value: { $multiply: ["$effectiveItems.qty", "$effectiveItems.sellingPrice"] } } }
-      ]),
-      PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, date: { $gte: start, $lte: end } } },
+      Invoice.aggregate([
+        { $match: { branchId: branchOid, status: { $ne: "CANCELLED" }, invoiceDate: { $gte: start, $lte: end } } },
         { $unwind: "$items" },
         { $match: { "items.productId": productOid } },
-        { $project: { type: "INWARD", date: "$date", voucherType: { $ifNull: ["$voucherType", "Purchase"] }, invoiceId: 1, particulars: { $ifNull: ["$vendor", "Supplier"] }, qty: "$items.qty", rate: "$items.purchasePrice", value: { $multiply: ["$items.qty", "$items.purchasePrice"] } } }
+        { $project: { type: "OUTWARD", date: "$invoiceDate", voucherType: { $literal: "Sales Invoice" }, invoiceId: "$invoiceNumber", particulars: "$customer.name", qty: "$items.qty", rate: "$items.sellingPrice", value: { $multiply: ["$items.qty", "$items.sellingPrice"] } } }
+      ]),
+      PurchaseInvoice.aggregate([
+        { $match: { branchId: branchOid, invoiceDate: { $gte: start, $lte: end } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": productOid } },
+        { $project: { type: "INWARD", date: "$invoiceDate", voucherType: { $literal: "Purchase Invoice" }, invoiceId: "$purchaseInvoiceId", particulars: "$vendor", qty: "$items.qty", rate: "$items.purchasePrice", value: { $multiply: ["$items.qty", "$items.purchasePrice"] } } }
       ]),
       DebitNote.aggregate([
-        { $match: { branchId: branchOid, status: "Created", date: { $gte: start, $lte: end } } },
+        { $match: { branchId: branchOid, status: { $ne: "Cancelled" }, date: { $gte: start, $lte: end } } },
         { $unwind: "$items" },
-        { $match: { "items.productId": productOid } },
-        { $project: { 
-            type: "OUTWARD", 
-            date: "$date", 
-            voucherType: { $literal: "Debit Note" }, 
-            invoiceId: 1, 
-            particulars: { $literal: "Pur. Return" }, 
-            qty: { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 
-            rate: { $ifNull: ["$items.purchasePrice", 0] }, 
-            value: { $multiply: [{ $ifNull: ["$items.qty", "$items.returnedQty", 0] }, { $ifNull: ["$items.purchasePrice", 0] }] } 
-        } }
+        { $match: { "items.productId": productOid, $or: [{ "items.qty": { $gt: 0 } }, { "items.returnedQty": { $gt: 0 } }] } },
+        {
+          $project: {
+            type: "OUTWARD",
+            date: "$date",
+            voucherType: { $literal: "Debit Note" },
+            invoiceId: "$debitNoteId",
+            particulars: { $literal: "Pur. Return" },
+            qty: { $ifNull: ["$items.qty", "$items.returnedQty", 0] },
+            rate: { $ifNull: ["$items.purchasePrice", 0] },
+            value: { $multiply: [{ $ifNull: ["$items.qty", "$items.returnedQty", 0] }, { $ifNull: ["$items.purchasePrice", 0] }] }
+          }
+        }
       ]),
       CreditNote.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["Created", "confirmed"] }, createdAt: { $gte: start, $lte: end } } },
+        { $match: { branchId: branchOid, status: { $ne: "Cancelled" }, createdAt: { $gte: start, $lte: end } } },
         { $addFields: { effectiveDate: { $ifNull: ["$date", "$createdAt"] } } },
         { $unwind: "$items" },
-        { $match: { "items.productId": productOid } },
-        { $project: { 
-            type: "INWARD", 
-            date: "$effectiveDate", 
-            voucherType: { $literal: "Credit Note" }, 
-            invoiceId: 1, 
-            particulars: { $literal: "Sal. Return" }, 
-            qty: "$items.qty", 
-            rate: { $ifNull: ["$items.sellingPrice", 0] }, 
-            value: { $multiply: ["$items.qty", { $ifNull: ["$items.sellingPrice", 0] }] } 
-        } }
+        { $match: { "items.productId": productOid, $or: [{ "items.qty": { $gt: 0 } }, { "items.returnedQty": { $gt: 0 } }] } },
+        {
+          $project: {
+            type: "INWARD",
+            date: "$effectiveDate",
+            voucherType: { $literal: "Credit Note" },
+            invoiceId: "$creditNoteId",
+            particulars: { $literal: "Sal. Return" },
+            qty: { $ifNull: ["$items.qty", "$items.returnedQty", 0] },
+            rate: { $ifNull: ["$items.sellingPrice", 0] },
+            value: { $multiply: [{ $ifNull: ["$items.qty", "$items.returnedQty", 0] }, { $ifNull: ["$items.sellingPrice", 0] }] }
+          }
+        }
       ])
     ]);
 
     const unified = [...sales, ...purchases, ...debitNotes, ...creditNotes].sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    res.json({ 
-      success: true, 
-      openingBalance, 
-      data: unified 
+
+    res.json({
+      success: true,
+      openingBalance,
+      data: unified
     });
   } catch (err) {
     console.error("Ledger Error:", err);
@@ -1765,17 +1821,20 @@ router.post("/reconcile-stock", async (req, res) => {
       PurchaseOrder.aggregate([
         { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, date: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
+        { $match: { "items.qty": { $gt: 0 } } },
         { $group: { _id: "$items.productId", totalQty: { $sum: "$items.qty" } } }
       ]),
       SalesOrder.aggregate([
         { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, orderDate: { $gt: HARD_ANCHOR_DATE } } },
-        { $addFields: { effectiveItems: { $cond: [ { $gt: [ { $size: { $ifNull: ["$invoiceItems", []] } }, 0 ] }, "$invoiceItems", "$items" ] } } },
+        { $addFields: { effectiveItems: { $cond: [{ $gt: [{ $size: { $ifNull: ["$invoiceItems", []] } }, 0] }, "$invoiceItems", "$items"] } } },
         { $unwind: "$effectiveItems" },
+        { $match: { "effectiveItems.qty": { $gt: 0 } } },
         { $group: { _id: "$effectiveItems.productId", totalQty: { $sum: "$effectiveItems.qty" } } }
       ]),
       DebitNote.aggregate([
         { $match: { branchId: branchOid, status: "Created", date: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
+        { $match: { $or: [{ "items.qty": { $gt: 0 } }, { "items.returnedQty": { $gt: 0 } }] } },
         { $group: { _id: "$items.productId", totalQty: { $sum: { $ifNull: ["$items.qty", "$items.returnedQty", 0] } } } }
       ]),
       CreditNote.aggregate([
@@ -1797,7 +1856,7 @@ router.post("/reconcile-stock", async (req, res) => {
       const excelAnchor = product.openingQty || 0;
       const tIn = (pMap.get(pid) || 0) + (cnMap.get(pid) || 0);
       const tOut = (sMap.get(pid) || 0) + (dnMap.get(pid) || 0);
-      
+
       const correctedQty = excelAnchor + tIn - tOut;
 
       return {

@@ -73,6 +73,7 @@ import SuperAdminBranchManagement from "./pages/SuperAdminBranchManagement";
 import SuperAdminControlSystem from "./pages/SuperAdminControlSystem";
 import SuperAdminAuditLogs from "./pages/SuperAdminAuditLogs";
 import SuperAdminUserManagement from "./pages/SuperAdminUserManagement";
+import SuperAdminCreditRequests from "./pages/SuperAdminCreditRequests";
 import CRMPage from "./pages/CRMPage";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerSummary from "./pages/CustomerSummary";
@@ -693,6 +694,10 @@ function AppContent() {
                   <Route 
                     path="/super-admin/user-management" 
                     element={<ProtectedRoute element={<SuperAdminUserManagement />} role={["SUPER_ADMIN"]} />} 
+                  />
+                  <Route 
+                    path="/super-admin/credit-requests" 
+                    element={<ProtectedRoute element={<SuperAdminCreditRequests />} role={["SUPER_ADMIN"]} />} 
                   />
                 </Routes>
             </div>

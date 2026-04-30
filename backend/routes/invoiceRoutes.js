@@ -1149,6 +1149,114 @@ router.put("/:invoiceId/cancel", async (req, res) => {
   }
 });
 
+// PUT - Revoke (Restore) Cancelled Invoice
+router.put("/:invoiceId/revoke", async (req, res) => {
+  return res.status(403).json({ success: false, message: "Revoke functionality has been disabled." });
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { invoiceId } = req.params;
+    const { revokedBy } = req.body;
+
+    const invoice = await Invoice.findById(invoiceId).session(session);
+    if (!invoice) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Invoice not found" });
+    }
+
+    if (invoice.status !== "CANCELLED") {
+      await session.abortTransaction();
+      return res.status(400).json({ message: "Only cancelled invoices can be revoked" });
+    }
+
+    const salesOrder = await SalesOrder.findById(invoice.salesOrderId).session(session);
+    if (!salesOrder) {
+      await session.abortTransaction();
+      return res.status(404).json({ success: false, message: "Associated Sales Order not found. Cannot revoke." });
+    }
+
+    if (salesOrder.invoiceGenerated && salesOrder.salesInvoiceId && salesOrder.salesInvoiceId.toString() !== invoice._id.toString()) {
+      await session.abortTransaction();
+      return res.status(400).json({ 
+        success: false,
+        message: `Restoration Denied: Sales Order ${salesOrder.invoiceId} already has an active invoice (${salesOrder.salesInvoiceId}). You must cancel the active invoice before you can revoke this old one.` 
+      });
+    }
+
+    // 1. RESTORE CUSTOMER BALANCE (Increase Liability)
+    const customer = await Customer.findById(invoice.customer.customerId).session(session);
+    if (customer) {
+      const amountToRestore = invoice.grandTotal || 0;
+      let curDebit = customer.debit || 0;
+      let curCredit = customer.credit || 0;
+
+      // Restoration (Sales): Increase debit or decrease credit
+      if (curCredit >= amountToRestore) {
+        curCredit -= amountToRestore;
+      } else {
+        const excess = amountToRestore - curCredit;
+        curCredit = 0;
+        curDebit += excess;
+      }
+
+      customer.debit = Math.round(curDebit);
+      customer.credit = Math.round(curCredit);
+      customer.closingBalance = Math.round((customer.closingBalance || 0) + amountToRestore);
+      customer.totalBalance = customer.closingBalance;
+      await customer.save({ session });
+      console.log(`💰 Balance Restored for ${customer.name}: +₹${amountToRestore}`);
+    }
+
+    // 2. RESTORE STOCK (Decrease Available Qty)
+    for (const item of invoice.items) {
+      if (!item.productId) continue;
+      const product = await Product.findById(item.productId).session(session);
+      if (product) {
+        product.totalQty = (product.totalQty || 0) - (item.qty || 0);
+        await product.save({ session });
+        console.log(`📦 Stock Restored (Decreased) for ${product.name}: -${item.qty}`);
+      }
+    }
+
+    // 3. UPDATE INVOICE STATUS
+    invoice.status = "PRINTED"; // Restore to standard invoiced status
+    invoice.cancelReason = undefined;
+    invoice.cancelledAt = undefined;
+    invoice.cancelledBy = undefined;
+    invoice.revokedBy = revokedBy || "System";
+    invoice.revokedAt = new Date();
+    await invoice.save({ session });
+
+    // 4. UPDATE SALES ORDER
+    salesOrder.invoiceGenerated = true;
+    salesOrder.salesInvoiceId = invoice._id;
+    salesOrder.status = "INVOICED";
+
+    // Add revocation to history
+    salesOrder.editHistory.push({
+      version: (salesOrder.editHistory.length || 0) + 1,
+      editType: "GENERAL_EDIT",
+      items: salesOrder.items,
+      subtotal: salesOrder.subtotal,
+      totalTax: salesOrder.totalTax,
+      grandTotal: salesOrder.grandTotal,
+      editedAt: new Date(),
+      note: `Invoice ${invoice.invoiceNumber} REVOKED/RESTORED by ${revokedBy || "System"}.`
+    });
+
+    await salesOrder.save({ session });
+
+    await session.commitTransaction();
+    res.json({ success: true, message: "Invoice revoked and restored successfully" });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("❌ Error revoking invoice:", error);
+    res.status(500).json({ message: error.message || "Failed to revoke invoice" });
+  } finally {
+    session.endSession();
+  }
+});
+
 // GET - Get all invoices for a branch
 // GET sales invoices with pagination and filtering (Sales Reports)
 router.get("", async (req, res) => {

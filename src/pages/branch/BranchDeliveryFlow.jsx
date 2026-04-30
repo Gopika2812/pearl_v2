@@ -286,8 +286,8 @@ const BranchDeliveryFlow = () => {
   };
 
   const isFieldLocked = (inv, personField, commentField) => {
-    // Locked if completed OR if record is 2+ days old
-    return inv.deliveryStatus === "COMPLETED" || isOldRecord(inv);
+    // Locked if CANCELLED, completed OR if record is 2+ days old
+    return inv.status === "CANCELLED" || inv.deliveryStatus === "COMPLETED" || isOldRecord(inv);
   };
 
   const handleViewInvoice = async (invoice) => {
@@ -498,7 +498,7 @@ const BranchDeliveryFlow = () => {
                   </tr>
                 ) : (
                   invoices.map((inv, idx) => (
-                    <tr key={inv._id} className={`transition-colors ${isOldRecord(inv) ? 'opacity-50 bg-slate-100/50 pointer-events-none' : inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/10 hover:bg-slate-50/50' : 'hover:bg-slate-50/50'}`}>
+                    <tr key={inv._id} className={`transition-colors ${inv.status === "CANCELLED" || isOldRecord(inv) ? 'opacity-50 bg-slate-100/50 pointer-events-none' : inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/10 hover:bg-slate-50/50' : 'hover:bg-slate-50/50'}`}>
                       <td className="px-6 py-4 text-center">
                         <span className="text-xs font-black text-slate-400">{(currentPage - 1) * 50 + idx + 1}</span>
                       </td>
@@ -596,7 +596,13 @@ const BranchDeliveryFlow = () => {
                       </td>
 
                       <td className="px-4 py-3">
-                        {inv.deliveryStatus === 'COMPLETED' ? (
+                        {inv.status === "CANCELLED" ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <span className="px-3 py-1.5 bg-rose-100 text-rose-700 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1 border border-rose-200">
+                              <FaUndo size={9} /> Cancelled
+                            </span>
+                          </div>
+                        ) : inv.deliveryStatus === 'COMPLETED' ? (
                           <div className="flex flex-col items-center gap-2">
                             <span className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1">
                               <FaCheckCircle size={9} /> Completed
@@ -724,7 +730,7 @@ const BranchDeliveryFlow = () => {
               </div>
             ) : (
               invoices.map((inv, idx) => (
-                <div key={inv._id} className={`p-4 ${isOldRecord(inv) ? 'opacity-50 bg-slate-100 pointer-events-none' : inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/20' : 'bg-white'}`}>
+                <div key={inv._id} className={`p-4 ${inv.status === "CANCELLED" || isOldRecord(inv) ? 'opacity-50 bg-slate-100 pointer-events-none' : inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/20' : 'bg-white'}`}>
                   {/* Card Header: SI & Status */}
                   <div className="flex items-start justify-between mb-4">
                     <div>
@@ -735,7 +741,9 @@ const BranchDeliveryFlow = () => {
                       <div className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">{formatIST(inv.createdAt || inv.invoiceDate)}</div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      {inv.deliveryStatus === 'COMPLETED' ? (
+                      {inv.status === "CANCELLED" ? (
+                        <span className="px-2.5 py-1 bg-rose-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">Cancelled</span>
+                      ) : inv.deliveryStatus === 'COMPLETED' ? (
                         <span className="px-2.5 py-1 bg-emerald-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">Delivered</span>
                       ) : inv.deliveryStatus === 'PICKED' ? (
                         <span className="px-2.5 py-1 bg-amber-500 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">In Transit</span>

@@ -158,7 +158,8 @@ export default function BranchAdminRequests() {
                   <tr>
                     <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Customer</th>
                     <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Balance / Limit</th>
-                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Requested By</th>
+                    <th className="px-6 py-4 text-left font-black text-gray-400 uppercase tracking-widest text-[10px]">Requested By / Time</th>
+                    <th className="px-6 py-4 text-center font-black text-gray-400 uppercase tracking-widest text-[10px]">History Count</th>
                     <th className="px-6 py-4 text-center font-black text-gray-400 uppercase tracking-widest text-[10px]">Actions</th>
                   </tr>
                 </thead>
@@ -190,17 +191,25 @@ export default function BranchAdminRequests() {
                             </span>
                           </div>
                         </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black tracking-tighter">
+                              {req.historyCount || 0} TOTAL REQUESTS
+                            </span>
+                            <span className="text-[9px] text-gray-400 mt-1 uppercase font-bold">Lifetime History</span>
+                          </div>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => handleCreditAction(req._id, "approve")}
-                              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition"
+                              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition shadow-sm active:scale-95"
                             >
                               <FaCheck size={10} /> <span className="text-[10px] font-bold uppercase">Approve</span>
                             </button>
                             <button
                               onClick={() => handleCreditAction(req._id, "reject")}
-                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition"
+                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition shadow-sm active:scale-95"
                             >
                               <FaTimes size={10} /> <span className="text-[10px] font-bold uppercase">Reject</span>
                             </button>

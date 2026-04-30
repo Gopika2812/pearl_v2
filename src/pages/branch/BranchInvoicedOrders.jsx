@@ -84,7 +84,7 @@ const BranchInvoicedOrders = () => {
       const generatedParam = filterGenerated ? `&generated=${filterGenerated === "GENERATED"}` : "";
 
       const res = await fetch(
-        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isClaim=false&fromDate=${filterFromDate}&toDate=${filterToDate}${searchParam}${voucherParam}${generatedParam}`,
+        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&fromDate=${filterFromDate}&toDate=${filterToDate}${searchParam}${voucherParam}${generatedParam}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -131,19 +131,23 @@ const BranchInvoicedOrders = () => {
   }, [currentBranch?._id]);
 
   // 🌍 HANDLE URL SEARCH PARAMS (Teleport from Audit Logs)
+  // Only apply if the term is different to prevent infinite loops or resets
   useEffect(() => {
     const searchParam = searchParams.get("search");
     const invIdParam = searchParams.get("invoiceId");
+    const term = searchParam || invIdParam;
     
-    if (searchParam || invIdParam) {
-      const term = searchParam || invIdParam;
+    if (term && term !== filterInvoiceId) {
       setFilterInvoiceId(term);
-      // Clear dates to search globally across all history
-      setFilterFromDate("");
-      setFilterToDate("");
-      toast.info(`🔍 Searching for ${term}...`);
+      // Only clear dates if they are still at "Today" (default state)
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (filterFromDate === todayStr && filterToDate === todayStr) {
+        setFilterFromDate("");
+        setFilterToDate("");
+        toast.info(`🔍 Searching for ${term} globally...`);
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, filterInvoiceId]);
 
   const resetFilters = () => {
     setFilterInvoiceId("");
@@ -335,7 +339,7 @@ const BranchInvoicedOrders = () => {
     }
     setCancelling(true);
     try {
-      const res = await fetch(`${API_BASE}/sales-orders/${cancellingOrder._id}`, {
+      const res = await fetch(`${API_BASE}/sales-orders/${cancellingOrder._id}/cancel`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -355,6 +359,7 @@ const BranchInvoicedOrders = () => {
       setCancelling(false);
     }
   };
+
 
 
 
@@ -392,37 +397,8 @@ const BranchInvoicedOrders = () => {
     }
   };
 
-  // Filter sales orders based on criteria
-  const filteredSalesOrders = salesOrders.filter((order) => {
-    // 🚩 REMOVED FILTER - ALL ORDERS SHOULD BE VISIBLE AS RECORDS
-
-    const matchesVoucherType = filterVoucherType === "" ||
-      (order.voucherType && order.voucherType.toLowerCase().includes(filterVoucherType.toLowerCase()));
-
-    const matchesInvoiceId = filterInvoiceId === "" ||
-      (order.invoiceId && order.invoiceId.toLowerCase().includes(filterInvoiceId.toLowerCase()));
-
-    const matchesCustomerName = filterCustomerName === "" ||
-      (order.customer?.name && order.customer.name.toLowerCase().includes(filterCustomerName.toLowerCase()));
-
-
-    const od = order.orderDate ? new Date(order.orderDate) : null;
-    const ct = new Date(order.createdAt);
-    const displayDate = od ? od : ct;
-    const orderDateStr = `${displayDate.getFullYear()}-${String(displayDate.getMonth() + 1).padStart(2, "0")}-${String(displayDate.getDate()).padStart(2, "0")}`;
-    const orderTimeStr = `${String(ct.getHours()).padStart(2, "0")}:${String(ct.getMinutes()).padStart(2, "0")}`;
-
-    const matchesFromDate = filterFromDate === "" || orderDateStr >= filterFromDate;
-    const matchesToDate = filterToDate === "" || orderDateStr <= filterToDate;
-    const matchesFromTime = filterFromTime === "" || filterFromDate === "" || orderDateStr > filterFromDate || (orderDateStr === filterFromDate && orderTimeStr >= filterFromTime);
-    const matchesToTime = filterToTime === "" || filterToDate === "" || orderDateStr < filterToDate || (orderDateStr === filterToDate && orderTimeStr <= filterToTime);
-
-    const matchesGenerated = filterGenerated === "" ||
-      (filterGenerated === "GENERATED" && order.invoiceGenerated) ||
-      (filterGenerated === "NOT_GENERATED" && !order.invoiceGenerated);
-
-    return matchesVoucherType && matchesInvoiceId && matchesCustomerName && matchesFromDate && matchesToDate && matchesFromTime && matchesToTime && matchesGenerated;
-  });
+  // Filter sales orders based on criteria (Backend handles most, but we keep frontend search for speed)
+  const filteredSalesOrders = salesOrders;
 
   const handleExportPDF = () => {
     const doc = new jsPDF();
@@ -942,7 +918,7 @@ const BranchInvoicedOrders = () => {
                         {isFieldAllowed("status") && (
                           <td className="px-6 py-4 text-center">
                             {order.status === "CANCELLED" ? (
-                              <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-bold line-through uppercase tracking-wider">
+                              <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border border-red-200">
                                 Cancelled
                               </span>
                             ) : order.editHistory?.some(h => h.editType === 'RE_INVOICED') ? (
@@ -1014,15 +990,23 @@ const BranchInvoicedOrders = () => {
                               )}
 
                               {/* Cancel Button — Admin & Super Admin only */}
-                              {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.status !== "CANCELLED" && isFieldAllowed("action_cancel") && (
-                                <button
-                                  onClick={() => handleOpenCancelModal(order)}
-                                  className="flex items-center gap-1 px-3 py-2 rounded-lg transition text-xs font-semibold bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-200 hover:border-red-600 shadow-sm"
-                                >
-                                  <FaBan className="text-xs" />
-                                  Cancel
-                                </button>
-                              )}
+                               {isFieldAllowed("action_cancel") && (
+                                 <div className="flex gap-2">
+                                    {order.status === "CANCELLED" ? (
+                                       <span className="text-[10px] font-black text-red-400 uppercase tracking-widest italic">
+                                          Archived
+                                       </span>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleOpenCancelModal(order)}
+                                        className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-red-50 text-red-700 hover:bg-red-600 hover:text-white border border-red-200"
+                                      >
+                                        <FaBan />
+                                        CANCEL
+                                      </button>
+                                    )}
+                                 </div>
+                               )}
                             </div>
                           </td>
                         )}

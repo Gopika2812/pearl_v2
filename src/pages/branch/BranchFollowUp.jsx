@@ -5,7 +5,8 @@ import {
     FaUser, FaPhone, FaMoneyBillWave, FaClock, FaHistory, 
     FaSearch, FaFilter, FaSort, FaSortUp, FaSortDown,
     FaArrowRight, FaBook, FaCalendarAlt, FaCog, FaTag,
-    FaEdit, FaChevronLeft, FaChevronRight, FaListOl, FaTicketAlt
+    FaEdit, FaChevronLeft, FaChevronRight, FaListOl, FaTicketAlt,
+    FaCloudUploadAlt, FaSpinner
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth, apiWithAuth } from "../../api";
@@ -58,6 +59,8 @@ const BranchFollowUp = () => {
     const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState(null);
     const [selectedCustomerForToken, setSelectedCustomerForToken] = useState(null);
     const [editingCustomer, setEditingCustomer] = useState(null);
+    const [bulkUpdating, setBulkUpdating] = useState(false);
+    const fileInputRef = React.useRef(null);
 
     // Sorting state - default to Balance High to Low
     const [sortConfig, setSortConfig] = useState({ key: "balance", direction: "desc" });
@@ -206,6 +209,41 @@ const BranchFollowUp = () => {
         }
     };
 
+    const handleBulkCreditUpdate = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!window.confirm("Are you sure you want to bulk update credit limits? This will replace existing limits with values from your Excel sheet (including 0s).")) {
+            e.target.value = null;
+            return;
+        }
+
+        setBulkUpdating(true);
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("branchId", currentBranch._id);
+
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/customers/bulk-update-credit`, {
+                method: "POST",
+                body: formData,
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success(data.message);
+                fetchData();
+            } else {
+                toast.error(data.message || "Bulk update failed");
+            }
+        } catch (err) {
+            console.error("Bulk update error:", err);
+            toast.error("Failed to upload file");
+        } finally {
+            setBulkUpdating(false);
+            e.target.value = null;
+        }
+    };
+
     return (
         <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20 pb-10">
             <div className="w-full max-w-full mx-auto px-2 sm:px-4 py-4">
@@ -288,13 +326,30 @@ const BranchFollowUp = () => {
                         </div>
 
                         {user?.role === "SUPER_ADMIN" && (
-                            <button 
-                                onClick={() => setIsManageCategoriesOpen(true)}
-                                className="w-9 h-9 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all shrink-0"
-                                title="Manage Master Data"
-                            >
-                                <FaCog size={16} />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <input 
+                                    type="file" 
+                                    ref={fileInputRef} 
+                                    onChange={handleBulkCreditUpdate} 
+                                    className="hidden" 
+                                    accept=".xlsx, .xls"
+                                />
+                                <button 
+                                    onClick={() => fileInputRef.current.click()}
+                                    disabled={bulkUpdating}
+                                    className="w-9 h-9 bg-indigo-600 border border-indigo-700 rounded-lg flex items-center justify-center text-white hover:bg-indigo-700 transition-all shadow-sm shrink-0 disabled:opacity-50"
+                                    title="Bulk Update Credit Limits"
+                                >
+                                    {bulkUpdating ? <FaSpinner className="animate-spin" /> : <FaCloudUploadAlt size={16} />}
+                                </button>
+                                <button 
+                                    onClick={() => setIsManageCategoriesOpen(true)}
+                                    className="w-9 h-9 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all shrink-0"
+                                    title="Manage Master Data"
+                                >
+                                    <FaCog size={16} />
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -411,7 +466,7 @@ const BranchFollowUp = () => {
                                                     )}
                                                     {isFieldAllowed("limit") && (
                                                         <td className="px-4 py-3 text-right text-gray-700 text-sm">
-                                                            ₹{(customer.creditLimit || 200000).toLocaleString()}
+                                                            ₹{(customer.creditLimit ?? 0).toLocaleString()}
                                                         </td>
                                                     )}
                                                     {isFieldAllowed("days") && (

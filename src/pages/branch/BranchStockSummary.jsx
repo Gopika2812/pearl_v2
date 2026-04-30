@@ -625,7 +625,7 @@ const BranchStockSummary = () => {
                         <tr key={idx} className="hover:bg-gray-50 transition border-l-4 border-transparent hover:border-secondary">
                           <td className="px-6 py-4">
                             <div className="font-bold text-gray-700">{txn.date.toLocaleDateString()}</div>
-                            <div className="text-[10px] text-gray-400 font-bold uppercase">{txn.voucherType} | {txn.invoiceId}</div>
+                            <div className="text-[10px] text-gray-400 font-bold uppercase">{txn.invoiceId} | {txn.voucherType}</div>
                           </td>
                           <td className="px-6 py-4 font-semibold text-gray-600">{txn.particulars}</td>
                           <td className="px-6 py-4 text-center font-black text-green-600">

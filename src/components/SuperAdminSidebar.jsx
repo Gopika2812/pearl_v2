@@ -11,6 +11,7 @@ import {
   FaUserCheck,
   FaBuilding,
   FaChartBar,
+  FaCreditCard,
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
@@ -34,6 +35,7 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
   const menu = [
     { name: "Branch Management", path: "/super-admin/branch-management", icon: <FaBuilding /> },
     { name: "User Management", path: "/super-admin/user-management", icon: <FaUserCheck /> },
+    { name: "Credit Requests", path: "/super-admin/credit-requests", icon: <FaCreditCard /> },
     { name: "Control System", path: "/super-admin/control-system", icon: <FaUsersCog /> },
     { name: "Audit Logs", path: "/super-admin/audit-logs", icon: <FaClipboardList /> },
   ];

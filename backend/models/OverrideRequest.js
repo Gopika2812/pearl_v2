@@ -15,8 +15,17 @@ const overrideRequestSchema = new mongoose.Schema(
     customerName: String,
     requestedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "BranchUser",
+      refPath: "requestedByModel",
       required: true,
+    },
+    requestedByModel: {
+      type: String,
+      enum: ["BranchUser", "SuperAdmin"],
+      default: "BranchUser"
+    },
+    requiresSuperAdmin: {
+      type: Boolean,
+      default: false
     },
     requestType: {
       type: String,

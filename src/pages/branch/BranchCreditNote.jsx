@@ -375,7 +375,7 @@ export default function BranchCreditNote() {
                             <div className="bg-white rounded-2xl border border-gray-100 p-4 space-y-3">
                                 <h4 className="text-[10px] font-black text-teal-600 uppercase tracking-widest">Return Item Details</h4>
                                 <div className="space-y-2">
-                                    {cn.items?.map((item, idx) => (
+                                    {cn.items?.filter(item => (item.qty || item.returnedQty || 0) > 0).map((item, idx) => (
                                         <div key={idx} className="flex justify-between items-center text-xs border-b border-gray-50 pb-2 last:border-0 last:pb-0">
                                             <div className="flex items-center gap-3">
                                                 <div className="flex flex-col items-center justify-center min-w-[40px] bg-indigo-600 text-white rounded-lg py-1 px-2 shadow-sm">
@@ -444,7 +444,6 @@ export default function BranchCreditNote() {
         />
       )}
     </div>
-  </div>
   );
 }
 

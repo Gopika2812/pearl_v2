@@ -68,6 +68,7 @@ const customerSchema = new mongoose.Schema(
     },
     creditLimitRequestBy: { type: String, default: "" },
     creditLimitRequestAt: { type: Date },
+    creditLimitRequiresSuperAdmin: { type: Boolean, default: false },
 
     // Risk Tracking System
     riskStatus: {

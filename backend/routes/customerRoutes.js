@@ -11,6 +11,8 @@ import Receipt from "../models/Receipt.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
 import Invoice from "../models/Invoice.js";
+import AuditLog from "../models/AuditLog.js";
+import OverrideRequest from "../models/OverrideRequest.js";
 
 const router = express.Router();
 
@@ -265,6 +267,18 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       updatedCount = result.modifiedCount;
     }
 
+    // 3️⃣ Log the Bulk Action
+    if (insertedCount > 0 || updatedCount > 0) {
+      await new AuditLog({
+        user: req.user?._id || branchId,
+        userModel: req.user?.role ? "BranchUser" : "SuperAdmin",
+        username: req.user?.username || "Unknown",
+        branchId,
+        action: "CUSTOMER_BULK_UPLOAD",
+        description: `Bulk customer upload completed in ${updateMode} mode. Inserted: ${insertedCount}, Updated: ${updatedCount}.`,
+      }).save();
+    }
+
     return res.json({
       success: true,
       message: `Bulk upload (${updateMode}) completed successfully`,
@@ -283,6 +297,102 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       message: "Bulk upload failed",
       error: err.message,
     });
+  }
+});
+
+/**
+ * POST: Bulk Update Customer Credit Limits
+ * Matches by Name, updates limit/days if > 0 in Excel.
+ */
+router.post("/bulk-update-credit", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.body) return res.status(400).json({ success: false, message: "Request body is missing. Ensure you are sending multipart/form-data." });
+    const { branchId } = req.body;
+    if (!req.file) return res.status(400).json({ success: false, message: "Excel file required" });
+    if (!branchId) return res.status(400).json({ success: false, message: "branchId is required" });
+
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+
+    const summary = { updated: 0, skipped: 0, notFound: 0, total: rows.length };
+    const updateOps = [];
+
+    for (const row of rows) {
+      // Find the name column dynamically
+      const name = (row["Customer Name"] || row["customer name"] || row["Name"] || "").toString().trim();
+      
+      // Find limit and days
+      const limit = parseFloat(row["Credit Limit (₹)"] || row["Credit Limit"] || row["limit"] || 0);
+      const days = parseInt(row["Credit Days"] || row["days"] || 0);
+
+      if (!name) {
+        summary.skipped++;
+        continue;
+      }
+
+      const updateFields = {};
+      
+      // Check if limit exists in row (even if it's 0)
+      const limitRaw = row["Credit Limit (₹)"] ?? row["Credit Limit"] ?? row["limit"];
+      if (limitRaw !== undefined && limitRaw !== "") {
+        updateFields.creditLimit = parseFloat(limitRaw);
+      }
+
+      // Check if days exists in row (even if it's 0)
+      const daysRaw = row["Credit Days"] ?? row["days"];
+      if (daysRaw !== undefined && daysRaw !== "") {
+        updateFields.creditLimitDays = parseInt(daysRaw);
+      }
+
+      // If nothing to update, skip
+      if (Object.keys(updateFields).length === 0) {
+        summary.skipped++;
+        continue;
+      }
+
+      // Case-insensitive exact name match within branch
+      const customer = await Customer.findOne({ 
+        branchId, 
+        name: { $regex: new RegExp(`^${escapeRegex(name)}$`, "i") } 
+      });
+      
+      if (customer) {
+        updateOps.push({
+          updateOne: {
+            filter: { _id: customer._id },
+            update: { $set: updateFields }
+          }
+        });
+        summary.updated++;
+      } else {
+        summary.notFound++;
+      }
+    }
+
+    if (updateOps.length > 0) {
+      await Customer.bulkWrite(updateOps, { ordered: false });
+      
+      // Log the action
+      await new AuditLog({
+        user: req.user?._id || branchId,
+        userModel: req.user?.role ? "BranchUser" : "SuperAdmin",
+        username: req.user?.username || "Unknown",
+        branchId,
+        action: "CUSTOMER_BULK_CREDIT_UPDATE",
+        description: `Bulk credit update completed. Updated: ${summary.updated}, Not Found: ${summary.notFound}, Total Rows: ${summary.total}.`,
+      }).save();
+    }
+
+    res.json({
+      success: true,
+      message: `Bulk Credit Update: ${summary.updated} updated, ${summary.notFound} not found, ${summary.skipped} skipped.`,
+      summary
+    });
+
+  } catch (err) {
+    console.error("Bulk credit update error:", err);
+    res.status(500).json({ success: false, message: "Server error during bulk update", error: err.message });
   }
 });
 /**
@@ -883,47 +993,61 @@ router.put("/:id", async (req, res) => {
     const updates = req.body;
 
     console.log(`\n📝 UPDATING CUSTOMER: ${id}`);
-    console.log(`Received Fields:`, Object.keys(updates));
+    
+    // 1️⃣ Fetch EXISTING customer for comparison
+    const oldCustomer = await Customer.findById(id);
+    if (!oldCustomer) {
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    }
 
     // Round numeric fields if provided
+    if (updates.openingBalance !== undefined) {
+      updates.openingBalance = Math.round(Number(updates.openingBalance) * 100) / 100;
+    }
     if (updates.closingBalance !== undefined) {
       updates.closingBalance = Math.round(Number(updates.closingBalance));
     }
     if (updates.margin !== undefined) {
       updates.margin = Math.round(Number(updates.margin) * 100) / 100;
     }
-    if (updates.totalBalance !== undefined) {
-      updates.totalBalance = Math.round(Number(updates.totalBalance));
-    }
     if (updates.credit !== undefined) {
-      updates.credit = Number(updates.credit) || 0;
+      updates.credit = Math.round(Number(updates.credit) * 100) / 100;
     }
     if (updates.debit !== undefined) {
-      updates.debit = Number(updates.debit) || 0;
-    }
-    
-    // If openingBalance is not set but debit/credit are, initialize it
-    if (updates.openingBalance === undefined && (updates.debit !== undefined || updates.credit !== undefined)) {
-        // We only want to set this if it was previously 0 or null to avoid overwriting legitimate historical opening balances
-        // But for now, let's just make it available if explicitly provided
+      updates.debit = Math.round(Number(updates.debit) * 100) / 100;
     }
 
-    // Validate registrationType if provided
-    if (updates.registrationType && !["regular", "unregistered"].includes(updates.registrationType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid registrationType. Must be 'regular' or 'unregistered'",
-      });
-    }
+    // 2️⃣ Check for SENSITIVE changes (Financial Integrity)
+    const hasOpeningBalChanged = updates.openingBalance !== undefined && updates.openingBalance !== oldCustomer.openingBalance;
+    const hasDebitChanged = updates.debit !== undefined && updates.debit !== oldCustomer.debit;
+    const hasCreditChanged = updates.credit !== undefined && updates.credit !== oldCustomer.credit;
 
-    // Validate and normalize stateCode if provided
-    if (updates.stateCode !== undefined) {
-      updates.stateCode = String(updates.stateCode || "33").trim();
-      console.log(`✓ Setting stateCode to: ${updates.stateCode}`);
-    }
-
-    if (updates.salesOwner === "") {
-      updates.salesOwner = null;
+    if (hasOpeningBalChanged || hasDebitChanged || hasCreditChanged) {
+        // Create Security Audit Log
+        const logEntry = new AuditLog({
+            user: req.user?._id || id, // Fallback to customer ID if no user context
+            userModel: req.user?.role ? "BranchUser" : "SuperAdmin",
+            username: req.user?.username || "Unknown",
+            branchId: oldCustomer.branchId,
+            action: "CUSTOMER_FINANCIAL_UPDATE",
+            targetId: oldCustomer._id,
+            targetModel: "Customer",
+            description: `Financial details updated for ${oldCustomer.name}.${hasOpeningBalChanged ? ` Opening Bal: ${oldCustomer.openingBalance} -> ${updates.openingBalance}.` : ''}`,
+            changes: {
+                before: {
+                    openingBalance: oldCustomer.openingBalance,
+                    debit: oldCustomer.debit,
+                    credit: oldCustomer.credit
+                },
+                after: {
+                    openingBalance: updates.openingBalance !== undefined ? updates.openingBalance : oldCustomer.openingBalance,
+                    debit: updates.debit !== undefined ? updates.debit : oldCustomer.debit,
+                    credit: updates.credit !== undefined ? updates.credit : oldCustomer.credit
+                }
+            }
+        });
+        await logEntry.save();
+        console.log(`🔒 Security Audit Log created for financial change on customer ${oldCustomer.name}`);
     }
 
     // Ensure arrays stay as arrays
@@ -941,12 +1065,7 @@ router.put("/:id", async (req, res) => {
       .populate('customerCategories', '_id name')
       .populate('customerGroups', '_id name');
 
-    if (!customer) {
-      return res.status(404).json({
-        success: false,
-        message: "Customer not found",
-      });
-    }
+    res.json({ success: true, data: customer });
 
     console.log(`✅ Customer Updated! StateCode: ${customer.stateCode}`);
     console.log(`✓ Complete Customer: ${JSON.stringify({ name: customer.name, stateCode: customer.stateCode })}\n`);
@@ -972,24 +1091,51 @@ router.put("/:id", async (req, res) => {
 router.patch("/:id/request-credit-bypass", async (req, res) => {
   try {
     const { id } = req.params;
-    const { requestedBy } = req.body;
+    const { requestedBy, requestedById } = req.body;
 
-    const customer = await Customer.findByIdAndUpdate(
-      id,
-      {
-        creditLimitRequestStatus: "PENDING",
-        creditLimitRequestBy: requestedBy || "Unknown Staff",
-        creditLimitRequestAt: new Date(),
-      },
-      { new: true }
-    );
-
+    const customer = await Customer.findById(id);
     if (!customer) {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
 
-    res.json({ success: true, message: "Credit bypass requested", data: customer });
+    // 1. Calculate History Count to determine routing
+    const historyCount = await OverrideRequest.countDocuments({ 
+      customerId: id, 
+      requestType: "CREDIT_LIMIT",
+      status: "APPROVED" // Only count previously granted access
+    });
+
+    const requiresSuperAdmin = historyCount >= 3;
+
+    // 2. Create the persistent record
+    const newRequest = new OverrideRequest({
+      branchId: customer.branchId,
+      customerId: id,
+      requestedBy: req.user?._id || customer.salesOwner || id, // Valid ObjectId
+      requestedByModel: req.user?.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      requestType: "CREDIT_LIMIT",
+      status: "PENDING",
+      requiresSuperAdmin: requiresSuperAdmin // Flag for routing
+    });
+    await newRequest.save();
+
+    // 3. Update Customer record with the request status and routing info
+    customer.creditLimitRequestStatus = "PENDING";
+    customer.creditLimitRequestBy = requestedBy || "Staff";
+    customer.creditLimitRequestAt = new Date();
+    customer.isCreditBypassed = false;
+    customer.creditLimitRequiresSuperAdmin = requiresSuperAdmin;
+    await customer.save();
+
+    res.json({ 
+      success: true, 
+      message: requiresSuperAdmin 
+        ? "Request sent to SUPER ADMIN (3+ prior approvals reached)" 
+        : "Request sent to Branch Admin",
+      requiresSuperAdmin
+    });
   } catch (error) {
+    console.error("Request Bypass Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -1000,6 +1146,18 @@ router.patch("/:id/request-credit-bypass", async (req, res) => {
 router.patch("/:id/approve-credit-bypass", async (req, res) => {
   try {
     const { id } = req.params;
+
+    // 1. Update the persistent record
+    await OverrideRequest.findOneAndUpdate(
+      { customerId: id, status: "PENDING", requestType: "CREDIT_LIMIT" },
+      { 
+        status: "APPROVED",
+        approvedBy: req.user?._id
+      },
+      { sort: { createdAt: -1 } }
+    );
+
+    // 2. Update Customer record
     const customer = await Customer.findByIdAndUpdate(
       id,
       {
@@ -1025,6 +1183,18 @@ router.patch("/:id/approve-credit-bypass", async (req, res) => {
 router.patch("/:id/reject-credit-bypass", async (req, res) => {
   try {
     const { id } = req.params;
+
+    // 1. Update the persistent record
+    await OverrideRequest.findOneAndUpdate(
+      { customerId: id, status: "PENDING", requestType: "CREDIT_LIMIT" },
+      { 
+        status: "REJECTED",
+        approvedBy: req.user?._id
+      },
+      { sort: { createdAt: -1 } }
+    );
+
+    // 2. Update Customer record
     const customer = await Customer.findByIdAndUpdate(
       id,
       {
@@ -1045,18 +1215,158 @@ router.patch("/:id/reject-credit-bypass", async (req, res) => {
 });
 
 /**
- * GET: Fetch Pending Credit Bypass Requests for a Branch
+ * GET: Fetch Pending Credit Bypass Requests for a Branch with History Count
  */
 router.get("/credit-requests/branch/:branchId", async (req, res) => {
   try {
     const { branchId } = req.params;
-    const requests = await Customer.find({
+    
+    // Find customers with PENDING requests that DON'T require Super Admin
+    const customers = await Customer.find({
       branchId,
-      creditLimitRequestStatus: "PENDING"
+      creditLimitRequestStatus: "PENDING",
+      creditLimitRequiresSuperAdmin: false // Only Branch Admin level
     }).select("name whatsapp debit creditLimit creditLimitRequestBy creditLimitRequestAt");
 
-    res.json({ success: true, data: requests });
+    // Enhance with total request count from history
+    const requestsWithHistory = await Promise.all(customers.map(async (c) => {
+      const historyCount = await OverrideRequest.countDocuments({ 
+        customerId: c._id, 
+        requestType: "CREDIT_LIMIT" 
+      });
+      
+      return {
+        ...c.toObject(),
+        historyCount
+      };
+    }));
+
+    res.json({ success: true, data: requestsWithHistory });
   } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET: Fetch Total Pending Credit Bypass Requests Count (Global for Super Admin)
+ */
+router.get("/credit-requests/total-count", async (req, res) => {
+  try {
+    const count = await Customer.countDocuments({
+      creditLimitRequestStatus: "PENDING",
+      creditLimitRequiresSuperAdmin: true // Only those requiring Super Admin
+    });
+    res.json({ success: true, count });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET: Fetch ALL Pending Credit Bypass Requests (Global for Super Admin)
+ */
+router.get("/credit-requests/all", async (req, res) => {
+  try {
+    const customers = await Customer.find({
+      creditLimitRequestStatus: "PENDING",
+      creditLimitRequiresSuperAdmin: true // Only High-Risk (4th time+)
+    }).select("name whatsapp debit creditLimit creditLimitRequestBy creditLimitRequestAt branchId")
+      .populate("branchId", "name code");
+
+    const requestsWithHistory = await Promise.all(customers.map(async (c) => {
+      const historyCount = await OverrideRequest.countDocuments({ 
+        customerId: c._id, 
+        requestType: "CREDIT_LIMIT" 
+      });
+      
+      return {
+        ...c.toObject(),
+        historyCount
+      };
+    }));
+
+    res.json({ success: true, data: requestsWithHistory });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET: Check Customer Credit Status (Limit + Days)
+ */
+router.get("/:id/check-credit", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const customer = await Customer.findById(id);
+    if (!customer) return res.status(404).json({ success: false, message: "Customer not found" });
+
+    const currentBalance = (customer.debit || 0) - (customer.credit || 0);
+    const creditLimit = customer.creditLimit || 0;
+    const creditLimitDays = customer.creditLimitDays || 0;
+
+    // 1️⃣ Check Credit Limit (₹)
+    const isLimitExceeded = currentBalance >= creditLimit && creditLimit > 0;
+
+    // 2️⃣ Check Credit Days (Time)
+    let isDaysExceeded = false;
+    let oldestUnpaidInvoiceDate = null;
+    let overdueDays = 0;
+
+    if (currentBalance > 0 && creditLimitDays > 0) {
+      // Find all invoices for this customer, oldest first
+      const invoices = await SalesOrder.find({
+        "customer.customerId": id,
+        invoiceGenerated: true,
+        status: "INVOICED"
+      }).sort({ orderDate: 1 });
+
+      let runningBalance = currentBalance;
+      // Reverse logic: The current balance covers the MOST RECENT invoices first? 
+      // No, usually payments cover oldest first. 
+      // If balance is 10k, it means 10k is STILL UNPAID. 
+      // These 10k must belong to the most recent invoices if old ones were paid.
+      // So we check invoices from NEWEST to OLDEST. 
+      // The moment the "Running Balance" (Unpaid Amount) reaches an invoice date, that's our oldest unpaid debt.
+      
+      const newestFirstInvoices = await SalesOrder.find({
+        "customer.customerId": id,
+        invoiceGenerated: true,
+        status: "INVOICED"
+      }).sort({ orderDate: -1 });
+
+      let totalUnpaid = currentBalance;
+      for (const inv of newestFirstInvoices) {
+          totalUnpaid -= (inv.grandTotalWithMargin || inv.grandTotal || 0);
+          oldestUnpaidInvoiceDate = inv.orderDate;
+          if (totalUnpaid <= 0) break;
+      }
+
+      if (oldestUnpaidInvoiceDate) {
+          const diffTime = Math.abs(new Date() - new Date(oldestUnpaidInvoiceDate));
+          overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          if (overdueDays > creditLimitDays) {
+              isDaysExceeded = true;
+          }
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        currentBalance,
+        creditLimit,
+        creditLimitDays,
+        isLimitExceeded,
+        isDaysExceeded,
+        overdueDays,
+        oldestUnpaidInvoiceDate,
+        isBlocked: (isLimitExceeded || isDaysExceeded) && !customer.isCreditBypassed,
+        isBypassed: customer.isCreditBypassed,
+        requestStatus: customer.creditLimitRequestStatus
+      }
+    });
+  } catch (error) {
+    console.error("Check Credit Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

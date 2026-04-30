@@ -555,16 +555,16 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
           <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-xl mb-4">
             <div className="flex items-center justify-between mb-4 pb-4 border-b border-emerald-100">
                <div>
-                  <label className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Opening Ground Truth (31-Mar-2026)</label>
+                  <label className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">🔒 Fixed Opening Stock (31-Mar-2026)</label>
                   <div className="flex items-center gap-2 mt-1">
                     <input 
                       type="number"
-                      className="w-32 p-2 border-2 border-orange-200 rounded-lg font-black text-orange-600 focus:border-orange-500"
+                      className="w-32 p-2 border-2 border-orange-200 rounded-lg font-black text-orange-600 focus:border-orange-500 bg-white"
                       value={product.openingQty}
                       onChange={(e) => setProduct({...product, openingQty: e.target.value})}
                       placeholder="Anchor Qty"
                     />
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">March 31st Anchor</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vault Anchor</span>
                   </div>
                </div>
                <div className="text-right">

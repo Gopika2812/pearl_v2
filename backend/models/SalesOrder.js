@@ -267,7 +267,7 @@ const salesOrderSchema = new mongoose.Schema(
         version: Number,
         editType: {
           type: String,
-          enum: ["CREATED", "PRE_INVOICE_EDIT", "INVOICED", "RE_EDIT_STARTED", "RE_INVOICED", "CANCELLED"],
+          enum: ["CREATED", "PRE_INVOICE_EDIT", "INVOICED", "RE_EDIT_STARTED", "RE_INVOICED", "CANCELLED", "GENERAL_EDIT", "INVOICE_CANCELLED"],
         },
         items: Array,
         subtotal: Number,

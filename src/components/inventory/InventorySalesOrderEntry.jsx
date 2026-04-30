@@ -99,6 +99,13 @@ export default function InventorySalesOrderEntry({
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
   const [showRecentPanel, setShowRecentPanel] = useState(true);
+  const [creditStatus, setCreditStatus] = useState({
+    isBlocked: false,
+    isLimitExceeded: false,
+    isDaysExceeded: false,
+    overdueDays: 0,
+    requestStatus: "NONE"
+  });
   const [salesOwner, setSalesOwner] = useState("");
   const [salesOwnerId, setSalesOwnerId] = useState("");
   const [salesMan, setSalesMan] = useState("");
@@ -738,17 +745,20 @@ export default function InventorySalesOrderEntry({
     setSalesOwnerId(ownerId);
     setCustomerMargin(customer?.margin || 0);
 
-    // Fetch recent orders + locked price for selected customer + selected item
-    if (selectedItem) {
-      fetchRecentOrders(id, selectedItem);
-      fetchCustomerLockedPrice(id, selectedItem);
-
-      // Recalculate price based on new customer's margin
-      const product = productsWithStock.find(p => p._id === selectedItem);
-      if (product) {
-        updateSellingPrice(product, customer?.margin || 0);
-      }
-    }
+    // 🛡️ SECURITY CHECK: Fetch live credit status (Limit + Days)
+    const checkCreditStatus = async () => {
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/customers/${id}/check-credit`);
+            const data = await res.json();
+            if (data.success) {
+                console.log("🛡️ Credit Status Received:", data.data);
+                setCreditStatus(data.data);
+            }
+        } catch (err) {
+            console.error("Failed to check credit status:", err);
+        }
+    };
+    checkCreditStatus();
   };
 
 
@@ -769,8 +779,8 @@ export default function InventorySalesOrderEntry({
 
 
   const addItem = async () => {
-    if (isCreditLimitExceeded) {
-      toast.error("Credit Limit Exceeded! Please request permission from admin to add items.");
+    if (creditStatus.isBlocked) {
+      toast.error("Billing Restricted! This customer is blocked due to credit limit or overdue days.");
       return;
     }
     if (!selectedItem) {
@@ -1209,6 +1219,10 @@ export default function InventorySalesOrderEntry({
       return toast.error("Please select a customer");
     }
 
+    if (creditStatus.isBlocked) {
+        return toast.error("🚫 BILLING BLOCKED: This customer has exceeded their credit limit or has overdue payments. Please request approval from Super Admin.");
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -1269,9 +1283,9 @@ export default function InventorySalesOrderEntry({
       if (data.success) {
         toast.success("Credit limit bypass requested from admin");
         // Update local state to reflect pending status
-        setSelectedCustomer(prev => ({
+        setCreditStatus(prev => ({
           ...prev,
-          creditLimitRequestStatus: "PENDING"
+          requestStatus: "PENDING"
         }));
       } else {
         toast.error(data.message || "Failed to request bypass");
@@ -1282,6 +1296,8 @@ export default function InventorySalesOrderEntry({
   };
 
 
+
+  const isAnyCreditProblem = creditStatus.isBlocked;
 
   return (
     <div className="space-y-6 font-sans">
@@ -1514,6 +1530,60 @@ export default function InventorySalesOrderEntry({
               <input className={inputClass} value={selectedCustomer?.pincode || ""} readOnly />
             </div>
           </div>
+
+          {/* 🛡️ CREDIT SECURITY ALARM SECTION - MOVED HERE FOR MAXIMUM VISIBILITY */}
+          {isAnyCreditProblem && (
+            <div className={`mt-3 p-3 rounded-xl border-2 flex flex-col gap-2 transition-all ${creditStatus.isBlocked ? "bg-rose-50 border-rose-200 shadow-lg shadow-rose-500/10" : "bg-amber-50 border-amber-200"}`}>
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xl">{creditStatus.isBlocked ? "🚫" : "⚠️"}</span>
+                        <div>
+                            <h4 className={`text-[10px] font-black uppercase tracking-widest ${creditStatus.isBlocked ? "text-rose-600" : "text-amber-600"}`}>
+                                {creditStatus.isBlocked ? "Security Block: Billing Restricted" : "Credit Warning"}
+                            </h4>
+                            <p className="text-xs font-bold text-gray-700">
+                                {creditStatus.isLimitExceeded && `Limit Reached (₹${(creditStatus.currentBalance || 0).toLocaleString()})`}
+                                {creditStatus.isLimitExceeded && creditStatus.isDaysExceeded && " & "}
+                                {creditStatus.isDaysExceeded && `Bills Overdue by ${creditStatus.overdueDays} Days`}
+                            </p>
+                        </div>
+                    </div>
+                    
+                    {(creditStatus.isBlocked || creditStatus.requestStatus === "PENDING") && (
+                        <div className="text-right">
+                            <span className={`text-[9px] font-black px-2 py-1 rounded uppercase tracking-tighter ${
+                                creditStatus.requestStatus === "PENDING" ? "bg-blue-600 text-white animate-pulse" :
+                                creditStatus.requestStatus === "REJECTED" ? "bg-rose-600 text-white" :
+                                "bg-gray-200 text-gray-600"
+                            }`}>
+                                {creditStatus.requestStatus === "PENDING" ? "Request Sent" : 
+                                 creditStatus.requestStatus === "REJECTED" ? "Rejected" : 
+                                 "Blocked"}
+                            </span>
+                        </div>
+                    )}
+                </div>
+
+                {creditStatus.isBlocked && creditStatus.requestStatus !== "PENDING" && (
+                    <button
+                        type="button"
+                        onClick={requestCreditLimitBypass}
+                        className="w-full bg-[#319bab] text-white py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-[#287d8a] transition shadow-md active:scale-95"
+                    >
+                        Send Approval Request to Super Admin
+                    </button>
+                )}
+                
+                {creditStatus.requestStatus === "PENDING" && (
+                    <div className="flex items-center justify-center gap-2 py-2 text-blue-600 bg-blue-50 rounded-lg">
+                        <div className="w-2 h-2 bg-blue-600 rounded-full animate-ping"></div>
+                        <p className="text-[10px] font-black uppercase tracking-widest italic">
+                            Waiting for Super Admin to review this request...
+                        </p>
+                    </div>
+                )}
+            </div>
+          )}
         </div>
 
         {/* RIGHT: ORDER PROCESSORS */}
@@ -2110,9 +2180,9 @@ export default function InventorySalesOrderEntry({
               <div className="mt-8">
                 <button
                   onClick={handleFinalAction}
-                  disabled={isSubmitting}
-                  className={`w-full text-white py-4 rounded-2xl font-black uppercase tracking-widest text-sm transition shadow-2xl hover:shadow-primary/50 cursor-pointer active:scale-95 ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#319bab] hover:bg-[#257f87]'}`}>
-                  {isSubmitting ? 'Processing...' : 'Place Sales Order'}
+                  disabled={isSubmitting || isAnyCreditProblem}
+                  className={`w-full text-white py-4 rounded-2xl font-black uppercase tracking-widest text-sm transition shadow-2xl hover:shadow-primary/50 cursor-pointer active:scale-95 ${(isSubmitting || isAnyCreditProblem) ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#319bab] hover:bg-[#257f87]'}`}>
+                  {isSubmitting ? 'Processing...' : isAnyCreditProblem ? '💳 BILLING BLOCKED' : 'Place Sales Order'}
                 </button>
               </div>
             </div>

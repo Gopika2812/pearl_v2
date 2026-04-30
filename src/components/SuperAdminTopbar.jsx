@@ -11,6 +11,7 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
   const navigate = useNavigate();
   const { superAdminViewBranch, setSuperAdminViewBranch } = useBranch();
   const [tokenStats, setTokenStats] = useState({ todayTotal: 0, todayPending: 0 });
+  const [pendingCreditRequests, setPendingCreditRequests] = useState(0);
   const [time, setTime] = useState(new Date());
   const [openProfile, setOpenProfile] = useState(false);
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
@@ -55,7 +56,25 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
     };
 
     fetchTokenStats();
-    const interval = setInterval(fetchTokenStats, 60000); // refresh every minute
+    
+    const fetchCreditRequestCount = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/customers/credit-requests/total-count`);
+        const data = await res.json();
+        if (data.success) {
+          setPendingCreditRequests(data.count || 0);
+        }
+      } catch (err) {
+        console.error("Failed to fetch credit request count:", err);
+      }
+    };
+
+    fetchCreditRequestCount();
+
+    const interval = setInterval(() => {
+      fetchTokenStats();
+      fetchCreditRequestCount();
+    }, 60000); // refresh every minute
     return () => clearInterval(interval);
   }, []);
 
@@ -248,6 +267,20 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
                 </div>
               </div>
             </button>
+
+            {/* Credit Requests Badge */}
+            {pendingCreditRequests > 0 && (
+                <button 
+                  onClick={() => navigate("/super-admin/credit-requests")}
+                  className="flex items-center gap-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-rose-500/20 relative animate-pulse shadow-lg shadow-rose-500/5"
+                >
+                  <FaShieldAlt className="text-rose-500" />
+                  <span>Credit Req</span>
+                  <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-secondary shadow-lg">
+                    {pendingCreditRequests}
+                  </span>
+                </button>
+            )}
 
             {/* Profile */}
             <div className="relative" ref={profileRef}>

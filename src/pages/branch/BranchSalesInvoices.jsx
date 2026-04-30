@@ -221,7 +221,7 @@ const BranchSalesInvoices = () => {
   const fetchBranchUsers = async () => {
     if (!currentBranch?._id) return;
     try {
-      const res = await fetchWithAuth(`${API_BASE}/users?branchId=${currentBranch._id}`);
+      const res = await fetchWithAuth(`${API_BASE}/branch-users?branchId=${currentBranch._id}`);
       const data = await res.json();
       if (data.success) {
         setBranchUsers(data.data || []);
@@ -259,14 +259,17 @@ const BranchSalesInvoices = () => {
   // 🌍 HANDLE URL SEARCH PARAMS (Teleport from Audit Logs)
   useEffect(() => {
     const searchParam = searchParams.get("search");
-    if (searchParam) {
+    if (searchParam && searchParam !== searchTerm) {
       setSearchTerm(searchParam);
-      // Clear dates to search globally
-      setFilterFromDate("");
-      setFilterToDate("");
-      toast.info(`🔍 Searching for ${searchParam}...`);
+      // Only clear dates if they are still at "Today" (default state)
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (filterFromDate === todayStr && filterToDate === todayStr) {
+        setFilterFromDate("");
+        setFilterToDate("");
+        toast.info(`🔍 Searching for ${searchParam} globally...`);
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, searchTerm]);
 
   const toggleExpanded = async (invoiceId) => {
     const isExpanding = !expandedInvoices[invoiceId];
@@ -356,6 +359,7 @@ const BranchSalesInvoices = () => {
       setRequestingAction(null);
     }
   };
+
 
   // ✅ GENERATE E-INVOICE FUNCTION
   const handleGenerateEInvoice = async (invoice, transportDetails = null) => {
@@ -966,7 +970,11 @@ const BranchSalesInvoices = () => {
                         )}
                         {isFieldAllowed("status") && (
                           <td className="px-6 py-5 text-center">
-                            {inv.salesOrderId?.reEditRequestStatus === "PENDING" ? (
+                            {inv.status === "CANCELLED" ? (
+                              <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-red-200">
+                                Cancelled
+                              </span>
+                            ) : inv.salesOrderId?.reEditRequestStatus === "PENDING" ? (
                               <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
                                 Re-Edit Requested
                               </span>
@@ -1070,19 +1078,28 @@ const BranchSalesInvoices = () => {
                                    )}
                                  </div>
                                )}
-                              {isFieldAllowed("action_cancel") && (
-                                <button
-                                  onClick={() => {
-                                    setCancelReason("");
-                                    setShowCancelModal(inv);
-                                  }}
-                                  disabled={requestingAction === inv._id || inv.status === "CANCELLED"}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white disabled:opacity-50"
-                                >
-                                  {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash size={12} />}
-                                  CANCEL
-                                </button>
-                              )}
+                               {isFieldAllowed("action_cancel") && (
+                                 <div className="flex gap-1">
+                                    {inv.status === "CANCELLED" ? (
+                                       <span className="text-[10px] font-black text-red-400 uppercase tracking-widest italic">
+                                          Archived
+                                       </span>
+                                    ) : (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setCancelReason("");
+                                          setShowCancelModal(inv);
+                                        }}
+                                        disabled={requestingAction === inv._id}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white"
+                                      >
+                                        {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash size={12} />}
+                                        CANCEL
+                                      </button>
+                                    )}
+                                 </div>
+                               )}
                             </div>
                           </td>
                         )}
