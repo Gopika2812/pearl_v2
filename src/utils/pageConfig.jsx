@@ -108,6 +108,7 @@ export const PAGE_CONFIG = [
           { id: "delivery-flow", name: "Delivery Flow", path: "/branch/delivery-flow", icon: "list" },
           { id: "delivery-records", name: "Delivery Records", path: "/branch/delivery-records", icon: "history" },
           { id: "delivery-receipt", name: "Delivery Receipt", path: "/branch/delivery-receipt", icon: "receipt" },
+          { id: "transferred-receipts", name: "Receipts Transferred", path: "/branch/transferred-receipts", icon: "history" },
         ]
       }
     ]

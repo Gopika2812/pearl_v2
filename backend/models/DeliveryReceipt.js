@@ -48,6 +48,22 @@ const deliveryReceiptSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    denominations: {
+      d500: { type: Number, default: 0 },
+      d200: { type: Number, default: 0 },
+      d100: { type: Number, default: 0 },
+      d50: { type: Number, default: 0 },
+      d20: { type: Number, default: 0 },
+      d10: { type: Number, default: 0 },
+      d5: { type: Number, default: 0 },
+      d2: { type: Number, default: 0 },
+      d1: { type: Number, default: 0 },
+      total: { type: Number, default: 0 }
+    },
+    isBankTransferred: { type: Boolean, default: false },
+    bankName: { type: String, enum: ["ICICI Bank", "State Bank", ""] },
+    transferredBy: { type: String },
+    transferredAt: { type: Date },
     createdBy: {
       type: String,
       required: true,

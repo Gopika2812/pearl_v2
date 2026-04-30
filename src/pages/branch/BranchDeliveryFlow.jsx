@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { FaHistory, FaSearch, FaSync, FaTruck, FaCheckCircle, FaUser, FaCommentDots, FaMapMarkerAlt, FaChevronDown, FaBoxOpen, FaClipboardCheck, FaUndo } from "react-icons/fa";
+import { FaHistory, FaSearch, FaSync, FaTruck, FaCheckCircle, FaUser, FaCommentDots, FaMapMarkerAlt, FaChevronDown, FaBoxOpen, FaClipboardCheck, FaUndo, FaPlus, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -25,6 +25,39 @@ const BranchDeliveryFlow = () => {
   const [sortField, setSortField] = useState("invoiceNumber");
   const [sortOrder, setSortOrder] = useState("desc");
   const [pickingAnim, setPickingAnim] = useState({}); // { invoiceId: 'packing' | 'done' }
+  const [selectedInvoices, setSelectedInvoices] = useState([]);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkData, setBulkData] = useState({ 
+    storageMan: [""], 
+    storageManComment: "",
+    stockChecker: [""], 
+    stockCheckerComment: "",
+    deliveryPerson: [""],
+    deliveryPersonComment: ""
+  });
+
+  const addStaffSlot = (role) => {
+    if (bulkData[role].length >= 5) {
+      toast.warning(`Maximum 5 ${role.replace(/([A-Z])/g, ' $1').toLowerCase()}s allowed`);
+      return;
+    }
+    setBulkData(prev => ({
+      ...prev,
+      [role]: [...prev[role], ""]
+    }));
+  };
+
+  const updateStaffSlot = (role, index, value) => {
+    const newArr = [...bulkData[role]];
+    newArr[index] = value;
+    setBulkData(prev => ({ ...prev, [role]: newArr }));
+  };
+
+  const removeStaffSlot = (role, index) => {
+    if (bulkData[role].length <= 1) return;
+    const newArr = bulkData[role].filter((_, i) => i !== index);
+    setBulkData(prev => ({ ...prev, [role]: newArr }));
+  };
 
   const handlePickWithAnimation = (invoiceId) => {
     // Phase 1: Packing (box spins)
@@ -273,6 +306,56 @@ const BranchDeliveryFlow = () => {
   };
 
 
+  const handleBulkUpdate = async () => {
+    if (selectedInvoices.length === 0) return;
+    
+    // Filter out empty selections and join with commas
+    const finalData = {
+      storageMan: bulkData.storageMan.filter(name => name && name !== "NONE").join(", "),
+      storageManComment: bulkData.storageManComment,
+      stockChecker: bulkData.stockChecker.filter(name => name && name !== "NONE").join(", "),
+      stockCheckerComment: bulkData.stockCheckerComment,
+      deliveryPerson: bulkData.deliveryPerson.filter(name => name && name !== "NONE").join(", "),
+      deliveryPersonComment: bulkData.deliveryPersonComment
+    };
+
+    if (!finalData.storageMan && !finalData.stockChecker && !finalData.deliveryPerson) {
+      toast.warning("Please select at least one person to assign");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/invoices/delivery-flow/bulk`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          invoiceIds: selectedInvoices,
+          ...finalData,
+          updatedBy: user?.username || "System",
+          updatedById: user?._id || user?.id || null
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message || "Bulk update successful");
+        setShowBulkModal(false);
+        setSelectedInvoices([]);
+        setBulkData({ 
+          storageMan: [""], storageManComment: "",
+          stockChecker: [""], stockCheckerComment: "",
+          deliveryPerson: [""], deliveryPersonComment: ""
+        });
+        fetchInvoices();
+      } else {
+        toast.error(data.message || "Bulk update failed");
+      }
+    } catch (err) {
+      toast.error("Error in bulk update");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
   // Check if invoice is 2+ days old (not today or yesterday)
@@ -380,6 +463,14 @@ const BranchDeliveryFlow = () => {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {selectedInvoices.length > 0 && (
+                <button
+                  onClick={() => setShowBulkModal(true)}
+                  className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg shadow-indigo-200 flex items-center gap-2"
+                >
+                  <FaUser /> Select Multi User ({selectedInvoices.length})
+                </button>
+              )}
               <button
                 onClick={fetchInvoices}
                 className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-slate-50 transition shadow-sm"
@@ -460,6 +551,20 @@ const BranchDeliveryFlow = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/50 border-b border-slate-100">
+                  <th className="px-6 py-4 text-center w-12">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      checked={invoices.length > 0 && selectedInvoices.length === invoices.filter(i => i.deliveryStatus !== 'COMPLETED' && i.status !== 'CANCELLED' && !isOldRecord(i)).length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedInvoices(invoices.filter(i => i.deliveryStatus !== 'COMPLETED' && i.status !== 'CANCELLED' && !isOldRecord(i)).map(i => i._id));
+                        } else {
+                          setSelectedInvoices([]);
+                        }
+                      }}
+                    />
+                  </th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">S.No</th>
                   <th 
                     className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors group"
@@ -486,19 +591,32 @@ const BranchDeliveryFlow = () => {
               <tbody className="divide-y divide-slate-50">
                 {loading ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                    <td colSpan="8" className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
                       <FaSync className="animate-spin inline-block mr-2" /> Loading Deliveries...
                     </td>
                   </tr>
                 ) : invoices.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                    <td colSpan="8" className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
                       No matching records found.
                     </td>
                   </tr>
                 ) : (
                   invoices.map((inv, idx) => (
                     <tr key={inv._id} className={`transition-colors ${inv.status === "CANCELLED" || isOldRecord(inv) ? 'opacity-50 bg-slate-100/50 pointer-events-none' : inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/10 hover:bg-slate-50/50' : 'hover:bg-slate-50/50'}`}>
+                      <td className="px-6 py-4 text-center">
+                        <input 
+                          type="checkbox" 
+                          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-20"
+                          checked={selectedInvoices.includes(inv._id)}
+                          disabled={inv.deliveryStatus === 'COMPLETED' || inv.status === 'CANCELLED'}
+                          onChange={() => {
+                            setSelectedInvoices(prev => 
+                              prev.includes(inv._id) ? prev.filter(id => id !== inv._id) : [...prev, inv._id]
+                            );
+                          }}
+                        />
+                      </td>
                       <td className="px-6 py-4 text-center">
                         <span className="text-xs font-black text-slate-400">{(currentPage - 1) * 50 + idx + 1}</span>
                       </td>
@@ -971,8 +1089,89 @@ const BranchDeliveryFlow = () => {
         </div>
       </div>
 
-      {/* DELIVERY COMPLETION MODAL REMOVED */}
+      {/* BULK ASSIGNMENT MODAL */}
+      {showBulkModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowBulkModal(false)}></div>
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg relative z-10 animate-in fade-in zoom-in duration-300 flex flex-col max-h-[90vh]">
+            <div className="bg-indigo-600 p-8 text-white rounded-t-[2.5rem] shrink-0">
+              <h3 className="text-xl font-black uppercase tracking-tight">Bulk Staff Assignment</h3>
+              <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mt-1">
+                Assigning staff for {selectedInvoices.length} selected invoices
+              </p>
+            </div>
+            
+            <div className="p-8 space-y-8 overflow-y-auto scrollbar-hide flex-1 pb-20">
+              {/* Category Helper */}
+              {['storageMan', 'stockChecker', 'deliveryPerson'].map((role) => (
+                <div key={role} className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                      {role.replace(/([A-Z])/g, ' $1')}s
+                    </label>
+                    <button 
+                      onClick={() => addStaffSlot(role)}
+                      className="w-6 h-6 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-100 transition-colors"
+                      title="Add more"
+                    >
+                      <FaPlus size={10} />
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {bulkData[role].map((val, idx) => (
+                      <div key={idx} className="flex gap-2 items-center animate-in slide-in-from-left-2 duration-200">
+                        <div className="flex-1">
+                          <FilterableSelect
+                            options={[{ _id: "", name: "NONE" }, ...branchUsers.map(u => ({ _id: u.name, name: u.name }))]}
+                            value={val}
+                            onChange={(newVal) => updateStaffSlot(role, idx, newVal)}
+                            placeholder={`Select ${role.replace(/([A-Z])/g, ' $1')} ${idx + 1}`}
+                          />
+                        </div>
+                        {bulkData[role].length > 1 && (
+                          <button 
+                            onClick={() => removeStaffSlot(role, idx)}
+                            className="w-8 h-8 flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          >
+                            <FaTrash size={12} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <div className="pt-1">
+                      <input 
+                        type="text"
+                        value={bulkData[`${role}Comment`]}
+                        onChange={(e) => setBulkData(prev => ({ ...prev, [`${role}Comment`]: e.target.value }))}
+                        placeholder={`Add ${role.replace(/([A-Z])/g, ' $1').toLowerCase()} note...`}
+                        className="w-full text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 outline-none focus:bg-white focus:border-indigo-300 transition-all shadow-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
 
+            <div className="absolute bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-md border-t border-slate-100 rounded-b-[2.5rem] z-20">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowBulkModal(false)}
+                  className="flex-1 px-6 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleBulkUpdate}
+                  className="flex-[2] px-6 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg shadow-indigo-200"
+                >
+                  Confirm Assignment
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

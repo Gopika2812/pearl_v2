@@ -113,6 +113,7 @@ router.post("/", auth, async (req, res) => {
       totalCollected,
       totalExpense,
       netAmount,
+      denominations: req.body.denominations || {},
       createdBy,
     });
 
@@ -121,7 +122,7 @@ router.post("/", auth, async (req, res) => {
     await createAuditLog({
       userId: req.user.id,
       username: createdBy,
-      branchId,
+      branchId: activeBranchId,
       action: "CREATE_DELIVERY_RECEIPT",
       description: `Created Delivery Receipt ${receiptId} for ${deliveryPerson}. Net: ₹${netAmount}`,
       targetId: newReceipt._id,
@@ -136,6 +137,98 @@ router.post("/", auth, async (req, res) => {
       message: error.message || "Internal server error",
       details: error.name === "ValidationError" ? error.errors : null
     });
+  }
+});
+
+// PATCH - Bulk transfer to bank
+router.patch("/bank-transfer", auth, async (req, res) => {
+  try {
+    const { receiptIds, bankName } = req.body;
+    if (!receiptIds || !Array.isArray(receiptIds) || receiptIds.length === 0) {
+      return res.status(400).json({ success: false, message: "Receipt IDs are required" });
+    }
+    if (!bankName) {
+      return res.status(400).json({ success: false, message: "Bank name is required" });
+    }
+
+    const result = await DeliveryReceipt.updateMany(
+      { _id: { $in: receiptIds } },
+      { 
+        $set: { 
+          isBankTransferred: true, 
+          bankName, 
+          transferredBy: req.user.username,
+          transferredAt: new Date()
+        } 
+      }
+    );
+
+    await createAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      action: "BANK_TRANSFER_RECEIPTS",
+      description: `Transferred ${result.modifiedCount} receipts to ${bankName}`,
+      targetModel: "DeliveryReceipt",
+    });
+
+    res.json({ success: true, message: `${result.modifiedCount} receipts transferred to ${bankName}` });
+  } catch (error) {
+    console.error("Error in bank transfer:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// PATCH - Revert bank transfer for a single receipt
+router.patch("/revert-transfer/:id", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const receipt = await DeliveryReceipt.findById(id);
+    
+    if (!receipt) {
+      return res.status(404).json({ success: false, message: "Receipt not found" });
+    }
+
+    const oldBank = receipt.bankName;
+    
+    await DeliveryReceipt.findByIdAndUpdate(id, {
+      $set: {
+        isBankTransferred: false,
+        bankName: "",
+        transferredBy: null,
+        transferredAt: null
+      }
+    });
+
+    await createAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      branchId: receipt.branchId,
+      action: "REVERT_BANK_TRANSFER",
+      description: `Reverted bank transfer for receipt ${receipt.receiptId} (was in ${oldBank})`,
+      targetId: id,
+      targetModel: "DeliveryReceipt",
+    });
+
+    res.json({ success: true, message: "Transfer status reverted successfully" });
+  } catch (error) {
+    console.error("Error reverting bank transfer:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// GET - Transferred receipts history
+router.get("/transferred", auth, async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    const activeBranchId = branchId || req.user.branchId;
+    const query = { isBankTransferred: true };
+    if (activeBranchId) query.branchId = activeBranchId;
+
+    const receipts = await DeliveryReceipt.find(query).sort({ transferredAt: -1 });
+    res.json({ success: true, data: receipts });
+  } catch (error) {
+    console.error("Error fetching transferred receipts:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 

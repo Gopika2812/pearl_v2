@@ -1723,7 +1723,70 @@ const generateDeliveryLogId = async (branchId) => {
   return `${prefix}${nextNum.toString().padStart(4, "0")}`;
 };
 
-// PATCH - Update delivery flow tracking fields
+// PATCH - Bulk update delivery flow fields for multiple invoices
+router.patch("/delivery-flow/bulk", auth, async (req, res) => {
+  try {
+    const { invoiceIds, storageMan, storageManComment, stockChecker, stockCheckerComment, deliveryPerson, deliveryPersonComment, updatedBy, updatedById } = req.body;
+    
+    if (!invoiceIds || !Array.isArray(invoiceIds) || invoiceIds.length === 0) {
+      return res.status(400).json({ success: false, message: "No invoices selected" });
+    }
+
+    const updateData = {};
+    if (storageMan !== undefined) updateData.storageMan = storageMan;
+    if (storageManComment !== undefined) updateData.storageManComment = storageManComment;
+    if (stockChecker !== undefined) updateData.stockChecker = stockChecker;
+    if (stockCheckerComment !== undefined) updateData.stockCheckerComment = stockCheckerComment;
+    if (deliveryPerson !== undefined) updateData.deliveryPerson = deliveryPerson;
+    if (deliveryPersonComment !== undefined) updateData.deliveryPersonComment = deliveryPersonComment;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ success: false, message: "No fields to update provided" });
+    }
+
+    const result = await Invoice.updateMany(
+      { _id: { $in: invoiceIds } },
+      { $set: updateData }
+    );
+
+    // Sync delivery person to SalesOrder/Invoice populated fields for each updated invoice
+    if (deliveryPerson !== undefined && deliveryPerson !== "" && deliveryPerson !== "NONE") {
+      const invoices = await Invoice.find({ _id: { $in: invoiceIds } });
+      const firstPerson = deliveryPerson.split(',')[0].trim();
+      
+      for (const inv of invoices) {
+         const dMan = await DeliveryMan.findOne({
+            name: { $regex: new RegExp(`^${firstPerson}$`, 'i') },
+            branchId: inv.branchId
+         });
+         if (dMan) {
+            await SalesOrder.findByIdAndUpdate(inv.salesOrderId, { deliveryMan: dMan._id });
+            await Invoice.findByIdAndUpdate(inv._id, { deliveryMan: dMan._id });
+         }
+      }
+    } else if (deliveryPerson === "" || deliveryPerson === "NONE") {
+      const invoices = await Invoice.find({ _id: { $in: invoiceIds } });
+      for (const inv of invoices) {
+         await SalesOrder.findByIdAndUpdate(inv.salesOrderId, { $unset: { deliveryMan: 1 } });
+         await Invoice.findByIdAndUpdate(inv._id, { $unset: { deliveryMan: 1 } });
+      }
+    }
+
+    await createAuditLog({
+      userId: req.user.id,
+      username: updatedBy || req.user.username,
+      action: "BULK_UPDATE_DELIVERY_FLOW",
+      description: `Bulk updated ${result.modifiedCount} invoices with assigned staff.`,
+      targetModel: "Invoice"
+    });
+
+    res.json({ success: true, message: `${result.modifiedCount} invoices updated successfully` });
+  } catch (error) {
+    console.error("Error in bulk delivery update:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
 router.patch("/:invoiceId/delivery-flow", async (req, res) => {
   try {
     const { invoiceId } = req.params;

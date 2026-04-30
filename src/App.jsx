@@ -62,6 +62,7 @@ import BranchCustomerLedger from "./pages/branch/BranchCustomerLedger";
 import BranchDeliveryFlow from "./pages/branch/BranchDeliveryFlow";
 import BranchDeliveryRecords from "./pages/branch/BranchDeliveryRecords";
 import BranchDeliveryReceipt from "./pages/branch/BranchDeliveryReceipt";
+import BranchTransferredReceipts from "./pages/branch/BranchTransferredReceipts";
 
 
 import BranchLoginPage from "./pages/BranchLoginPage";
@@ -255,6 +256,7 @@ function AppContent() {
         "/branch/delivery-flow": "delivery-flow",
         "/branch/delivery-records": "delivery-records",
         "/branch/delivery-receipt": "delivery-receipt",
+        "/branch/transferred-receipts": "delivery-receipt",
       };
 
       const requiredPermission = pathPermissionMap[location.pathname];
@@ -620,6 +622,7 @@ function AppContent() {
                   <Route path="/branch/delivery-flow" element={<ProtectedRoute element={<BranchDeliveryFlow />} />} />
                   <Route path="/branch/delivery-records" element={<ProtectedRoute element={<BranchDeliveryRecords />} />} />
                   <Route path="/branch/delivery-receipt" element={<ProtectedRoute element={<BranchDeliveryReceipt />} />} />
+                  <Route path="/branch/transferred-receipts" element={<ProtectedRoute element={<BranchTransferredReceipts />} />} />
 
                   {/* LEGACY ROUTES */}
                   <Route
