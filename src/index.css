@@ -13,33 +13,68 @@
     @apply text-secondary bg-white min-h-screen overflow-x-hidden;
     color: #001f3f;
   }
-  
-  h1, h2, h3, h4, h5, h6, p, span, div, table, th, td, input, select, textarea, button {
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p,
+  span,
+  div,
+  table,
+  th,
+  td,
+  input,
+  select,
+  textarea,
+  button {
     color: inherit;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-bold;
   }
 }
 
 @layer utilities {
-  .text-navy { color: #001f3f; }
-  .bg-navy { background-color: #001f3f; }
-  .text-sky { color: #4096d3; }
-  .bg-sky { background-color: #4096d3; }
+  .text-navy {
+    color: #001f3f;
+  }
+
+  .bg-navy {
+    background-color: #001f3f;
+  }
+
+  .text-sky {
+    color: #4096d3;
+  }
+
+  .bg-sky {
+    background-color: #4096d3;
+  }
 
   /* Hide scrollbar for Chrome, Safari and Opera */
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
   /* Hide scrollbar for IE, Edge and Firefox */
   .no-scrollbar {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
   }
 
-  .select-none, .no-copy {
+  .select-none,
+  .no-copy {
     -webkit-user-select: none !important;
     -moz-user-select: none !important;
     -ms-user-select: none !important;
