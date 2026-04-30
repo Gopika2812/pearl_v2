@@ -1737,7 +1737,7 @@ export default function InventorySalesOrderEntry({
                     )}
                     {!searchingProducts && fetchedProducts
                       .map((p) => {
-                        const currentStock = availableQtyCache[p._id] ?? p.totalQty ?? p.availableQty ?? 0;
+                        const currentStock = availableQtyCache[p._id] ?? p.availableQty ?? p.totalQty ?? 0;
                         return (
                           <div
                             key={p._id}
@@ -1746,7 +1746,7 @@ export default function InventorySalesOrderEntry({
                           >
                             <div className="font-semibold">{p.name} ({p.perQty || 1}:{p.units || ""})</div>
                             <div className="text-xs text-gray-500">
-                              Total Qty: {currentStock}
+                              Available Qty: {currentStock}
                             </div>
                           </div>
                         );
@@ -1755,6 +1755,11 @@ export default function InventorySalesOrderEntry({
                       <div className="px-3 py-2 text-gray-500 text-sm">No items found</div>
                     )}
                   </div>
+                )}
+                {selectedItem && (
+                    <div className="text-[10px] text-gray-500 mt-1 font-bold">
+                        Live Balance: {availableQtyCache[selectedItem] ?? productsWithStock.find(p => p._id === selectedItem)?.availableQty ?? 0} {convUnit || "Units"}
+                    </div>
                 )}
               </div>
 

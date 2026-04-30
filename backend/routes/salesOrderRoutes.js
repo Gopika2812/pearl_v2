@@ -862,7 +862,10 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
     console.log("📋 Generating invoice flow for SO:", id);
 
     // 🔍 FIND SALES ORDER
-    const salesOrder = await SalesOrder.findById(id);
+    const salesOrder = await SalesOrder.findById(id)
+      .populate("items.productId")
+      .populate("invoiceItems.productId")
+      .populate("lastInvoicedItems.productId");
     if (!salesOrder) return res.status(404).json({ message: "Sales order not found" });
 
     if (salesOrder.status === "INVOICED" && salesOrder.reEditRequestStatus !== "APPROVED") {
@@ -1242,7 +1245,12 @@ router.get("/:id", async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid sales order ID" });
     }
 
-    const salesOrder = await SalesOrder.findById(id);
+    const salesOrder = await SalesOrder.findById(id)
+      .populate("items.productId")
+      .populate("invoiceItems.productId")
+      .populate("lastInvoicedItems.productId")
+      .populate("salesOwner", "name")
+      .populate("deliveryMan", "name phone");
 
     if (!salesOrder) {
       return res.status(404).json({ success: false, message: "Sales order not found" });

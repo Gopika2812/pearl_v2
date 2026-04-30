@@ -18,6 +18,8 @@ import Warehouse from "../models/Warehouse.js";
 import auth from "../middleware/auth.js";
 import { createAuditLog } from "../utils/logUtil.js";
 
+const HARD_ANCHOR_DATE = moment.tz("2026-03-31 23:59:59", "Asia/Kolkata").toDate();
+
 const router = express.Router();
 
 // Configure multer with 50MB limit for bulk uploads
@@ -190,25 +192,27 @@ router.get("/", async (req, res) => {
     
     const [salesTotals, purchaseTotals, cnTotals, dnTotals] = await Promise.all([
       Invoice.aggregate([
-        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
         { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
       ]),
       PurchaseInvoice.aggregate([
-        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
         { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
       ]),
       CreditNote.aggregate([
-        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+        { $addFields: { effectiveDate: { $ifNull: ["$date", "$createdAt"] } } },
+        { $match: { effectiveDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
         { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
       ]),
       DebitNote.aggregate([
-        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, date: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
         { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
         { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
@@ -316,25 +320,27 @@ router.get("/group/:productGroupId", async (req, res) => {
     if (products.length > 0 && branchObjectId) {
       const [salesTotals, purchaseTotals, cnTotals, dnTotals] = await Promise.all([
         Invoice.aggregate([
-          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
           { $unwind: "$items" },
           { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
           { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
         ]),
         PurchaseInvoice.aggregate([
-          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
           { $unwind: "$items" },
           { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
           { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
         ]),
         CreditNote.aggregate([
-          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, createdAt: { $gt: HARD_ANCHOR_DATE } } },
+          { $addFields: { effectiveDate: { $ifNull: ["$date", "$createdAt"] } } },
+          { $match: { effectiveDate: { $gt: HARD_ANCHOR_DATE } } },
           { $unwind: "$items" },
           { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
           { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
         ]),
         DebitNote.aggregate([
-          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+          { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, date: { $gt: HARD_ANCHOR_DATE } } },
           { $unwind: "$items" },
           { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
           { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
@@ -1205,9 +1211,6 @@ router.get("/available/:productId", async (req, res) => {
     if (!branchOid) {
       return res.status(400).json({ success: false, message: "branchId is required" });
     }
-
-    // ⚓ ANCHOR POINT: March 31st, 2026 (IST)
-    const HARD_ANCHOR_DATE = moment.tz("2026-03-31 23:59:59", "Asia/Kolkata").toDate();
 
     // 🧮 Calculate ALL movements after the anchor for this specific product
     const [purchases, sales, debitNotes, creditNotes] = await Promise.all([

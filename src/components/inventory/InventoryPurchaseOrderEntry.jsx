@@ -846,7 +846,7 @@ const InventoryPurchaseOrderEntry = ({
                       <div className="px-3 py-2 text-gray-500 text-sm italic">🔍 Searching products...</div>
                     )}
                     {!searchingProducts && fetchedProducts.map((p) => {
-                      const currentStock = availableQtyCache[p._id] ?? p.totalQty ?? 0;
+                      const currentStock = availableQtyCache[p._id] ?? p.availableQty ?? p.totalQty ?? 0;
                       return (
                         <div
                           key={p._id}
@@ -868,7 +868,7 @@ const InventoryPurchaseOrderEntry = ({
                 )}
                 {selectedProductData && (
                   <div className="text-[10px] text-gray-500 mt-1">
-                    Live Balance: {availableQtyCache[selectedProductData._id] ?? selectedProductData.totalQty ?? 0} {selectedProductData.units || ""}
+                    Live Balance: {availableQtyCache[selectedProductData._id] ?? selectedProductData.availableQty ?? selectedProductData.totalQty ?? 0} {selectedProductData.units || ""}
                   </div>
                 )}
               </div>

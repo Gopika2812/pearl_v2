@@ -181,7 +181,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             sellingPrice: item.sellingPrice || 0,
             discountPercent: item.discountPercent || 0,
             discountAmount: item.discountAmount || 0,
-            hsn: item.hsn || "",
+            gst: item.gst || item.productId?.gst || 0,
+            cgst: item.cgst || (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
+            sgst: item.sgst || (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
+            igst: item.igst || 0,
+            hsn: item.hsn || item.productId?.hsnCode || "",
             total: total
           });
         });
@@ -203,7 +207,11 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             sellingPrice: item.sellingPrice || item.rate || 0,
             discountPercent: item.discountPercent || 0,
             discountAmount: item.discountAmount || 0,
-            hsn: item.hsn || item.hsnCode || "",
+            gst: item.gst || item.productId?.gst || 0,
+            cgst: item.cgst || (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
+            sgst: item.sgst || (item.gst ? item.gst / 2 : (item.productId?.gst ? item.productId.gst / 2 : 0)),
+            igst: item.igst || 0,
+            hsn: item.hsn || item.hsnCode || item.productId?.hsnCode || "",
             total: Math.round((item.sellingPrice || 0) * (item.qty || 0) * 100) / 100
           });
         });
