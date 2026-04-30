@@ -375,12 +375,14 @@ const BranchDeliveryReceipt = () => {
               </div>
 
               {/* ADD ROW BUTTON */}
-              <div className="pl-12 sm:pl-20 pr-2 sm:pr-8 h-[48px] flex items-center relative z-20 group border-t border-dashed border-slate-200">
+              <div className="pl-12 sm:pl-20 pr-3 sm:pr-8 h-[56px] flex items-center relative z-20 group">
                 <button 
                   onClick={addEntry} 
-                  className="flex items-center gap-2 text-[9px] sm:text-[11px] font-black text-emerald-500/70 hover:text-emerald-600 transition-colors uppercase tracking-widest w-full h-full text-left"
+                  className="flex items-center gap-3 px-6 py-2 bg-emerald-50 hover:bg-emerald-100/80 text-[10px] sm:text-xs font-black text-emerald-600 border border-emerald-100 rounded-full transition-all duration-300 uppercase tracking-[0.2em] shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:shadow-inner"
                 >
-                  <FaPlusCircle /> Add New Row
+                  <FaPlusCircle className="text-emerald-500" /> 
+                  <span>Add New Row</span>
+                  <div className="ml-2 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
                 </button>
               </div>
 
