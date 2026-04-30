@@ -35,6 +35,7 @@ export default function InventorySalesOrderEntry({
   const { user } = useBranch();
   // Check if the user has this new feature explicitly disabled by Super Admin. (Defaults to true)
   const canUseQuickLinks = user?.role === "SUPER_ADMIN" || user?.actionPermissions?.create_shortcuts !== false;
+  const canEditSellingPrice = user?.role === "SUPER_ADMIN" || user?.actionPermissions?.editSellingPrice !== false;
 
   const [voucherType, setVoucherType] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
@@ -1715,10 +1716,14 @@ export default function InventorySalesOrderEntry({
                   </label>
                   <input
                     type="number"
-                    className={inputClass}
+                    className={`${inputClass} ${!canEditSellingPrice ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''}`}
                     value={sellingPrice === 0 ? "" : sellingPrice}
-                    onChange={(e) => setSellingPrice(e.target.value === "" ? "" : Number(e.target.value))}
+                    onChange={(e) => {
+                      if (canEditSellingPrice) setSellingPrice(e.target.value === "" ? "" : Number(e.target.value));
+                    }}
                     placeholder="Price"
+                    readOnly={!canEditSellingPrice}
+                    title={!canEditSellingPrice ? "You do not have permission to edit the selling price." : ""}
                   />
                 </div>
               </div>

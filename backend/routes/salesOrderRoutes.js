@@ -138,6 +138,7 @@ router.post("/:id/record-payment", clearCachePrefix("/api/sales-orders"), async 
 router.get("/", async (req, res) => {
   try {
     const { branchId, customerName, status, isClaim, fromDate, toDate, customerId, search, voucherType, generated } = req.query;
+    console.log("🔍 [DEBUG] Sales Order Fetch Query:", { branchId, isClaim, fromDate, toDate, search, voucherType });
     const query = {};
 
     // 1. Branch Filter (Always required)
@@ -168,17 +169,34 @@ router.get("/", async (req, res) => {
     }
 
     // 5. Date Filter
-    // Apply default 'Today' ONLY if no specific dates AND no search term are provided
     // 📅 Date Filtering: Respect specific dates if provided, or default to "Today" if no global search is active.
-    // Status filters (voucherType, generated) should NOT disable the date filter.
-    if (fromDate || toDate || !search) {
-      const start = fromDate ? new Date(fromDate) : new Date();
-      start.setHours(0, 0, 0, 0);
+    if (fromDate || toDate || (!search && !voucherType && !customerName)) {
+      const parseDate = (dateStr, isEnd) => {
+        if (!dateStr) return isEnd ? new Date() : new Date();
+        
+        let d = new Date(dateStr);
+        // If Invalid Date and contains dashes, try DD-MM-YYYY
+        if (isNaN(d.getTime()) && dateStr.includes("-")) {
+          const parts = dateStr.split("-");
+          if (parts.length === 3) {
+            // Assume DD-MM-YYYY if parts[0] > 12 or if parts[2] is 4 digits
+            if (parts[2].length === 4) {
+              d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+            }
+          }
+        }
+        return d;
+      };
 
-      const end = toDate ? new Date(toDate) : new Date();
-      end.setHours(23, 59, 59, 999);
+      const start = parseDate(fromDate, false);
+      if (!isNaN(start.getTime())) start.setHours(0, 0, 0, 0);
 
-      query.orderDate = { $gte: start, $lte: end };
+      const end = parseDate(toDate, true);
+      if (!isNaN(end.getTime())) end.setHours(23, 59, 59, 999);
+
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+        query.orderDate = { $gte: start, $lte: end };
+      }
     }
 
     // 6. Status & Customer Filters
@@ -210,6 +228,7 @@ router.get("/", async (req, res) => {
       .limit(search ? 1000 : 200) // Increase limit for searches
       .lean();
 
+    console.log(`✅ [DEBUG] Found ${salesOrders.length} sales orders for branch ${branchId}`);
     res.json(salesOrders);
   } catch (error) {
     console.error("Fetch error:", error);

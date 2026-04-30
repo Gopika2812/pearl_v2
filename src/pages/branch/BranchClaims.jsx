@@ -23,8 +23,8 @@ const BranchClaims = () => {
   const [filterVoucherType, setFilterVoucherType] = useState("");
   const [filterInvoiceId, setFilterInvoiceId] = useState("");
   const [filterCustomerName, setFilterCustomerName] = useState("");
-  const [filterFromDate, setFilterFromDate] = useState("");
-  const [filterToDate, setFilterToDate] = useState("");
+  const [filterFromDate, setFilterFromDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]); // Start of month
+  const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0]); // Today
   const [filterFromTime, setFilterFromTime] = useState("");
   const [filterToTime, setFilterToTime] = useState("");
 
@@ -37,15 +37,23 @@ const BranchClaims = () => {
 
     setLoading(true);
     try {
+      const searchParam = (filterInvoiceId || filterCustomerName) ? `&search=${encodeURIComponent(filterInvoiceId || filterCustomerName)}` : "";
+      const voucherParam = filterVoucherType ? `&voucherType=${encodeURIComponent(filterVoucherType)}` : "";
+      const dateParams = (filterFromDate || filterToDate) ? `&fromDate=${filterFromDate}&toDate=${filterToDate}` : "";
+
       const res = await fetch(
-        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isClaim=true`
+        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isClaim=true${searchParam}${voucherParam}${dateParams}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
       );
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.message || "Failed to fetch claims");
 
       setSalesOrders(data || []);
-      toast.success(`Fetched ${data?.length || 0} claims`);
     } catch (err) {
       console.error("Error fetching claims:", err);
       toast.error(err.message || "Failed to fetch claims");
@@ -55,8 +63,11 @@ const BranchClaims = () => {
   };
 
   useEffect(() => {
-    fetchSalesOrders();
-  }, [currentBranch?._id]);
+    const handler = setTimeout(() => {
+      fetchSalesOrders();
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [currentBranch?._id, filterFromDate, filterToDate, filterInvoiceId, filterCustomerName, filterVoucherType]);
 
   const handleGenerateInvoice = (order) => {
     setSelectedOrder(order);
@@ -159,16 +170,8 @@ const BranchClaims = () => {
     const matchesCustomerName = filterCustomerName === "" || 
       (order.customer?.name && order.customer.name.toLowerCase().includes(filterCustomerName.toLowerCase()));
     
-    const orderDate = new Date(order.createdAt);
-    const orderDateStr = orderDate.toISOString().split('T')[0];
-    const orderTimeStr = orderDate.toTimeString().slice(0, 5);
-    
-    const matchesFromDate = filterFromDate === "" || orderDateStr >= filterFromDate;
-    const matchesToDate = filterToDate === "" || orderDateStr <= filterToDate;
-    const matchesFromTime = filterFromTime === "" || filterFromDate === "" || orderDateStr > filterFromDate || (orderDateStr === filterFromDate && orderTimeStr >= filterFromTime);
-    const matchesToTime = filterToTime === "" || filterToDate === "" || orderDateStr < filterToDate || (orderDateStr === filterToDate && orderTimeStr <= filterToTime);
-
-    return matchesVoucherType && matchesInvoiceId && matchesCustomerName && matchesFromDate && matchesToDate && matchesFromTime && matchesToTime;
+    // Date and Time filtering is handled by the backend now
+    return matchesVoucherType && matchesInvoiceId && matchesCustomerName;
   });
 
   return (

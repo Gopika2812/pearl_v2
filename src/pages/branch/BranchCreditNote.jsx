@@ -21,14 +21,22 @@ export default function BranchCreditNote() {
   const [showEInvoiceModal, setShowEInvoiceModal] = useState(null);
   const [editCN, setEditCN] = useState(null);
   const [showTransportModal, setShowTransportModal] = useState(null);
+  
+  // Date Filters
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30); // Default to last 30 days
+    return d.toISOString().split("T")[0];
+  });
+  const [toDate, setToDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
     if (currentBranch?._id) {
       setPage(1);
       setCreditNotes([]);
-      fetchCreditNotes(1, searchQuery);
+      fetchCreditNotes(1, searchQuery, fromDate, toDate);
     }
-  }, [currentBranch]);
+  }, [currentBranch, fromDate, toDate]);
 
   // Debounced search
   useEffect(() => {
@@ -36,16 +44,16 @@ export default function BranchCreditNote() {
       if (currentBranch?._id) {
         setPage(1);
         setCreditNotes([]);
-        fetchCreditNotes(1, searchQuery);
+        fetchCreditNotes(1, searchQuery, fromDate, toDate);
       }
     }, 500);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const fetchCreditNotes = async (pageNum = 1, search = "") => {
+  const fetchCreditNotes = async (pageNum = 1, search = "", fDate = fromDate, tDate = toDate) => {
     try {
       if (pageNum === 1) setLoading(true);
-      const response = await fetchWithAuth(`${API_BASE}/credit-notes?branchId=${currentBranch._id}&page=${pageNum}&search=${search}`);
+      const response = await fetchWithAuth(`${API_BASE}/credit-notes?branchId=${currentBranch._id}&page=${pageNum}&search=${search}&fromDate=${fDate}&toDate=${tDate}`);
       const result = await response.json();
       if (result.success) {
         if (pageNum === 1) {
@@ -183,18 +191,49 @@ export default function BranchCreditNote() {
                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Total Credit Value</p>
                 <p className="text-3xl font-black text-indigo-600">₹{summary.totalValue.toLocaleString()}</p>
             </div>
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4 relative overflow-hidden">
-                <FaSearch className="absolute -right-4 -bottom-4 text-8xl text-gray-50 -rotate-12" />
-                <div className="z-10 w-full">
-                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Search Records</p>
+        </div>
+
+        {/* SEARCH & FILTERS BAR */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
+            <div className="relative w-full md:w-96 group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+                  <FaSearch className="group-focus-within:text-indigo-500 transition-colors" />
+                </div>
+                <input 
+                  type="text"
+                  placeholder="Search CN ID or Customer..."
+                  className="w-full bg-white border border-gray-200 rounded-2xl py-4 pl-11 pr-4 text-sm font-bold text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+            </div>
+
+            <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="flex items-center px-4 border-r border-gray-100">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mr-3">From</span>
                     <input 
-                      type="text"
-                      placeholder="CN ID or Customer..."
-                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-indigo-500 outline-none transition-all"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                        type="date"
+                        value={fromDate}
+                        onChange={(e) => setFromDate(e.target.value)}
+                        className="bg-transparent text-sm font-black text-gray-700 outline-none"
                     />
                 </div>
+                <div className="flex items-center px-4">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mr-3">To</span>
+                    <input 
+                        type="date"
+                        value={toDate}
+                        onChange={(e) => setToDate(e.target.value)}
+                        className="bg-transparent text-sm font-black text-gray-700 outline-none"
+                    />
+                </div>
+            </div>
+
+            <div className="hidden md:flex flex-col items-end">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Active Filters</p>
+                <p className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full mt-1 border border-indigo-100">
+                    {new Date(fromDate).toLocaleDateString()} - {new Date(toDate).toLocaleDateString()}
+                </p>
             </div>
         </div>
 
@@ -405,6 +444,7 @@ export default function BranchCreditNote() {
         />
       )}
     </div>
+  </div>
   );
 }
 

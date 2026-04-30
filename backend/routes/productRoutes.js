@@ -1480,8 +1480,8 @@ router.get("/:id/ledger", auth, async (req, res) => {
             invoiceId: 1, 
             particulars: { $literal: "Pur. Return" }, 
             qty: { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 
-            rate: { $literal: 0 }, 
-            value: { $literal: 0 } 
+            rate: { $ifNull: ["$items.purchasePrice", 0] }, 
+            value: { $multiply: [{ $ifNull: ["$items.qty", "$items.returnedQty", 0] }, { $ifNull: ["$items.purchasePrice", 0] }] } 
         } }
       ]),
       CreditNote.aggregate([
@@ -1489,7 +1489,16 @@ router.get("/:id/ledger", auth, async (req, res) => {
         { $addFields: { effectiveDate: { $ifNull: ["$date", "$createdAt"] } } },
         { $unwind: "$items" },
         { $match: { "items.productId": productOid } },
-        { $project: { type: "INWARD", date: "$effectiveDate", voucherType: { $literal: "Credit Note" }, invoiceId: 1, particulars: { $literal: "Sal. Return" }, qty: "$items.qty", rate: { $literal: 0 }, value: { $literal: 0 } } }
+        { $project: { 
+            type: "INWARD", 
+            date: "$effectiveDate", 
+            voucherType: { $literal: "Credit Note" }, 
+            invoiceId: 1, 
+            particulars: { $literal: "Sal. Return" }, 
+            qty: "$items.qty", 
+            rate: { $ifNull: ["$items.sellingPrice", 0] }, 
+            value: { $multiply: ["$items.qty", { $ifNull: ["$items.sellingPrice", 0] }] } 
+        } }
       ])
     ]);
 
