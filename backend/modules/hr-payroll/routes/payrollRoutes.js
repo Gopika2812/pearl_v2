@@ -6,8 +6,11 @@ import {
   updateSalaryStructure,
   getPayrollHistory
 } from "../controllers/payrollController.js";
+import auth from "../../../middleware/auth.js";
 
 const router = express.Router();
+
+router.use(auth);
 
 router.post("/generate", generatePayroll);
 router.patch("/status/:payrollId", updatePayrollStatus);
