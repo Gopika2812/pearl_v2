@@ -54,21 +54,32 @@ const AttendancePage = () => {
         await Promise.all(data.data.map(async (record) => {
           const updatedRecord = { ...record };
           const loc = updatedRecord.presentLocation;
+          const leaveLoc = updatedRecord.leaveLocation;
           
-          if (loc?.lat && (!loc.address || loc.address === "Location Captured")) {
+          const resolveAddress = async (l) => {
+            if (!l?.lat || (l.address && l.address !== "Location Captured")) return l.address;
             try {
-              const fbRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${loc.lat}&longitude=${loc.lng}&localityLanguage=en`);
+              // Try BigDataCloud
+              const fbRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${l.lat}&longitude=${l.lng}&localityLanguage=en`);
               const fbData = await fbRes.json();
               if (fbData && fbData.city) {
-                updatedRecord.presentLocation = { 
-                  ...loc, 
-                  address: `${fbData.locality || fbData.principalSubdivision}, ${fbData.city}` 
-                };
+                return `${fbData.locality || fbData.principalSubdivision || ""}, ${fbData.city || ""}`.trim().replace(/^,/, "");
+              }
+              // Try Nominatim as secondary fallback
+              const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18`);
+              const nomData = await nomRes.json();
+              if (nomData && nomData.display_name) {
+                return nomData.display_name.split(",").slice(0, 2).join(", ");
               }
             } catch (e) {
-              console.error("Client-side geocoding failed for record:", e);
+              console.error("Client-side geocoding failed:", e);
             }
-          }
+            return l.address || "Location Captured";
+          };
+
+          if (loc) updatedRecord.presentLocation = { ...loc, address: await resolveAddress(loc) };
+          if (leaveLoc) updatedRecord.leaveLocation = { ...leaveLoc, address: await resolveAddress(leaveLoc) };
+          
           records[record.employeeId] = updatedRecord;
         }));
 
@@ -184,18 +195,33 @@ const AttendancePage = () => {
       if (data.success) {
         console.log("✅ Mark Success. Data:", data.data);
         
-        // If backend failed to get address, try client-side fallback
-        if (!data.data.presentLocation?.address || data.data.presentLocation.address === "Location Captured") {
+        // If backend failed to get address, try client-side fallback with multiple services
+        const resolveClientSide = async (l) => {
+          if (!l?.lat || (l.address && l.address !== "Location Captured")) return l.address;
           try {
-            const fallbackRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${location.lat}&longitude=${location.lng}&localityLanguage=en`);
-            const fallbackData = await fallbackRes.json();
-            if (fallbackData && fallbackData.city) {
-              const clientAddress = `${fallbackData.locality || fallbackData.principalSubdivision}, ${fallbackData.city}`;
-              data.data.presentLocation = { ...data.data.presentLocation, address: clientAddress };
+            // Service 1: BigDataCloud
+            const fbRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${l.lat}&longitude=${l.lng}&localityLanguage=en`);
+            const fbData = await fbRes.json();
+            if (fbData && fbData.city) {
+              return `${fbData.locality || fbData.principalSubdivision || ""}, ${fbData.city || ""}`.trim().replace(/^,/, "");
+            }
+            // Service 2: Nominatim
+            const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18`);
+            const nomData = await nomRes.json();
+            if (nomData && nomData.display_name) {
+              return nomData.display_name.split(",").slice(0, 2).join(", ");
             }
           } catch (e) {
             console.error("Client-side geocoding failed:", e);
           }
+          return l.address || "Location Captured";
+        };
+
+        if (data.data.presentLocation) {
+          data.data.presentLocation.address = await resolveClientSide(data.data.presentLocation);
+        }
+        if (data.data.leaveLocation) {
+          data.data.leaveLocation.address = await resolveClientSide(data.data.leaveLocation);
         }
         
         setAttendanceRecords(prev => ({ ...prev, [employeeId]: data.data }));
