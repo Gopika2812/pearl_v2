@@ -69,7 +69,8 @@ const AttendancePage = () => {
               const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18`);
               const nomData = await nomRes.json();
               if (nomData && nomData.display_name) {
-                return nomData.display_name.split(",").slice(0, 2).join(", ");
+                const parts = nomData.display_name.split(",").slice(0, 5);
+                return [...new Set(parts)].join(", ");
               }
             } catch (e) {
               console.error("Client-side geocoding failed:", e);
@@ -209,7 +210,8 @@ const AttendancePage = () => {
             const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18`);
             const nomData = await nomRes.json();
             if (nomData && nomData.display_name) {
-              return nomData.display_name.split(",").slice(0, 2).join(", ");
+              const parts = nomData.display_name.split(",").slice(0, 5);
+              return [...new Set(parts)].join(", ");
             }
           } catch (e) {
             console.error("Client-side geocoding failed:", e);

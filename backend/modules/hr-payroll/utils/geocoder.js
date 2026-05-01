@@ -21,11 +21,17 @@ export const getAddressFromCoords = async (lat, lng) => {
     if (response.data && response.data.display_name) {
       const addr = response.data.address;
       const parts = [
-        addr.road || addr.pedestrian || addr.suburb || addr.neighbourhood,
-        addr.city || addr.town || addr.village || addr.county
+        addr.road || addr.pedestrian,
+        addr.neighbourhood || addr.quarter,
+        addr.suburb || addr.city_district,
+        addr.city || addr.town || addr.village,
+        addr.state_district || addr.state
       ].filter(Boolean);
       
-      const summary = parts.length > 0 ? parts.join(", ") : response.data.display_name.split(",").slice(0, 2).join(", ");
+      // Deduplicate parts
+      const uniqueParts = [...new Set(parts)];
+      
+      const summary = uniqueParts.length > 0 ? uniqueParts.join(", ") : response.data.display_name.split(",").slice(0, 5).join(", ");
       if (summary) return summary;
     }
     
