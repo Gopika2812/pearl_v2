@@ -21,7 +21,41 @@ const AttendanceRecordPage = () => {
       const res = await fetchWithAuth(`${API_BASE}/hr/attendance/logs?branchId=${branch._id}&date=${date}`);
       const data = await res.json();
       if (data.success) {
-        setLogs(data.data);
+        const records = await Promise.all(data.data.map(async (log) => {
+          const updatedLog = { ...log };
+          
+          const resolveAddress = async (l) => {
+            if (!l?.lat || (l.address && l.address !== "Location Captured")) return l.address;
+            try {
+              // Service 1: BigDataCloud
+              const fbRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${l.lat}&longitude=${l.lng}&localityLanguage=en`);
+              const fbData = await fbRes.json();
+              if (fbData && fbData.city) {
+                return `${fbData.locality || fbData.principalSubdivision || ""}, ${fbData.city || ""}`.trim().replace(/^,/, "");
+              }
+              // Service 2: Nominatim
+              const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18`);
+              const nomData = await nomRes.json();
+              if (nomData && nomData.display_name) {
+                const parts = nomData.display_name.split(",").slice(0, 5);
+                return [...new Set(parts)].join(", ");
+              }
+            } catch (e) {
+              console.error("Geocoding repair failed:", e);
+            }
+            return l.address || "Location Captured";
+          };
+
+          if (updatedLog.presentLocation) {
+            updatedLog.presentLocation.address = await resolveAddress(updatedLog.presentLocation);
+          }
+          if (updatedLog.leaveLocation) {
+            updatedLog.leaveLocation.address = await resolveAddress(updatedLog.leaveLocation);
+          }
+          return updatedLog;
+        }));
+
+        setLogs(records);
       }
     } catch (error) {
       toast.error("Failed to fetch attendance logs");
