@@ -20,18 +20,39 @@ export const getAddressFromCoords = async (lat, lng) => {
     
     if (response.data && response.data.display_name) {
       const addr = response.data.address;
-      // Build a nice short address
       const parts = [
         addr.road || addr.pedestrian || addr.suburb || addr.neighbourhood,
         addr.city || addr.town || addr.village || addr.county
       ].filter(Boolean);
       
       const summary = parts.length > 0 ? parts.join(", ") : response.data.display_name.split(",").slice(0, 2).join(", ");
-      return summary || "Location Captured";
+      if (summary) return summary;
     }
+    
+    // Fallback to BigDataCloud if Nominatim fails or returns empty
+    console.log("🔄 Primary Geocoder failed, trying fallback...");
+    const fallbackRes = await axios.get(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`,
+      { timeout: 3000 }
+    );
+    
+    if (fallbackRes.data && fallbackRes.data.city) {
+      return `${fallbackRes.data.locality || fallbackRes.data.principalSubdivision}, ${fallbackRes.data.city}`;
+    }
+
     return "Location Captured";
   } catch (error) {
     console.error("Reverse Geocoding Error:", error.message);
+    // Final attempt at a different fallback if possible
+    try {
+      const fallbackRes = await axios.get(
+        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`,
+        { timeout: 3000 }
+      );
+      if (fallbackRes.data) {
+        return `${fallbackRes.data.locality || ""}, ${fallbackRes.data.city || ""}`.trim().replace(/^,/, "") || "Location Captured";
+      }
+    } catch (e) {}
     return "Location Captured";
   }
 };

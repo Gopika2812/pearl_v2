@@ -49,10 +49,30 @@ const AttendancePage = () => {
       const data = await res.json();
       if (data.success) {
         const records = {};
-        data.data.forEach(record => {
-          records[record.employeeId] = record;
-        });
-        console.log("📍 Daily Attendance Records:", records);
+        
+        // Use Promise.all to handle potential client-side geocoding for missing addresses
+        await Promise.all(data.data.map(async (record) => {
+          const updatedRecord = { ...record };
+          const loc = updatedRecord.presentLocation;
+          
+          if (loc?.lat && (!loc.address || loc.address === "Location Captured")) {
+            try {
+              const fbRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${loc.lat}&longitude=${loc.lng}&localityLanguage=en`);
+              const fbData = await fbRes.json();
+              if (fbData && fbData.city) {
+                updatedRecord.presentLocation = { 
+                  ...loc, 
+                  address: `${fbData.locality || fbData.principalSubdivision}, ${fbData.city}` 
+                };
+              }
+            } catch (e) {
+              console.error("Client-side geocoding failed for record:", e);
+            }
+          }
+          records[record.employeeId] = updatedRecord;
+        }));
+
+        console.log("📍 Daily Attendance Records (Resolved):", records);
         setAttendanceRecords(records);
       }
     } catch (err) {
@@ -163,7 +183,21 @@ const AttendancePage = () => {
       const data = await res.json();
       if (data.success) {
         console.log("✅ Mark Success. Data:", data.data);
-        console.log("🔍 Debug Info:", data.debug);
+        
+        // If backend failed to get address, try client-side fallback
+        if (!data.data.presentLocation?.address || data.data.presentLocation.address === "Location Captured") {
+          try {
+            const fallbackRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${location.lat}&longitude=${location.lng}&localityLanguage=en`);
+            const fallbackData = await fallbackRes.json();
+            if (fallbackData && fallbackData.city) {
+              const clientAddress = `${fallbackData.locality || fallbackData.principalSubdivision}, ${fallbackData.city}`;
+              data.data.presentLocation = { ...data.data.presentLocation, address: clientAddress };
+            }
+          } catch (e) {
+            console.error("Client-side geocoding failed:", e);
+          }
+        }
+        
         setAttendanceRecords(prev => ({ ...prev, [employeeId]: data.data }));
         toast.success(`Attendance updated: ${status}`);
         setCommentModal(null);
