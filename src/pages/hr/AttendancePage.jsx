@@ -298,11 +298,13 @@ const AttendancePage = () => {
                    <div className="mt-1 flex items-center justify-center gap-1.5 px-2 py-1 bg-emerald-50/50 rounded-lg border border-emerald-100/50 animate-in fade-in slide-in-from-top-1 duration-500 min-h-[20px]">
                      <FaMapMarkerAlt className="text-[8px] text-emerald-500" />
                      <span className="text-[8px] font-black text-emerald-700 uppercase truncate">
-                       {record?.presentLocation?.address || (
-                         record?.presentLocation?.lat && !isNaN(record.presentLocation.lat) 
-                         ? `${Number(record.presentLocation.lat).toFixed(2)}, ${Number(record.presentLocation.lng).toFixed(2)}`
-                         : "Fetching..."
-                       )}
+                        {record?.presentLocation?.address && record.presentLocation.address !== "Location Captured" ? (
+                          record.presentLocation.address
+                        ) : (
+                          record?.presentLocation?.lat ? (
+                            `${Number(record.presentLocation.lat).toFixed(2)}, ${Number(record.presentLocation.lng).toFixed(2)}`
+                          ) : "Fetching..."
+                        )}
                      </span>
                    </div>
                    {record?.presentTime && (
@@ -339,10 +341,12 @@ const AttendancePage = () => {
                     <div className="mt-1 flex items-center justify-center gap-1.5 px-2 py-1 bg-amber-50/50 rounded-lg border border-amber-100/50 animate-in fade-in slide-in-from-top-1 duration-500 min-h-[20px]">
                       <FaMapMarkerAlt className="text-[8px] text-amber-500" />
                       <span className="text-[8px] font-black text-amber-700 uppercase truncate">
-                        {record?.leaveLocation?.address || (
-                          record?.leaveLocation?.lat && !isNaN(record.leaveLocation.lat) 
-                          ? `${Number(record.leaveLocation.lat).toFixed(2)}, ${Number(record.leaveLocation.lng).toFixed(2)}`
-                          : "Fetching..."
+                        {record?.leaveLocation?.address && record.leaveLocation.address !== "Location Captured" ? (
+                          record.leaveLocation.address
+                        ) : (
+                          record?.leaveLocation?.lat ? (
+                            `${Number(record.leaveLocation.lat).toFixed(2)}, ${Number(record.leaveLocation.lng).toFixed(2)}`
+                          ) : "Fetching..."
                         )}
                       </span>
                     </div>

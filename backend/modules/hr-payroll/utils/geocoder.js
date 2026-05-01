@@ -22,15 +22,16 @@ export const getAddressFromCoords = async (lat, lng) => {
       const addr = response.data.address;
       // Build a nice short address
       const parts = [
-        addr.road || addr.pedestrian || addr.suburb,
-        addr.city || addr.town || addr.village
+        addr.road || addr.pedestrian || addr.suburb || addr.neighbourhood,
+        addr.city || addr.town || addr.village || addr.county
       ].filter(Boolean);
       
-      return parts.length > 0 ? parts.join(", ") : response.data.display_name.split(",")[0];
+      const summary = parts.length > 0 ? parts.join(", ") : response.data.display_name.split(",").slice(0, 2).join(", ");
+      return summary || "Location Captured";
     }
-    return (lat && lng) ? `${lat.toFixed(2)}, ${lng.toFixed(2)}` : "Location Captured";
+    return "Location Captured";
   } catch (error) {
     console.error("Reverse Geocoding Error:", error.message);
-    return (lat && lng) ? `${lat.toFixed(2)}, ${lng.toFixed(2)}` : "Location Captured";
+    return "Location Captured";
   }
 };
