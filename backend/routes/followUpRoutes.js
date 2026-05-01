@@ -76,10 +76,12 @@ router.get("/", async (req, res) => {
     const records = await FollowUp.find(query)
       .populate({
         path: "customerId",
-        select: "name whatsapp whatsapp2 phone customerCategory customerCategories",
+        select: "name whatsapp whatsapp2 phone customerCategory customerCategories customerGroup customerGroups",
         populate: [
           { path: "customerCategory", select: "name" },
-          { path: "customerCategories", select: "name" }
+          { path: "customerCategories", select: "name" },
+          { path: "customerGroup", select: "name" },
+          { path: "customerGroups", select: "name" }
         ]
       })
       .sort({ createdAt: -1 });

@@ -15,6 +15,7 @@ const BranchFollowUpRecords = () => {
         return user.fieldPermissions?.[key] !== false;
     };
     const [records, setRecords] = useState([]);
+    const [allCustomers, setAllCustomers] = useState([]);
     const [loading, setLoading] = useState(false);
 
     // Filters
@@ -24,8 +25,26 @@ const BranchFollowUpRecords = () => {
     const [sortConfig, setSortConfig] = useState({ key: "createdAt", direction: "desc" });
 
     useEffect(() => {
-        if (currentBranch?._id) fetchRecords();
+        if (currentBranch?._id) {
+            fetchRecords();
+            fetchCustomers();
+        }
     }, [currentBranch?._id]);
+
+    const fetchCustomers = async () => {
+        if (!currentBranch?._id) return;
+        try {
+            const res = await fetch(`${API_BASE}/customers?branchId=${currentBranch._id}&mini=true&limit=1000`, {
+                headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+            });
+            const data = await res.json();
+            if (data.success) {
+                setAllCustomers(data.data || []);
+            }
+        } catch (err) {
+            console.error("Fetch customers error:", err);
+        }
+    };
 
     const fetchRecords = async () => {
         if (!currentBranch?._id) return;
@@ -185,7 +204,17 @@ const BranchFollowUpRecords = () => {
                                     )}
                                     {isFieldAllowed("customer") && (
                                         <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                            Group
+                                        </th>
+                                    )}
+                                    {isFieldAllowed("customer") && (
+                                        <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">
                                             Category
+                                        </th>
+                                    )}
+                                    {isFieldAllowed("customer") && (
+                                        <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                            Zone
                                         </th>
                                     )}
                                     {isFieldAllowed("followUpBy") && (
@@ -216,7 +245,7 @@ const BranchFollowUpRecords = () => {
                             <tbody className="divide-y divide-gray-50">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan="7" className="px-6 py-20 text-center">
+                                        <td colSpan="9" className="px-6 py-20 text-center">
                                             <div className="flex flex-col items-center gap-3">
                                                 <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
                                                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">Scanning Archives...</p>
@@ -225,7 +254,7 @@ const BranchFollowUpRecords = () => {
                                     </tr>
                                 ) : filteredRecords.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" className="px-6 py-20 text-center">
+                                        <td colSpan="9" className="px-6 py-20 text-center">
                                             <div className="flex flex-col items-center gap-2 opacity-30">
                                                 <FaHistory size={48} className="text-gray-400" />
                                                 <p className="text-lg font-bold text-gray-800">No records found</p>
@@ -269,12 +298,32 @@ const BranchFollowUpRecords = () => {
                                             )}
                                             {isFieldAllowed("customer") && (
                                                 <td className="px-6 py-5">
+                                                    <span className="text-[10px] font-black text-gray-700 uppercase">
+                                                        {(() => {
+                                                            const fullCustomer = allCustomers?.find(c => c._id === r.customerId?._id) || r.customerId;
+                                                            return fullCustomer?.customerGroups?.[0]?.name || fullCustomer?.customerGroup?.name || "None";
+                                                        })()}
+                                                    </span>
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("customer") && (
+                                                <td className="px-6 py-5">
                                                     <span className="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border border-emerald-100/50 block w-fit whitespace-nowrap shadow-sm">
                                                         {(() => {
-                                                            const fullCustomer = customers?.find(c => c._id === r.customerId?._id) || r.customerId;
+                                                            const fullCustomer = allCustomers?.find(c => c._id === r.customerId?._id) || r.customerId;
                                                             return fullCustomer?.customerCategories?.[0]?.name || fullCustomer?.customerCategory?.name || "Unassigned";
                                                         })()}
                                                     </span>
+                                                </td>
+                                            )}
+                                            {isFieldAllowed("customer") && (
+                                                <td className="px-6 py-5">
+                                                    {(() => {
+                                                        const risk = r.riskStatus || "safe_zone";
+                                                        if (risk === "risk_zone") return <span className="bg-rose-100 text-rose-700 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight">Risk</span>;
+                                                        if (risk === "medium_zone") return <span className="bg-amber-100 text-amber-700 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight">Medium</span>;
+                                                        return <span className="bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight">Safe</span>;
+                                                    })()}
                                                 </td>
                                             )}
                                             {isFieldAllowed("followUpBy") && (
