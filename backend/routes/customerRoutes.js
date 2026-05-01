@@ -754,7 +754,25 @@ router.get("/", async (req, res) => {
           foreignField: "_id",
           as: "customerGroups"
         }
-      }
+      },
+      {
+        $lookup: {
+          from: "customergroups",
+          localField: "customerGroup",
+          foreignField: "_id",
+          as: "customerGroup"
+        }
+      },
+      { $unwind: { path: "$customerGroup", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "customercategories",
+          localField: "customerCategory",
+          foreignField: "_id",
+          as: "customerCategory"
+        }
+      },
+      { $unwind: { path: "$customerCategory", preserveNullAndEmptyArrays: true } }
     );
 
     // 6. Selection (Projection)
@@ -767,7 +785,9 @@ router.get("/", async (req, res) => {
           gstin: 1,
           branchId: 1,
           customerGroups: 1,
+          customerGroup: 1,
           customerCategories: 1,
+          customerCategory: 1,
           salesOwner: 1,
           riskStatus: 1,
           creditLimit: 1,
