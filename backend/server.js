@@ -57,6 +57,7 @@ import ledgerRoutes from "./routes/ledgerRoutes.js";
 import tokenRoutes from "./routes/tokenRoutes.js";
 import followUpRoutes from "./routes/followUpRoutes.js";
 import deliveryReceiptRoutes from "./routes/deliveryReceiptRoutes.js";
+import hrPayrollRoutes from "./modules/hr-payroll/index.js";
 
 
 
@@ -138,6 +139,7 @@ app.use("/api/ledgers", ledgerRoutes);
 app.use("/api/tokens", tokenRoutes);
 app.use("/api/follow-ups", followUpRoutes);
 app.use("/api/delivery-receipts", deliveryReceiptRoutes);
+app.use("/api/hr", hrPayrollRoutes);
 
 
 
@@ -162,6 +164,11 @@ mongoose
 // Health check endpoint
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date(), uptime: process.uptime() });
+});
+
+// 404 Handler for /api routes
+app.use("/api/*", (req, res) => {
+  res.status(404).json({ success: false, message: `Endpoint not found: ${req.originalUrl}` });
 });
 
 const PORT = process.env.PORT || 5000;

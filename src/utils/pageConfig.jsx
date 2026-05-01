@@ -5,7 +5,8 @@ import {
   FaBook, FaHistory, FaCheckCircle, FaMoneyBillWave,
   FaDownload, FaLock, FaBookOpen, FaShieldAlt, FaPlusCircle,
   FaFileInvoice, FaList, FaUndo, FaMoneyCheckAlt, FaReceipt,
-  FaBoxes, FaHandHoldingUsd, FaPlus, FaSync, FaTicketAlt, FaPhone
+  FaBoxes, FaHandHoldingUsd, FaPlus, FaSync, FaTicketAlt, FaPhone,
+  FaCalendarCheck, FaMoneyCheck, FaFileContract
 } from "react-icons/fa";
 
 export const ICON_MAP = {
@@ -38,7 +39,10 @@ export const ICON_MAP = {
   claims: <FaHandHoldingUsd />,
   sync: <FaSync />,
   token: <FaTicketAlt />,
-  phone: <FaPhone />
+  phone: <FaPhone />,
+  calendar: <FaCalendarCheck />,
+  payroll: <FaMoneyCheck />,
+  structure: <FaFileContract />
 };
 
 export const PAGE_CONFIG = [
@@ -137,6 +141,19 @@ export const PAGE_CONFIG = [
     items: [
       { id: "insights", name: "Insights & Analysis", path: "/branch/insights", icon: "chart" },
       { id: "stock-summary", name: "Stock Summary (Tally)", path: "/branch/stock-summary", icon: "bookOpen", permissionFields: ["groupName", "opening", "inwards", "outwards", "closingQty", "closingValue"] },
+    ]
+  },
+  {
+    category: "HR Payroll",
+    items: [
+      {
+        id: "hr-payroll-dropdown", name: "HR Management", icon: "users", isDropdown: true, subItems: [
+          { id: "attendance", name: "Attendance", path: "/branch/hr/attendance", icon: "calendar" },
+          { id: "payroll-processing", name: "Process Payroll", path: "/branch/hr/payroll", icon: "payroll" },
+          { id: "salary-structure", name: "Salary Structure", path: "/branch/hr/salary-structure", icon: "structure" },
+          { id: "hr-reports", name: "HR Reports", path: "/branch/hr/reports", icon: "chart" },
+        ]
+      }
     ]
   },
   {

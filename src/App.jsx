@@ -63,6 +63,10 @@ import BranchDeliveryFlow from "./pages/branch/BranchDeliveryFlow";
 import BranchDeliveryRecords from "./pages/branch/BranchDeliveryRecords";
 import BranchDeliveryReceipt from "./pages/branch/BranchDeliveryReceipt";
 import BranchTransferredReceipts from "./pages/branch/BranchTransferredReceipts";
+import AttendancePage from "./pages/hr/AttendancePage";
+import PayrollPage from "./pages/hr/PayrollPage";
+import SalaryStructurePage from "./pages/hr/SalaryStructurePage";
+import HRReportsPage from "./pages/hr/HRReportsPage";
 
 
 import BranchLoginPage from "./pages/BranchLoginPage";
@@ -257,6 +261,10 @@ function AppContent() {
         "/branch/delivery-records": "delivery-records",
         "/branch/delivery-receipt": "delivery-receipt",
         "/branch/transferred-receipts": "delivery-receipt",
+        "/branch/hr/attendance": "attendance",
+        "/branch/hr/payroll": "payroll-processing",
+        "/branch/hr/salary-structure": "salary-structure",
+        "/branch/hr/reports": "hr-reports",
       };
 
       const requiredPermission = pathPermissionMap[location.pathname];
@@ -623,6 +631,12 @@ function AppContent() {
                   <Route path="/branch/delivery-records" element={<ProtectedRoute element={<BranchDeliveryRecords />} />} />
                   <Route path="/branch/delivery-receipt" element={<ProtectedRoute element={<BranchDeliveryReceipt />} />} />
                   <Route path="/branch/transferred-receipts" element={<ProtectedRoute element={<BranchTransferredReceipts />} />} />
+                  
+                  {/* HR PAYROLL ROUTES */}
+                  <Route path="/branch/hr/attendance" element={<ProtectedRoute element={<AttendancePage />} />} />
+                  <Route path="/branch/hr/payroll" element={<ProtectedRoute element={<PayrollPage />} />} />
+                  <Route path="/branch/hr/salary-structure" element={<ProtectedRoute element={<SalaryStructurePage />} />} />
+                  <Route path="/branch/hr/reports" element={<ProtectedRoute element={<HRReportsPage />} />} />
 
                   {/* LEGACY ROUTES */}
                   <Route
