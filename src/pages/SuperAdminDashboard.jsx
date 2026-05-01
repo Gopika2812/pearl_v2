@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { FaCheck, FaTimes, FaTrash, FaUser, FaBriefcase, FaShieldAlt } from "react-icons/fa";
+import { useEffect, useState, useCallback } from "react";
+import { FaCheck, FaTimes, FaTrash, FaUser, FaBriefcase, FaShieldAlt, FaFilter, FaCalendar, FaBuilding, FaChartLine, FaMoneyBillWave, FaUndo, FaArrowUp, FaArrowDown, FaSync } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -11,6 +11,19 @@ export default function SuperAdminDashboard() {
   const [approvingId, setApprovingId] = useState(null);
   const [rejectingId, setRejectingId] = useState(null);
   const [rejectionReason, setRejectionReason] = useState("");
+
+  const today = new Date().toISOString().split("T")[0];
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(today);
+  const [selectedBranch, setSelectedBranch] = useState("");
+  const [branches, setBranches] = useState([]);
+  const [stats, setStats] = useState({
+    totalPurchase: 0,
+    totalSales: 0,
+    totalCreditNote: 0,
+    totalDebitNote: 0,
+  });
+  const [statsLoading, setStatsLoading] = useState(false);
 
   // Check if user is super admin
   useEffect(() => {
@@ -28,10 +41,62 @@ export default function SuperAdminDashboard() {
     }
   }, [navigate]);
 
-  // Fetch pending registrations
+  // Fetch pending registrations and branches
   useEffect(() => {
     fetchPendingRegistrations();
+    fetchBranches();
   }, []);
+
+  const fetchBranches = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE}/super-admin/branches`, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBranches(data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching branches:", error);
+    }
+  };
+
+  const fetchStats = useCallback(async () => {
+    try {
+      setStatsLoading(true);
+      const token = localStorage.getItem("token");
+      const queryParams = new URLSearchParams();
+      if (selectedBranch) queryParams.append("branchId", selectedBranch);
+      if (startDate) queryParams.append("startDate", startDate);
+      if (endDate) queryParams.append("endDate", endDate);
+
+      const res = await fetch(`${API_BASE}/super-admin/dashboard-stats?${queryParams.toString()}`, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStats(data.data);
+      } else {
+        toast.error("Failed to load dashboard stats");
+      }
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+      toast.error("Failed to load dashboard stats");
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [selectedBranch, startDate, endDate]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  const handleClearFilters = () => {
+    setStartDate(today);
+    setEndDate(today);
+    setSelectedBranch("");
+  };
 
   const fetchPendingRegistrations = async () => {
     try {
@@ -168,21 +233,112 @@ export default function SuperAdminDashboard() {
             <p className="text-secondary/60 mt-1 font-medium text-sm">System-wide operational overview and stats</p>
           </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-[24px]">
-          <p className="text-secondary/40 text-[10px] font-black uppercase tracking-widest mb-2"><FaUser className="inline mr-2" /> Pending Verification</p>
-          <p className="text-4xl font-black text-secondary">{pendingRegistrations.length}</p>
-        </div>
-        <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-[24px]">
-          <p className="text-secondary/40 text-[10px] font-black uppercase tracking-widest mb-2"><FaCheck className="inline mr-2" /> Processed Today</p>
-          <p className="text-4xl font-black text-emerald-500">0</p>
-        </div>
-        <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-[24px]">
-          <p className="text-secondary/40 text-[10px] font-black uppercase tracking-widest mb-2"><FaTimes className="inline mr-2" /> Denied Today</p>
-          <p className="text-4xl font-black text-rose-500">0</p>
+      {/* Filter Section */}
+      <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-[24px] mb-8">
+        <div className="flex flex-col md:flex-row items-center gap-4 justify-between">
+          <div className="flex items-center gap-2 text-secondary/70">
+            <FaFilter />
+            <span className="font-bold text-sm uppercase tracking-wider">Filters</span>
+          </div>
+          <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+            <div className="relative w-full md:w-48">
+              <FaBuilding className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 text-secondary text-sm rounded-xl pl-10 pr-4 py-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none font-medium"
+              >
+                <option value="">All Branches</option>
+                {branches.map(b => (
+                  <option key={b._id} value={b._id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="relative flex-1 md:w-40">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 text-secondary text-sm rounded-xl px-4 py-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary font-medium"
+                />
+              </div>
+              <span className="text-gray-400 font-bold">to</span>
+              <div className="relative flex-1 md:w-40">
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 text-secondary text-sm rounded-xl px-4 py-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary font-medium"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleClearFilters}
+              className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl font-bold transition-colors text-sm"
+            >
+              <FaSync />
+              Clear
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Financial Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10 relative">
+        {statsLoading && (
+          <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] z-10 flex items-center justify-center rounded-[24px]">
+            <div className="animate-spin text-primary text-2xl">⟳</div>
+          </div>
+        )}
+        <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-[24px] hover:shadow-md transition-shadow relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
+            <FaMoneyBillWave size={64} />
+          </div>
+          <p className="text-secondary/40 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-500"></span> Purchase Invoice
+          </p>
+          <p className="text-3xl font-black text-secondary mt-4">₹ {stats.totalPurchase.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+        </div>
+        
+        <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-[24px] hover:shadow-md transition-shadow relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
+            <FaChartLine size={64} />
+          </div>
+          <p className="text-secondary/40 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Sales Invoice
+          </p>
+          <p className="text-3xl font-black text-secondary mt-4">₹ {stats.totalSales.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+        </div>
+
+        <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-[24px] hover:shadow-md transition-shadow relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
+            <FaArrowUp size={64} />
+          </div>
+          <p className="text-secondary/40 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span> Credit Note
+          </p>
+          <p className="text-3xl font-black text-secondary mt-4">₹ {stats.totalCreditNote.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+        </div>
+
+        <div className="bg-white border border-gray-100 shadow-sm p-6 rounded-[24px] hover:shadow-md transition-shadow relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
+            <FaArrowDown size={64} />
+          </div>
+          <p className="text-secondary/40 text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-rose-500"></span> Debit Note
+          </p>
+          <p className="text-3xl font-black text-secondary mt-4">₹ {stats.totalDebitNote.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+        </div>
+      </div>
+
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-xl font-black text-secondary tracking-tight">Pending Registrations</h2>
+      </div>
+
+      {/* Stats */}
 
       {/* Pending Registrations List */}
       {pendingRegistrations.length === 0 ? (

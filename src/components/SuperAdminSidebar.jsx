@@ -33,6 +33,7 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
   }, [location.pathname]);
 
   const menu = [
+    { name: "Dashboard", path: "/super-admin/dashboard", icon: <FaHome /> },
     { name: "Branch Management", path: "/super-admin/branch-management", icon: <FaBuilding /> },
     { name: "User Management", path: "/super-admin/user-management", icon: <FaUserCheck /> },
     { name: "Credit Requests", path: "/super-admin/credit-requests", icon: <FaCreditCard /> },

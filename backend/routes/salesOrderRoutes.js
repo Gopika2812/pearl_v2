@@ -237,11 +237,14 @@ router.get("/", async (req, res) => {
 // GET selling history (for Product Records)
 router.get("/history", cacheData(120), async (req, res) => {
   try {
-    const { branchId, fromDate, toDate, productGroupId, productId, customerId } = req.query;
+    const { branchId, fromDate, toDate, productGroupId, productId, customerId, page = 1, limit = 500, sortKey = 'date', sortDirection = 'desc' } = req.query;
 
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
     }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const limitNum = parseInt(limit);
 
     const matchQuery = {
       branchId: new mongoose.Types.ObjectId(branchId),
@@ -316,7 +319,6 @@ router.get("/history", cacheData(120), async (req, res) => {
           qty: "$items.qty",
           sellingPrice: "$items.sellingPrice",
           discountAmount: "$items.discountAmount",
-          // Calculate discount per unit
           discountPerUnit: {
             $cond: [
               { $gt: ["$items.qty", 0] },
@@ -324,7 +326,6 @@ router.get("/history", cacheData(120), async (req, res) => {
               0
             ]
           },
-          // Gross Profit per unit = (actual selling price per unit) - cost
           grossProfit: {
             $subtract: [
               {
@@ -344,12 +345,56 @@ router.get("/history", cacheData(120), async (req, res) => {
           }
         }
       },
-      { $sort: { date: -1 } },
-      { $limit: 500 }
+      {
+        $addFields: {
+          profitPercent: {
+            $cond: [
+              { $gt: ["$purchasingPrice", 0] },
+              { $multiply: [{ $divide: ["$grossProfit", "$purchasingPrice"] }, 100] },
+              0
+            ]
+          }
+        }
+      }
     );
 
-    const history = await SalesOrder.aggregate(aggregation);
-    res.json(history);
+    // Sorting logic
+    const sortObj = {};
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    switch (sortKey) {
+      case 'date': sortObj.date = direction; break;
+      case 'customer': sortObj.customerName = direction; break;
+      case 'product': sortObj.productName = direction; break;
+      case 'purchase': sortObj.purchasingPrice = direction; break;
+      case 'selling': sortObj.sellingPrice = direction; break;
+      case 'qty': sortObj.qty = direction; break;
+      case 'gst': sortObj.gst = direction; break;
+      case 'discount': sortObj.discountPerUnit = direction; break;
+      case 'profitPercent': sortObj.profitPercent = direction; break;
+      case 'profitCash': sortObj.grossProfit = direction; break;
+      default: sortObj.date = -1;
+    }
+
+    aggregation.push(
+      { $sort: sortObj },
+      {
+        $facet: {
+          metadata: [{ $count: "total" }],
+          data: [{ $skip: skip }, { $limit: limitNum }]
+        }
+      }
+    );
+
+    const result = await SalesOrder.aggregate(aggregation);
+    const history = result[0].data;
+    const total = result[0].metadata[0]?.total || 0;
+
+    res.json({
+      history,
+      total,
+      page: parseInt(page),
+      limit: limitNum
+    });
   } catch (error) {
     console.error("Aggregation error:", error);
     res.status(500).json({ message: "Failed to fetch sales history" });

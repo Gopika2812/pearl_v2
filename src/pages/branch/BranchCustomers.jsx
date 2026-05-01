@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaWhatsapp, FaMapMarkerAlt, FaEnvelope, FaUserTie, FaTags } from "react-icons/fa";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaWhatsapp, FaMapMarkerAlt, FaEnvelope, FaUserTie, FaTags, FaObjectGroup } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
@@ -196,6 +196,58 @@ const BranchCustomers = () => {
     }
   };
 
+  const handleMergeCustomers = async () => {
+    const sourceName = prompt("MERGE: Enter name of DUPLICATE customer to REMOVE:");
+    if (!sourceName) return;
+
+    try {
+      toast.loading("Searching for source customer...", { id: "merge" });
+      const srcRes = await fetchWithAuth(`${API_BASE}/customers?branchId=${branchId}&search=${encodeURIComponent(sourceName)}&limit=5`);
+      const srcData = await srcRes.json();
+      
+      if (!srcData.data || srcData.data.length === 0) {
+        return toast.error("Source customer not found", { id: "merge" });
+      }
+      const source = srcData.data[0];
+
+      const targetName = prompt(`MERGE: "${source.name}" found. Now enter name of MASTER customer to KEEP:`);
+      if (!targetName) return toast.dismiss("merge");
+
+      const tarRes = await fetchWithAuth(`${API_BASE}/customers?branchId=${branchId}&search=${encodeURIComponent(targetName)}&limit=5`);
+      const tarData = await tarRes.json();
+      
+      if (!tarData.data || tarData.data.length === 0) {
+        return toast.error("Master customer not found", { id: "merge" });
+      }
+      const target = tarData.data[0];
+
+      if (source._id === target._id) {
+        return toast.error("Cannot merge a customer into itself", { id: "merge" });
+      }
+
+      if (!window.confirm(`⚠️ FINAL WARNING: This will DELETE "${source.name}" and move all their data (Invoices, Receipts, Balance) to "${target.name}". This action is IRREVERSIBLE. Proceed?`)) {
+        return toast.dismiss("merge");
+      }
+
+      const res = await fetchWithAuth(`${API_BASE}/customers/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId: source._id, targetId: target._id })
+      });
+
+      const result = await res.json();
+      if (result.success) {
+        toast.success(result.message, { id: "merge" });
+        fetchCustomers(1);
+      } else {
+        toast.error(result.message || "Merge failed", { id: "merge" });
+      }
+    } catch (err) {
+      console.error("Merge error:", err);
+      toast.error("An error occurred during merge", { id: "merge" });
+    }
+  };
+
 
   // Customer debit is already provided natively by the backend API.
   // There is no need for local array re-calculation.
@@ -378,6 +430,16 @@ const BranchCustomers = () => {
             >
               <FaPlus /> Add Customer
             </button>
+
+            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && (
+              <button
+                onClick={handleMergeCustomers}
+                className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
+                title="Merge two customer records into one"
+              >
+                <FaObjectGroup /> Merge Records
+              </button>
+            )}
 
             <div className="flex items-center gap-3 bg-white p-2 px-4 rounded-xl border border-gray-200 shadow-sm">
               <div className="flex flex-col">

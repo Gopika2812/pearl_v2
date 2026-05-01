@@ -13,6 +13,9 @@ import SalesOwner from "../models/SalesOwner.js";
 import Invoice from "../models/Invoice.js";
 import AuditLog from "../models/AuditLog.js";
 import OverrideRequest from "../models/OverrideRequest.js";
+import FollowUp from "../models/FollowUp.js";
+import CustomerLockedPrice from "../models/CustomerLockedPrice.js";
+import auth from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -1491,7 +1494,7 @@ router.get("/:id/ledger", async (req, res) => {
       status: "Created",
       date: { $gte: start }
     })
-      .select("grandTotal date creditNoteId reasonForReturn");
+      .select("grandTotal date creditNoteId reasonForReturn originalSalesOrderId");
 
     // 🧮 Opening Balance = Current_Balance - (Debits after Start) + (Credits after Start)
     const totalDebitsAfterStart = invoicesAfterStart.reduce((sum, s) => sum + (s.grandTotal || 0), 0);
@@ -1525,7 +1528,8 @@ router.get("/:id/ledger", async (req, res) => {
           debit: s.grandTotal || 0,
           credit: 0,
           user: user,
-          deliveryMan: dMan
+          deliveryMan: dMan,
+          salesOrderId: s.salesOrderId?._id || s.salesOrderId // 👈 Added for link functionality
         };
       }),
       ...inRangeReceipts.map(r => {
@@ -1545,7 +1549,8 @@ router.get("/:id/ledger", async (req, res) => {
           credit: (r.status === "bounced" || r.status === "cancelled") ? 0 : (r.amount || 0),
           originalAmount: r.amount || 0,
           user: creator,
-          deliveryMan: "-"
+          deliveryMan: "-",
+          salesOrderId: r.originalSalesOrderId?._id || r.originalSalesOrderId || (r.relatedOrders && r.relatedOrders.length > 0 ? (r.relatedOrders[0].salesOrderId?._id || r.relatedOrders[0].salesOrderId) : null)
         };
       }),
       ...inRangeCNs.map(cn => ({
@@ -1556,7 +1561,8 @@ router.get("/:id/ledger", async (req, res) => {
         debit: 0,
         credit: cn.grandTotal || 0,
         user: "-",
-        deliveryMan: "-"
+        deliveryMan: "-",
+        salesOrderId: cn.originalSalesOrderId?._id || cn.originalSalesOrderId
       }))
     ].sort((a, b) => new Date(a.date) - new Date(b.date));
 
@@ -1626,5 +1632,165 @@ router.post("/login", async (req, res) => {
   }
 });
 
+
+
+/* ========== MERGE CUSTOMERS ========== */
+router.post("/merge", auth, async (req, res) => {
+  const { sourceId, targetId } = req.body;
+
+  if (req.user.role !== "SUPER_ADMIN" && req.user.role !== "ADMIN") {
+    return res.status(403).json({ message: "Only administrators can merge customers" });
+  }
+
+  if (!sourceId || !targetId || sourceId === targetId) {
+    return res.status(400).json({ message: "Valid source and target customer IDs are required" });
+  }
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const source = await Customer.findById(sourceId).session(session);
+    const target = await Customer.findById(targetId).session(session);
+
+    if (!source || !target) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Source or Target customer not found" });
+    }
+
+    console.log(`🚀 Merging "${source.name}" into "${target.name}"`);
+
+    // 1. Update Documents
+    const updateCriteria = { "customer.customerId": source._id };
+    const updatePayload = { $set: { "customer.customerId": target._id, "customer.name": target.name } };
+
+    await SalesOrder.updateMany(updateCriteria, updatePayload, { session });
+    await Invoice.updateMany(updateCriteria, updatePayload, { session });
+    await Receipt.updateMany(updateCriteria, updatePayload, { session });
+    await CreditNote.updateMany(updateCriteria, updatePayload, { session });
+    
+    // 2. Update Direct References
+    await FollowUp.updateMany({ customerId: source._id }, { $set: { customerId: target._id } }, { session });
+    await CustomerLockedPrice.updateMany({ customerId: source._id }, { $set: { customerId: target._id } }, { session });
+
+    // 3. Consolidate Balances
+    // We move the source's debit and credit to the target
+    const sourceDebit = source.debit || 0;
+    const sourceCredit = source.credit || 0;
+
+    target.debit = (target.debit || 0) + sourceDebit;
+    target.credit = (target.credit || 0) + sourceCredit;
+    target.closingBalance = (target.debit - target.credit);
+    target.totalBalance = target.closingBalance;
+
+    await target.save({ session });
+
+    // 4. Delete Source
+    await Customer.findByIdAndDelete(source._id, { session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.json({ success: true, message: `Successfully merged "${source.name}" into "${target.name}"` });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error("Merge error:", error);
+    res.status(500).json({ message: "Failed to merge customers" });
+  }
+});
+
+/* ========== TRANSFER TRANSACTION ========== */
+router.post("/transfer-transaction", auth, async (req, res) => {
+  const { type, transactionId, targetCustomerId } = req.body;
+
+  if (req.user.role !== "SUPER_ADMIN" && req.user.role !== "ADMIN") {
+    return res.status(403).json({ message: "Only administrators can transfer transactions" });
+  }
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    let doc;
+    let amount = 0;
+    let isDebit = false;
+
+    // Load Document
+    if (type === "INVOICE") {
+      doc = await SalesOrder.findById(transactionId).session(session);
+      amount = doc.lastInvoicedGrandTotal || doc.invoiceGrandTotal || doc.grandTotal || 0;
+      isDebit = true;
+    } else if (type === "RECEIPT") {
+      doc = await Receipt.findById(transactionId).session(session);
+      amount = doc.amount || 0;
+      isDebit = false;
+    } else if (type === "CREDIT_NOTE") {
+      doc = await CreditNote.findById(transactionId).session(session);
+      amount = doc.grandTotal || 0;
+      isDebit = false;
+    }
+
+    if (!doc) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    const sourceCustomerId = doc.customer?.customerId || doc.customerId;
+    const target = await Customer.findById(targetCustomerId).session(session);
+    const source = await Customer.findById(sourceCustomerId).session(session);
+
+    if (!target) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Target customer not found" });
+    }
+
+    // Update Document
+    if (doc.customer) {
+      doc.customer.customerId = target._id;
+      doc.customer.name = target.name;
+    } else {
+      doc.customerId = target._id;
+    }
+    await doc.save({ session });
+
+    // If Invoice, update the Invoice model too
+    if (type === "INVOICE") {
+      await Invoice.updateMany(
+        { salesOrderId: doc._id },
+        { $set: { "customer.customerId": target._id, "customer.name": target.name } },
+        { session }
+      );
+    }
+
+    // Update Balances
+    if (source) {
+      if (isDebit) source.debit = (source.debit || 0) - amount;
+      else source.credit = (source.credit || 0) - amount;
+      source.closingBalance = (source.debit - source.credit);
+      source.totalBalance = source.closingBalance;
+      await source.save({ session });
+    }
+
+    target.debit = (target.debit || 0) + (isDebit ? amount : 0);
+    target.credit = (target.credit || 0) + (isDebit ? 0 : amount);
+    target.closingBalance = (target.debit - target.credit);
+    target.totalBalance = target.closingBalance;
+    await target.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.json({ success: true, message: "Transaction transferred successfully" });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error("Transfer error:", error);
+    res.status(500).json({ message: "Failed to transfer transaction" });
+  }
+});
 
 export default router;

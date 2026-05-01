@@ -51,6 +51,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
   const [commonDiscount, setCommonDiscount] = useState(0);
   const [transportCharge, setTransportCharge] = useState(0);
   const [transportGstPercent, setTransportGstPercent] = useState(18);
+  const [extraExpenseAmount, setExtraExpenseAmount] = useState(0);
+  const [extraExpenses, setExtraExpenses] = useState([]);
 
   // Customer Swap state
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -84,11 +86,15 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
         try {
           const res = await fetch(`${API_BASE}/sales-orders/${order._id}`);
           if (res.ok) {
-            const freshOrder = await res.json();
+            const responseData = await res.json();
+            const freshOrder = responseData.data || responseData;
+
             // Sync financial fields even if initializationRef is true, provided they are default
-            setCommonDiscount(prev => prev === 0 ? (freshOrder.commonDiscount || 0) : prev);
-            setTransportCharge(prev => prev === 0 ? (freshOrder.transportCharge || 0) : prev);
-            setTransportGstPercent(prev => (prev === 18 || prev === 0) ? (freshOrder.transportGstPercent || 18) : prev);
+            setCommonDiscount(prev => (prev === 0 || !prev) ? (freshOrder.commonDiscount || 0) : prev);
+            setTransportCharge(prev => (prev === 0 || !prev) ? (freshOrder.transportCharge || 0) : prev);
+            setTransportGstPercent(prev => (prev === 18 || prev === 0 || !prev) ? (freshOrder.transportGstPercent || 18) : prev);
+            setExtraExpenseAmount(freshOrder.extraExpenseAmount || 0);
+            setExtraExpenses(freshOrder.extraExpenses || []);
             setNotes(prev => !prev ? (freshOrder.notes || "") : prev);
 
             // ⚡ SELF-HEALING: If any items are missing names, patch them from the fresh, populated order
@@ -222,6 +228,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
       setCommonDiscount(order.commonDiscount || 0);
       setTransportCharge(order.transportCharge || 0);
       setTransportGstPercent(order.transportGstPercent || 18);
+      setExtraExpenseAmount(order.extraExpenseAmount || 0);
+      setExtraExpenses(order.extraExpenses || []);
       setSelectedCustomer(order.customer);
       setCustomerSearch(order.customer?.name || "");
     }
@@ -432,6 +440,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             commonDiscount: Number(commonDiscount) || 0,
             transportCharge: Number(transportCharge) || 0,
             transportGstPercent: Number(transportGstPercent) || 18,
+            extraExpenseAmount: Number(extraExpenseAmount) || 0,
+            extraExpenses,
             useSoNumber,
             customerId: selectedCustomer?.customerId || selectedCustomer?._id, // Use swapped customer
           }),
@@ -468,6 +478,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             commonDiscount: Number(commonDiscount) || 0,
             transportCharge: Number(transportCharge) || 0,
             transportGstPercent: Number(transportGstPercent) || 18,
+            extraExpenseAmount: Number(extraExpenseAmount) || 0,
+            extraExpenses,
             customerId: selectedCustomer?.customerId || selectedCustomer?._id, // Use swapped customer
             finalizedBy: user?.id || user?._id,
             finalizedByUsername: user?.username || user?.fullName || user?.name || "System",
@@ -1070,7 +1082,8 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
         <table>
           <thead>
             <tr>
-              <th style="width: 40%;">Product Name</th>
+              <th style="width: 35%;">Product Name</th>
+              <th>HSN Code</th>
               <th style="text-align: right;">Req</th>
               <th style="text-align: right;">Conf</th>
               <th style="text-align: right;">Pend ⚠️</th>
@@ -1081,6 +1094,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             ${editedItems.map((item, idx) => item.backOrderQty > 0 ? `
               <tr>
                 <td>${item.name}</td>
+                <td style="text-align: center;">${item.hsn || "-"}</td>
                 <td style="text-align: right;">${item.originalQty || item.qty} ${item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : ""}</td>
                 <td style="text-align: right;">${item.confirmedQty} ${item.altQty > 0 && (item.originalQty || item.qty) > 0 ? `(${(item.altQty * (item.confirmedQty / (item.originalQty || item.qty))).toFixed(0)} ${item.altUnit})` : (item.altQty > 0 ? `(0 ${item.altUnit})` : "")}</td>
                 <td style="text-align: right; color: red; font-weight: bold;">${item.backOrderQty} ${item.altQty > 0 && (item.originalQty || item.qty) > 0 ? `(${(item.altQty * (item.backOrderQty / (item.originalQty || item.qty))).toFixed(0)} ${item.altUnit})` : (item.altQty > 0 ? `(${item.altQty} ${item.altUnit})` : "")}</td>
@@ -1387,6 +1401,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                   <thead>
                     <tr className="bg-blue-600 text-white">
                       <th className="p-3 text-left">Product</th>
+                      <th className="p-3 text-center">HSN</th>
                       <th className="p-3 text-right">Original Qty</th>
                       <th className="p-3 text-right">Confirmed Qty</th>
                       <th className="p-3 text-right text-[10px] uppercase">Back Order</th>
@@ -1402,6 +1417,9 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                       <tr key={idx} className="border-b hover:bg-gray-50 transition">
                         <td className="p-3 font-medium">
                           {item.name || <span className="text-gray-400 italic text-xs">Product Name Missing</span>}
+                        </td>
+                        <td className="p-3 text-center text-xs font-bold text-gray-500">
+                          {item.hsn || "-"}
                         </td>
                         <td className="p-3 text-right text-gray-500">
                           <div className="flex flex-col items-end gap-1">
@@ -1504,11 +1522,17 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                 const transport = Number(transportCharge || 0);
                 const tGstPercent = Number(transportGstPercent || 18);
                 const transportGst = Math.round((transport * tGstPercent / 100) * 100) / 100;
-                // Total tax = item taxes + transport GST
-                const liveTax = Math.round((itemTax + transportGst) * 100) / 100;
+                
+                let extraExpenseGst = 0;
+                (extraExpenses || []).forEach(exp => {
+                  extraExpenseGst += Number(exp.gstAmount || 0);
+                });
+
+                // Total tax = item taxes + transport GST + extraExpenseGst
+                const liveTax = Math.round((itemTax + transportGst + extraExpenseGst) * 100) / 100;
                 const specialDisc = Number(commonDiscount) || 0;
-                // Grand total = subtotal + item taxes + transport base + transport gst - discount
-                const grandTotal = Math.round(liveSubtotal + itemTax + transport + transportGst - specialDisc);
+                // Grand total = subtotal + item taxes + transport base + transport gst + extra base + extra gst - discount
+                const grandTotal = Math.round(liveSubtotal + itemTax + transport + transportGst + extraExpenseAmount + extraExpenseGst - specialDisc);
 
                 return (
                   <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 mb-6 shadow-xl border border-slate-700">
@@ -1542,6 +1566,27 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                             <span className="ml-2 text-[10px] text-purple-400/70 font-normal">GST {transportGstPercent}% added in Tax above</span>
                           </span>
                           <span className="font-black text-purple-300 text-base">₹{transport.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {/* Extra Expenses from SO */}
+                      {extraExpenseAmount > 0 && (
+                        <div className="flex justify-between items-center py-2.5 border-b border-slate-700">
+                          <span className="text-sm text-gray-400 font-bold">
+                            Extra Charges
+                            {extraExpenseGst > 0 && <span className="ml-2 text-[10px] text-pink-400/70 font-normal">GST added in Tax above</span>}
+                          </span>
+                          <div className="flex items-center gap-3">
+                            <span className="font-black text-pink-300 text-base">₹{extraExpenseAmount.toFixed(2)}</span>
+                            <button
+                              onClick={() => {
+                                setExtraExpenseAmount(0);
+                                setExtraExpenses([]);
+                              }}
+                              className="text-xs text-red-400 hover:text-red-300 bg-red-400/10 hover:bg-red-400/20 px-2 py-1 rounded transition"
+                            >
+                              Clear
+                            </button>
+                          </div>
                         </div>
                       )}
                       {/* Special Discount — editable inline */}
@@ -1697,10 +1742,10 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
               {editedItems.some((item) => item.backOrderQty > 0) && (
                 <div className="bg-red-50 border-2 border-red-300 p-4 rounded-lg mb-6">
                   <div className="font-bold text-red-700 mb-2">⚠️ Back Order Items</div>
-                  <div className="text-sm text-red-600">
+                  <div className="text-sm text-red-600 font-bold">
                     {editedItems
                       .filter((item) => item.backOrderQty > 0)
-                      .map((item) => `${item.name}: ${item.backOrderQty}`)
+                      .map((item) => `${item.name} (${item.hsn || '-'}): ${item.backOrderQty} ${item.unit}`)
                       .join(" | ")}
                   </div>
                 </div>
