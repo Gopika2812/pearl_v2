@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import PayrollRecord from "../models/PayrollRecord.js";
 import SalaryStructure from "../models/SalaryStructure.js";
 import Attendance from "../models/Attendance.js";
+import HREmployeeProfile from "../models/HREmployeeProfile.js";
 import { calculatePayroll } from "../services/payrollEngine.js";
 import { createSalaryExpense } from "../services/zohoBooksService.js";
 
@@ -137,8 +138,19 @@ export const getPayrollHistory = async (req, res) => {
     const query = { branch: branchId };
     if (month) query.month = month;
 
-    const records = await PayrollRecord.find(query).populate("employeeId", "name role");
-    res.status(200).json({ success: true, data: records });
+    const records = await PayrollRecord.find(query).populate("employeeId", "name role").lean();
+    
+    // Fetch employee codes for these records
+    const employeeIds = records.map(r => r.employeeId?._id).filter(id => id);
+    const profiles = await HREmployeeProfile.find({ employeeId: { $in: employeeIds } });
+    const profileMap = new Map(profiles.map(p => [p.employeeId.toString(), p.employeeCode]));
+
+    const recordsWithCodes = records.map(r => ({
+      ...r,
+      employeeCode: profileMap.get(r.employeeId?._id?.toString()) || "---"
+    }));
+
+    res.status(200).json({ success: true, data: recordsWithCodes });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

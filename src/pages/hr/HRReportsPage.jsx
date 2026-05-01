@@ -86,45 +86,50 @@ const HRReportsPage = () => {
       </div>
 
       {/* Detailed Table */}
-      <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-100">
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Employee</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Basic</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Bonus/OT</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Deduction</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Net Salary</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((record) => (
-              <tr key={record._id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-all">
-                <td className="px-8 py-5">
-                  <p className="text-xs font-black text-slate-800 uppercase">{record.employeeId?.name}</p>
-                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{record.employeeId?.role}</p>
-                </td>
-                <td className="px-8 py-5 text-xs font-bold text-slate-700 text-right">₹{record.basicSalary.toLocaleString()}</td>
-                <td className="px-8 py-5 text-xs font-bold text-slate-700 text-right">₹{(record.bonus + record.overtimePay).toLocaleString()}</td>
-                <td className="px-8 py-5 text-xs font-bold text-rose-500 text-right">₹{record.deductions.toLocaleString()}</td>
-                <td className="px-8 py-5 text-xs font-black text-slate-800 text-right">₹{record.netSalary.toLocaleString()}</td>
-                <td className="px-8 py-5 text-center">
-                  <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-tighter ${record.status === "Paid" ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"}`}>
-                    {record.status}
-                  </span>
-                </td>
+      <div className="bg-white rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto no-scrollbar">
+          <table className="w-full text-left min-w-[600px]">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="px-6 md:px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Employee</th>
+                <th className="px-6 md:px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Basic</th>
+                <th className="px-6 md:px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Bonus/OT</th>
+                <th className="px-6 md:px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Deduction</th>
+                <th className="px-6 md:px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Net Salary</th>
+                <th className="px-6 md:px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
               </tr>
-            ))}
-            {records.length === 0 && (
-              <tr>
-                <td colSpan="6" className="px-8 py-20 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">
-                  No data available for this month
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {records.map((record) => (
+                <tr key={record._id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-all">
+                  <td className="px-6 md:px-8 py-5">
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-black text-slate-800 uppercase">{record.employeeId?.name}</p>
+                      <span className="text-[8px] font-black bg-indigo-50 text-indigo-500 px-1 rounded">#{record.employeeCode || "---"}</span>
+                    </div>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{record.employeeId?.role}</p>
+                  </td>
+                  <td className="px-6 md:px-8 py-5 text-xs font-bold text-slate-700 text-right">₹{record.basicSalary.toLocaleString()}</td>
+                  <td className="px-6 md:px-8 py-5 text-xs font-bold text-slate-700 text-right">₹{(record.bonus + record.overtimePay).toLocaleString()}</td>
+                  <td className="px-6 md:px-8 py-5 text-xs font-bold text-rose-500 text-right">₹{record.deductions.toLocaleString()}</td>
+                  <td className="px-6 md:px-8 py-5 text-xs font-black text-slate-800 text-right">₹{record.netSalary.toLocaleString()}</td>
+                  <td className="px-6 md:px-8 py-5 text-center">
+                    <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-tighter ${record.status === "Paid" ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"}`}>
+                      {record.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {records.length === 0 && (
+                <tr>
+                  <td colSpan="6" className="px-8 py-20 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">
+                    No data available for this month
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
-import { FaCalendarCheck, FaUser, FaCheck, FaTimes, FaRunning, FaMapMarkerAlt, FaClock, FaComment } from "react-icons/fa";
+import { FaCalendarCheck, FaUser, FaCheck, FaTimes, FaRunning, FaMapMarkerAlt, FaClock, FaComment, FaTrashAlt, FaRegCommentDots } from "react-icons/fa";
 import { fetchWithAuth, API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
@@ -11,10 +11,15 @@ const AttendancePage = () => {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [loading, setLoading] = useState(true);
   const [fetchingLocation, setFetchingLocation] = useState(false);
+  const [fetchingAddress, setFetchingAddress] = useState(false);
   const [commentModal, setCommentModal] = useState(null); // { employeeId, status, location, hours }
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const isSuperAdmin = ["SUPERADMIN", "SUPER_ADMIN"].includes(currentUser?.role?.toUpperCase());
 
   useEffect(() => {
-    fetchEmployees();
+    if (currentBranch?._id) {
+      fetchEmployees();
+    }
   }, [currentBranch]);
 
   useEffect(() => {
@@ -24,11 +29,12 @@ const AttendancePage = () => {
   }, [employees, date]);
 
   const fetchEmployees = async () => {
+    if (!currentBranch?._id) return;
     try {
-      const res = await fetchWithAuth(`${API_BASE}/branch-users?branchId=${currentBranch?._id}`);
+      const res = await fetchWithAuth(`${API_BASE}/hr/employees/list?branchId=${currentBranch._id}`);
       const data = await res.json();
       if (data.success) {
-        setEmployees(data.data.filter(u => u.status === "ACTIVE"));
+        setEmployees(data.data);
       }
     } catch (err) {
       toast.error("Failed to fetch employees");
@@ -74,15 +80,58 @@ const AttendancePage = () => {
     });
   };
 
+  const handleRevert = async (employeeId) => {
+    if (!window.confirm("Are you sure you want to revert this attendance? This will delete today's record.")) return;
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/hr/attendance/revert`, {
+        method: "POST",
+        body: JSON.stringify({ employeeId, date })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message);
+        setAttendanceRecords(prev => {
+          const newRecords = { ...prev };
+          if (data.data) {
+            newRecords[employeeId] = data.data;
+          } else {
+            delete newRecords[employeeId];
+          }
+          return newRecords;
+        });
+      }
+    } catch (err) {
+      toast.error("Failed to revert attendance");
+    }
+  };
+
+  const handleApprove = async (employeeId) => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/hr/attendance/approve`, {
+        method: "POST",
+        body: JSON.stringify({ employeeId, date })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Attendance approved");
+        setAttendanceRecords(prev => ({ ...prev, [employeeId]: data.data }));
+      }
+    } catch (err) {
+      toast.error("Failed to approve attendance");
+    }
+  };
+
   const handleMark = async (employeeId, status, customComment = "") => {
     try {
       setFetchingLocation(true);
+      const existingRecord = attendanceRecords[employeeId];
+      
       toast.info("Capturing GPS Location...", { autoClose: 1500 });
       const location = await getPosition();
       console.log("📍 Captured Location:", location);
 
-      if (!location || location.lat === undefined) {
-        throw new Error("Could not retrieve precise GPS coordinates. Please allow location access.");
+      if (!location || !location.lat || isNaN(location.lat)) {
+        throw new Error("Could not retrieve precise GPS coordinates. Please ensure GPS is enabled and you have allowed location access.");
       }
       
       // Calculate working hours if marking Leave/Absent after Present
@@ -169,104 +218,151 @@ const AttendancePage = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pt-10 md:pt-14 px-4 md:px-0">
       <CommentModal />
       
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Employee Attendance</h1>
-          <p className="text-slate-500 text-sm font-medium uppercase tracking-widest">Mark daily presence and tracking</p>
+          <h1 className="text-2xl md:text-3xl font-black text-slate-800 uppercase tracking-tight">Employee Attendance</h1>
+          <p className="text-slate-500 text-[10px] md:text-sm font-medium uppercase tracking-widest">Mark daily presence and tracking</p>
         </div>
-        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-[1.5rem] border-2 border-slate-100 shadow-sm hover:border-indigo-500 transition-all group w-fit">
+          <FaCalendarCheck className="text-indigo-500 group-hover:scale-110 transition-transform" />
           <input 
             type="date" 
             value={date} 
             onChange={(e) => setDate(e.target.value)}
-            className="bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 uppercase"
+            className="bg-transparent border-none focus:ring-0 text-sm font-black text-slate-700 uppercase cursor-pointer"
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-10">
         {employees.map((emp) => {
           const record = attendanceRecords[emp._id];
           const isPresent = record?.status === "Present";
+          const isLeft = record?.status === "Leave";
           const isFinished = record?.status === "Leave" || record?.status === "Absent";
           
           return (
-            <div key={emp._id} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm hover:shadow-md transition-all duration-500 group">
+            <div key={emp._id} className="bg-white rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-200 p-5 md:p-8 shadow-sm hover:shadow-md transition-all duration-500 group">
               <div className="flex items-center gap-5 mb-8">
                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl transition-all ${isPresent ? "bg-emerald-50 text-emerald-500" : "bg-indigo-50 text-indigo-500"}`}>
                   <FaUser />
                 </div>
-                <div>
-                  <h3 className="font-black text-slate-800 uppercase text-sm leading-tight">{emp.name}</h3>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-slate-800 uppercase text-sm leading-tight">{emp.name}</h3>
+                      <span className="text-[10px] font-black bg-indigo-50 text-indigo-500 px-2 py-0.5 rounded-md">ID: {emp.employeeCode}</span>
+                    </div>
+                    {record && isSuperAdmin && (
+                      <button 
+                        onClick={() => handleRevert(emp._id)}
+                        className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                        title="Revert Attendance (Super Admin Only)"
+                      >
+                        <FaTrashAlt className="text-xs" />
+                      </button>
+                    )}
+                  </div>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{emp.role}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 mb-6">
-                 <div className="flex-1 flex flex-col gap-2">
-                   <button 
-                    onClick={() => handleMark(emp._id, "Present")}
-                    disabled={isPresent || isFinished || fetchingLocation}
-                    className={`w-full flex flex-col items-center justify-center gap-1 py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all ${
-                      isPresent || isFinished
-                      ? "bg-slate-100 text-slate-400 opacity-80" 
-                      : "bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white shadow-lg shadow-emerald-50"
-                    } ${fetchingLocation ? "animate-pulse" : ""}`}
-                   >
-                     <FaCheck className="text-sm" /> 
-                     {fetchingLocation ? "Locating..." : "Present"}
-                   </button>
-                   {record?.presentLocation?.lat != null && (
-                     <div className="mt-2 flex items-center justify-center gap-1.5 px-3 py-1 bg-emerald-50/50 rounded-lg border border-emerald-100/50 animate-in fade-in slide-in-from-top-1 duration-500">
-                       <FaMapMarkerAlt className="text-[10px] text-emerald-500" />
-                       <span className="text-[9px] font-black text-emerald-700 tabular-nums">
-                         {Number(record.presentLocation.lat).toFixed(4)}, {Number(record.presentLocation.lng).toFixed(4)}
-                       </span>
-                     </div>
-                   )}
-                   {isPresent && !record?.presentLocation?.lat && (
-                     <div className="mt-2 text-[8px] font-bold text-slate-400 italic text-center">
-                       Location not captured
-                     </div>
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <div className="flex flex-col gap-2">
+                    <button 
+                     onClick={() => handleMark(emp._id, "Present")}
+                     disabled={isPresent || isFinished || fetchingLocation}
+                     className={`w-full flex flex-col items-center justify-center gap-1 py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all duration-300 relative overflow-hidden group/btn ${
+                       isPresent || isFinished
+                       ? "bg-slate-100 text-slate-400 opacity-80" 
+                       : "bg-white text-emerald-600 border-2 border-emerald-100 hover:border-emerald-500 hover:bg-emerald-50 shadow-[0_6px_0_0_#10b98120] active:shadow-none active:translate-y-1"
+                     } ${fetchingLocation ? "animate-pulse" : ""}`}
+                    >
+                      {isPresent ? (
+                        <div className="flex flex-col items-center gap-1 animate-in zoom-in duration-500">
+                          <div className="w-6 h-6 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-emerald-200">
+                            <FaCheck className="text-[10px]" />
+                          </div>
+                          <span className="text-emerald-600 font-black">Presented</span>
+                        </div>
+                      ) : (
+                        <>
+                          <FaCheck className={`text-sm transition-transform duration-500 ${fetchingLocation ? "animate-spin" : "group-hover/btn:scale-125"}`} /> 
+                          <span>{fetchingLocation ? "Locating..." : "Present"}</span>
+                        </>
+                      )}
+                    </button>
+                   <div className="mt-1 flex items-center justify-center gap-1.5 px-2 py-1 bg-emerald-50/50 rounded-lg border border-emerald-100/50 animate-in fade-in slide-in-from-top-1 duration-500 min-h-[20px]">
+                     <FaMapMarkerAlt className="text-[8px] text-emerald-500" />
+                     <span className="text-[8px] font-black text-emerald-700 uppercase truncate">
+                       {record?.presentLocation?.address || (
+                         record?.presentLocation?.lat && !isNaN(record.presentLocation.lat) 
+                         ? `${Number(record.presentLocation.lat).toFixed(2)}, ${Number(record.presentLocation.lng).toFixed(2)}`
+                         : "Fetching..."
+                       )}
+                     </span>
+                   </div>
+                   {record?.presentTime && (
+                     <p className="text-[8px] font-black text-emerald-500/60 text-center uppercase tracking-widest mt-1">
+                       In: {new Date(record.presentTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                     </p>
                    )}
                  </div>
                  
-                 <div className="flex-1 flex flex-col gap-2">
-                   <button 
-                    onClick={() => handleMark(emp._id, "Leave")}
-                    disabled={isFinished || (!isPresent && !record) || fetchingLocation}
-                    className={`w-full flex flex-col items-center justify-center gap-1 py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all ${
-                      isFinished || (!isPresent && !record)
-                      ? "bg-slate-100 text-slate-400 opacity-80" 
-                      : "bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white shadow-lg shadow-amber-50"
-                    } ${fetchingLocation ? "animate-pulse" : ""}`}
-                   >
-                     <FaRunning className="text-sm" /> 
-                     {fetchingLocation ? "Locating..." : "Leave"}
-                   </button>
-                   {record?.leaveLocation && (
-                     <div className="mt-2 flex items-center justify-center gap-1.5 px-3 py-1 bg-amber-50/50 rounded-lg border border-amber-100/50 animate-in fade-in slide-in-from-top-1 duration-500">
-                       <FaMapMarkerAlt className="text-[10px] text-amber-500" />
-                       <span className="text-[9px] font-black text-amber-700 tabular-nums">
-                         {record.leaveLocation.lat.toFixed(4)}, {record.leaveLocation.lng.toFixed(4)}
-                       </span>
-                     </div>
-                   )}
+                 <div className="flex flex-col gap-2">
+                    <button 
+                     onClick={() => handleMark(emp._id, "Leave")}
+                     disabled={isFinished || (!isPresent && !record) || fetchingLocation}
+                     className={`w-full flex flex-col items-center justify-center gap-1 py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all duration-300 relative overflow-hidden group/btn ${
+                       isFinished || (!isPresent && !record)
+                       ? "bg-slate-100 text-slate-400 opacity-80" 
+                       : "bg-white text-amber-600 border-2 border-amber-100 hover:border-amber-500 hover:bg-amber-50 shadow-[0_6px_0_0_#f59e0b20] active:shadow-none active:translate-y-1"
+                     } ${fetchingLocation ? "animate-pulse" : ""}`}
+                    >
+                      {isLeft ? (
+                        <div className="flex flex-col items-center gap-1 animate-in zoom-in duration-500">
+                          <div className="w-6 h-6 bg-amber-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-amber-200">
+                            <FaRunning className="text-[10px]" />
+                          </div>
+                          <span className="text-amber-600 font-black">Left</span>
+                        </div>
+                      ) : (
+                        <>
+                          <FaRunning className={`text-sm transition-transform duration-500 ${fetchingLocation ? "animate-spin" : "group-hover/btn:scale-125"}`} /> 
+                          <span>{fetchingLocation ? "Locating..." : "Leave"}</span>
+                        </>
+                      )}
+                    </button>
+                    <div className="mt-1 flex items-center justify-center gap-1.5 px-2 py-1 bg-amber-50/50 rounded-lg border border-amber-100/50 animate-in fade-in slide-in-from-top-1 duration-500 min-h-[20px]">
+                      <FaMapMarkerAlt className="text-[8px] text-amber-500" />
+                      <span className="text-[8px] font-black text-amber-700 uppercase truncate">
+                        {record?.leaveLocation?.address || (
+                          record?.leaveLocation?.lat && !isNaN(record.leaveLocation.lat) 
+                          ? `${Number(record.leaveLocation.lat).toFixed(2)}, ${Number(record.leaveLocation.lng).toFixed(2)}`
+                          : "Fetching..."
+                        )}
+                      </span>
+                    </div>
+                    {record?.leaveTime && !isPresent && (
+                      <p className="text-[8px] font-black text-amber-500/60 text-center uppercase tracking-widest mt-1">
+                        Out: {new Date(record.leaveTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    )}
                  </div>
 
                  <button 
                   onClick={() => handleMark(emp._id, "Absent")}
                   disabled={isFinished || isPresent}
-                  className={`flex-1 flex flex-col items-center justify-center gap-1 py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all ${
+                  className={`col-span-2 flex items-center justify-center gap-3 py-3 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] transition-all ${
                     isFinished || isPresent
                     ? "bg-slate-50 text-slate-300 opacity-50 cursor-not-allowed" 
-                    : "bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white shadow-lg shadow-rose-50"
+                    : "bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white border border-rose-100"
                   }`}
                  >
-                   <FaTimes className="text-sm" /> Absent
+                   <FaTimes className="text-[10px]" /> Mark as Absent
                  </button>
               </div>
 
@@ -288,6 +384,21 @@ const AttendancePage = () => {
                       <FaComment /> Note
                     </p>
                     <p className="text-[10px] font-bold text-amber-800 leading-tight italic">"{record.comment}"</p>
+                  </div>
+                )}
+
+                {record && !record.isApproved && date < new Date().toISOString().split("T")[0] && (
+                  <div className="mt-4 p-4 bg-rose-50 border border-rose-100 rounded-3xl flex flex-col items-center gap-3 animate-in fade-in zoom-in duration-300">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping"></div>
+                      <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Pending Admin Approval</span>
+                    </div>
+                    <button 
+                      onClick={() => handleApprove(emp._id)}
+                      className="w-full py-3 bg-white text-rose-600 text-[10px] font-black uppercase rounded-2xl border border-rose-100 hover:bg-rose-500 hover:text-white transition-all shadow-sm active:scale-95"
+                    >
+                      Approve This Entry
+                    </button>
                   </div>
                 )}
               </div>

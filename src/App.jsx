@@ -67,7 +67,7 @@ import AttendancePage from "./pages/hr/AttendancePage";
 import PayrollPage from "./pages/hr/PayrollPage";
 import SalaryStructurePage from "./pages/hr/SalaryStructurePage";
 import HRReportsPage from "./pages/hr/HRReportsPage";
-
+import AttendanceRecordPage from "./pages/hr/AttendanceRecordPage.jsx";
 
 import BranchLoginPage from "./pages/BranchLoginPage";
 import BranchRegisterPage from "./pages/BranchRegisterPage";
@@ -634,6 +634,7 @@ function AppContent() {
                   
                   {/* HR PAYROLL ROUTES */}
                   <Route path="/branch/hr/attendance" element={<ProtectedRoute element={<AttendancePage />} />} />
+                  <Route path="/branch/hr/attendance-logs" element={<ProtectedRoute element={<AttendanceRecordPage />} />} />
                   <Route path="/branch/hr/payroll" element={<ProtectedRoute element={<PayrollPage />} />} />
                   <Route path="/branch/hr/salary-structure" element={<ProtectedRoute element={<SalaryStructurePage />} />} />
                   <Route path="/branch/hr/reports" element={<ProtectedRoute element={<HRReportsPage />} />} />

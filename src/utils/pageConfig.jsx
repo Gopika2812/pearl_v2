@@ -149,6 +149,7 @@ export const PAGE_CONFIG = [
       {
         id: "hr-payroll-dropdown", name: "HR Management", icon: "users", isDropdown: true, subItems: [
           { id: "attendance", name: "Attendance", path: "/branch/hr/attendance", icon: "calendar" },
+          { id: "attendance-records", name: "Attendance Records", path: "/branch/hr/attendance-logs", icon: "history" },
           { id: "payroll-processing", name: "Process Payroll", path: "/branch/hr/payroll", icon: "payroll" },
           { id: "salary-structure", name: "Salary Structure", path: "/branch/hr/salary-structure", icon: "structure" },
           { id: "hr-reports", name: "HR Reports", path: "/branch/hr/reports", icon: "chart" },

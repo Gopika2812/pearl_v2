@@ -140,6 +140,7 @@ app.use("/api/tokens", tokenRoutes);
 app.use("/api/follow-ups", followUpRoutes);
 app.use("/api/delivery-receipts", deliveryReceiptRoutes);
 app.use("/api/hr", hrPayrollRoutes);
+app.get("/api/hr-ping", (req, res) => res.json({ msg: "HR module reachable" }));
 
 
 
@@ -167,7 +168,7 @@ app.get("/api/health", (req, res) => {
 });
 
 // 404 Handler for /api routes
-app.use("/api/*", (req, res) => {
+app.use(/^\/api\/.*/, (req, res) => {
   res.status(404).json({ success: false, message: `Endpoint not found: ${req.originalUrl}` });
 });
 

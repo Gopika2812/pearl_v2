@@ -18,10 +18,10 @@ const PayrollPage = () => {
 
   const fetchEmployees = async () => {
     try {
-      const res = await fetchWithAuth(`${API_BASE}/branch-users?branchId=${currentBranch?._id}`);
+      const res = await fetchWithAuth(`${API_BASE}/hr/employees/list?branchId=${currentBranch?._id}`);
       const data = await res.json();
       if (data.success) {
-        setEmployees(data.data.filter(u => u.status === "ACTIVE"));
+        setEmployees(data.data);
       }
     } catch (err) {
       toast.error("Failed to fetch employees");
@@ -113,7 +113,10 @@ const PayrollPage = () => {
                           <FaUser />
                         </div>
                         <div>
-                          <p className="text-xs font-black text-slate-800 uppercase leading-tight">{emp.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-black text-slate-800 uppercase leading-tight">{emp.name}</p>
+                            <span className="text-[8px] font-black bg-indigo-50 text-indigo-500 px-1 rounded uppercase">#{emp.employeeCode}</span>
+                          </div>
                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{emp.role}</p>
                         </div>
                       </div>
@@ -151,35 +154,38 @@ const PayrollPage = () => {
                 </div>
               ) : (
                 payrollHistory.map(record => (
-                  <div key={record._id} className="bg-white rounded-3xl border border-slate-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-sm hover:border-indigo-100 transition-all">
-                    <div className="flex items-center gap-4">
-                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${record.status === "Paid" ? "bg-emerald-50 text-emerald-500" : "bg-amber-50 text-amber-500"}`}>
-                         {record.status === "Paid" ? <FaCheckCircle className="text-xl" /> : <FaExclamationCircle className="text-xl" />}
-                       </div>
-                       <div>
-                         <h3 className="font-black text-slate-800 uppercase text-sm">{record.employeeId?.name}</h3>
-                         <div className="flex items-center gap-2">
-                           <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md uppercase">Net: ₹{record.netSalary.toLocaleString()}</span>
-                           <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase ${record.status === "Paid" ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"}`}>
-                             {record.status}
-                           </span>
+                  <div key={record._id} className="bg-white rounded-3xl border border-slate-200 p-4 sm:p-6 flex flex-col gap-4 shadow-sm hover:border-indigo-100 transition-all">
+                      <div className="flex items-center gap-4">
+                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${record.status === "Paid" ? "bg-emerald-50 text-emerald-500" : "bg-amber-50 text-amber-500"}`}>
+                           {record.status === "Paid" ? <FaCheckCircle className="text-xl" /> : <FaExclamationCircle className="text-xl" />}
                          </div>
-                       </div>
-                    </div>
+                         <div>
+                           <h3 className="font-black text-slate-800 uppercase text-sm truncate max-w-[120px] sm:max-w-none">{record.employeeId?.name}</h3>
+                           <div className="flex flex-wrap items-center gap-2 mt-1">
+                             <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md uppercase whitespace-nowrap">Net: ₹{record.netSalary.toLocaleString()}</span>
+                             <span className={`text-[9px] font-black px-2 py-0.5 rounded-md uppercase whitespace-nowrap ${record.status === "Paid" ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"}`}>
+                               {record.status}
+                             </span>
+                           </div>
+                         </div>
+                      </div>
 
-                    <div className="grid grid-cols-2 md:flex md:items-center gap-4 md:gap-8">
-                       <div className="text-center md:text-left">
-                         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Basic</p>
-                         <p className="text-xs font-bold text-slate-700">₹{record.basicSalary.toLocaleString()}</p>
-                       </div>
-                       <div className="text-center md:text-left">
-                         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">OT Pay</p>
-                         <p className="text-xs font-bold text-slate-700">₹{record.overtimePay.toLocaleString()}</p>
-                       </div>
-                       <div className="text-center md:text-left">
-                         <p className="text-[8px] font-black text-rose-300 uppercase tracking-widest mb-1">Deductions</p>
-                         <p className="text-xs font-bold text-rose-500">₹{record.deductions.toLocaleString()}</p>
-                       </div>
+                      <div className="flex items-center gap-3 sm:gap-6 border-t sm:border-t-0 pt-4 sm:pt-0">
+                         <div className="flex-1 sm:flex-none">
+                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Basic</p>
+                           <p className="text-[11px] font-bold text-slate-700">₹{record.basicSalary.toLocaleString()}</p>
+                         </div>
+                         <div className="flex-1 sm:flex-none">
+                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">OT Pay</p>
+                           <p className="text-[11px] font-bold text-slate-700">₹{record.overtimePay.toLocaleString()}</p>
+                         </div>
+                         <div className="flex-1 sm:flex-none">
+                           <p className="text-[8px] font-black text-rose-300 uppercase tracking-widest mb-1">Deductions</p>
+                           <p className="text-[11px] font-bold text-rose-500">₹{record.deductions.toLocaleString()}</p>
+                         </div>
+                      </div>
+
+                      <div className="w-full md:w-auto mt-2 md:mt-0 border-t pt-4 md:border-t-0 md:pt-0">
                        {record.status === "Pending" && (
                          <button 
                           onClick={() => handleMarkPaid(record._id)}

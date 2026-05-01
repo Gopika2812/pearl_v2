@@ -48,6 +48,14 @@ const attendanceSchema = new mongoose.Schema(
     comment: {
       type: String,
     },
+    isApproved: {
+      type: Boolean,
+      default: true, // Default to true for current day
+    },
+    markedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "BranchUser",
+    },
   },
   { timestamps: true }
 );
