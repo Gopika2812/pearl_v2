@@ -69,7 +69,7 @@ const AttendancePage = () => {
               const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18`);
               const nomData = await nomRes.json();
               if (nomData && nomData.display_name) {
-                const parts = nomData.display_name.split(",").slice(0, 5);
+                const parts = nomData.display_name.split(",").slice(0, 7);
                 return [...new Set(parts)].join(", ");
               }
             } catch (e) {
@@ -211,7 +211,7 @@ const AttendancePage = () => {
             const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18`);
             const nomData = await nomRes.json();
             if (nomData && nomData.display_name) {
-              const parts = nomData.display_name.split(",").slice(0, 5);
+              const parts = nomData.display_name.split(",").slice(0, 7);
               return [...new Set(parts)].join(", ");
             }
           } catch (e) {
