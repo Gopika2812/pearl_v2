@@ -36,7 +36,6 @@ const MultiUserSelect = ({ users, selected, onChange, disabled }) => {
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (containerRef.current && !containerRef.current.contains(event.target)) {
-        // Check if the click was inside the fixed portal-like menu
         const menu = document.getElementById("floating-staff-menu");
         if (menu && menu.contains(event.target)) return;
         setIsOpen(false);
@@ -75,7 +74,7 @@ const MultiUserSelect = ({ users, selected, onChange, disabled }) => {
           id="floating-staff-menu"
           style={{ 
             position: "fixed", 
-            top: coords.top + 32, // Just below the button
+            top: coords.top + 32,
             left: coords.left,
             width: Math.max(coords.width, 220),
             zIndex: 99999
@@ -117,22 +116,14 @@ const MultiUserSelect = ({ users, selected, onChange, disabled }) => {
 export default function BranchPhysicalStock() {
   const { currentBranch, user } = useBranch();
 
-  // ── Meta
   const [productGroups, setProductGroups] = useState([]);
   const [products, setProducts] = useState([]);
   const [branchUsers, setBranchUsers] = useState([]);
   const [nextId, setNextId] = useState("SJ001");
-
-  // ── Entry rows (worksheet)
   const [rows, setRows] = useState([]);
-
-  // ── Filters for row
   const [groupFilter, setGroupFilter] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [showProductDrop, setShowProductDrop] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  // ── Date
   const [entryDate, setEntryDate] = useState(new Date().toISOString().split("T")[0]);
 
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
@@ -212,11 +203,11 @@ export default function BranchPhysicalStock() {
       productGroupName: product.productGroup?.name || "",
       systemQty,
       physicalQty: "",
+      mrp: product.mrp || 0,
       batch: "",
       expiryDate: "",
       checkedBy: [],
       saving: false,
-      saved: false,
       savedId: null,
       status: "DRAFT"
     }]);
@@ -253,6 +244,7 @@ export default function BranchPhysicalStock() {
         productName: row.productName,
         systemQty: Number(row.systemQty),
         physicalQty: Number(row.physicalQty),
+        mrp: Number(row.mrp) || 0,
         batch: row.batch,
         expiryDate: row.expiryDate || undefined,
         checkedBy: row.checkedBy,
@@ -273,7 +265,7 @@ export default function BranchPhysicalStock() {
       data = await res.json();
       if (data.success) {
         setRows(prev => prev.map(r => r.rowId === row.rowId ? {
-          ...r, saving: false, saved: true, savedId: data.data._id, status: "DRAFT"
+          ...r, saving: false, savedId: data.data._id, status: "DRAFT"
         } : r));
         if (!row.savedId) fetchNextId();
         toast.success(`${data.data.sjId} saved`);
@@ -311,34 +303,34 @@ export default function BranchPhysicalStock() {
       <div className="p-4">
         
         {/* COMPACT HEADER */}
-        <div className="bg-white border border-gray-300 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+        <div className="bg-white border border-gray-300 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 rounded-xl shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#001f3f] flex items-center justify-center rounded shadow">
+            <div className="w-10 h-10 bg-[#001f3f] flex items-center justify-center rounded-xl shadow-inner">
               <FaBoxes className="text-white text-lg" />
             </div>
             <div>
-              <h1 className="text-lg font-black text-gray-800 uppercase tracking-tight">Stock Journal Entry</h1>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                Next Entry: <span className="text-blue-600">{nextId}</span> | {currentBranch?.name}
+              <h1 className="text-lg font-black text-gray-800 uppercase tracking-tight leading-tight">Stock Journal Entry</h1>
+              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">
+                Next: <span className="text-blue-600">{nextId}</span> • {currentBranch?.name}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-2 md:flex items-center gap-2">
             <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)}
-              className="border border-gray-300 px-2 py-1.5 text-xs font-bold rounded outline-none" />
+              className="border border-gray-300 px-3 py-2 text-[11px] font-black rounded-xl outline-none bg-gray-50 text-gray-700 w-full" />
             <a href="/branch/physical-stock-records"
-              className="px-3 py-1.5 bg-gray-600 text-white text-[11px] font-bold rounded hover:bg-gray-700 transition uppercase flex items-center gap-2">
-              <FaHistory /> Stock Journal Records
+              className="px-3 py-2 bg-gray-800 text-white text-[11px] font-black rounded-xl hover:bg-gray-900 transition uppercase flex items-center justify-center gap-2 w-full shadow-lg shadow-gray-200">
+              <FaHistory /> Records
             </a>
           </div>
         </div>
 
         {/* COMPACT SEARCH */}
-        <div className="bg-white border border-gray-300 p-3 mb-4 flex flex-wrap gap-3 items-center">
-          <select className="bg-white border border-gray-300 rounded px-3 py-1.5 text-xs font-bold text-gray-700 outline-none w-48"
+        <div className="bg-white border border-gray-300 p-3 mb-4 flex flex-col md:flex-row gap-3 items-center rounded-xl shadow-sm">
+          <select className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[11px] font-black text-gray-700 outline-none w-full md:w-64"
             value={groupFilter} onChange={e => { setGroupFilter(e.target.value); setProductSearch(""); }}>
-            <option value="">All Groups</option>
-            {productGroups.map(g => <option key={g._id} value={g._id}>{g.name}</option>)}
+            <option value="">ALL GROUPS</option>
+            {productGroups.map(g => <option key={g._id} value={g._id}>{g.name.toUpperCase()}</option>)}
           </select>
           <div className="flex-1 relative">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
@@ -365,111 +357,206 @@ export default function BranchPhysicalStock() {
           </div>
         </div>
 
-        {/* STANDARD TABLE FORMAT */}
-        <div className="bg-white border border-gray-300 shadow-sm overflow-visible">
-          <div className="overflow-x-auto overflow-y-visible">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-100 border-b border-gray-300">
-                  {["#", "Product", "Group", "System Qty", "Physical Qty", "Inward ↑", "Outward ↓", "Batch", "Expiry", "Checked By", "Status", "Actions"].map(h => (
-                    <th key={h} className="px-3 py-3 border-r border-gray-300 last:border-0 font-black text-[10px] uppercase tracking-wider text-gray-600 whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan="12" className="py-20 text-center text-gray-400 font-bold uppercase text-[11px] tracking-widest">
-                      Search and add products above to start verification
-                    </td>
+        <div className="space-y-4">
+          {/* DESKTOP TABLE */}
+          <div className="hidden md:block bg-white border border-gray-300 shadow-sm overflow-visible rounded-xl">
+            <div className="overflow-x-auto overflow-y-visible">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    {["#", "Product", "Group", "System", "Physical", "Inward", "Outward", "MRP", "Batch", "Expiry", "Staff", "Status", "Actions"].map(h => (
+                      <th key={h} className="px-3 py-4 border-r border-gray-200 last:border-0 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">{h}</th>
+                    ))}
                   </tr>
-                ) : (
-                  rows.map((row, idx) => {
-                    const { inward, outward } = calc(row);
-                    return (
-                      <tr key={row.rowId} className={`hover:bg-gray-50 ${row.status === "APPROVED" ? "bg-green-50" : ""}`}>
-                        <td className="px-3 py-3 border-r border-gray-200 font-bold text-gray-400 text-center">{idx + 1}</td>
-                        <td className="px-3 py-3 border-r border-gray-200">
-                          <p className="font-bold text-gray-800 text-[11px] uppercase whitespace-nowrap overflow-hidden text-ellipsis max-w-[180px]">{row.productName}</p>
-                        </td>
-                        <td className="px-3 py-3 border-r border-gray-200 text-[10px] text-gray-500 font-bold uppercase">{row.productGroupName || "-"}</td>
-                        <td className="px-3 py-3 border-r border-gray-200 text-center">
-                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded font-black text-[10px]">{row.systemQty}</span>
-                        </td>
-                        <td className="px-3 py-3 border-r border-gray-200">
-                          <input type="number" min="0"
-                            value={row.physicalQty}
-                            onChange={e => updateRow(row.rowId, "physicalQty", e.target.value)}
-                            disabled={row.status === "APPROVED"}
-                            className="w-full border border-gray-300 rounded px-2 py-1 text-[11px] font-bold outline-none focus:border-blue-500 disabled:bg-gray-100"
-                            placeholder="Qty" />
-                        </td>
-                        <td className="px-3 py-3 border-r border-gray-200 text-center">
-                          {inward > 0 ? <span className="text-green-600 font-black text-[11px]">+{inward}</span> : <span className="text-gray-300">-</span>}
-                        </td>
-                        <td className="px-3 py-3 border-r border-gray-200 text-center">
-                          {outward > 0 ? <span className="text-red-600 font-black text-[11px]">-{outward}</span> : <span className="text-gray-300">-</span>}
-                        </td>
-                        <td className="px-3 py-3 border-r border-gray-200">
-                          <input type="text" value={row.batch}
-                            onChange={e => updateRow(row.rowId, "batch", e.target.value)}
-                            disabled={row.status === "APPROVED"}
-                            className="w-full border border-gray-300 rounded px-2 py-1 text-[10px] font-bold outline-none disabled:bg-gray-100"
-                            placeholder="Batch" />
-                        </td>
-                        <td className="px-3 py-3 border-r border-gray-200">
-                          <input type="date" value={row.expiryDate}
-                            onChange={e => updateRow(row.rowId, "expiryDate", e.target.value)}
-                            disabled={row.status === "APPROVED"}
-                            className="w-full border border-gray-300 rounded px-2 py-1 text-[10px] font-bold outline-none disabled:bg-gray-100" />
-                        </td>
-                        <td className="px-3 py-3 border-r border-gray-200">
-                          <MultiUserSelect
-                            users={branchUsers}
-                            selected={row.checkedBy}
-                            onChange={(val) => updateRow(row.rowId, "checkedBy", val)}
-                            disabled={row.status === "APPROVED"}
-                          />
-                        </td>
-                        <td className="px-3 py-3 border-r border-gray-200 text-center">
-                          {row.status === "APPROVED"
-                            ? <span className="text-green-700 font-black text-[9px] uppercase">Approved</span>
-                            : <span className="text-orange-600 font-black text-[9px] uppercase">Draft</span>}
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-1 justify-center">
-                            {row.status !== "APPROVED" && (
-                              <>
-                                <button onClick={() => saveRow(row)} disabled={row.saving}
-                                  className="px-2 py-1 bg-blue-600 text-white text-[9px] font-black rounded hover:bg-blue-700 disabled:opacity-50 uppercase">
-                                  {row.saving ? "..." : "Save"}
-                                </button>
-                                {isAdmin && row.savedId && (
-                                  <button onClick={() => approveRow(row)} disabled={row.saving}
-                                    className="px-2 py-1 bg-green-600 text-white text-[9px] font-black rounded hover:bg-green-700 disabled:opacity-50 uppercase">
-                                    Approve
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {rows.length === 0 ? (
+                    <tr>
+                      <td colSpan="12" className="py-20 text-center text-gray-300 font-black uppercase text-[11px] tracking-widest">
+                        Search and add products to start
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((row, idx) => {
+                      const { inward, outward } = calc(row);
+                      return (
+                        <tr key={row.rowId} className={`hover:bg-gray-50/50 transition-colors ${row.status === "APPROVED" ? "bg-green-50/30" : ""}`}>
+                          <td className="px-3 py-3 border-r border-gray-100 font-black text-gray-300 text-center">{idx + 1}</td>
+                          <td className="px-3 py-3 border-r border-gray-100">
+                            <p className="font-black text-gray-700 text-[10px] uppercase truncate max-w-[160px]">{row.productName}</p>
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100 text-[9px] text-gray-400 font-black uppercase">{row.productGroupName || "-"}</td>
+                          <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-[10px] text-blue-500">{row.systemQty}</td>
+                          <td className="px-3 py-3 border-r border-gray-100">
+                            <input type="number" min="0"
+                              value={row.physicalQty}
+                              onChange={e => updateRow(row.rowId, "physicalQty", e.target.value)}
+                              disabled={row.status === "APPROVED"}
+                              className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-black outline-none focus:border-blue-400 disabled:bg-gray-50 shadow-sm"
+                              placeholder="Qty" />
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100 text-center">
+                            {inward > 0 ? <span className="text-green-600 font-black text-[10px] bg-green-50 px-1.5 py-0.5 rounded">+{inward}</span> : <span className="text-gray-200">-</span>}
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100 text-center">
+                            {outward > 0 ? <span className="text-red-500 font-black text-[10px] bg-red-50 px-1.5 py-0.5 rounded">-{outward}</span> : <span className="text-gray-200">-</span>}
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100">
+                            <input type="number" value={row.mrp}
+                              onChange={e => updateRow(row.rowId, "mrp", e.target.value)}
+                              disabled={row.status === "APPROVED"}
+                              className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-[10px] font-black outline-none focus:border-blue-400 disabled:bg-gray-50"
+                              placeholder="MRP" />
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100">
+                            <input type="text" value={row.batch}
+                              onChange={e => updateRow(row.rowId, "batch", e.target.value)}
+                              disabled={row.status === "APPROVED"}
+                              className="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-[10px] font-black outline-none disabled:bg-gray-50"
+                              placeholder="Batch" />
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100">
+                            <input type="date" value={row.expiryDate}
+                              onChange={e => updateRow(row.rowId, "expiryDate", e.target.value)}
+                              disabled={row.status === "APPROVED"}
+                              className="w-28 border border-gray-200 rounded-lg px-2 py-1.5 text-[9px] font-black outline-none disabled:bg-gray-50" />
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100">
+                            <MultiUserSelect
+                              users={branchUsers}
+                              selected={row.checkedBy}
+                              onChange={(val) => updateRow(row.rowId, "checkedBy", val)}
+                              disabled={row.status === "APPROVED"}
+                            />
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100 text-center">
+                            {row.status === "APPROVED"
+                              ? <span className="text-green-600 font-black text-[9px] uppercase bg-green-50 px-2 py-1 rounded-full">Approved</span>
+                              : <span className="text-orange-500 font-black text-[9px] uppercase bg-orange-50 px-2 py-1 rounded-full">Draft</span>}
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center gap-1 justify-center">
+                              {row.status !== "APPROVED" && (
+                                <>
+                                  <button onClick={() => saveRow(row)} disabled={row.saving}
+                                    className="px-3 py-1.5 bg-blue-600 text-white text-[9px] font-black rounded-lg hover:bg-blue-700 disabled:opacity-50 uppercase shadow-md shadow-blue-100">
+                                    {row.saving ? "..." : "Save"}
                                   </button>
-                                )}
-                                <button onClick={() => removeRow(row.rowId)}
-                                  className="p-1 text-gray-400 hover:text-red-500">
-                                  <FaTrash size={11} />
-                                </button>
-                              </>
-                            )}
-                            {row.status === "APPROVED" && (
-                              <FaCheck className="text-green-600" size={14} title="Entry finalized" />
-                            )}
-                          </div>
+                                  {isAdmin && row.savedId && (
+                                    <button onClick={() => approveRow(row)} disabled={row.saving}
+                                      className="px-3 py-1.5 bg-emerald-600 text-white text-[9px] font-black rounded-lg hover:bg-emerald-700 disabled:opacity-50 uppercase shadow-md shadow-emerald-100">
+                                      Approve
+                                    </button>
+                                  )}
+                                  <button onClick={() => removeRow(row.rowId)}
+                                    className="p-2 text-gray-300 hover:text-red-500 transition-colors">
+                                    <FaTrash size={12} />
+                                  </button>
+                                </>
+                              )}
+                              {row.status === "APPROVED" && (
+                                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                                  <FaCheck size={12} />
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* MOBILE ENTRY CARDS */}
+          <div className="md:hidden space-y-4">
+            {rows.length === 0 ? (
+              <div className="bg-white p-12 rounded-2xl border border-dashed border-gray-300 text-center">
+                <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Search products above to start</p>
+              </div>
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[600px]">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      {["Product", "Sys", "Phy", "Diff", "MRP", "Batch", "Staff", "Actions"].map(h => (
+                        <th key={h} className="px-3 py-3 font-black text-[9px] uppercase tracking-widest text-gray-400 border-r last:border-0">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {rows.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="py-12 text-center text-gray-300 font-black uppercase text-[10px] tracking-widest">
+                          Search above to start
                         </td>
                       </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                    ) : (
+                      rows.map((row, idx) => {
+                        const { inward, outward } = calc(row);
+                        return (
+                          <tr key={row.rowId} className={`hover:bg-gray-50 transition-colors ${row.status === "APPROVED" ? "bg-green-50/20" : ""}`}>
+                            <td className="px-3 py-3 border-r border-gray-100 min-w-[140px]">
+                              <p className="font-black text-gray-700 text-[10px] uppercase leading-tight truncate">{row.productName}</p>
+                              <p className="text-[8px] font-bold text-gray-400 uppercase">{row.productGroupName || "-"}</p>
+                            </td>
+                            <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-[10px] text-blue-500">{row.systemQty}</td>
+                            <td className="px-3 py-3 border-r border-gray-100">
+                              <input type="number" value={row.physicalQty} onChange={e => updateRow(row.rowId, "physicalQty", e.target.value)}
+                                disabled={row.status === "APPROVED"}
+                                className="w-16 border border-gray-200 rounded px-2 py-1 text-[10px] font-black outline-none focus:border-blue-400" />
+                            </td>
+                            <td className="px-3 py-3 border-r border-gray-100 text-center">
+                              {inward > 0 && <span className="text-green-600 font-black text-[9px]">+{inward}</span>}
+                              {outward > 0 && <span className="text-red-500 font-black text-[9px]">-{outward}</span>}
+                              {inward === 0 && outward === 0 && <span className="text-gray-300">-</span>}
+                            </td>
+                            <td className="px-3 py-3 border-r border-gray-100">
+                              <input type="number" value={row.mrp} onChange={e => updateRow(row.rowId, "mrp", e.target.value)}
+                                disabled={row.status === "APPROVED"}
+                                className="w-12 border border-gray-200 rounded px-1 py-1 text-[9px] font-black outline-none focus:border-blue-400" placeholder="MRP" />
+                            </td>
+                            <td className="px-3 py-3 border-r border-gray-100">
+                              <input type="text" value={row.batch} onChange={e => updateRow(row.rowId, "batch", e.target.value)}
+                                disabled={row.status === "APPROVED"}
+                                className="w-16 border border-gray-200 rounded px-2 py-1 text-[9px] font-black outline-none" placeholder="Batch" />
+                            </td>
+                            <td className="px-3 py-3 border-r border-gray-100">
+                              <MultiUserSelect users={branchUsers} selected={row.checkedBy} onChange={(val) => updateRow(row.rowId, "checkedBy", val)} disabled={row.status === "APPROVED"} />
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center gap-1">
+                                {row.status !== "APPROVED" ? (
+                                  <>
+                                    <button onClick={() => saveRow(row)} disabled={row.saving} className="p-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 active:scale-90 transition">
+                                      <FaCheck size={10} />
+                                    </button>
+                                    <button onClick={() => removeRow(row.rowId)} className="p-1.5 text-gray-300 hover:text-red-500">
+                                      <FaTrash size={10} />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                                    <FaCheck size={10} />
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
+  </div>
   );
 }

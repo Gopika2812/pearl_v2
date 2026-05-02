@@ -35,6 +35,7 @@ const physicalStockEntrySchema = new mongoose.Schema({
   outwardQty:        { type: Number, default: 0 },   // systemQty > physicalQty  → system - physical
 
   // Optional fields
+  mrp:               { type: Number, default: 0 },
   batch:             { type: String, default: "" },
   expiryDate:        { type: Date },
 

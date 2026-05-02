@@ -91,7 +91,7 @@ router.post("/", async (req, res) => {
       branchId, productGroupId, productGroupName,
       productId, productName,
       systemQty, physicalQty,
-      batch, expiryDate,
+      mrp, batch, expiryDate,
       checkedBy,
       userId, username
     } = req.body;
@@ -114,6 +114,7 @@ router.post("/", async (req, res) => {
       productId, productName,
       systemQty: sQty, physicalQty: pQty,
       inwardQty, outwardQty,
+      mrp: Number(mrp) || 0,
       batch: batch || "",
       expiryDate: expiryDate ? new Date(expiryDate) : undefined,
       checkedBy: checkedBy || [],
@@ -140,7 +141,7 @@ router.post("/", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.put("/:id", async (req, res) => {
   try {
-    const { physicalQty, checkedBy, batch, expiryDate, userId, username } = req.body;
+    const { physicalQty, mrp, checkedBy, batch, expiryDate, userId, username } = req.body;
 
     const entry = await PhysicalStockEntry.findById(req.params.id);
     if (!entry) return res.status(404).json({ success: false, message: "Entry not found" });
@@ -161,6 +162,7 @@ router.put("/:id", async (req, res) => {
     }
 
     if (checkedBy !== undefined) entry.checkedBy = checkedBy;
+    if (mrp !== undefined) entry.mrp = Number(mrp) || 0;
     if (batch !== undefined) entry.batch = batch;
     if (expiryDate !== undefined) entry.expiryDate = expiryDate ? new Date(expiryDate) : null;
 

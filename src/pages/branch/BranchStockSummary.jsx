@@ -318,14 +318,14 @@ const BranchStockSummary = () => {
               </button>
             )}
 
-            <div className="flex bg-gray-50 p-1.5 rounded-2xl border border-gray-100">
+            <div className="grid grid-cols-2 md:flex bg-gray-50 p-1.5 rounded-2xl border border-gray-200 w-full md:w-auto">
               <div className="flex items-center px-3 border-r border-gray-200">
                 <FaCalendarAlt className="text-gray-400 text-sm mr-2" />
                 <input
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-gray-600 outline-none"
+                  className="bg-transparent text-[10px] font-black text-gray-600 outline-none w-full"
                 />
               </div>
               <div className="flex items-center px-3">
@@ -333,51 +333,62 @@ const BranchStockSummary = () => {
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-gray-600 outline-none"
+                  className="bg-transparent text-[10px] font-black text-gray-600 outline-none w-full"
                 />
               </div>
             </div>
 
-            <button
-              onClick={viewLevel === "LEDGER" ? () => fetchProductLedger(selectedProduct.id) : fetchStockSummary}
-              className="bg-secondary text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-secondary/20 hover:scale-[1.02] transition active:scale-95 flex items-center gap-2"
-            >
-              <FaSync className={loading ? "animate-spin" : ""} /> Refresh
-            </button>
+            <div className="grid grid-cols-2 md:flex items-center gap-2 w-full md:w-auto">
+              <button
+                onClick={viewLevel === "LEDGER" ? () => fetchProductLedger(selectedProduct.id) : fetchStockSummary}
+                className="bg-secondary text-white px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-secondary/20 hover:scale-[1.02] transition active:scale-95 flex items-center justify-center gap-2 w-full"
+              >
+                <FaSync className={loading ? "animate-spin" : ""} /> Refresh
+              </button>
 
-            <button
-              onClick={async () => {
-                if (!window.confirm("CRITICAL RECONCILIATION:\n\nThis will force your Current Stock to match:\n[Mar 31st Anchor] + [Total Inwards] - [Total Outwards].\n\nUse this if your 'Available Qty' looks wrong. Proceed?")) return;
-                setLoading(true);
-                try {
-                  const res = await fetchWithAuth(`${API_BASE}/products/reconcile-stock`, {
-                    method: "POST",
-                    body: JSON.stringify({ branchId: currentBranch._id })
-                  });
-                  const result = await res.json();
-                  if (result.success) {
-                    toast.success(result.message);
-                    fetchStockSummary();
-                  } else {
-                    throw new Error(result.message);
+              <button
+                onClick={async () => {
+                  if (!window.confirm("CRITICAL RECONCILIATION:\n\nThis will force your Current Stock to match:\n[Mar 31st Anchor] + [Total Inwards] - [Total Outwards].\n\nUse this if your 'Available Qty' looks wrong. Proceed?")) return;
+                  setLoading(true);
+                  try {
+                    const res = await fetchWithAuth(`${API_BASE}/products/reconcile-stock`, {
+                      method: "POST",
+                      body: JSON.stringify({ branchId: currentBranch._id })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                      toast.success(result.message);
+                      fetchStockSummary();
+                    } else {
+                      throw new Error(result.message);
+                    }
+                  } catch (err) {
+                    toast.error(err.message || "Sync failed");
+                  } finally {
+                    setLoading(false);
                   }
-                } catch (err) {
-                  toast.error(err.message || "Sync failed");
-                } finally {
-                  setLoading(false);
-                }
-              }}
-              className="bg-orange-500 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-orange-200 hover:bg-orange-600 transition flex items-center gap-2"
-            >
-              <FaSync className={loading ? "animate-spin" : ""} /> Sync Live Stock
-            </button>
+                }}
+                className="bg-orange-500 text-white px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-orange-200 hover:bg-orange-600 transition flex items-center justify-center gap-2 w-full"
+              >
+                <FaSync className={loading ? "animate-spin" : ""} /> Sync Stock
+              </button>
+            </div>
 
-            <button
-              onClick={handleExportSnapshot}
-              className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition flex items-center gap-2"
-            >
-              <FaDownload size={14} /> 31st Mar Snapshot
-            </button>
+            <div className="grid grid-cols-2 md:flex items-center gap-2 w-full md:w-auto">
+              <button
+                onClick={handleExportSnapshot}
+                className="bg-indigo-600 text-white px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition flex items-center justify-center gap-2 w-full"
+              >
+                <FaDownload size={12} /> Snapshot
+              </button>
+
+              <button
+                onClick={() => setShowExportModal(true)}
+                className="bg-gray-800 text-white px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-gray-200 hover:bg-gray-900 transition flex items-center justify-center gap-2 w-full"
+              >
+                <FaDownload size={12} /> Export
+              </button>
+            </div>
 
             {/* Hidden File Input for Import */}
             {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
@@ -500,43 +511,75 @@ const BranchStockSummary = () => {
           )}
 
           {!loading && viewLevel === "GROUPS" && filteredGroupAggregates.length > 0 && (
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50/50 text-gray-400 uppercase text-[10px] font-black tracking-widest border-b">
-                      {isFieldAllowed("groupName") && <th className="px-6 py-4">Stock Group Name</th>}
-                      {isFieldAllowed("opening") && <th className="px-6 py-4 text-center">Opening</th>}
-                      {isFieldAllowed("inwards") && <th className="px-6 py-4 text-center">Inwards</th>}
-                      {isFieldAllowed("outwards") && <th className="px-6 py-4 text-center">Outwards</th>}
-                      {isFieldAllowed("closingQty") && <th className="px-6 py-4 text-right">Closing Qty</th>}
-                      {isFieldAllowed("closingValue") && <th className="px-6 py-4 text-right">Closing Value</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {filteredGroupAggregates.map(agg => (
-                      <tr
-                        key={agg.id}
-                        onClick={() => changeView("ITEMS", { _id: agg.id, name: agg.name })}
-                        className="hover:bg-blue-50/50 cursor-pointer transition group"
-                      >
-                        {isFieldAllowed("groupName") && (
-                          <td className="px-6 py-4 font-bold text-gray-700 flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary group-hover:bg-secondary group-hover:text-white transition">
-                              <FaChevronRight size={10} />
-                            </div>
-                            {agg.name}
-                          </td>
-                        )}
-                        {isFieldAllowed("opening") && <td className="px-6 py-4 text-center font-bold text-gray-400">{Math.round(agg.openingQty || 0)}</td>}
-                        {isFieldAllowed("inwards") && <td className="px-6 py-4 text-center font-bold text-green-600">{agg.inwards || 0}</td>}
-                        {isFieldAllowed("outwards") && <td className="px-6 py-4 text-center font-bold text-red-500">{agg.outwards || 0}</td>}
-                        {isFieldAllowed("closingQty") && <td className="px-6 py-4 text-right font-black text-gray-600">{agg.closingQty}</td>}
-                        {isFieldAllowed("closingValue") && <td className="px-6 py-4 text-right font-black text-secondary">₹{agg.closingValue.toLocaleString()}</td>}
+            <div className="space-y-4">
+              {/* DESKTOP TABLE */}
+              <div className="hidden md:block bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50/50 text-gray-400 uppercase text-[10px] font-black tracking-widest border-b">
+                        {isFieldAllowed("groupName") && <th className="px-6 py-4">Stock Group Name</th>}
+                        {isFieldAllowed("opening") && <th className="px-6 py-4 text-center">Opening</th>}
+                        {isFieldAllowed("inwards") && <th className="px-6 py-4 text-center">Inwards</th>}
+                        {isFieldAllowed("outwards") && <th className="px-6 py-4 text-center">Outwards</th>}
+                        {isFieldAllowed("closingQty") && <th className="px-6 py-4 text-right">Closing Qty</th>}
+                        {isFieldAllowed("closingValue") && <th className="px-6 py-4 text-right">Closing Value</th>}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {filteredGroupAggregates.map(agg => (
+                        <tr
+                          key={agg.id}
+                          onClick={() => changeView("ITEMS", { _id: agg.id, name: agg.name })}
+                          className="hover:bg-blue-50/50 cursor-pointer transition group"
+                        >
+                          {isFieldAllowed("groupName") && (
+                            <td className="px-6 py-4 font-bold text-gray-700 flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary group-hover:bg-secondary group-hover:text-white transition">
+                                <FaChevronRight size={10} />
+                              </div>
+                              {agg.name}
+                            </td>
+                          )}
+                          {isFieldAllowed("opening") && <td className="px-6 py-4 text-center font-bold text-gray-400">{Math.round(agg.openingQty || 0)}</td>}
+                          {isFieldAllowed("inwards") && <td className="px-6 py-4 text-center font-bold text-green-600">{agg.inwards || 0}</td>}
+                          {isFieldAllowed("outwards") && <td className="px-6 py-4 text-center font-bold text-red-500">{agg.outwards || 0}</td>}
+                          {isFieldAllowed("closingQty") && <td className="px-6 py-4 text-right font-black text-gray-600">{agg.closingQty}</td>}
+                          {isFieldAllowed("closingValue") && <td className="px-6 py-4 text-right font-black text-secondary">₹{agg.closingValue.toLocaleString()}</td>}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* MOBILE COMPACT TABLE (Groups) */}
+              <div className="md:hidden">
+                <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[500px]">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          {["Group", "Opening", "In", "Out", "Closing", "Value"].map(h => (
+                            <th key={h} className="px-3 py-3 font-black text-[9px] uppercase tracking-widest text-gray-400 border-r last:border-0">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredGroupAggregates.map(agg => (
+                          <tr key={agg.id} onClick={() => changeView("ITEMS", { _id: agg.id, name: agg.name })} className="hover:bg-blue-50/50 transition-colors">
+                            <td className="px-3 py-3 border-r border-gray-100 font-black text-gray-700 text-[10px] uppercase truncate">{agg.name}</td>
+                            <td className="px-3 py-3 border-r border-gray-100 text-center font-bold text-gray-400 text-[10px]">{Math.round(agg.openingQty || 0)}</td>
+                            <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-green-600 text-[10px]">{agg.inwards || 0}</td>
+                            <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-red-500 text-[10px]">{agg.outwards || 0}</td>
+                            <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-gray-600 text-[10px]">{agg.closingQty}</td>
+                            <td className="px-3 py-3 text-right font-black text-secondary text-[10px]">₹{Math.round(agg.closingValue || 0).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -548,44 +591,76 @@ const BranchStockSummary = () => {
           )}
 
           {!loading && viewLevel === "ITEMS" && filteredStockItems.length > 0 && (
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50/50 text-gray-400 uppercase text-[10px] font-black tracking-widest border-b">
-                      <th className="px-6 py-4">Product Name</th>
-                      <th className="px-6 py-4 text-center">Opening</th>
-                      <th className="px-6 py-4 text-center">Inwards</th>
-                      <th className="px-6 py-4 text-center">Outwards</th>
-                      <th className="px-6 py-4 text-right">Closing</th>
-                      <th className="px-6 py-4 text-right font-black">Value</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {filteredStockItems.map(item => (
-                      <tr
-                        key={item.productId}
-                        onClick={() => changeView("LEDGER", selectedGroup, { id: item.productId, name: item.productName })}
-                        className="hover:bg-blue-50/50 cursor-pointer transition group"
-                      >
-                        <td className="px-6 py-4">
-                          <div className="font-bold text-gray-700">{item.productName}</div>
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">ID: {item.productId.slice(-6)}</span>
-                            {item.branchId && (
-                              <span className="text-[8px] font-bold text-blue-400 uppercase tracking-tighter">Branch: {String(item.branchId).slice(-6)}</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-center font-bold text-gray-400">{item.opening.qty}</td>
-                        <td className="px-6 py-4 text-center font-bold text-green-600">{item.purchasesInPeriod || 0}</td>
-                        <td className="px-6 py-4 text-center font-bold text-red-500">{item.salesInPeriod || 0}</td>
-                        <td className="px-6 py-4 text-right font-black text-gray-600">{item.closing.qty}</td>
-                        <td className="px-6 py-4 text-right font-black text-secondary">₹{item.closing.amount.toLocaleString()}</td>
+            <div className="space-y-4">
+              {/* DESKTOP TABLE */}
+              <div className="hidden md:block bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50/50 text-gray-400 uppercase text-[10px] font-black tracking-widest border-b">
+                        <th className="px-6 py-4">Product Name</th>
+                        <th className="px-6 py-4 text-center">Opening</th>
+                        <th className="px-6 py-4 text-center">Inwards</th>
+                        <th className="px-6 py-4 text-center">Outwards</th>
+                        <th className="px-6 py-4 text-right">Closing</th>
+                        <th className="px-6 py-4 text-right font-black">Value</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {filteredStockItems.map(item => (
+                        <tr
+                          key={item.productId}
+                          onClick={() => changeView("LEDGER", selectedGroup, { id: item.productId, name: item.productName })}
+                          className="hover:bg-blue-50/50 cursor-pointer transition group"
+                        >
+                          <td className="px-6 py-4">
+                            <div className="font-bold text-gray-700">{item.productName}</div>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">ID: {item.productId.slice(-6)}</span>
+                              {item.branchId && (
+                                <span className="text-[8px] font-bold text-blue-400 uppercase tracking-tighter">Branch: {String(item.branchId).slice(-6)}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center font-bold text-gray-400">{item.opening.qty}</td>
+                          <td className="px-6 py-4 text-center font-bold text-green-600">{item.purchasesInPeriod || 0}</td>
+                          <td className="px-6 py-4 text-center font-bold text-red-500">{item.salesInPeriod || 0}</td>
+                          <td className="px-6 py-4 text-right font-black text-gray-600">{item.closing.qty}</td>
+                          <td className="px-6 py-4 text-right font-black text-secondary">₹{item.closing.amount.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* MOBILE COMPACT TABLE (Items) */}
+              <div className="md:hidden">
+                <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[500px]">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          {["Product", "Opening", "In", "Out", "Closing", "Value"].map(h => (
+                            <th key={h} className="px-3 py-3 font-black text-[9px] uppercase tracking-widest text-gray-400 border-r last:border-0">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredStockItems.map(item => (
+                          <tr key={item.productId} onClick={() => changeView("LEDGER", selectedGroup, { id: item.productId, name: item.productName })} className="hover:bg-blue-50/50 transition-colors">
+                            <td className="px-3 py-3 border-r border-gray-100 font-black text-gray-700 text-[10px] uppercase truncate min-w-[120px]">{item.productName}</td>
+                            <td className="px-3 py-3 border-r border-gray-100 text-center font-bold text-gray-400 text-[10px]">{item.opening.qty}</td>
+                            <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-green-600 text-[10px]">{item.purchasesInPeriod || 0}</td>
+                            <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-red-500 text-[10px]">{item.salesInPeriod || 0}</td>
+                            <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-gray-600 text-[10px]">{item.closing.qty}</td>
+                            <td className="px-3 py-3 text-right font-black text-secondary text-[10px]">₹{Math.round(item.closing.amount || 0).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           )}

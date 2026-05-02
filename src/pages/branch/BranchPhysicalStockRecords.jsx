@@ -120,202 +120,275 @@ export default function BranchPhysicalStockRecords() {
                 <FaHistory className="text-white text-xl" />
               </div>
               <div>
-                <h1 className="text-2xl font-black text-gray-800 tracking-tight">Stock Journal Records</h1>
+                <h1 className="text-xl md:text-2xl font-black text-gray-800 tracking-tight">Stock Journal Records</h1>
                 <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest mt-0.5">
-                  Stock Journal History • {currentBranch?.name}
+                  History • {currentBranch?.name}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl gap-2">
+            <div className="flex flex-col md:flex-row items-center gap-3">
+              <div className="flex items-center bg-gray-50 border border-gray-200 px-3 py-2.5 rounded-xl gap-2 w-full md:w-auto">
                 <FaCalendarAlt className="text-violet-500 text-xs" />
                 <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
-                  className="bg-transparent text-[10px] font-black outline-none text-gray-700" />
+                  className="bg-transparent text-[10px] font-black outline-none text-gray-700 w-full" />
                 <span className="text-gray-300">|</span>
                 <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
-                  className="bg-transparent text-[10px] font-black outline-none text-gray-700" />
+                  className="bg-transparent text-[10px] font-black outline-none text-gray-700 w-full" />
               </div>
-              <button onClick={fetchRecords} disabled={loading}
-                className="px-5 py-2.5 bg-violet-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-violet-700 transition shadow-lg shadow-violet-600/20 disabled:opacity-50">
-                {loading ? "Loading..." : "Search"}
-              </button>
-              <a href="/branch/physical-stock"
-                className="px-5 py-2.5 bg-gray-100 text-gray-600 text-[10px] font-black uppercase rounded-xl hover:bg-gray-200 transition">
-                + New Entry
-              </a>
+              <div className="grid grid-cols-2 gap-2 w-full md:w-auto">
+                <button onClick={fetchRecords} disabled={loading}
+                  className="px-5 py-3 bg-violet-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-violet-700 transition shadow-lg shadow-violet-600/20 disabled:opacity-50 w-full">
+                  {loading ? "..." : "Search"}
+                </button>
+                <a href="/branch/physical-stock"
+                  className="px-5 py-3 bg-gray-800 text-white text-[10px] font-black uppercase rounded-xl hover:bg-gray-900 transition text-center w-full shadow-lg shadow-gray-200">
+                  + New
+                </a>
+              </div>
             </div>
           </div>
         </div>
 
         {/* FILTERS */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 mb-4 flex flex-wrap items-center gap-3">
-          <div className="flex-1 relative min-w-[180px]">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 mb-4 flex flex-col md:flex-row items-center gap-3">
+          <div className="relative w-full md:flex-1">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
-            <input type="text" placeholder="Search SJ ID, product, user..."
+            <input type="text" placeholder="Search SJ ID, product..."
               value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm font-semibold text-gray-800 outline-none focus:border-violet-400 transition" />
+              className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-8 pr-3 py-2.5 text-sm font-semibold text-gray-800 outline-none focus:border-violet-400 transition" />
           </div>
-          <select className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs font-bold text-gray-700 outline-none min-w-[130px]"
-            value={groupFilter} onChange={e => setGroupFilter(e.target.value)}>
-            <option value="ALL">All Groups</option>
-            {productGroups.map(g => <option key={g._id} value={g._id}>{g.name}</option>)}
-          </select>
-          <select className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs font-bold text-gray-700 outline-none min-w-[120px]"
-            value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-            <option value="ALL">All Status</option>
-            <option value="DRAFT">Draft</option>
-            <option value="APPROVED">Approved</option>
-          </select>
-          <select className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs font-bold text-gray-700 outline-none min-w-[130px]"
+          <div className="grid grid-cols-2 md:flex gap-2 w-full md:w-auto">
+            <select className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[10px] font-black text-gray-700 outline-none w-full"
+              value={groupFilter} onChange={e => setGroupFilter(e.target.value)}>
+              <option value="ALL">ALL GROUPS</option>
+              {productGroups.map(g => <option key={g._id} value={g._id}>{g.name.toUpperCase()}</option>)}
+            </select>
+            <select className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[10px] font-black text-gray-700 outline-none w-full"
+              value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="ALL">ALL STATUS</option>
+              <option value="DRAFT">DRAFT</option>
+              <option value="APPROVED">APPROVED</option>
+            </select>
+          </div>
+          <select className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[10px] font-black text-gray-700 outline-none w-full md:w-48"
             value={adjFilter} onChange={e => setAdjFilter(e.target.value)}>
-            <option value="ALL">All Adjustments</option>
-            <option value="INWARD">Inward Only</option>
-            <option value="OUTWARD">Outward Only</option>
+            <option value="ALL">ALL ADJUSTMENTS</option>
+            <option value="INWARD">INWARD ONLY</option>
+            <option value="OUTWARD">OUTWARD ONLY</option>
           </select>
-          <span className="ml-auto text-[10px] font-black text-gray-400 uppercase tracking-widest">
-            {filteredSorted.length} records
-          </span>
         </div>
 
-        {/* TABLE */}
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50/80 border-b border-gray-100">
-                  <Th label="SJ ID" col="sjId" />
-                  <Th label="Date" col="entryDate" />
-                  <Th label="Product Group" col="productGroupName" />
-                  <Th label="Product" col="productName" />
-                  <Th label="System Qty" col="systemQty" right />
-                  <Th label="Physical Qty" col="physicalQty" right />
-                  <Th label="Inward ↑" col="inwardQty" right />
-                  <Th label="Outward ↓" col="outwardQty" right />
-                  <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Batch / Expiry</th>
-                  <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Checked By</th>
-                  <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Edit History</th>
-                  <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Approved By</th>
-                  <Th label="Status" col="status" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {loading ? (
-                  <tr><td colSpan="13" className="px-6 py-20 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="w-10 h-10 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">Loading records...</p>
-                    </div>
-                  </td></tr>
-                ) : filteredSorted.length === 0 ? (
-                  <tr><td colSpan="13" className="px-6 py-20 text-center">
-                    <div className="opacity-30 flex flex-col items-center gap-2">
-                      <FaHistory size={48} className="text-gray-400" />
-                      <p className="text-lg font-bold text-gray-800">No records found</p>
-                    </div>
-                  </td></tr>
-                ) : (
-                  filteredSorted.map(r => (
-                    <React.Fragment key={r._id}>
-                      <tr className="hover:bg-gray-50/80 transition-colors group">
-                        <td className="px-4 py-4">
-                          <span className="text-xs font-black text-violet-600">{r.sjId}</span>
-                        </td>
-                        <td className="px-4 py-4">
-                          <p className="text-[10px] font-black text-gray-800 uppercase">
-                            {new Date(r.entryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-                          </p>
-                          <p className="text-[9px] text-gray-400 font-bold">
-                            {new Date(r.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
-                          </p>
-                        </td>
-                        <td className="px-4 py-4 text-[10px] font-black text-gray-600">{r.productGroupName || "-"}</td>
-                        <td className="px-4 py-4">
-                          <p className="text-xs font-black text-gray-800 max-w-[150px] truncate">{r.productName}</p>
-                        </td>
-                        <td className="px-4 py-4 text-right text-xs font-black text-blue-600">{r.systemQty}</td>
-                        <td className="px-4 py-4 text-right text-xs font-black text-gray-800">{r.physicalQty}</td>
-                        <td className="px-4 py-4 text-right">
-                          {r.inwardQty > 0
-                            ? <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg text-[10px] font-black">+{r.inwardQty}</span>
-                            : <span className="text-gray-200 text-[10px]">-</span>}
-                        </td>
-                        <td className="px-4 py-4 text-right">
-                          {r.outwardQty > 0
-                            ? <span className="bg-rose-100 text-rose-700 px-2 py-1 rounded-lg text-[10px] font-black">-{r.outwardQty}</span>
-                            : <span className="text-gray-200 text-[10px]">-</span>}
-                        </td>
-                        <td className="px-4 py-4">
-                          {r.batch && <p className="text-[9px] font-bold text-gray-600">Batch: {r.batch}</p>}
-                          {r.expiryDate && <p className="text-[9px] font-bold text-orange-500">
-                            Exp: {new Date(r.expiryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" })}
-                          </p>}
-                          {!r.batch && !r.expiryDate && <span className="text-gray-200 text-[10px]">-</span>}
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex flex-wrap gap-1 max-w-[140px]">
-                            {(r.checkedBy || []).map((c, i) => (
-                              <span key={i} className="bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded text-[9px] font-black">
-                                {c.username}
-                              </span>
-                            ))}
-                            {(!r.checkedBy || r.checkedBy.length === 0) && <span className="text-gray-200 text-[10px]">-</span>}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          {r.physicalEditLog?.length > 0 && (
-                            <button onClick={() => setExpandedRow(expandedRow === r._id ? null : r._id)}
-                              className="flex items-center gap-1 text-[9px] font-black text-gray-400 hover:text-violet-600 transition uppercase">
-                              {r.physicalEditLog.length} edit{r.physicalEditLog.length > 1 ? "s" : ""}
-                              {expandedRow === r._id ? <FaChevronUp size={8} /> : <FaChevronDown size={8} />}
-                            </button>
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
-                          {r.approvedBy?.username
-                            ? <div>
-                                <p className="text-[10px] font-black text-emerald-600">{r.approvedBy.username}</p>
-                                {r.approvedBy.approvedAt && (
-                                  <p className="text-[9px] text-gray-400 font-bold">
-                                    {new Date(r.approvedBy.approvedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                                  </p>
-                                )}
-                              </div>
-                            : <span className="text-gray-300 text-[10px]">Pending</span>}
-                        </td>
-                        <td className="px-4 py-4">
-                          {r.status === "APPROVED"
-                            ? <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase">✓ Approved</span>
-                            : <span className="bg-amber-100 text-amber-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase">Draft</span>}
-                        </td>
-                      </tr>
-                      {/* Edit History Expand Row */}
-                      {expandedRow === r._id && (
-                        <tr className="bg-violet-50/30">
-                          <td colSpan="13" className="px-6 py-4">
-                            <div className="bg-white rounded-xl border border-violet-100 p-4">
-                              <p className="text-[10px] font-black text-violet-600 uppercase tracking-widest mb-3">Physical Qty Edit History</p>
-                              <div className="space-y-2">
-                                {r.physicalEditLog.map((log, i) => (
-                                  <div key={i} className="flex items-center gap-4 text-[10px]">
-                                    <span className="font-black text-gray-600">{log.username}</span>
-                                    <span className="text-gray-400">
-                                      {log.oldQty !== null && log.oldQty !== undefined ? `${log.oldQty} →` : "Initial:"} <strong>{log.newQty}</strong>
-                                    </span>
-                                    <span className="text-gray-300">
-                                      {new Date(log.editedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true })}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
+        <div className="space-y-4">
+          {/* DESKTOP TABLE */}
+          <div className="hidden md:block bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/80 border-b border-gray-100">
+                    <Th label="SJ ID" col="sjId" />
+                    <Th label="Date" col="entryDate" />
+                    <Th label="Product Group" col="productGroupName" />
+                    <Th label="Product" col="productName" />
+                    <Th label="System Qty" col="systemQty" right />
+                    <Th label="Physical Qty" col="physicalQty" right />
+                    <Th label="MRP" col="mrp" right />
+                    <Th label="Inward ↑" col="inwardQty" right />
+                    <Th label="Outward ↓" col="outwardQty" right />
+                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Batch / Expiry</th>
+                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Checked By</th>
+                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Edit History</th>
+                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Approved By</th>
+                    <Th label="Status" col="status" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {loading ? (
+                    <tr><td colSpan="13" className="px-6 py-20 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-10 h-10 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">Loading records...</p>
+                      </div>
+                    </td></tr>
+                  ) : filteredSorted.length === 0 ? (
+                    <tr><td colSpan="13" className="px-6 py-20 text-center">
+                      <div className="opacity-30 flex flex-col items-center gap-2">
+                        <FaHistory size={48} className="text-gray-400" />
+                        <p className="text-lg font-bold text-gray-800">No records found</p>
+                      </div>
+                    </td></tr>
+                  ) : (
+                    filteredSorted.map(r => (
+                      <React.Fragment key={r._id}>
+                        <tr className="hover:bg-gray-50/80 transition-colors group">
+                          <td className="px-4 py-4">
+                            <span className="text-xs font-black text-violet-600">{r.sjId}</span>
+                          </td>
+                          <td className="px-4 py-4">
+                            <p className="text-[10px] font-black text-gray-800 uppercase">
+                              {new Date(r.entryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                            </p>
+                            <p className="text-[9px] text-gray-400 font-bold">
+                              {new Date(r.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                            </p>
+                          </td>
+                          <td className="px-4 py-4 text-[10px] font-black text-gray-600">{r.productGroupName || "-"}</td>
+                          <td className="px-4 py-4">
+                            <p className="text-xs font-black text-gray-800 max-w-[150px] truncate">{r.productName}</p>
+                          </td>
+                          <td className="px-4 py-4 text-right text-xs font-black text-blue-600">{r.systemQty}</td>
+                          <td className="px-4 py-4 text-right text-xs font-black text-gray-800">{r.physicalQty}</td>
+                          <td className="px-4 py-4 text-right text-xs font-black text-blue-600">₹{r.mrp || 0}</td>
+                          <td className="px-4 py-4 text-right">
+                            {r.inwardQty > 0
+                              ? <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg text-[10px] font-black">+{r.inwardQty}</span>
+                              : <span className="text-gray-200 text-[10px]">-</span>}
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            {r.outwardQty > 0
+                              ? <span className="bg-rose-100 text-rose-700 px-2 py-1 rounded-lg text-[10px] font-black">-{r.outwardQty}</span>
+                              : <span className="text-gray-200 text-[10px]">-</span>}
+                          </td>
+                          <td className="px-4 py-4">
+                            {r.batch && <p className="text-[9px] font-bold text-gray-600">Batch: {r.batch}</p>}
+                            {r.expiryDate && <p className="text-[9px] font-bold text-orange-500">
+                              Exp: {new Date(r.expiryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" })}
+                            </p>}
+                            {!r.batch && !r.expiryDate && <span className="text-gray-200 text-[10px]">-</span>}
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="flex flex-wrap gap-1 max-w-[140px]">
+                              {(r.checkedBy || []).map((c, i) => (
+                                <span key={i} className="bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded text-[9px] font-black">
+                                  {c.username}
+                                </span>
+                              ))}
+                              {(!r.checkedBy || r.checkedBy.length === 0) && <span className="text-gray-200 text-[10px]">-</span>}
                             </div>
                           </td>
+                          <td className="px-4 py-4">
+                            {r.physicalEditLog?.length > 0 && (
+                              <button onClick={() => setExpandedRow(expandedRow === r._id ? null : r._id)}
+                                className="flex items-center gap-1 text-[9px] font-black text-gray-400 hover:text-violet-600 transition uppercase">
+                                {r.physicalEditLog.length} edit{r.physicalEditLog.length > 1 ? "s" : ""}
+                                {expandedRow === r._id ? <FaChevronUp size={8} /> : <FaChevronDown size={8} />}
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-4 py-4">
+                            {r.approvedBy?.username
+                              ? <div>
+                                  <p className="text-[10px] font-black text-emerald-600">{r.approvedBy.username}</p>
+                                  {r.approvedBy.approvedAt && (
+                                    <p className="text-[9px] text-gray-400 font-bold">
+                                      {new Date(r.approvedBy.approvedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                                    </p>
+                                  )}
+                                </div>
+                              : <span className="text-gray-300 text-[10px]">Pending</span>}
+                          </td>
+                          <td className="px-4 py-4">
+                            {r.status === "APPROVED"
+                              ? <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase">✓ Approved</span>
+                              : <span className="bg-amber-100 text-amber-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase">Draft</span>}
+                          </td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  ))
-                )}
-              </tbody>
-            </table>
+                        {/* Edit History Expand Row */}
+                        {expandedRow === r._id && (
+                          <tr className="bg-violet-50/30">
+                            <td colSpan="13" className="px-6 py-4">
+                              <div className="bg-white rounded-xl border border-violet-100 p-4">
+                                <p className="text-[10px] font-black text-violet-600 uppercase tracking-widest mb-3">Physical Qty Edit History</p>
+                                <div className="space-y-2">
+                                  {r.physicalEditLog.map((log, i) => (
+                                    <div key={i} className="flex items-center gap-4 text-[10px]">
+                                      <span className="font-black text-gray-600">{log.username}</span>
+                                      <span className="text-gray-400">
+                                        {log.oldQty !== null && log.oldQty !== undefined ? `${log.oldQty} →` : "Initial:"} <strong>{log.newQty}</strong>
+                                      </span>
+                                      <span className="text-gray-300">
+                                        {new Date(log.editedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true })}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* MOBILE COMPACT TABLE (Horizontal Scroll) */}
+          <div className="md:hidden">
+            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[700px]">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      {["Date", "SJ ID", "Product", "Type", "Qty", "Phy Qty", "MRP", "Status"].map(h => (
+                        <th key={h} className="px-3 py-3 font-black text-[9px] uppercase tracking-widest text-gray-400 border-r last:border-0">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {loading ? (
+                      <tr>
+                        <td colSpan="7" className="py-20 text-center">
+                          <div className="w-8 h-8 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin mx-auto mb-2" />
+                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Loading...</p>
+                        </td>
+                      </tr>
+                    ) : filteredSorted.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="py-12 text-center text-gray-300 font-black uppercase text-[10px] tracking-widest">
+                          No records found
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredSorted.map(r => (
+                        <tr key={r._id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-3 py-3 border-r border-gray-100 text-[10px] font-bold text-gray-500">
+                            {new Date(r.entryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100 font-black text-[10px] text-violet-600">
+                            {r.sjId}
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100 min-w-[150px]">
+                            <p className="font-black text-gray-700 text-[10px] uppercase truncate leading-tight">{r.productName}</p>
+                            <p className="text-[8px] font-bold text-gray-400 uppercase">{r.productGroupName || "-"}</p>
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100 text-center">
+                            {r.inwardQty > 0 && <span className="text-emerald-600 font-black text-[9px]">INWARD</span>}
+                            {r.outwardQty > 0 && <span className="text-rose-500 font-black text-[9px]">OUTWARD</span>}
+                            {r.inwardQty === 0 && r.outwardQty === 0 && <span className="text-gray-300">-</span>}
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-[10px] text-gray-700">
+                            {r.inwardQty || r.outwardQty || 0}
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-[10px] text-gray-800">
+                            {r.physicalQty}
+                          </td>
+                          <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-[10px] text-blue-600">
+                            ₹{r.mrp || 0}
+                          </td>
+                          <td className="px-3 py-3">
+                            {r.status === "APPROVED" 
+                              ? <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase">Approved</span>
+                              : <span className="text-[8px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-full uppercase">Draft</span>
+                            }
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>
