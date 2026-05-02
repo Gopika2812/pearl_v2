@@ -294,12 +294,11 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       return val >= 0 ? `₹${absVal} Dr` : `₹${absVal} Cr`;
     };
 
-    // 🏦 SECURE SELLER DATA (Ensure branch info is fetched even if populate was shallow)
-    let sellerInfo = salesOrder.branchId;
-    if (sellerInfo && !sellerInfo.name) {
-      // If it's just an ID or missing fields, fetch it fresh
-      const branchData = await Branch.findById(sellerInfo._id || sellerInfo).lean();
-      if (branchData) sellerInfo = branchData;
+    // 🏦 SECURE SELLER DATA (Always fetch fresh from DB to avoid stale data)
+    let sellerInfo = null;
+    const branchId = salesOrder.branchId?._id || salesOrder.branchId;
+    if (branchId) {
+      sellerInfo = await Branch.findById(branchId).lean();
     }
 
     const previewData = {
@@ -329,8 +328,8 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         pincode: sellerInfo?.pincode || "627003",
         gstin: sellerInfo?.gstin || "33DULPS2600Q1Z6",
         phone: sellerInfo?.phone || "9429692970",
-        gpayNo: sellerInfo?.gpayNo || "",
-        upiId: sellerInfo?.upiId || "",
+        gpayNo: sellerInfo?.gpayNo || sellerInfo?.upiId || "",
+        upiId: sellerInfo?.upiId || sellerInfo?.gpayNo || "",
         stateCode: sellerInfo?.stateCode || "33",
         logo: sellerInfo?.logo || "/logo.jpeg",
       },
@@ -715,6 +714,18 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           }
         }
 
+        let dynamicOpeningBalance = 0;
+        let closingBalance = 0;
+
+        if (customer) {
+          // Calculate opening balance BEFORE we apply the current update
+          // Opening Balance = Current DB Balance - (last grand total if this was already invoiced)
+          const currentBalance = (customer.debit || 0) - (customer.credit || 0);
+          const balanceAdjustment = salesOrder.invoiceGenerated ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
+          dynamicOpeningBalance = currentBalance - balanceAdjustment;
+          closingBalance = dynamicOpeningBalance + grandTotal;
+        }
+
         // ==========================================
         // 4️⃣ UPDATE CUSTOMER BALANCE (SINGLE-PASS)
         // ==========================================
@@ -789,6 +800,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           stateCode: branch.stateCode || "33",
         } : {};
 
+
         if (invoice) {
           invoice.customer = customerSnapshot;
           invoice.seller = sellerSnapshot;
@@ -801,6 +813,9 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           invoice.commonDiscount = commonDiscount;
           invoice.extraExpenseAmount = extraExpenseAmount;
           invoice.grandTotal = grandTotal;
+          invoice.openingBalance = dynamicOpeningBalance;
+          invoice.closingBalance = closingBalance;
+          invoice.balanceType = closingBalance >= 0 ? "Dr" : "Cr";
           invoice.billingPerson = finalizedByUsername || invoice.billingPerson || "System";
           invoice.generatedBy = finalizedByUsername || invoice.generatedBy || "System";
           invoice.deliveryMan = salesOrder.deliveryMan;
@@ -826,6 +841,9 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             commonDiscount: commonDiscount,
             extraExpenseAmount: extraExpenseAmount,
             grandTotal,
+            openingBalance: dynamicOpeningBalance,
+            closingBalance: closingBalance,
+            balanceType: closingBalance >= 0 ? "Dr" : "Cr",
             billingPerson: finalizedByUsername || "System",
             generatedBy: finalizedByUsername || "System",
             deliveryMan: salesOrder.deliveryMan,
@@ -1382,6 +1400,9 @@ router.get("", async (req, res) => {
         extraExpenseAmount: 1,
         einvoiceStatus: 1,
         ewayBillNo: 1,
+        openingBalance: 1,
+        closingBalance: 1,
+        seller: 1,
         ewayBillPdfUrl: 1,
         invoicePdfUrl: 1,
         irn: 1,

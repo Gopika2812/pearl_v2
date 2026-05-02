@@ -372,11 +372,6 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                       Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
                     </div>
                   </div>
-                  ${previewData?.seller?.upiId ? `
-                  <div class="upi-qr-box">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=70x70&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" alt="UPI QR" />
-                    <div class="upi-qr-label">Scan to Pay</div>
-                  </div>` : ''}
                 </div>
 
                 <div class="section-title">📋 ${documentTitle} DETAILS</div>
@@ -438,22 +433,31 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
 
                 <div class="total-section" style="display: flex; gap: 10px;">
                   <div style="flex: 1; text-align: left;">
-                    <div style="background: #f8fafc; padding: 10px; font-size: 11px; border-left: 4px solid #000; border-radius: 4px;">
-                      <div><strong>Closing Balance:</strong> ₹${(() => {
-                        const actualParty = party?.customerId || party?.vendorId || party || {};
-                        const debit = Number(actualParty.debit || 0);
-                        const credit = Number(actualParty.credit || 0);
-                        
-                        // For Vendors (isDN), Balance = Credit - Debit
-                        // For Customers, Balance = Debit - Credit
-                        const bal = isDN ? (credit - debit) : (debit - credit);
-                        const absBal = Math.abs(bal).toFixed(2);
-                        const label = isDN 
-                          ? (bal > 0 ? "Cr" : bal < 0 ? "Dr" : "") 
-                          : (bal > 0 ? "Dr" : bal < 0 ? "Cr" : "");
-                        
-                        return `${absBal} ${label}`;
-                      })()}</div>
+                    <div style="background: #f8fafc; padding: 10px; font-size: 11px; border-left: 4px solid #000; border-radius: 4px; display: flex; gap: 20px; align-items: center;">
+                      <div>
+                         <span style="color: #64748b; font-weight: bold; text-transform: uppercase; font-size: 9px; display: block;">Previous Balance:</span>
+                         <span style="font-size: 13px; font-weight: 900;">₹${(() => {
+                            const val = Number(previewData?.openingBalance || 0);
+                            const absVal = Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                            const label = val >= 0 ? "Dr" : "Cr";
+                            return `${absVal} ${label}`;
+                         })()}</span>
+                      </div>
+                      <div>
+                         <span style="color: #64748b; font-weight: bold; text-transform: uppercase; font-size: 9px; display: block;">Closing Balance:</span>
+                         <span style="font-size: 13px; font-weight: 900;">₹${(() => {
+                            const val = Number(previewData?.closingBalance || 0);
+                            const absVal = Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                            const label = val >= 0 ? "Dr" : "Cr";
+                            return `${absVal} ${label}`;
+                         })()}</span>
+                      </div>
+                      ${previewData?.seller?.gpayNo || previewData?.seller?.upiId ? `
+                        <div style="text-align: center; margin-left: 10px; border-left: 1px solid #e2e8f0; padding-left: 15px;">
+                           <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.gpayNo || previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" style="width: 15mm; height: 15mm; border: 1px solid #e2e8f0; padding: 1mm; border-radius: 4px;" alt="GPay QR" />
+                           <div style="font-size: 6px; font-weight: 800; color: #475569; margin-top: 1px;">SCAN TO PAY</div>
+                        </div>
+                      ` : ""}
                     </div>
                   </div>
                   <div style="flex: 1; text-align: right;">
