@@ -318,9 +318,9 @@ class GSTZenService {
           ackNo: result.AckNo || result.ackNo,
           ackDate: result.AckDt || result.ackDate,
           ewayBillNo: result.EwbNo || result.ewbNo,
-          invoicePdfUrl: result.InvoicePdfUrl,
-          ewayBillPdfUrl: result.EWayBillPdfUrl,
-          qrCodeUrl: qrUrl,
+          invoicePdfUrl: this.makeAbsoluteUrl(result.InvoicePdfUrl),
+          ewayBillPdfUrl: this.makeAbsoluteUrl(result.EWayBillPdfUrl),
+          qrCodeUrl: this.makeAbsoluteUrl(qrUrl),
           signedInvoice: result.SignedInvoice,
           signedQrCode: signedQr,
           signedQrCodeImgUrl: qrImgData // Base64 if returned
@@ -395,7 +395,7 @@ class GSTZenService {
           ewayBillNo: ewbNo,
           ewayBillDate: result.EwbDt || result.ewbDate,
           ewayBillValidUntil: result.EwbValidTill || result.ewbValidUntil,
-          ewayBillPdfUrl: result.EWayBillPdfUrl
+          ewayBillPdfUrl: this.makeAbsoluteUrl(result.EWayBillPdfUrl)
         };
       } else {
         // Find specific errors in InfoDtls if possible
@@ -418,6 +418,14 @@ class GSTZenService {
     const day = String(date.getDate()).padStart(2, "0");
     const month = String(date.getMonth() + 1).padStart(2, "0");
     return `${day}/${month}/${date.getFullYear()}`;
+  }
+  
+  makeAbsoluteUrl(url) {
+    if (!url || typeof url !== "string") return url;
+    if (url.startsWith("/")) {
+      return `${this.baseUrl}${url}`;
+    }
+    return url;
   }
 }
 

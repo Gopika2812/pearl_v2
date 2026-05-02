@@ -1116,6 +1116,15 @@ const BranchInvoicedOrders = () => {
                                         if (hasIgst) igst += tGst;
                                         else { cgst += tGst / 2; sgst += tGst / 2; }
 
+                                        // 3. Extra Expenses GST
+                                        (order.extraExpenses || []).forEach(exp => {
+                                          if (hasIgst) igst += (exp.gstAmount || 0);
+                                          else {
+                                            cgst += (exp.gstAmount || 0) / 2;
+                                            sgst += (exp.gstAmount || 0) / 2;
+                                          }
+                                        });
+
                                         return hasIgst ? (
                                           <div className="flex justify-between text-xs font-black text-blue-600 border-t border-gray-50 pt-2">
                                             <span>IGST (Merged)</span>
@@ -1139,6 +1148,23 @@ const BranchInvoicedOrders = () => {
                                         <div className="flex justify-between text-xs text-purple-600 font-bold border-t border-gray-50 pt-2">
                                           <span>Transport Charge (+)</span>
                                           <span>₹{(order.transportCharge || 0).toFixed(2)}</span>
+                                        </div>
+                                      )}
+
+                                      {(order.extraExpenseAmount > 0 || (order.extraExpenses || []).length > 0) && (
+                                        <div className="border-t border-gray-50 pt-2 space-y-1">
+                                          {(order.extraExpenses || []).map((exp, i) => (
+                                            <div key={i} className="flex justify-between text-[10px] text-gray-500 font-bold">
+                                              <span>{exp.expenseName} (+)</span>
+                                              <span>₹{(exp.basePrice || 0).toFixed(2)}</span>
+                                            </div>
+                                          ))}
+                                          {(!order.extraExpenses || order.extraExpenses.length === 0) && order.extraExpenseAmount > 0 && (
+                                            <div className="flex justify-between text-xs text-indigo-600 font-bold">
+                                              <span>Extra Expenses (+)</span>
+                                              <span>₹{(order.extraExpenseAmount || 0).toFixed(2)}</span>
+                                            </div>
+                                          )}
                                         </div>
                                       )}
 
@@ -1286,6 +1312,9 @@ const BranchInvoicedOrders = () => {
                                           Product Name
                                         </th>
                                         <th className="text-center py-2 px-3">
+                                          HSN
+                                        </th>
+                                        <th className="text-center py-2 px-3">
                                           SO Qty
                                         </th>
                                         <th className="text-center py-2 px-3">
@@ -1345,6 +1374,9 @@ const BranchInvoicedOrders = () => {
                                                   <td className="py-2 px-3 font-semibold">
                                                     {invoiceItem.name}
                                                   </td>
+                                                   <td className="py-2 px-3 text-center text-gray-500 font-bold">
+                                                     {invoiceItem.hsn || "-"}
+                                                   </td>
                                                   <td className={`py-2 px-3 text-center font-bold ${originalItem?.isNegativeStockBilled ? 'text-red-600 bg-red-50 rounded shadow-sm border border-red-100 flex items-center justify-center gap-1' : ''}`}>
                                                     {originalItem?.qty ? `${originalItem.qty} ${originalItem.unit || "Units"} ${originalItem.altQty > 0 ? `(${originalItem.altQty} ${originalItem.altUnit})` : ""}` : "-"} {originalItem?.isNegativeStockBilled && <span title="Billed with negative stock">⚠️</span>}
                                                   </td>

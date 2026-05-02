@@ -74,6 +74,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       transportCharge: customTransportCharge,
       transportGstPercent: customTransportGstPercent,
       extraExpenseAmount: customExtraExpenseAmount,
+      extraExpenses: customExtraExpenses,
       finalizedBy,
       finalizedByUsername
     } = req.body;
@@ -83,7 +84,8 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       .populate({
         path: "customer.customerId",
         populate: { path: "customerGroup" }
-      });
+      })
+      .populate("items.productId lastInvoicedItems.productId");
 
     if (!salesOrder) {
       return res.status(404).json({ message: "Sales order not found" });
@@ -102,10 +104,12 @@ router.post("/preview/:salesOrderId", async (req, res) => {
 
       const confirmedQty = Number(item.confirmedQty || item.qty || 0);
       const sellingPrice = Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0));
-      const gstPercent = Number(item.gst || (originalItem ? originalItem.gst : 0));
-      const cgstPercent = Number(item.cgst || (originalItem ? originalItem.cgst : 0));
-      const sgstPercent = Number(item.sgst || (originalItem ? originalItem.sgst : 0));
-      const igstPercent = Number(item.igst || (originalItem ? originalItem.igst : 0));
+      
+      // FALLBACK GST LOGIC: Use originalItem values, but if 0, check productId master data
+      const gstPercent = Number(item.gst || (originalItem ? (originalItem.gst || originalItem.productId?.gst || 0) : 0));
+      const cgstPercent = Number(item.cgst || (originalItem ? (originalItem.cgst || (gstPercent ? gstPercent / 2 : 0)) : (gstPercent / 2)));
+      const sgstPercent = Number(item.sgst || (originalItem ? (originalItem.sgst || (gstPercent ? gstPercent / 2 : 0)) : (gstPercent / 2)));
+      const igstPercent = Number(item.igst || (originalItem ? (originalItem.igst || 0) : 0));
       const discountPercent = Number(item.discountPercent || 0);
       const discountAmount = Number(item.discountAmount || 0);
 
@@ -164,15 +168,28 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       ? Number(customExtraExpenseAmount)
       : (salesOrder.extraExpenseAmount || 0);
 
+    const extraExpensesList = customExtraExpenses !== undefined ? customExtraExpenses : (salesOrder.extraExpenses || []);
+
+    let extraExpenseCgst = 0, extraExpenseSgst = 0, extraExpenseIgst = 0;
+    extraExpensesList.forEach(exp => {
+      const gstAmt = Number(exp.gstAmount || 0);
+      if (igstTotal === 0) {
+        extraExpenseCgst += gstAmt / 2;
+        extraExpenseSgst += gstAmt / 2;
+      } else {
+        extraExpenseIgst += gstAmt;
+      }
+    });
+
     const tGstPercent = customTransportGstPercent !== undefined
       ? Number(customTransportGstPercent)
       : (salesOrder.transportGstPercent || 0);
     const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
 
     const totalTax = {
-      cgst: Math.round((cgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
-      sgst: Math.round((sgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
-      igst: Math.round((igstTotal + (igstTotal > 0 ? tGstAmount : 0)) * 100) / 100,
+      cgst: Math.round((cgstTotal + extraExpenseCgst + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
+      sgst: Math.round((sgstTotal + extraExpenseSgst + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
+      igst: Math.round((igstTotal + extraExpenseIgst + (igstTotal > 0 ? tGstAmount : 0)) * 100) / 100,
     };
     totalTax.total = Math.round((totalTax.cgst + totalTax.sgst + totalTax.igst) * 100) / 100;
 
@@ -342,7 +359,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
       transportCharge: tCharge,
       transportGstPercent: tGstPercent,
       transportGstAmount: tGstAmount,
-      extraExpenses: salesOrder.extraExpenses || [],
+      extraExpenses: extraExpensesList,
       extraExpenseAmount: extraExpenseAmount,
       commonDiscount: commonDiscount,
       grandTotal: grandTotal,
@@ -378,6 +395,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
       transportCharge: customTransportCharge,
       transportGstPercent: customTransportGstPercent,
       extraExpenseAmount: customExtraExpenseAmount,
+      extraExpenses: customExtraExpenses,
       finalizedBy,
       finalizedByUsername
     } = req.body;
@@ -391,7 +409,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
       session.startTransaction();
 
       try {
-        const salesOrder = await SalesOrder.findById(salesOrderId).session(session);
+        const salesOrder = await SalesOrder.findById(salesOrderId).session(session).populate("items.productId lastInvoicedItems.productId invoiceItems.productId");
 
         if (!salesOrder) {
           await session.abortTransaction();
@@ -616,7 +634,9 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           const originalQty = Number(item.originalQty || (originalItem ? originalItem.qty : confirmedQty));
           const backOrderQty = Number(item.backOrderQty || Math.max(0, originalQty - confirmedQty));
           const sellingPrice = Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0));
-          const gstPercent = Number(item.gst || (originalItem ? originalItem.gst : 0));
+          
+          // FALLBACK GST LOGIC
+          const gstPercent = Number(item.gst || (originalItem ? (originalItem.gst || originalItem.productId?.gst || 0) : 0));
           const discountPercent = Number(item.discountPercent || 0);
           const discountAmount = Number(item.discountAmount || 0);
 
@@ -628,8 +648,8 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             discountAmount,
             sellingPrice,
             gst: gstPercent,
-            cgst: item.cgst !== undefined ? Number(item.cgst) : (originalItem ? (originalItem.cgst || 0) : (item.igst ? 0 : gstPercent / 2)),
-            sgst: item.sgst !== undefined ? Number(item.sgst) : (originalItem ? (originalItem.sgst || 0) : (item.igst ? 0 : gstPercent / 2)),
+            cgst: item.cgst !== undefined ? Number(item.cgst) : (originalItem ? (originalItem.cgst || (item.igst ? 0 : gstPercent / 2)) : (item.igst ? 0 : gstPercent / 2)),
+            sgst: item.sgst !== undefined ? Number(item.sgst) : (originalItem ? (originalItem.sgst || (item.igst ? 0 : gstPercent / 2)) : (item.igst ? 0 : gstPercent / 2)),
             igst: item.igst !== undefined ? Number(item.igst) : (originalItem ? (originalItem.igst || 0) : 0),
             name: item.name || (originalItem ? originalItem.name : "Unknown Product"),
             hsn: item.hsn || (originalItem ? originalItem.hsn : "")
@@ -680,15 +700,27 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         const commonDiscount = customCommonDiscount !== undefined ? Number(customCommonDiscount) : (salesOrder.commonDiscount || 0);
         const tCharge = customTransportCharge !== undefined ? Number(customTransportCharge) : (salesOrder.transportCharge || 0);
         const extraExpenseAmount = customExtraExpenseAmount !== undefined ? Number(customExtraExpenseAmount) : (salesOrder.extraExpenseAmount || 0);
+        const extraExpensesList = customExtraExpenses !== undefined ? customExtraExpenses : (salesOrder.extraExpenses || []);
+
+        let extraExpenseCgst = 0, extraExpenseSgst = 0, extraExpenseIgst = 0;
+        extraExpensesList.forEach(exp => {
+          const gstAmt = Number(exp.gstAmount || 0);
+          if (igstTotal === 0) {
+            extraExpenseCgst += gstAmt / 2;
+            extraExpenseSgst += gstAmt / 2;
+          } else {
+            extraExpenseIgst += gstAmt;
+          }
+        });
 
         const tGstPercent = customTransportGstPercent !== undefined
           ? Number(customTransportGstPercent)
           : (salesOrder.transportGstPercent || 0);
         const tGstAmount = Math.round((tCharge * tGstPercent / 100) * 100) / 100;
         const totalTax = {
-          cgst: Math.round((cgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
-          sgst: Math.round((sgstTotal + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
-          igst: Math.round((igstTotal + (igstTotal > 0 ? tGstAmount : 0)) * 100) / 100,
+          cgst: Math.round((cgstTotal + extraExpenseCgst + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
+          sgst: Math.round((sgstTotal + extraExpenseSgst + (igstTotal === 0 ? tGstAmount / 2 : 0)) * 100) / 100,
+          igst: Math.round((igstTotal + extraExpenseIgst + (igstTotal > 0 ? tGstAmount : 0)) * 100) / 100,
         };
         totalTax.total = Math.round((totalTax.cgst + totalTax.sgst + totalTax.igst) * 100) / 100;
 
@@ -701,13 +733,13 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         // ==========================================
         const lastItems = salesOrder.lastInvoicedItems || [];
         const allProductIds = new Set([
-          ...processedItems.map(i => i.productId.toString()),
-          ...lastItems.map(i => i.productId.toString())
+          ...processedItems.map(i => i.productId ? (i.productId._id || i.productId).toString() : null).filter(Boolean),
+          ...lastItems.map(i => i.productId ? (i.productId._id || i.productId).toString() : null).filter(Boolean)
         ]);
 
         for (const pId of allProductIds) {
-          const newItem = processedItems.find(i => i.productId.toString() === pId);
-          const oldItem = lastItems.find(i => i.productId.toString() === pId);
+          const newItem = processedItems.find(i => i.productId && (i.productId._id || i.productId).toString() === pId);
+          const oldItem = lastItems.find(i => i.productId && (i.productId._id || i.productId).toString() === pId);
           const deltaQty = (newItem?.qty || 0) - (oldItem?.qty || 0);
           if (deltaQty !== 0) {
             await Product.updateOne({ _id: pId }, { $inc: { totalQty: -deltaQty } }, { session });
@@ -812,6 +844,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           invoice.transportGstAmount = tGstAmount;
           invoice.commonDiscount = commonDiscount;
           invoice.extraExpenseAmount = extraExpenseAmount;
+          invoice.extraExpenses = extraExpensesList;
           invoice.grandTotal = grandTotal;
           invoice.openingBalance = dynamicOpeningBalance;
           invoice.closingBalance = closingBalance;
@@ -840,11 +873,12 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             transportGstAmount: tGstAmount,
             commonDiscount: commonDiscount,
             extraExpenseAmount: extraExpenseAmount,
+            extraExpenses: extraExpensesList,
             grandTotal,
             openingBalance: dynamicOpeningBalance,
             closingBalance: closingBalance,
             balanceType: closingBalance >= 0 ? "Dr" : "Cr",
-            billingPerson: finalizedByUsername || "System",
+            billingPerson: finalizedByUsername || salesOrder.billingPerson || "System",
             generatedBy: finalizedByUsername || "System",
             deliveryMan: salesOrder.deliveryMan,
             status: "FINALIZED",
@@ -1275,6 +1309,43 @@ router.put("/:invoiceId/revoke", async (req, res) => {
     res.status(500).json({ message: error.message || "Failed to revoke invoice" });
   } finally {
     session.endSession();
+  }
+});
+
+// POST - Get last invoice info for a batch of customers (for Follow-Up page)
+router.post("/last-by-customers", async (req, res) => {
+  try {
+    const { customerIds, branchId } = req.body;
+    if (!customerIds || !Array.isArray(customerIds) || customerIds.length === 0) {
+      return res.status(400).json({ success: false, message: "customerIds array required" });
+    }
+
+    const objectIds = customerIds
+      .filter(id => mongoose.Types.ObjectId.isValid(id))
+      .map(id => new mongoose.Types.ObjectId(id));
+
+    const results = await Invoice.aggregate([
+      {
+        $match: {
+          "customer.customerId": { $in: objectIds },
+          status: { $ne: "CANCELLED" },
+          ...(branchId ? { branchId: new mongoose.Types.ObjectId(branchId) } : {})
+        }
+      },
+      { $sort: { invoiceDate: -1 } },
+      {
+        $group: {
+          _id: "$customer.customerId",
+          lastInvoiceNumber: { $first: "$invoiceNumber" },
+          lastInvoiceDate: { $first: "$invoiceDate" }
+        }
+      }
+    ]);
+
+    res.json({ success: true, data: results });
+  } catch (err) {
+    console.error("Last by customers error:", err);
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 

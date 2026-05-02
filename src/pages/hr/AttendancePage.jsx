@@ -69,7 +69,7 @@ const AttendancePage = () => {
               const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18`);
               const nomData = await nomRes.json();
               if (nomData && nomData.display_name) {
-                const parts = nomData.display_name.split(",").slice(0, 5);
+                const parts = nomData.display_name.split(",").slice(0, 7);
                 return [...new Set(parts)].join(", ");
               }
             } catch (e) {
@@ -106,7 +106,8 @@ const AttendancePage = () => {
           },
           (error) => {
             reject(error);
-          }
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       }
     });
@@ -210,7 +211,7 @@ const AttendancePage = () => {
             const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18`);
             const nomData = await nomRes.json();
             if (nomData && nomData.display_name) {
-              const parts = nomData.display_name.split(",").slice(0, 5);
+              const parts = nomData.display_name.split(",").slice(0, 7);
               return [...new Set(parts)].join(", ");
             }
           } catch (e) {
@@ -357,18 +358,20 @@ const AttendancePage = () => {
                         </>
                       )}
                     </button>
-                   <div className="mt-1 flex items-center justify-center gap-1.5 px-2 py-1 bg-emerald-50/50 rounded-lg border border-emerald-100/50 animate-in fade-in slide-in-from-top-1 duration-500 min-h-[20px]">
-                     <FaMapMarkerAlt className="text-[8px] text-emerald-500" />
-                     <span className="text-[8px] font-black text-emerald-700 uppercase truncate">
-                        {record?.presentLocation?.address && record.presentLocation.address !== "Location Captured" ? (
-                          record.presentLocation.address
-                        ) : (
-                          record?.presentLocation?.lat ? (
-                            `${Number(record.presentLocation.lat).toFixed(2)}, ${Number(record.presentLocation.lng).toFixed(2)}`
-                          ) : "Fetching..."
-                        )}
-                     </span>
-                   </div>
+                    <div className="mt-1 flex flex-col items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50/50 rounded-xl border border-emerald-100/50 animate-in fade-in slide-in-from-top-1 duration-500 min-h-[30px]">
+                      <div className="flex items-center gap-1.5">
+                        <FaMapMarkerAlt className="text-[8px] text-emerald-500 flex-shrink-0" />
+                        <span className="text-[8px] font-black text-emerald-700 uppercase whitespace-normal break-words text-center leading-relaxed">
+                          {record?.presentLocation?.address && record.presentLocation.address !== "Location Captured" ? (
+                            record.presentLocation.address
+                          ) : (
+                            record?.presentLocation?.lat ? (
+                              `${Number(record.presentLocation.lat).toFixed(4)}, ${Number(record.presentLocation.lng).toFixed(4)}`
+                            ) : "Fetching..."
+                          )}
+                        </span>
+                      </div>
+                    </div>
                    {record?.presentTime && (
                      <p className="text-[8px] font-black text-emerald-500/60 text-center uppercase tracking-widest mt-1">
                        In: {new Date(record.presentTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -400,17 +403,19 @@ const AttendancePage = () => {
                         </>
                       )}
                     </button>
-                    <div className="mt-1 flex items-center justify-center gap-1.5 px-2 py-1 bg-amber-50/50 rounded-lg border border-amber-100/50 animate-in fade-in slide-in-from-top-1 duration-500 min-h-[20px]">
-                      <FaMapMarkerAlt className="text-[8px] text-amber-500" />
-                      <span className="text-[8px] font-black text-amber-700 uppercase truncate">
-                        {record?.leaveLocation?.address && record.leaveLocation.address !== "Location Captured" ? (
-                          record.leaveLocation.address
-                        ) : (
-                          record?.leaveLocation?.lat ? (
-                            `${Number(record.leaveLocation.lat).toFixed(2)}, ${Number(record.leaveLocation.lng).toFixed(2)}`
-                          ) : "Fetching..."
-                        )}
-                      </span>
+                    <div className="mt-1 flex flex-col items-center justify-center gap-1.5 px-3 py-2 bg-amber-50/50 rounded-xl border border-amber-100/50 animate-in fade-in slide-in-from-top-1 duration-500 min-h-[30px]">
+                      <div className="flex items-center gap-1.5">
+                        <FaMapMarkerAlt className="text-[8px] text-amber-500 flex-shrink-0" />
+                        <span className="text-[8px] font-black text-amber-700 uppercase whitespace-normal break-words text-center leading-relaxed">
+                          {record?.leaveLocation?.address && record.leaveLocation.address !== "Location Captured" ? (
+                            record.leaveLocation.address
+                          ) : (
+                            record?.leaveLocation?.lat ? (
+                              `${Number(record.leaveLocation.lat).toFixed(4)}, ${Number(record.leaveLocation.lng).toFixed(4)}`
+                            ) : "Fetching..."
+                          )}
+                        </span>
+                      </div>
                     </div>
                     {record?.leaveTime && !isPresent && (
                       <p className="text-[8px] font-black text-amber-500/60 text-center uppercase tracking-widest mt-1">

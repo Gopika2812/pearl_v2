@@ -21,6 +21,8 @@ export const getAddressFromCoords = async (lat, lng) => {
     if (response.data && response.data.display_name) {
       const addr = response.data.address;
       const parts = [
+        addr.building || addr.office || addr.amenity || addr.shop,
+        addr.house_number,
         addr.road || addr.pedestrian,
         addr.neighbourhood || addr.quarter,
         addr.suburb || addr.city_district,
@@ -31,7 +33,7 @@ export const getAddressFromCoords = async (lat, lng) => {
       // Deduplicate parts
       const uniqueParts = [...new Set(parts)];
       
-      const summary = uniqueParts.length > 0 ? uniqueParts.join(", ") : response.data.display_name.split(",").slice(0, 5).join(", ");
+      const summary = uniqueParts.length > 0 ? uniqueParts.join(", ") : response.data.display_name.split(",").slice(0, 7).join(", ");
       if (summary) return summary;
     }
     

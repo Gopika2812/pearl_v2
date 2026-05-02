@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { 
   FaFileInvoiceDollar, FaDownload, FaCalendarAlt, 
   FaSpinner, FaPencilAlt, FaCheck, FaTimes, 
-  FaArrowLeft, FaUser, FaTruck 
+  FaArrowLeft, FaUser, FaTruck, FaExchangeAlt
 } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -15,7 +15,7 @@ import { toast } from "react-toastify";
 const BranchCustomerLedger = () => {
   const { customerId } = useParams();
   const navigate = useNavigate();
-  const { currentBranch: branch } = useBranch();
+  const { currentBranch: branch, user } = useBranch();
   
   const [loading, setLoading] = useState(true);
   const [customer, setCustomer] = useState(null);
@@ -124,6 +124,80 @@ const BranchCustomerLedger = () => {
       toast.error(err.message || "Failed to save balance");
     } finally {
       setSavingBalance(false);
+    }
+  };
+
+  const handleNavigateToOrder = (txn) => {
+    if (!txn.salesOrderId) return;
+    
+    // Extract invoice number from particulars if possible
+    let invNo = "";
+    
+    // 1. Check for "for Invoice(s): SI-123" (common in receipts)
+    const forInvMatch = txn.particulars?.match(/for Invoice?s?:\s*([^,\[(\n]+)/i);
+    if (forInvMatch) {
+      invNo = forInvMatch[1].trim();
+    } 
+    // 2. Check for "for Inv: SI-123" (shorthand)
+    else {
+      const shorthandMatch = txn.particulars?.match(/for Inv:\s*([^,\[(\n]+)/i);
+      if (shorthandMatch) {
+        invNo = shorthandMatch[1].trim();
+      }
+      // 3. Check for "Sales Invoice: SI-123" (direct invoice entry)
+      else if (txn.type === "INVOICE") {
+        invNo = txn.particulars.split(": ")[1]?.trim() || "";
+      }
+      // 4. Check for "Credit Note: CN-123" or similar
+      else {
+        const genericMatch = txn.particulars?.match(/(?:Invoice|Note|Ref):\s*([^,\[(\n]+)/i);
+        if (genericMatch) invNo = genericMatch[1].trim();
+      }
+    }
+
+    if (!invNo) return;
+    // This will trigger the global search for that specific ID across all dates
+    navigate(`/branch/sales-orders?invoiceId=${encodeURIComponent(invNo)}`);
+  };
+
+  const handleTransferTransaction = async (txn) => {
+    const targetName = prompt("Enter full name of target customer to search:");
+    if (!targetName) return;
+
+    try {
+      toast.loading("Searching for customer...", { id: "search-cust" });
+      const searchRes = await fetchWithAuth(`${API_BASE}/customers?branchId=${branch._id}&search=${encodeURIComponent(targetName)}&limit=5`);
+      const searchData = await searchRes.json();
+      toast.dismiss("search-cust");
+
+      if (!searchData.data || searchData.data.length === 0) {
+        return toast.error("No customer found with that name.");
+      }
+
+      const target = searchData.data[0];
+      if (!window.confirm(`Are you sure you want to TRANSFER this transaction to "${target.name}"? This will shift the balance and update all records.`)) return;
+
+      toast.loading("Transferring transaction...", { id: "transfer-txn" });
+      const res = await fetchWithAuth(`${API_BASE}/customers/transfer-transaction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: txn.type,
+          transactionId: txn.id,
+          targetCustomerId: target._id
+        })
+      });
+
+      const result = await res.json();
+      if (result.success) {
+        toast.success("Transaction transferred successfully!", { id: "transfer-txn" });
+        fetchLedger();
+      } else {
+        toast.error(result.message || "Transfer failed", { id: "transfer-txn" });
+      }
+    } catch (err) {
+      console.error("Transfer error:", err);
+      toast.error("An error occurred during transfer", { id: "transfer-txn" });
     }
   };
 
@@ -437,7 +511,8 @@ const BranchCustomerLedger = () => {
                   <th className="px-6 py-6 text-left"><div className="flex items-center gap-2"><FaTruck size={10} className="text-indigo-400"/> Delivery</div></th>
                   <th className="px-6 py-6 text-right">Debit (Dr)</th>
                   <th className="px-6 py-6 text-right">Credit (Cr)</th>
-                  <th className="px-8 py-6 text-right rounded-tr-[2rem]">Balance</th>
+                  <th className="px-6 py-6 text-center">Balance</th>
+                  <th className="px-8 py-6 text-right rounded-tr-[2rem]">Tools</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50 font-bold">
@@ -468,7 +543,16 @@ const BranchCustomerLedger = () => {
                       <td className="px-8 py-6 text-slate-300 group-hover:text-indigo-400 transition-colors">{index + 1}</td>
                       <td className="px-6 py-6 text-slate-500 whitespace-nowrap">{formatDate(txn.date, true)}</td>
                       <td className="px-6 py-6">
-                        <div className={`text-slate-800 group-hover:text-slate-900 transition-colors uppercase tracking-tight font-black ${txn.type === 'CANCELLED' ? 'line-through text-slate-400' : ''}`} title={docId}>{docId}</div>
+                        <button 
+                          onClick={() => handleNavigateToOrder(txn)}
+                          disabled={!txn.salesOrderId}
+                          className={`text-left group/btn ${txn.salesOrderId ? 'cursor-pointer' : 'cursor-default'}`}
+                        >
+                          <div className={`text-slate-800 group-hover/btn:text-indigo-600 transition-colors uppercase tracking-tight font-black ${txn.type === 'CANCELLED' ? 'line-through text-slate-400' : ''}`} title={docId}>
+                            {docId}
+                            {txn.salesOrderId && <span className="ml-1 opacity-0 group-hover/btn:opacity-100 text-[8px] font-black bg-indigo-50 text-indigo-600 px-1 py-0.5 rounded transition-all">VIEW BILL</span>}
+                          </div>
+                        </button>
                         <div className={`text-[10px] text-slate-400 font-bold italic truncate max-w-[300px] mt-0.5 ${txn.type === 'CANCELLED' ? 'line-through' : ''}`} title={txn.particulars}>{txn.particulars}</div>
                       </td>
                       <td className="px-6 py-6 text-center">
@@ -499,8 +583,19 @@ const BranchCustomerLedger = () => {
                           <div className="text-[13px] font-bold text-slate-400 line-through">₹{txn.originalAmount?.toLocaleString()}</div>
                         ) : "-"}
                       </td>
-                      <td className={`px-8 py-6 text-right font-black text-[14px] ${balanceColor(txn.balance)}`}>
+                      <td className={`px-6 py-6 text-right font-black text-[14px] ${balanceColor(txn.balance)}`}>
                         ₹{Math.abs(txn.balance).toLocaleString()} <span className="text-[10px] opacity-40">{balanceLabel(txn.balance)}</span>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        {(user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") && (
+                          <button 
+                            onClick={() => handleTransferTransaction(txn)}
+                            className="text-slate-300 hover:text-indigo-600 transition p-2"
+                            title="Transfer Transaction to another Customer"
+                          >
+                            <FaExchangeAlt size={14} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -511,7 +606,8 @@ const BranchCustomerLedger = () => {
                   <td colSpan={6} className="px-6 py-8 text-right uppercase tracking-[0.3em] text-[10px] opacity-50">Period Totals</td>
                   <td className="px-6 py-8 text-right font-black text-rose-300 text-base">₹{totalDebit.toLocaleString()}</td>
                   <td className="px-6 py-8 text-right font-black text-emerald-300 text-base">₹{totalCredit.toLocaleString()}</td>
-                  <td className="px-8 py-8 text-right font-black bg-white/10 text-lg">₹{Math.abs(closingBalance).toLocaleString()} <span className="text-xs opacity-50">{balanceLabel(closingBalance)}</span></td>
+                  <td className="px-6 py-8 text-right font-black bg-white/10 text-lg">₹{Math.abs(closingBalance).toLocaleString()} <span className="text-xs opacity-50">{balanceLabel(closingBalance)}</span></td>
+                  <td className="px-8 py-8 bg-white/10"></td>
                 </tr>
               </tbody>
             </table>

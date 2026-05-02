@@ -8,6 +8,8 @@ import EInvoicePrintModal from "../../components/branch/EInvoicePrintModal";
 import { useBranch } from "../../context/BranchContext";
 import { getInvoiceHTML } from "../../utils/invoiceUtils";
 import FilterableSelect from "../../components/FilterableSelect";
+import BulkEInvoiceModal from "../../components/branch/BulkEInvoiceModal";
+import BulkPdfDownloadModal from "../../components/branch/BulkPdfDownloadModal";
 
 const ExportColumnSelectorModal = ({ show, onClose, columns, selected, onSelect, exporting, onExport }) => {
   if (!show) return null;
@@ -106,7 +108,7 @@ const BranchSalesInvoices = () => {
   const [filterVoucherPrefix, setFilterVoucherPrefix] = useState("");
   const [filterEinvoiceStatus, setFilterEinvoiceStatus] = useState("");
   const [branchUsers, setBranchUsers] = useState([]);
-  const [sortField, setSortField] = useState("invoiceNumber");
+  const [sortField, setSortField] = useState("invoiceDate");
   const [sortOrder, setSortOrder] = useState("desc");
   
   // Permission helper
@@ -121,6 +123,8 @@ const BranchSalesInvoices = () => {
 
   // --- SELECTIVE EXPORT STATE ---
   const [showColumnModal, setShowColumnModal] = useState(false);
+  const [showBulkEInvoiceModal, setShowBulkEInvoiceModal] = useState(false);
+  const [showBulkPdfModal, setShowBulkPdfModal] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState([
     "date", "invoiceNumber", "voucherType", "customerName", "grandTotal", "creator"
   ]);
@@ -172,7 +176,7 @@ const BranchSalesInvoices = () => {
     setLoading(true);
     try {
       // Build query string
-      let url = `${API_BASE}/invoices?branchId=${currentBranch._id}&page=${currentPage}`;
+      let url = `${API_BASE}/invoices?branchId=${currentBranch._id}&page=${currentPage}&limit=100`;
       
       if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
       if (filterFromDate) url += `&fromDate=${filterFromDate}`;
@@ -466,7 +470,9 @@ const BranchSalesInvoices = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch for export");
 
-      const invoicesToExport = data.data || [];
+      let invoicesToExport = data.data || [];
+      invoicesToExport = invoicesToExport.filter(inv => inv.status !== "CANCELLED");
+
       if (invoicesToExport.length === 0) {
         toast.warn("No invoices found in this range to export.");
         return;
@@ -666,6 +672,21 @@ const BranchSalesInvoices = () => {
         />
       )}
 
+      {showBulkEInvoiceModal && (
+        <BulkEInvoiceModal
+          show={showBulkEInvoiceModal}
+          onClose={() => setShowBulkEInvoiceModal(false)}
+          onRefresh={fetchInvoices}
+        />
+      )}
+
+      {showBulkPdfModal && (
+        <BulkPdfDownloadModal
+          show={showBulkPdfModal}
+          onClose={() => setShowBulkPdfModal(false)}
+        />
+      )}
+
       <div className="w-full mx-auto px-4 sm:px-8 py-4">
         {/* HEADER */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
@@ -696,8 +717,20 @@ const BranchSalesInvoices = () => {
               {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
                 <>
                   <button
+                    onClick={() => setShowBulkEInvoiceModal(true)}
+                    className="inline-flex items-center gap-2 px-3 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-200 text-[10px] font-black"
+                  >
+                    <FaSync /> MONTH END E-INV
+                  </button>
+                  <button
+                    onClick={() => setShowBulkPdfModal(true)}
+                    className="inline-flex items-center gap-2 px-3 py-2.5 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition shadow-lg shadow-rose-200 text-[10px] font-black"
+                  >
+                    <FaFilePdf /> BULK PDF
+                  </button>
+                  <button
                     onClick={() => setShowColumnModal(true)}
-                    className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition shadow-sm"
+                    className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition shadow-sm shrink-0"
                     title="Select Export Columns"
                   >
                     <FaFileExcel size={18} />

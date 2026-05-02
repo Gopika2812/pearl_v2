@@ -6,7 +6,7 @@ import {
     FaSearch, FaFilter, FaSort, FaSortUp, FaSortDown,
     FaArrowRight, FaBook, FaCalendarAlt, FaCog, FaTag,
     FaEdit, FaChevronLeft, FaChevronRight, FaListOl, FaTicketAlt,
-    FaCloudUploadAlt, FaSpinner
+    FaCloudUploadAlt, FaSpinner, FaFileInvoice
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth, apiWithAuth } from "../../api";
@@ -129,6 +129,23 @@ const BranchFollowUp = () => {
                     setCustomers(prev => prev.map(c => {
                         if (balMap.has(c._id)) {
                             return { ...c, ...balMap.get(c._id) };
+                        }
+                        return c;
+                    }));
+                }
+
+                // STAGE 3: Background fetch last invoice for each visible customer
+                const invRes = await fetchWithAuth(`${API_BASE}/invoices/last-by-customers`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ customerIds, branchId: currentBranch._id })
+                });
+                const invData = await invRes.json();
+                if (invData.success) {
+                    const invMap = new Map(invData.data.map(i => [i._id.toString(), { lastInvoiceNumber: i.lastInvoiceNumber, lastInvoiceDate: i.lastInvoiceDate }]));
+                    setCustomers(prev => prev.map(c => {
+                        if (invMap.has(c._id.toString())) {
+                            return { ...c, ...invMap.get(c._id.toString()) };
                         }
                         return c;
                     }));
@@ -405,6 +422,9 @@ const BranchFollowUp = () => {
                                                     <div className="flex items-center justify-center">Token</div>
                                                 </th>
                                             )}
+                                            <th className="px-4 py-3 text-left border-b border-gray-200">
+                                                <div className="flex items-center gap-1"><FaFileInvoice size={10} /> Last Invoice</div>
+                                            </th>
                                             {(isFieldAllowed("action_followup") || isFieldAllowed("action_log") || isFieldAllowed("action_ledger") || isFieldAllowed("action_edit")) && (
                                                 <th className="px-4 py-3 text-center border-b border-gray-200">Actions</th>
                                             )}
@@ -480,6 +500,19 @@ const BranchFollowUp = () => {
                                                             </button>
                                                         </td>
                                                     )}
+                                                    {/* Last Invoice Column */}
+                                                    <td className="px-4 py-3">
+                                                        {customer.lastInvoiceNumber ? (
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[11px] font-black text-indigo-700">{customer.lastInvoiceNumber}</span>
+                                                                <span className="text-[10px] text-gray-400">
+                                                                    {new Date(customer.lastInvoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[10px] text-gray-300 italic">—</span>
+                                                        )}
+                                                    </td>
                                                     {(isFieldAllowed("action_followup") || isFieldAllowed("action_log") || isFieldAllowed("action_ledger") || isFieldAllowed("action_edit")) && (
                                                         <td className="px-4 py-3 text-center">
                                                             <div className="flex items-center justify-center gap-2">

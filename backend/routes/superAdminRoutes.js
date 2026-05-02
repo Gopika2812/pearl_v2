@@ -10,6 +10,11 @@ import SuperAdmin from "../models/SuperAdmin.js";
 import {
     sendApprovalEmail
 } from "../utils/emailService.js";
+import PurchaseInvoice from "../models/PurchaseInvoice.js";
+import Invoice from "../models/Invoice.js";
+import CreditNote from "../models/CreditNote.js";
+import DebitNote from "../models/DebitNote.js";
+import mongoose from "mongoose";
 
 const router = express.Router();
 
@@ -142,6 +147,79 @@ router.get("/branches", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch branches",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET: Dashboard Stats (Super Admin only)
+ * Calculates total purchase, sales, credit note, and debit note values
+ */
+router.get("/dashboard-stats", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
+  try {
+    const { branchId, startDate, endDate } = req.query;
+
+    const matchPi = {};
+    const matchInv = { status: { $nin: ["DRAFT", "CANCELLED"] } }; // ignore ungenerated/cancelled
+    const matchCn = { status: { $ne: "Cancelled" } };
+    const matchDn = { status: { $ne: "Cancelled" } };
+
+    if (branchId && mongoose.Types.ObjectId.isValid(branchId)) {
+      const bId = new mongoose.Types.ObjectId(branchId);
+      matchPi.branchId = bId;
+      matchInv.branchId = bId;
+      matchCn.branchId = bId;
+      matchDn.branchId = bId;
+    }
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+
+      matchPi.invoiceDate = { $gte: start, $lte: end };
+      matchInv.invoiceDate = { $gte: start, $lte: end };
+      matchCn.date = { $gte: start, $lte: end };
+      matchDn.date = { $gte: start, $lte: end };
+    }
+
+    // Run aggregations in parallel
+    const [piResult, invResult, cnResult, dnResult] = await Promise.all([
+      PurchaseInvoice.aggregate([
+        { $match: matchPi },
+        { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+      ]),
+      Invoice.aggregate([
+        { $match: matchInv },
+        { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+      ]),
+      CreditNote.aggregate([
+        { $match: matchCn },
+        { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+      ]),
+      DebitNote.aggregate([
+        { $match: matchDn },
+        { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+      ])
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        totalPurchase: piResult[0]?.total || 0,
+        totalSales: invResult[0]?.total || 0,
+        totalCreditNote: cnResult[0]?.total || 0,
+        totalDebitNote: dnResult[0]?.total || 0,
+      }
+    });
+
+  } catch (error) {
+    console.error("Fetch Dashboard Stats Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch dashboard stats",
       error: error.message,
     });
   }

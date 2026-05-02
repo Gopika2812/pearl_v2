@@ -21,6 +21,9 @@ const BranchProductRecords = () => {
   
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(500);
 
   // Filter states
   const [fromDate, setFromDate] = useState("");
@@ -38,7 +41,7 @@ const BranchProductRecords = () => {
 
     setLoading(true);
     try {
-      let url = `${API_BASE}/sales-orders/history?branchId=${currentBranch._id}`;
+      let url = `${API_BASE}/sales-orders/history?branchId=${currentBranch._id}&page=${currentPage}&limit=${limit}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
       if (fromDate) url += `&fromDate=${fromDate}`;
       if (toDate) url += `&toDate=${toDate}`;
       if (selectedProductGroupId) url += `&productGroupId=${selectedProductGroupId}`;
@@ -50,7 +53,8 @@ const BranchProductRecords = () => {
 
       if (!res.ok) throw new Error(data.message || "Failed to fetch history");
 
-      setRecords(data || []);
+      setRecords(data.history || []);
+      setTotalRecords(data.total || 0);
     } catch (err) {
       console.error("Error fetching history:", err);
       toast.error(err.message || "Failed to fetch sales history");
@@ -61,7 +65,7 @@ const BranchProductRecords = () => {
 
   useEffect(() => {
     fetchHistory();
-  }, [currentBranch?._id, selectedProductId, selectedCustomerId, fromDate, toDate, selectedProductGroupId]);
+  }, [currentBranch?._id, selectedProductId, selectedCustomerId, fromDate, toDate, selectedProductGroupId, currentPage, sortConfig]);
 
   const handleReset = () => {
     setFromDate("");
@@ -69,6 +73,7 @@ const BranchProductRecords = () => {
     setSelectedProductGroupId("");
     setSelectedProductId("");
     setSelectedCustomerId("");
+    setCurrentPage(1);
   };
 
   const handleSort = (key) => {
@@ -77,32 +82,10 @@ const BranchProductRecords = () => {
       direction = 'asc';
     }
     setSortConfig({ key, direction });
+    setCurrentPage(1);
   };
 
-  const sortedRecords = [...records].sort((a, b) => {
-    let aVal, bVal;
-
-    switch (sortConfig.key) {
-      case 'date': aVal = new Date(a.date); bVal = new Date(b.date); break;
-      case 'customer': aVal = a.customerName || ""; bVal = b.customerName || ""; break;
-      case 'product': aVal = a.productName || ""; bVal = b.productName || ""; break;
-      case 'purchase': aVal = a.purchasingPrice || 0; bVal = b.purchasingPrice || 0; break;
-      case 'selling': aVal = a.sellingPrice || 0; bVal = b.sellingPrice || 0; break;
-      case 'qty': aVal = a.qty || 0; bVal = b.qty || 0; break;
-      case 'gst': aVal = a.gst || 0; bVal = b.gst || 0; break;
-      case 'discount': aVal = a.discount || 0; bVal = b.discount || 0; break;
-      case 'profitPercent': 
-        aVal = a.purchasingPrice > 0 ? (a.grossProfit / a.purchasingPrice) : 0;
-        bVal = b.purchasingPrice > 0 ? (b.grossProfit / b.purchasingPrice) : 0;
-        break;
-      case 'profitCash': aVal = a.grossProfit || 0; bVal = b.grossProfit || 0; break;
-      default: return 0;
-    }
-
-    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-    return 0;
-  });
+  const sortedRecords = records; // Server-side sorted now
 
   const getSortIcon = (key) => {
     if (sortConfig.key !== key) return <FaSort className="inline ml-1 text-gray-300" />;
@@ -437,7 +420,7 @@ const BranchProductRecords = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Transactions</span>
-                    <span className="text-xl font-black text-[#319bab]">{records.length}</span>
+                    <span className="text-xl font-black text-[#319bab]">{totalRecords}</span>
                   </div>
                   <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Qty</span>
@@ -467,9 +450,9 @@ const BranchProductRecords = () => {
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
                     <span className="text-xs font-black text-gray-500 uppercase tracking-widest">
-                      {selectedProductId ? "Item Detailed Record" : "Global Branch Records (Last 500)"}
+                      {selectedProductId ? "Item Detailed Record" : "Global Branch Records"}
                     </span>
-                    <span className="text-[10px] text-[#319bab] font-bold">Showing {records.length} Entries</span>
+                    <span className="text-[10px] text-[#319bab] font-bold">Showing {records.length} of {totalRecords} Entries</span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm border-collapse">
@@ -607,6 +590,58 @@ const BranchProductRecords = () => {
                       </tbody>
                     </table>
                   </div>
+                  
+                  {/* PAGINATION CONTROLS */}
+                  {totalRecords > limit && (
+                    <div className="flex items-center justify-between px-6 py-4 bg-gray-50/30 border-t border-gray-100">
+                      <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                        Page {currentPage} of {Math.ceil(totalRecords / limit)}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1 || loading}
+                          className="px-4 py-2 rounded-lg bg-white border border-gray-100 text-[10px] font-black uppercase tracking-widest text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+                        >
+                          Previous
+                        </button>
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: Math.min(5, Math.ceil(totalRecords / limit)) }, (_, i) => {
+                            const totalPages = Math.ceil(totalRecords / limit);
+                            let pageNum;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else {
+                              if (currentPage <= 3) pageNum = i + 1;
+                              else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                              else pageNum = currentPage - 2 + i;
+                            }
+                            
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => setCurrentPage(pageNum)}
+                                className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all ${
+                                  currentPage === pageNum 
+                                  ? 'bg-[#319bab] text-white shadow-md' 
+                                  : 'bg-white text-gray-400 border border-gray-50 hover:bg-gray-50'
+                                }`}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.min(Math.ceil(totalRecords / limit), prev + 1))}
+                          disabled={currentPage === Math.ceil(totalRecords / limit) || loading}
+                          className="px-4 py-2 rounded-lg bg-white border border-gray-100 text-[10px] font-black uppercase tracking-widest text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             </div>
