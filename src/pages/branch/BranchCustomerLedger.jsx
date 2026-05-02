@@ -15,7 +15,7 @@ import { toast } from "react-toastify";
 const BranchCustomerLedger = () => {
   const { customerId } = useParams();
   const navigate = useNavigate();
-  const { currentBranch: branch } = useBranch();
+  const { currentBranch: branch, user } = useBranch();
   
   const [loading, setLoading] = useState(true);
   const [customer, setCustomer] = useState(null);
