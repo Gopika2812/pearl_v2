@@ -58,6 +58,7 @@ import tokenRoutes from "./routes/tokenRoutes.js";
 import followUpRoutes from "./routes/followUpRoutes.js";
 import deliveryReceiptRoutes from "./routes/deliveryReceiptRoutes.js";
 import hrPayrollRoutes from "./modules/hr-payroll/index.js";
+import physicalStockRoutes from "./routes/physicalStockRoutes.js";
 
 
 
@@ -141,6 +142,7 @@ app.use("/api/follow-ups", followUpRoutes);
 app.use("/api/delivery-receipts", deliveryReceiptRoutes);
 app.use("/api/hr", hrPayrollRoutes);
 app.get("/api/hr-ping", (req, res) => res.json({ msg: "HR module reachable" }));
+app.use("/api/physical-stock", physicalStockRoutes);
 
 
 

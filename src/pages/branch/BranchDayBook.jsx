@@ -36,7 +36,8 @@ const BranchDayBook = () => {
         { label: "REC", value: "REC", color: "bg-purple-50 text-purple-600 border-purple-200" },
         { label: "PAYMENT", value: "PAY", color: "bg-rose-50 text-rose-600 border-rose-200" },
         { label: "Credit Note", value: "CN", color: "bg-cyan-50 text-cyan-600 border-cyan-200" },
-        { label: "Debit Note", value: "DN", color: "bg-red-50 text-red-600 border-red-200" }
+        { label: "Debit Note", value: "DN", color: "bg-red-50 text-red-600 border-red-200" },
+        { label: "Stock Journal", value: "SJ", color: "bg-violet-50 text-violet-600 border-violet-200" }
     ];
 
     const SI_SERIES_OPTIONS = ["ALL", "CS", "LS", "Z-1", "Z-2"];

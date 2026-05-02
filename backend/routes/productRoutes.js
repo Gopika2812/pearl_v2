@@ -14,6 +14,7 @@ import PurchaseInvoice from "../models/PurchaseInvoice.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import SalesOrder from "../models/SalesOrder.js";
 import Warehouse from "../models/Warehouse.js";
+import PhysicalStockEntry from "../models/PhysicalStockEntry.js";
 
 import auth from "../middleware/auth.js";
 import { createAuditLog } from "../utils/logUtil.js";
@@ -149,7 +150,7 @@ router.post("/", async (req, res) => {
 // GET: Fetch All Products with Pagination
 router.get("/", async (req, res) => {
   try {
-    const { page = 1, limit = 10000, search = "", diag = "", branchId } = req.query;
+    const { page = 1, limit = 10000, search = "", diag = "", branchId, productGroup, productCategory } = req.query;
 
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
@@ -169,10 +170,11 @@ router.get("/", async (req, res) => {
     const pageSize = Math.min(10000, Math.max(1, parseInt(limit) || 10000));
     const skip = (pageNum - 1) * pageSize;
 
-    // Build search filter with branchId (using ObjectId)
-    const filter = search
-      ? { branchId: branchObjectId, name: { $regex: search, $options: "i" } }
-      : { branchId: branchObjectId };
+    // Build search filter with branchId
+    const filter = { branchId: branchObjectId };
+    if (search) filter.name = { $regex: search, $options: "i" };
+    if (productGroup && productGroup !== "ALL") filter.productGroup = productGroup;
+    if (productCategory && productCategory !== "ALL") filter.productCategories = productCategory;
 
     // ⚡ Get total count
     const total = await Product.countDocuments(filter);
@@ -190,7 +192,7 @@ router.get("/", async (req, res) => {
     // ⚡ SYNC: Fetch financial totals for the returned products to calculate "Tally Stock"
     const productIds = products.map(p => p._id);
     
-    const [salesTotals, purchaseTotals, cnTotals, dnTotals] = await Promise.all([
+    const [salesTotals, purchaseTotals, cnTotals, dnTotals, psvTotals] = await Promise.all([
       Invoice.aggregate([
         { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
@@ -216,25 +218,32 @@ router.get("/", async (req, res) => {
         { $unwind: "$items" },
         { $match: { "items.productId": { $in: productIds }, "items.qty": { $gt: 0 } } },
         { $group: { _id: "$items.productId", total: { $sum: "$items.qty" } } }
+      ]),
+      // ✅ PSV: Approved physical stock adjustments (branch-scoped, formula-based)
+      PhysicalStockEntry.aggregate([
+        { $match: { branchId: branchObjectId, status: "APPROVED", productId: { $in: productIds } } },
+        { $group: { _id: "$productId", inward: { $sum: "$inwardQty" }, outward: { $sum: "$outwardQty" } } }
       ])
     ]);
 
-    // Create lookup maps for fast access
-    const salesMap = new Map(salesTotals.map(t => [t._id.toString(), t.total]));
+    const salesMap    = new Map(salesTotals.map(t => [t._id.toString(), t.total]));
     const purchaseMap = new Map(purchaseTotals.map(t => [t._id.toString(), t.total]));
-    const cnMap = new Map(cnTotals.map(t => [t._id.toString(), t.total]));
-    const dnMap = new Map(dnTotals.map(t => [t._id.toString(), t.total]));
+    const cnMap       = new Map(cnTotals.map(t => [t._id.toString(), t.total]));
+    const dnMap       = new Map(dnTotals.map(t => [t._id.toString(), t.total]));
+    const psvMap      = new Map(psvTotals.map(t => [t._id.toString(), { inward: t.inward, outward: t.outward }]));
 
-    // ⚡ Return product with current ground-truth "Tally Stock"
+    // ⚡ Return product with current ground-truth "Tally Stock" (includes PSV adjustments)
     const enhancedProducts = products.map((product) => {
       const pId = product._id.toString();
-      const opening = Number(product.openingQty || 0);
-      const inwardPurchases = Number(purchaseMap.get(pId) || 0);
+      const opening           = Number(product.openingQty || 0);
+      const inwardPurchases   = Number(purchaseMap.get(pId) || 0);
       const inwardCreditNotes = Number(cnMap.get(pId) || 0);
-      const outwardSales = Number(salesMap.get(pId) || 0);
+      const outwardSales      = Number(salesMap.get(pId) || 0);
       const outwardDebitNotes = Number(dnMap.get(pId) || 0);
+      const psv               = psvMap.get(pId) || { inward: 0, outward: 0 };
 
-      const closingStock = (opening + inwardPurchases + inwardCreditNotes) - (outwardSales + outwardDebitNotes);
+      const closingStock = (opening + inwardPurchases + inwardCreditNotes + psv.inward)
+                         - (outwardSales + outwardDebitNotes + psv.outward);
 
       return {
         ...product,
@@ -1286,12 +1295,11 @@ router.get("/stock-group-summary", async (req, res) => {
 
     // Hard cutoff at the start of original Excel implementation (April 1st IST)
     // Mar 31, 2026 23:59:59 IST = 2026-03-31T18:29:59.999Z
-    const HARD_ANCHOR_DATE = moment.tz("2026-03-31 23:59:59", "Asia/Kolkata").toDate();
 
     // ⚡ Execute group-level math directly in MongoDB
     const products = await Product.find({ branchId }).select("productGroup totalQty purchasingPrice manualOpeningDate openingQty").lean();
 
-    const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
+    const [purchases, sales, debitNotes, creditNotes, psvTotals] = await Promise.all([
       PurchaseInvoice.aggregate([
         { $match: { branchId: branchOid, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
@@ -1339,6 +1347,18 @@ router.get("/stock-group-summary", async (req, res) => {
             inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$effectiveDate", reportStart] }, { $lte: ["$effectiveDate", reportEnd] }] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } }
           }
         }
+      ]),
+      PhysicalStockEntry.aggregate([
+        { $match: { branchId: branchOid, status: "APPROVED" } },
+        {
+          $group: {
+            _id: "$productId",
+            inBeforeReport: { $sum: { $cond: [{ $lt: ["$approvedBy.approvedAt", reportStart] }, "$inwardQty", 0] } },
+            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$approvedBy.approvedAt", reportStart] }, { $lte: ["$approvedBy.approvedAt", reportEnd] }] }, "$inwardQty", 0] } },
+            outBeforeReport: { $sum: { $cond: [{ $lt: ["$approvedBy.approvedAt", reportStart] }, "$outwardQty", 0] } },
+            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$approvedBy.approvedAt", reportStart] }, { $lte: ["$approvedBy.approvedAt", reportEnd] }] }, "$outwardQty", 0] } }
+          }
+        }
       ])
     ]);
 
@@ -1346,6 +1366,7 @@ router.get("/stock-group-summary", async (req, res) => {
     const sMap = new Map(sales.map(s => [s._id.toString(), s]));
     const dnMap = new Map(debitNotes.map(dn => [dn._id.toString(), dn]));
     const cnMap = new Map(creditNotes.map(cn => [cn._id.toString(), cn]));
+    const psvMap = new Map(psvTotals.map(psv => [psv._id.toString(), psv]));
 
     const groupTotals = {};
     products.forEach(product => {
@@ -1356,18 +1377,19 @@ router.get("/stock-group-summary", async (req, res) => {
       const ss = sMap.get(pid) || { outBeforeReport: 0, outDuringPeriod: 0 };
       const dns = dnMap.get(pid) || { outBeforeReport: 0, outDuringPeriod: 0 };
       const cns = cnMap.get(pid) || { inBeforeReport: 0, inDuringPeriod: 0 };
+      const psv = psvMap.get(pid) || { inBeforeReport: 0, inDuringPeriod: 0, outBeforeReport: 0, outDuringPeriod: 0 };
 
       // ⚓ CHAIN-LINKED MATH
-      // 1. Opening = Excel Anchor + ∑In(Before report but after Apr 1) - ∑Out(Before report but after Apr 1)
+      // 1. Opening = Excel Anchor + ∑In(Before report) - ∑Out(Before report)
       const excelAnchor = product.openingQty || 0;
-      const inBefore = ps.inBeforeReport + cns.inBeforeReport;
-      const outBefore = ss.outBeforeReport + dns.outBeforeReport;
+      const inBefore = ps.inBeforeReport + cns.inBeforeReport + psv.inBeforeReport;
+      const outBefore = ss.outBeforeReport + dns.outBeforeReport + psv.outBeforeReport;
 
       const openingQty = excelAnchor + inBefore - outBefore;
 
       // 2. Movements during the selected report period
-      const inwards = ps.inDuringPeriod + cns.inDuringPeriod;
-      const outwards = ss.outDuringPeriod + dns.outDuringPeriod;
+      const inwards = ps.inDuringPeriod + cns.inDuringPeriod + psv.inDuringPeriod;
+      const outwards = ss.outDuringPeriod + dns.outDuringPeriod + psv.outDuringPeriod;
 
       // 3. Closing = Opening + Inwards - Outwards
       const closingQty = openingQty + inwards - outwards;
@@ -1405,7 +1427,6 @@ router.get("/stock-journal", async (req, res) => {
     // 🌍 LOCAL TIMEZONE LOCK: Asia/Kolkata
     const reportStart = moment.tz(startDate, "Asia/Kolkata").startOf('day').toDate();
     const reportEnd = moment.tz(endDate, "Asia/Kolkata").endOf('day').toDate();
-    const HARD_ANCHOR_DATE = moment.tz("2026-03-31 23:59:59", "Asia/Kolkata").toDate();
 
     console.log(`📊 Generating Stock Journal: ${branchId} | Group: ${productGroupId || 'ALL'} | ${reportStart.toDateString()} - ${reportEnd.toDateString()}`);
 
@@ -1425,7 +1446,7 @@ router.get("/stock-journal", async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
-    const [purchases, sales, debitNotes, creditNotes] = await Promise.all([
+    const [purchases, sales, debitNotes, creditNotes, psvTotals] = await Promise.all([
       PurchaseInvoice.aggregate([
         { $match: { branchId: branchOid, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
@@ -1473,41 +1494,55 @@ router.get("/stock-journal", async (req, res) => {
             inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$effectiveDate", reportStart] }, { $lte: ["$effectiveDate", reportEnd] }] }, { $ifNull: ["$items.qty", "$items.returnedQty", 0] }, 0] } }
           }
         }
+      ]),
+      PhysicalStockEntry.aggregate([
+        { $match: { branchId: branchOid, status: "APPROVED", productId: { $in: products.map(p => p._id) } } },
+        {
+          $group: {
+            _id: "$productId",
+            inBefore: { $sum: { $cond: [{ $lt: ["$approvedBy.approvedAt", reportStart] }, "$inwardQty", 0] } },
+            inDuring: { $sum: { $cond: [{ $and: [{ $gte: ["$approvedBy.approvedAt", reportStart] }, { $lte: ["$approvedBy.approvedAt", reportEnd] }] }, "$inwardQty", 0] } },
+            outBefore: { $sum: { $cond: [{ $lt: ["$approvedBy.approvedAt", reportStart] }, "$outwardQty", 0] } },
+            outDuring: { $sum: { $cond: [{ $and: [{ $gte: ["$approvedBy.approvedAt", reportStart] }, { $lte: ["$approvedBy.approvedAt", reportEnd] }] }, "$outwardQty", 0] } }
+          }
+        }
       ])
     ]);
 
     // Maps for O(1) lookup
-    const pMap = new Map(purchases.map(p => [p._id.toString(), p]));
-    const sMap = new Map(sales.map(s => [s._id.toString(), s]));
-    const dnMap = new Map(debitNotes.map(dn => [dn._id.toString(), dn]));
-    const cnMap = new Map(creditNotes.map(cn => [cn._id.toString(), cn]));
+    const pMap = new Map(purchases.map(p => [p._id.toString(), { inBefore: p.inBeforeReport, inDuring: p.inDuringPeriod }]));
+    const sMap = new Map(sales.map(s => [s._id.toString(), { outBefore: s.outBeforeReport, outDuring: s.outDuringPeriod }]));
+    const dnMap = new Map(debitNotes.map(dn => [dn._id.toString(), { outBefore: dn.outBeforeReport, outDuring: dn.outDuringPeriod }]));
+    const cnMap = new Map(creditNotes.map(cn => [cn._id.toString(), { inBefore: cn.inBeforeReport, inDuring: cn.inDuringPeriod }]));
+    const psvMap = new Map(psvTotals.map(psv => [psv._id.toString(), psv]));
 
     // 6️⃣ Calculate Journal for each Product
     const journalData = products.map((product) => {
       const pid = product._id.toString();
-      const ps = pMap.get(pid) || { inBeforeReport: 0, inDuringPeriod: 0 };
-      const ss = sMap.get(pid) || { outBeforeReport: 0, outDuringPeriod: 0 };
-      const dns = dnMap.get(pid) || { outBeforeReport: 0, outDuringPeriod: 0 };
-      const cns = cnMap.get(pid) || { inBeforeReport: 0, inDuringPeriod: 0 };
+      const ps = pMap.get(pid) || { inBefore: 0, inDuring: 0 };
+      const ss = sMap.get(pid) || { outBefore: 0, outDuring: 0 };
+      const dns = dnMap.get(pid) || { outBefore: 0, outDuring: 0 };
+      const cns = cnMap.get(pid) || { inBefore: 0, inDuring: 0 };
+      const psv = psvMap.get(pid) || { inBefore: 0, inDuring: 0, outBefore: 0, outDuring: 0 };
 
       const hasAnchor = product.openingQty !== undefined;
       let openingQty, closingQty;
 
       if (hasAnchor) {
         // Opening = Anchor (Mar 31) + Movements BEFORE Report Start
-        openingQty = product.openingQty + ps.inBeforeReport + cns.inBeforeReport - ss.outBeforeReport - dns.outBeforeReport;
+        openingQty = product.openingQty + ps.inBefore + cns.inBefore + psv.inBefore - ss.outBefore - dns.outBefore - psv.outBefore;
         // Closing = Opening + Movements DURING Report Period
-        closingQty = openingQty + ps.inDuringPeriod + cns.inDuringPeriod - ss.outDuringPeriod - dns.outDuringPeriod;
+        closingQty = openingQty + ps.inDuring + cns.inDuring + psv.inDuring - ss.outDuring - dns.outDuring - psv.outDuring;
       } else {
         // Fallback if no anchor (Back-calculation from totalQty)
-        const totalInSinceReport = ps.inDuringPeriod + cns.inDuringPeriod;
-        const totalOutSinceReport = ss.outDuringPeriod + dns.outDuringPeriod;
+        const totalInSinceReport = ps.inDuring + cns.inDuring + psv.inDuring;
+        const totalOutSinceReport = ss.outDuring + dns.outDuring + psv.outDuring;
         openingQty = Math.max(0, product.totalQty - totalInSinceReport + totalOutSinceReport);
         closingQty = product.totalQty;
       }
 
-      const inwards = ps.inDuringPeriod + cns.inDuringPeriod;
-      const outwards = ss.outDuringPeriod + dns.outDuringPeriod;
+      const inwards = ps.inDuring + cns.inDuring + psv.inDuring;
+      const outwards = ss.outDuring + dns.outDuring + psv.outDuring;
 
       return {
         productId: pid,
@@ -1572,14 +1607,13 @@ router.get("/:id/ledger", auth, async (req, res) => {
     // 🌍 LOCAL TIMEZONE LOCK: Asia/Kolkata
     const start = moment.tz(fromDate, "Asia/Kolkata").startOf('day').toDate();
     const end = moment.tz(toDate, "Asia/Kolkata").endOf('day').toDate();
-    const HARD_ANCHOR_DATE = moment.tz("2026-03-31 23:59:59", "Asia/Kolkata").toDate();
 
     // 🔗 Fetch Ground Truth (Anchor)
     const product = await Product.findById(id).select("openingQty manualOpeningDate").lean();
     if (!product) return res.status(404).json({ success: false, message: "Product not found" });
 
     // 🧮 1. Calculate Movements BEFORE Report Start (Post-Anchor)
-    const [pBefore, sBefore, dnBefore, cnBefore] = await Promise.all([
+    const [pBefore, sBefore, dnBefore, cnBefore, psvBefore] = await Promise.all([
       PurchaseOrder.aggregate([
         { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, date: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
         { $unwind: "$items" },
@@ -1605,15 +1639,19 @@ router.get("/:id/ledger", auth, async (req, res) => {
         { $unwind: "$items" },
         { $match: { "items.productId": productOid } },
         { $group: { _id: null, total: { $sum: "$items.qty" } } }
+      ]),
+      PhysicalStockEntry.aggregate([
+        { $match: { branchId: branchOid, status: "APPROVED", productId: productOid, "approvedBy.approvedAt": { $gt: HARD_ANCHOR_DATE, $lt: start } } },
+        { $group: { _id: null, inward: { $sum: "$inwardQty" }, outward: { $sum: "$outwardQty" } } }
       ])
     ]);
 
     const openingBalance = (product.openingQty || 0) +
-      (pBefore[0]?.total || 0) + (cnBefore[0]?.total || 0) -
-      (sBefore[0]?.total || 0) - (dnBefore[0]?.total || 0);
+      (pBefore[0]?.total || 0) + (cnBefore[0]?.total || 0) + (psvBefore[0]?.inward || 0) -
+      (sBefore[0]?.total || 0) - (dnBefore[0]?.total || 0) - (psvBefore[0]?.outward || 0);
 
     // 💸 2. Fetch Movements DURING Report Period
-    const [sales, purchases, debitNotes, creditNotes] = await Promise.all([
+    const [sales, purchases, debitNotes, creditNotes, psvs] = await Promise.all([
       Invoice.aggregate([
         { $match: { branchId: branchOid, status: { $ne: "CANCELLED" }, invoiceDate: { $gte: start, $lte: end } } },
         { $unwind: "$items" },
@@ -1660,10 +1698,21 @@ router.get("/:id/ledger", auth, async (req, res) => {
             value: { $multiply: [{ $ifNull: ["$items.qty", "$items.returnedQty", 0] }, { $ifNull: ["$items.sellingPrice", 0] }] }
           }
         }
-      ])
+      ]),
+      PhysicalStockEntry.find({ branchId: branchOid, productId: productOid, status: "APPROVED", "approvedBy.approvedAt": { $gte: start, $lte: end } }).lean()
     ]);
 
-    const unified = [...sales, ...purchases, ...debitNotes, ...creditNotes].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const psvTxns = psvs.map(p => ({
+      type: p.inwardQty > 0 ? "INWARD" : "OUTWARD",
+      date: p.approvedBy?.approvedAt || p.entryDate,
+      voucherType: "Stock Journal",
+      invoiceId: p.sjId,
+      particulars: `Stock Journal (${p.approvedBy?.username || 'Admin'})`,
+      qty: p.inwardQty > 0 ? p.inwardQty : p.outwardQty,
+      rate: 0,
+      value: 0
+    }));
+    const unified = [...sales, ...purchases, ...debitNotes, ...creditNotes, ...psvTxns].sort((a, b) => new Date(a.date) - new Date(b.date));
 
     res.json({
       success: true,

@@ -13,6 +13,7 @@ import Receipt from "../models/Receipt.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import CreditNote from "../models/CreditNote.js";
 import mongoose from "mongoose";
+import PhysicalStockEntry from "../models/PhysicalStockEntry.js";
 
 const router = express.Router();
 
@@ -523,6 +524,13 @@ router.get("/day-book", async (req, res) => {
       ...(fromDate || toDate ? { createdAt: dateFilter } : {})
     }).select("debitNoteId vendor grandTotal createdAt");
 
+    // 8. Fetch Approved Physical Stock Adjustments (SJ)
+    const physicalStockEntries = await PhysicalStockEntry.find({
+      branchId,
+      status: "APPROVED",
+      ...(fromDate || toDate ? { entryDate: dateFilter } : {})
+    }).select("sjId productName productGroupName inwardQty outwardQty approvedBy entryDate createdAt").lean();
+
     // Combine and Transform
     const dayBook = [
       ...salesOrders.map(s => ({
@@ -608,6 +616,18 @@ router.get("/day-book", async (req, res) => {
         debit: dn.grandTotal || 0,
         credit: 0,
         type: "DEBIT_NOTE"
+      })),
+      // ✅ Stock Adjustment entries from Physical Stock Verification
+      ...physicalStockEntries.map(psv => ({
+        _id: psv._id,
+        date: psv.entryDate || psv.createdAt,
+        name: psv.productName + (psv.productGroupName ? ` (${psv.productGroupName})` : ""),
+        voucherType: "SJ",
+        invoiceId: psv.sjId,
+        debit:  psv.inwardQty  > 0 ? psv.inwardQty  : 0,   // Inward = stock increases
+        credit: psv.outwardQty > 0 ? psv.outwardQty : 0,   // Outward = stock decreases
+        type: "STOCK_ADJUSTMENT",
+        approvedBy: psv.approvedBy?.username || "-"
       }))
     ].sort((a, b) => new Date(b.date) - new Date(a.date));
 

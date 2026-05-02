@@ -6,7 +6,7 @@ import {
   FaDownload, FaLock, FaBookOpen, FaShieldAlt, FaPlusCircle,
   FaFileInvoice, FaList, FaUndo, FaMoneyCheckAlt, FaReceipt,
   FaBoxes, FaHandHoldingUsd, FaPlus, FaSync, FaTicketAlt, FaPhone,
-  FaCalendarCheck, FaMoneyCheck, FaFileContract
+  FaCalendarCheck, FaMoneyCheck, FaFileContract, FaCheckSquare
 } from "react-icons/fa";
 
 export const ICON_MAP = {
@@ -42,7 +42,8 @@ export const ICON_MAP = {
   phone: <FaPhone />,
   calendar: <FaCalendarCheck />,
   payroll: <FaMoneyCheck />,
-  structure: <FaFileContract />
+  structure: <FaFileContract />,
+  check: <FaCheckSquare />
 };
 
 export const PAGE_CONFIG = [
@@ -131,7 +132,7 @@ export const PAGE_CONFIG = [
       { id: "ledgers", name: "Ledger", path: "/branch/ledger", icon: "book", permissionFields: ["details", "hierarchy", "nature", "tax", "debit", "credit", "net"] },
 
       { id: "journals", name: "Journal Master", path: "/branch/journals", icon: "book", permissionFields: ["name", "group", "gstin", "type", "debit", "credit"] },
-      { id: "stock-journal", name: "Stock Journal", path: "/branch/stock-journal", icon: "history" },
+
       { id: "day-book", name: "Day Book", path: "/branch/day-book", icon: "bookOpen", permissionFields: ["date", "voucherType", "invoiceId", "accountName", "debit", "credit"] },
       { id: "extra-expense-ledger", name: "Extra Expense Ledger", path: "/branch/extra-expense-ledger", icon: "list", permissionFields: ["date", "type", "invoiceId", "partyName", "expenseName", "baseAmount", "gstPercent", "gstAmount", "total"] },
     ]
@@ -141,6 +142,17 @@ export const PAGE_CONFIG = [
     items: [
       { id: "insights", name: "Insights & Analysis", path: "/branch/insights", icon: "chart" },
       { id: "stock-summary", name: "Stock Summary (Tally)", path: "/branch/stock-summary", icon: "bookOpen", permissionFields: ["groupName", "opening", "inwards", "outwards", "closingQty", "closingValue"] },
+    ]
+  },
+  {
+    category: "Inventory Audit",
+    items: [
+      {
+        id: "physical-stock-dropdown", name: "Stock Verification", icon: "inventory", isDropdown: true, subItems: [
+          { id: "physical-stock-entry", name: "Stock Journal Entry", path: "/branch/physical-stock", icon: "add" },
+          { id: "physical-stock-records", name: "Stock Journal Records", path: "/branch/physical-stock-records", icon: "history" },
+        ]
+      },
     ]
   },
   {

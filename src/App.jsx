@@ -56,6 +56,8 @@ import BranchReceiptRecords from "./pages/branch/BranchReceiptRecords";
 import BranchPaymentRecords from "./pages/branch/BranchPaymentRecords";
 import BranchFollowUp from "./pages/branch/BranchFollowUp";
 import BranchFollowUpRecords from "./pages/branch/BranchFollowUpRecords";
+import BranchPhysicalStock from "./pages/branch/BranchPhysicalStock";
+import BranchPhysicalStockRecords from "./pages/branch/BranchPhysicalStockRecords";
 
 import BranchProductConfig from "./pages/branch/BranchProductConfig";
 import BranchCustomerLedger from "./pages/branch/BranchCustomerLedger";
@@ -626,6 +628,8 @@ function AppContent() {
 
                   <Route path="/branch/follow-up" element={<ProtectedRoute element={<BranchFollowUp />} />} />
                   <Route path="/branch/follow-up-records" element={<ProtectedRoute element={<BranchFollowUpRecords />} />} />
+                  <Route path="/branch/physical-stock" element={<ProtectedRoute element={<BranchPhysicalStock />} />} />
+                  <Route path="/branch/physical-stock-records" element={<ProtectedRoute element={<BranchPhysicalStockRecords />} />} />
                   <Route path="/branch/tokenization" element={<ProtectedRoute element={<Tokenization />} />} />
                   <Route path="/branch/delivery-flow" element={<ProtectedRoute element={<BranchDeliveryFlow />} />} />
                   <Route path="/branch/delivery-records" element={<ProtectedRoute element={<BranchDeliveryRecords />} />} />
