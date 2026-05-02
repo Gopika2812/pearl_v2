@@ -24,7 +24,7 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
     address: invoice.seller?.address || invoice.branchId?.address || "Address Not Provided",
     gstin: invoice.seller?.gstin || invoice.branchId?.gstin || "N/A",
     phone: invoice.seller?.phone || invoice.branchId?.phone || "N/A",
-    gpayNo: invoice.seller?.gpayNo || invoice.branchId?.gpayNo || "",
+    gpayNo: invoice.seller?.gpayNo || invoice.seller?.upiId || invoice.branchId?.gpayNo || invoice.branchId?.upiId || "",
     state: invoice.seller?.state || invoice.branchId?.state || "Tamil Nadu",
     stateCode: invoice.seller?.stateCode || invoice.branchId?.stateCode || "33",
   };
@@ -41,6 +41,12 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
     setTimeout(() => {
       if (printWindow) printWindow.print();
     }, 500);
+  };
+
+  const formatBalance = (val) => {
+    const absVal = Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2 });
+    const label = val >= 0 ? "Dr" : "Cr";
+    return `₹${absVal} ${label}`;
   };
 
   const getEInvoiceHTML = () => {
@@ -62,7 +68,7 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
         .company-info { flex: 1; }
         .company-name { font-size: 20px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: -0.5px; }
         .company-details { font-size: 11px; color: #475569; margin-top: 2px; }
-        .qr-section { width: 40mm; text-align: right; }
+        .qr-section { width: 45mm; text-align: right; }
         .qr-code { width: 35mm; height: 35mm; object-fit: contain; border: 1px solid #e2e8f0; padding: 2px; }
 
         .invoice-title { 
@@ -143,18 +149,20 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
                   GSTIN: <strong>${invoice.customer?.gstin || "URP"}</strong> | Pos: ${invoice.customer?.stateCode || "33"}
                 </div>
               </div>
-              <div style="text-align: right; flex: 1;">
-                 <span class="meta-label">${invoice.creditNoteId ? "Credit Note" : "Invoice"} Details</span>
-                 <div class="meta-value">${invoice.invoiceNumber || invoice.creditNoteId}</div>
-                 <div class="meta-value" style="font-size: 11px;">Date: ${new Date(invoice.invoiceDate || invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
-
-              </div>
             </div>
           </div>
           
           <div class="qr-section">
-            ${qrImage ? `<img src="${qrImage}" class="qr-code" alt="E-Invoice QR" />` : `<div class="qr-code" style="display:flex;align-items:center;justify-content:center;color:#ccc;font-size:8px;">[ QR CODE EMPTY ]</div>`}
-            <div style="font-size: 8px; font-weight: bold; margin-top: 1mm; text-align: center;">E-INVOICE SIGNED</div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 1mm;">
+              ${qrImage ? `<img src="${qrImage}" class="qr-code" alt="E-Invoice QR" />` : `<div class="qr-code" style="display:flex;align-items:center;justify-content:center;color:#ccc;font-size:8px;">[ QR CODE EMPTY ]</div>`}
+              <div style="font-size: 8px; font-weight: bold; text-align: center; text-transform: uppercase;">E-INVOICE SIGNED</div>
+
+              <div style="margin-top: 1mm; text-align: center; white-space: nowrap;">
+                 <span style="font-size: 11px; font-weight: 900; color: #0f172a;">${invoice.invoiceNumber || invoice.creditNoteId}</span>
+                 <span style="font-size: 10px; font-weight: 700; color: #475569; margin-left: 2mm;">Date: ${new Date(invoice.invoiceDate || invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+              </div>
+
+            </div>
           </div>
         </div>
 
@@ -211,9 +219,25 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
 
         <div style="display: flex; gap: 10mm; margin-bottom: 20mm;">
            <div style="flex: 1;">
-              <div style="font-size: 10px; border: 1px solid #e2e8f0; padding: 3mm; border-radius: 4px; background: #fffbeb;">
+              <div style="font-size: 10px; border: 1px solid #e2e8f0; padding: 3mm; border-radius: 4px; background: #fffbeb; margin-bottom: 3mm;">
                 <strong>Remarks / Notes:</strong><br/>
                 <span id="amountWords" style="text-transform: capitalize;">${invoice.invoiceNotes || "N/A"}</span>
+              </div>
+              <div style="display: flex; gap: 5mm; align-items: center;">
+                 <div style="background: #f8fafc; border-left: 4px solid #334155; padding: 2mm 4mm; border-radius: 4px; flex: 1;">
+                    <span style="font-size: 8px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">Previous Balance</span>
+                    <span style="font-size: 12px; font-weight: 900; color: #0f172a;">${formatBalance(invoice.openingBalance || 0)}</span>
+                 </div>
+                 <div style="background: #f1f5f9; border-left: 4px solid #0f172a; padding: 2mm 4mm; border-radius: 4px; flex: 1;">
+                    <span style="font-size: 8px; font-weight: 800; color: #64748b; text-transform: uppercase; display: block;">Closing Balance</span>
+                    <span style="font-size: 12px; font-weight: 900; color: #0f172a;">${formatBalance(invoice.closingBalance || 0)}</span>
+                 </div>
+                 ${seller.gpayNo ? `
+                   <div style="text-align: center; margin-left: 2mm;">
+                      <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(`upi://pay?pa=${seller.gpayNo}&pn=${seller.name}&cu=INR`)}" style="width: 15mm; height: 15mm; border: 1px solid #e2e8f0; padding: 1mm; border-radius: 4px;" alt="GPay QR" />
+                      <div style="font-size: 6px; font-weight: 800; color: #475569; margin-top: 1px;">GPAY: ${seller.gpayNo}</div>
+                   </div>
+                 ` : ""}
               </div>
            </div>
            <div class="totals-section">
@@ -285,14 +309,21 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
                   <div className="text-xs text-gray-500 font-bold mt-1 max-w-xs">{seller.address}</div>
                 </div>
                 
-                <div className="w-24 h-24 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-                  {qrImage ? (
-                    <img src={qrImage} className="w-full h-full object-contain p-1" alt="Preview QR" />
-                  ) : (
-                    <div className="text-[10px] text-gray-300 font-bold text-center p-2 underline decoration-red-500 decoration-2">
-                       [ QR MISSING ]
-                    </div>
-                  )}
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-24 h-24 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
+                    {qrImage ? (
+                      <img src={qrImage} className="w-full h-full object-contain p-1" alt="Preview QR" />
+                    ) : (
+                      <div className="text-[10px] text-gray-300 font-bold text-center p-2 underline decoration-red-500 decoration-2">
+                         [ QR MISSING ]
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-center bg-gray-50 px-3 py-1 rounded-full border border-gray-100">
+                     <span className="text-[11px] font-black text-slate-800 tracking-tight">{invoice.invoiceNumber || invoice.creditNoteId}</span>
+                     <span className="text-[10px] font-bold text-gray-500 ml-3 border-l pl-3 border-gray-200">Date: {new Date(invoice.invoiceDate || invoice.date).toLocaleDateString('en-IN')}</span>
+                  </div>
+
                 </div>
               </div>
 
@@ -311,10 +342,32 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <div className="h-4 bg-gray-100 rounded w-full"></div>
-                <div className="h-4 bg-gray-50 rounded w-3/4"></div>
-                <div className="h-4 bg-gray-100 rounded w-full"></div>
+              <div className="space-y-4">
+                <div className="bg-amber-50/50 border border-amber-100 p-3 rounded-lg">
+                  <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest block mb-1">Remarks / Notes</span>
+                  <p className="text-xs font-bold text-amber-900">{invoice.invoiceNotes || "N/A"}</p>
+                </div>
+                
+                <div className="flex gap-3 items-center">
+                   <div className="bg-slate-50 border-l-4 border-slate-400 p-3 rounded-r-lg flex-1">
+                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Previous Balance</span>
+                      <span className="text-xs font-black text-slate-700">{formatBalance(invoice.openingBalance || 0)}</span>
+                   </div>
+                   <div className="bg-indigo-50 border-l-4 border-indigo-600 p-3 rounded-r-lg flex-1">
+                      <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest block mb-0.5">Closing Balance</span>
+                      <span className="text-xs font-black text-indigo-900">{formatBalance(invoice.closingBalance || 0)}</span>
+                   </div>
+                   {seller.gpayNo && (
+                      <div className="flex flex-col items-center gap-1 pl-2">
+                        <img 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(`upi://pay?pa=${seller.gpayNo}&pn=${seller.name}&cu=INR`)}`} 
+                          className="w-10 h-10 border border-gray-100 p-1 rounded" 
+                          alt="GPay QR" 
+                        />
+                        <span className="text-[6px] font-black text-gray-400 uppercase">GPAY</span>
+                      </div>
+                   )}
+                </div>
               </div>
            </div>
            

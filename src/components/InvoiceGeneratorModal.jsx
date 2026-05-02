@@ -831,11 +831,6 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                     GPAY No: ${previewData?.seller?.gpayNo || currentBranch?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
-                ${previewData?.seller?.upiId ? `
-                <div class="upi-qr-box">
-                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=72x72&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" alt="UPI QR" />
-                  <div class="upi-qr-label">Scan to Pay</div>
-                </div>` : ''}
               </div>
               ` : ''}
 
@@ -998,11 +993,6 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                     GPAY No: ${previewData?.seller?.gpayNo || currentBranch?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
                   </div>
                 </div>
-                ${previewData?.seller?.upiId ? `
-                <div class="upi-qr-box">
-                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=72x72&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" alt="UPI QR" />
-                  <div class="upi-qr-label">Scan to Pay</div>
-                </div>` : ''}
               </div>
 
               <div class="section-title" style="background: #1e293b; color: #fff;">📊 HSN-WISE TAX SUMMARY</div>
@@ -1061,18 +1051,34 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                 </tbody>
               </table>
 
-              <div class="total-section">
-                <div style="font-size: 11px;">Subtotal (Gross): <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
-                ${previewData?.totalTax?.igst > 0 ?
-            `<div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` :
-            `<div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
-                   <div style="font-size: 11px;">SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
-          }
-                ${previewData?.commonDiscount > 0 ? `<div style="font-size: 11px;">Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
-                ${previewData?.transportCharge > 0 ? `<div style="font-size: 11px;">Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
-                ${previewData?.extraExpenseAmount > 0 ? `<div style="font-size: 11px;">Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
-                ${previewData?.roundingOff !== 0 ? `<div style="font-size: 11px;">Rounding Off: <strong>${previewData.roundingOff > 0 ? '+' : ''}₹${previewData.roundingOff.toFixed(2)}</strong></div>` : ""}
-                <div class="grand-total">TOTAL AMOUNT: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
+              <div class="total-section" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div style="flex: 1;">
+                   <div class="balance-info" style="display: flex; gap: 20px; align-items: center;">
+                      <div>
+                        <div><strong>Previous Balance:</strong> ${previewData?.formattedOpeningBalance || (previewData?.openingBalance >= 0 ? '₹' + (previewData?.openingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.openingBalance || 0).toFixed(2) + ' Cr')}</div>
+                        <div style="margin-top: 4px;"><strong>Closing Balance:</strong> ${previewData?.formattedClosingBalance || (previewData?.closingBalance >= 0 ? '₹' + (previewData?.closingBalance || 0).toFixed(2) + ' Dr' : '₹' + Math.abs(previewData?.closingBalance || 0).toFixed(2) + ' Cr')}</div>
+                      </div>
+                      ${(previewData?.seller?.gpayNo || previewData?.seller?.upiId || currentBranch?.gpayNo || currentBranch?.upiId) ? `
+                        <div style="text-align: center;">
+                           <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(`upi://pay?pa=${previewData?.seller?.gpayNo || previewData?.seller?.upiId || currentBranch?.gpayNo || currentBranch?.upiId}&pn=${previewData?.seller?.name || 'Pearl Agency'}&cu=INR`)}" style="width: 15mm; height: 15mm; border: 1px solid #e2e8f0; padding: 1mm; border-radius: 4px;" alt="GPay QR" />
+                           <div style="font-size: 7px; font-weight: 800; margin-top: 1px;">SCAN TO PAY</div>
+                        </div>
+                      ` : ""}
+                   </div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-size: 11px;">Subtotal (Gross): <strong>₹${previewData?.subtotal?.toFixed(2) || 0}</strong></div>
+                  ${previewData?.totalTax?.igst > 0 ?
+              `<div style="font-size: 11px;">IGST: <strong>₹${(previewData?.totalTax?.igst || 0).toFixed(2)}</strong></div>` :
+              `<div style="font-size: 11px;">CGST: <strong>₹${(previewData?.totalTax?.cgst || 0).toFixed(2)}</strong></div>
+                     <div style="font-size: 11px;">SGST: <strong>₹${(previewData?.totalTax?.sgst || 0).toFixed(2)}</strong></div>`
+            }
+                  ${previewData?.commonDiscount > 0 ? `<div style="font-size: 11px;">Common Discount: <strong style="color: red;">-₹${previewData.commonDiscount.toFixed(2)}</strong></div>` : ""}
+                  ${previewData?.transportCharge > 0 ? `<div style="font-size: 11px;">Transport: <strong>₹${previewData.transportCharge.toFixed(2)}</strong></div>` : ""}
+                  ${previewData?.extraExpenseAmount > 0 ? `<div style="font-size: 11px;">Extra Expenses: <strong>₹${previewData.extraExpenseAmount.toFixed(2)}</strong></div>` : ""}
+                  ${previewData?.roundingOff !== 0 ? `<div style="font-size: 11px;">Rounding Off: <strong>${previewData.roundingOff > 0 ? '+' : ''}₹${previewData.roundingOff.toFixed(2)}</strong></div>` : ""}
+                  <div class="grand-total">TOTAL AMOUNT: ₹${previewData?.grandTotal?.toFixed(2) || 0}</div>
+                </div>
               </div>
 
               <!-- BACK ORDER SECTION (if applicable) -->

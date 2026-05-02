@@ -94,6 +94,11 @@ const SuperAdminBranchManagement = () => {
         setShowBranchModal(false);
         resetForm();
         fetchBranches();
+        
+        // Update context if we just edited the active branch
+        if (editingBranch && (selectedBranch?._id === editingBranch._id)) {
+          setSuperAdminViewBranch(data.data);
+        }
       } else {
         toast.error(data.message || "Operation failed");
       }
@@ -410,7 +415,7 @@ const SuperAdminBranchManagement = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Terminal No</label>
+                  <label className="text-[9px] font-black text-primary uppercase tracking-widest ml-1">GPay No / UPI ID</label>
                   <input
                     type="text"
                     value={branchForm.gpayNo}
