@@ -1294,6 +1294,43 @@ router.put("/:invoiceId/revoke", async (req, res) => {
   }
 });
 
+// POST - Get last invoice info for a batch of customers (for Follow-Up page)
+router.post("/last-by-customers", async (req, res) => {
+  try {
+    const { customerIds, branchId } = req.body;
+    if (!customerIds || !Array.isArray(customerIds) || customerIds.length === 0) {
+      return res.status(400).json({ success: false, message: "customerIds array required" });
+    }
+
+    const objectIds = customerIds
+      .filter(id => mongoose.Types.ObjectId.isValid(id))
+      .map(id => new mongoose.Types.ObjectId(id));
+
+    const results = await Invoice.aggregate([
+      {
+        $match: {
+          "customer.customerId": { $in: objectIds },
+          status: { $ne: "CANCELLED" },
+          ...(branchId ? { branchId: new mongoose.Types.ObjectId(branchId) } : {})
+        }
+      },
+      { $sort: { invoiceDate: -1 } },
+      {
+        $group: {
+          _id: "$customer.customerId",
+          lastInvoiceNumber: { $first: "$invoiceNumber" },
+          lastInvoiceDate: { $first: "$invoiceDate" }
+        }
+      }
+    ]);
+
+    res.json({ success: true, data: results });
+  } catch (err) {
+    console.error("Last by customers error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // GET - Get all invoices for a branch
 // GET sales invoices with pagination and filtering (Sales Reports)
 router.get("", async (req, res) => {

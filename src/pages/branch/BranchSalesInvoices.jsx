@@ -108,7 +108,7 @@ const BranchSalesInvoices = () => {
   const [filterVoucherPrefix, setFilterVoucherPrefix] = useState("");
   const [filterEinvoiceStatus, setFilterEinvoiceStatus] = useState("");
   const [branchUsers, setBranchUsers] = useState([]);
-  const [sortField, setSortField] = useState("invoiceNumber");
+  const [sortField, setSortField] = useState("invoiceDate");
   const [sortOrder, setSortOrder] = useState("desc");
   
   // Permission helper
@@ -176,7 +176,7 @@ const BranchSalesInvoices = () => {
     setLoading(true);
     try {
       // Build query string
-      let url = `${API_BASE}/invoices?branchId=${currentBranch._id}&page=${currentPage}`;
+      let url = `${API_BASE}/invoices?branchId=${currentBranch._id}&page=${currentPage}&limit=100`;
       
       if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
       if (filterFromDate) url += `&fromDate=${filterFromDate}`;

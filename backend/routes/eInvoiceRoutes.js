@@ -323,12 +323,40 @@ router.post("/bulk-generate", async (req, res) => {
 });
 
 /**
+ * POST /api/einvoice/bulk-pdf-count
+ * Returns the total count of generated invoices for a given month, for pagination.
+ */
+router.post("/bulk-pdf-count", async (req, res) => {
+  try {
+    const { branchId, month, year } = req.body;
+    if (!branchId || !month || !year) {
+      return res.status(400).json({ success: false, message: "Missing branchId, month, or year" });
+    }
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const total = await Invoice.countDocuments({
+      branchId,
+      invoiceDate: { $gte: startDate, $lte: endDate },
+      einvoiceStatus: "GENERATED",
+      invoicePdfUrl: { $exists: true, $ne: "" }
+    });
+
+    res.json({ success: true, total });
+  } catch (error) {
+    console.error("Bulk PDF Count Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * POST /api/einvoice/bulk-pdf-download
  * Downloads and merges e-invoice PDFs for a given month and branch.
+ * Supports pagination via `page` and `batchSize` body params (default: page=1, batchSize=10).
  */
 router.post("/bulk-pdf-download", async (req, res) => {
   try {
-    const { branchId, month, year } = req.body;
+    const { branchId, month, year, page = 1, batchSize = 10 } = req.body;
     
     if (!branchId || !month || !year) {
       return res.status(400).json({ success: false, message: "Missing branchId, month, or year" });
@@ -336,16 +364,20 @@ router.post("/bulk-pdf-download", async (req, res) => {
 
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+    const skip = (parseInt(page) - 1) * parseInt(batchSize);
 
     const invoices = await Invoice.find({
       branchId,
       invoiceDate: { $gte: startDate, $lte: endDate },
       einvoiceStatus: "GENERATED",
       invoicePdfUrl: { $exists: true, $ne: "" }
-    }).sort({ invoiceDate: 1 });
+    })
+      .sort({ invoiceDate: 1 })
+      .skip(skip)
+      .limit(parseInt(batchSize));
 
     if (invoices.length === 0) {
-      return res.status(404).json({ success: false, message: "No generated E-Invoices found for this month." });
+      return res.status(404).json({ success: false, message: "No generated E-Invoices found for this batch." });
     }
 
     // Create a new empty PDF
@@ -353,8 +385,16 @@ router.post("/bulk-pdf-download", async (req, res) => {
 
     for (const inv of invoices) {
       try {
-        const response = await fetch(inv.invoicePdfUrl);
-        if (!response.ok) continue;
+        let pdfUrl = inv.invoicePdfUrl;
+        if (pdfUrl.startsWith("/")) {
+          pdfUrl = `${gstzenService.baseUrl}${pdfUrl}`;
+        }
+        
+        const response = await fetch(pdfUrl);
+        if (!response.ok) {
+          console.error(`Failed to fetch PDF for ${inv.invoiceNumber}: Status ${response.status} from ${pdfUrl}`);
+          continue;
+        }
         const pdfBytes = await response.arrayBuffer();
         
         const invoiceDoc = await PDFDocument.load(pdfBytes);
@@ -366,11 +406,10 @@ router.post("/bulk-pdf-download", async (req, res) => {
     }
 
     const mergedPdfBytes = await mergedPdf.save();
-    
     const buffer = Buffer.from(mergedPdfBytes);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=Merged_EInvoices_${month}_${year}.pdf`);
+    res.setHeader('Content-Disposition', `attachment; filename=EInvoices_${month}_${year}_Part${page}.pdf`);
     res.send(buffer);
 
   } catch (error) {
