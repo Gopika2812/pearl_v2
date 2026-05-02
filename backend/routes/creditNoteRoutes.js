@@ -592,7 +592,7 @@ router.post("/general", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { items, reasonForReturn, userId, username } = req.body;
+    const { items, reasonForReturn, userId, username, customerId } = req.body;
 
     const oldCN = await CreditNote.findById(id);
     if (!oldCN) return res.status(404).json({ success: false, message: "Credit note not found" });
@@ -617,13 +617,15 @@ router.put("/:id", async (req, res) => {
         });
       }
     }
-    // Reverse Customer Balance
-    const customer = await Customer.findById(oldCN.customer.customerId);
-    if (customer) {
-      const restoredBalance = (customer.closingBalance || 0) + oldCN.grandTotal;
+
+    // Reverse Customer Balance (Old Customer)
+    const oldCustomerId = oldCN.customer.customerId;
+    const oldCustomer = await Customer.findById(oldCustomerId);
+    if (oldCustomer) {
+      const restoredBalance = (oldCustomer.closingBalance || 0) + oldCN.grandTotal;
       let amountToTakeBack = oldCN.grandTotal;
-      let currentDebit = customer.debit || 0;
-      let currentCredit = customer.credit || 0;
+      let currentDebit = oldCustomer.debit || 0;
+      let currentCredit = oldCustomer.credit || 0;
 
       // Reverse the netted logic
       if (currentCredit >= amountToTakeBack) {
@@ -634,7 +636,7 @@ router.put("/:id", async (req, res) => {
         currentDebit += amountToTakeBack;
       }
 
-      await Customer.findByIdAndUpdate(customer._id, {
+      await Customer.findByIdAndUpdate(oldCustomer._id, {
         debit: currentDebit,
         credit: currentCredit,
         closingBalance: restoredBalance,
@@ -642,7 +644,14 @@ router.put("/:id", async (req, res) => {
       });
     }
 
-    // 2️⃣ CALCULATE NEW TOTALS
+    // 2️⃣ HANDLE CUSTOMER CHANGE IF NECESSARY
+    let finalCustomer = oldCustomer;
+    if (customerId && customerId !== oldCustomerId.toString()) {
+      finalCustomer = await Customer.findById(customerId);
+      if (!finalCustomer) return res.status(404).json({ success: false, message: "New customer not found" });
+    }
+
+    // 3️⃣ CALCULATE NEW TOTALS
     let subtotal = 0;
     let totalTax = 0;
     let grandTotal = 0;
@@ -672,7 +681,7 @@ router.put("/:id", async (req, res) => {
       });
     }
 
-    // 3️⃣ APPLY NEW IMPACT
+    // 4️⃣ APPLY NEW IMPACT
     // Apply Inventory
     for (const item of newItems) {
       if (item.productId) {
@@ -681,12 +690,15 @@ router.put("/:id", async (req, res) => {
         });
       }
     }
-    // Apply Customer Balance
-    if (customer) {
-      const newBalance = (customer.closingBalance || 0) + oldCN.grandTotal - Math.round(grandTotal);
+
+    // Apply Customer Balance (Final Customer - might be new)
+    if (finalCustomer) {
+      // Re-fetch to get current state after potential old impact reversal (if same customer) 
+      // or fresh state (if new customer)
+      const freshCustomer = await Customer.findById(finalCustomer._id);
+      
+      const newBalance = (freshCustomer.closingBalance || 0) - Math.round(grandTotal);
       let amountToReturn = Math.round(grandTotal);
-      // Fetch fresh customer data after reversal
-      const freshCustomer = await Customer.findById(customer._id);
       let cDebit = freshCustomer.debit || 0;
       let cCredit = freshCustomer.credit || 0;
 
@@ -698,7 +710,7 @@ router.put("/:id", async (req, res) => {
         cCredit += amountToReturn;
       }
 
-      await Customer.findByIdAndUpdate(customer._id, {
+      await Customer.findByIdAndUpdate(freshCustomer._id, {
         debit: cDebit,
         credit: cCredit,
         closingBalance: newBalance,
@@ -706,14 +718,33 @@ router.put("/:id", async (req, res) => {
       });
     }
 
-    // 4️⃣ UPDATE RECORD
-    const updatedCN = await CreditNote.findByIdAndUpdate(id, {
+    // 5️⃣ UPDATE RECORD
+    const updateData = {
       items: newItems,
       reasonForReturn,
       subtotal: Math.round(subtotal),
       totalTax: Math.round(totalTax),
       grandTotal: Math.round(grandTotal),
-    }, { new: true });
+    };
+
+    // If customer changed, update customer details in CN
+    if (customerId && customerId !== oldCustomerId.toString()) {
+      updateData.customer = {
+        customerId: finalCustomer._id,
+        name: finalCustomer.name,
+        whatsapp: finalCustomer.whatsapp || "",
+        phone: finalCustomer.phone || "",
+        address: finalCustomer.address || "",
+        gstin: finalCustomer.gstin || "URP",
+        state: finalCustomer.state || "TAMIL NADU",
+        stateCode: finalCustomer.stateCode || "33",
+        pincode: finalCustomer.pincode || "",
+        district: finalCustomer.district || "",
+        closingBalance: finalCustomer.closingBalance || 0,
+      };
+    }
+
+    const updatedCN = await CreditNote.findByIdAndUpdate(id, updateData, { new: true });
 
     // AUDIT LOG
     try {

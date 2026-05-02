@@ -455,6 +455,185 @@ router.post("/bounce", async (req, res) => {
   }
 });
 
+// UPDATE receipt
+router.put("/:id", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params;
+    const { customerId, amount, paymentMethod, reference, notes, userId, username } = req.body;
+
+    const oldReceipt = await Receipt.findById(id).session(session);
+    if (!oldReceipt) {
+      await session.abortTransaction();
+      return res.status(404).json({ success: false, message: "Receipt not found" });
+    }
+
+    if (oldReceipt.status === "cancelled") {
+      await session.abortTransaction();
+      return res.status(400).json({ success: false, message: "Cannot edit a cancelled receipt" });
+    }
+
+    const oldCustomerId = oldReceipt.customer.customerId;
+    const oldCustomer = await Customer.findById(oldCustomerId).session(session);
+    
+    // 1️⃣ REVERSE OLD IMPACT
+    // Reverse Customer Balance
+    if (oldCustomer) {
+      const oldAmount = oldReceipt.amount || 0;
+      let cDebit = oldCustomer.debit || 0;
+      let cCredit = oldCustomer.credit || 0;
+
+      if (oldReceipt.paymentMethod === "CREDIT") {
+        cDebit += oldAmount;
+        cCredit += oldAmount;
+      } else {
+        let remainingToReverse = oldAmount;
+        const creditToRemove = Math.min(cCredit, remainingToReverse);
+        cCredit -= creditToRemove;
+        remainingToReverse -= creditToRemove;
+        cDebit += remainingToReverse;
+      }
+
+      const restoredBalance = (oldCustomer.closingBalance || 0) + (oldReceipt.paymentMethod === "CREDIT" ? 0 : oldAmount);
+
+      await Customer.findByIdAndUpdate(oldCustomer._id, {
+        debit: cDebit,
+        credit: cCredit,
+        closingBalance: restoredBalance,
+        totalBalance: restoredBalance,
+      }).session(session);
+    }
+
+    // Reverse Sales Order Balances
+    if (oldReceipt.relatedOrders && oldReceipt.relatedOrders.length > 0) {
+      for (const ro of oldReceipt.relatedOrders) {
+        await SalesOrder.findByIdAndUpdate(ro.salesOrderId, { 
+          $inc: { closingBalance: ro.amount } 
+        }).session(session);
+      }
+    } else if (oldReceipt.originalSalesOrderId) {
+      await SalesOrder.findByIdAndUpdate(oldReceipt.originalSalesOrderId, { 
+        $inc: { closingBalance: oldReceipt.amount } 
+      }).session(session);
+    }
+
+    // 2️⃣ HANDLE CUSTOMER CHANGE & NEW TOTALS
+    let finalCustomer = oldCustomer;
+    if (customerId && customerId !== oldCustomerId.toString()) {
+      finalCustomer = await Customer.findById(customerId).session(session);
+      if (!finalCustomer) {
+        await session.abortTransaction();
+        return res.status(404).json({ success: false, message: "New customer not found" });
+      }
+    }
+
+    const newAmount = Number(amount || oldReceipt.amount);
+    const newPaymentMethod = paymentMethod || oldReceipt.paymentMethod;
+
+    // 3️⃣ APPLY NEW IMPACT
+    // Apply Customer Balance
+    if (finalCustomer) {
+      // Re-fetch to get fresh state (might be same customer)
+      const freshCustomer = await Customer.findById(finalCustomer._id).session(session);
+      
+      let remainingAmount = newAmount;
+      let cDebit = freshCustomer.debit || 0;
+      let cCredit = freshCustomer.credit || 0;
+
+      if (newPaymentMethod === "CREDIT") {
+        const actualCreditToUse = Math.min(cCredit, remainingAmount);
+        cDebit = Math.max(0, cDebit - actualCreditToUse);
+        cCredit -= actualCreditToUse;
+      } else {
+        if (cDebit >= remainingAmount) {
+          cDebit -= remainingAmount;
+          remainingAmount = 0;
+        } else {
+          remainingAmount -= cDebit;
+          cDebit = 0;
+          cCredit += remainingAmount;
+        }
+      }
+
+      const newClosingBalance = (freshCustomer.closingBalance || 0) - (newPaymentMethod === "CREDIT" ? 0 : newAmount);
+
+      await Customer.findByIdAndUpdate(freshCustomer._id, {
+        debit: cDebit,
+        credit: cCredit,
+        closingBalance: newClosingBalance,
+        totalBalance: newClosingBalance,
+      }).session(session);
+    }
+
+    // Apply Sales Order Balances (ONLY if same customer)
+    // If customer changed, we UNLINK the sales orders from this receipt to prevent data corruption
+    let updatedOriginalSalesOrderId = oldReceipt.originalSalesOrderId;
+    let updatedOriginalInvoiceId = oldReceipt.originalInvoiceId;
+    let updatedRelatedOrders = oldReceipt.relatedOrders;
+
+    if (customerId && customerId !== oldCustomerId.toString()) {
+      // Customer changed - Unlink everything
+      updatedOriginalSalesOrderId = null;
+      updatedOriginalInvoiceId = "UNLINKED (CUST SWAP)";
+      updatedRelatedOrders = [];
+      console.log(`⚠️ Receipt ${oldReceipt.receiptId} unlinked from orders due to customer swap.`);
+    } else {
+      // Same customer - Update order balances with NEW amount
+      // Note: This is complex for bulk receipts. For simplicity, we only handle single order updates here
+      // if amount changed.
+      if (oldReceipt.originalSalesOrderId && !oldReceipt.relatedOrders?.length) {
+        await SalesOrder.findByIdAndUpdate(oldReceipt.originalSalesOrderId, { 
+          $inc: { closingBalance: -newAmount } 
+        }).session(session);
+      }
+      // Bulk receipts (relatedOrders) usually shouldn't be edited via this route, 
+      // but we maintain the link if customer is same.
+    }
+
+    // 4️⃣ UPDATE RECORD
+    const updateData = {
+      amount: newAmount,
+      paymentMethod: newPaymentMethod,
+      reference: reference !== undefined ? reference : oldReceipt.reference,
+      notes: notes !== undefined ? notes : oldReceipt.notes,
+      originalSalesOrderId: updatedOriginalSalesOrderId,
+      originalInvoiceId: updatedOriginalInvoiceId,
+      relatedOrders: updatedRelatedOrders,
+    };
+
+    if (customerId && customerId !== oldCustomerId.toString()) {
+      updateData.customer = {
+        customerId: finalCustomer._id,
+        name: finalCustomer.name,
+      };
+    }
+
+    const updatedReceipt = await Receipt.findByIdAndUpdate(id, updateData, { new: true, session });
+
+    // 5️⃣ AUDIT LOG
+    await createAuditLog({
+      userId: userId || "System",
+      username: username || "System",
+      branchId: oldReceipt.branchId,
+      action: "EDIT_RECEIPT",
+      description: `Edited receipt ${oldReceipt.receiptId}. New Amount: ₹${newAmount}. ${customerId ? 'Customer Swapped.' : ''}`,
+      targetId: id,
+      targetModel: "Receipt",
+    });
+
+    await session.commitTransaction();
+    res.json({ success: true, message: "Receipt updated successfully", data: updatedReceipt });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("Edit Receipt error:", error);
+    res.status(500).json({ success: false, message: "Failed to update receipt" });
+  } finally {
+    session.endSession();
+  }
+});
+
 // CANCEL receipt (delete receipt entry)
 router.delete("/:receiptId", async (req, res) => {
   try {

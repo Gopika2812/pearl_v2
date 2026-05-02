@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { FaArrowLeft, FaFileAlt, FaSearch, FaTimesCircle } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useBranch } from "../../context/BranchContext";
+import EditReceiptModal from "../../components/sales/EditReceiptModal";
+import { FaArrowLeft, FaFileAlt, FaSearch, FaTimesCircle, FaEdit } from "react-icons/fa";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 
@@ -15,6 +16,7 @@ export default function BranchReceiptRecords() {
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [activeFilter, setActiveFilter] = useState("ALL"); // ALL, CASH, BANK, CHEQUE
+  const [editReceipt, setEditReceipt] = useState(null);
   useEffect(() => {
     if (currentBranch?._id) fetchReceipts();
   }, [currentBranch, startDate, endDate]);
@@ -277,19 +279,31 @@ export default function BranchReceiptRecords() {
                           ₹{r.amount?.toLocaleString()}
                         </p>
                       </td>
-                      <td className="px-6 py-4 text-center">
-                        {r.status !== 'cancelled' ? (
-                          <button 
-                            onClick={() => handleCancel(r._id)}
-                            className="text-red-400 hover:text-red-600 transition p-2 hover:bg-red-50 rounded-lg"
-                            title="Cancel Receipt"
-                          >
-                            <FaTimesCircle size={16} />
-                          </button>
-                        ) : (
-                          <span className="text-[10px] font-bold text-red-600 uppercase italic bg-red-50 px-2 py-1 rounded">Cancelled</span>
-                        )}
-                      </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            {r.status !== 'cancelled' && (
+                              <>
+                                <button 
+                                  onClick={() => setEditReceipt(r)}
+                                  className="text-blue-400 hover:text-blue-600 transition p-2 hover:bg-blue-50 rounded-lg"
+                                  title="Edit Receipt"
+                                >
+                                  <FaEdit size={16} />
+                                </button>
+                                <button 
+                                  onClick={() => handleCancel(r._id)}
+                                  className="text-red-400 hover:text-red-600 transition p-2 hover:bg-red-50 rounded-lg"
+                                  title="Cancel Receipt"
+                                >
+                                  <FaTimesCircle size={16} />
+                                </button>
+                              </>
+                            )}
+                            {r.status === 'cancelled' && (
+                              <span className="text-[10px] font-bold text-red-600 uppercase italic bg-red-50 px-2 py-1 rounded">Cancelled</span>
+                            )}
+                          </div>
+                        </td>
                     </tr>
                   ))}
                 </tbody>
@@ -298,6 +312,13 @@ export default function BranchReceiptRecords() {
           )}
         </div>
       </div>
+
+      <EditReceiptModal 
+        isOpen={!!editReceipt}
+        onClose={() => setEditReceipt(null)}
+        onReceiptSuccess={fetchReceipts}
+        receiptData={editReceipt}
+      />
     </div>
   );
 }
