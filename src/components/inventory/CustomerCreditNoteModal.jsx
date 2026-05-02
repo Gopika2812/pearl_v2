@@ -8,6 +8,9 @@ const inputClass = "w-full border border-gray-200 rounded-md px-3 py-2 focus:rin
 const selectClass = "w-full border border-gray-200 rounded-md px-3 py-2 bg-white focus:ring-1 focus:ring-[#319bab] outline-none text-sm font-semibold text-gray-800 appearance-none";
 const labelClass = "block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight";
 
+// Generates a unique ID for each row so duplicate products stay independent
+const generateRowId = () => `row_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
 const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, onCreditSuccess, editData }) => {
   const formatDate = (date) => {
     if (!date) return "";
@@ -53,10 +56,11 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
         setCustomer(editData.customer?.customerId ? { _id: editData.customer.customerId, name: editData.customer.name } : null);
         setCustomerSearch(editData.customer?.name || "");
         
-        // Initial set of items from the credit note
+        // Initial set of items from the credit note — give each row a unique _rowId
         setSelectedItems(editData.items.map(item => ({
           ...item,
-          productId: item.productId?._id || item.productId
+          productId: item.productId?._id || item.productId,
+          _rowId: generateRowId()
         })));
         
         setFormData({
@@ -96,13 +100,14 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
           productId: item.productId._id || item.productId,
           maxQty: item.qty,
           qty: 0,
-          returnQty: 0
+          returnQty: 0,
+          _rowId: generateRowId()
         }));
 
         const merged = invoiceItems.map(invItem => {
           const existing = editData.items.find(ei => (ei.productId?._id || ei.productId) === invItem.productId);
           if (existing) {
-            return { ...invItem, ...existing, maxQty: invItem.qty, returnQty: existing.qty || existing.qty };
+            return { ...invItem, ...existing, maxQty: invItem.qty, returnQty: existing.qty || existing.qty, _rowId: invItem._rowId };
           }
           return invItem;
         });
@@ -111,7 +116,7 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
         const manualItems = editData.items.filter(ei => {
           const eiId = ei.productId?._id || ei.productId;
           return !invoiceItems.some(invItem => invItem.productId === eiId);
-        }).map(item => ({ ...item, productId: item.productId?._id || item.productId }));
+        }).map(item => ({ ...item, productId: item.productId?._id || item.productId, _rowId: generateRowId() }));
 
         setSelectedItems([...merged, ...manualItems]);
       }
@@ -185,18 +190,18 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
   };
 
   const handleSelectProduct = (p) => {
-    const exists = selectedItems.find(item => item.productId === p._id);
-    if (!exists) {
-      setSelectedItems([...selectedItems, {
-        productId: p._id,
-        name: p.name,
-        qty: 1,
-        sellingPrice: p.sellingPrice || 0,
-        gst: p.gst || 0,
-        hsn: p.hsn || "",
-        discountPercent: p.discount || 0
-      }]);
-    }
+    // Each addition always creates a new independent row — no duplicate blocking
+    setSelectedItems(prev => [...prev, {
+      _rowId: generateRowId(),
+      productId: p._id,
+      name: p.name,
+      qty: 1,
+      returnQty: 1,
+      sellingPrice: p.sellingPrice || 0,
+      gst: p.gst || 0,
+      hsn: p.hsn || "",
+      discountPercent: p.discount || 0
+    }]);
     setProductSearch("");
     setShowProductResults(false);
   };
@@ -207,15 +212,16 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
       ...item,
       productId: item.productId._id || item.productId,
       maxQty: item.qty,
-      qty: 0, // Default to 0 for partial returns
-      returnQty: 0 
+      qty: 0,
+      returnQty: 0,
+      _rowId: generateRowId()  // unique per row
     }));
 
     // Merge with current selectedItems to prevent losing manual additions
     const merged = invoiceItems.map(invItem => {
       const existing = selectedItems.find(ei => (ei.productId?._id || ei.productId) === invItem.productId);
       if (existing) {
-        return { ...invItem, ...existing, maxQty: invItem.qty };
+        return { ...invItem, ...existing, maxQty: invItem.qty, _rowId: invItem._rowId };
       }
       return invItem;
     });
@@ -246,22 +252,20 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
     })));
   };
 
-  const handleQtyChange = (productId, val) => {
-    setSelectedItems(selectedItems.map(item => {
-      if (item.productId === productId || item._id === productId) {
-        // If invoice mode, don't allow exceeding maxQty
-        let qty = Number(val);
-        if (returnType === "invoice" && qty > item.maxQty) {
-          toast.warning(`Cannot exceed original qty (${item.maxQty})`);
-          qty = item.maxQty;
-        }
-        return { ...item, qty: qty, returnQty: qty };
+  // Matches by unique _rowId so duplicate-product rows stay independent
+  const handleQtyChange = (rowId, val) => {
+    setSelectedItems(prev => prev.map(item => {
+      if (item._rowId !== rowId) return item;
+      let qty = Number(val);
+      if (returnType === "invoice" && qty > item.maxQty) {
+        toast.warning(`Cannot exceed original qty (${item.maxQty})`);
+        qty = item.maxQty;
       }
-      return item;
+      return { ...item, qty, returnQty: qty };
     }));
   };
 
-  const removeItem = (id) => setSelectedItems(selectedItems.filter(item => (item.productId || item._id) !== id));
+  const removeItem = (rowId) => setSelectedItems(prev => prev.filter(item => item._rowId !== rowId));
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -542,7 +546,8 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                 
                 <div className="divide-y divide-gray-50">
                   {selectedItems.map(item => (
-                    <div key={item.productId || item._id} className="p-8 hover:bg-gray-50 transition-colors">
+                    // key uses _rowId so same-product duplicate rows are treated as separate DOM nodes
+                    <div key={item._rowId} className="p-8 hover:bg-gray-50 transition-colors">
                       <div className="flex justify-between items-start mb-6">
                         <div>
                           <p className="text-base font-black text-gray-900 mb-1">{item.name}</p>
@@ -553,7 +558,7 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                             )}
                           </div>
                         </div>
-                        <button type="button" onClick={() => removeItem(item.productId || item._id)} className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all active:scale-90">
+                        <button type="button" onClick={() => removeItem(item._rowId)} className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all active:scale-90">
                           <FaTrashAlt size={14} />
                         </button>
                       </div>
@@ -564,8 +569,8 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                           <input 
                             type="number"
                             className={inputClass}
-                            value={item.returnQty || item.qty}
-                            onChange={(e) => handleQtyChange(item.productId || item._id, e.target.value)}
+                            value={item.returnQty ?? item.qty}
+                            onChange={(e) => handleQtyChange(item._rowId, e.target.value)}
                           />
                         </div>
                         <div>
@@ -575,7 +580,7 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                             className={inputClass}
                             value={item.sellingPrice}
                             onChange={(e) => {
-                              setSelectedItems(selectedItems.map(si => ((si.productId === item.productId || si._id === item._id) ? { ...si, sellingPrice: Number(e.target.value) } : si)));
+                              setSelectedItems(prev => prev.map(si => si._rowId === item._rowId ? { ...si, sellingPrice: Number(e.target.value) } : si));
                             }}
                           />
                         </div>
@@ -586,7 +591,7 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                             className={inputClass}
                             value={item.discountPercent || 0}
                             onChange={(e) => {
-                              setSelectedItems(selectedItems.map(si => ((si.productId === item.productId || si._id === item._id) ? { ...si, discountPercent: Number(e.target.value) } : si)));
+                              setSelectedItems(prev => prev.map(si => si._rowId === item._rowId ? { ...si, discountPercent: Number(e.target.value) } : si));
                             }}
                           />
                         </div>
@@ -597,14 +602,14 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                             className={inputClass}
                             value={item.gst}
                             onChange={(e) => {
-                              setSelectedItems(selectedItems.map(si => ((si.productId === item.productId || si._id === item._id) ? { ...si, gst: Number(e.target.value) } : si)));
+                              setSelectedItems(prev => prev.map(si => si._rowId === item._rowId ? { ...si, gst: Number(e.target.value) } : si));
                             }}
                           />
                         </div>
                         <div>
                           <label className={labelClass}>Line Total</label>
                           <div className={inputClass + " bg-teal-50 border-teal-100 flex items-center justify-end"}>
-                            ₹{((item.returnQty || item.qty) * item.sellingPrice * (1 - (item.discountPercent || 0)/100) * (1 + item.gst/100)).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            ₹{((item.returnQty ?? item.qty) * item.sellingPrice * (1 - (item.discountPercent || 0)/100) * (1 + item.gst/100)).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                           </div>
                         </div>
                       </div>
