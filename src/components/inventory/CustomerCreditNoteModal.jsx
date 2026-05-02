@@ -385,20 +385,25 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="relative" ref={customerDropdownRef}>
-                  <label className={labelClass}>Select Customer</label>
-                  <div className="flex items-center bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 focus-within:border-[#319bab] focus-within:bg-white transition-all">
-                    <FaSearch className="text-gray-300 mr-2" size={14} />
+                  <label className={labelClass}>{editData ? (user?.role === "SUPER_ADMIN" ? "Billing Customer (Swap Allowed)" : "Billing Customer") : "Select Customer"}</label>
+                  <div className={`flex items-center border-2 rounded-xl px-4 py-2 transition-all ${editData ? (user?.role === "SUPER_ADMIN" ? 'bg-amber-50 border-amber-200 focus-within:border-amber-500 focus-within:bg-white' : 'bg-gray-100 border-gray-200 cursor-not-allowed') : 'bg-gray-50 border-gray-200 focus-within:border-[#319bab] focus-within:bg-white'}`}>
+                    <FaSearch className={editData ? (user?.role === "SUPER_ADMIN" ? 'text-amber-400 mr-3' : 'text-gray-400 mr-3') : 'text-gray-300 mr-3'} size={14} />
                     <input 
                       type="text"
-                      className="flex-1 bg-transparent py-1 outline-none text-sm font-bold"
-                      placeholder="Type name or phone..."
+                      className="flex-1 bg-transparent py-1 outline-none text-sm font-black text-gray-800"
+                      placeholder={editData && user?.role !== "SUPER_ADMIN" ? "Customer name" : "Type name or phone to swap customer..."}
                       value={customerSearch}
+                      readOnly={editData && user?.role !== "SUPER_ADMIN"}
                       onChange={(e) => {
+                        if (editData && user?.role !== "SUPER_ADMIN") return;
                         setCustomerSearch(e.target.value);
                         fetchCustomers(e.target.value);
                         setShowCustomerResults(true);
                       }}
-                      onFocus={() => setShowCustomerResults(true)}
+                      onFocus={() => {
+                        if (editData && user?.role !== "SUPER_ADMIN") return;
+                        setShowCustomerResults(true);
+                      }}
                     />
                   </div>
                   {showCustomerResults && (
@@ -416,6 +421,12 @@ const CustomerCreditNoteModal = ({ isOpen, onClose, customer: initialCustomer, o
                           <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-black uppercase">Balance: ₹{(c.debit - c.credit).toLocaleString()}</span>
                         </div>
                       ))}
+                    </div>
+                  )}
+                  {editData && (
+                    <div className="mt-2 p-2 bg-amber-100/50 rounded-lg border border-amber-200 text-[10px] font-black text-amber-700 flex items-center gap-2">
+                      <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
+                      CURRENTLY BILLING: {customer?.name || "N/A"}
                     </div>
                   )}
                 </div>

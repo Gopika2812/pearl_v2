@@ -205,39 +205,48 @@ const BranchCustomerLedger = () => {
     const element = document.getElementById("formal-ledger-export");
     if (!element) return toast.error("Export template not found");
 
-    toast.loading("Preparing multi-page PDF...", { id: "pdf-gen" });
+    toast.loading("Generating A5 Ledger PDF...", { id: "pdf-gen" });
 
     try {
+      // Increase width for higher quality, but maintain aspect ratio
       const canvas = await html2canvas(element, { 
         scale: 2, 
         useCORS: true,
         backgroundColor: "#ffffff",
         logging: false,
+        scrollY: -window.scrollY,
         windowWidth: element.scrollWidth,
         windowHeight: element.scrollHeight
       });
       
       const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
+      const pdf = new jsPDF("p", "mm", "a5");
       
-      const imgWidth = 210; 
-      const pageHeight = 295;
+      const pdfWidth = pdf.internal.pageSize.getWidth(); // 148mm
+      const pdfHeight = pdf.internal.pageSize.getHeight(); // 210mm
+      
+      const imgWidth = pdfWidth; 
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
       let heightLeft = imgHeight;
       let position = 0;
+      let pageNumber = 1;
 
+      // First Page
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-      heightLeft -= pageHeight;
+      heightLeft -= pdfHeight;
 
-      while (heightLeft >= 0) {
+      // Subsequent Pages
+      while (heightLeft > 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-        heightLeft -= pageHeight;
+        heightLeft -= pdfHeight;
+        pageNumber++;
       }
       
       pdf.save(`Ledger-${customer?.name}-${startDate}-to-${endDate}.pdf`);
-      toast.success("PDF Downloaded!", { id: "pdf-gen" });
+      toast.success(`A5 PDF Downloaded (${pageNumber} Pages)!`, { id: "pdf-gen" });
     } catch (error) {
       console.error("PDF generation failed:", error);
       toast.error("Failed to generate PDF", { id: "pdf-gen" });
@@ -587,7 +596,7 @@ const BranchCustomerLedger = () => {
                         ₹{Math.abs(txn.balance).toLocaleString()} <span className="text-[10px] opacity-40">{balanceLabel(txn.balance)}</span>
                       </td>
                       <td className="px-8 py-6 text-right">
-                        {(user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") && (
+                        {user?.role === "SUPER_ADMIN" && (
                           <button 
                             onClick={() => handleTransferTransaction(txn)}
                             className="text-slate-300 hover:text-indigo-600 transition p-2"
@@ -616,74 +625,88 @@ const BranchCustomerLedger = () => {
       </div>
 
       {/* OFF-SCREEN EXPORT TEMPLATE */}
-      <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '1000px', background: 'white' }}>
+      <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '800px', background: 'white' }}>
         <div id="formal-ledger-export" className="p-10 formal-ledger" style={{ fontFamily: "'Times New Roman', serif" }}>
            <style>
              {`
-               .formal-ledger { color: #000; }
-               .formal-h { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
+               .formal-ledger { color: #000; padding: 30px 30px 60px 30px; }
+               .formal-h { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; align-items: center; }
                .formal-t { width: 100%; border-collapse: collapse; border: 1.5px solid #000; }
-               .formal-t th { border: 1px solid #000; padding: 10px; background: #f0f0f0; font-weight: bold; }
-               .formal-t td { border: 1px solid #000; padding: 8px; font-weight: bold; }
+               .formal-t th { border: 1px solid #000; padding: 6px 4px; background: #f5f5f5; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+               .formal-t td { border: 1px solid #000; padding: 5px 4px; font-weight: bold; font-size: 10px; }
+               .formal-footer { margin-top: 15px; border: 1px solid #000; padding: 10px; display: flex; justify-content: space-between; align-items: center; background: #f9f9f9; margin-bottom: 20px; }
              `}
            </style>
            <div className="formal-h">
-              {branch?.logo && <img src={branch.logo} style={{ width: '80px' }} />}
+              {branch?.logo && <img src={branch.logo} style={{ width: '60px', height: 'auto' }} />}
               <div style={{ textAlign: 'center', flex: 1 }}>
-                <h1 style={{ fontSize: '24px', margin: 0 }}>{branch?.name}</h1>
-                <p style={{ margin: '5px 0' }}>{branch?.address}</p>
-                <p style={{ margin: '5px 0' }}>GSTIN: {branch?.gstin}</p>
+                <h1 style={{ fontSize: '20px', margin: 0, fontWeight: 'bold' }}>{branch?.name}</h1>
+                <p style={{ margin: '3px 0', fontSize: '11px' }}>{branch?.address}</p>
+                <p style={{ margin: '3px 0', fontSize: '11px', fontWeight: 'bold' }}>GSTIN: {branch?.gstin}</p>
               </div>
            </div>
-           <h2 style={{ textAlign: 'center', textDecoration: 'underline' }}>CUSTOMER LEDGER STATEMENT</h2>
-           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', border: '1px solid #000', padding: '15px' }}>
-              <div>
+           <h2 style={{ textAlign: 'center', textDecoration: 'underline', fontSize: '16px', margin: '15px 0', fontWeight: 'bold' }}>CUSTOMER LEDGER STATEMENT</h2>
+           <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', marginBottom: '15px', border: '1px solid #000', padding: '10px', fontSize: '12px' }}>
+              <div style={{ flex: 1 }}>
                 <strong>Account of:</strong><br/>
-                {customer.name}<br/>
-                {customer.address}
+                <span style={{ fontSize: '14px' }}>{customer.name}</span><br/>
+                <p style={{ margin: '2px 0', maxWidth: '300px' }}>{customer.address}</p>
+                <p style={{ margin: '2px 0' }}>{customer.gstin ? `GSTIN: ${customer.gstin}` : ""}</p>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <strong>Period:</strong> {formatDate(startDate)} TO {formatDate(endDate)}
+              <div style={{ textAlign: 'right', flex: 1 }}>
+                <p style={{ margin: '2px 0' }}><strong>Period:</strong> {formatDate(startDate)} TO {formatDate(endDate)}</p>
+                <p style={{ margin: '2px 0' }}><strong>Report Date:</strong> {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
               </div>
            </div>
            <table className="formal-t">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Particulars</th>
-                  <th>Type</th>
-                  <th>User</th>
-                  <th>Delivery</th>
-                  <th style={{ textAlign: 'right' }}>Debit</th>
-                  <th style={{ textAlign: 'right' }}>Credit</th>
-                  <th style={{ textAlign: 'right' }}>Balance</th>
+                  <th style={{ width: '80px' }}>Date</th>
+                  <th>Particulars / Reference</th>
+                  <th style={{ width: '50px' }}>Type</th>
+                  <th style={{ width: '60px' }}>User</th>
+                  <th style={{ width: '80px' }}>Delivery</th>
+                  <th style={{ textAlign: 'right', width: '70px' }}>Debit</th>
+                  <th style={{ textAlign: 'right', width: '70px' }}>Credit</th>
+                  <th style={{ textAlign: 'right', width: '90px' }}>Balance</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
+                <tr style={{ background: '#f9f9f9' }}>
                   <td>{formatDate(startDate)}</td>
-                  <td>OPENING BALANCE B/F</td>
-                  <td>-</td>
-                  <td>-</td>
-                  <td>-</td>
+                  <td style={{ letterSpacing: '0.05em' }}>OPENING BALANCE B/F</td>
+                  <td style={{ textAlign: 'center' }}>-</td>
+                  <td style={{ textAlign: 'center' }}>-</td>
+                  <td style={{ textAlign: 'center' }}>-</td>
                   <td style={{ textAlign: 'right' }}>-</td>
                   <td style={{ textAlign: 'right' }}>-</td>
-                  <td style={{ textAlign: 'right' }}>₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</td>
+                  <td style={{ textAlign: 'right', fontSize: '11px' }}>₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</td>
                 </tr>
                 {transactions.filter(t => !String(t.type).toUpperCase().includes("CANCEL")).map(t => (
                   <tr key={t.id}>
-                    <td style={{ fontSize: '10px', whiteSpace: 'nowrap' }}>{formatDate(t.date, true)}</td>
-                    <td>{t.particulars}</td>
-                    <td>{t.type}</td>
-                    <td>{t.user || "-"}</td>
-                    <td>{t.deliveryMan || "-"}</td>
-                    <td style={{ textAlign: 'right' }}>{t.debit > 0 ? t.debit.toLocaleString() : "-"}</td>
-                    <td style={{ textAlign: 'right' }}>{t.credit > 0 ? t.credit.toLocaleString() : "-"}</td>
-                    <td style={{ textAlign: 'right' }}>₹{Math.abs(t.balance).toLocaleString()} {balanceLabel(t.balance)}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDate(t.date, true)}</td>
+                    <td style={{ maxWidth: '220px', wordWrap: 'break-word' }}>{t.particulars}</td>
+                    <td style={{ textAlign: 'center' }}>{t.type}</td>
+                    <td style={{ textAlign: 'center' }}>{t.user || "-"}</td>
+                    <td style={{ textAlign: 'center' }}>{t.deliveryMan || "-"}</td>
+                    <td style={{ textAlign: 'right', color: t.debit > 0 ? '#b91c1c' : '#000' }}>{t.debit > 0 ? t.debit.toLocaleString() : "-"}</td>
+                    <td style={{ textAlign: 'right', color: t.credit > 0 ? '#047857' : '#000' }}>{t.credit > 0 ? t.credit.toLocaleString() : "-"}</td>
+                    <td style={{ textAlign: 'right', fontSize: '11px' }}>₹{Math.abs(t.balance).toLocaleString()} {balanceLabel(t.balance)}</td>
                   </tr>
                 ))}
               </tbody>
            </table>
+
+           <div className="formal-footer">
+              <div style={{ fontSize: '11px' }}>
+                <p style={{ margin: '2px 0' }}><strong>Total Debit:</strong> ₹{totalDebit.toLocaleString()}</p>
+                <p style={{ margin: '2px 0' }}><strong>Total Credit:</strong> ₹{totalCredit.toLocaleString()}</p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', margin: 0 }}>Closing Balance: ₹{Math.abs(closingBalance).toLocaleString()} {balanceLabel(closingBalance)}</p>
+                <p style={{ fontSize: '10px', marginTop: '5px', color: '#666' }}>* This is a computer generated statement.</p>
+              </div>
+           </div>
         </div>
       </div>
     </div>
