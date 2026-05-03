@@ -409,6 +409,13 @@ export default function SuperAdminControlSystem() {
     action_wb_qty: "WB: Edit Qty",
     action_wb_discount: "WB: Edit Disc",
     action_wb_delete: "WB: Delete Item",
+    physicalQty: "Physical Qty",
+    inward: "Inward Adjust",
+    outward: "Outward Adjust",
+    expiryDate: "Expiry Date",
+    checkedBy: "Staff Member",
+    action_save: "Action: Save",
+    action_approve: "Action: Approve",
   };
 
   return (

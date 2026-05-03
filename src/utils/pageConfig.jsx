@@ -149,7 +149,7 @@ export const PAGE_CONFIG = [
     items: [
       {
         id: "physical-stock-dropdown", name: "Stock Verification", icon: "inventory", isDropdown: true, subItems: [
-          { id: "physical-stock-entry", name: "Stock Journal Entry", path: "/branch/physical-stock", icon: "add" },
+          { id: "physical-stock-entry", name: "Stock Journal Entry", path: "/branch/physical-stock", icon: "add", permissionFields: ["productName", "productGroupName", "systemQty", "physicalQty", "inward", "outward", "mrp", "batch", "expiryDate", "checkedBy", "status", "action_save", "action_approve"] },
           { id: "physical-stock-records", name: "Stock Journal Records", path: "/branch/physical-stock-records", icon: "history" },
         ]
       },
