@@ -126,7 +126,8 @@ export default function BranchPhysicalStock() {
   const [showProductDrop, setShowProductDrop] = useState(false);
   const [entryDate, setEntryDate] = useState(new Date().toISOString().split("T")[0]);
   const [expandedMobileRows, setExpandedMobileRows] = useState({});
-  const [mobileViewMode, setMobileViewMode] = useState("TABLE"); // "TABLE" or "CARD"
+  const [mobileViewMode, setMobileViewMode] = useState("CARD"); // "CARD" or "TABLE"
+  const dropRef = useRef(null);
 
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
 
@@ -183,7 +184,7 @@ export default function BranchPhysicalStock() {
   const searchProducts = useCallback(async (query, groupId) => {
     if (!currentBranch?._id) return;
     try {
-      const url = `${API_BASE}/products?branchId=${currentBranch._id}&search=${query}&limit=20${groupId && groupId !== "ALL" ? `&productGroup=${groupId}` : ""}`;
+      const url = `${API_BASE}/products?branchId=${currentBranch._id}&search=${query}&limit=500${groupId && groupId !== "ALL" ? `&productGroup=${groupId}` : ""}`;
       const res = await fetchWithAuth(url);
       const data = await res.json();
       if (data.success) setProducts(data.data || []);
@@ -200,6 +201,16 @@ export default function BranchPhysicalStock() {
     }, 300);
     return () => clearTimeout(t);
   }, [productSearch, groupFilter]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropRef.current && !dropRef.current.contains(event.target)) {
+        setShowProductDrop(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const addRow = async (product) => {
     setShowProductDrop(false);
@@ -348,22 +359,34 @@ export default function BranchPhysicalStock() {
         </div>
 
         {/* COMPACT SEARCH */}
-        <div className="bg-white border border-gray-300 p-3 mb-4 flex flex-col md:flex-row gap-3 items-center rounded-xl shadow-sm">
-          <select className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[11px] font-black text-gray-700 outline-none w-full md:w-64"
-            value={groupFilter} onChange={e => { setGroupFilter(e.target.value); setProductSearch(""); }}>
-            <option value="">ALL GROUPS</option>
-            {productGroups.map(g => <option key={g._id} value={g._id}>{g.name.toUpperCase()}</option>)}
-          </select>
-          <div className="flex-1 relative">
+        <div className="bg-white border border-gray-300 p-3 mb-4 flex flex-col md:flex-row gap-3 items-center rounded-xl shadow-sm relative" ref={dropRef}>
+          <div className="w-full md:w-64 relative">
+            <select className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[11px] font-black text-gray-700 outline-none w-full appearance-none pr-8"
+              value={groupFilter} onChange={e => { setGroupFilter(e.target.value); setProductSearch(""); }}>
+              <option value="">ALL GROUPS {products.length > 0 && `(${products.length})`}</option>
+              {productGroups.map(g => <option key={g._id} value={g._id}>{g.name.toUpperCase()}</option>)}
+            </select>
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+              <FaBoxes size={10} />
+            </div>
+          </div>
+          <div className="flex-1 relative w-full">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
-            <input type="text" placeholder="Search and add product..."
+            <input type="text" placeholder={`Search among ${products.length} products...`}
               value={productSearch} 
               onChange={e => setProductSearch(e.target.value)}
               onFocus={() => {
-                searchProducts("", groupFilter);
+                searchProducts(productSearch, groupFilter);
                 setShowProductDrop(true);
               }}
-              className="w-full border border-gray-300 rounded pl-9 pr-3 py-1.5 text-xs font-semibold outline-none focus:border-blue-400" />
+              className="w-full border border-gray-300 rounded-xl pl-9 pr-3 py-2.5 text-[11px] font-black uppercase outline-none focus:border-blue-400 bg-gray-50" />
+            {products.length > 0 && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <span className="bg-blue-100 text-blue-600 text-[8px] font-black px-2 py-1 rounded-full uppercase">
+                  {products.length} Found
+                </span>
+              </div>
+            )}
             {showProductDrop && products.length > 0 && (
               <div className="absolute z-[100] left-0 right-0 top-full mt-1 bg-white border border-gray-300 shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
                 {products.map(p => (
@@ -531,15 +554,15 @@ export default function BranchPhysicalStock() {
             <div className="flex bg-white p-1 rounded-xl border border-gray-200 shadow-sm">
               <button 
                 type="button"
-                onClick={() => setMobileViewMode("TABLE")}
-                className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${mobileViewMode === "TABLE" ? "bg-[#001f3f] text-white shadow-lg" : "text-gray-400 hover:bg-gray-50"}`}>
-                Table
-              </button>
-              <button 
-                type="button"
                 onClick={() => setMobileViewMode("CARD")}
                 className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${mobileViewMode === "CARD" ? "bg-[#001f3f] text-white shadow-lg" : "text-gray-400 hover:bg-gray-50"}`}>
                 Cards
+              </button>
+              <button 
+                type="button"
+                onClick={() => setMobileViewMode("TABLE")}
+                className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${mobileViewMode === "TABLE" ? "bg-[#001f3f] text-white shadow-lg" : "text-gray-400 hover:bg-gray-50"}`}>
+                Table
               </button>
             </div>
 
