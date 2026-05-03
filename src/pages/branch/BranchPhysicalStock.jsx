@@ -132,13 +132,20 @@ export default function BranchPhysicalStock() {
 
   const isFieldVisible = (fieldId) => {
     if (!user) return false;
-    const key = `physical-stock-entry_${fieldId}`;
-    // If explicitly disabled in Control System, hide it even for Admins
-    if (user.fieldPermissions?.[key] === false) return false;
-    // Super Admin always sees everything, Admins see everything unless explicitly disabled above
+    // Super Admin is the master override - always see everything
     if (user.role === "SUPER_ADMIN") return true;
-    if (isAdmin) return true;
-    return user.fieldPermissions?.[key] !== false;
+
+    const key = `physical-stock-entry_${fieldId}`;
+    // For all other users, if explicitly disabled in Control System, hide it
+    if (user.fieldPermissions?.[key] === false) return false;
+    // If explicitly enabled, show it
+    if (user.fieldPermissions?.[key] === true) return true;
+    
+    // Default for regular ADMIN: show unless explicitly disabled above
+    if (user.role === "ADMIN") return true;
+    
+    // For other roles, hide unless explicitly enabled
+    return false;
   };
 
   useEffect(() => {
