@@ -269,7 +269,7 @@ export default function BranchPhysicalStock() {
   };
 
   const calc = (row) => {
-    if (row.physicalQty === "" || row.physicalQty === null) return { inward: 0, outward: 0 };
+    if (row.physicalQty === "" || row.physicalQty === null || row.physicalQty === "NO_ACTION") return { inward: 0, outward: 0 };
     const p = Number(row.physicalQty) || 0;
     const s = Number(row.systemQty) || 0;
     return {
@@ -279,10 +279,18 @@ export default function BranchPhysicalStock() {
   };
 
   const saveRow = async (row) => {
+    const isNoAction = row.physicalQty === "NO_ACTION";
+    const systemIsZero = Number(row.systemQty) === 0;
+    const skipMandatory = isNoAction || systemIsZero;
+
     if (row.physicalQty === "" || row.physicalQty === null) return toast.warning("Physical Qty is mandatory");
-    if (!row.mrp || Number(row.mrp) <= 0) return toast.warning("Valid MRP is mandatory");
-    if (!row.batch || row.batch.trim() === "") return toast.warning("Batch Number is mandatory");
-    if (!row.expiryDate) return toast.warning("Expiry Date is mandatory");
+    
+    if (!skipMandatory) {
+      if (!row.mrp || Number(row.mrp) <= 0) return toast.warning("Valid MRP is mandatory");
+      if (!row.batch || row.batch.trim() === "") return toast.warning("Batch Number is mandatory");
+      if (!row.expiryDate) return toast.warning("Expiry Date is mandatory");
+    }
+    
     if (!row.checkedBy || row.checkedBy.length === 0) return toast.warning("At least one Staff Member must be selected");
     setRows(prev => prev.map(r => r.rowId === row.rowId ? { ...r, saving: true } : r));
     try {
@@ -293,10 +301,11 @@ export default function BranchPhysicalStock() {
         productId: row.productId,
         productName: row.productName,
         systemQty: Number(row.systemQty),
-        physicalQty: Number(row.physicalQty),
+        physicalQty: isNoAction ? Number(row.systemQty) : Number(row.physicalQty),
         mrp: Number(row.mrp) || 0,
-        batch: row.batch,
-        expiryDate: row.expiryDate || undefined,
+        batch: isNoAction ? "NO_ACTION" : (row.batch || ""),
+        expiryDate: isNoAction ? undefined : (row.expiryDate || undefined),
+        noAction: isNoAction,
         checkedBy: row.checkedBy,
         userId: user?._id || user?.id,
         username: user?.username || user?.fullName || "Staff"
@@ -594,9 +603,22 @@ export default function BranchPhysicalStock() {
                                   {isFieldVisible("systemQty") && <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-[10px] text-blue-500">{row.systemQty}</td>}
                                   {isFieldVisible("physicalQty") && (
                                     <td className="px-3 py-3 border-r border-gray-100">
-                                      <input type="number" value={row.physicalQty} onChange={e => updateRow(row.rowId, "physicalQty", e.target.value)}
-                                        disabled={row.status === "APPROVED"}
-                                        className="w-16 border border-gray-200 rounded px-2 py-1 text-[10px] font-black outline-none focus:border-blue-400" />
+                                      <div className="relative flex items-center">
+                                        <input type={row.physicalQty === "NO_ACTION" ? "text" : "number"} 
+                                          value={row.physicalQty === "NO_ACTION" ? "NO ACTION" : row.physicalQty} 
+                                          onChange={e => updateRow(row.rowId, "physicalQty", e.target.value)}
+                                          disabled={row.status === "APPROVED"}
+                                          className={`w-16 border border-gray-200 rounded px-2 py-1 text-[10px] font-black outline-none focus:border-blue-400 ${row.physicalQty === "NO_ACTION" ? "bg-gray-50 text-gray-400" : ""}`} />
+                                        <select className="absolute inset-0 opacity-0 cursor-pointer"
+                                          onChange={e => {
+                                            if (e.target.value === "NO_ACTION") updateRow(row.rowId, "physicalQty", "NO_ACTION");
+                                            else updateRow(row.rowId, "physicalQty", "");
+                                          }}
+                                          disabled={row.status === "APPROVED"}>
+                                          <option value="">QTY</option>
+                                          <option value="NO_ACTION">No action</option>
+                                        </select>
+                                      </div>
                                     </td>
                                   )}
                                   {(isFieldVisible("inward") || isFieldVisible("outward")) && (
