@@ -132,8 +132,12 @@ export default function BranchPhysicalStock() {
 
   const isFieldVisible = (fieldId) => {
     if (!user) return false;
-    if (isAdmin) return true;
     const key = `physical-stock-entry_${fieldId}`;
+    // If explicitly disabled in Control System, hide it even for Admins
+    if (user.fieldPermissions?.[key] === false) return false;
+    // Super Admin always sees everything, Admins see everything unless explicitly disabled above
+    if (user.role === "SUPER_ADMIN") return true;
+    if (isAdmin) return true;
     return user.fieldPermissions?.[key] !== false;
   };
 
@@ -241,9 +245,11 @@ export default function BranchPhysicalStock() {
   };
 
   const saveRow = async (row) => {
-    if (row.physicalQty === "" || row.physicalQty === null) {
-      return toast.warning("Enter physical qty first");
-    }
+    if (row.physicalQty === "" || row.physicalQty === null) return toast.warning("Physical Qty is mandatory");
+    if (!row.mrp || Number(row.mrp) <= 0) return toast.warning("Valid MRP is mandatory");
+    if (!row.batch || row.batch.trim() === "") return toast.warning("Batch Number is mandatory");
+    if (!row.expiryDate) return toast.warning("Expiry Date is mandatory");
+    if (!row.checkedBy || row.checkedBy.length === 0) return toast.warning("At least one Staff Member must be selected");
     setRows(prev => prev.map(r => r.rowId === row.rowId ? { ...r, saving: true } : r));
     try {
       const payload = {
