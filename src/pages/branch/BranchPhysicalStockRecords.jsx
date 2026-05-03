@@ -11,6 +11,8 @@ export default function BranchPhysicalStockRecords() {
   const [loading, setLoading] = useState(false);
   const [productGroups, setProductGroups] = useState([]);
   const [expandedRow, setExpandedRow] = useState(null);
+  const [selectedRecords, setSelectedRecords] = useState([]);
+  const [approving, setApproving] = useState(false);
 
   // Filters
   const [fromDate, setFromDate] = useState(() => {
@@ -44,6 +46,7 @@ export default function BranchPhysicalStockRecords() {
 
   const fetchRecords = async () => {
     setLoading(true);
+    setSelectedRecords([]);
     try {
       const url = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&fromDate=${fromDate}&toDate=${toDate}&limit=500`;
       const res = await fetchWithAuth(url);
@@ -56,6 +59,59 @@ export default function BranchPhysicalStockRecords() {
       setLoading(false);
     }
   };
+
+  const handleBulkApprove = async () => {
+    if (selectedRecords.length === 0) return;
+    if (!isAdmin && !isFieldVisible("action_approve")) return toast.error("No permission to approve");
+    
+    if (!window.confirm(`Approve ${selectedRecords.length} selected records?`)) return;
+
+    setApproving(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const id of selectedRecords) {
+      try {
+        const res = await fetchWithAuth(`${API_BASE}/physical-stock/${id}/approve`, {
+          method: "POST",
+          body: JSON.stringify({ userId: user?._id || user?.id, username: user?.username || user?.fullName, role: user?.role })
+        });
+        const data = await res.json();
+        if (data.success) successCount++;
+        else failCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    setApproving(false);
+    setSelectedRecords([]);
+    fetchRecords();
+    
+    if (failCount === 0) toast.success(`Successfully approved ${successCount} records`);
+    else toast.warning(`Approved ${successCount} records, ${failCount} failed`);
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedRecords(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = (filtered) => {
+    if (selectedRecords.length === filtered.length) setSelectedRecords([]);
+    else setSelectedRecords(filtered.map(r => r._id));
+  };
+
+  const isFieldVisible = (fieldId) => {
+    if (!user) return false;
+    if (user.role === "SUPER_ADMIN") return true;
+    const key = `physical-stock-entry_${fieldId}`;
+    if (user.fieldPermissions?.[key] === false) return false;
+    if (user.fieldPermissions?.[key] === true) return true;
+    if (user.role === "ADMIN") return true;
+    return false;
+  };
+
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
 
   const handleSort = (key) => {
     setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc" }));
@@ -127,6 +183,12 @@ export default function BranchPhysicalStockRecords() {
               </div>
             </div>
             <div className="flex flex-col md:flex-row items-center gap-3">
+              {selectedRecords.length > 0 && (
+                <button onClick={handleBulkApprove} disabled={approving}
+                  className="px-6 py-3 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-2 animate-pulse">
+                  {approving ? "Approving..." : `Approve Selected (${selectedRecords.length})`}
+                </button>
+              )}
               <div className="flex items-center bg-gray-50 border border-gray-200 px-3 py-2.5 rounded-xl gap-2 w-full md:w-auto">
                 <FaCalendarAlt className="text-violet-500 text-xs" />
                 <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
@@ -141,7 +203,7 @@ export default function BranchPhysicalStockRecords() {
                   {loading ? "..." : "Search"}
                 </button>
                 <a href="/branch/physical-stock"
-                  className="px-5 py-3 bg-gray-800 text-white text-[10px] font-black uppercase rounded-xl hover:bg-gray-900 transition text-center w-full shadow-lg shadow-gray-200">
+                  className="px-5 py-3 bg-gray-800 text-white text-[10px] font-black uppercase rounded-xl hover:bg-900 transition text-center w-full shadow-lg shadow-gray-200">
                   + New
                 </a>
               </div>
@@ -185,6 +247,12 @@ export default function BranchPhysicalStockRecords() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-gray-50/80 border-b border-gray-100">
+                    <th className="px-4 py-4 w-10">
+                      <input type="checkbox" 
+                        checked={selectedRecords.length > 0 && selectedRecords.length === filteredSorted.filter(r => r.status !== "APPROVED").length}
+                        onChange={() => toggleSelectAll(filteredSorted.filter(r => r.status !== "APPROVED"))}
+                        className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                    </th>
                     <Th label="SJ ID" col="sjId" />
                     <Th label="Date" col="entryDate" />
                     <Th label="Product Group" col="productGroupName" />
@@ -196,7 +264,6 @@ export default function BranchPhysicalStockRecords() {
                     <Th label="Outward ↓" col="outwardQty" right />
                     <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Batch / Expiry</th>
                     <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Checked By</th>
-                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Edit History</th>
                     <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Approved By</th>
                     <Th label="Status" col="status" />
                   </tr>
@@ -219,7 +286,15 @@ export default function BranchPhysicalStockRecords() {
                   ) : (
                     filteredSorted.map(r => (
                       <React.Fragment key={r._id}>
-                        <tr className="hover:bg-gray-50/80 transition-colors group">
+                        <tr className={`hover:bg-gray-50/80 transition-colors group ${selectedRecords.includes(r._id) ? "bg-violet-50/50" : ""}`}>
+                          <td className="px-4 py-4">
+                            {r.status !== "APPROVED" && (
+                              <input type="checkbox" 
+                                checked={selectedRecords.includes(r._id)}
+                                onChange={() => toggleSelect(r._id)}
+                                className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                            )}
+                          </td>
                           <td className="px-4 py-4">
                             <span className="text-xs font-black text-violet-600">{r.sjId}</span>
                           </td>
@@ -330,6 +405,12 @@ export default function BranchPhysicalStockRecords() {
                 <table className="w-full text-left border-collapse min-w-[700px]">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="px-3 py-3 w-8 border-r border-gray-200">
+                        <input type="checkbox" 
+                          checked={selectedRecords.length > 0 && selectedRecords.length === filteredSorted.filter(r => r.status !== "APPROVED").length}
+                          onChange={() => toggleSelectAll(filteredSorted.filter(r => r.status !== "APPROVED"))}
+                          className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                      </th>
                       {["Date", "SJ ID", "Product", "Type", "Qty", "Phy Qty", "MRP", "Status"].map(h => (
                         <th key={h} className="px-3 py-3 font-black text-[9px] uppercase tracking-widest text-gray-400 border-r last:border-0">{h}</th>
                       ))}
@@ -351,7 +432,15 @@ export default function BranchPhysicalStockRecords() {
                       </tr>
                     ) : (
                       filteredSorted.map(r => (
-                        <tr key={r._id} className="hover:bg-gray-50 transition-colors">
+                        <tr key={r._id} className={`hover:bg-gray-50 transition-colors ${selectedRecords.includes(r._id) ? "bg-violet-50/30" : ""}`}>
+                          <td className="px-3 py-3 border-r border-gray-100 text-center">
+                            {r.status !== "APPROVED" && (
+                              <input type="checkbox" 
+                                checked={selectedRecords.includes(r._id)}
+                                onChange={() => toggleSelect(r._id)}
+                                className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                            )}
+                          </td>
                           <td className="px-3 py-3 border-r border-gray-100 text-[10px] font-bold text-gray-500">
                             {new Date(r.entryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
                           </td>

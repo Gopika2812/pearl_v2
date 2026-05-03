@@ -338,26 +338,6 @@ export default function BranchPhysicalStock() {
     }
   };
 
-  const approveRow = async (row) => {
-    if (!row.savedId) return toast.warning("Save first");
-    if (!isAdmin && !isFieldVisible("action_approve")) return toast.error("No permission to approve");
-    setRows(prev => prev.map(r => r.rowId === row.rowId ? { ...r, saving: true } : r));
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/physical-stock/${row.savedId}/approve`, {
-        method: "POST",
-        body: JSON.stringify({ userId: user?._id || user?.id, username: user?.username || user?.fullName, role: user?.role })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setRows(prev => prev.map(r => r.rowId === row.rowId ? { ...r, saving: false, status: "APPROVED" } : r));
-        toast.success(data.message);
-      } else throw new Error(data.message);
-    } catch (err) {
-      toast.error(err.message || "Approval failed");
-      setRows(prev => prev.map(r => r.rowId === row.rowId ? { ...r, saving: false } : r));
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 pt-16 md:pl-20">
       <div className="p-4">
@@ -554,14 +534,6 @@ export default function BranchPhysicalStock() {
                                       {row.saving ? "..." : "Save"}
                                     </button>
                                   )}
-                                  {isAdmin || isFieldVisible("action_approve") ? (
-                                    row.savedId && (
-                                      <button onClick={() => approveRow(row)} disabled={row.saving}
-                                        className="px-3 py-1.5 bg-emerald-600 text-white text-[9px] font-black rounded-lg hover:bg-emerald-700 disabled:opacity-50 uppercase shadow-md shadow-emerald-100">
-                                        Approve
-                                      </button>
-                                    )
-                                  ) : null}
                                 </>
                               )}
                               {row.status === "APPROVED" && (
@@ -722,11 +694,6 @@ export default function BranchPhysicalStock() {
                                                 {isFieldVisible("action_save") && (
                                                   <button type="button" onClick={() => saveRow(row)} disabled={row.saving} className="px-4 py-1.5 bg-[#001f3f] text-white text-[10px] font-black rounded-lg uppercase shadow-lg">
                                                     {row.saving ? "..." : "Save Record"}
-                                                  </button>
-                                                )}
-                                                {(isAdmin || isFieldVisible("action_approve")) && row.savedId && (
-                                                  <button type="button" onClick={() => approveRow(row)} disabled={row.saving} className="px-4 py-1.5 bg-emerald-600 text-white text-[10px] font-black rounded-lg uppercase shadow-lg">
-                                                    Approve
                                                   </button>
                                                 )}
                                               </>
