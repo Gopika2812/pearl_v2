@@ -212,35 +212,63 @@ export default function BranchPhysicalStock() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const addRow = async (product) => {
-    setShowProductDrop(false);
-    setProductSearch("");
-
-    let systemQty = 0;
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/products?branchId=${currentBranch._id}&search=${encodeURIComponent(product.name)}&limit=5`);
-      const data = await res.json();
-      const match = (data.data || []).find(p => p._id === product._id);
-      systemQty = match?.availableQty ?? product.availableQty ?? 0;
-    } catch {}
-
-    const rowId = `row_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    setRows(prev => [...prev, {
-      rowId,
+  const addRow = (product) => {
+    if (rows.find(r => r.productId === product._id)) return;
+    
+    const newRow = {
+      rowId: Date.now() + Math.random(),
       productId: product._id,
       productName: product.name,
-      productGroupId: product.productGroup?._id || "",
-      productGroupName: product.productGroup?.name || "",
-      systemQty,
+      productGroupId: product.productGroup?._id || product.productGroup,
+      productGroupName: typeof product.productGroup === 'object' ? product.productGroup?.name : "",
+      systemQty: product.availableQty || 0,
       physicalQty: "",
       mrp: product.mrp || 0,
-      batch: "",
-      expiryDate: "",
+      batch: product.batch || "",
+      expiryDate: product.expiryDate ? new Date(product.expiryDate).toISOString().split('T')[0] : "",
       checkedBy: [],
-      saving: false,
-      savedId: null,
-      status: "DRAFT"
-    }]);
+      status: "DRAFT",
+      saving: false
+    };
+    setRows(prev => [...prev, newRow]);
+    setShowProductDrop(false);
+    setProductSearch("");
+  };
+
+  const addAllFromGroup = async (groupId) => {
+    if (!groupId || groupId === "ALL") return;
+    try {
+      const url = `${API_BASE}/products?branchId=${currentBranch._id}&productGroup=${groupId}&limit=500`;
+      const res = await fetchWithAuth(url);
+      const data = await res.json();
+      if (data.success && data.data) {
+        const productsToAdd = data.data;
+        setRows(prev => {
+          const existingIds = new Set(prev.map(r => r.productId));
+          const newRows = productsToAdd
+            .filter(p => !existingIds.has(p._id))
+            .map(p => ({
+              rowId: Math.random() + Date.now(),
+              productId: p._id,
+              productName: p.name,
+              productGroupId: p.productGroup?._id || p.productGroup,
+              productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
+              systemQty: p.availableQty || 0,
+              physicalQty: "",
+              mrp: p.mrp || 0,
+              batch: p.batch || "",
+              expiryDate: p.expiryDate ? new Date(p.expiryDate).toISOString().split('T')[0] : "",
+              checkedBy: [],
+              status: "DRAFT",
+              saving: false
+            }));
+          return [...prev, ...newRows];
+        });
+        toast.info(`Added ${productsToAdd.length} products from group`);
+      }
+    } catch (err) {
+      toast.error("Failed to load group products");
+    }
   };
 
   const updateRow = (rowId, field, value) => {
@@ -362,8 +390,13 @@ export default function BranchPhysicalStock() {
         <div className="bg-white border border-gray-300 p-3 mb-4 flex flex-col md:flex-row gap-3 items-center rounded-xl shadow-sm relative" ref={dropRef}>
           <div className="w-full md:w-64 relative">
             <select className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[11px] font-black text-gray-700 outline-none w-full appearance-none pr-8"
-              value={groupFilter} onChange={e => { setGroupFilter(e.target.value); setProductSearch(""); }}>
-              <option value="">ALL GROUPS {products.length > 0 && `(${products.length})`}</option>
+              value={groupFilter} onChange={e => { 
+                const val = e.target.value;
+                setGroupFilter(val); 
+                setProductSearch("");
+                if (val && val !== "ALL") addAllFromGroup(val);
+              }}>
+              <option value="ALL">ALL GROUPS {products.length > 0 && `(${products.length})`}</option>
               {productGroups.map(g => <option key={g._id} value={g._id}>{g.name.toUpperCase()}</option>)}
             </select>
             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
