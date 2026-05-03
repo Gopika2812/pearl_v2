@@ -124,6 +124,8 @@ export default function BranchPhysicalStock() {
   const [groupFilter, setGroupFilter] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [showProductDrop, setShowProductDrop] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [entryDate, setEntryDate] = useState(new Date().toISOString().split("T")[0]);
   const [expandedMobileRows, setExpandedMobileRows] = useState({});
   const [mobileViewMode, setMobileViewMode] = useState("CARD"); // "CARD" or "TABLE"
@@ -145,6 +147,26 @@ export default function BranchPhysicalStock() {
       fetchNextId();
     }
   }, [currentBranch?._id]);
+
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (!productSearch || productSearch.trim().length < 2) {
+        setSearchResults([]);
+        return;
+      }
+      setIsSearching(true);
+      try {
+        const res = await fetchWithAuth(`${API_BASE}/products?branchId=${currentBranch?._id}&search=${productSearch}&limit=50`);
+        const data = await res.json();
+        if (data.success) setSearchResults(data.data);
+      } catch (err) {
+        console.error("Search failed", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [productSearch, currentBranch?._id]);
 
   const fetchNextId = async () => {
     try {
@@ -419,6 +441,17 @@ export default function BranchPhysicalStock() {
     }
   };
 
+  const sortedRows = [...rows].sort((a, b) => {
+    // Saved (Pending/Approved) first, then Drafts
+    const valA = a.savedId ? 1 : 2;
+    const valB = b.savedId ? 1 : 2;
+    if (valA !== valB) return valA - valB;
+    return 0;
+  });
+
+  const savedCount = rows.filter(r => r.savedId).length;
+  const draftCount = rows.filter(r => !r.savedId).length;
+
   return (
     <div className="min-h-screen bg-gray-50 pt-16 md:pl-20">
       <div className="p-4">
@@ -429,8 +462,18 @@ export default function BranchPhysicalStock() {
               <FaBoxes className="text-white text-lg" />
             </div>
             <div>
-              <h1 className="text-lg font-black text-gray-800 uppercase tracking-tight leading-tight">Stock Journal Entry</h1>
-              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">
+              <div className="flex items-center gap-3">
+                <h1 className="text-lg font-black text-gray-800 uppercase tracking-tight leading-tight">Stock Journal Entry</h1>
+                <div className="flex gap-1.5 ml-2">
+                  <span className="bg-green-100 text-green-700 px-2.5 py-1 rounded-full text-[9px] font-black uppercase flex items-center gap-1.5 shadow-sm border border-green-200">
+                    <FaCheck size={8} /> Saved: {savedCount}
+                  </span>
+                  <span className="bg-orange-100 text-orange-700 px-2.5 py-1 rounded-full text-[9px] font-black uppercase flex items-center gap-1.5 shadow-sm border border-orange-200">
+                    Pending: {draftCount}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-0.5">
                 Next: <span className="text-blue-600">{nextId}</span> - {currentBranch?.name}
               </p>
             </div>
@@ -464,35 +507,35 @@ export default function BranchPhysicalStock() {
           </div>
           <div className="flex-1 relative w-full">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
-            <input type="text" placeholder={`Search among ${products.length} products...`}
+            <input type="text" placeholder="TYPE PRODUCT NAME TO SEARCH..."
               value={productSearch} 
               onChange={e => setProductSearch(e.target.value)}
-              onFocus={() => {
-                searchProducts(productSearch, groupFilter);
-                setShowProductDrop(true);
-              }}
+              onFocus={() => setShowProductDrop(true)}
               className="w-full border border-gray-300 rounded-xl pl-9 pr-3 py-2.5 text-[11px] font-black uppercase outline-none focus:border-blue-400 bg-gray-50" />
-            {products.length > 0 && (
+            {isSearching && (
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                <span className="bg-blue-100 text-blue-600 text-[8px] font-black px-2 py-1 rounded-full uppercase">
-                  {products.length} Found
-                </span>
+                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
               </div>
             )}
-            {showProductDrop && products.length > 0 && (
-              <div className="absolute z-[100] left-0 right-0 top-full mt-1 bg-white border border-gray-300 shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
-                {products.map(p => (
-                  <div key={p._id} onClick={() => addRow(p)}
-                    className="px-3 py-2.5 hover:bg-blue-50 cursor-pointer border-b last:border-0 flex justify-between items-center">
-                    <div>
-                      <p className="text-[11px] font-bold text-gray-800 uppercase">{p.name}</p>
-                      <p className="text-[9px] text-gray-400 font-bold uppercase">{p.productGroup?.name || "No Group"}</p>
+            {showProductDrop && productSearch.trim().length >= 2 && (
+              <div className="absolute z-[100] left-0 right-0 top-full mt-1 bg-white border border-gray-300 shadow-2xl rounded-xl overflow-hidden max-h-80 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                {searchResults.length === 0 && !isSearching ? (
+                  <div className="p-8 text-center text-[10px] font-black text-gray-300 uppercase tracking-widest">No products found matching "{productSearch}"</div>
+                ) : (
+                  searchResults.map(p => (
+                    <div key={p._id} onClick={() => addRow(p)}
+                      className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 flex justify-between items-center group transition-colors">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-[11px] font-black text-gray-800 uppercase group-hover:text-blue-600 transition-colors">{p.name}</p>
+                          <span className="text-[8px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100">MRP: {p.mrp || 0}</span>
+                        </div>
+                        <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">{p.productGroup?.name || "No Group"}</p>
+                      </div>
+                      <FaPlus className="text-gray-300 group-hover:text-blue-500 transition-all" size={12} />
                     </div>
-                    <span className="text-[10px] font-black bg-blue-50 text-blue-700 px-2 py-1 rounded">
-                      Stock: {p.availableQty ?? 0}
-                    </span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -650,7 +693,7 @@ export default function BranchPhysicalStock() {
               </button>
             </div>
 
-            {rows.length === 0 ? (
+            {sortedRows.length === 0 ? (
               <div className="bg-white p-12 rounded-2xl border border-dashed border-gray-300 text-center">
                 <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Search products above to start</p>
               </div>
@@ -671,7 +714,7 @@ export default function BranchPhysicalStock() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {rows.map((row) => {
+                          {sortedRows.map((row) => {
                             const { inward, outward } = calc(row);
                             return (
                               <React.Fragment key={row.rowId}>
@@ -807,7 +850,7 @@ export default function BranchPhysicalStock() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-4">
-                    {rows.map(row => {
+                    {sortedRows.map(row => {
                       const { inward, outward } = calc(row);
                       return (
                         <div key={row.rowId} className={`bg-white p-4 rounded-2xl shadow-sm border ${row.status === "APPROVED" ? "border-green-200 bg-green-50" : "border-gray-200"}`}>
@@ -841,11 +884,22 @@ export default function BranchPhysicalStock() {
                               </div>
                             )}
                             {isFieldVisible("physicalQty") && (
-                              <div className="bg-gray-50 p-2 rounded-xl">
+                              <div className="bg-gray-50 p-2 rounded-xl relative">
                                 <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Physical</p>
-                                <input type="number" value={row.physicalQty} onChange={e => updateRow(row.rowId, "physicalQty", e.target.value)}
+                                <input type={row.physicalQty === "NO_ACTION" ? "text" : "number"} 
+                                  value={row.physicalQty === "NO_ACTION" ? "NO ACTION" : row.physicalQty} 
+                                  onChange={e => updateRow(row.rowId, "physicalQty", e.target.value)}
                                   disabled={row.status === "APPROVED"}
-                                  className="w-full bg-transparent text-xs font-black text-gray-800 outline-none" placeholder="0" />
+                                  className={`w-full bg-transparent text-xs font-black outline-none ${row.physicalQty === "NO_ACTION" ? "text-gray-400" : "text-gray-800"}`} placeholder="0" />
+                                <select className="absolute inset-0 opacity-0 cursor-pointer"
+                                  onChange={e => {
+                                    if (e.target.value === "NO_ACTION") updateRow(row.rowId, "physicalQty", "NO_ACTION");
+                                    else updateRow(row.rowId, "physicalQty", "");
+                                  }}
+                                  disabled={row.status === "APPROVED"}>
+                                  <option value="">QTY</option>
+                                  <option value="NO_ACTION">No action</option>
+                                </select>
                               </div>
                             )}
                             {isFieldVisible("mrp") && (
