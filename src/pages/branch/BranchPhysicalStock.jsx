@@ -236,35 +236,33 @@ export default function BranchPhysicalStock() {
   };
 
   const addAllFromGroup = async (groupId) => {
-    if (!groupId || groupId === "ALL") return;
+    if (!groupId || groupId === "ALL") {
+      setRows([]); // Clear if "ALL" or empty to avoid massive lists
+      return;
+    }
     try {
       const url = `${API_BASE}/products?branchId=${currentBranch._id}&productGroup=${groupId}&limit=500`;
       const res = await fetchWithAuth(url);
       const data = await res.json();
       if (data.success && data.data) {
         const productsToAdd = data.data;
-        setRows(prev => {
-          const existingIds = new Set(prev.map(r => r.productId));
-          const newRows = productsToAdd
-            .filter(p => !existingIds.has(p._id))
-            .map(p => ({
-              rowId: Math.random() + Date.now(),
-              productId: p._id,
-              productName: p.name,
-              productGroupId: p.productGroup?._id || p.productGroup,
-              productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
-              systemQty: p.availableQty || 0,
-              physicalQty: "",
-              mrp: p.mrp || 0,
-              batch: p.batch || "",
-              expiryDate: p.expiryDate ? new Date(p.expiryDate).toISOString().split('T')[0] : "",
-              checkedBy: [],
-              status: "DRAFT",
-              saving: false
-            }));
-          return [...prev, ...newRows];
-        });
-        toast.info(`Added ${productsToAdd.length} products from group`);
+        const newRows = productsToAdd.map(p => ({
+          rowId: Math.random() + Date.now(),
+          productId: p._id,
+          productName: p.name,
+          productGroupId: p.productGroup?._id || p.productGroup,
+          productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
+          systemQty: p.availableQty || 0,
+          physicalQty: "",
+          mrp: p.mrp || 0,
+          batch: p.batch || "",
+          expiryDate: p.expiryDate ? new Date(p.expiryDate).toISOString().split('T')[0] : "",
+          checkedBy: [],
+          status: "DRAFT",
+          saving: false
+        }));
+        setRows(newRows);
+        toast.info(`Loaded ${productsToAdd.length} products`);
       }
     } catch (err) {
       toast.error("Failed to load group products");
