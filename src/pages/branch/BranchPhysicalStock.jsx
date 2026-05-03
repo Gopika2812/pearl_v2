@@ -275,7 +275,7 @@ export default function BranchPhysicalStock() {
       data = await res.json();
       if (data.success) {
         setRows(prev => prev.map(r => r.rowId === row.rowId ? {
-          ...r, saving: false, savedId: data.data._id, status: "DRAFT"
+          ...r, saving: false, savedId: data.data._id, status: "PENDING"
         } : r));
         if (!row.savedId) fetchNextId();
         toast.success(`${data.data.sjId} saved`);
@@ -290,7 +290,7 @@ export default function BranchPhysicalStock() {
 
   const approveRow = async (row) => {
     if (!row.savedId) return toast.warning("Save first");
-    if (!isAdmin) return toast.error("Only ADMIN can approve");
+    if (!isAdmin && !isFieldVisible("action_approve")) return toast.error("No permission to approve");
     setRows(prev => prev.map(r => r.rowId === row.rowId ? { ...r, saving: true } : r));
     try {
       const res = await fetchWithAuth(`${API_BASE}/physical-stock/${row.savedId}/approve`, {
@@ -471,8 +471,10 @@ export default function BranchPhysicalStock() {
                           {isFieldVisible("status") && (
                             <td className="px-1.5 py-3 border-r border-gray-100 text-center">
                               {row.status === "APPROVED"
-                                ? <span className="text-green-600 font-black text-[9px] uppercase bg-green-50 px-2 py-1 rounded-full">Approved</span>
-                                : <span className="text-orange-500 font-black text-[9px] uppercase bg-orange-50 px-2 py-1 rounded-full">Draft</span>}
+                                ? <span className="text-green-600 font-black text-[9px] uppercase bg-green-50 px-2 py-1 rounded-full whitespace-nowrap">Approved</span>
+                                : row.savedId 
+                                  ? <span className="text-blue-500 font-black text-[9px] uppercase bg-blue-50 px-2 py-1 rounded-full whitespace-nowrap">Pending</span>
+                                  : <span className="text-orange-500 font-black text-[9px] uppercase bg-orange-50 px-2 py-1 rounded-full whitespace-nowrap">Draft</span>}
                             </td>
                           )}
                           <td className="px-1.5 py-3">
@@ -640,6 +642,8 @@ export default function BranchPhysicalStock() {
                                                 <span className="text-[8px] font-black text-green-600 bg-green-50 px-2 py-1 rounded-full uppercase flex items-center gap-1">
                                                   <FaCheck size={8} /> Approved
                                                 </span>
+                                              ) : row.savedId ? (
+                                                <span className="text-[8px] font-black text-blue-500 bg-blue-50 px-2 py-1 rounded-full uppercase">Pending Approval</span>
                                               ) : (
                                                 <span className="text-[8px] font-black text-orange-500 bg-orange-50 px-2 py-1 rounded-full uppercase">Draft Mode</span>
                                               )
@@ -692,6 +696,8 @@ export default function BranchPhysicalStock() {
                               {isFieldVisible("status") && (
                                 row.status === "APPROVED" ? (
                                   <span className="text-[8px] font-black text-green-600 bg-green-50 px-2 py-1 rounded-full uppercase">Approved</span>
+                                ) : row.savedId ? (
+                                  <span className="text-[8px] font-black text-blue-500 bg-blue-50 px-2 py-1 rounded-full uppercase">Pending</span>
                                 ) : (
                                   <span className="text-[8px] font-black text-orange-500 bg-orange-50 px-2 py-1 rounded-full uppercase">Draft</span>
                                 )

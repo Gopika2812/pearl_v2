@@ -664,7 +664,6 @@ export default function SuperAdminControlSystem() {
                               {/* Parent Item */}
                               <div
                                 onClick={() => {
-                                  togglePermission(item.id);
                                   if (item.permissionFields) setExpandedFieldsPageId(expandedFieldsPageId === item.id ? null : item.id);
                                 }}
                                 className={`flex items-center gap-4 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
@@ -687,7 +686,9 @@ export default function SuperAdminControlSystem() {
                                     <p className="text-[8px] font-black text-primary/40 uppercase mt-0.5">Click to configure columns</p>
                                   )}
                                 </div>
-                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                                <div 
+                                  onClick={(e) => { e.stopPropagation(); togglePermission(item.id); }}
+                                  className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
                                   userPermissions.includes(item.id) ? "bg-primary border-primary text-white" : "border-gray-200"
                                 }`}>
                                   {userPermissions.includes(item.id) && <FaCheck size={8} />}
@@ -732,36 +733,37 @@ export default function SuperAdminControlSystem() {
                                 <div className="ml-8 pl-4 border-l-2 border-gray-100 space-y-3">
                                   {item.subItems.map(sub => (
                                     <div key={sub.id} className="space-y-2">
-                                      <div
-                                        onClick={() => {
-                                          togglePermission(sub.id);
-                                          if (sub.permissionFields) setExpandedFieldsPageId(expandedFieldsPageId === sub.id ? null : sub.id);
-                                        }}
-                                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-all duration-300 ${
-                                          userPermissions.includes(sub.id)
-                                            ? "border-primary/10 bg-white shadow-sm"
-                                            : "border-transparent bg-gray-50/50 hover:bg-gray-100/50"
-                                        } ${expandedFieldsPageId === sub.id ? "ring-2 ring-primary/10" : ""}`}
-                                      >
-                                        <div className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${
-                                          userPermissions.includes(sub.id) ? "bg-primary/10 text-primary" : "bg-gray-200 text-gray-400"
-                                        }`}>
-                                          <span className="text-[10px]">{ICON_MAP[sub.icon]}</span>
+                                        <div
+                                          onClick={() => {
+                                            if (sub.permissionFields) setExpandedFieldsPageId(expandedFieldsPageId === sub.id ? null : sub.id);
+                                          }}
+                                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-all duration-300 ${
+                                            userPermissions.includes(sub.id)
+                                              ? "border-primary/10 bg-white shadow-sm"
+                                              : "border-transparent bg-gray-50/50 hover:bg-gray-100/50"
+                                          } ${expandedFieldsPageId === sub.id ? "ring-2 ring-primary/10" : ""}`}
+                                        >
+                                          <div className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${
+                                            userPermissions.includes(sub.id) ? "bg-primary/10 text-primary" : "bg-gray-200 text-gray-400"
+                                          }`}>
+                                            <span className="text-[10px]">{ICON_MAP[sub.icon]}</span>
+                                          </div>
+                                          <div className="flex-1">
+                                            <p className={`text-[10px] font-bold ${userPermissions.includes(sub.id) ? "text-gray-800" : "text-gray-400"}`}>
+                                              {sub.name}
+                                            </p>
+                                            {sub.permissionFields && (
+                                              <p className="text-[8px] font-black text-primary/40 uppercase">Click to configure columns</p>
+                                            )}
+                                          </div>
+                                          <div 
+                                            onClick={(e) => { e.stopPropagation(); togglePermission(sub.id); }}
+                                            className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
+                                            userPermissions.includes(sub.id) ? "bg-primary border-primary text-white" : "border-gray-200 bg-white"
+                                          }`}>
+                                            {userPermissions.includes(sub.id) && <FaCheck size={6} />}
+                                          </div>
                                         </div>
-                                        <div className="flex-1">
-                                          <p className={`text-[10px] font-bold ${userPermissions.includes(sub.id) ? "text-gray-800" : "text-gray-400"}`}>
-                                            {sub.name}
-                                          </p>
-                                          {sub.permissionFields && (
-                                            <p className="text-[8px] font-black text-primary/40 uppercase">Click to configure columns</p>
-                                          )}
-                                        </div>
-                                        <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
-                                          userPermissions.includes(sub.id) ? "bg-primary border-primary text-white" : "border-gray-200 bg-white"
-                                        }`}>
-                                          {userPermissions.includes(sub.id) && <FaCheck size={6} />}
-                                        </div>
-                                      </div>
 
                                       {/* Field Permissions for Sub Item */}
                                       {expandedFieldsPageId === sub.id && sub.permissionFields && (
