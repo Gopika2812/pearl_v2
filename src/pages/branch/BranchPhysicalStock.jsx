@@ -329,6 +329,7 @@ export default function BranchPhysicalStock() {
               productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
               systemQty: record.systemQty || 0,
               physicalQty: record.noAction ? "NO_ACTION" : record.physicalQty,
+              tempQty: "", // Initializing increment field
               mrp: record.mrp || 0,
               batch: record.batch || "",
               expiryDate: record.expiryDate ? new Date(record.expiryDate).toISOString().split('T')[0] : "",
@@ -347,6 +348,7 @@ export default function BranchPhysicalStock() {
             productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
             systemQty: p.availableQty || 0,
             physicalQty: "",
+            tempQty: "", // Initializing increment field
             mrp: p.mrp || 0,
             batch: p.batch || "",
             expiryDate: p.expiryDate ? new Date(p.expiryDate).toISOString().split('T')[0] : "",
@@ -383,11 +385,11 @@ export default function BranchPhysicalStock() {
   };
 
   const saveRow = async (row) => {
-    const isNoAction = row.physicalQty === "NO_ACTION";
+    const isNoAction = row.savedId ? (row.tempQty === "NO_ACTION") : (row.physicalQty === "NO_ACTION");
     const systemIsZero = Number(row.systemQty) === 0;
     const skipMandatory = isNoAction || systemIsZero;
 
-    if (row.physicalQty === "" || row.physicalQty === null) return toast.warning("Physical Qty is mandatory");
+    if (!row.savedId && (row.physicalQty === "" || row.physicalQty === null)) return toast.warning("Physical Qty is mandatory");
     
     if (!skipMandatory) {
       if (!row.mrp || Number(row.mrp) <= 0) return toast.warning("Valid MRP is mandatory");
@@ -398,6 +400,21 @@ export default function BranchPhysicalStock() {
     if (!row.checkedBy || row.checkedBy.length === 0) return toast.warning("At least one Staff Member must be selected");
     setRows(prev => prev.map(r => r.rowId === row.rowId ? { ...r, saving: true } : r));
     try {
+      const isNoAction = row.tempQty === "NO_ACTION" || (row.savedId ? false : row.physicalQty === "NO_ACTION");
+      const systemIsZero = Number(row.systemQty) === 0;
+      const skipMandatory = isNoAction || systemIsZero;
+
+      // Determine what to save: 
+      // If it's a new row, use physicalQty. 
+      // If it's an existing row, use Current Total + New Increment (tempQty).
+      let finalPhysicalQty = 0;
+      if (row.savedId) {
+        finalPhysicalQty = (Number(row.physicalQty) || 0) + (Number(row.tempQty) || 0);
+        if (isNoAction) finalPhysicalQty = Number(row.systemQty);
+      } else {
+        finalPhysicalQty = isNoAction ? Number(row.systemQty) : Number(row.physicalQty);
+      }
+
       const payload = {
         branchId: currentBranch._id,
         productGroupId: row.productGroupId || undefined,
@@ -405,7 +422,7 @@ export default function BranchPhysicalStock() {
         productId: row.productId,
         productName: row.productName,
         systemQty: Number(row.systemQty),
-        physicalQty: isNoAction ? Number(row.systemQty) : Number(row.physicalQty),
+        physicalQty: finalPhysicalQty,
         mrp: Number(row.mrp) || 0,
         batch: isNoAction ? "NO_ACTION" : (row.batch || ""),
         expiryDate: isNoAction ? undefined : (row.expiryDate || undefined),
@@ -428,10 +445,15 @@ export default function BranchPhysicalStock() {
       data = await res.json();
       if (data.success) {
         setRows(prev => prev.map(r => r.rowId === row.rowId ? {
-          ...r, saving: false, savedId: data.data._id, status: "PENDING"
+          ...r, 
+          saving: false, 
+          savedId: data.data._id, 
+          status: "PENDING",
+          physicalQty: data.data.physicalQty, // Update to the new total from server
+          tempQty: "" // Clear the increment input
         } : r));
         if (!row.savedId) fetchNextId();
-        toast.success(`${data.data.sjId} saved`);
+        toast.success(`Total: ${data.data.physicalQty} saved`);
       } else {
         throw new Error(data.message);
       }
@@ -585,12 +607,35 @@ export default function BranchPhysicalStock() {
                           {isFieldVisible("systemQty") && <td className="px-1.5 py-3 border-r border-gray-100 text-center font-black text-[10px] text-blue-500">{row.systemQty}</td>}
                           {isFieldVisible("physicalQty") && (
                             <td className="px-1.5 py-3 border-r border-gray-100">
-                              <input type="number" min="0"
-                                value={row.physicalQty}
-                                onChange={e => updateRow(row.rowId, "physicalQty", e.target.value)}
-                                disabled={row.status === "APPROVED"}
-                                className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-black outline-none focus:border-blue-400 disabled:bg-gray-50 shadow-sm"
-                                placeholder="Qty" />
+                              <div className="flex flex-col gap-1">
+                                {row.savedId && (
+                                  <div className="flex items-center justify-between px-1">
+                                    <span className="text-[8px] font-black text-blue-500 uppercase">Total:</span>
+                                    <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-1.5 rounded">{row.physicalQty}</span>
+                                  </div>
+                                )}
+                                <div className="relative group/edit">
+                                  <input type={(row.savedId ? row.tempQty : row.physicalQty) === "NO_ACTION" ? "text" : "number"} 
+                                    value={row.savedId ? (row.tempQty === "NO_ACTION" ? "NO ACTION" : row.tempQty) : (row.physicalQty === "NO_ACTION" ? "NO ACTION" : row.physicalQty)} 
+                                    onChange={e => updateRow(row.rowId, row.savedId ? "tempQty" : "physicalQty", e.target.value)}
+                                    disabled={row.status === "APPROVED"}
+                                    className={`w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-[10px] font-black outline-none focus:border-blue-400 ${(row.savedId ? row.tempQty : row.physicalQty) === "NO_ACTION" ? "bg-gray-100 text-gray-400" : ""}`} 
+                                    placeholder={row.savedId ? "+ Add" : "Qty"} />
+                                  <select 
+                                    className="absolute right-0 top-0 opacity-0 w-6 h-full cursor-pointer"
+                                    onChange={e => {
+                                      const field = row.savedId ? "tempQty" : "physicalQty";
+                                      if (e.target.value === "NO_ACTION") updateRow(row.rowId, field, "NO_ACTION");
+                                      else updateRow(row.rowId, field, "");
+                                    }}
+                                    disabled={row.status === "APPROVED"}
+                                  >
+                                    <option value="">Edit</option>
+                                    <option value="NO_ACTION">No action</option>
+                                  </select>
+                                  <FaChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" size={8} />
+                                </div>
+                              </div>
                             </td>
                           )}
                           {isFieldVisible("inward") && (
@@ -654,8 +699,8 @@ export default function BranchPhysicalStock() {
                                 <>
                                   {isFieldVisible("action_save") && (
                                     <button onClick={() => saveRow(row)} disabled={row.saving}
-                                      className="px-3 py-1.5 bg-blue-600 text-white text-[9px] font-black rounded-lg hover:bg-blue-700 disabled:opacity-50 uppercase shadow-md shadow-blue-100">
-                                      {row.saving ? "..." : "Save"}
+                                      className={`px-3 py-1.5 text-white text-[9px] font-black rounded-lg disabled:opacity-50 uppercase shadow-md ${row.savedId ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100" : "bg-blue-600 hover:bg-blue-700 shadow-blue-100"}`}>
+                                      {row.saving ? "..." : (row.savedId ? "+ Add" : "Save")}
                                     </button>
                                   )}
                                 </>
@@ -886,15 +931,22 @@ export default function BranchPhysicalStock() {
                             {isFieldVisible("physicalQty") && (
                               <div className="bg-gray-50 p-2 rounded-xl relative">
                                 <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Physical</p>
-                                <input type={row.physicalQty === "NO_ACTION" ? "text" : "number"} 
-                                  value={row.physicalQty === "NO_ACTION" ? "NO ACTION" : row.physicalQty} 
-                                  onChange={e => updateRow(row.rowId, "physicalQty", e.target.value)}
+                                {row.savedId && (
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[8px] font-black text-blue-500 uppercase">Total:</span>
+                                    <span className="text-[10px] font-black text-blue-600">{row.physicalQty}</span>
+                                  </div>
+                                )}
+                                <input type={(row.savedId ? row.tempQty : row.physicalQty) === "NO_ACTION" ? "text" : "number"} 
+                                  value={row.savedId ? (row.tempQty === "NO_ACTION" ? "NO ACTION" : row.tempQty) : (row.physicalQty === "NO_ACTION" ? "NO ACTION" : row.physicalQty)} 
+                                  onChange={e => updateRow(row.rowId, row.savedId ? "tempQty" : "physicalQty", e.target.value)}
                                   disabled={row.status === "APPROVED"}
-                                  className={`w-full bg-transparent text-xs font-black outline-none ${row.physicalQty === "NO_ACTION" ? "text-gray-400" : "text-gray-800"}`} placeholder="0" />
+                                  className={`w-full bg-transparent text-xs font-black outline-none ${(row.savedId ? row.tempQty : row.physicalQty) === "NO_ACTION" ? "text-gray-400" : "text-gray-800"}`} placeholder={row.savedId ? "+ Add" : "0"} />
                                 <select className="absolute inset-0 opacity-0 cursor-pointer"
                                   onChange={e => {
-                                    if (e.target.value === "NO_ACTION") updateRow(row.rowId, "physicalQty", "NO_ACTION");
-                                    else updateRow(row.rowId, "physicalQty", "");
+                                    const field = row.savedId ? "tempQty" : "physicalQty";
+                                    if (e.target.value === "NO_ACTION") updateRow(row.rowId, field, "NO_ACTION");
+                                    else updateRow(row.rowId, field, "");
                                   }}
                                   disabled={row.status === "APPROVED"}>
                                   <option value="">QTY</option>
