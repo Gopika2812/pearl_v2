@@ -202,57 +202,139 @@ export default function BranchPhysicalStock() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const addRow = (product) => {
+  const addRow = async (product) => {
     if (rows.find(r => r.productId === product._id)) return;
     
-    const newRow = {
-      rowId: Date.now() + Math.random(),
-      productId: product._id,
-      productName: product.name,
-      productGroupId: product.productGroup?._id || product.productGroup,
-      productGroupName: typeof product.productGroup === 'object' ? product.productGroup?.name : "",
-      systemQty: product.availableQty || 0,
-      physicalQty: "",
-      mrp: product.mrp || 0,
-      batch: product.batch || "",
-      expiryDate: product.expiryDate ? new Date(product.expiryDate).toISOString().split('T')[0] : "",
-      checkedBy: [],
-      status: "DRAFT",
-      saving: false
-    };
-    setRows(prev => [...prev, newRow]);
+    // Check if a record exists for today
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const recUrl = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&productId=${product._id}&fromDate=${todayStr}&toDate=${todayStr}&limit=1`;
+      const recRes = await fetchWithAuth(recUrl);
+      const recData = await recRes.json();
+      
+      if (recData.success && recData.data?.length > 0) {
+        const record = recData.data[0];
+        const existingRow = {
+          rowId: record._id,
+          productId: product._id,
+          productName: product.name,
+          productGroupId: product.productGroup?._id || product.productGroup,
+          productGroupName: typeof product.productGroup === 'object' ? product.productGroup?.name : "",
+          systemQty: record.systemQty || 0,
+          physicalQty: record.noAction ? "NO_ACTION" : record.physicalQty,
+          mrp: record.mrp || 0,
+          batch: record.batch || "",
+          expiryDate: record.expiryDate ? new Date(record.expiryDate).toISOString().split('T')[0] : "",
+          checkedBy: record.checkedBy || [],
+          status: record.status || "PENDING",
+          savedId: record._id,
+          saving: false
+        };
+        setRows(prev => [...prev, existingRow]);
+      } else {
+        const newRow = {
+          rowId: Date.now() + Math.random(),
+          productId: product._id,
+          productName: product.name,
+          productGroupId: product.productGroup?._id || product.productGroup,
+          productGroupName: typeof product.productGroup === 'object' ? product.productGroup?.name : "",
+          systemQty: product.availableQty || 0,
+          physicalQty: "",
+          mrp: product.mrp || 0,
+          batch: product.batch || "",
+          expiryDate: product.expiryDate ? new Date(product.expiryDate).toISOString().split('T')[0] : "",
+          checkedBy: [],
+          status: "DRAFT",
+          saving: false
+        };
+        setRows(prev => [...prev, newRow]);
+      }
+    } catch {
+      // Fallback to new row if fetch fails
+      const newRow = {
+        rowId: Date.now() + Math.random(),
+        productId: product._id,
+        productName: product.name,
+        productGroupId: product.productGroup?._id || product.productGroup,
+        productGroupName: typeof product.productGroup === 'object' ? product.productGroup?.name : "",
+        systemQty: product.availableQty || 0,
+        physicalQty: "",
+        mrp: product.mrp || 0,
+        batch: product.batch || "",
+        expiryDate: product.expiryDate ? new Date(product.expiryDate).toISOString().split('T')[0] : "",
+        checkedBy: [],
+        status: "DRAFT",
+        saving: false
+      };
+      setRows(prev => [...prev, newRow]);
+    }
+    
     setShowProductDrop(false);
     setProductSearch("");
   };
 
   const addAllFromGroup = async (groupId) => {
     if (!groupId || groupId === "ALL") {
-      setRows([]); // Clear if "ALL" or empty to avoid massive lists
+      setRows([]); 
       return;
     }
     try {
-      const url = `${API_BASE}/products?branchId=${currentBranch._id}&productGroup=${groupId}&limit=500`;
-      const res = await fetchWithAuth(url);
-      const data = await res.json();
-      if (data.success && data.data) {
-        const productsToAdd = data.data;
-        const newRows = productsToAdd.map(p => ({
-          rowId: Math.random() + Date.now(),
-          productId: p._id,
-          productName: p.name,
-          productGroupId: p.productGroup?._id || p.productGroup,
-          productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
-          systemQty: p.availableQty || 0,
-          physicalQty: "",
-          mrp: p.mrp || 0,
-          batch: p.batch || "",
-          expiryDate: p.expiryDate ? new Date(p.expiryDate).toISOString().split('T')[0] : "",
-          checkedBy: [],
-          status: "DRAFT",
-          saving: false
-        }));
+      // 1. Fetch Products in this group
+      const prodUrl = `${API_BASE}/products?branchId=${currentBranch._id}&productGroup=${groupId}&limit=500`;
+      const prodRes = await fetchWithAuth(prodUrl);
+      const prodData = await prodRes.json();
+      
+      // 2. Fetch today's physical stock records for this group
+      const todayStr = new Date().toISOString().split('T')[0];
+      const recUrl = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&productGroupId=${groupId}&fromDate=${todayStr}&toDate=${todayStr}&limit=500`;
+      const recRes = await fetchWithAuth(recUrl);
+      const recData = await recRes.json();
+      
+      const existingRecords = recData.success ? recData.data : [];
+
+      if (prodData.success && prodData.data) {
+        const productsToAdd = prodData.data;
+        const newRows = productsToAdd.map(p => {
+          // Check if we already have a record for this product today
+          const record = existingRecords.find(r => r.productId === p._id);
+          
+          if (record) {
+            return {
+              rowId: record._id,
+              productId: p._id,
+              productName: p.name,
+              productGroupId: p.productGroup?._id || p.productGroup,
+              productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
+              systemQty: record.systemQty || 0,
+              physicalQty: record.noAction ? "NO_ACTION" : record.physicalQty,
+              mrp: record.mrp || 0,
+              batch: record.batch || "",
+              expiryDate: record.expiryDate ? new Date(record.expiryDate).toISOString().split('T')[0] : "",
+              checkedBy: record.checkedBy || [],
+              status: record.status || "PENDING",
+              savedId: record._id,
+              saving: false
+            };
+          }
+
+          return {
+            rowId: Math.random() + Date.now(),
+            productId: p._id,
+            productName: p.name,
+            productGroupId: p.productGroup?._id || p.productGroup,
+            productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
+            systemQty: p.availableQty || 0,
+            physicalQty: "",
+            mrp: p.mrp || 0,
+            batch: p.batch || "",
+            expiryDate: p.expiryDate ? new Date(p.expiryDate).toISOString().split('T')[0] : "",
+            checkedBy: [],
+            status: "DRAFT",
+            saving: false
+          };
+        });
         setRows(newRows);
-        toast.info(`Loaded ${productsToAdd.length} products`);
+        toast.info(`Loaded ${productsToAdd.length} items (${existingRecords.length} saved)`);
       }
     } catch (err) {
       toast.error("Failed to load group products");
