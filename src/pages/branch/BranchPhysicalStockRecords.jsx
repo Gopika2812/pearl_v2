@@ -104,10 +104,22 @@ export default function BranchPhysicalStockRecords() {
   const isFieldVisible = (fieldId) => {
     if (!user) return false;
     if (user.role === "SUPER_ADMIN") return true;
+
     const key = `physical-stock-entry_${fieldId}`;
-    if (user.fieldPermissions?.[key] === false) return false;
-    if (user.fieldPermissions?.[key] === true) return true;
+    const perm = user.fieldPermissions?.[key];
+
+    // If explicitly disabled, always hide
+    if (perm === false) return false;
+    // If explicitly enabled, always show
+    if (perm === true) return true;
+    
+    // Default for ADMIN: show everything unless explicitly disabled
     if (user.role === "ADMIN") return true;
+    
+    // Default for OTHERS: Show basic info, hide sensitive stock/actions
+    const publicFields = ["productName", "productGroupName", "mrp", "batch", "expiryDate", "status", "checkedBy", "sjId", "entryDate"];
+    if (publicFields.includes(fieldId)) return true;
+    
     return false;
   };
 

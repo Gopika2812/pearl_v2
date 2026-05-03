@@ -133,19 +133,26 @@ export default function BranchPhysicalStock() {
 
   const isFieldVisible = (fieldId) => {
     if (!user) return false;
-    // Super Admin is the master override - always see everything
     if (user.role === "SUPER_ADMIN") return true;
 
     const key = `physical-stock-entry_${fieldId}`;
-    // For all other users, if explicitly disabled in Control System, hide it
-    if (user.fieldPermissions?.[key] === false) return false;
-    // If explicitly enabled, show it
-    if (user.fieldPermissions?.[key] === true) return true;
+    const perm = user.fieldPermissions?.[key];
+
+    // If explicitly disabled, always hide
+    if (perm === false) return false;
+    // If explicitly enabled, always show
+    if (perm === true) return true;
     
-    // Default for regular ADMIN: show unless explicitly disabled above
+    // Default for ADMIN: show everything unless explicitly disabled
     if (user.role === "ADMIN") return true;
     
-    // For other roles, hide unless explicitly enabled
+    // Default for OTHERS (Staff/Branch Users):
+    // Show basic info by default, but hide sensitive stock/actions
+    const publicFields = ["productName", "productGroupName", "mrp", "batch", "expiryDate", "status", "checkedBy"];
+    if (publicFields.includes(fieldId)) return true;
+    
+    // Sensitive fields (systemQty, inward, outward, action_save, action_approve) 
+    // stay hidden unless explicitly checked in Control System
     return false;
   };
 
