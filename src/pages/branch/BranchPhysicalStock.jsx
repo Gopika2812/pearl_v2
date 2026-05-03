@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { FaBoxes, FaPlus, FaTrash, FaCheck, FaSearch, FaTimes, FaHistory, FaChevronDown } from "react-icons/fa";
+import { FaBoxes, FaPlus, FaTrash, FaCheck, FaSearch, FaTimes, FaHistory, FaChevronDown, FaDownload, FaPrint } from "react-icons/fa";
+import * as XLSX from "xlsx";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -367,11 +368,6 @@ export default function BranchPhysicalStock() {
     setRows(prev => prev.map(r => r.rowId !== rowId ? r : { ...r, [field]: value }));
   };
 
-  const removeRow = (rowId) => {
-    // Keeping for internal logic if needed, but removed from UI as requested
-    setRows(prev => prev.filter(r => r.rowId !== rowId));
-  };
-
   const calc = (row) => {
     if (row.physicalQty === "" || row.physicalQty === null || row.physicalQty === "NO_ACTION") return { inward: 0, outward: 0 };
     const p = Number(row.physicalQty) || 0;
@@ -455,12 +451,105 @@ export default function BranchPhysicalStock() {
       return r.productName.toLowerCase().includes(productSearch.toLowerCase());
     })
     .sort((a, b) => {
-      // Saved (Pending/Approved) first, then Drafts
       const valA = a.savedId ? 1 : 2;
       const valB = b.savedId ? 1 : 2;
       if (valA !== valB) return valA - valB;
       return 0;
     });
+
+  const exportToExcel = () => {
+    if (rows.length === 0) return toast.warning("No data to export");
+    const monthName = new Date(entryDate).toLocaleDateString('en-GB');
+    const groupName = groupFilter && productGroups.find(g => g._id === groupFilter)?.name || "ALL GROUPS";
+    
+    const worksheetData = [
+      [`STOCK JOURNAL ENTRY - ${monthName}`],
+      [`GROUP: ${groupName.toUpperCase()}`],
+      [""],
+      ["PRODUCT NAME", "SYSTEM STOCK", "PHYSICAL QTY", "MRP", "BATCH", "EXPIRY DATE", "STAFF CHECKING"]
+    ];
+
+    sortedRows.forEach(r => {
+      worksheetData.push([
+        r.productName,
+        r.systemQty,
+        r.physicalQty === "NO_ACTION" ? "NO ACTION" : r.physicalQty,
+        Number(r.mrp) === 0 ? "" : r.mrp,
+        r.batch === "NO_ACTION" ? "NO ACTION" : (r.batch || ""),
+        r.expiryDate || "",
+        r.checkedBy.map(u => u.username || u.fullName).join(", ")
+      ]);
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }];
+    XLSX.utils.book_append_sheet(wb, ws, "Stock Journal");
+    XLSX.writeFile(wb, `Stock_Journal_${monthName.replace(/\//g, "-")}.xlsx`);
+    toast.success("Excel exported successfully");
+  };
+
+  const handlePrint = () => {
+    if (rows.length === 0) return toast.warning("No data to print");
+    const dateStr = new Date(entryDate).toLocaleDateString('en-GB');
+    const groupName = groupFilter && productGroups.find(g => g._id === groupFilter)?.name || "ALL GROUPS";
+    
+    const printWindow = window.open('', '_blank');
+    const html = `
+      <html>
+        <head>
+          <title>Stock Journal Print</title>
+          <style>
+            body { font-family: sans-serif; padding: 20px; }
+            h1 { text-align: center; font-size: 16px; text-transform: uppercase; margin: 0; }
+            .meta { text-align: center; font-size: 12px; margin-bottom: 20px; color: #555; }
+            table { width: 100%; border-collapse: collapse; font-size: 10px; }
+            th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+            th { background-color: #f9f9f9; text-transform: uppercase; }
+          </style>
+        </head>
+        <body>
+          <h1>Stock Journal Entry</h1>
+          <div class="meta">Date: ${dateStr} | Branch: ${currentBranch?.name} | Group: ${groupName.toUpperCase()}</div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 35%">Product</th>
+                <th style="width: 8%">System</th>
+                <th style="width: 8%">Phys</th>
+                <th style="width: 8%">MRP</th>
+                <th style="width: 12%">Batch</th>
+                <th style="width: 12%">Expiry</th>
+                <th style="width: 17%">Staff</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sortedRows.map(r => `<tr>
+                <td>${r.productName}</td>
+                <td style="text-align: center">${r.systemQty}</td>
+                <td style="text-align: center">${r.physicalQty === "NO_ACTION" ? "N/A" : r.physicalQty}</td>
+                <td style="text-align: center">${Number(r.mrp) === 0 ? "" : r.mrp}</td>
+                <td>${r.batch === "NO_ACTION" ? "N/A" : (r.batch || "")}</td>
+                <td>${r.expiryDate || ""}</td>
+                <td>${r.checkedBy.map(u => u.username || u.fullName).join(", ")}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+          
+          <div style="margin-top: 40px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; font-size: 11px; font-weight: bold;">
+            <div>1. STAFF SIGN: _______________________</div>
+            <div>2. STAFF SIGN: _______________________</div>
+            <div>3. STAFF SIGN: _______________________</div>
+            <div>4. STAFF SIGN: _______________________</div>
+          </div>
+          
+          <script>window.print(); window.close();</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
 
   const savedCount = rows.filter(r => r.savedId).length;
   const draftCount = rows.filter(r => !r.savedId).length;
@@ -552,6 +641,26 @@ export default function BranchPhysicalStock() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* ACTION TOOLBAR */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-white p-3 border border-gray-300 rounded-xl shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mr-2">Quick Actions:</span>
+            <button onClick={exportToExcel}
+              className="px-4 py-2 bg-emerald-600 text-white text-[10px] font-black uppercase rounded-lg hover:bg-emerald-700 transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-100">
+              <FaDownload size={10} /> Export Excel
+            </button>
+            <button onClick={handlePrint}
+              className="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-lg shadow-blue-100">
+              <FaPrint size={10} /> Print Report
+            </button>
+          </div>
+          
+          <button onClick={() => setRows([])}
+            className="px-4 py-2 bg-rose-50 text-rose-600 text-[10px] font-black uppercase rounded-lg hover:bg-rose-100 transition border border-rose-100 flex items-center justify-center gap-2">
+            <FaTrash size={10} /> Clear List
+          </button>
         </div>
 
         <div className="space-y-4">

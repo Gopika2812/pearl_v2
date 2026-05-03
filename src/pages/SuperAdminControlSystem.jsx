@@ -1,22 +1,29 @@
 import { useEffect, useState } from "react";
-import { 
-  FaBuilding, FaCheck, FaShieldAlt, FaUser, FaUsers, FaUsersCog, 
-  FaLock, FaGlobe, FaShoppingCart, FaBox, FaFileAlt, FaDollarSign, 
-  FaTruck, FaHandshake, FaChartLine, FaLink, FaBook, FaChartBar, 
-  FaChevronRight, FaEdit, FaTrash, FaCheckCircle, FaPlus, 
-  FaFileInvoice, FaFilePdf, FaUndo, FaCalendar 
+import {
+  FaBox,
+  FaBuilding,
+  FaCalendar,
+  FaCheck,
+  FaChevronRight,
+  FaDollarSign,
+  FaEdit,
+  FaFileInvoice, FaFilePdf,
+  FaLink,
+  FaLock,
+  FaShieldAlt,
+  FaTrash,
+  FaTruck,
+  FaUndo,
+  FaUsers, FaUsersCog
 } from "react-icons/fa";
-import { QUICK_LINKS_CONFIG, QUICK_LINKS_CATEGORIES } from "../utils/quickLinksConfig";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
+import { QUICK_LINKS_CONFIG } from "../utils/quickLinksConfig";
 
-import { PAGE_CONFIG, ICON_MAP, getFlattenedPages } from "../utils/pageConfig";
+import { ICON_MAP, PAGE_CONFIG, getFlattenedPages } from "../utils/pageConfig";
 
-/**
- * Dynamically merge all configured pages from PAGE_CONFIG
- * into a unified list for permission management.
- */
+
 const getUnifiedPageDefinitions = () => {
   return getFlattenedPages();
 };
@@ -133,13 +140,13 @@ export default function SuperAdminControlSystem() {
   };
 
   const toggleVoucherType = (vtId) => {
-    setAllowedVoucherTypes(prev => 
+    setAllowedVoucherTypes(prev =>
       prev.includes(vtId) ? prev.filter(id => id !== vtId) : [...prev, vtId]
     );
   };
- 
+
   const toggleQuickLink = (linkId) => {
-    setAllowedQuickLinks(prev => 
+    setAllowedQuickLinks(prev =>
       prev.includes(linkId) ? prev.filter(id => id !== linkId) : [...prev, linkId]
     );
   };
@@ -155,7 +162,7 @@ export default function SuperAdminControlSystem() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           allowedPages: userPermissions,
           fieldPermissions: fieldPermissions,
           actionPermissions: actionPermissions,
@@ -167,8 +174,8 @@ export default function SuperAdminControlSystem() {
       if (data.success) {
         toast.success(`Permissions updated for ${selectedUser.username}`);
         // Update local state
-        const updatedUser = { 
-          ...selectedUser, 
+        const updatedUser = {
+          ...selectedUser,
           allowedPages: userPermissions,
           fieldPermissions: fieldPermissions,
           actionPermissions: actionPermissions,
@@ -195,12 +202,12 @@ export default function SuperAdminControlSystem() {
     if (isSelecting) {
       // 1. Pages
       setUserPermissions(allPages.map(p => p.id));
-      
+
       // 2. Actions
       const newActionPerms = {};
       ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice"].forEach(a => newActionPerms[a] = true);
       setActionPermissions(newActionPerms);
-      
+
       // 3. Field Visibility
       const newFieldPerms = {};
       getFlattenedPages().forEach(page => {
@@ -211,17 +218,17 @@ export default function SuperAdminControlSystem() {
         }
       });
       setFieldPermissions(newFieldPerms);
-      
+
       // 4. Hubs & Vouchers
       setAllowedQuickLinks(Object.keys(QUICK_LINKS_CONFIG));
       setAllowedVoucherTypes(voucherTypes.map(vt => vt._id));
     } else {
       setUserPermissions([]);
-      
+
       const newActionPerms = {};
       ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice"].forEach(a => newActionPerms[a] = false);
       setActionPermissions(newActionPerms);
-      
+
       const newFieldPerms = {};
       getFlattenedPages().forEach(page => {
         if (page.permissionFields) {
@@ -231,16 +238,16 @@ export default function SuperAdminControlSystem() {
         }
       });
       setFieldPermissions(newFieldPerms);
-      
+
       setAllowedQuickLinks([]);
       setAllowedVoucherTypes([]);
     }
   };
 
-  const isAllSelected = 
-    selectedUser && 
-    userPermissions.length === allPages.length && 
-    allowedQuickLinks.length === Object.keys(QUICK_LINKS_CONFIG).length && 
+  const isAllSelected =
+    selectedUser &&
+    userPermissions.length === allPages.length &&
+    allowedQuickLinks.length === Object.keys(QUICK_LINKS_CONFIG).length &&
     (voucherTypes.length === 0 || allowedVoucherTypes.length === voucherTypes.length);
 
   const fieldLabels = {
@@ -454,11 +461,10 @@ export default function SuperAdminControlSystem() {
                   <button
                     key={branch._id}
                     onClick={() => setSelectedBranch(branch)}
-                    className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-300 flex items-center justify-between group ${
-                      selectedBranch?._id === branch._id
+                    className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-300 flex items-center justify-between group ${selectedBranch?._id === branch._id
                         ? "bg-primary/5 text-primary shadow-sm"
                         : "hover:bg-gray-50 text-gray-600"
-                    }`}
+                      }`}
                   >
                     <div className="flex flex-col">
                       <span className={`font-bold text-xs truncate max-w-[150px] ${selectedBranch?._id === branch._id ? "text-primary" : "text-gray-700"}`}>{branch.name}</span>
@@ -489,11 +495,10 @@ export default function SuperAdminControlSystem() {
                       <button
                         key={user._id}
                         onClick={() => setSelectedUser(user)}
-                        className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-300 flex items-center justify-between group ${
-                          selectedUser?._id === user._id
+                        className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-300 flex items-center justify-between group ${selectedUser?._id === user._id
                             ? "bg-primary text-white shadow-md shadow-primary/20"
                             : "hover:bg-gray-50 text-gray-600"
-                        }`}
+                          }`}
                       >
                         <div className="flex flex-col min-w-0">
                           <span className={`font-bold text-xs truncate ${selectedUser?._id === user._id ? "text-white" : "text-gray-700"}`}>{user.username}</span>
@@ -528,13 +533,12 @@ export default function SuperAdminControlSystem() {
                   </div>
                   <div className="flex items-center gap-4">
                     <label className="flex items-center gap-2 text-white/70 font-black tracking-widest text-[10px] cursor-pointer hover:text-white transition group">
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                        isAllSelected ? "bg-primary border-primary text-white" : "border-gray-500 bg-gray-700 group-hover:border-gray-400"
-                      }`}>
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${isAllSelected ? "bg-primary border-primary text-white" : "border-gray-500 bg-gray-700 group-hover:border-gray-400"
+                        }`}>
                         {isAllSelected && <FaCheck size={8} />}
                       </div>
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         className="hidden"
                         checked={isAllSelected}
                         onChange={(e) => handleSelectAll(e.target.checked)}
@@ -582,23 +586,20 @@ export default function SuperAdminControlSystem() {
                         <div
                           key={action.id}
                           onClick={() => toggleActionPermission(action.id)}
-                          className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
-                            actionPermissions[action.id] !== false
+                          className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${actionPermissions[action.id] !== false
                               ? "border-primary/20 bg-white shadow-sm"
                               : "border-gray-50 bg-gray-100/50 opacity-60"
-                          }`}
+                            }`}
                         >
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                            actionPermissions[action.id] !== false ? "bg-primary text-white" : "bg-gray-200 text-gray-400"
-                          }`}>
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${actionPermissions[action.id] !== false ? "bg-primary text-white" : "bg-gray-200 text-gray-400"
+                            }`}>
                             <span className="text-xs">{action.icon}</span>
                           </div>
                           <span className={`text-[10px] font-bold ${actionPermissions[action.id] !== false ? "text-gray-900" : "text-gray-400"}`}>
                             {action.name}
                           </span>
-                          <div className={`ml-auto w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
-                            actionPermissions[action.id] !== false ? "bg-primary border-primary text-white" : "border-gray-200 bg-white"
-                          }`}>
+                          <div className={`ml-auto w-4 h-4 rounded-md border flex items-center justify-center transition-all ${actionPermissions[action.id] !== false ? "bg-primary border-primary text-white" : "border-gray-200 bg-white"
+                            }`}>
                             {actionPermissions[action.id] !== false && <FaCheck size={6} />}
                           </div>
                         </div>
@@ -620,15 +621,13 @@ export default function SuperAdminControlSystem() {
                       </div>
                       <div
                         onClick={() => toggleActionPermission("export")}
-                        className={`flex items-center gap-4 px-8 py-5 rounded-2xl border-2 cursor-pointer transition-all duration-300 min-w-[240px] ${
-                          actionPermissions.export !== false
+                        className={`flex items-center gap-4 px-8 py-5 rounded-2xl border-2 cursor-pointer transition-all duration-300 min-w-[240px] ${actionPermissions.export !== false
                             ? "border-emerald-500/20 bg-white shadow-md shadow-emerald-500/5 scale-105"
                             : "border-gray-100 bg-gray-50 opacity-60"
-                        }`}
+                          }`}
                       >
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-lg ${
-                          actionPermissions.export !== false ? "bg-emerald-500 text-white shadow-emerald-500/20" : "bg-gray-300 text-white"
-                        }`}>
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-lg ${actionPermissions.export !== false ? "bg-emerald-500 text-white shadow-emerald-500/20" : "bg-gray-300 text-white"
+                          }`}>
                           <FaFilePdf size={20} />
                         </div>
                         <div>
@@ -637,9 +636,8 @@ export default function SuperAdminControlSystem() {
                           </p>
                           <p className="text-[9px] text-gray-400 font-bold mt-1">Global Data Access Security</p>
                         </div>
-                        <div className={`ml-auto w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
-                          actionPermissions.export !== false ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-200 bg-white"
-                        }`}>
+                        <div className={`ml-auto w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${actionPermissions.export !== false ? "bg-emerald-500 border-emerald-500 text-white" : "border-gray-200 bg-white"
+                          }`}>
                           {actionPermissions.export !== false && <FaCheck size={10} />}
                         </div>
                       </div>
@@ -651,7 +649,7 @@ export default function SuperAdminControlSystem() {
                       <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
                       PAGE WISE ACCESS (SIDE BAR)
                     </h4>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                       {PAGE_CONFIG.map(category => (
                         <div key={category.category} className="space-y-4">
@@ -661,91 +659,84 @@ export default function SuperAdminControlSystem() {
                           <div className="space-y-3">
                             {category.items.map(item => (
                               <div key={item.id} className="space-y-2">
-                              {/* Parent Item */}
-                              <div
-                                onClick={() => {
-                                  if (item.permissionFields) setExpandedFieldsPageId(expandedFieldsPageId === item.id ? null : item.id);
-                                }}
-                                className={`flex items-center gap-4 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
-                                  userPermissions.includes(item.id)
-                                    ? "border-primary/20 bg-primary/5 shadow-sm"
-                                    : "border-gray-50 bg-white hover:border-gray-200"
-                                } ${expandedFieldsPageId === item.id ? "ring-2 ring-primary/20" : ""}`}
-                              >
-                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
-                                  userPermissions.includes(item.id) ? "bg-primary text-white" : "bg-gray-100 text-gray-400"
-                                }`}>
-                                  {ICON_MAP[item.icon]}
-                                </div>
-                                <div className="flex-1">
-                                  <p className={`text-[11px] font-bold ${userPermissions.includes(item.id) ? "text-gray-900" : "text-gray-500"}`}>
-                                    {item.name}
-                                    {item.isDropdown && <span className="ml-2 text-[8px] opacity-40">(Dropdown)</span>}
-                                  </p>
-                                  {item.permissionFields && (
-                                    <p className="text-[8px] font-black text-primary/40 uppercase mt-0.5">Click to configure columns</p>
-                                  )}
-                                </div>
-                                <div 
-                                  onClick={(e) => { e.stopPropagation(); togglePermission(item.id); }}
-                                  className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
-                                  userPermissions.includes(item.id) ? "bg-primary border-primary text-white" : "border-gray-200"
-                                }`}>
-                                  {userPermissions.includes(item.id) && <FaCheck size={8} />}
-                                </div>
-                              </div>
-
-                              {/* Field Permissions for Parent Item */}
-                              {expandedFieldsPageId === item.id && item.permissionFields && (
-                                <div className="ml-13 p-4 bg-gray-50/50 rounded-xl border border-gray-100 space-y-3 animate-in slide-in-from-top-2 duration-300">
-                                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    <FaLock size={8} /> Column Visibility
-                                  </p>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    {item.permissionFields.map(fieldId => {
-                                      const key = `${item.id}_${fieldId}`;
-                                      const isAllowed = fieldPermissions[key] !== false;
-                                      return (
-                                        <div
-                                          key={key}
-                                          onClick={(e) => { e.stopPropagation(); toggleFieldPermission(key); }}
-                                          className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border transition-all duration-300 cursor-pointer ${
-                                            isAllowed ? "bg-white border-primary/20 shadow-sm" : "bg-gray-100/50 border-transparent opacity-50"
-                                          }`}
-                                        >
-                                          <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center transition-all ${
-                                            isAllowed ? "bg-primary border-primary text-white" : "border-gray-300 bg-white"
-                                          }`}>
-                                            {isAllowed && <FaCheck size={6} />}
-                                          </div>
-                                          <span className={`text-[9px] font-bold ${isAllowed ? "text-gray-700" : "text-gray-400"}`}>
-                                            {fieldLabels[fieldId] || fieldId}
-                                          </span>
-                                        </div>
-                                      );
-                                    })}
+                                {/* Parent Item */}
+                                <div
+                                  onClick={() => {
+                                    if (item.permissionFields) setExpandedFieldsPageId(expandedFieldsPageId === item.id ? null : item.id);
+                                  }}
+                                  className={`flex items-center gap-4 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${userPermissions.includes(item.id)
+                                      ? "border-primary/20 bg-primary/5 shadow-sm"
+                                      : "border-gray-50 bg-white hover:border-gray-200"
+                                    } ${expandedFieldsPageId === item.id ? "ring-2 ring-primary/20" : ""}`}
+                                >
+                                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${userPermissions.includes(item.id) ? "bg-primary text-white" : "bg-gray-100 text-gray-400"
+                                    }`}>
+                                    {ICON_MAP[item.icon]}
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className={`text-[11px] font-bold ${userPermissions.includes(item.id) ? "text-gray-900" : "text-gray-500"}`}>
+                                      {item.name}
+                                      {item.isDropdown && <span className="ml-2 text-[8px] opacity-40">(Dropdown)</span>}
+                                    </p>
+                                    {item.permissionFields && (
+                                      <p className="text-[8px] font-black text-primary/40 uppercase mt-0.5">Click to configure columns</p>
+                                    )}
+                                  </div>
+                                  <div
+                                    onClick={(e) => { e.stopPropagation(); togglePermission(item.id); }}
+                                    className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${userPermissions.includes(item.id) ? "bg-primary border-primary text-white" : "border-gray-200"
+                                      }`}>
+                                    {userPermissions.includes(item.id) && <FaCheck size={8} />}
                                   </div>
                                 </div>
-                              )}
 
-                              {/* Sub Items if Dropdown */}
-                              {item.isDropdown && (
-                                <div className="ml-8 pl-4 border-l-2 border-gray-100 space-y-3">
-                                  {item.subItems.map(sub => (
-                                    <div key={sub.id} className="space-y-2">
+                                {/* Field Permissions for Parent Item */}
+                                {expandedFieldsPageId === item.id && item.permissionFields && (
+                                  <div className="ml-13 p-4 bg-gray-50/50 rounded-xl border border-gray-100 space-y-3 animate-in slide-in-from-top-2 duration-300">
+                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                      <FaLock size={8} /> Column Visibility
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      {item.permissionFields.map(fieldId => {
+                                        const key = `${item.id}_${fieldId}`;
+                                        const isAllowed = fieldPermissions[key] !== false;
+                                        return (
+                                          <div
+                                            key={key}
+                                            onClick={(e) => { e.stopPropagation(); toggleFieldPermission(key); }}
+                                            className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border transition-all duration-300 cursor-pointer ${isAllowed ? "bg-white border-primary/20 shadow-sm" : "bg-gray-100/50 border-transparent opacity-50"
+                                              }`}
+                                          >
+                                            <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center transition-all ${isAllowed ? "bg-primary border-primary text-white" : "border-gray-300 bg-white"
+                                              }`}>
+                                              {isAllowed && <FaCheck size={6} />}
+                                            </div>
+                                            <span className={`text-[9px] font-bold ${isAllowed ? "text-gray-700" : "text-gray-400"}`}>
+                                              {fieldLabels[fieldId] || fieldId}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Sub Items if Dropdown */}
+                                {item.isDropdown && (
+                                  <div className="ml-8 pl-4 border-l-2 border-gray-100 space-y-3">
+                                    {item.subItems.map(sub => (
+                                      <div key={sub.id} className="space-y-2">
                                         <div
                                           onClick={() => {
                                             if (sub.permissionFields) setExpandedFieldsPageId(expandedFieldsPageId === sub.id ? null : sub.id);
                                           }}
-                                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-all duration-300 ${
-                                            userPermissions.includes(sub.id)
+                                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-all duration-300 ${userPermissions.includes(sub.id)
                                               ? "border-primary/10 bg-white shadow-sm"
                                               : "border-transparent bg-gray-50/50 hover:bg-gray-100/50"
-                                          } ${expandedFieldsPageId === sub.id ? "ring-2 ring-primary/10" : ""}`}
+                                            } ${expandedFieldsPageId === sub.id ? "ring-2 ring-primary/10" : ""}`}
                                         >
-                                          <div className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${
-                                            userPermissions.includes(sub.id) ? "bg-primary/10 text-primary" : "bg-gray-200 text-gray-400"
-                                          }`}>
+                                          <div className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${userPermissions.includes(sub.id) ? "bg-primary/10 text-primary" : "bg-gray-200 text-gray-400"
+                                            }`}>
                                             <span className="text-[10px]">{ICON_MAP[sub.icon]}</span>
                                           </div>
                                           <div className="flex-1">
@@ -756,52 +747,49 @@ export default function SuperAdminControlSystem() {
                                               <p className="text-[8px] font-black text-primary/40 uppercase">Click to configure columns</p>
                                             )}
                                           </div>
-                                          <div 
+                                          <div
                                             onClick={(e) => { e.stopPropagation(); togglePermission(sub.id); }}
-                                            className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
-                                            userPermissions.includes(sub.id) ? "bg-primary border-primary text-white" : "border-gray-200 bg-white"
-                                          }`}>
+                                            className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${userPermissions.includes(sub.id) ? "bg-primary border-primary text-white" : "border-gray-200 bg-white"
+                                              }`}>
                                             {userPermissions.includes(sub.id) && <FaCheck size={6} />}
                                           </div>
                                         </div>
 
-                                      {/* Field Permissions for Sub Item */}
-                                      {expandedFieldsPageId === sub.id && sub.permissionFields && (
-                                        <div className="p-3 bg-gray-50/50 rounded-xl border border-gray-100 space-y-3 animate-in slide-in-from-top-2 duration-300">
-                                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                            <FaLock size={8} /> Column Visibility
-                                          </p>
-                                          <div className="grid grid-cols-2 gap-2">
-                                            {sub.permissionFields.map(fieldId => {
-                                              const key = `${sub.id}_${fieldId}`;
-                                              const isAllowed = fieldPermissions[key] !== false;
-                                              return (
-                                                <div
-                                                  key={key}
-                                                  onClick={(e) => { e.stopPropagation(); toggleFieldPermission(key); }}
-                                                  className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border transition-all duration-300 cursor-pointer ${
-                                                    isAllowed ? "bg-white border-primary/20 shadow-sm" : "bg-gray-100/50 border-transparent opacity-50"
-                                                  }`}
-                                                >
-                                                  <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center transition-all ${
-                                                    isAllowed ? "bg-primary border-primary text-white" : "border-gray-300 bg-white"
-                                                  }`}>
-                                                    {isAllowed && <FaCheck size={6} />}
+                                        {/* Field Permissions for Sub Item */}
+                                        {expandedFieldsPageId === sub.id && sub.permissionFields && (
+                                          <div className="p-3 bg-gray-50/50 rounded-xl border border-gray-100 space-y-3 animate-in slide-in-from-top-2 duration-300">
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                              <FaLock size={8} /> Column Visibility
+                                            </p>
+                                            <div className="grid grid-cols-2 gap-2">
+                                              {sub.permissionFields.map(fieldId => {
+                                                const key = `${sub.id}_${fieldId}`;
+                                                const isAllowed = fieldPermissions[key] !== false;
+                                                return (
+                                                  <div
+                                                    key={key}
+                                                    onClick={(e) => { e.stopPropagation(); toggleFieldPermission(key); }}
+                                                    className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border transition-all duration-300 cursor-pointer ${isAllowed ? "bg-white border-primary/20 shadow-sm" : "bg-gray-100/50 border-transparent opacity-50"
+                                                      }`}
+                                                  >
+                                                    <div className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center transition-all ${isAllowed ? "bg-primary border-primary text-white" : "border-gray-300 bg-white"
+                                                      }`}>
+                                                      {isAllowed && <FaCheck size={6} />}
+                                                    </div>
+                                                    <span className={`text-[9px] font-bold ${isAllowed ? "text-gray-700" : "text-gray-400"}`}>
+                                                      {fieldLabels[fieldId] || fieldId}
+                                                    </span>
                                                   </div>
-                                                  <span className={`text-[9px] font-bold ${isAllowed ? "text-gray-700" : "text-gray-400"}`}>
-                                                    {fieldLabels[fieldId] || fieldId}
-                                                  </span>
-                                                </div>
-                                              );
-                                            })}
+                                                );
+                                              })}
+                                            </div>
                                           </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -821,18 +809,16 @@ export default function SuperAdminControlSystem() {
                         <p className="text-[10px] text-gray-400 font-bold uppercase italic">No voucher types configured for this branch</p>
                       ) : (
                         voucherTypes.map(vt => (
-                          <div 
+                          <div
                             key={vt._id}
                             onClick={() => toggleVoucherType(vt._id)}
-                            className={`flex items-center gap-4 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
-                              allowedVoucherTypes.includes(vt._id)
+                            className={`flex items-center gap-4 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${allowedVoucherTypes.includes(vt._id)
                                 ? "border-primary/20 bg-primary/5 shadow-sm"
                                 : "border-gray-50 bg-white hover:border-gray-200"
-                            }`}
+                              }`}
                           >
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                              allowedVoucherTypes.includes(vt._id) ? "bg-primary text-white" : "bg-gray-100 text-gray-400"
-                            }`}>
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${allowedVoucherTypes.includes(vt._id) ? "bg-primary text-white" : "bg-gray-100 text-gray-400"
+                              }`}>
                               <FaFileInvoice className="text-xs" />
                             </div>
                             <div className="flex-1 min-w-0">
@@ -843,9 +829,8 @@ export default function SuperAdminControlSystem() {
                                 {vt.orderType} • {vt.prefix}
                               </p>
                             </div>
-                            <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
-                              allowedVoucherTypes.includes(vt._id) ? "bg-primary border-primary text-white" : "border-gray-200 bg-white"
-                            }`}>
+                            <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${allowedVoucherTypes.includes(vt._id) ? "bg-primary border-primary text-white" : "border-gray-200 bg-white"
+                              }`}>
                               {allowedVoucherTypes.includes(vt._id) && <FaCheck size={6} />}
                             </div>
                           </div>
