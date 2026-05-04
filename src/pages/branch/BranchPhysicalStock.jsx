@@ -381,7 +381,9 @@ export default function BranchPhysicalStock() {
   const saveRow = async (row) => {
     const isNoAction = row.physicalQty === "NO_ACTION";
     const systemIsZero = Number(row.systemQty) === 0;
-    const skipMandatory = isNoAction || systemIsZero;
+    const physicalIsZero = Number(row.physicalQty) === 0;
+    const systemIsNegative = Number(row.systemQty) < 0;
+    const skipMandatory = isNoAction || systemIsZero || physicalIsZero || systemIsNegative;
 
     if (row.physicalQty === "" || row.physicalQty === null) return toast.warning("Physical Qty is mandatory");
     
@@ -396,7 +398,9 @@ export default function BranchPhysicalStock() {
     try {
       const isNoAction = row.physicalQty === "NO_ACTION";
       const systemIsZero = Number(row.systemQty) === 0;
-      const skipMandatory = isNoAction || systemIsZero;
+      const physicalIsZero = Number(row.physicalQty) === 0;
+      const systemIsNegative = Number(row.systemQty) < 0;
+      const skipMandatory = isNoAction || systemIsZero || physicalIsZero || systemIsNegative;
 
       const payload = {
         branchId: currentBranch._id,
@@ -407,8 +411,8 @@ export default function BranchPhysicalStock() {
         systemQty: Number(row.systemQty),
         physicalQty: isNoAction ? Number(row.systemQty) : (Number(row.physicalQty) || 0),
         mrp: Number(row.mrp) || 0,
-        batch: isNoAction ? "NO_ACTION" : (row.batch || ""),
-        expiryDate: isNoAction ? undefined : (row.expiryDate || undefined),
+        batch: skipMandatory ? (isNoAction ? "NO_ACTION" : "ZERO_STOCK") : (row.batch || ""),
+        expiryDate: skipMandatory ? undefined : (row.expiryDate || undefined),
         noAction: isNoAction,
         checkedBy: row.checkedBy,
         userId: user?._id || user?.id,
