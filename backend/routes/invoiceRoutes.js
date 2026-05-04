@@ -274,7 +274,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
 
       const confirmedQty = Number(item.confirmedQty || item.qty || 0);
       const sellingPrice = Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0));
-      
+
       // FALLBACK GST LOGIC: Use originalItem values, but if 0, check productId master data
       const gstPercent = Number(item.gst || (originalItem ? (originalItem.gst || originalItem.productId?.gst || 0) : 0));
       const cgstPercent = Number(item.cgst || (originalItem ? (originalItem.cgst || (gstPercent ? gstPercent / 2 : 0)) : (gstPercent / 2)));
@@ -622,7 +622,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         // 0️⃣ PERMISSION CHECK & DIFFING (MODIFICATIONS)
         // ==========================================
         const baselineItems = salesOrder.invoiceItems && salesOrder.invoiceItems.length > 0 ? salesOrder.invoiceItems : salesOrder.items;
-        
+
         let modificationDetails = [];
         let isModified = false;
 
@@ -804,7 +804,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           const originalQty = Number(item.originalQty || (originalItem ? originalItem.qty : confirmedQty));
           const backOrderQty = Number(item.backOrderQty || Math.max(0, originalQty - confirmedQty));
           const sellingPrice = Number(item.sellingPrice || (originalItem ? originalItem.sellingPrice : 0));
-          
+
           // FALLBACK GST LOGIC
           const gstPercent = Number(item.gst || (originalItem ? (originalItem.gst || originalItem.productId?.gst || 0) : 0));
           const discountPercent = Number(item.discountPercent || 0);
@@ -1402,9 +1402,9 @@ router.put("/:invoiceId/revoke", async (req, res) => {
 
     if (salesOrder.invoiceGenerated && salesOrder.salesInvoiceId && salesOrder.salesInvoiceId.toString() !== invoice._id.toString()) {
       await session.abortTransaction();
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: `Restoration Denied: Sales Order ${salesOrder.invoiceId} already has an active invoice (${salesOrder.salesInvoiceId}). You must cancel the active invoice before you can revoke this old one.` 
+        message: `Restoration Denied: Sales Order ${salesOrder.invoiceId} already has an active invoice (${salesOrder.salesInvoiceId}). You must cancel the active invoice before you can revoke this old one.`
       });
     }
 
@@ -1511,7 +1511,6 @@ router.post("/last-by-customers", async (req, res) => {
         }
       }
     ]);
-
     res.json({ success: true, data: results });
   } catch (err) {
     console.error("Last by customers error:", err);
@@ -1992,7 +1991,7 @@ const generateDeliveryLogId = async (branchId) => {
 router.patch("/delivery-flow/bulk", auth, async (req, res) => {
   try {
     const { invoiceIds, storageMan, storageManComment, stockChecker, stockCheckerComment, deliveryPerson, deliveryPersonComment, updatedBy, updatedById } = req.body;
-    
+
     if (!invoiceIds || !Array.isArray(invoiceIds) || invoiceIds.length === 0) {
       return res.status(400).json({ success: false, message: "No invoices selected" });
     }
@@ -2018,22 +2017,22 @@ router.patch("/delivery-flow/bulk", auth, async (req, res) => {
     if (deliveryPerson !== undefined && deliveryPerson !== "" && deliveryPerson !== "NONE") {
       const invoices = await Invoice.find({ _id: { $in: invoiceIds } });
       const firstPerson = deliveryPerson.split(',')[0].trim();
-      
+
       for (const inv of invoices) {
-         const dMan = await DeliveryMan.findOne({
-            name: { $regex: new RegExp(`^${firstPerson}$`, 'i') },
-            branchId: inv.branchId
-         });
-         if (dMan) {
-            await SalesOrder.findByIdAndUpdate(inv.salesOrderId, { deliveryMan: dMan._id });
-            await Invoice.findByIdAndUpdate(inv._id, { deliveryMan: dMan._id });
-         }
+        const dMan = await DeliveryMan.findOne({
+          name: { $regex: new RegExp(`^${firstPerson}$`, 'i') },
+          branchId: inv.branchId
+        });
+        if (dMan) {
+          await SalesOrder.findByIdAndUpdate(inv.salesOrderId, { deliveryMan: dMan._id });
+          await Invoice.findByIdAndUpdate(inv._id, { deliveryMan: dMan._id });
+        }
       }
     } else if (deliveryPerson === "" || deliveryPerson === "NONE") {
       const invoices = await Invoice.find({ _id: { $in: invoiceIds } });
       for (const inv of invoices) {
-         await SalesOrder.findByIdAndUpdate(inv.salesOrderId, { $unset: { deliveryMan: 1 } });
-         await Invoice.findByIdAndUpdate(inv._id, { $unset: { deliveryMan: 1 } });
+        await SalesOrder.findByIdAndUpdate(inv.salesOrderId, { $unset: { deliveryMan: 1 } });
+        await Invoice.findByIdAndUpdate(inv._id, { $unset: { deliveryMan: 1 } });
       }
     }
 

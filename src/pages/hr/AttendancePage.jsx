@@ -301,7 +301,14 @@ const AttendancePage = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-10">
-        {employees.map((emp) => {
+        {employees
+          .filter(emp => {
+            if (isSuperAdmin) return true;
+            const empId = emp._id || emp.id;
+            const currentId = currentUser.id || currentUser._id;
+            return empId === currentId;
+          })
+          .map((emp) => {
           const record = attendanceRecords[emp._id];
           const isPresent = record?.status === "Present";
           const isLeft = record?.status === "Leave";
@@ -458,7 +465,7 @@ const AttendancePage = () => {
                   </div>
                 )}
 
-                {record && !record.isApproved && date < new Date().toISOString().split("T")[0] && (
+                {record && isSuperAdmin && !record.isApproved && date < new Date().toISOString().split("T")[0] && (
                   <div className="mt-4 p-4 bg-rose-50 border border-rose-100 rounded-3xl flex flex-col items-center gap-3 animate-in fade-in zoom-in duration-300">
                     <div className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping"></div>

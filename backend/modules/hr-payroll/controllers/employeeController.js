@@ -11,11 +11,24 @@ export const getHREmployees = async (req, res) => {
       return res.status(400).json({ success: false, message: "Valid Branch ID is required" });
     }
 
-    // 1. Fetch all active users for this branch from main system
-    const users = await BranchUser.find({ 
+    const userRole = req.user?.role?.toUpperCase();
+    const isSuperAdmin = ["SUPERADMIN", "SUPER_ADMIN"].includes(userRole);
+
+    // 1. Fetch active users for this branch from main system
+    let query = { 
       branch: branchId, 
       status: "ACTIVE" 
-    }).lean();
+    };
+
+    // If not super admin, only fetch the logged-in user themselves
+    if (!isSuperAdmin) {
+      const targetId = req.user.id || req.user._id;
+      if (targetId) {
+        query._id = targetId; 
+      }
+    }
+
+    const users = await BranchUser.find(query).lean();
 
     // 2. Fetch HR profiles for these users
     const profiles = await HREmployeeProfile.find({ branch: branchId });
