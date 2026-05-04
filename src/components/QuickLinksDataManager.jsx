@@ -1,6 +1,6 @@
 import axios from "axios";
 import React, { useEffect, useState, Fragment } from "react";
-import { FaEdit, FaTrash, FaCheck, FaTimes, FaPlus, FaPlusCircle, FaSync, FaSave, FaExclamationTriangle, FaBox, FaArrowLeft, FaEye, FaArrowRight, FaLink, FaExternalLinkAlt, FaImage, FaChevronDown, FaChevronLeft, FaChevronRight, FaChevronUp, FaSearch, FaFileExport } from "react-icons/fa";
+import { FaEdit, FaTrash, FaCheck, FaTimes, FaPlus, FaPlusCircle, FaSync, FaSave, FaHistory, FaExclamationTriangle, FaBox, FaArrowLeft, FaEye, FaArrowRight, FaLink, FaExternalLinkAlt, FaImage, FaChevronDown, FaChevronLeft, FaChevronRight, FaChevronUp, FaSearch, FaFileExport } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -691,7 +691,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                       </tr>
                       {expandedId === item._id && (
                         <tr className="bg-gray-50/80 animate-in fade-in duration-300">
-                          <td colSpan={config.displayFields.length + ((actionPermissions.edit !== false || actionPermissions.delete !== false) ? 1 : 0)} className="p-6">
+                          <td colSpan={config.displayFields.length + ((actionPermissions.edit !== false || actionPermissions.delete !== false || isFieldAllowed("action_edit") || isFieldAllowed("action_delete")) ? 1 : 0)} className="p-6">
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                               {config.detailedFields ? (
                                 config.detailedFields.map((key) => {
@@ -729,7 +729,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                                         {(() => {
                                           if (key === "margin" || key === "marginPercentage" || key === "adminMargin") return formatMarginDisplay(item, key);
                                           if (typeof value === "object" && value !== null) {
-                                            return Array.isArray(value) ? value.map(v => v.name || v._id || "-").join(", ") : (value.name || v._id || "-");
+                                            return Array.isArray(value) ? value.map(v => v.name || v._id || "-").join(", ") : (value.name || value._id || "-");
                                           }
                                           return String(value === null || value === undefined ? "-" : value);
                                         })()}
@@ -739,6 +739,68 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                                 ))
                               )}
                             </div>
+
+                            {/* 📈 PRICE HISTORY SECTION (FOR PRODUCTS ONLY) */}
+                            {type === "product" && item.priceHistory && item.priceHistory.length > 0 && (
+                              <div className="mt-8 border-t border-gray-200 pt-6">
+                                <div className="flex items-center gap-2 mb-4">
+                                  <div className="bg-indigo-100 p-2 rounded-lg">
+                                    <FaHistory className="text-indigo-600 text-sm" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-sm font-black text-gray-800 uppercase tracking-tight">Price & GST History</h4>
+                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Historical Changes & Effective Dates</p>
+                                  </div>
+                                </div>
+                                <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
+                                  <table className="w-full text-left text-[11px] border-collapse">
+                                    <thead>
+                                      <tr className="bg-gray-50 text-gray-500 font-black uppercase tracking-widest border-b border-gray-200">
+                                        <th className="px-4 py-3">Date</th>
+                                        <th className="px-4 py-3">Voucher</th>
+                                        <th className="px-4 py-3 text-right">Old P</th>
+                                        <th className="px-4 py-3 text-right">New P</th>
+                                        <th className="px-4 py-3 text-right">Old S</th>
+                                        <th className="px-4 py-3 text-right">New S</th>
+                                        <th className="px-4 py-3 text-center">Old GST</th>
+                                        <th className="px-4 py-3 text-center">New GST</th>
+                                        <th className="px-4 py-3">Type</th>
+                                        <th className="px-4 py-3">Note</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                      {[...item.priceHistory].reverse().map((history, hIdx) => (
+                                        <tr key={hIdx} className="hover:bg-gray-50/80 transition-colors">
+                                          <td className="px-4 py-3 whitespace-nowrap font-bold text-gray-600">
+                                            {new Date(history.effectiveDate).toLocaleDateString()}
+                                            <div className="text-[9px] text-gray-400 font-medium">
+                                              {new Date(history.effectiveDate).toLocaleTimeString()}
+                                            </div>
+                                          </td>
+                                          <td className="px-4 py-3 font-black text-indigo-600">{history.sourceVoucher || "-"}</td>
+                                          <td className="px-4 py-3 text-right text-gray-400">₹{(history.oldPurchasingPrice || 0).toFixed(2)}</td>
+                                          <td className="px-4 py-3 text-right font-bold text-gray-800">₹{(history.newPurchasingPrice || 0).toFixed(2)}</td>
+                                          <td className="px-4 py-3 text-right text-gray-400">₹{(history.oldSellingPrice || 0).toFixed(2)}</td>
+                                          <td className="px-4 py-3 text-right font-bold text-[#319bab]">₹{(history.newSellingPrice || 0).toFixed(2)}</td>
+                                          <td className="px-4 py-3 text-center text-gray-500">{history.oldGst ?? "-"}%</td>
+                                          <td className="px-4 py-3 text-center font-bold text-gray-800">{history.newGst ?? "-"}%</td>
+                                          <td className="px-4 py-3">
+                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                                              history.type === 'INCREASE' ? 'bg-red-50 text-red-600' : 
+                                              history.type === 'DECREASE' ? 'bg-green-50 text-green-600' : 
+                                              'bg-blue-50 text-blue-600'
+                                            }`}>
+                                              {history.type}
+                                            </span>
+                                          </td>
+                                          <td className="px-4 py-3 text-gray-500 font-medium">{history.note}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )}

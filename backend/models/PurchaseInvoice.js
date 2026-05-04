@@ -97,5 +97,7 @@ const purchaseInvoiceSchema = new mongoose.Schema(
 
 // Compound unique index: same PI number allowed across branches, not within the same branch
 purchaseInvoiceSchema.index({ branchId: 1, purchaseInvoiceId: 1 }, { unique: true });
+purchaseInvoiceSchema.index({ createdAt: -1 });
+purchaseInvoiceSchema.index({ branchId: 1, createdAt: -1 });
 
 export default mongoose.model("PurchaseInvoice", purchaseInvoiceSchema);

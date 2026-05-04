@@ -41,7 +41,7 @@ const BranchProductRecords = () => {
 
     setLoading(true);
     try {
-      let url = `${API_BASE}/sales-orders/history?branchId=${currentBranch._id}&page=${currentPage}&limit=${limit}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
+      let url = `${API_BASE}/invoices/history?branchId=${currentBranch._id}&page=${currentPage}&limit=${limit}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
       if (fromDate) url += `&fromDate=${fromDate}`;
       if (toDate) url += `&toDate=${toDate}`;
       if (selectedProductGroupId) url += `&productGroupId=${selectedProductGroupId}`;
@@ -98,45 +98,74 @@ const BranchProductRecords = () => {
   const totalProfit = records.reduce((sum, r) => sum + (r.grossProfit * r.qty), 0);
   const totalQty = records.reduce((sum, r) => sum + (r.qty || 0), 0);
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     try {
-      if (records.length === 0) {
-        toast.info("No records to export. Please adjust filters or select a product.");
+      if (totalRecords === 0) {
+        toast.info("No records to export.");
         return;
       }
 
-      // Group records by product name and sum their quantities
-      const productSummary = records.reduce((acc, record) => {
-        const name = record.productName || "Unknown Product";
-        if (!acc[name]) {
-          acc[name] = { "Name": name, "Total Qty": 0 };
-        }
-        acc[name]["Total Qty"] += (record.qty || 0);
-        return acc;
-      }, {});
+      setLoading(true);
+      toast.info("Preparing complete export data...");
 
-      const exportData = Object.values(productSummary);
+      // Fetch ALL records for the current filter (no limit)
+      let url = `${API_BASE}/invoices/history?branchId=${currentBranch._id}&page=1&limit=${totalRecords}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
+      if (fromDate) url += `&fromDate=${fromDate}`;
+      if (toDate) url += `&toDate=${toDate}`;
+      if (selectedProductGroupId) url += `&productGroupId=${selectedProductGroupId}`;
+      if (selectedProductId) url += `&productId=${selectedProductId}`;
+      if (selectedCustomerId) url += `&customerId=${selectedCustomerId}`;
+
+      const res = await fetchWithAuth(url);
+      const data = await res.json();
+      
+      if (!res.ok) throw new Error("Failed to fetch all records for export");
+      
+      const allRecords = data.history || [];
+
+      // Create detailed export data
+      const exportData = allRecords.map(r => ({
+        "Date": new Date(r.date).toLocaleDateString(),
+        "Time": new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        "Invoice No": r.invoiceNumber,
+        "Voucher": r.voucherType,
+        "Customer": r.customerName || "Walk-in",
+        "Product": r.productName,
+        "Group": r.productGroupName || "No Group",
+        "Purchase Price": r.purchasingPrice?.toFixed(2),
+        "Selling Price": r.sellingPrice?.toFixed(2),
+        "Qty": r.qty,
+        "GST %": r.gst,
+        "Discount/Unit": r.discountPerUnit?.toFixed(2),
+        "Profit %": r.profitPercent?.toFixed(1) + "%",
+        "Gross Profit": (r.grossProfit * r.qty).toFixed(2)
+      }));
 
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Product Records");
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Product Transaction Records");
 
       // Auto-width adjustment
       const wscols = [
-        { wch: 40 }, // Name
-        { wch: 15 }  // Total Qty
+        { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 15 }, { wch: 30 }, 
+        { wch: 40 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 8 }, 
+        { wch: 8 }, { wch: 15 }, { wch: 10 }, { wch: 15 }
       ];
       worksheet['!cols'] = wscols;
 
-      const fileName = selectedProductId 
-        ? `ProductRecord_${records[0]?.productName || 'Export'}_${new Date().toLocaleDateString()}.xlsx`
-        : `All_ProductRecords_${new Date().toLocaleDateString()}.xlsx`;
+      const groupName = selectedProductGroupId 
+        ? productGroups.find(g => g._id === selectedProductGroupId)?.name 
+        : "AllGroups";
+
+      const fileName = `ProductAnalysis_${groupName}_${new Date().toISOString().split('T')[0]}.xlsx`;
 
       XLSX.writeFile(workbook, fileName);
-      toast.success("Excel exported successfully!");
+      toast.success("Full analysis exported successfully!");
     } catch (error) {
       console.error("Export error:", error);
       toast.error("Failed to export Excel");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -528,7 +557,7 @@ const BranchProductRecords = () => {
                                     <div className="text-[9px] text-gray-500 font-bold">
                                       {new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </div>
-                                    <div className="text-[9px] text-gray-400 font-bold">{r.invoiceId} | {new Date(r.date).toLocaleDateString()}</div>
+                                    <div className="text-[9px] text-gray-400 font-bold">{r.invoiceNumber} | {new Date(r.date).toLocaleDateString()}</div>
                                   </td>
                                 )}
                                 <td className="px-4 py-3">

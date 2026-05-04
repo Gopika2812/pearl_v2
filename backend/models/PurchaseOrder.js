@@ -132,5 +132,7 @@ const PurchaseOrderSchema = new mongoose.Schema(
 
 // Compound unique index: same invoiceId is allowed across branches, but not within the same branch
 PurchaseOrderSchema.index({ branchId: 1, invoiceId: 1 }, { unique: true });
+PurchaseOrderSchema.index({ createdAt: -1 });
+PurchaseOrderSchema.index({ branchId: 1, createdAt: -1 });
 
 export default mongoose.model("PurchaseOrder", PurchaseOrderSchema);

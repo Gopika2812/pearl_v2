@@ -880,9 +880,16 @@ const InventoryPurchaseOrderEntry = ({
                 <div className="flex justify-between items-center mb-1">
                   <label className={labelClass}>Purchase ₹</label>
                   {selectedProductData && (
-                    <span className="text-[9px] font-black text-gray-400">
-                      Prev: ₹{selectedProductData.purchasingPrice || 0}
-                    </span>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[9px] font-black text-gray-400">
+                        Prev: ₹{selectedProductData.purchasingPrice || 0}
+                      </span>
+                      {selectedProductData.marginPercentage > 0 && (
+                        <span className="text-[9px] font-black text-indigo-500">
+                          Margin: {selectedProductData.marginPercentage}%
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div className="relative">

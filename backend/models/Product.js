@@ -86,6 +86,8 @@ const productSchema = new mongoose.Schema(
       newPurchasingPrice: Number,
       oldSellingPrice: Number,
       newSellingPrice: Number,
+      oldGst: Number,
+      newGst: Number,
       effectiveDate: { type: Date, default: Date.now },
       sourceVoucher: String, // PI Number
       type: { type: String, enum: ['INCREASE', 'DECREASE', 'INITIAL'] },
@@ -117,21 +119,19 @@ productSchema.pre("save", function () {
       this.marginPercentage = Math.round((this.margin / this.purchasingPrice) * 100 * 100) / 100;
     }
   }
-  // PRIORITY 3: Only Purchasing Price changed (Maintain Absolute Margin Amount)
+  // PRIORITY 3: Only Purchasing Price changed (Maintain Margin Percentage if available)
   else if (!isNew && pPriceChanged && !sPriceChanged) {
-    // If we have an existing margin, maintain it
-    if (this.margin !== undefined && this.margin !== null) {
+    if (this.marginPercentage > 0) {
+      this.sellingPrice = Math.round(((this.purchasingPrice || 0) + ((this.purchasingPrice || 0) * this.marginPercentage / 100)) * 100) / 100;
+      this.margin = Math.round((this.sellingPrice - (this.purchasingPrice || 0)) * 100) / 100;
+      console.log(`🛡️ Product Sync: [${this.name}] cost updated. Maintained ${this.marginPercentage}% margin. New sellingPrice: ₹${this.sellingPrice}`);
+    } else if (this.margin !== undefined && this.margin !== null) {
+      // Fallback to absolute margin if percentage not set
       this.sellingPrice = Math.round(((this.purchasingPrice || 0) + this.margin) * 100) / 100;
       if (this.purchasingPrice > 0) {
         this.marginPercentage = Math.round((this.margin / this.purchasingPrice) * 100 * 100) / 100;
       }
       console.log(`🛡️ Product Sync: [${this.name}] cost updated. Maintained ₹${this.margin} margin. New sellingPrice: ₹${this.sellingPrice}`);
-    } else {
-      // Fallback
-      this.margin = Math.round(((this.sellingPrice || 0) - (this.purchasingPrice || 0)) * 100) / 100;
-      if (this.purchasingPrice > 0) {
-        this.marginPercentage = Math.round((this.margin / this.purchasingPrice) * 100 * 100) / 100;
-      }
     }
   }
   // PRIORITY 4: Only Selling Price changed (Recalculate Margin)
@@ -153,6 +153,10 @@ productSchema.pre("save", function () {
   if (!this.hsn && this.hsnCode) {
     this.hsn = this.hsnCode;
   }
+
+  // ⚡ CAPTURE MODIFICATION STATE FOR POST-SAVE SYNC
+  this._purchasingPriceChanged = pPriceChanged;
+  // We use a simple flag. Margin recovery will use the lp.purchasingPrice if available.
 });
 
 // Create composite unique index: branchId + name
@@ -230,27 +234,45 @@ productSchema.pre(["findOneAndUpdate", "findByIdAndUpdate"], async function () {
 
 // 🔄 CASCADING PRICE SYNC: Update Customer Locked Prices when Product Cost changes
 productSchema.post("save", async function() {
-  if (this.isModified("purchasingPrice")) {
+  if (this._purchasingPriceChanged) {
     try {
-       const CustomerLockedPrice = mongoose.model("CustomerLockedPrice");
+       const CustomerLockedPrice = mongoose.models.CustomerLockedPrice || mongoose.model("CustomerLockedPrice");
        const lockedPrices = await CustomerLockedPrice.find({ productId: this._id });
        
        const bulkOps = lockedPrices.map(lp => {
-         const newLockedPrice = Math.round((this.purchasingPrice + (lp.margin || 0)) * 100) / 100;
+         // 📈 PERCENTAGE SYNC LOGIC:
+         let mPct = lp.marginPercentage;
+         
+         if (mPct === undefined || mPct === null || mPct === 0) {
+           const referenceCost = lp.purchasingPrice || this.purchasingPrice;
+           const referenceMargin = (lp.margin !== undefined && lp.margin !== null) ? lp.margin : (lp.lockedPrice - referenceCost);
+           mPct = referenceCost > 0 ? (referenceMargin / referenceCost) * 100 : 0;
+         }
+
+         const newLockedPrice = Math.round((this.purchasingPrice + (this.purchasingPrice * mPct / 100)) * 100) / 100;
+         const newAbsoluteMargin = Math.round((newLockedPrice - this.purchasingPrice) * 100) / 100;
+
          return {
            updateOne: {
              filter: { _id: lp._id },
-             update: { $set: { lockedPrice: newLockedPrice, purchasingPrice: this.purchasingPrice } }
+             update: { 
+               $set: { 
+                 lockedPrice: newLockedPrice, 
+                 purchasingPrice: this.purchasingPrice, 
+                 margin: newAbsoluteMargin,
+                 marginPercentage: Math.round(mPct * 100) / 100
+               } 
+             }
            }
          };
        });
 
        if (bulkOps.length > 0) {
          await CustomerLockedPrice.bulkWrite(bulkOps);
-         console.log(`📡 Dynamic Pricing: Synced ${bulkOps.length} customer locked prices for product [${this.name}]`);
+         console.log(`📡 [DYNAMIC_PRICING] Synced ${bulkOps.length} customer locked prices for [${this.name}] (New Cost: ₹${this.purchasingPrice})`);
        }
     } catch (err) {
-       console.error("Cascading Pricing Error:", err.message);
+       console.error("❌ [DYNAMIC_PRICING] Cascading Sync Error:", err.message);
     }
   }
 });
@@ -261,25 +283,43 @@ productSchema.post(["findOneAndUpdate", "findByIdAndUpdate"], async function (do
     // But to be safe, we re-fetch the update object if possible or just check the doc.
     // For simplicity and stability, we use the doc's current state.
     try {
-       const CustomerLockedPrice = mongoose.model("CustomerLockedPrice");
+       const CustomerLockedPrice = mongoose.models.CustomerLockedPrice || mongoose.model("CustomerLockedPrice");
        const lockedPrices = await CustomerLockedPrice.find({ productId: doc._id });
        
        const bulkOps = lockedPrices.map(lp => {
-         const newLockedPrice = Math.round((doc.purchasingPrice + (lp.margin || 0)) * 100) / 100;
+         // 📈 PERCENTAGE SYNC LOGIC:
+         let mPct = lp.marginPercentage;
+         
+         if (mPct === undefined || mPct === null || mPct === 0) {
+           const referenceCost = lp.purchasingPrice || doc.purchasingPrice;
+           const referenceMargin = (lp.margin !== undefined && lp.margin !== null) ? lp.margin : (lp.lockedPrice - referenceCost);
+           mPct = referenceCost > 0 ? (referenceMargin / referenceCost) * 100 : 0;
+         }
+
+         const newLockedPrice = Math.round((doc.purchasingPrice + (doc.purchasingPrice * mPct / 100)) * 100) / 100;
+         const newAbsoluteMargin = Math.round((newLockedPrice - doc.purchasingPrice) * 100) / 100;
+
          return {
            updateOne: {
              filter: { _id: lp._id },
-             update: { $set: { lockedPrice: newLockedPrice, purchasingPrice: doc.purchasingPrice } }
+             update: { 
+               $set: { 
+                 lockedPrice: newLockedPrice, 
+                 purchasingPrice: doc.purchasingPrice, 
+                 margin: newAbsoluteMargin,
+                 marginPercentage: Math.round(mPct * 100) / 100
+               } 
+             }
            }
          };
        });
 
        if (bulkOps.length > 0) {
          await CustomerLockedPrice.bulkWrite(bulkOps);
-         console.log(`📡 Dynamic Pricing (Query): Synced ${bulkOps.length} customer locked prices for product [${doc.name}]`);
+         console.log(`📡 [DYNAMIC_PRICING_QUERY] Synced ${bulkOps.length} customer locked prices for [${doc.name}] (New Cost: ₹${doc.purchasingPrice})`);
        }
     } catch (err) {
-       console.error("Cascading Pricing (Query) Error:", err.message);
+       console.error("❌ [DYNAMIC_PRICING_QUERY] Cascading Sync Error:", err.message);
     }
   }
 });

@@ -32,6 +32,10 @@ const customerLockedPriceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    marginPercentage: {
+      type: Number,
+      default: 0,
+    },
     updatedBy: {
       type: String,
       default: "System",

@@ -1,22 +1,29 @@
-import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { 
-  FaFileInvoiceDollar, FaDownload, FaCalendarAlt, 
-  FaSpinner, FaPencilAlt, FaCheck, FaTimes, 
-  FaArrowLeft, FaUser, FaTruck, FaExchangeAlt
-} from "react-icons/fa";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { useEffect, useState } from "react";
+import {
+  FaArrowLeft,
+  FaCalendarAlt,
+  FaCheck,
+  FaDownload,
+  FaExchangeAlt,
+  FaPencilAlt,
+  FaSpinner,
+  FaTimes,
+  FaTruck,
+  FaUser
+} from "react-icons/fa";
+import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "react-toastify";
 import * as XLSX from 'xlsx';
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
-import { toast } from "react-toastify";
 
 const BranchCustomerLedger = () => {
   const { customerId } = useParams();
   const navigate = useNavigate();
   const { currentBranch: branch, user } = useBranch();
-  
+
   const [loading, setLoading] = useState(true);
   const [customer, setCustomer] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -32,7 +39,7 @@ const BranchCustomerLedger = () => {
   const now = new Date();
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
   const lastDay = new Date().toISOString().split('T')[0];
-  
+
   const [startDate, setStartDate] = useState(firstDay);
   const [endDate, setEndDate] = useState(lastDay);
 
@@ -69,7 +76,7 @@ const BranchCustomerLedger = () => {
     try {
       const response = await fetch(`${API_BASE}/customers/${customerId}/ledger?startDate=${startDate}&endDate=${endDate}`);
       const result = await response.json();
-      
+
       if (result.success) {
         setTransactions(result.data.transactions || []);
         setOpeningBalance(result.data.openingBalance || 0);
@@ -129,15 +136,15 @@ const BranchCustomerLedger = () => {
 
   const handleNavigateToOrder = (txn) => {
     if (!txn.salesOrderId) return;
-    
+
     // Extract invoice number from particulars if possible
     let invNo = "";
-    
+
     // 1. Check for "for Invoice(s): SI-123" (common in receipts)
     const forInvMatch = txn.particulars?.match(/for Invoice?s?:\s*([^,\[(\n]+)/i);
     if (forInvMatch) {
       invNo = forInvMatch[1].trim();
-    } 
+    }
     // 2. Check for "for Inv: SI-123" (shorthand)
     else {
       const shorthandMatch = txn.particulars?.match(/for Inv:\s*([^,\[(\n]+)/i);
@@ -209,8 +216,8 @@ const BranchCustomerLedger = () => {
 
     try {
       // Increase width for higher quality, but maintain aspect ratio
-      const canvas = await html2canvas(element, { 
-        scale: 2, 
+      const canvas = await html2canvas(element, {
+        scale: 2,
         useCORS: true,
         backgroundColor: "#ffffff",
         logging: false,
@@ -218,16 +225,16 @@ const BranchCustomerLedger = () => {
         windowWidth: element.scrollWidth,
         windowHeight: element.scrollHeight
       });
-      
+
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF("p", "mm", "a5");
-      
+
       const pdfWidth = pdf.internal.pageSize.getWidth(); // 148mm
       const pdfHeight = pdf.internal.pageSize.getHeight(); // 210mm
-      
-      const imgWidth = pdfWidth; 
+
+      const imgWidth = pdfWidth;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
+
       let heightLeft = imgHeight;
       let position = 0;
       let pageNumber = 1;
@@ -244,7 +251,7 @@ const BranchCustomerLedger = () => {
         heightLeft -= pdfHeight;
         pageNumber++;
       }
-      
+
       pdf.save(`Ledger-${customer?.name}-${startDate}-to-${endDate}.pdf`);
       toast.success(`A5 PDF Downloaded (${pageNumber} Pages)!`, { id: "pdf-gen" });
     } catch (error) {
@@ -260,7 +267,7 @@ const BranchCustomerLedger = () => {
       data.push([branch?.address || ""]);
       data.push([`Customer: ${customer?.name}`]);
       data.push([`Date: ${formatDate(startDate)} TO ${formatDate(endDate)}`]);
-      data.push([]); 
+      data.push([]);
 
       // Table Header
       data.push(["Date", "Particulars / Ref No", "Type", "User", "Delivery Man", "Debit", "Credit", "Balance"]);
@@ -282,9 +289,9 @@ const BranchCustomerLedger = () => {
         let docId = "-";
         const invMatch = txn.particulars?.match(/for Inv:\s*([^\s(]+)/i);
         const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note):\s*([^\s(]+)/i);
-        
+
         if (invMatch) docId = invMatch[1];
-        else if (pm) docId = pm[1]; 
+        else if (pm) docId = pm[1];
         else if (txn.type === "INVOICE") docId = txn.particulars.split(": ")[1] || "-";
 
         let vt = "-";
@@ -363,10 +370,10 @@ const BranchCustomerLedger = () => {
       {/* PREMIUM HEADER */}
       <div className="relative overflow-hidden bg-white/50 backdrop-blur-md p-8 rounded-3xl border border-white/50 shadow-sm">
         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
-        
+
         <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="flex items-center gap-5">
-            <button 
+            <button
               onClick={() => navigate(-1)}
               className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:shadow-lg transition-all border border-slate-100"
             >
@@ -384,7 +391,7 @@ const BranchCustomerLedger = () => {
               <p className="text-slate-500 text-sm font-semibold mt-1">Full transaction history and automated financial reconciliation</p>
             </div>
           </div>
-          
+
           <div className="flex flex-wrap items-center gap-4">
             <button
               onClick={handleExportPDF}
@@ -408,21 +415,21 @@ const BranchCustomerLedger = () => {
         <div className="lg:col-span-2 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
           <div className="flex-1 flex items-center bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 shadow-inner">
             <FaCalendarAlt className="text-slate-400 mr-3" />
-            <input 
-              type="date" 
+            <input
+              type="date"
               className="bg-transparent text-xs font-black text-slate-600 outline-none w-full"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
             <span className="mx-2 text-slate-300 text-xs font-black">TO</span>
-            <input 
-              type="date" 
+            <input
+              type="date"
               className="bg-transparent text-xs font-black text-slate-600 outline-none w-full"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
           </div>
-          <button 
+          <button
             onClick={fetchLedger}
             className="bg-slate-900 text-white px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition shadow-xl shadow-slate-900/20"
           >
@@ -434,7 +441,7 @@ const BranchCustomerLedger = () => {
         <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm group">
           <div className="flex justify-between items-start mb-2">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Opening Balance</p>
-            <button 
+            <button
               onClick={() => { setEditingType('opening'); setEditValue(openingBalance.toString()); }}
               className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-indigo-600 transition"
             >
@@ -443,7 +450,7 @@ const BranchCustomerLedger = () => {
           </div>
           {editingType === 'opening' ? (
             <div className="flex items-center gap-2 mt-2">
-              <input 
+              <input
                 type="number"
                 autoFocus
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-black outline-none"
@@ -468,7 +475,7 @@ const BranchCustomerLedger = () => {
         <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm group">
           <div className="flex justify-between items-start mb-2">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Closing Balance</p>
-            <button 
+            <button
               onClick={() => { setEditingType('closing'); setEditValue(closingBalance.toString()); }}
               className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-indigo-600 transition"
             >
@@ -477,7 +484,7 @@ const BranchCustomerLedger = () => {
           </div>
           {editingType === 'closing' ? (
             <div className="flex items-center gap-2 mt-2">
-              <input 
+              <input
                 type="number"
                 autoFocus
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-black outline-none"
@@ -516,8 +523,8 @@ const BranchCustomerLedger = () => {
                   <th className="px-6 py-6 text-left">Date</th>
                   <th className="px-6 py-6 text-left">Particulars / Ref</th>
                   <th className="px-6 py-6 text-center">Type</th>
-                  <th className="px-6 py-6 text-left"><div className="flex items-center gap-2"><FaUser size={10} className="text-indigo-400"/> User</div></th>
-                  <th className="px-6 py-6 text-left"><div className="flex items-center gap-2"><FaTruck size={10} className="text-indigo-400"/> Delivery</div></th>
+                  <th className="px-6 py-6 text-left"><div className="flex items-center gap-2"><FaUser size={10} className="text-indigo-400" /> User</div></th>
+                  <th className="px-6 py-6 text-left"><div className="flex items-center gap-2"><FaTruck size={10} className="text-indigo-400" /> Delivery</div></th>
                   <th className="px-6 py-6 text-right">Debit (Dr)</th>
                   <th className="px-6 py-6 text-right">Credit (Cr)</th>
                   <th className="px-6 py-6 text-center">Balance</th>
@@ -542,9 +549,9 @@ const BranchCustomerLedger = () => {
                   let docId = "-";
                   const invMatch = txn.particulars?.match(/for Invoice?s?:\s*([^\[(]+)/i);
                   const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note):\s*([^\[(]+)/i);
-                  
+
                   if (invMatch) docId = invMatch[1].trim();
-                  else if (pm) docId = pm[1].trim(); 
+                  else if (pm) docId = pm[1].trim();
                   else if (txn.type === "INVOICE") docId = txn.particulars.split(": ")[1] || "-";
 
                   return (
@@ -552,7 +559,7 @@ const BranchCustomerLedger = () => {
                       <td className="px-8 py-6 text-slate-300 group-hover:text-indigo-400 transition-colors">{index + 1}</td>
                       <td className="px-6 py-6 text-slate-500 whitespace-nowrap">{formatDate(txn.date, true)}</td>
                       <td className="px-6 py-6">
-                        <button 
+                        <button
                           onClick={() => handleNavigateToOrder(txn)}
                           disabled={!txn.salesOrderId}
                           className={`text-left group/btn ${txn.salesOrderId ? 'cursor-pointer' : 'cursor-default'}`}
@@ -565,20 +572,19 @@ const BranchCustomerLedger = () => {
                         <div className={`text-[10px] text-slate-400 font-bold italic truncate max-w-[300px] mt-0.5 ${txn.type === 'CANCELLED' ? 'line-through' : ''}`} title={txn.particulars}>{txn.particulars}</div>
                       </td>
                       <td className="px-6 py-6 text-center">
-                        <span className={`px-2.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm border ${
-                          txn.type === "INVOICE" ? "bg-rose-50 text-rose-600 border-rose-100" : 
-                          txn.type === "RECEIPT" || txn.type === "BOUNCED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" : 
-                          txn.type === "CANCELLED" ? "bg-slate-100 text-slate-400 border-slate-200" :
-                          "bg-indigo-50 text-indigo-600 border-indigo-100"
-                        }`}>
+                        <span className={`px-2.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm border ${txn.type === "INVOICE" ? "bg-rose-50 text-rose-600 border-rose-100" :
+                            txn.type === "RECEIPT" || txn.type === "BOUNCED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                              txn.type === "CANCELLED" ? "bg-slate-100 text-slate-400 border-slate-200" :
+                                "bg-indigo-50 text-indigo-600 border-indigo-100"
+                          }`}>
                           {txn.type === "RECEIPT" ? (txn.particulars?.match(/\(([^)]+)\)/)?.[1]?.toUpperCase() || "CASH") : txn.type}
                         </span>
                       </td>
                       <td className="px-6 py-6">
-                         <div className="text-[12px] text-slate-700">{txn.user || "-"}</div>
+                        <div className="text-[12px] text-slate-700">{txn.user || "-"}</div>
                       </td>
                       <td className="px-6 py-6">
-                         <div className="text-[12px] text-slate-700">{txn.deliveryMan || "-"}</div>
+                        <div className="text-[12px] text-slate-700">{txn.deliveryMan || "-"}</div>
                       </td>
                       <td className="px-6 py-6 text-right">
                         {txn.debit > 0 ? (
@@ -597,7 +603,7 @@ const BranchCustomerLedger = () => {
                       </td>
                       <td className="px-8 py-6 text-right">
                         {user?.role === "SUPER_ADMIN" && (
-                          <button 
+                          <button
                             onClick={() => handleTransferTransaction(txn)}
                             className="text-slate-300 hover:text-indigo-600 transition p-2"
                             title="Transfer Transaction to another Customer"
@@ -627,8 +633,8 @@ const BranchCustomerLedger = () => {
       {/* OFF-SCREEN EXPORT TEMPLATE */}
       <div style={{ position: 'absolute', left: '-9999px', top: 0, width: '800px', background: 'white' }}>
         <div id="formal-ledger-export" className="p-10 formal-ledger" style={{ fontFamily: "'Times New Roman', serif" }}>
-           <style>
-             {`
+          <style>
+            {`
                .formal-ledger { color: #000; padding: 30px 30px 60px 30px; }
                .formal-h { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; align-items: center; }
                .formal-t { width: 100%; border-collapse: collapse; border: 1.5px solid #000; }
@@ -636,77 +642,77 @@ const BranchCustomerLedger = () => {
                .formal-t td { border: 1px solid #000; padding: 5px 4px; font-weight: bold; font-size: 10px; }
                .formal-footer { margin-top: 15px; border: 1px solid #000; padding: 10px; display: flex; justify-content: space-between; align-items: center; background: #f9f9f9; margin-bottom: 20px; }
              `}
-           </style>
-           <div className="formal-h">
-              {branch?.logo && <img src={branch.logo} style={{ width: '60px', height: 'auto' }} />}
-              <div style={{ textAlign: 'center', flex: 1 }}>
-                <h1 style={{ fontSize: '20px', margin: 0, fontWeight: 'bold' }}>{branch?.name}</h1>
-                <p style={{ margin: '3px 0', fontSize: '11px' }}>{branch?.address}</p>
-                <p style={{ margin: '3px 0', fontSize: '11px', fontWeight: 'bold' }}>GSTIN: {branch?.gstin}</p>
-              </div>
-           </div>
-           <h2 style={{ textAlign: 'center', textDecoration: 'underline', fontSize: '16px', margin: '15px 0', fontWeight: 'bold' }}>CUSTOMER LEDGER STATEMENT</h2>
-           <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', marginBottom: '15px', border: '1px solid #000', padding: '10px', fontSize: '12px' }}>
-              <div style={{ flex: 1 }}>
-                <strong>Account of:</strong><br/>
-                <span style={{ fontSize: '14px' }}>{customer.name}</span><br/>
-                <p style={{ margin: '2px 0', maxWidth: '300px' }}>{customer.address}</p>
-                <p style={{ margin: '2px 0' }}>{customer.gstin ? `GSTIN: ${customer.gstin}` : ""}</p>
-              </div>
-              <div style={{ textAlign: 'right', flex: 1 }}>
-                <p style={{ margin: '2px 0' }}><strong>Period:</strong> {formatDate(startDate)} TO {formatDate(endDate)}</p>
-                <p style={{ margin: '2px 0' }}><strong>Report Date:</strong> {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-              </div>
-           </div>
-           <table className="formal-t">
-              <thead>
-                <tr>
-                  <th style={{ width: '80px' }}>Date</th>
-                  <th>Particulars / Reference</th>
-                  <th style={{ width: '50px' }}>Type</th>
-                  <th style={{ width: '60px' }}>User</th>
-                  <th style={{ width: '80px' }}>Delivery</th>
-                  <th style={{ textAlign: 'right', width: '70px' }}>Debit</th>
-                  <th style={{ textAlign: 'right', width: '70px' }}>Credit</th>
-                  <th style={{ textAlign: 'right', width: '90px' }}>Balance</th>
+          </style>
+          <div className="formal-h">
+            {branch?.logo && <img src={branch.logo} style={{ width: '60px', height: 'auto' }} />}
+            <div style={{ textAlign: 'center', flex: 1 }}>
+              <h1 style={{ fontSize: '20px', margin: 0, fontWeight: 'bold' }}>{branch?.name}</h1>
+              <p style={{ margin: '3px 0', fontSize: '11px' }}>{branch?.address}</p>
+              <p style={{ margin: '3px 0', fontSize: '11px', fontWeight: 'bold' }}>GSTIN: {branch?.gstin}</p>
+            </div>
+          </div>
+          <h2 style={{ textAlign: 'center', textDecoration: 'underline', fontSize: '16px', margin: '15px 0', fontWeight: 'bold' }}>CUSTOMER LEDGER STATEMENT</h2>
+          <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', marginBottom: '15px', border: '1px solid #000', padding: '10px', fontSize: '12px' }}>
+            <div style={{ flex: 1 }}>
+              <strong>Account of:</strong><br />
+              <span style={{ fontSize: '14px' }}>{customer.name}</span><br />
+              <p style={{ margin: '2px 0', maxWidth: '300px' }}>{customer.address}</p>
+              <p style={{ margin: '2px 0' }}>{customer.gstin ? `GSTIN: ${customer.gstin}` : ""}</p>
+            </div>
+            <div style={{ textAlign: 'right', flex: 1 }}>
+              <p style={{ margin: '2px 0' }}><strong>Period:</strong> {formatDate(startDate)} TO {formatDate(endDate)}</p>
+              <p style={{ margin: '2px 0' }}><strong>Report Date:</strong> {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+            </div>
+          </div>
+          <table className="formal-t">
+            <thead>
+              <tr>
+                <th style={{ width: '80px' }}>Date</th>
+                <th>Particulars / Reference</th>
+                <th style={{ width: '50px' }}>Type</th>
+                <th style={{ width: '60px' }}>User</th>
+                <th style={{ width: '80px' }}>Delivery</th>
+                <th style={{ textAlign: 'right', width: '70px' }}>Debit</th>
+                <th style={{ textAlign: 'right', width: '70px' }}>Credit</th>
+                <th style={{ textAlign: 'right', width: '90px' }}>Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style={{ background: '#f9f9f9' }}>
+                <td>{formatDate(startDate)}</td>
+                <td style={{ letterSpacing: '0.05em' }}>OPENING BALANCE B/F</td>
+                <td style={{ textAlign: 'center' }}>-</td>
+                <td style={{ textAlign: 'center' }}>-</td>
+                <td style={{ textAlign: 'center' }}>-</td>
+                <td style={{ textAlign: 'right' }}>-</td>
+                <td style={{ textAlign: 'right' }}>-</td>
+                <td style={{ textAlign: 'right', fontSize: '11px' }}>₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</td>
+              </tr>
+              {transactions.filter(t => !String(t.type).toUpperCase().includes("CANCEL")).map(t => (
+                <tr key={t.id}>
+                  <td style={{ whiteSpace: 'nowrap' }}>{formatDate(t.date, true)}</td>
+                  <td style={{ maxWidth: '220px', wordWrap: 'break-word' }}>{t.particulars}</td>
+                  <td style={{ textAlign: 'center' }}>{t.type}</td>
+                  <td style={{ textAlign: 'center' }}>{t.user || "-"}</td>
+                  <td style={{ textAlign: 'center' }}>{t.deliveryMan || "-"}</td>
+                  <td style={{ textAlign: 'right', color: t.debit > 0 ? '#b91c1c' : '#000' }}>{t.debit > 0 ? t.debit.toLocaleString() : "-"}</td>
+                  <td style={{ textAlign: 'right', color: t.credit > 0 ? '#047857' : '#000' }}>{t.credit > 0 ? t.credit.toLocaleString() : "-"}</td>
+                  <td style={{ textAlign: 'right', fontSize: '11px' }}>₹{Math.abs(t.balance).toLocaleString()} {balanceLabel(t.balance)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                <tr style={{ background: '#f9f9f9' }}>
-                  <td>{formatDate(startDate)}</td>
-                  <td style={{ letterSpacing: '0.05em' }}>OPENING BALANCE B/F</td>
-                  <td style={{ textAlign: 'center' }}>-</td>
-                  <td style={{ textAlign: 'center' }}>-</td>
-                  <td style={{ textAlign: 'center' }}>-</td>
-                  <td style={{ textAlign: 'right' }}>-</td>
-                  <td style={{ textAlign: 'right' }}>-</td>
-                  <td style={{ textAlign: 'right', fontSize: '11px' }}>₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</td>
-                </tr>
-                {transactions.filter(t => !String(t.type).toUpperCase().includes("CANCEL")).map(t => (
-                  <tr key={t.id}>
-                    <td style={{ whiteSpace: 'nowrap' }}>{formatDate(t.date, true)}</td>
-                    <td style={{ maxWidth: '220px', wordWrap: 'break-word' }}>{t.particulars}</td>
-                    <td style={{ textAlign: 'center' }}>{t.type}</td>
-                    <td style={{ textAlign: 'center' }}>{t.user || "-"}</td>
-                    <td style={{ textAlign: 'center' }}>{t.deliveryMan || "-"}</td>
-                    <td style={{ textAlign: 'right', color: t.debit > 0 ? '#b91c1c' : '#000' }}>{t.debit > 0 ? t.debit.toLocaleString() : "-"}</td>
-                    <td style={{ textAlign: 'right', color: t.credit > 0 ? '#047857' : '#000' }}>{t.credit > 0 ? t.credit.toLocaleString() : "-"}</td>
-                    <td style={{ textAlign: 'right', fontSize: '11px' }}>₹{Math.abs(t.balance).toLocaleString()} {balanceLabel(t.balance)}</td>
-                  </tr>
-                ))}
-              </tbody>
-           </table>
+              ))}
+            </tbody>
+          </table>
 
-           <div className="formal-footer">
-              <div style={{ fontSize: '11px' }}>
-                <p style={{ margin: '2px 0' }}><strong>Total Debit:</strong> ₹{totalDebit.toLocaleString()}</p>
-                <p style={{ margin: '2px 0' }}><strong>Total Credit:</strong> ₹{totalCredit.toLocaleString()}</p>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ fontSize: '14px', fontWeight: 'bold', margin: 0 }}>Closing Balance: ₹{Math.abs(closingBalance).toLocaleString()} {balanceLabel(closingBalance)}</p>
-                <p style={{ fontSize: '10px', marginTop: '5px', color: '#666' }}>* This is a computer generated statement.</p>
-              </div>
-           </div>
+          <div className="formal-footer">
+            <div style={{ fontSize: '11px' }}>
+              <p style={{ margin: '2px 0' }}><strong>Total Debit:</strong> ₹{totalDebit.toLocaleString()}</p>
+              <p style={{ margin: '2px 0' }}><strong>Total Credit:</strong> ₹{totalCredit.toLocaleString()}</p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: '14px', fontWeight: 'bold', margin: 0 }}>Closing Balance: ₹{Math.abs(closingBalance).toLocaleString()} {balanceLabel(closingBalance)}</p>
+              <p style={{ fontSize: '10px', marginTop: '5px', color: '#666' }}>* This is a computer generated statement.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

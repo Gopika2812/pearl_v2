@@ -123,6 +123,7 @@ router.post("/bulk-upload", auth, upload.single("file"), async (req, res) => {
       const product = allProducts.find(p => p._id.toString() === productId.toString());
       const pPrice = product?.purchasingPrice || 0;
       const margin = Math.round((lockedPrice - pPrice) * 100) / 100;
+      const marginPercentage = pPrice > 0 ? (margin / pPrice) * 100 : 0;
 
       bulkOps.push({
         updateOne: {
@@ -132,6 +133,7 @@ router.post("/bulk-upload", auth, upload.single("file"), async (req, res) => {
               lockedPrice: Math.round(lockedPrice * 100) / 100,
               purchasingPrice: pPrice,
               margin: margin,
+              marginPercentage: Math.round(marginPercentage * 100) / 100,
               updatedBy: req.user.username || req.user.name,
               updatedById: req.user.id || req.user._id,
               updatedByModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser"
@@ -196,6 +198,7 @@ router.post("/", auth, async (req, res) => {
     }
     const pPrice = product.purchasingPrice || 0;
     const margin = Math.round((Number(lockedPrice) - pPrice) * 100) / 100;
+    const marginPercentage = pPrice > 0 ? (margin / pPrice) * 100 : 0;
 
     // Upsert: update existing or create new
     const result = await CustomerLockedPrice.findOneAndUpdate(
@@ -204,6 +207,7 @@ router.post("/", auth, async (req, res) => {
         lockedPrice: Number(lockedPrice),
         purchasingPrice: pPrice,
         margin: margin,
+        marginPercentage: Math.round(marginPercentage * 100) / 100,
         updatedBy: req.user.username || req.user.name,
         updatedById: req.user.id || req.user._id,
         updatedByModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser"
@@ -265,6 +269,7 @@ router.put("/:id", auth, async (req, res) => {
     const oldEntry = await CustomerLockedPrice.findById(id);
     const pPrice = product.purchasingPrice || 0;
     const margin = Math.round((Number(lockedPrice) - pPrice) * 100) / 100;
+    const marginPercentage = pPrice > 0 ? (margin / pPrice) * 100 : 0;
 
     const updated = await CustomerLockedPrice.findByIdAndUpdate(
       id,
@@ -274,6 +279,7 @@ router.put("/:id", auth, async (req, res) => {
         lockedPrice: Number(lockedPrice),
         purchasingPrice: pPrice,
         margin: margin,
+        marginPercentage: Math.round(marginPercentage * 100) / 100,
         updatedBy: req.user.username || req.user.name,
         updatedById: req.user.id || req.user._id,
         updatedByModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser"

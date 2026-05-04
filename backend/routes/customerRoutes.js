@@ -2,20 +2,20 @@ import express from "express";
 import mongoose from "mongoose";
 import multer from "multer";
 import XLSX from "xlsx";
+import auth from "../middleware/auth.js";
+import AuditLog from "../models/AuditLog.js";
 import CreditNote from "../models/CreditNote.js";
 import Customer from "../models/Customer.js";
 import CustomerCategory from "../models/CustomerCategory.js";
 import CustomerGroup from "../models/CustomerGroup.js";
+import CustomerLockedPrice from "../models/CustomerLockedPrice.js";
+import FollowUp from "../models/FollowUp.js";
+import Invoice from "../models/Invoice.js";
 import OtherTransaction from "../models/OtherTransaction.js";
+import OverrideRequest from "../models/OverrideRequest.js";
 import Receipt from "../models/Receipt.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
-import Invoice from "../models/Invoice.js";
-import AuditLog from "../models/AuditLog.js";
-import OverrideRequest from "../models/OverrideRequest.js";
-import FollowUp from "../models/FollowUp.js";
-import CustomerLockedPrice from "../models/CustomerLockedPrice.js";
-import auth from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -324,7 +324,7 @@ router.post("/bulk-update-credit", upload.single("file"), async (req, res) => {
     for (const row of rows) {
       // Find the name column dynamically
       const name = (row["Customer Name"] || row["customer name"] || row["Name"] || "").toString().trim();
-      
+
       // Find limit and days
       const limit = parseFloat(row["Credit Limit (₹)"] || row["Credit Limit"] || row["limit"] || 0);
       const days = parseInt(row["Credit Days"] || row["days"] || 0);
@@ -335,7 +335,7 @@ router.post("/bulk-update-credit", upload.single("file"), async (req, res) => {
       }
 
       const updateFields = {};
-      
+
       // Check if limit exists in row (even if it's 0)
       const limitRaw = row["Credit Limit (₹)"] ?? row["Credit Limit"] ?? row["limit"];
       if (limitRaw !== undefined && limitRaw !== "") {
@@ -355,11 +355,11 @@ router.post("/bulk-update-credit", upload.single("file"), async (req, res) => {
       }
 
       // Case-insensitive exact name match within branch
-      const customer = await Customer.findOne({ 
-        branchId, 
-        name: { $regex: new RegExp(`^${escapeRegex(name)}$`, "i") } 
+      const customer = await Customer.findOne({
+        branchId,
+        name: { $regex: new RegExp(`^${escapeRegex(name)}$`, "i") }
       });
-      
+
       if (customer) {
         updateOps.push({
           updateOne: {
@@ -375,7 +375,7 @@ router.post("/bulk-update-credit", upload.single("file"), async (req, res) => {
 
     if (updateOps.length > 0) {
       await Customer.bulkWrite(updateOps, { ordered: false });
-      
+
       // Log the action
       await new AuditLog({
         user: req.user?._id || branchId,
@@ -1016,7 +1016,7 @@ router.put("/:id", async (req, res) => {
     const updates = req.body;
 
     console.log(`\n📝 UPDATING CUSTOMER: ${id}`);
-    
+
     // 1️⃣ Fetch EXISTING customer for comparison
     const oldCustomer = await Customer.findById(id);
     if (!oldCustomer) {
@@ -1046,54 +1046,54 @@ router.put("/:id", async (req, res) => {
     const hasCreditChanged = updates.credit !== undefined && updates.credit !== oldCustomer.credit;
 
     if (hasOpeningBalChanged || hasDebitChanged || hasCreditChanged) {
-        // Create Security Audit Log
-        const logEntry = new AuditLog({
-            user: req.user?._id || id, // Fallback to customer ID if no user context
-            userModel: req.user?.role ? "BranchUser" : "SuperAdmin",
-            username: req.user?.username || "Unknown",
-            branchId: oldCustomer.branchId,
-            action: "CUSTOMER_FINANCIAL_UPDATE",
-            targetId: oldCustomer._id,
-            targetModel: "Customer",
-            description: `Financial details updated for ${oldCustomer.name}.${hasOpeningBalChanged ? ` Opening Bal: ${oldCustomer.openingBalance} -> ${updates.openingBalance}.` : ''}`,
-            changes: {
-                before: {
-                    openingBalance: oldCustomer.openingBalance,
-                    debit: oldCustomer.debit,
-                    credit: oldCustomer.credit
-                },
-                after: {
-                    openingBalance: updates.openingBalance !== undefined ? updates.openingBalance : oldCustomer.openingBalance,
-                    debit: updates.debit !== undefined ? updates.debit : oldCustomer.debit,
-                    credit: updates.credit !== undefined ? updates.credit : oldCustomer.credit
-                }
-            }
-        });
-        await logEntry.save();
-        console.log(`🔒 Security Audit Log created for financial change on customer ${oldCustomer.name}`);
+      // Create Security Audit Log
+      const logEntry = new AuditLog({
+        user: req.user?._id || id, // Fallback to customer ID if no user context
+        userModel: req.user?.role ? "BranchUser" : "SuperAdmin",
+        username: req.user?.username || "Unknown",
+        branchId: oldCustomer.branchId,
+        action: "CUSTOMER_FINANCIAL_UPDATE",
+        targetId: oldCustomer._id,
+        targetModel: "Customer",
+        description: `Financial details updated for ${oldCustomer.name}.${hasOpeningBalChanged ? ` Opening Bal: ${oldCustomer.openingBalance} -> ${updates.openingBalance}.` : ''}`,
+        changes: {
+          before: {
+            openingBalance: oldCustomer.openingBalance,
+            debit: oldCustomer.debit,
+            credit: oldCustomer.credit
+          },
+          after: {
+            openingBalance: updates.openingBalance !== undefined ? updates.openingBalance : oldCustomer.openingBalance,
+            debit: updates.debit !== undefined ? updates.debit : oldCustomer.debit,
+            credit: updates.credit !== undefined ? updates.credit : oldCustomer.credit
+          }
+        }
+      });
+      await logEntry.save();
+      console.log(`🔒 Security Audit Log created for financial change on customer ${oldCustomer.name}`);
     }
 
     // 3️⃣ SANITIZE OBJECTID FIELDS (Prevent CastErrors from empty strings)
     if (updates.salesOwner === "") {
-        updates.salesOwner = null;
+      updates.salesOwner = null;
     }
-    
+
     if (updates.customerCategories === "") {
-        updates.customerCategories = [];
+      updates.customerCategories = [];
     } else if (updates.customerCategories && !Array.isArray(updates.customerCategories)) {
-        updates.customerCategories = [updates.customerCategories];
+      updates.customerCategories = [updates.customerCategories];
     } else if (Array.isArray(updates.customerCategories)) {
-        // Remove empty strings from array
-        updates.customerCategories = updates.customerCategories.filter(id => id && id !== "");
+      // Remove empty strings from array
+      updates.customerCategories = updates.customerCategories.filter(id => id && id !== "");
     }
 
     if (updates.customerGroups === "") {
-        updates.customerGroups = [];
+      updates.customerGroups = [];
     } else if (updates.customerGroups && !Array.isArray(updates.customerGroups)) {
-        updates.customerGroups = [updates.customerGroups];
+      updates.customerGroups = [updates.customerGroups];
     } else if (Array.isArray(updates.customerGroups)) {
-        // Remove empty strings from array
-        updates.customerGroups = updates.customerGroups.filter(id => id && id !== "");
+      // Remove empty strings from array
+      updates.customerGroups = updates.customerGroups.filter(id => id && id !== "");
     }
 
     const customer = await Customer.findByIdAndUpdate(id, updates, {
@@ -1132,8 +1132,8 @@ router.patch("/:id/request-credit-bypass", async (req, res) => {
     }
 
     // 1. Calculate History Count to determine routing
-    const historyCount = await OverrideRequest.countDocuments({ 
-      customerId: id, 
+    const historyCount = await OverrideRequest.countDocuments({
+      customerId: id,
       requestType: "CREDIT_LIMIT",
       status: "APPROVED" // Only count previously granted access
     });
@@ -1160,10 +1160,10 @@ router.patch("/:id/request-credit-bypass", async (req, res) => {
     customer.creditLimitRequiresSuperAdmin = requiresSuperAdmin;
     await customer.save();
 
-    res.json({ 
-      success: true, 
-      message: requiresSuperAdmin 
-        ? "Request sent to SUPER ADMIN (3+ prior approvals reached)" 
+    res.json({
+      success: true,
+      message: requiresSuperAdmin
+        ? "Request sent to SUPER ADMIN (3+ prior approvals reached)"
         : "Request sent to Branch Admin",
       requiresSuperAdmin
     });
@@ -1183,7 +1183,7 @@ router.patch("/:id/approve-credit-bypass", async (req, res) => {
     // 1. Update the persistent record
     await OverrideRequest.findOneAndUpdate(
       { customerId: id, status: "PENDING", requestType: "CREDIT_LIMIT" },
-      { 
+      {
         status: "APPROVED",
         approvedBy: req.user?._id
       },
@@ -1220,7 +1220,7 @@ router.patch("/:id/reject-credit-bypass", async (req, res) => {
     // 1. Update the persistent record
     await OverrideRequest.findOneAndUpdate(
       { customerId: id, status: "PENDING", requestType: "CREDIT_LIMIT" },
-      { 
+      {
         status: "REJECTED",
         approvedBy: req.user?._id
       },
@@ -1253,7 +1253,7 @@ router.patch("/:id/reject-credit-bypass", async (req, res) => {
 router.get("/credit-requests/branch/:branchId", async (req, res) => {
   try {
     const { branchId } = req.params;
-    
+
     // Find customers with PENDING requests that DON'T require Super Admin
     const customers = await Customer.find({
       branchId,
@@ -1263,11 +1263,11 @@ router.get("/credit-requests/branch/:branchId", async (req, res) => {
 
     // Enhance with total request count from history
     const requestsWithHistory = await Promise.all(customers.map(async (c) => {
-      const historyCount = await OverrideRequest.countDocuments({ 
-        customerId: c._id, 
-        requestType: "CREDIT_LIMIT" 
+      const historyCount = await OverrideRequest.countDocuments({
+        customerId: c._id,
+        requestType: "CREDIT_LIMIT"
       });
-      
+
       return {
         ...c.toObject(),
         historyCount
@@ -1307,11 +1307,11 @@ router.get("/credit-requests/all", async (req, res) => {
       .populate("branchId", "name code");
 
     const requestsWithHistory = await Promise.all(customers.map(async (c) => {
-      const historyCount = await OverrideRequest.countDocuments({ 
-        customerId: c._id, 
-        requestType: "CREDIT_LIMIT" 
+      const historyCount = await OverrideRequest.countDocuments({
+        customerId: c._id,
+        requestType: "CREDIT_LIMIT"
       });
-      
+
       return {
         ...c.toObject(),
         historyCount
@@ -1360,7 +1360,7 @@ router.get("/:id/check-credit", async (req, res) => {
       // These 10k must belong to the most recent invoices if old ones were paid.
       // So we check invoices from NEWEST to OLDEST. 
       // The moment the "Running Balance" (Unpaid Amount) reaches an invoice date, that's our oldest unpaid debt.
-      
+
       const newestFirstInvoices = await SalesOrder.find({
         "customer.customerId": id,
         invoiceGenerated: true,
@@ -1369,17 +1369,17 @@ router.get("/:id/check-credit", async (req, res) => {
 
       let totalUnpaid = currentBalance;
       for (const inv of newestFirstInvoices) {
-          totalUnpaid -= (inv.grandTotalWithMargin || inv.grandTotal || 0);
-          oldestUnpaidInvoiceDate = inv.orderDate;
-          if (totalUnpaid <= 0) break;
+        totalUnpaid -= (inv.grandTotalWithMargin || inv.grandTotal || 0);
+        oldestUnpaidInvoiceDate = inv.orderDate;
+        if (totalUnpaid <= 0) break;
       }
 
       if (oldestUnpaidInvoiceDate) {
-          const diffTime = Math.abs(new Date() - new Date(oldestUnpaidInvoiceDate));
-          overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          if (overdueDays > creditLimitDays) {
-              isDaysExceeded = true;
-          }
+        const diffTime = Math.abs(new Date() - new Date(oldestUnpaidInvoiceDate));
+        overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (overdueDays > creditLimitDays) {
+          isDaysExceeded = true;
+        }
       }
     }
 
@@ -1535,16 +1535,15 @@ router.get("/:id/ledger", async (req, res) => {
       ...inRangeReceipts.map(r => {
         const creator = r.generatedBy?.name || "-";
         const canceller = r.cancelledBy?.name || "";
-        
+
         return {
           id: `rcp-${r._id}`,
           date: r.createdAt,
           type: r.status === "bounced" ? "BOUNCED" : (r.status === "cancelled" ? "CANCELLED" : "RECEIPT"),
-          particulars: `${r.status === "bounced" ? "BOUNCED: " : (r.status === "cancelled" ? "CANCELLED: " : "Receipt: ")}${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})${
-            r.relatedOrders && r.relatedOrders.length > 0 
+          particulars: `${r.status === "bounced" ? "BOUNCED: " : (r.status === "cancelled" ? "CANCELLED: " : "Receipt: ")}${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})${r.relatedOrders && r.relatedOrders.length > 0
               ? ` - for Invoices: ${r.relatedOrders.map(ro => ro.salesOrderId?.salesInvoiceId || ro.salesOrderId?.invoiceId || ro.invoiceId).join(", ")}`
               : (r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId ? ` - for Inv: ${r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId}` : "")
-          }${r.status === 'cancelled' ? ` [By: ${canceller}${r.cancelReason ? ` | Reason: ${r.cancelReason}` : ""}]` : ""}`,
+            }${r.status === 'cancelled' ? ` [By: ${canceller}${r.cancelReason ? ` | Reason: ${r.cancelReason}` : ""}]` : ""}`,
           debit: r.status === "bounced" ? (r.amount || 0) : 0,
           credit: (r.status === "bounced" || r.status === "cancelled") ? 0 : (r.amount || 0),
           originalAmount: r.amount || 0,
@@ -1669,7 +1668,7 @@ router.post("/merge", auth, async (req, res) => {
     await Invoice.updateMany(updateCriteria, updatePayload, { session });
     await Receipt.updateMany(updateCriteria, updatePayload, { session });
     await CreditNote.updateMany(updateCriteria, updatePayload, { session });
-    
+
     // 2. Update Direct References
     await FollowUp.updateMany({ customerId: source._id }, { $set: { customerId: target._id } }, { session });
     await CustomerLockedPrice.updateMany({ customerId: source._id }, { $set: { customerId: target._id } }, { session });

@@ -91,23 +91,7 @@ const BranchPurchaseOrders = () => {
     }
   };
 
-  // Now using server-side search:
-  // Now using local filtering based on date range and search term
-  const filteredOrders = purchaseOrders.filter(order => {
-    const orderDate = new Date(order.date || order.createdAt);
-    const orderDateStr = orderDate.toISOString().split('T')[0];
-    
-    // Date filter
-    const matchesFromDate = filterFromDate === "" || orderDateStr >= filterFromDate;
-    const matchesToDate = filterToDate === "" || orderDateStr <= filterToDate;
-    
-    // Search term filter (if any local search is still needed, though we search on server too)
-    const matchesSearch = searchTerm === "" || 
-      (order.invoiceId && order.invoiceId.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (order.vendor && order.vendor.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    return matchesFromDate && matchesToDate && matchesSearch;
-  });
 
 
   const handleDeleteOrder = async (orderId) => {
@@ -489,7 +473,7 @@ const BranchPurchaseOrders = () => {
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
             <div className="animate-pulse">Loading purchase orders...</div>
           </div>
-        ) : filteredOrders.length === 0 ? (
+        ) : purchaseOrders.length === 0 ? (
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
             <p className="text-gray-500">
               {searchTerm ? `No purchase orders matching "${searchTerm}"` : "No purchase orders found"}
@@ -511,7 +495,7 @@ const BranchPurchaseOrders = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {filteredOrders.map((order) => (
+                  {purchaseOrders.map((order) => (
                     <React.Fragment key={order._id}>
                       <tr className="hover:bg-gray-50 transition">
                         {isFieldAllowed("orderBillId") && (

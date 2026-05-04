@@ -56,6 +56,7 @@ const BranchLockedPrices = () => {
   const [editProduct, setEditProduct] = useState(null);
   const [editCustomer, setEditCustomer] = useState(null);
   const [editLockedPrice, setEditLockedPrice] = useState("");
+  const [editMarginPercent, setEditMarginPercent] = useState("");
   const [editProdSearch, setEditProdSearch] = useState("");
   const [editCustSearch, setEditCustSearch] = useState("");
   const [showEditProdDropdown, setShowEditProdDropdown] = useState(false);
@@ -75,6 +76,7 @@ const BranchLockedPrices = () => {
     purchasingPrice: 0,
     sellingPrice: 0,
     lockedPrice: "",
+    marginPercent: "",
     custSearch: "",
     prodSearch: ""
   });
@@ -408,6 +410,16 @@ const BranchLockedPrices = () => {
     setEditProduct(lp.productId);
     setEditCustomer(lp.customerId);
     setEditLockedPrice(lp.lockedPrice?.toString() || "");
+    
+    // Calculate initial margin % for editing
+    const purchasingPrice = lp.productId?.purchasingPrice || 0;
+    if (purchasingPrice > 0) {
+      const mp = ((lp.lockedPrice - purchasingPrice) / purchasingPrice) * 100;
+      setEditMarginPercent(mp.toFixed(1));
+    } else {
+      setEditMarginPercent("0");
+    }
+
     setEditProdSearch(lp.productId?.name || "");
     setEditCustSearch(lp.customerId?.name || "");
     setShowEditProdDropdown(false);
@@ -848,15 +860,38 @@ const BranchLockedPrices = () => {
                           <input 
                             type="number"
                             placeholder="Price"
-                            className="w-24 px-3 py-2 border-2 border-amber-200 rounded-lg text-right font-black text-amber-600 outline-none"
+                            className="w-24 px-3 py-2 border-2 border-amber-200 rounded-lg text-right font-black text-amber-600 outline-none focus:border-amber-400"
                             value={newRowData.lockedPrice}
-                            onChange={(e) => setNewRowData({ ...newRowData, lockedPrice: e.target.value })}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const pPrice = newRowData.purchasingPrice || 0;
+                              let mPct = "";
+                              if (val && pPrice > 0) {
+                                mPct = (((Number(val) - pPrice) / pPrice) * 100).toFixed(1);
+                              }
+                              setNewRowData({ ...newRowData, lockedPrice: val, marginPercent: mPct });
+                            }}
                           />
                         </td>
-                        <td className={`px-4 py-4 text-right text-xs font-black ${((Number(newRowData.lockedPrice) - newRowData.purchasingPrice) / (newRowData.purchasingPrice || 1) * 100) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                          {newRowData.purchasingPrice > 0 
-                            ? (((Number(newRowData.lockedPrice) - newRowData.purchasingPrice) / newRowData.purchasingPrice) * 100).toFixed(1)
-                            : "0.0"}%
+                        <td className="px-4 py-4 text-right">
+                           <div className="relative flex items-center justify-end">
+                             <input 
+                               type="number"
+                               placeholder="%"
+                               className="w-20 px-3 py-2 border-2 border-[#319bab]/20 rounded-lg text-right font-black text-[#319bab] outline-none focus:border-[#319bab]"
+                               value={newRowData.marginPercent}
+                               onChange={(e) => {
+                                 const val = e.target.value;
+                                 const pPrice = newRowData.purchasingPrice || 0;
+                                 let lPrice = "";
+                                 if (val !== "" && pPrice > 0) {
+                                   lPrice = (pPrice + (pPrice * Number(val) / 100)).toFixed(2);
+                                 }
+                                 setNewRowData({ ...newRowData, marginPercent: val, lockedPrice: lPrice });
+                               }}
+                             />
+                             <span className="absolute right-2 text-[8px] font-black text-[#319bab]/40 pointer-events-none">%</span>
+                           </div>
                         </td>
                         <td className="px-4 py-4 text-center">
                            <div className="flex items-center justify-center gap-2">
@@ -1059,8 +1094,14 @@ const BranchLockedPrices = () => {
                                     type="number"
                                     className="w-24 px-3 py-2 bg-white border-2 border-[#319bab]/40 rounded-lg text-right font-black text-[#319bab] text-sm outline-none shadow-inner"
                                     value={editLockedPrice}
-                                    onChange={(e) => setEditLockedPrice(e.target.value)}
-                                    autoFocus
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const pPrice = purchasingPrice || 0;
+                                      if (pPrice > 0) {
+                                        setEditMarginPercent((((Number(val) - pPrice) / pPrice) * 100).toFixed(1));
+                                      }
+                                      setEditLockedPrice(val);
+                                    }}
                                   />
                                 ) : (
                                   <div className="flex flex-col items-end gap-1">
@@ -1073,8 +1114,29 @@ const BranchLockedPrices = () => {
                               </td>
                             )}
                             {isFieldAllowed("margin") && (
-                              <td className={`px-6 py-5 text-right text-sm font-black ${mp >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                {mp.toFixed(1)}%
+                              <td className="px-6 py-5 text-right">
+                                {isEditing ? (
+                                  <div className="relative flex items-center justify-end">
+                                    <input 
+                                      type="number"
+                                      className="w-20 px-3 py-2 bg-white border-2 border-[#319bab]/40 rounded-lg text-right font-black text-[#319bab] text-sm outline-none shadow-inner"
+                                      value={editMarginPercent}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        const pPrice = purchasingPrice || 0;
+                                        if (val !== "" && pPrice > 0) {
+                                          setEditLockedPrice((pPrice + (pPrice * Number(val) / 100)).toFixed(2));
+                                        }
+                                        setEditMarginPercent(val);
+                                      }}
+                                    />
+                                    <span className="absolute right-2 text-[8px] font-black text-[#319bab]/40 pointer-events-none">%</span>
+                                  </div>
+                                ) : (
+                                  <span className={`text-sm font-black ${mp >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                    {mp.toFixed(1)}%
+                                  </span>
+                                )}
                               </td>
                             )}
                             <td className="px-6 py-5 text-left">

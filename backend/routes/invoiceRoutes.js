@@ -16,8 +16,178 @@ import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
 
 
+import moment from "moment-timezone";
+import { cacheData } from "../middleware/cacheMiddleware.js";
+
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+// GET invoice history (for Product Records)
+router.get("/history", cacheData(120), async (req, res) => {
+  try {
+    const { branchId, fromDate, toDate, productGroupId, productId, customerId, page = 1, limit = 500, sortKey = 'date', sortDirection = 'desc' } = req.query;
+
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const limitNum = parseInt(limit);
+
+    const matchQuery = {
+      branchId: new mongoose.Types.ObjectId(branchId),
+      status: { $in: ["FINALIZED", "PRINTED", "SENT"] }
+    };
+
+    if (customerId) {
+      matchQuery["customer.customerId"] = new mongoose.Types.ObjectId(customerId);
+    }
+
+    if (fromDate || toDate) {
+      const IST = "Asia/Kolkata";
+      matchQuery.invoiceDate = {};
+      if (fromDate) matchQuery.invoiceDate.$gte = moment.tz(fromDate, IST).startOf("day").toDate();
+      if (toDate) matchQuery.invoiceDate.$lte = moment.tz(toDate, IST).endOf("day").toDate();
+    }
+
+    const aggregation = [
+      { $match: matchQuery },
+      { $unwind: "$items" },
+    ];
+
+    if (productId) {
+      aggregation.push({
+        $match: { "items.productId": new mongoose.Types.ObjectId(productId) }
+      });
+    }
+
+    aggregation.push(
+      {
+        $lookup: {
+          from: "products",
+          localField: "items.productId",
+          foreignField: "_id",
+          as: "productInfo"
+        }
+      },
+      { $unwind: "$productInfo" }
+    );
+
+    if (productGroupId) {
+      aggregation.push({
+        $match: { "productInfo.productGroup": new mongoose.Types.ObjectId(productGroupId) }
+      });
+    }
+
+    aggregation.push(
+      {
+        $lookup: {
+          from: "productgroups",
+          localField: "productInfo.productGroup",
+          foreignField: "_id",
+          as: "groupInfo"
+        }
+      },
+      {
+        $unwind: {
+          path: "$groupInfo",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          date: "$invoiceDate",
+          invoiceNumber: 1,
+          voucherType: 1,
+          customerName: "$customer.name",
+          productName: "$items.name",
+          productGroupName: "$groupInfo.name",
+          purchasingPrice: "$productInfo.purchasingPrice",
+          gst: "$items.gst",
+          qty: "$items.qty",
+          sellingPrice: "$items.sellingPrice",
+          discountAmount: "$items.discountAmount",
+          discountPerUnit: {
+            $cond: [
+              { $gt: ["$items.qty", 0] },
+              { $divide: ["$items.discountAmount", "$items.qty"] },
+              0
+            ]
+          },
+          grossProfit: {
+            $subtract: [
+              {
+                $subtract: [
+                  "$items.sellingPrice",
+                  {
+                    $cond: [
+                      { $gt: ["$items.qty", 0] },
+                      { $divide: ["$items.discountAmount", "$items.qty"] },
+                      0
+                    ]
+                  }
+                ]
+              },
+              "$productInfo.purchasingPrice"
+            ]
+          }
+        }
+      },
+      {
+        $addFields: {
+          profitPercent: {
+            $cond: [
+              { $gt: ["$purchasingPrice", 0] },
+              { $multiply: [{ $divide: ["$grossProfit", "$purchasingPrice"] }, 100] },
+              0
+            ]
+          }
+        }
+      }
+    );
+
+    // Sorting logic
+    const sortObj = {};
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    switch (sortKey) {
+      case 'date': sortObj.date = direction; break;
+      case 'customer': sortObj.customerName = direction; break;
+      case 'product': sortObj.productName = direction; break;
+      case 'purchase': sortObj.purchasingPrice = direction; break;
+      case 'selling': sortObj.sellingPrice = direction; break;
+      case 'qty': sortObj.qty = direction; break;
+      case 'gst': sortObj.gst = direction; break;
+      case 'discount': sortObj.discountPerUnit = direction; break;
+      case 'profitPercent': sortObj.profitPercent = direction; break;
+      case 'profitCash': sortObj.grossProfit = direction; break;
+      default: sortObj.date = -1;
+    }
+
+    aggregation.push(
+      { $sort: sortObj },
+      {
+        $facet: {
+          metadata: [{ $count: "total" }],
+          data: [{ $skip: skip }, { $limit: limitNum }]
+        }
+      }
+    );
+
+    const result = await Invoice.aggregate(aggregation);
+    const history = result[0].data;
+    const total = result[0].metadata[0]?.total || 0;
+
+    res.json({
+      history,
+      total,
+      page: parseInt(page),
+      limit: limitNum
+    });
+  } catch (error) {
+    console.error("Aggregation error:", error);
+    res.status(500).json({ message: "Failed to fetch sales history" });
+  }
+});
 
 const isToday = (date) => {
   if (!date) return true;

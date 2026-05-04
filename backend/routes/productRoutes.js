@@ -731,17 +731,31 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         for (const p of updatedProducts) {
           const lockedPrices = await CustomerLockedPrice.find({ productId: p._id });
           if (lockedPrices.length > 0) {
-            const lpOps = lockedPrices.map(lp => ({
-              updateOne: {
-                filter: { _id: lp._id },
-                update: {
-                  $set: {
-                    lockedPrice: Math.round((p.purchasingPrice + (lp.margin || 0)) * 100) / 100,
-                    purchasingPrice: p.purchasingPrice
+            const lpOps = lockedPrices.map(lp => {
+              // 📈 PERCENTAGE SYNC LOGIC:
+              let mPct = lp.marginPercentage;
+              if (!mPct || mPct === 0) {
+                const refCost = lp.purchasingPrice || p.purchasingPrice;
+                mPct = refCost > 0 ? ((lp.margin || (lp.lockedPrice - refCost)) / refCost) * 100 : 0;
+              }
+
+              const newLockedPrice = Math.round((p.purchasingPrice + (p.purchasingPrice * mPct / 100)) * 100) / 100;
+              const newAbsoluteMargin = Math.round((newLockedPrice - p.purchasingPrice) * 100) / 100;
+
+              return {
+                updateOne: {
+                  filter: { _id: lp._id },
+                  update: {
+                    $set: {
+                      lockedPrice: newLockedPrice,
+                      purchasingPrice: p.purchasingPrice,
+                      margin: newAbsoluteMargin,
+                      marginPercentage: Math.round(mPct * 100) / 100
+                    }
                   }
                 }
-              }
-            }));
+              };
+            });
             await CustomerLockedPrice.bulkWrite(lpOps);
             console.log(`   ✅ Synced ${lockedPrices.length} locked prices for [${p.name}]`);
           }

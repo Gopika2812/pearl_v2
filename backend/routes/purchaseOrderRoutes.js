@@ -73,12 +73,27 @@ router.get("/next-invoice/:voucherType", async (req, res) => {
 // GET ALL PURCHASE ORDERS
 router.get("/", async (req, res) => {
   try {
-    const { branchId, search, status, statuses, excludeStatus } = req.query;
+    const { branchId, search, status, statuses, excludeStatus, fromDate, toDate } = req.query;
     const query = {};
 
     // Filter by branchId if provided
     if (branchId) {
       query.branchId = branchId;
+    }
+
+    // Filter by date range
+    if (fromDate || toDate) {
+      query.createdAt = {};
+      if (fromDate) {
+        const start = new Date(fromDate);
+        start.setHours(0, 0, 0, 0);
+        query.createdAt.$gte = start;
+      }
+      if (toDate) {
+        const end = new Date(toDate);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
     }
 
     // Filter by single status (e.g., ?status=INVOICED)
@@ -509,6 +524,13 @@ router.post("/", auth, async (req, res) => {
 
     await order.save();
 
+    // ⚡ INSTANT PRICE SYNC: Update master product prices from PO
+    try {
+      await updateProductCostsFromInvoice(rest.items, invoiceId);
+    } catch (err) {
+      console.warn("⚠️ Price Sync Failed (Non-blocking):", err.message);
+    }
+
     voucher.counter += 1;
     await voucher.save();
 
@@ -596,6 +618,13 @@ router.put("/:id", auth, async (req, res) => {
     order.grandTotal = Math.round(calcSubtotal - calcDiscount + calcTax + extra);
 
     await order.save();
+
+    // ⚡ INSTANT PRICE SYNC: Update master product prices from PO Update
+    try {
+      await updateProductCostsFromInvoice(items, order.invoiceId, true);
+    } catch (err) {
+      console.warn("⚠️ Price Sync Failed (Non-blocking):", err.message);
+    }
 
     // Log the update
     await createAuditLog({

@@ -21,6 +21,8 @@ const BranchPurchaseInvoices = () => {
   const [expandedInvoices, setExpandedInvoices] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Search debounce logic
   useEffect(() => {
@@ -35,7 +37,7 @@ const BranchPurchaseInvoices = () => {
     setLoading(true);
     try {
       const res = await fetchWithAuth(
-        `${API_BASE}/purchase-invoices?branchId=${currentBranch._id}${debouncedSearch ? `&search=${debouncedSearch}` : ""}`
+        `${API_BASE}/purchase-invoices?branchId=${currentBranch._id}${debouncedSearch ? `&search=${debouncedSearch}` : ""}&fromDate=${filterFromDate}&toDate=${filterToDate}`
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch invoices");
@@ -49,7 +51,7 @@ const BranchPurchaseInvoices = () => {
 
   useEffect(() => {
     fetchInvoices();
-  }, [currentBranch?._id, debouncedSearch]);
+  }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate]);
 
   const toggleExpanded = (invoiceId) => {
     setExpandedInvoices((prev) => ({
@@ -84,16 +86,49 @@ const BranchPurchaseInvoices = () => {
           </div>
         </div>
 
-        {/* SEARCH */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 relative">
-          <FaSearch className="absolute left-8 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
-          <input
-            type="text"
-            placeholder="Search by Invoice ID, Vendor, or Product..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-green-600 text-sm"
-          />
+        {/* SEARCH & FILTERS */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 flex flex-col md:flex-row items-center gap-4">
+          <div className="relative flex-1 w-full">
+            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+            <input
+              type="text"
+              placeholder="Search by Invoice ID, Vendor, or Product..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-green-600 text-sm font-medium"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="flex items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-1">
+              <span className="text-[10px] font-black text-gray-400 uppercase mr-2 mt-0.5">From</span>
+              <input
+                type="date"
+                value={filterFromDate}
+                onChange={(e) => setFilterFromDate(e.target.value)}
+                className="bg-transparent border-none focus:ring-0 text-xs font-bold text-gray-700 outline-none"
+              />
+            </div>
+            <div className="flex items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-1">
+              <span className="text-[10px] font-black text-gray-400 uppercase mr-2 mt-0.5">To</span>
+              <input
+                type="date"
+                value={filterToDate}
+                onChange={(e) => setFilterToDate(e.target.value)}
+                className="bg-transparent border-none focus:ring-0 text-xs font-bold text-gray-700 outline-none"
+              />
+            </div>
+            <button
+               onClick={() => {
+                 setFilterFromDate(new Date().toISOString().split('T')[0]);
+                 setFilterToDate(new Date().toISOString().split('T')[0]);
+                 setSearchTerm("");
+               }}
+               className="text-[10px] font-black text-green-600 hover:text-green-700 uppercase tracking-wider px-2"
+            >
+              Reset
+            </button>
+          </div>
         </div>
 
         {/* TABLE */}

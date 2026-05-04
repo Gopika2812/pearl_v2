@@ -7,9 +7,25 @@ const router = express.Router();
 // GET ALL PURCHASE INVOICES (Finalized Bills)
 router.get("/", async (req, res) => {
   try {
-    const { branchId, search } = req.query;
+    const { branchId, search, fromDate, toDate } = req.query;
     const query = {};
     if (branchId) query.branchId = branchId;
+
+    // Filter by date range
+    if (fromDate || toDate) {
+      query.createdAt = {};
+      if (fromDate) {
+        const start = new Date(fromDate);
+        start.setHours(0, 0, 0, 0);
+        query.createdAt.$gte = start;
+      }
+      if (toDate) {
+        const end = new Date(toDate);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
+    }
+
     if (search) {
       query.$or = [
         { purchaseInvoiceId: { $regex: search, $options: "i" } },
@@ -17,7 +33,7 @@ router.get("/", async (req, res) => {
         { "items.name": { $regex: search, $options: "i" } },
       ];
     }
-    const invoices = await PurchaseInvoice.find(query).sort({ createdAt: -1 });
+    const invoices = await PurchaseInvoice.find(query).sort({ createdAt: -1 }).lean();
     res.json(invoices);
   } catch (err) {
     res.status(500).json({ message: err.message });
