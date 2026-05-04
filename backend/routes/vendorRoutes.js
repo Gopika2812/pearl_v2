@@ -395,7 +395,7 @@ router.get("/:id", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, phone, email, address, stateName, gstRegistrationType, gstin, debit, credit, isActive } = req.body;
+    const { name, phone, email, address, stateName, gstRegistrationType, gstin, debit, credit, openingBalance, isActive } = req.body;
 
     // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -417,6 +417,7 @@ router.put("/:id", async (req, res) => {
         gstin,
         debit,
         credit,
+        openingBalance,
         isActive,
       },
       { new: true }

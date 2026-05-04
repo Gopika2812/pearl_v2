@@ -1,16 +1,24 @@
 import { useState, useEffect } from "react";
-import { FaTimes, FaFileInvoiceDollar, FaDownload, FaCalendarAlt, FaSpinner } from "react-icons/fa";
+import { FaTimes, FaFileInvoiceDollar, FaDownload, FaCalendarAlt, FaSpinner, FaPencilAlt, FaCheck } from "react-icons/fa";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import * as XLSX from 'xlsx';
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { toast } from "react-toastify";
+import { useBranch } from "../../context/BranchContext";
 
-const VendorLedgerModal = ({ isOpen, onClose, supplier }) => {
+const VendorLedgerModal = ({ isOpen, onClose, supplier: propSupplier }) => {
+  const { user } = useBranch();
   const [loading, setLoading] = useState(false);
+  const [supplier, setSupplier] = useState(propSupplier);
   const [transactions, setTransactions] = useState([]);
   const [openingBalance, setOpeningBalance] = useState(0);
   const [closingBalance, setClosingBalance] = useState(0);
+
+  // Editing state for balance adjustments
+  const [editingType, setEditingType] = useState(null); // 'opening' or 'closing'
+  const [editValue, setEditValue] = useState("");
+  const [savingBalance, setSavingBalance] = useState(false);
 
   // Date Filters
   const now = new Date();
@@ -21,15 +29,17 @@ const VendorLedgerModal = ({ isOpen, onClose, supplier }) => {
   const [endDate, setEndDate] = useState(lastDay);
 
   useEffect(() => {
-    if (isOpen && supplier?._id) {
+    if (isOpen && propSupplier?._id) {
+      setSupplier(propSupplier);
       fetchLedger();
     }
-  }, [isOpen, supplier, startDate, endDate]);
+  }, [isOpen, propSupplier, startDate, endDate]);
 
   const fetchLedger = async () => {
+    if (!propSupplier?._id) return;
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/vendors/${supplier._id}/ledger?startDate=${startDate}&endDate=${endDate}`);
+      const response = await fetch(`${API_BASE}/vendors/${propSupplier._id}/ledger?startDate=${startDate}&endDate=${endDate}`);
       const result = await response.json();
       
       if (result.success) {
@@ -44,6 +54,50 @@ const VendorLedgerModal = ({ isOpen, onClose, supplier }) => {
       toast.error("Error connecting to server");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveBalance = async () => {
+    if (!editValue || isNaN(editValue)) {
+      toast.error("Please enter a valid number");
+      return;
+    }
+
+    setSavingBalance(true);
+    try {
+      const newValue = parseFloat(editValue);
+      let diff = 0;
+
+      if (editingType === 'opening') {
+        diff = newValue - openingBalance;
+      } else {
+        diff = newValue - closingBalance;
+      }
+
+      const updatedCredit = (supplier.credit || 0) + diff;
+
+      const response = await fetchWithAuth(`${API_BASE}/vendors/${supplier._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credit: updatedCredit })
+      });
+
+      if (response.ok) {
+        toast.success(`Balance adjusted by ₹${Math.abs(diff).toLocaleString()}`);
+        setEditingType(null);
+        fetchLedger();
+        // Update local supplier state if needed
+        const updatedData = await response.json();
+        if (updatedData.success) setSupplier(updatedData.data);
+      } else {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to update balance");
+      }
+    } catch (err) {
+      console.error("Error saving balance:", err);
+      toast.error(err.message || "Failed to save balance");
+    } finally {
+      setSavingBalance(false);
     }
   };
 
@@ -217,14 +271,72 @@ const VendorLedgerModal = ({ isOpen, onClose, supplier }) => {
            </div>
 
            <div className="flex gap-4">
-              <div className="text-right">
-                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Opening Balance</p>
-                <p className={`text-sm font-black ${balanceColor(openingBalance)}`}>₹{Math.abs(openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {balanceLabel(openingBalance)}</p>
+              <div className="text-right group relative">
+                <div className="flex justify-between items-start">
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Opening Balance</p>
+                  {user?.role === "SUPER_ADMIN" && (
+                    <button
+                      onClick={() => { setEditingType('opening'); setEditValue(openingBalance.toString()); }}
+                      className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-teal-600 transition ml-2"
+                    >
+                      <FaPencilAlt size={10} />
+                    </button>
+                  )}
+                </div>
+                {editingType === 'opening' ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="number"
+                      autoFocus
+                      className="w-24 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-black outline-none"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveBalance()}
+                    />
+                    <button onClick={handleSaveBalance} className="p-1.5 bg-teal-600 text-white rounded">
+                      {savingBalance ? <FaSpinner className="animate-spin size-3" /> : <FaCheck size={10} />}
+                    </button>
+                    <button onClick={() => setEditingType(null)} className="p-1.5 bg-gray-200 text-gray-400 rounded">
+                      <FaTimes size={10} />
+                    </button>
+                  </div>
+                ) : (
+                  <p className={`text-sm font-black ${balanceColor(openingBalance)}`}>₹{Math.abs(openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {balanceLabel(openingBalance)}</p>
+                )}
               </div>
               <div className="w-px h-8 bg-gray-300 mx-1"></div>
-              <div className="text-right">
-                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Closing Balance</p>
-                <p className={`text-sm font-black ${balanceColor(closingBalance)}`}>₹{Math.abs(closingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {balanceLabel(closingBalance)}</p>
+              <div className="text-right group relative">
+                <div className="flex justify-between items-start">
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Closing Balance</p>
+                  {user?.role === "SUPER_ADMIN" && (
+                    <button
+                      onClick={() => { setEditingType('closing'); setEditValue(closingBalance.toString()); }}
+                      className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-teal-600 transition ml-2"
+                    >
+                      <FaPencilAlt size={10} />
+                    </button>
+                  )}
+                </div>
+                {editingType === 'closing' ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="number"
+                      autoFocus
+                      className="w-24 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-black outline-none"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveBalance()}
+                    />
+                    <button onClick={handleSaveBalance} className="p-1.5 bg-teal-600 text-white rounded">
+                      {savingBalance ? <FaSpinner className="animate-spin size-3" /> : <FaCheck size={10} />}
+                    </button>
+                    <button onClick={() => setEditingType(null)} className="p-1.5 bg-gray-200 text-gray-400 rounded">
+                      <FaTimes size={10} />
+                    </button>
+                  </div>
+                ) : (
+                  <p className={`text-sm font-black ${balanceColor(closingBalance)}`}>₹{Math.abs(closingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {balanceLabel(closingBalance)}</p>
+                )}
               </div>
            </div>
         </div>

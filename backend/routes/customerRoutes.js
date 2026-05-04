@@ -793,6 +793,15 @@ router.get("/", async (req, res) => {
           customerCategory: 1,
           salesOwner: 1,
           riskStatus: 1,
+          openingBalance: 1,
+          margin: 1,
+          address: 1,
+          district: 1,
+          state: 1,
+          stateCode: 1,
+          country: 1,
+          pincode: 1,
+          registrationType: 1,
           creditLimit: 1,
           creditLimitDays: 1,
           debit: 1,
@@ -1458,64 +1467,79 @@ router.get("/:id/ledger", async (req, res) => {
     const end = endDate ? new Date(endDate) : new Date();
     end.setHours(23, 59, 59, 999);
 
-    // 1. Get current balance (This is the anchor for our backwards calculation)
-    const currentBalance = (customer.debit || 0) - (customer.credit || 0);
+    // 1. Calculate the 'Forward' Branch-Specific Balance
+    // We start from the customer's base Opening Balance and add only THIS branch's transactions.
+    const startOfFY = new Date(now.getFullYear(), 3, 1); // April 1st
+    if (now.getMonth() < 3) startOfFY.setFullYear(now.getFullYear() - 1);
+    
+    // Initial Snapshot
+    const baseOpeningBalance = customer.openingBalance || 0;
 
-    // 2. Fetch ALL transactions after startDate to determine the opening balance
-    // 🛡️ We remove branchId filter to show all transactions affecting the global balance.
-
-    // Debits: Invoices after startDate (Using Invoice model as source of truth for finalized bills)
-    const invoicesAfterStart = await Invoice.find({
+    // 2. Fetch ALL transactions for THIS branch between startOfFY and startDate
+    const invoicesBeforeRange = await Invoice.find({
       "customer.customerId": id,
+      branchId: customer.branchId,
       status: "FINALIZED",
-      invoiceDate: { $gte: start }
-    })
-      .select("grandTotal invoiceDate invoiceNumber salesOrderId status generatedBy deliveryPerson")
+      invoiceDate: { $gte: startOfFY, $lt: start }
+    }).select("grandTotal");
+
+    const receiptsBeforeRange = await Receipt.find({
+      "customer.customerId": id,
+      branchId: customer.branchId,
+      status: "confirmed",
+      createdAt: { $gte: startOfFY, $lt: start }
+    }).select("amount");
+
+    const cnBeforeRange = await CreditNote.find({
+      "customer.customerId": id,
+      branchId: customer.branchId,
+      status: "Created",
+      date: { $gte: startOfFY, $lt: start }
+    }).select("grandTotal");
+
+    const totalDebitsBefore = invoicesBeforeRange.reduce((sum, i) => sum + (i.grandTotal || 0), 0);
+    const totalCreditsBefore = receiptsBeforeRange.reduce((sum, r) => sum + (r.amount || 0), 0) + 
+                               cnBeforeRange.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
+
+    const openingBalance = baseOpeningBalance + totalDebitsBefore - totalCreditsBefore;
+
+    // 3. Fetch Transactions for the requested range (STRICTLY BRANCH FILTERED)
+    const invoicesInRange = await Invoice.find({
+      "customer.customerId": id,
+      branchId: customer.branchId,
+      status: "FINALIZED",
+      invoiceDate: { $gte: start, $lte: end }
+    }).select("grandTotal invoiceDate invoiceNumber salesOrderId status generatedBy deliveryPerson branchId")
+      .populate("branchId", "name code")
       .populate({
         path: "salesOrderId",
         select: "deliveryMan billingPerson",
         populate: { path: "deliveryMan", select: "name" }
       });
 
-    // Credits: Receipts after startDate
-    const receiptsAfterStart = await Receipt.find({
+    const receiptsInRange = await Receipt.find({
       "customer.customerId": id,
+      branchId: customer.branchId,
       status: { $in: ["confirmed", "bounced", "cancelled"] },
-      createdAt: { $gte: start }
-    }).select("amount createdAt receiptId paymentMethod originalInvoiceId relatedOrders originalSalesOrderId status generatedBy cancelledBy cancelReason")
+      createdAt: { $gte: start, $lte: end }
+    }).select("amount createdAt receiptId paymentMethod originalInvoiceId relatedOrders originalSalesOrderId status generatedBy cancelledBy cancelReason branchId")
+      .populate("branchId", "name code")
       .populate("generatedBy", "name")
       .populate("cancelledBy", "name")
       .populate("originalSalesOrderId", "salesInvoiceId invoiceId")
       .populate("relatedOrders.salesOrderId", "salesInvoiceId invoiceId");
 
-    // Credits: Credit Notes after startDate
-    const cnAfterStart = await CreditNote.find({
+    const cnInRange = await CreditNote.find({
       "customer.customerId": id,
+      branchId: customer.branchId,
       status: "Created",
-      date: { $gte: start }
-    })
-      .select("grandTotal date creditNoteId reasonForReturn originalSalesOrderId");
-
-    // 🧮 Opening Balance = Current_Balance - (Debits after Start) + (Credits after Start)
-    const totalDebitsAfterStart = invoicesAfterStart.reduce((sum, s) => sum + (s.grandTotal || 0), 0);
-
-    const totalCreditsAfterStart =
-      receiptsAfterStart.reduce((sum, r) => {
-        if (r.status === "cancelled") return sum;
-        return sum + (r.status === "bounced" ? -(r.amount || 0) : (r.amount || 0));
-      }, 0) +
-      cnAfterStart.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
-
-    const openingBalance = currentBalance - totalDebitsAfterStart + totalCreditsAfterStart;
-
-    // 3. Filter transactions within the [start, end] range
-    const inRangeInvoices = invoicesAfterStart.filter(s => s.invoiceDate <= end);
-    const inRangeReceipts = receiptsAfterStart.filter(r => r.createdAt <= end);
-    const inRangeCNs = cnAfterStart.filter(cn => (cn.date || cn.createdAt) <= end);
+      date: { $gte: start, $lte: end }
+    }).select("grandTotal date creditNoteId reasonForReturn originalSalesOrderId branchId")
+      .populate("branchId", "name code");
 
     // Format all transactions
     const txns = [
-      ...inRangeInvoices.map(s => {
+      ...invoicesInRange.map(s => {
         // PRIORITIZE data from SalesOrder as requested
         const user = s.salesOrderId?.billingPerson || s.generatedBy || "-";
         const dMan = s.salesOrderId?.deliveryMan?.name || s.deliveryPerson || "-";
@@ -1529,10 +1553,12 @@ router.get("/:id/ledger", async (req, res) => {
           credit: 0,
           user: user,
           deliveryMan: dMan,
+          branchName: s.branchId?.name || "-",
+          branchCode: s.branchId?.code || "-",
           salesOrderId: s.salesOrderId?._id || s.salesOrderId // 👈 Added for link functionality
         };
       }),
-      ...inRangeReceipts.map(r => {
+      ...receiptsInRange.map(r => {
         const creator = r.generatedBy?.name || "-";
         const canceller = r.cancelledBy?.name || "";
 
@@ -1549,10 +1575,12 @@ router.get("/:id/ledger", async (req, res) => {
           originalAmount: r.amount || 0,
           user: creator,
           deliveryMan: "-",
+          branchName: r.branchId?.name || "-",
+          branchCode: r.branchId?.code || "-",
           salesOrderId: r.originalSalesOrderId?._id || r.originalSalesOrderId || (r.relatedOrders && r.relatedOrders.length > 0 ? (r.relatedOrders[0].salesOrderId?._id || r.relatedOrders[0].salesOrderId) : null)
         };
       }),
-      ...inRangeCNs.map(cn => ({
+      ...cnInRange.map(cn => ({
         id: `cn-${cn._id}`,
         date: cn.date || cn.createdAt,
         type: "CREDIT_NOTE",
@@ -1561,6 +1589,8 @@ router.get("/:id/ledger", async (req, res) => {
         credit: cn.grandTotal || 0,
         user: "-",
         deliveryMan: "-",
+        branchName: cn.branchId?.name || "-",
+        branchCode: cn.branchId?.code || "-",
         salesOrderId: cn.originalSalesOrderId?._id || cn.originalSalesOrderId
       }))
     ].sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -1754,13 +1784,23 @@ router.post("/transfer-transaction", auth, async (req, res) => {
     } else {
       doc.customerId = target._id;
     }
+    
+    // 🔥 NEW: Update branchId to match the target customer's branch
+    doc.branchId = target.branchId;
+    
     await doc.save({ session });
 
     // If Invoice, update the Invoice model too
     if (type === "INVOICE") {
       await Invoice.updateMany(
         { salesOrderId: doc._id },
-        { $set: { "customer.customerId": target._id, "customer.name": target.name } },
+        { 
+          $set: { 
+            "customer.customerId": target._id, 
+            "customer.name": target.name,
+            branchId: target.branchId // Update branch reference
+          } 
+        },
         { session }
       );
     }

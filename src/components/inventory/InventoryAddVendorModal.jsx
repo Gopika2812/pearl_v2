@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { FaTimes, FaHandshake, FaPhoneAlt, FaMapMarkedAlt, FaFileAlt, FaWallet, FaCloudUploadAlt } from "react-icons/fa";
 import { API_BASE, fetchWithAuth } from "../../api";
 
-const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranchId, editingItem }) => {
+const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranchId, editingItem, user }) => {
   const getBranchId = () => {
     if (propBranchId) return propBranchId;
     const user = localStorage.getItem("user");
@@ -21,7 +21,7 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
   const emptyVendor = {
     _id: null, name: "", phone: "", email: "",
     address: "", stateName: "", gstRegistrationType: "Regular",
-    gstin: "", debit: 0, credit: 0,
+    gstin: "", debit: 0, credit: 0, openingBalance: 0,
   };
 
   const [vendor, setVendor] = useState(emptyVendor);
@@ -40,6 +40,7 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
         gstin: editingItem.gstin || "",
         debit: editingItem.debit || 0,
         credit: editingItem.credit || 0,
+        openingBalance: editingItem.openingBalance || 0,
       });
     } else {
       setVendor(emptyVendor);
@@ -68,7 +69,12 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave({ ...vendor, credit: Math.round(Number(vendor.credit || 0)), debit: Math.round(Number(vendor.debit || 0)) });
+    onSave({ 
+      ...vendor, 
+      credit: Math.round(Number(vendor.credit || 0)), 
+      debit: Math.round(Number(vendor.debit || 0)),
+      openingBalance: Math.round(Number(vendor.openingBalance || 0))
+    });
     setVendor(emptyVendor);
     onClose();
   };
@@ -235,20 +241,32 @@ const InventoryAddVendorModal = ({ isOpen, onClose, onSave, branchId: propBranch
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-5">
                   <div className="flex items-center gap-3 pb-3 border-b border-gray-50">
                     <span className="p-2 bg-teal-50 text-teal-500 rounded-lg"><FaWallet size={14} /></span>
-                    <h4 className="text-gray-900 font-black text-sm tracking-widest uppercase">Opening Balances</h4>
+                    <h4 className="text-gray-900 font-black text-sm tracking-widest uppercase">Financial Setup</h4>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className={lc}>Debit (₹)</label>
-                      <input type="number" step="0.01" className={ic} placeholder="0.00"
-                        value={vendor.debit} onChange={(e) => setVendor({ ...vendor, debit: parseFloat(e.target.value) || 0 })} />
+                  
+                  {user?.role === "SUPER_ADMIN" && (
+                    <div className="space-y-5">
+                      <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
+                        <label className={`${lc} !text-blue-600`}>🔒 Fixed 31st Mar Bal (Opening)</label>
+                        <input type="number" step="0.01" className={`${ic} !bg-white !h-10`} placeholder="e.g., 5000.00"
+                          value={vendor.openingBalance} onChange={(e) => setVendor({ ...vendor, openingBalance: parseFloat(e.target.value) || 0 })} />
+                        <p className="text-[8px] text-blue-400 font-bold mt-1 uppercase tracking-tighter">Static Vault Snapshot</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-50">
+                        <div>
+                          <label className={lc}>Current Debit (₹)</label>
+                          <input type="number" step="0.01" className={ic} placeholder="0.00"
+                            value={vendor.debit} onChange={(e) => setVendor({ ...vendor, debit: parseFloat(e.target.value) || 0 })} />
+                        </div>
+                        <div>
+                          <label className={lc}>Current Credit (₹)</label>
+                          <input type="number" step="0.01" className={ic} placeholder="0.00"
+                            value={vendor.credit} onChange={(e) => setVendor({ ...vendor, credit: parseFloat(e.target.value) || 0 })} />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className={lc}>Credit (₹)</label>
-                      <input type="number" step="0.01" className={ic} placeholder="0.00"
-                        value={vendor.credit} onChange={(e) => setVendor({ ...vendor, credit: parseFloat(e.target.value) || 0 })} />
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Status Badge */}

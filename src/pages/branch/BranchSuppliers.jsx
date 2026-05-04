@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaList, FaSpinner, FaThLarge, FaPlus, FaFileExport, FaChevronDown, FaChevronUp, FaMapMarkerAlt, FaPhone, FaEnvelope, FaMoneyBillWave, FaExchangeAlt, FaUndoAlt, FaBook } from "react-icons/fa";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaFileExport, FaChevronDown, FaChevronUp, FaMapMarkerAlt, FaPhone, FaEnvelope, FaMoneyBillWave, FaExchangeAlt, FaUndoAlt, FaBook, FaEdit } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
@@ -39,6 +39,7 @@ const BranchSuppliers = () => {
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
+  const [editingSupplier, setEditingSupplier] = useState(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -104,7 +105,14 @@ const BranchSuppliers = () => {
     } catch (error) {
       console.error("Error saving supplier:", error);
       toast.error("Failed to save supplier");
+    } finally {
+      setEditingSupplier(null);
     }
+  };
+
+  const handleEdit = (supplier) => {
+    setEditingSupplier(supplier);
+    setIsAddModalOpen(true);
   };
 
 
@@ -261,7 +269,10 @@ const BranchSuppliers = () => {
             </button>
 
             <button
-              onClick={() => setIsAddModalOpen(true)}
+              onClick={() => {
+                setEditingSupplier(null);
+                setIsAddModalOpen(true);
+              }}
               className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
             >
               <FaPlus /> Add Supplier
@@ -518,6 +529,13 @@ const BranchSuppliers = () => {
                 >
                   <span>📅</span> Ledger
                 </button>
+                <button
+                  onClick={() => handleEdit(supplier)}
+                  className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg border border-blue-200 transition active:scale-95"
+                  title="Edit Supplier"
+                >
+                  <FaEdit />
+                </button>
               </div>
             </div>
           ))}
@@ -626,6 +644,13 @@ const BranchSuppliers = () => {
                                 <FaBook className="text-[9px]" /> Ledger
                               </button>
                             )}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleEdit(supplier); }}
+                              className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 rounded-md transition active:scale-95"
+                              title="Edit Supplier"
+                            >
+                              <FaEdit size={10} />
+                            </button>
                           </div>
                         </td>
                       )}
@@ -763,9 +788,14 @@ const BranchSuppliers = () => {
       {isAddModalOpen && (
         <InventoryAddVendorModal
           isOpen={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
+          onClose={() => {
+            setIsAddModalOpen(false);
+            setEditingSupplier(null);
+          }}
           onSave={handleAddSupplier}
           branchId={branchId}
+          editingItem={editingSupplier}
+          user={user}
         />
       )}
     </div>

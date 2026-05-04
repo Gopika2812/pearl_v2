@@ -566,6 +566,11 @@ const BranchCustomerLedger = () => {
                         >
                           <div className={`text-slate-800 group-hover/btn:text-indigo-600 transition-colors uppercase tracking-tight font-black ${txn.type === 'CANCELLED' ? 'line-through text-slate-400' : ''}`} title={docId}>
                             {docId}
+                            {txn.branchName && txn.branchName !== branch?.name && (
+                              <span className="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded uppercase font-black tracking-tighter" title={`Origin: ${txn.branchName}`}>
+                                📍 {txn.branchCode}
+                              </span>
+                            )}
                             {txn.salesOrderId && <span className="ml-1 opacity-0 group-hover/btn:opacity-100 text-[8px] font-black bg-indigo-50 text-indigo-600 px-1 py-0.5 rounded transition-all">VIEW BILL</span>}
                           </div>
                         </button>

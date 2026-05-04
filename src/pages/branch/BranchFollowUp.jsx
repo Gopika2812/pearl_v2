@@ -505,9 +505,23 @@ const BranchFollowUp = () => {
                                                         {customer.lastInvoiceNumber ? (
                                                             <div className="flex flex-col">
                                                                 <span className="text-[11px] font-black text-indigo-700">{customer.lastInvoiceNumber}</span>
-                                                                <span className="text-[10px] text-gray-400">
-                                                                    {new Date(customer.lastInvoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-                                                                </span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-[10px] text-gray-400 font-bold">
+                                                                        {new Date(customer.lastInvoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                                                                    </span>
+                                                                    {(() => {
+                                                                        const days = Math.floor((new Date() - new Date(customer.lastInvoiceDate)) / (1000 * 60 * 60 * 24));
+                                                                        return (
+                                                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter ${
+                                                                                days > 30 ? "bg-rose-100 text-rose-600" : 
+                                                                                days > 7 ? "bg-amber-100 text-amber-600" : 
+                                                                                "bg-indigo-100 text-indigo-600"
+                                                                            }`}>
+                                                                                {days === 0 ? "Today" : `${days}d`}
+                                                                            </span>
+                                                                        );
+                                                                    })()}
+                                                                </div>
                                                             </div>
                                                         ) : (
                                                             <span className="text-[10px] text-gray-300 italic">—</span>
