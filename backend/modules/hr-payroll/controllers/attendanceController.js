@@ -12,6 +12,12 @@ export const markAttendance = async (req, res) => {
       return res.status(400).json({ success: false, message: "Missing required fields: employeeId, date, or branchId" });
     }
 
+    // Role-based security: Regular users can only mark for themselves
+    const isSuperAdmin = ["SUPERADMIN", "SUPER_ADMIN"].includes(req.user.role?.toUpperCase());
+    if (!isSuperAdmin && employeeId !== req.user.id) {
+      return res.status(403).json({ success: false, message: "Forbidden: You can only mark attendance for yourself" });
+    }
+
     // Validate ObjectIds to prevent CastErrors
     if (!mongoose.Types.ObjectId.isValid(employeeId) || !mongoose.Types.ObjectId.isValid(branchId)) {
       return res.status(400).json({ success: false, message: "Invalid ID format for employee or branch" });
@@ -132,10 +138,18 @@ export const getDailyAttendance = async (req, res) => {
     const targetDate = new Date(date);
     targetDate.setUTCHours(0, 0, 0, 0);
 
-    const records = await Attendance.find({
+    const isSuperAdmin = ["SUPERADMIN", "SUPER_ADMIN"].includes(req.user.role?.toUpperCase());
+    let query = {
       branch: branchId,
       date: targetDate
-    });
+    };
+
+    // If not super admin, only fetch the logged-in user's records
+    if (!isSuperAdmin) {
+      query.employeeId = req.user.id;
+    }
+
+    const records = await Attendance.find(query);
 
     res.status(200).json({ success: true, data: records });
   } catch (error) {
@@ -150,12 +164,19 @@ export const getMonthlySummary = async (req, res) => {
     const start = new Date(`${month}-01`);
     const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
 
+    const isSuperAdmin = ["SUPERADMIN", "SUPER_ADMIN"].includes(req.user.role?.toUpperCase());
+    const matchStage = {
+      branch: new mongoose.Types.ObjectId(branchId),
+      date: { $gte: start, $lte: end },
+    };
+
+    if (!isSuperAdmin) {
+      matchStage.employeeId = new mongoose.Types.ObjectId(req.user.id);
+    }
+
     const summary = await Attendance.aggregate([
       {
-        $match: {
-          branch: new mongoose.Types.ObjectId(branchId),
-          date: { $gte: start, $lte: end },
-        },
+        $match: matchStage,
       },
       {
         $group: {
@@ -216,6 +237,11 @@ export const approveAttendance = async (req, res) => {
     const targetDate = new Date(date);
     targetDate.setUTCHours(0, 0, 0, 0);
 
+    const isSuperAdmin = ["SUPERADMIN", "SUPER_ADMIN"].includes(req.user.role?.toUpperCase());
+    if (!isSuperAdmin) {
+      return res.status(403).json({ success: false, message: "Forbidden: Only Super Admins can approve attendance" });
+    }
+
     const attendance = await Attendance.findOneAndUpdate(
       { employeeId, date: targetDate },
       { $set: { isApproved: true } },
@@ -238,6 +264,11 @@ export const revertAttendance = async (req, res) => {
     const { employeeId, date } = req.body;
     const targetDate = new Date(date);
     targetDate.setUTCHours(0, 0, 0, 0);
+
+    const isSuperAdmin = ["SUPERADMIN", "SUPER_ADMIN"].includes(req.user.role?.toUpperCase());
+    if (!isSuperAdmin) {
+      return res.status(403).json({ success: false, message: "Forbidden: Only Super Admins can revert attendance" });
+    }
 
     const attendance = await Attendance.findOne({ employeeId, date: targetDate });
     
@@ -272,7 +303,14 @@ export const getDetailedLogs = async (req, res) => {
     const { branchId, date } = req.query;
     if (!branchId) return res.status(400).json({ success: false, message: "branchId is required" });
 
+    const isSuperAdmin = ["SUPERADMIN", "SUPER_ADMIN"].includes(req.user.role?.toUpperCase());
     let query = { branch: branchId };
+
+    // If not super admin, only fetch the logged-in user's records
+    if (!isSuperAdmin) {
+      query.employeeId = req.user.id;
+    }
+
     if (date) {
       const targetDate = new Date(date);
       targetDate.setUTCHours(0, 0, 0, 0);
