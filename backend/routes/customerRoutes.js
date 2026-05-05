@@ -1467,41 +1467,40 @@ router.get("/:id/ledger", async (req, res) => {
     const end = endDate ? new Date(endDate) : new Date();
     end.setHours(23, 59, 59, 999);
 
-    // 1. Calculate the 'Forward' Branch-Specific Balance
-    // We start from the customer's base Opening Balance and add only THIS branch's transactions.
-    const startOfFY = new Date(now.getFullYear(), 3, 1); // April 1st
-    if (now.getMonth() < 3) startOfFY.setFullYear(now.getFullYear() - 1);
-    
-    // Initial Snapshot
-    const baseOpeningBalance = customer.openingBalance || 0;
+    // 1. Calculate Dynamic Opening Balance
+    // Start from the current live balance and subtract all branch transactions since startDate.
+    // This ensures consistency with the "Snapshot" exports and handles cases where the static openingBalance field is 0.
+    const currentBalance = (customer.debit || 0) - (customer.credit || 0);
 
-    // 2. Fetch ALL transactions for THIS branch between startOfFY and startDate
-    const invoicesBeforeRange = await Invoice.find({
+    // Fetch all transactions since startDate for delta calculation
+    const invoicesAfter = await Invoice.find({
       "customer.customerId": id,
       branchId: customer.branchId,
       status: "FINALIZED",
-      invoiceDate: { $gte: startOfFY, $lt: start }
+      invoiceDate: { $gte: start }
     }).select("grandTotal");
 
-    const receiptsBeforeRange = await Receipt.find({
+    const receiptsAfter = await Receipt.find({
       "customer.customerId": id,
       branchId: customer.branchId,
-      status: "confirmed",
-      createdAt: { $gte: startOfFY, $lt: start }
-    }).select("amount");
+      status: { $in: ["confirmed", "bounced"] },
+      createdAt: { $gte: start }
+    }).select("amount status");
 
-    const cnBeforeRange = await CreditNote.find({
+    const cnAfter = await CreditNote.find({
       "customer.customerId": id,
       branchId: customer.branchId,
       status: "Created",
-      date: { $gte: startOfFY, $lt: start }
+      date: { $gte: start }
     }).select("grandTotal");
 
-    const totalDebitsBefore = invoicesBeforeRange.reduce((sum, i) => sum + (i.grandTotal || 0), 0);
-    const totalCreditsBefore = receiptsBeforeRange.reduce((sum, r) => sum + (r.amount || 0), 0) + 
-                               cnBeforeRange.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
+    const totalDebitsAfter = invoicesAfter.reduce((sum, i) => sum + (i.grandTotal || 0), 0) +
+                            receiptsAfter.filter(r => r.status === "bounced").reduce((sum, r) => sum + (r.amount || 0), 0);
+    
+    const totalCreditsAfter = receiptsAfter.filter(r => r.status === "confirmed").reduce((sum, r) => sum + (r.amount || 0), 0) + 
+                             cnAfter.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
 
-    const openingBalance = baseOpeningBalance + totalDebitsBefore - totalCreditsBefore;
+    const openingBalance = currentBalance - totalDebitsAfter + totalCreditsAfter;
 
     // 3. Fetch Transactions for the requested range (STRICTLY BRANCH FILTERED)
     const invoicesInRange = await Invoice.find({
