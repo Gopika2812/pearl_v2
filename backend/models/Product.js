@@ -260,7 +260,10 @@ productSchema.post("save", async function() {
                  lockedPrice: newLockedPrice, 
                  purchasingPrice: this.purchasingPrice, 
                  margin: newAbsoluteMargin,
-                 marginPercentage: Math.round(mPct * 100) / 100
+                 marginPercentage: Math.round(mPct * 100) / 100,
+                 updatedBy: this._updatedByUser?.username || this._updatedByUser?.name || "System",
+                 updatedById: this._updatedByUser?.id || this._updatedByUser?._id || null,
+                 updatedByModel: this._updatedByUser?.role === "SUPER_ADMIN" ? "SuperAdmin" : (this._updatedByUser ? "BranchUser" : undefined)
                } 
              }
            }
@@ -277,11 +280,8 @@ productSchema.post("save", async function() {
   }
 });
 
-productSchema.post(["findOneAndUpdate", "findByIdAndUpdate"], async function (doc) {
-  if (doc) {
-    // Note: In some mongoose versions, we skip if no price change. 
-    // But to be safe, we re-fetch the update object if possible or just check the doc.
-    // For simplicity and stability, we use the doc's current state.
+productSchema.post(["findOneAndUpdate", "findByIdAndUpdate", "save"], async function (doc) {
+  if (doc && (doc._purchasingPriceChanged || doc.isModified?.("purchasingPrice"))) {
     try {
        const CustomerLockedPrice = mongoose.models.CustomerLockedPrice || mongoose.model("CustomerLockedPrice");
        const lockedPrices = await CustomerLockedPrice.find({ productId: doc._id });
@@ -307,7 +307,10 @@ productSchema.post(["findOneAndUpdate", "findByIdAndUpdate"], async function (do
                  lockedPrice: newLockedPrice, 
                  purchasingPrice: doc.purchasingPrice, 
                  margin: newAbsoluteMargin,
-                 marginPercentage: Math.round(mPct * 100) / 100
+                 marginPercentage: Math.round(mPct * 100) / 100,
+                 updatedBy: doc._updatedByUser?.username || doc._updatedByUser?.name || "System",
+                 updatedById: doc._updatedByUser?.id || doc._updatedByUser?._id || null,
+                 updatedByModel: doc._updatedByUser?.role === "SUPER_ADMIN" ? "SuperAdmin" : (doc._updatedByUser ? "BranchUser" : undefined)
                } 
              }
            }

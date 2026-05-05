@@ -1050,11 +1050,14 @@ router.put("/:id", auth, async (req, res) => {
       }
     }
 
-    const updatedProduct = await Product.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
-    )
+    const productToUpdate = await Product.findById(id);
+    if (!productToUpdate) return res.status(404).json({ message: "Product not found" });
+
+    productToUpdate._updatedByUser = req.user;
+    Object.assign(productToUpdate, updateData);
+    const savedProduct = await productToUpdate.save();
+    
+    const updatedProduct = await Product.findById(savedProduct._id)
       .populate("productGroup", "name")
       .populate("productCategories", "name")
       .populate("warehouse", "name");

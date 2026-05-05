@@ -1162,6 +1162,8 @@ router.put("/:invoiceId/print", async (req, res) => {
     const { invoiceId } = req.params;
     const { printedBy, printedByUsername, branchId } = req.body;
 
+    console.log(`🖨️ [DEBUG] Incrementing print count for Invoice: ${invoiceId}`);
+
     const invoice = await Invoice.findByIdAndUpdate(
       invoiceId,
       {
@@ -1172,6 +1174,23 @@ router.put("/:invoiceId/print", async (req, res) => {
     );
 
     if (invoice) {
+      // 🎯 Sync print count with SalesOrder for restricted printing logic
+      if (invoice.salesOrderId) {
+        console.log(`🎯 [DEBUG] Syncing printCount to SalesOrder: ${invoice.salesOrderId}`);
+        const updateResult = await SalesOrder.findByIdAndUpdate(
+          invoice.salesOrderId, 
+          { $inc: { printCount: 1 } },
+          { new: true }
+        );
+        if (updateResult) {
+          console.log(`✅ [DEBUG] SalesOrder printCount is now: ${updateResult.printCount}`);
+        } else {
+          console.warn(`⚠️ [DEBUG] SalesOrder ${invoice.salesOrderId} not found during print sync`);
+        }
+      } else {
+        console.warn(`⚠️ [DEBUG] Invoice ${invoiceId} has no associated salesOrderId`);
+      }
+
       await createAuditLog({
         userId: printedBy || invoice.billingPerson || "System",
         username: printedByUsername || invoice.billingPerson || "System",
@@ -1181,12 +1200,15 @@ router.put("/:invoiceId/print", async (req, res) => {
         targetId: invoice._id,
         targetModel: "Invoice",
       });
-    }
 
-    res.json(invoice);
+      return res.json({ success: true, printCount: invoice.printCount });
+    } else {
+      console.error(`❌ [DEBUG] Invoice ${invoiceId} not found`);
+      return res.status(404).json({ message: "Invoice not found" });
+    }
   } catch (error) {
-    console.error("Error updating print status:", error);
-    res.status(500).json({ message: "Failed to update print status" });
+    console.error("❌ Error updating print status:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

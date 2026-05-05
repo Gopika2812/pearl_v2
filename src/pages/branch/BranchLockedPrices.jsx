@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { FaLock, FaSync, FaSearch, FaUser, FaBox, FaTrash, FaPlus, FaCheckCircle, FaChevronDown, FaUpload, FaEdit, FaTimes, FaFileExcel } from "react-icons/fa";
 import * as XLSX from "xlsx";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 
@@ -103,7 +103,7 @@ const BranchLockedPrices = () => {
       if (!selectedCustomer?._id || !selectedProduct?._id || !currentBranch?._id) return;
       
       try {
-        const res = await fetch(`${API_BASE}/customer-locked-prices/${selectedCustomer._id}/${selectedProduct._id}?branchId=${currentBranch._id}`);
+        const res = await fetchWithAuth(`${API_BASE}/customer-locked-prices/${selectedCustomer._id}/${selectedProduct._id}?branchId=${currentBranch._id}`);
         const data = await res.json();
         
         if (data.success && data.data?.lockedPrice) {
@@ -131,7 +131,7 @@ const BranchLockedPrices = () => {
       
       setSearchingCust(true);
       try {
-        const res = await fetch(`${API_BASE}/customers?branchId=${currentBranch._id}&search=${custSearch}&limit=20`);
+        const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${currentBranch._id}&search=${custSearch}&limit=20`);
         const data = await res.json();
         setCustomers(data.data || []);
       } catch (err) {
@@ -155,7 +155,7 @@ const BranchLockedPrices = () => {
       
       setSearchingProd(true);
       try {
-        const res = await fetch(`${API_BASE}/products?branchId=${currentBranch._id}&search=${prodSearch}&limit=20`);
+        const res = await fetchWithAuth(`${API_BASE}/products?branchId=${currentBranch._id}&search=${prodSearch}&limit=20`);
         const data = await res.json();
         setProdResults(data.data || []);
       } catch (err) {
@@ -176,7 +176,7 @@ const BranchLockedPrices = () => {
       
       setEditSearchingCust(true);
       try {
-        const res = await fetch(`${API_BASE}/customers?branchId=${currentBranch._id}&search=${editCustSearch}&limit=20`);
+        const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${currentBranch._id}&search=${editCustSearch}&limit=20`);
         const data = await res.json();
         setEditCustResults(data.data || []);
       } catch (err) {
@@ -197,7 +197,7 @@ const BranchLockedPrices = () => {
       
       setEditSearchingProd(true);
       try {
-        const res = await fetch(`${API_BASE}/products?branchId=${currentBranch._id}&search=${editProdSearch}&limit=20`);
+        const res = await fetchWithAuth(`${API_BASE}/products?branchId=${currentBranch._id}&search=${editProdSearch}&limit=20`);
         const data = await res.json();
         setEditProdResults(data.data || []);
       } catch (err) {
@@ -218,7 +218,7 @@ const BranchLockedPrices = () => {
       
       setNewSearchingCust(true);
       try {
-        const res = await fetch(`${API_BASE}/customers?branchId=${currentBranch._id}&search=${newRowData.custSearch}&limit=20`);
+        const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${currentBranch._id}&search=${newRowData.custSearch}&limit=20`);
         const data = await res.json();
         setNewCustResults(data.data || []);
       } catch (err) {
@@ -239,7 +239,7 @@ const BranchLockedPrices = () => {
       
       setNewSearchingProd(true);
       try {
-        const res = await fetch(`${API_BASE}/products?branchId=${currentBranch._id}&search=${newRowData.prodSearch}&limit=20`);
+        const res = await fetchWithAuth(`${API_BASE}/products?branchId=${currentBranch._id}&search=${newRowData.prodSearch}&limit=20`);
         const data = await res.json();
         setNewProdResults(data.data || []);
       } catch (err) {
@@ -255,7 +255,7 @@ const BranchLockedPrices = () => {
 
   const fetchCustomers = async () => {
     try {
-      const res = await fetch(`${API_BASE}/customers?branchId=${currentBranch._id}`);
+      const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${currentBranch._id}`);
       const data = await res.json();
       // customerRoutes.js returns { success: true, data: [...] }
       setCustomers(data.data || []);
@@ -272,9 +272,7 @@ const BranchLockedPrices = () => {
       if (filters.product) url += `&productName=${encodeURIComponent(filters.product)}`;
       if (filters.customer) url += `&customerName=${encodeURIComponent(filters.customer)}`;
 
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-      });
+      const res = await fetchWithAuth(url);
       const data = await res.json();
       if (data.success) {
         setLockedPrices(data.data || []);
@@ -314,12 +312,8 @@ const BranchLockedPrices = () => {
 
     setBulkDeleting(true);
     try {
-      const resp = await fetch(`${API_BASE}/customer-locked-prices/bulk-delete`, {
+      const resp = await fetchWithAuth(`${API_BASE}/customer-locked-prices/bulk-delete`, {
         method: "DELETE",
-        headers: { 
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
         body: JSON.stringify({ ids: selectedIds })
       });
       const data = await resp.json();
@@ -354,12 +348,8 @@ const BranchLockedPrices = () => {
 
     setSaving(true);
     try {
-      const resp = await fetch(`${API_BASE}/customer-locked-prices`, {
+      const resp = await fetchWithAuth(`${API_BASE}/customer-locked-prices`, {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
         body: JSON.stringify({
           branchId: currentBranch._id,
           customerId: selectedCustomer._id,
@@ -392,9 +382,8 @@ const BranchLockedPrices = () => {
     try {
       // Assuming a delete route exists or using the POST with lockedPrice: 0 logic if needed
       // But we should ideally have a DELETE route. For now, let's assume we can delete.
-      const resp = await fetch(`${API_BASE}/customer-locked-prices/${id}`, { 
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      const resp = await fetchWithAuth(`${API_BASE}/customer-locked-prices/${id}`, { 
+        method: "DELETE"
       });
       if (resp.ok) {
         toast.success("Locked price removed");
@@ -443,12 +432,8 @@ const BranchLockedPrices = () => {
 
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/customer-locked-prices/${editingId}`, {
+      const res = await fetchWithAuth(`${API_BASE}/customer-locked-prices/${editingId}`, {
         method: "PUT",
-        headers: { 
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
         body: JSON.stringify({
           customerId: editCustomer._id,
           productId: editProduct._id,
@@ -481,9 +466,8 @@ const BranchLockedPrices = () => {
 
     setBulkLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/customer-locked-prices/bulk-upload`, {
+      const res = await fetchWithAuth(`${API_BASE}/customer-locked-prices/bulk-upload`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         body: formData,
       });
 
@@ -508,9 +492,7 @@ const BranchLockedPrices = () => {
     try {
       // Fetch ALL records for this branch without pagination limits (or a very high limit)
       const url = `${API_BASE}/customer-locked-prices/branch/${currentBranch._id}?limit=10000`;
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-      });
+      const res = await fetchWithAuth(url);
       const data = await res.json();
       
       if (!data.success || !data.data || data.data.length === 0) {
@@ -551,9 +533,8 @@ const BranchLockedPrices = () => {
 
     setSaving(true);
     try {
-      const resp = await fetch(`${API_BASE}/customer-locked-prices`, {
+      const resp = await fetchWithAuth(`${API_BASE}/customer-locked-prices`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           branchId: currentBranch._id,
           customerId: newRowData.customerId,

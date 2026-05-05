@@ -275,9 +275,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
       const bid = currentBranch?._id || order.branchId?._id || order.branchId;
 
       if (customerId && bid && product._id) {
-        const res = await fetch(`${API_BASE}/customer-locked-prices/${customerId}/${product._id}?branchId=${bid}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
+        const res = await fetchWithAuth(`${API_BASE}/customer-locked-prices/${customerId}/${product._id}?branchId=${bid}`);
         if (res.ok) {
           const data = await res.json();
           if (data.success && data.data?.lockedPrice) {
@@ -539,8 +537,13 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
 
       // Mark as printed
       if (generatedInvoice?._id) {
-        await fetch(`${API_BASE}/invoices/${generatedInvoice._id}/print`, {
+        await fetchWithAuth(`${API_BASE}/invoices/${generatedInvoice._id}/print`, {
           method: "PUT",
+          body: JSON.stringify({
+            printedBy: user?.id || user?._id,
+            printedByUsername: user?.username || user?.name || "System",
+            branchId: order?.branchId
+          })
         });
       }
     } catch (error) {

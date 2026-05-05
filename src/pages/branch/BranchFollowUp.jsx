@@ -53,12 +53,12 @@ const BranchFollowUp = () => {
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [isTokenOpen, setIsTokenOpen] = useState(false);
     const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
-    const [isEditCustomerOpen, setIsEditCustomerOpen] = useState(false);
     
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState(null);
     const [selectedCustomerForToken, setSelectedCustomerForToken] = useState(null);
-    const [editingCustomer, setEditingCustomer] = useState(null);
+    const [editingId, setEditingId] = useState(null);
+    const [editForm, setEditForm] = useState({});
     const [bulkUpdating, setBulkUpdating] = useState(false);
     const fileInputRef = React.useRef(null);
 
@@ -201,8 +201,38 @@ const BranchFollowUp = () => {
     };
 
     const openEditCustomer = (customer) => {
-        setEditingCustomer(customer);
-        setIsEditCustomerOpen(true);
+        setEditingId(customer._id);
+        setEditForm({
+            ...customer,
+            customerGroups: Array.isArray(customer.customerGroups) 
+                ? customer.customerGroups.map(g => typeof g === 'object' ? g._id : g) 
+                : (customer.customerGroup ? [typeof customer.customerGroup === 'object' ? customer.customerGroup._id : customer.customerGroup] : []),
+            customerCategories: Array.isArray(customer.customerCategories) 
+                ? customer.customerCategories.map(c => typeof c === 'object' ? c._id : c) 
+                : (customer.customerCategory ? [typeof customer.customerCategory === 'object' ? customer.customerCategory._id : customer.customerCategory] : []),
+            salesOwner: typeof customer.salesOwner === 'object' ? customer.salesOwner._id : (customer.salesOwner || "")
+        });
+    };
+
+    const handleInlineSave = async () => {
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/customers/${editingId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(editForm)
+            });
+            if (res.ok) {
+                toast.success("Customer updated successfully");
+                setEditingId(null);
+                fetchData();
+            } else {
+                const data = await res.json();
+                toast.error(data.message || "Update failed");
+            }
+        } catch (err) {
+            console.error("Save error:", err);
+            toast.error("An error occurred while saving");
+        }
     };
 
     const handleSaveCustomer = async (customerData) => {
@@ -414,7 +444,7 @@ const BranchFollowUp = () => {
                                             )}
                                             {isFieldAllowed("days") && (
                                                 <th onClick={() => handleSort("days")} className="px-4 py-3 text-right border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
-                                                    <div className="flex items-center justify-end">Days <SortIcon column="days" /></div>
+                                                    <div className="flex items-center justify-end">CR DAYS <SortIcon column="days" /></div>
                                                 </th>
                                             )}
                                             {isFieldAllowed("token") && (
@@ -425,6 +455,9 @@ const BranchFollowUp = () => {
                                             <th className="px-4 py-3 text-left border-b border-gray-200">
                                                 <div className="flex items-center gap-1"><FaFileInvoice size={10} /> Last Invoice</div>
                                             </th>
+                                            <th className="px-4 py-3 text-center border-b border-gray-200">
+                                                <div className="flex items-center justify-center"><FaClock size={10} className="mr-1" /> Age</div>
+                                            </th>
                                             {(isFieldAllowed("action_followup") || isFieldAllowed("action_log") || isFieldAllowed("action_ledger") || isFieldAllowed("action_edit")) && (
                                                 <th className="px-4 py-3 text-center border-b border-gray-200">Actions</th>
                                             )}
@@ -432,9 +465,140 @@ const BranchFollowUp = () => {
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
                                         {paginatedCustomers.map((customer) => {
+                                            const isEditing = editingId === customer._id;
                                             const balance = getBalance(customer);
                                             const primaryGroup = customer.customerGroups?.[0]?.name || customer.customerGroup?.name || "None";
                                             const primaryCategory = customer.customerCategories?.[0]?.name || customer.customerCategory?.name || "Unassigned";
+
+                                            if (isEditing) {
+                                                return (
+                                                    <React.Fragment key={customer._id}>
+                                                        <tr className="bg-indigo-50/50 border-x-4 border-indigo-500 transition-all">
+                                                            <td className="px-4 py-4">
+                                                                <input 
+                                                                    type="text" 
+                                                                    className="w-full bg-white border border-indigo-200 rounded px-2 py-1.5 text-sm font-bold outline-none focus:border-indigo-500"
+                                                                    value={editForm.name}
+                                                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                                                    placeholder="Customer Name"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-4">
+                                                                <select 
+                                                                    className="w-full bg-white border border-indigo-200 rounded px-2 py-1.5 text-[11px] font-bold outline-none focus:border-indigo-500"
+                                                                    value={editForm.customerGroups?.[0] || ""}
+                                                                    onChange={(e) => setEditForm({ ...editForm, customerGroups: [e.target.value] })}
+                                                                >
+                                                                    <option value="">No Group</option>
+                                                                    {customerGroups.map(g => <option key={g._id} value={g._id}>{g.name}</option>)}
+                                                                </select>
+                                                            </td>
+                                                            <td className="px-4 py-4">
+                                                                <select 
+                                                                    className="w-full bg-white border border-indigo-200 rounded px-2 py-1.5 text-[11px] font-bold outline-none focus:border-indigo-500"
+                                                                    value={editForm.customerCategories?.[0] || ""}
+                                                                    onChange={(e) => setEditForm({ ...editForm, customerCategories: [e.target.value] })}
+                                                                >
+                                                                    <option value="">No Category</option>
+                                                                    {customerCategories.map(cat => <option key={cat._id} value={cat._id}>{cat.name}</option>)}
+                                                                </select>
+                                                            </td>
+                                                            <td colSpan={4} className="px-4 py-4">
+                                                                <div className="flex items-center gap-4">
+                                                                    <div className="flex-1">
+                                                                        <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">WhatsApp</label>
+                                                                        <input 
+                                                                            type="text" 
+                                                                            className="w-full bg-white border border-indigo-200 rounded px-2 py-1.5 text-sm font-bold outline-none"
+                                                                            value={editForm.whatsapp}
+                                                                            onChange={(e) => setEditForm({ ...editForm, whatsapp: e.target.value })}
+                                                                        />
+                                                                    </div>
+                                                                    <div className="flex-1">
+                                                                        <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Email</label>
+                                                                        <input 
+                                                                            type="text" 
+                                                                            className="w-full bg-white border border-indigo-200 rounded px-2 py-1.5 text-sm font-bold outline-none"
+                                                                            value={editForm.email}
+                                                                            onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td colSpan={3} className="px-4 py-4">
+                                                                <div className="flex items-center justify-end gap-2">
+                                                                    <button 
+                                                                        onClick={() => setEditingId(null)}
+                                                                        className="px-4 py-2 bg-white border border-gray-200 text-gray-500 rounded-lg text-[10px] font-black uppercase hover:bg-gray-50"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={handleInlineSave}
+                                                                        className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-[10px] font-black uppercase shadow-lg shadow-indigo-200 hover:bg-indigo-700"
+                                                                    >
+                                                                        Save Changes
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                        <tr className="bg-indigo-50/30 border-x-4 border-indigo-500 border-b-2 border-indigo-100">
+                                                            <td colSpan={5} className="px-4 py-3">
+                                                                <div className="flex items-center gap-6">
+                                                                    <div className="w-1/3">
+                                                                        <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1">Full Address</label>
+                                                                        <input 
+                                                                            type="text" 
+                                                                            className="w-full bg-white border border-indigo-100 rounded px-2 py-1 text-[11px] font-bold"
+                                                                            value={editForm.address}
+                                                                            onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1">District</label>
+                                                                        <input type="text" className="bg-white border border-indigo-100 rounded px-2 py-1 text-[11px] font-bold w-28" value={editForm.district} onChange={(e) => setEditForm({ ...editForm, district: e.target.value })} />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1">State Code</label>
+                                                                        <input type="text" className="bg-white border border-indigo-100 rounded px-2 py-1 text-[11px] font-bold w-16" value={editForm.stateCode} onChange={(e) => setEditForm({ ...editForm, stateCode: e.target.value })} />
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right">
+                                                                <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1 text-right">Limit (₹)</label>
+                                                                <input 
+                                                                    type="number" 
+                                                                    className="w-24 bg-white border border-indigo-100 rounded px-2 py-1 text-right text-[11px] font-bold"
+                                                                    value={editForm.creditLimit}
+                                                                    onChange={(e) => setEditForm({ ...editForm, creditLimit: e.target.value })}
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right">
+                                                                <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1 text-right">CR Days</label>
+                                                                <input 
+                                                                    type="number" 
+                                                                    className="w-16 bg-white border border-indigo-100 rounded px-2 py-1 text-right text-[11px] font-bold"
+                                                                    value={editForm.creditLimitDays}
+                                                                    onChange={(e) => setEditForm({ ...editForm, creditLimitDays: e.target.value })}
+                                                                />
+                                                            </td>
+                                                            <td colSpan={3} className="px-4 py-3">
+                                                                <div className="flex flex-col items-center">
+                                                                    <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1">Sales Manager</label>
+                                                                    <select 
+                                                                        className="bg-white border border-indigo-100 rounded px-2 py-1 text-[10px] font-bold outline-none"
+                                                                        value={editForm.salesOwner || ""}
+                                                                        onChange={(e) => setEditForm({ ...editForm, salesOwner: e.target.value })}
+                                                                    >
+                                                                        <option value="">Select Owner</option>
+                                                                        {salesOwners.map(owner => <option key={owner._id} value={owner._id}>{owner.name}</option>)}
+                                                                    </select>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    </React.Fragment>
+                                                );
+                                            }
 
                                             return (
                                                 <tr key={customer._id} className="hover:bg-gray-50 transition-colors">
@@ -505,24 +669,29 @@ const BranchFollowUp = () => {
                                                         {customer.lastInvoiceNumber ? (
                                                             <div className="flex flex-col">
                                                                 <span className="text-[11px] font-black text-indigo-700">{customer.lastInvoiceNumber}</span>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="text-[10px] text-gray-400 font-bold">
-                                                                        {new Date(customer.lastInvoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                                                                    </span>
-                                                                    {(() => {
-                                                                        const days = Math.floor((new Date() - new Date(customer.lastInvoiceDate)) / (1000 * 60 * 60 * 24));
-                                                                        return (
-                                                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter ${
-                                                                                days > 30 ? "bg-rose-100 text-rose-600" : 
-                                                                                days > 7 ? "bg-amber-100 text-amber-600" : 
-                                                                                "bg-indigo-100 text-indigo-600"
-                                                                            }`}>
-                                                                                {days === 0 ? "Today" : `${days}d`}
-                                                                            </span>
-                                                                        );
-                                                                    })()}
-                                                                </div>
+                                                                <span className="text-[10px] text-gray-400 font-bold">
+                                                                    {new Date(customer.lastInvoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                                                                </span>
                                                             </div>
+                                                        ) : (
+                                                            <span className="text-[10px] text-gray-300 italic">—</span>
+                                                        )}
+                                                    </td>
+                                                    {/* Invoice Age Column */}
+                                                    <td className="px-4 py-3 text-center">
+                                                        {customer.lastInvoiceDate ? (
+                                                            (() => {
+                                                                const days = Math.floor((new Date() - new Date(customer.lastInvoiceDate)) / (1000 * 60 * 60 * 24));
+                                                                return (
+                                                                    <span className={`text-[10px] font-black px-2 py-1 rounded uppercase tracking-tighter shadow-sm border ${
+                                                                        days > 30 ? "bg-rose-50 text-rose-600 border-rose-100" : 
+                                                                        days > 7 ? "bg-amber-50 text-amber-600 border-amber-100" : 
+                                                                        "bg-indigo-50 text-indigo-600 border-indigo-100"
+                                                                    }`}>
+                                                                        {days === 0 ? "Today" : `${days}D`}
+                                                                    </span>
+                                                                );
+                                                            })()
                                                         ) : (
                                                             <span className="text-[10px] text-gray-300 italic">—</span>
                                                         )}
@@ -682,17 +851,6 @@ const BranchFollowUp = () => {
                 onUpdate={fetchData}
             />
 
-            <InventoryAddCustomerModal 
-                isOpen={isEditCustomerOpen}
-                onClose={() => setIsEditCustomerOpen(false)}
-                editingItem={editingCustomer}
-                onSave={handleSaveCustomer}
-                branchId={currentBranch?._id}
-                customerCategories={customerCategories}
-                customerGroups={customerGroups}
-                salesOwners={salesOwners}
-                user={user}
-            />
         </div>
     );
 };

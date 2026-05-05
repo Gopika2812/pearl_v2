@@ -260,7 +260,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       }
 
       // Sync product prices to Locked Prices using utility
-      await updateProductCostsFromInvoice(newItems, order.purchaseInvoiceId || existingPI?.purchaseInvoiceId, true);
+      await updateProductCostsFromInvoice(newItems, order.purchaseInvoiceId || existingPI?.purchaseInvoiceId, true, req.user);
 
       const newPids = new Set(newItems.map(i => i.productId.toString()));
       for (const oldItem of order.lastInvoicedItems || []) {
@@ -395,7 +395,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     order.status = 'INVOICED';
 
     // STOCK & PRICE UPDATES
-    await updateProductCostsFromInvoice(invoiceItems, piNumber);
+    await updateProductCostsFromInvoice(invoiceItems, piNumber, false, req.user);
 
     for (const item of invoiceItems) {
       const product = await Product.findById(item.productId);
@@ -526,7 +526,7 @@ router.post("/", auth, async (req, res) => {
 
     // ⚡ INSTANT PRICE SYNC: Update master product prices from PO
     try {
-      await updateProductCostsFromInvoice(rest.items, invoiceId);
+      await updateProductCostsFromInvoice(rest.items, invoiceId, false, req.user);
     } catch (err) {
       console.warn("⚠️ Price Sync Failed (Non-blocking):", err.message);
     }
@@ -621,7 +621,7 @@ router.put("/:id", auth, async (req, res) => {
 
     // ⚡ INSTANT PRICE SYNC: Update master product prices from PO Update
     try {
-      await updateProductCostsFromInvoice(items, order.invoiceId, true);
+      await updateProductCostsFromInvoice(items, order.invoiceId, true, req.user);
     } catch (err) {
       console.warn("⚠️ Price Sync Failed (Non-blocking):", err.message);
     }

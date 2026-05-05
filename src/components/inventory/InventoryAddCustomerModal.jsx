@@ -60,7 +60,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         stateCode: editingItem.stateCode || "33",
         registrationType: editingItem.registrationType || "regular",
         gstin: editingItem.gstin || "",
-        salesOwner: editingItem.salesOwner || "",
+        salesOwner: typeof editingItem.salesOwner === 'object' ? editingItem.salesOwner._id : (editingItem.salesOwner || ""),
         margin: editingItem.margin || 0,
         credit: editingItem.credit || 0,
         debit: editingItem.debit || 0,
@@ -492,7 +492,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                 </div>
 
                 {/* ADDRESS METADATA */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className={labelClass}>District</label>
                     <input type="text" className={inputClass} value={customer.district} onChange={(e) => setCustomer({ ...customer, district: e.target.value })} />
@@ -509,7 +509,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                     <label className={labelClass}>State Code *</label>
                     <input type="text" className={inputClass} placeholder="e.g. 33, 32, 29, 27" value={customer.stateCode} onChange={(e) => setCustomer({ ...customer, stateCode: e.target.value })} />
                   </div>
-                  <div>
+                  <div className="md:col-span-2">
                     <label className={labelClass}>Country</label>
                     <input type="text" className={inputClass} value={customer.country} onChange={(e) => setCustomer({ ...customer, country: e.target.value })} />
                   </div>

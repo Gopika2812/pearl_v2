@@ -188,11 +188,9 @@ router.get("/", async (req, res) => {
       }
 
       if (start && end) {
-        // 🎯 ROBUST FILTER: Check both orderDate and createdAt so we don't miss anything
-        query.$or = [
-          { orderDate: { $gte: start, $lte: end } },
-          { createdAt: { $gte: start, $lte: end } }
-        ];
+        // 🎯 STRICT FILTER: Use orderDate as the primary business date for filtering.
+        // This ensures tomorrow's orders don't show up today just because they were created today.
+        query.orderDate = { $gte: start, $lte: end };
         console.log(`📅 [DEBUG] Date Range (IST): ${moment(start).tz(IST).format()} to ${moment(end).tz(IST).format()}`);
       }
     }
@@ -216,7 +214,7 @@ router.get("/", async (req, res) => {
 
     // ⚡ Optimized Fetch
     const salesOrders = await SalesOrder.find(query)
-      .select("invoiceId salesInvoiceId customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt orderDate invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount invoiceItems lastInvoicedItems invoiceSubtotal invoiceTotalTax invoiceGrandTotal invoiceOpeningBalance invoiceClosingBalance deliveryMan")
+      .select("invoiceId salesInvoiceId printCount customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt orderDate invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount invoiceItems lastInvoicedItems invoiceSubtotal invoiceTotalTax invoiceGrandTotal invoiceOpeningBalance invoiceClosingBalance deliveryMan")
       .populate('salesOwner', 'name')
       .populate('deliveryMan', 'name phone')
       .populate('items.productId')
@@ -1966,7 +1964,24 @@ router.delete("/:id/cancel", auth, async (req, res) => {
   }
 });
 
-export default router;
+// PUT - Increment Print Count (for restricted printing logic)
+router.put("/:id/increment-print-count", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await SalesOrder.findByIdAndUpdate(
+      id,
+      { $inc: { printCount: 1 } },
+      { new: true }
+    );
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    
+    console.log(`✅ [DEBUG] Print count incremented for SO ${order.invoiceId}. New count: ${order.printCount}`);
+    res.json({ success: true, printCount: order.printCount });
+  } catch (error) {
+    console.error("❌ Error incrementing print count:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
 
 // PUT - Revoke (Restore) Cancelled Sales Order
 router.put("/:id/revoke", auth, async (req, res) => {
@@ -2055,3 +2070,5 @@ router.put("/:id/revoke", auth, async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to restore order", error: error.message });
   }
 });
+
+export default router;

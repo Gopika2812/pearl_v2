@@ -89,11 +89,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       const branchIdToUse = order?.branchId || branchId;
       if (!branchIdToUse) return;
 
-      const res = await fetch(`${API_BASE}/customers?branchId=${branchIdToUse}&limit=10000`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
+      const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${branchIdToUse}&limit=10000`);
       const data = await res.json();
       setCustomers(data.data || []);
     } catch (err) {
@@ -315,11 +311,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
         console.log(`🔍 Checking locked price: Customer=${customerId}, Product=${productId}, Branch=${branch}`);
 
         if (customerId && branch) {
-          const res = await fetch(`${API_BASE}/customer-locked-prices/${customerId}/${productId}?branchId=${branch}`, {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-          });
+          const res = await fetchWithAuth(`${API_BASE}/customer-locked-prices/${customerId}/${productId}?branchId=${branch}`);
           if (res.ok) {
             const data = await res.json();
             if (data.success && data.data?.lockedPrice) {

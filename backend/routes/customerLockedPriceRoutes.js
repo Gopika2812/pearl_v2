@@ -325,9 +325,14 @@ router.put("/:id", auth, async (req, res) => {
 /**
  * GET: Fetch All Customer Locked Prices for a Branch (Optimized with Sort & Pagination)
  */
-router.get("/branch/:branchId", async (req, res) => {
+router.get("/branch/:branchId", auth, async (req, res) => {
   try {
     const { branchId } = req.params;
+
+    // Strict Branch Check
+    if (req.user.role !== "SUPER_ADMIN" && req.user.branchId !== branchId) {
+      return res.status(403).json({ success: false, message: "Unauthorized access to this branch's data" });
+    }
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
@@ -455,7 +460,7 @@ router.get("/branch/:branchId", async (req, res) => {
 /**
  * GET: Fetch Customer Locked Price
  */
-router.get("/:customerId/:productId", async (req, res) => {
+router.get("/:customerId/:productId", auth, async (req, res) => {
   try {
     const { customerId, productId } = req.params;
     const { branchId } = req.query;
@@ -465,6 +470,11 @@ router.get("/:customerId/:productId", async (req, res) => {
         success: false,
         message: "branchId is required",
       });
+    }
+
+    // Strict Branch Check
+    if (req.user.role !== "SUPER_ADMIN" && req.user.branchId !== branchId) {
+      return res.status(403).json({ success: false, message: "Unauthorized access to this branch's data" });
     }
 
     const lockedPriceEntry = await CustomerLockedPrice.findOne({

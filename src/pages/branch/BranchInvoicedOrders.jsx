@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { toast } from "react-toastify";
-import { API_BASE } from "../../api";
+import { API_BASE, fetchWithAuth } from "../../api";
 import EditBillModal from "../../components/EditBillModal";
 import InvoiceGeneratorModal from "../../components/InvoiceGeneratorModal";
 import AggregateSlipModal from "../../components/branch/AggregateSlipModal";
@@ -231,6 +231,21 @@ const BranchInvoicedOrders = () => {
           printWindow.print();
           setTimeout(() => printWindow.close(), 1000);
         }, 500);
+
+        // 🎯 Update print count in backend
+        if (finalizeData.invoice?._id) {
+            fetch(`${API_BASE}/invoices/${finalizeData.invoice._id}/print`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${localStorage.getItem("token")}`
+                },
+                body: JSON.stringify({ 
+                    printedBy: user?.id || user?._id,
+                    printedByUsername: user?.username || user?.name || "System"
+                })
+            }).catch(err => console.error("Error updating direct print count:", err));
+        }
       }
 
       toast.success("✅ Invoice generated and print triggered!");
@@ -970,11 +985,67 @@ const BranchInvoicedOrders = () => {
                             <div className="flex items-center gap-2 justify-center flex-wrap">
                               {order.invoiceGenerated && isFieldAllowed("action_si_bill") && (
                                 <button
-                                  onClick={() => handleGenerateInvoice(order, false)}
-                                  className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-black bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-200 border border-blue-700"
+                                  onClick={() => {
+                                      const userRole = (user?.role || "").toUpperCase();
+                                      const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
+
+                                      // 📅 Date Check: Prevent printing if order date is in the future (unless Admin)
+                                      const today = new Date();
+                                      today.setHours(0, 0, 0, 0);
+                                      const orderDate = new Date(order.orderDate || order.createdAt);
+                                      orderDate.setHours(0, 0, 0, 0);
+
+                                      if (orderDate > today) {
+                                        const dateStr = orderDate.toLocaleDateString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        toast.warning(`📅 Print Blocked: This order is dated ${dateStr}. Nobody (including Admins) can take the SI Bill until that date.`);
+                                        return;
+                                      }
+                                      
+                                      console.log(`👤 Role: ${userRole}, isAdmin: ${isAdmin}, printCount: ${order.printCount}`);
+
+                                      if (!isAdmin && order.printCount > 0) {
+                                        toast.error(`⚠️ Printing Restricted: This bill has already been printed ${order.printCount} time(s).`);
+                                        return;
+                                      }
+                                    if (!isAdmin && (order.printCount || 0) === 0) {
+                                      if (window.confirm("🔔 IMPORTANT: You can only print this bill ONCE. Please ensure all items and details are correct before proceeding. Next time this button will be disabled. Do you want to print now?")) {
+                                        // 🎯 Immediately increment print count in backend so it's "spent"
+                                        fetchWithAuth(`${API_BASE}/sales-orders/${order._id}/increment-print-count`, {
+                                          method: "PUT",
+                                        })
+                                          .then(async (res) => {
+                                            if (res.ok) {
+                                              const data = await res.json();
+                                              // 🚀 Update local state immediately so button turns grey
+                                              setSalesOrders(prev => prev.map(o => o._id === order._id ? { ...o, printCount: data.printCount || 1 } : o));
+                                              toast.success("📝 Print attempt recorded.");
+                                            }
+                                          })
+                                          .catch(err => {
+                                            console.error("Error incrementing print count:", err);
+                                            toast.error("Failed to record print attempt.");
+                                          });
+
+                                        handleGenerateInvoice(order, false);
+                                      }
+                                      return;
+                                    }
+                                    handleGenerateInvoice(order, false);
+                                  }}
+                                  disabled={!(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.printCount > 0}
+                                  className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-black shadow-md border 
+                                    ${(!(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.printCount > 0)
+                                      ? "bg-gray-200 text-gray-400 cursor-not-allowed border-gray-300"
+                                      : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 border-blue-700"}`}
+                                  title={(user?.role !== "ADMIN" && user?.role !== "SUPER_ADMIN" && order.printCount > 0) ? "Already Printed - Restricted to Admin" : "Print Sales Invoice Bill"}
                                 >
                                   <FaFileInvoice className="text-sm" />
-                                  SI Bill
+                                  <span>SI Bill</span>
+                                  {order.printCount > 0 && (
+                                    <span className="ml-1 bg-white/20 px-1.5 py-0.5 rounded text-[9px] border border-white/30">
+                                      P-{order.printCount}
+                                    </span>
+                                  )}
                                 </button>
                               )}
 

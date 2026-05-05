@@ -6,10 +6,10 @@ import mongoose from "mongoose";
  * This function updates product purchasing prices based on invoice items 
  * and triggers cascading syncs to customer locked prices.
  */
-export const updateProductCostsFromInvoice = async (items, sourceVoucher, isReInvoice = false) => {
+export const updateProductCostsFromInvoice = async (items, sourceVoucher, isReInvoice = false, user = null) => {
   if (!items || !Array.isArray(items)) return;
 
-  console.log(`📡 [PRICE_SYNC] Triggering cost sync for voucher: ${sourceVoucher}`);
+  console.log(`📡 [PRICE_SYNC] Triggering cost sync for voucher: ${sourceVoucher} | User: ${user?.username || "System"}`);
   const isPO = sourceVoucher.startsWith("PO");
 
   for (const item of items) {
@@ -57,7 +57,7 @@ export const updateProductCostsFromInvoice = async (items, sourceVoucher, isReIn
           await product.save();
         }
 
-        // 3. ⚡ EXPLICIT CASCADING SYNC (Bypassing Hooks for Reliability)
+        // 3. ⚡ EXPLICIT CASCADING SYNC
         if (priceChanged) {
           const CustomerLockedPrice = mongoose.models.CustomerLockedPrice || mongoose.model("CustomerLockedPrice");
           const lockedPrices = await CustomerLockedPrice.find({ productId: product._id });
@@ -66,7 +66,6 @@ export const updateProductCostsFromInvoice = async (items, sourceVoucher, isReIn
             console.log(`   🔗 [PRICE_SYNC] Syncing ${lockedPrices.length} locked prices for [${product.name}]`);
             const bulkOps = lockedPrices.map(lp => {
               // 📈 PERCENTAGE SYNC LOGIC:
-              // 1. Get the margin percentage (Recover from absolute margin if missing)
               let mPct = lp.marginPercentage;
               
               if (mPct === undefined || mPct === null || mPct === 0) {
@@ -87,7 +86,10 @@ export const updateProductCostsFromInvoice = async (items, sourceVoucher, isReIn
                       lockedPrice: newLockedPrice, 
                       purchasingPrice: newPPrice,
                       margin: newAbsoluteMargin,
-                      marginPercentage: Math.round(mPct * 100) / 100
+                      marginPercentage: Math.round(mPct * 100) / 100,
+                      updatedBy: user?.username || user?.name || "System",
+                      updatedById: user?.id || user?._id || null,
+                      updatedByModel: user?.role === "SUPER_ADMIN" ? "SuperAdmin" : (user ? "BranchUser" : undefined)
                     } 
                   }
                 }

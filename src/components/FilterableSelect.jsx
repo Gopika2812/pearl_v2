@@ -46,8 +46,8 @@ const FilterableSelect = ({
         disabled={disabled}
         className={`w-full px-4 py-2 bg-transparent text-left flex items-center justify-between hover:bg-slate-50/50 transition-all ${disabled ? 'opacity-60 cursor-not-allowed' : ''} ${className}`}
       >
-        <span className={`truncate ${(selectedOption || value) ? "font-black text-slate-800" : "font-bold text-slate-400"}`}>
-          {selectedOption?.name || value || placeholder}
+        <span className={`truncate ${(selectedOption || (typeof value === 'string' && value)) ? "font-black text-slate-800" : "font-bold text-slate-400"}`}>
+          {selectedOption?.name || (typeof value === 'string' ? value : "") || placeholder}
         </span>
         <FaChevronDown className={`transition-transform text-slate-300 ml-2 ${isOpen ? "rotate-180 text-emerald-500" : ""}`} size={8} />
       </button>
