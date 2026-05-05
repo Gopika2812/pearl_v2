@@ -96,7 +96,14 @@ const __dirname = path.dirname(__filename);
 const publicPath = path.join(__dirname, "../public");
 app.use(express.static(publicPath));
 
-// Routes
+// Global Logger - See every request hitting the server
+app.use((req, res, next) => {
+  console.log(`🌍 [GLOBAL] ${req.method} ${req.url}`);
+  next();
+});
+
+// Routes - HR Module prioritized to prevent conflicts
+app.use("/api/hr", hrPayrollRoutes);
 app.use("/api/super-admin", superAdminRoutes);
 app.use("/api/branches", branchRoutes);
 app.use("/api/branch-users", branchUserRoutes);
@@ -140,7 +147,7 @@ app.use("/api/ledgers", ledgerRoutes);
 app.use("/api/tokens", tokenRoutes);
 app.use("/api/follow-ups", followUpRoutes);
 app.use("/api/delivery-receipts", deliveryReceiptRoutes);
-app.use("/api/hr", hrPayrollRoutes);
+// HR module moved to top
 app.get("/api/hr-ping", (req, res) => res.json({ msg: "HR module reachable" }));
 app.use("/api/physical-stock", physicalStockRoutes);
 
@@ -175,4 +182,4 @@ app.use(/^\/api\/.*/, (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 [ANTIGRAVITY-v4] Server running on ${PORT}`));

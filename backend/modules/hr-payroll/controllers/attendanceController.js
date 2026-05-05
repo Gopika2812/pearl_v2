@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import Attendance from "../models/Attendance.js";
+import Branch from "../../../models/Branch.js";
+import BranchUser from "../../../models/BranchUser.js";
 import { getAddressFromCoords } from "../utils/geocoder.js";
 
 // Mark Attendance
@@ -299,31 +301,79 @@ export const revertAttendance = async (req, res) => {
 
 // Get Detailed Logs for Attendance Record Page
 export const getDetailedLogs = async (req, res) => {
+  console.log("-----------------------------------------");
+  console.log("📥 [getDetailedLogs] Incoming Request");
+  console.log("👤 Auth User:", JSON.stringify(req.user));
+  console.log("📊 Raw Query:", JSON.stringify(req.query));
+
   try {
-    const { branchId, date } = req.query;
-    if (!branchId) return res.status(400).json({ success: false, message: "branchId is required" });
+    let { branchId, date, startDate, endDate, employeeId, status } = req.query;
 
-    const isSuperAdmin = ["SUPERADMIN", "SUPER_ADMIN"].includes(req.user.role?.toUpperCase());
-    let query = { branch: branchId };
+    // Clean parameters: Convert empty strings or "undefined" strings to null
+    const clean = (val) => (val === "" || val === "undefined" || !val) ? null : val;
+    branchId = clean(branchId);
+    employeeId = clean(employeeId);
+    status = clean(status);
 
-    // If not super admin, only fetch the logged-in user's records
-    if (!isSuperAdmin) {
+    const userRole = req.user.role?.toUpperCase();
+    const isGlobalAdmin = ["SUPERADMIN", "SUPER_ADMIN"].includes(userRole);
+    const isBranchAdmin = userRole === "ADMIN";
+    
+    let query = {};
+    
+    // 🎯 SMART FILTERING: If a branch is selected, we want users WHO BELONG to that branch
+    if (branchId && branchId !== "" && branchId !== "null") {
+      if (!mongoose.Types.ObjectId.isValid(branchId)) {
+        return res.status(400).json({ success: false, message: `Invalid branchId format: "${branchId}"` });
+      }
+      // Find all employees belonging to this branch
+      const branchEmployees = await BranchUser.find({ branch: new mongoose.Types.ObjectId(branchId) }).select("_id");
+      const employeeIds = branchEmployees.map(e => e._id);
+      
+      // Show logs if the attendance was marked for this branch OR the employee belongs to it
+      query.$or = [
+        { branch: new mongoose.Types.ObjectId(branchId) },
+        { employeeId: { $in: employeeIds } }
+      ];
+    }
+
+    if (!isGlobalAdmin && !isBranchAdmin) {
       query.employeeId = req.user.id;
+    } else if (employeeId) {
+      query.employeeId = employeeId;
     }
 
     if (date) {
       const targetDate = new Date(date);
       targetDate.setUTCHours(0, 0, 0, 0);
       query.date = targetDate;
+    } else if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setUTCHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setUTCHours(23, 59, 59, 999);
+      query.date = { $gte: start, $lte: end };
+    }
+
+    if (status) {
+      query.status = status;
     }
 
     const logs = await Attendance.find(query)
-      .populate("employeeId", "name role")
+      .populate({
+        path: "employeeId",
+        select: "name role branch branchName",
+        populate: { path: "branch", select: "name" }
+      })
+      .populate("branch", "name")
       .populate("markedBy", "name")
       .sort({ date: -1, createdAt: -1 });
 
+    console.log(`📊 Found ${logs.length} logs. Sample branch: "${logs[0]?.branch?.name || logs[0]?.employeeId?.branch?.name || logs[0]?.employeeId?.branchName}"`);
+
     res.status(200).json({ success: true, data: logs });
   } catch (error) {
+    console.error("❌ [getDetailedLogs] ERROR:", error.message, "\n", error.stack);
     res.status(500).json({ success: false, message: error.message });
   }
 };

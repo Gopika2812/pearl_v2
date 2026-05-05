@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import {
   FaBuilding, FaPlus, FaEdit, FaCheck, FaTimes,
-  FaPhone, FaEnvelope, FaMapMarkerAlt, FaGlobe, FaShieldAlt
+  FaPhone, FaEnvelope, FaMapMarkerAlt, FaGlobe, FaShieldAlt, FaUserCheck
 } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../api";
 import { useBranch } from "../context/BranchContext";
 
 const SuperAdminBranchManagement = () => {
+  const navigate = useNavigate();
   const { setSuperAdminViewBranch } = useBranch();
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState(null);
@@ -145,16 +147,32 @@ const SuperAdminBranchManagement = () => {
               </span>
             </p>
           </div>
-          <button
-            onClick={() => {
-              resetForm();
-              setShowBranchModal(true);
-            }}
-            className="bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary/20"
-          >
-            <FaPlus size={12} />
-            <span className="text-xs uppercase tracking-widest">New Node</span>
-          </button>
+          <div className="flex gap-4">
+            <button
+              onClick={() => {
+                if (selectedBranch) {
+                  setSuperAdminViewBranch(selectedBranch);
+                  navigate("/admin/attendance-report");
+                } else {
+                  toast.info("Please select a branch from the list first");
+                }
+              }}
+              className="bg-white border border-gray-200 hover:border-primary hover:text-primary text-gray-500 px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+            >
+              <FaUserCheck size={12} />
+              <span className="text-xs uppercase tracking-widest">Attendance Report</span>
+            </button>
+            <button
+              onClick={() => {
+                resetForm();
+                setShowBranchModal(true);
+              }}
+              className="bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary/20"
+            >
+              <FaPlus size={12} />
+              <span className="text-xs uppercase tracking-widest">New Node</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

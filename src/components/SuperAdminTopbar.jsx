@@ -127,13 +127,20 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
   const handleBranchSelect = (branch) => {
     setSuperAdminViewBranch(branch);
     setBranchDropdownOpen(false);
-    // Navigate to branch home so super admin can use branch pages
-    navigate("/branch-home");
+    
+    // Only navigate to branch home if we are NOT on a global admin page
+    const isGlobalPage = window.location.pathname.startsWith("/admin/");
+    if (!isGlobalPage) {
+      navigate("/branch-home");
+    }
   };
 
   const handleClearBranch = () => {
     setSuperAdminViewBranch(null);
-    navigate("/super-admin/branch-management");
+    const isGlobalPage = window.location.pathname.startsWith("/admin/");
+    if (!isGlobalPage) {
+      navigate("/super-admin/branch-management");
+    }
   };
 
   return (

@@ -6,6 +6,7 @@ const auth = (req, res, next) => {
     const token = req.headers.authorization?.split(" ")[1]; // Bearer TOKEN
 
     if (!token) {
+      console.warn(`🔐 Auth Failure: No token provided for ${req.originalUrl}`);
       return res.status(401).json({
         success: false,
         message: "No token, authorization denied",

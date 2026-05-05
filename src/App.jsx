@@ -70,6 +70,7 @@ import PayrollPage from "./pages/hr/PayrollPage";
 import SalaryStructurePage from "./pages/hr/SalaryStructurePage";
 import HRReportsPage from "./pages/hr/HRReportsPage";
 import AttendanceRecordPage from "./pages/hr/AttendanceRecordPage.jsx";
+import AttendanceReportPage from "./pages/hr/AttendanceReportPage";
 
 import BranchLoginPage from "./pages/BranchLoginPage";
 import BranchRegisterPage from "./pages/BranchRegisterPage";
@@ -700,6 +701,10 @@ function AppContent() {
                   <Route
                     path="/reordering"
                     element={<ReorderingDashboard />}
+                  />
+                  <Route
+                    path="/admin/attendance-report"
+                    element={<ProtectedRoute element={<AttendanceReportPage />} role={["ADMIN", "SUPER_ADMIN", "SUPERADMIN"]} />}
                   />
                   <Route
                     path="/admin/branches"

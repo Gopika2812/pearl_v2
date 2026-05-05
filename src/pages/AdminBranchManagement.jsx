@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaBuilding, FaCheck, FaEnvelope, FaPhone, FaPlus, FaTimes, FaTrash, FaUser } from "react-icons/fa";
+import { FaBuilding, FaCheck, FaEnvelope, FaPhone, FaPlus, FaTimes, FaTrash, FaUser, FaUserClock } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
@@ -247,13 +247,22 @@ export default function AdminBranchManagement() {
               </h1>
               <p className="text-white/60 font-medium">Provision and manage infrastructure nodes and access protocols</p>
             </div>
-            <button
-              onClick={() => setShowBranchModal(true)}
-              className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-3 transition-all shadow-xl shadow-primary/20 uppercase tracking-widest text-xs"
-            >
-              <FaPlus />
-              Initialize Node
-            </button>
+            <div className="flex flex-wrap justify-center gap-4">
+              <button
+                onClick={() => navigate("/admin/attendance-report")}
+                className="bg-white/10 hover:bg-white/20 text-white px-6 py-4 rounded-2xl font-black flex items-center gap-3 transition-all border border-white/20 shadow-xl uppercase tracking-widest text-[10px]"
+              >
+                <FaUserClock />
+                Attendance Report
+              </button>
+              <button
+                onClick={() => setShowBranchModal(true)}
+                className="bg-primary hover:bg-primary/90 text-white px-6 py-4 rounded-2xl font-black flex items-center gap-3 transition-all shadow-xl shadow-primary/20 uppercase tracking-widest text-[10px]"
+              >
+                <FaPlus />
+                Initialize Node
+              </button>
+            </div>
           </div>
         </div>
 

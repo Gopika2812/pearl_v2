@@ -93,10 +93,21 @@ export const fetchWithAuth = async (url, options = {}) => {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
+  console.log(`🌐 API Request: ${url}`);
   const response = await fetch(url, {
     ...options,
     headers,
   });
+
+  if (!response.ok) {
+    const errorBody = await response.clone().text();
+    console.error(`❌ API Error [${response.status}]:`, errorBody);
+  }
+
+  if (response.status === 401) {
+    console.warn("🔐 401 Unauthorized: Session may have expired. Redirecting to login...");
+    // Optionally trigger a logout or redirect here if needed
+  }
 
   return response;
 };

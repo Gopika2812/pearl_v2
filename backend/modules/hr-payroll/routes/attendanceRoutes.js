@@ -9,6 +9,12 @@ console.log("🛣️ HR Attendance Routes registered");
 // Apply auth middleware to all routes in this file
 router.use(auth);
 
+// FINGERPRINT LOG: See every request hitting this module
+router.use((req, res, next) => {
+  console.log(`📡 [Attendance Route] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 router.get("/logs", getDetailedLogs);
 router.post("/revert", revertAttendance);
 router.post("/mark", markAttendance);

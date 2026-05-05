@@ -47,6 +47,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const adminItems = [
     { name: "Branch Management", path: "/admin/branches", icon: <FaBuilding /> },
+    { name: "Attendance Report", path: "/admin/attendance-report", icon: <FaUserClock /> },
   ];
 
   const handleLogout = () => {
