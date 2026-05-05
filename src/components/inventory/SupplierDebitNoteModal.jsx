@@ -7,7 +7,7 @@ import { useBranch } from "../../context/BranchContext";
 const inputClass = "w-full border border-gray-200 rounded-md px-3 py-2 focus:ring-1 focus:ring-rose-500 outline-none text-sm font-semibold text-gray-800";
 const labelClass = "block text-xs font-bold text-gray-500 mb-1 uppercase tracking-tight";
 
-const SupplierDebitNoteModal = ({ isOpen, onClose, preselectedVendor = null, onSuccess }) => {
+const SupplierDebitNoteModal = ({ isOpen, onClose, preselectedVendor = null, editData = null, onSuccess }) => {
   const formatDate = (date) => {
     if (!date) return "";
     return new Date(date).toLocaleDateString("en-IN", {
@@ -44,19 +44,44 @@ const SupplierDebitNoteModal = ({ isOpen, onClose, preselectedVendor = null, onS
   const vendorDropdownRef = useRef(null);
   const productDropdownRef = useRef(null);
 
-  // Fetch Next ID and Initial Data
   useEffect(() => {
     if (isOpen) {
-      fetchNextId();
-      fetchVendors();
-      fetchProducts();
+      if (editData) {
+        // LOAD EDIT DATA
+        setNextId(editData.debitNoteId);
+        setVendor(editData.vendor?.vendorId || editData.vendor);
+        setVendorSearch(editData.vendor?.name || "");
+        setReturnType(editData.originalPurchaseOrderId ? "invoice" : "standalone");
+        setFormData({
+          reason: editData.reason || "",
+          date: new Date(editData.createdAt).toISOString().split("T")[0]
+        });
+        
+        const mappedItems = editData.items.map(item => ({
+          ...item,
+          productId: item.productId._id || item.productId,
+          qty: item.qty || item.returnedQty || 0,
+          returnQty: item.qty || item.returnedQty || 0,
+          maxQty: 999999 // In edit mode, we don't strictly enforce maxQty unless we re-fetch the PO
+        }));
+        setSelectedItems(mappedItems);
+        
+        if (editData.originalPurchaseOrderId) {
+           setSelectedInvoice(editData.originalPurchaseOrderId);
+        }
+      } else {
+        fetchNextId();
+        fetchVendors();
+        fetchProducts();
+        setVendor(preselectedVendor);
+        setVendorSearch(preselectedVendor?.name || "");
+        setReturnType("standalone");
+        setSelectedItems([]);
+        setSelectedInvoice(null);
+        setFormData({ reason: "", date: new Date().toISOString().split("T")[0] });
+      }
     }
-  }, [isOpen]);
-
-  // Sync preselected vendor
-  useEffect(() => {
-    if (preselectedVendor) setVendor(preselectedVendor);
-  }, [preselectedVendor]);
+  }, [isOpen, editData]);
 
   // Fetch Invoices when vendor changes
   useEffect(() => {
@@ -224,13 +249,18 @@ const SupplierDebitNoteModal = ({ isOpen, onClose, preselectedVendor = null, onS
         originalPurchaseOrderId: returnType === "invoice" ? selectedInvoice?._id : null
       };
 
-      const res = await fetchWithAuth(`${API_BASE}/debit-notes`, {
-        method: "POST",
+      const url = editData 
+        ? `${API_BASE}/debit-notes/${editData._id}` 
+        : `${API_BASE}/debit-notes`;
+      const method = editData ? "PUT" : "POST";
+
+      const res = await fetchWithAuth(url, {
+        method: method,
         body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (data.success) {
-        toast.success("Debit Note Generated");
+        toast.success(editData ? "Debit Note Updated" : "Debit Note Generated");
         onSuccess?.();
         onClose();
         // Reset
@@ -256,10 +286,12 @@ const SupplierDebitNoteModal = ({ isOpen, onClose, preselectedVendor = null, onS
             <FaUndoAlt size={22} className="-rotate-90" />
           </div>
           <div>
-            <h3 className="text-xl font-black text-gray-900 tracking-tight leading-none uppercase italic">Purchase Return / Issue Debit Note</h3>
+            <h3 className="text-xl font-black text-gray-900 tracking-tight leading-none uppercase italic">
+              {editData ? "Edit Debit Note" : "Purchase Return / Issue Debit Note"}
+            </h3>
             <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1.5 flex items-center gap-2">
-              <span className="text-rose-600 uppercase">REF ID: {nextId || "GENERATING..."}</span>
-              <span className="px-2 py-0.5 bg-gray-100 rounded text-gray-500 uppercase tracking-tighter italic">{formatDate(new Date())}</span>
+              <span className="text-rose-600 uppercase">REF ID: {nextId || (editData ? editData.debitNoteId : "GENERATING...")}</span>
+              <span className="px-2 py-0.5 bg-gray-100 rounded text-gray-500 uppercase tracking-tighter italic">{formatDate(editData ? editData.createdAt : new Date())}</span>
             </p>
           </div>
         </div>
@@ -324,15 +356,17 @@ const SupplierDebitNoteModal = ({ isOpen, onClose, preselectedVendor = null, onS
                   <div className="flex p-1 bg-gray-100 rounded-lg gap-1 border border-gray-200">
                     <button 
                       type="button"
-                      onClick={() => { setReturnType("standalone"); setSelectedItems([]); setSelectedInvoice(null); }}
-                      className={`flex-1 py-2 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${returnType === "standalone" ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                      disabled={editData}
+                      onClick={() => { if(!editData) { setReturnType("standalone"); setSelectedItems([]); setSelectedInvoice(null); } }}
+                      className={`flex-1 py-2 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${returnType === "standalone" ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'} ${editData ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       General Return
                     </button>
                     <button 
                       type="button"
-                      onClick={() => { setReturnType("invoice"); setSelectedItems([]); }}
-                      className={`flex-1 py-2 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${returnType === "invoice" ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                      disabled={editData}
+                      onClick={() => { if(!editData) { setReturnType("invoice"); setSelectedItems([]); } }}
+                      className={`flex-1 py-2 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${returnType === "invoice" ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'} ${editData ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       Against Invoice
                     </button>
@@ -571,7 +605,7 @@ const SupplierDebitNoteModal = ({ isOpen, onClose, preselectedVendor = null, onS
               {submitting ? (
                 <><FaSpinner className="animate-spin" size={16} /> UPDATING...</>
               ) : (
-                <><FaCheckCircle size={16} /> CONFIRM RETURN</>
+                <><FaCheckCircle size={16} /> {editData ? "UPDATE DEBIT NOTE" : "CONFIRM RETURN"}</>
               )}
             </button>
           </div>

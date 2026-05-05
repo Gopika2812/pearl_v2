@@ -416,22 +416,167 @@ router.post("/", async (req, res) => {
   }
 });
 
-// UPDATE DEBIT NOTE
+// UPDATE DEBIT NOTE (FULL EDIT)
 router.put("/:id", async (req, res) => {
   try {
-    const debitNote = await DebitNote.findByIdAndUpdate(
+    const oldDN = await DebitNote.findById(req.params.id);
+    if (!oldDN) return res.status(404).json({ success: false, message: "Debit note not found" });
+    if (oldDN.status === "Cancelled") return res.status(400).json({ success: false, message: "Cannot edit a cancelled debit note" });
+
+    const updateData = req.body;
+    const branchId = oldDN.branchId;
+
+    // 1. REVERT OLD IMPACTS
+    // Restore inventory
+    if (oldDN.items && oldDN.items.length > 0) {
+      for (const item of oldDN.items) {
+        if (item.productId && item.productId.toString() !== "000000000000000000000000") {
+          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty || item.returnedQty || 0 } });
+        }
+      }
+    }
+    // Restore Vendor Balance
+    const oldVendorId = oldDN.vendor?.vendorId;
+    if (oldVendorId) {
+      const vendorRecord = await Vendor.findById(oldVendorId);
+      if (vendorRecord) {
+        const amount = oldDN.grandTotal || 0;
+        let remainder = amount;
+        let newDebit = vendorRecord.debit || 0;
+        let newCredit = vendorRecord.credit || 0;
+        if (newDebit > 0) {
+          const reduction = Math.min(newDebit, remainder);
+          newDebit -= reduction;
+          remainder -= reduction;
+        }
+        if (remainder > 0) newCredit += remainder;
+        await Vendor.findByIdAndUpdate(vendorRecord._id, { debit: newDebit, credit: newCredit });
+      }
+    }
+
+    // 2. CALCULATE NEW TOTALS & APPLY NEW IMPACTS
+    let subtotal = 0;
+    let totalTax = 0;
+    const items = updateData.items || [];
+
+    for (const item of items) {
+      const qty = Number(item.returnedQty || item.qty || 0);
+      const price = Number(item.purchasePrice || 0);
+      const disc = Number(item.discountPercent || 0);
+      const gstRate = Number(item.gst || 0);
+
+      const taxable = (qty * price) * (1 - disc / 100);
+      const tax = (taxable * gstRate) / 100;
+      
+      item.qty = qty;
+      item.taxableAmount = taxable;
+      item.cgst = tax / 2;
+      item.sgst = tax / 2;
+      item.igst = 0;
+      item.total = Math.round(taxable + tax);
+
+      subtotal += taxable;
+      totalTax += tax;
+
+      // Update Inventory (Subtract new qty)
+      if (item.productId && item.productId.toString() !== "000000000000000000000000") {
+        await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: -qty } });
+      }
+    }
+
+    const finalGrandTotal = Math.round(subtotal + totalTax);
+
+    // Update Vendor Balance (Apply new amount)
+    const newVendorId = updateData.vendor?.vendorId || oldVendorId;
+    if (newVendorId) {
+      const vendorRecord = await Vendor.findById(newVendorId);
+      if (vendorRecord) {
+        const currentCredit = vendorRecord.credit || 0;
+        if (finalGrandTotal <= currentCredit) {
+          await Vendor.findByIdAndUpdate(vendorRecord._id, { credit: currentCredit - finalGrandTotal });
+        } else {
+          const remainder = finalGrandTotal - currentCredit;
+          const currentDebit = vendorRecord.debit || 0;
+          await Vendor.findByIdAndUpdate(vendorRecord._id, { credit: 0, debit: currentDebit + remainder });
+        }
+      }
+    }
+
+    // 3. SAVE UPDATED DEBIT NOTE
+    const updatedDN = await DebitNote.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      {
+        ...updateData,
+        subtotal: Math.round(subtotal),
+        totalTax: Math.round(totalTax),
+        grandTotal: finalGrandTotal,
+        items: items
+      },
       { new: true }
     );
 
-    if (!debitNote) {
-      return res.status(404).json({ message: "Debit note not found" });
+    res.json({ success: true, data: updatedDN, message: "Debit note updated successfully" });
+  } catch (err) {
+    console.error("Update Debit Note Error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// CANCEL DEBIT NOTE
+router.patch("/:id/cancel", async (req, res) => {
+  try {
+    const { narration } = req.body;
+    if (!narration) return res.status(400).json({ success: false, message: "Narration is required for cancellation" });
+
+    const debitNote = await DebitNote.findById(req.params.id);
+    if (!debitNote) return res.status(404).json({ success: false, message: "Debit note not found" });
+    if (debitNote.status === "Cancelled") return res.status(400).json({ success: false, message: "Debit note is already cancelled" });
+
+    // 1. REVERT INVENTORY
+    if (debitNote.items && debitNote.items.length > 0) {
+      for (const item of debitNote.items) {
+        if (item.productId && item.productId.toString() !== "000000000000000000000000") {
+          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty || item.returnedQty || 0 } });
+        }
+      }
     }
 
-    res.json({ success: true, data: debitNote });
+    // 2. REVERT VENDOR BALANCE
+    const vendorId = debitNote.vendor?.vendorId;
+    if (vendorId) {
+      const vendorRecord = await Vendor.findById(vendorId);
+      if (vendorRecord) {
+        const amount = debitNote.grandTotal || 0;
+        let remainder = amount;
+        let newDebit = vendorRecord.debit || 0;
+        let newCredit = vendorRecord.credit || 0;
+        
+        if (newDebit > 0) {
+          const reduction = Math.min(newDebit, remainder);
+          newDebit -= reduction;
+          remainder -= reduction;
+        }
+        if (remainder > 0) {
+          newCredit += remainder;
+        }
+        await Vendor.findByIdAndUpdate(vendorRecord._id, { debit: newDebit, credit: newCredit });
+      }
+    }
+
+    // 3. REVERT PO STATUS (Optional but recommended)
+    if (debitNote.originalPurchaseOrderId) {
+      await PurchaseOrder.findByIdAndUpdate(debitNote.originalPurchaseOrderId, { status: "RECEIVED" });
+    }
+
+    // 4. UPDATE STATUS
+    debitNote.status = "Cancelled";
+    debitNote.reason = (debitNote.reason ? debitNote.reason + " | " : "") + "CANCELLED: " + narration;
+    await debitNote.save();
+
+    res.json({ success: true, message: "Debit note cancelled successfully", data: debitNote });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Cancel Debit Note Error:", err);
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 

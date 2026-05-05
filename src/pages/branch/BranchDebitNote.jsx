@@ -21,6 +21,7 @@ export default function BranchDebitNote() {
   const [debitNotes, setDebitNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editData, setEditData] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedDN, setExpandedDN] = useState({});
 
@@ -80,6 +81,33 @@ export default function BranchDebitNote() {
     }, 500);
   };
 
+  const handleEdit = (dn) => {
+    if (dn.status === "Cancelled") return toast.warning("Cannot edit a cancelled debit note");
+    setEditData(dn);
+    setShowModal(true);
+  };
+
+  const handleCancel = async (dn) => {
+    const narration = window.prompt("Enter reason for cancellation:");
+    if (!narration) return;
+
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/debit-notes/${dn._id}/cancel`, {
+        method: "PATCH",
+        body: JSON.stringify({ narration })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Debit note cancelled");
+        fetchDebitNotes();
+      } else {
+        toast.error(data.message || "Failed to cancel");
+      }
+    } catch (err) {
+      toast.error("Error cancelling debit note");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 font-sans">
@@ -97,7 +125,7 @@ export default function BranchDebitNote() {
           </div>
           
           <button 
-            onClick={() => setShowModal(true)}
+            onClick={() => { setEditData(null); setShowModal(true); }}
             className="flex items-center gap-3 bg-rose-600 hover:bg-rose-700 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl shadow-rose-100 active:scale-95"
           >
             <FaPlus /> Create Debit Note
@@ -152,6 +180,7 @@ export default function BranchDebitNote() {
                     {isFieldAllowed("items") && <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Items</th>}
                     {isFieldAllowed("amount") && <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>}
                     {isFieldAllowed("invoiceRef") && <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Invoice Ref</th>}
+                    <th className="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
                     {isFieldAllowed("details") && <th className="px-10 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Details</th>}
                   </tr>
                 </thead>
@@ -176,31 +205,36 @@ export default function BranchDebitNote() {
                                </span>
                           </td>
                         )}
+                        <td className="px-6 py-5 text-center">
+                            <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${dn.status === 'Cancelled' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                {dn.status || 'Created'}
+                            </span>
+                        </td>
                         {isFieldAllowed("details") && (
                           <td className="px-10 py-5 text-center">
                               <div className="flex items-center gap-2 justify-center">
-                                <button 
-                                  onClick={() => handlePrint(dn, 'STANDARD')}
-                                  className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all text-[10px] font-black border border-blue-100"
-                                  title="Print Standard Layout"
-                                >
-                                    STD
-                                </button>
-                                <button 
-                                  onClick={() => handlePrint(dn, 'PROFESSIONAL')}
-                                  className="px-2 py-1 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-600 hover:text-white transition-all text-[10px] font-black border border-rose-100"
-                                  title="Print Professional Layout"
-                                >
-                                    PROF
-                                </button>
-                                <button 
-                                  onClick={() => toggleExpand(dn._id)}
-                                  className="p-2 hover:bg-white rounded-xl text-rose-600 transition-all shadow-sm group-hover:shadow-md border border-transparent hover:border-rose-100"
-                                >
-                                    {expandedDN[dn._id] ? <FaChevronUp /> : <FaChevronDown />}
-                                </button>
-                              </div>
-                          </td>
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handleEdit(dn); }}
+                                    className="px-2 py-1 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-600 hover:text-white transition-all text-[10px] font-black border border-amber-100"
+                                    title="Edit Debit Note"
+                                  >
+                                      EDIT
+                                  </button>
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handleCancel(dn); }}
+                                    className="px-2 py-1 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all text-[10px] font-black border border-red-100"
+                                    title="Cancel Debit Note"
+                                  >
+                                      CANCEL
+                                  </button>
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); toggleExpand(dn._id); }}
+                                    className="p-2 hover:bg-white rounded-xl text-rose-600 transition-all shadow-sm group-hover:shadow-md border border-transparent hover:border-rose-100"
+                                  >
+                                      {expandedDN[dn._id] ? <FaChevronUp /> : <FaChevronDown />}
+                                  </button>
+                                </div>
+                            </td>
                         )}
                       </tr>
                       {expandedDN[dn._id] && (
@@ -253,7 +287,8 @@ export default function BranchDebitNote() {
 
       <SupplierDebitNoteModal 
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => { setShowModal(false); setEditData(null); }}
+        editData={editData}
         onSuccess={fetchDebitNotes}
       />
     </div>
