@@ -137,6 +137,78 @@ const AttendanceReportPage = () => {
     fetchAttendance(); // button click — state is already settled by now
   };
 
+  const exportToCSV = () => {
+    if (!attendance.length) {
+      toast.warning("No data to export.");
+      return;
+    }
+
+    const headers = [
+      "Date",
+      "Employee Name",
+      "Role",
+      "Branch",
+      "Status",
+      "Check In",
+      "Check Out",
+      "Work Hours",
+      "Overtime Hours",
+      "Location",
+      "Submitted By"
+    ];
+
+    const escape = (val) => {
+      const str = String(val ?? "");
+      return str.includes(",") || str.includes('"') || str.includes("\n")
+        ? `"${str.replace(/"/g, '""')}"`
+        : str;
+    };
+
+    const rows = attendance.map((log) => {
+      const bName =
+        log.branch?.name ||
+        log.employeeId?.branch?.name ||
+        log.employeeId?.branchName ||
+        "—";
+
+      const checkIn = log.presentTime
+        ? new Date(log.presentTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : "—";
+      const checkOut = log.leaveTime
+        ? new Date(log.leaveTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : "—";
+      const date = new Date(log.date).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+
+      return [
+        date,
+        log.employeeId?.name || "Unknown",
+        log.employeeId?.role || "Staff",
+        bName,
+        log.status || "—",
+        checkIn,
+        checkOut,
+        (log.workingHours ?? 0).toFixed(2),
+        (log.overtimeHours ?? 0).toFixed(2),
+        log.presentLocation?.address || "No Data",
+        log.markedBy?.name || "Self",
+      ].map(escape);
+    });
+
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Attendance_${filters.startDate}_to_${filters.endDate}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${attendance.length} records successfully!`);
+  };
+
   // Calculate stats
   const stats = {
     present: attendance.filter(a => a.status === "Present").length,
@@ -154,10 +226,11 @@ const AttendanceReportPage = () => {
           <p className="text-slate-500 text-sm font-medium uppercase tracking-widest mt-1">Comprehensive branch attendance analysis</p>
         </div>
         <button 
-          onClick={() => toast.info("Exporting data...")}
-          className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl shadow-slate-200"
+          onClick={exportToCSV}
+          disabled={!attendance.length || loading}
+          className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl shadow-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <FaDownload /> Export Report
+          <FaDownload /> Export Report {attendance.length > 0 && `(${attendance.length})`}
         </button>
       </div>
 
