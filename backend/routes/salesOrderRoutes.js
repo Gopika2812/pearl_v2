@@ -170,37 +170,44 @@ router.get("/", async (req, res) => {
     }
 
     // 5. Date Filter logic:
-    // 🎯 If a search or voucherType/customerName filter is active, we don't force 'Today's records.
-    // However, if the user EXPLICITLY provided dates, we respect them.
     const hasSearch = search || voucherType || customerName || customerId;
     
-    if (fromDate || toDate || !hasSearch) {
-      let start, end;
+    // We apply date filter if:
+    // a) fromDate or toDate are provided (non-empty)
+    // b) NO other filters (search/voucher/customer) are provided (defaults to Today)
+    if ((fromDate && fromDate !== "undefined") || (toDate && toDate !== "undefined") || !hasSearch) {
       const IST = "Asia/Kolkata";
+      let startStr = (fromDate && fromDate !== "undefined") ? fromDate : null;
+      let endStr = (toDate && toDate !== "undefined") ? toDate : null;
 
-      // If there's a search but NO dates provided, we SKIP the date filter to search globally.
-      // If there's NO search, we default to Today if dates are missing.
-      const shouldApplyDateFilter = (fromDate || toDate) || !hasSearch;
+      // If no search and no dates provided, default both to today
+      if (!hasSearch && !startStr && !endStr) {
+        startStr = moment.tz(IST).format("YYYY-MM-DD");
+        endStr = moment.tz(IST).format("YYYY-MM-DD");
+      }
 
-      if (shouldApplyDateFilter) {
-        if (fromDate) {
-          start = moment.tz(fromDate, IST).startOf("day").toDate();
-        } else if (!hasSearch) {
-          start = moment.tz(IST).startOf("day").toDate();
-        }
+      let start = startStr ? moment.tz(startStr, IST).startOf("day").toDate() : null;
+      let end = endStr ? moment.tz(endStr, IST).endOf("day").toDate() : null;
 
-        if (toDate) {
-          end = moment.tz(toDate, IST).endOf("day").toDate();
-        } else if (!hasSearch) {
-          end = moment.tz(IST).endOf("day").toDate();
-        }
+      // 🛡️ Safeguard: Handle invalid date strings
+      if (start && isNaN(start.getTime())) start = null;
+      if (end && isNaN(end.getTime())) end = null;
 
-        if (start || end) {
-          query.orderDate = {};
-          if (start) query.orderDate.$gte = start;
-          if (end) query.orderDate.$lte = end;
-          console.log(`📅 [DEBUG] Date Filter Applied: ${start ? moment(start).format() : 'ANY'} to ${end ? moment(end).format() : 'ANY'}`);
-        }
+      // 🛡️ Safeguard: If only one date is provided, make it a single-day range
+      if (start && !end) end = moment(start).endOf("day").toDate();
+      if (!start && end) start = moment(end).startOf("day").toDate();
+
+      // 🛡️ Safeguard: If dates are inverted (Start > End), swap them
+      if (start && end && start > end) {
+        console.log("⚠️ [DEBUG] Inverted dates detected. Swapping start and end.");
+        [start, end] = [end, start];
+      }
+
+      if (start || end) {
+        query.orderDate = {};
+        if (start) query.orderDate.$gte = start;
+        if (end) query.orderDate.$lte = end;
+        console.log(`📅 [DEBUG] Final Date Filter: ${start ? moment(start).format() : 'ANY'} to ${end ? moment(end).format() : 'ANY'}`);
       }
     }
 

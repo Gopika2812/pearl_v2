@@ -51,8 +51,8 @@ const BranchInvoicedOrders = () => {
   const [filterGenerated, setFilterGenerated] = useState(""); // ALL, GENERATED, NOT_GENERATED
   const [filterInvoiceId, setFilterInvoiceId] = useState("");
   const [filterCustomerName, setFilterCustomerName] = useState("");
-  const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split('T')[0]);
-  const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterFromDate, setFilterFromDate] = useState(new Date().toLocaleDateString('en-CA'));
+  const [filterToDate, setFilterToDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [filterFromTime, setFilterFromTime] = useState("");
   const [filterToTime, setFilterToTime] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -140,7 +140,7 @@ const BranchInvoicedOrders = () => {
     if (term && term !== filterInvoiceId) {
       setFilterInvoiceId(term);
       // Only clear dates if they are still at "Today" (default state)
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = new Date().toLocaleDateString('en-CA');
       if (filterFromDate === todayStr && filterToDate === todayStr) {
         setFilterFromDate("");
         setFilterToDate("");
@@ -152,8 +152,8 @@ const BranchInvoicedOrders = () => {
   const resetFilters = () => {
     setFilterInvoiceId("");
     setFilterCustomerName("");
-    setFilterFromDate(new Date().toISOString().split('T')[0]);
-    setFilterToDate(new Date().toISOString().split('T')[0]);
+    setFilterFromDate(new Date().toLocaleDateString('en-CA'));
+    setFilterToDate(new Date().toLocaleDateString('en-CA'));
     setFilterVoucherType("");
     setFilterGenerated("");
     toast.info("Filters reset to Today");

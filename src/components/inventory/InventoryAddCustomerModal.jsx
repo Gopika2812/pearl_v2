@@ -563,7 +563,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                   </div>
                 </div>
 
-                {user?.role === "SUPER_ADMIN" && (
+                {(user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") && (
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-4 pt-4 border-t border-gray-50">
                     <div>
                       <label className={labelClass}>Zone</label>

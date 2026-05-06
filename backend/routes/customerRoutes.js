@@ -702,6 +702,29 @@ router.get("/", async (req, res) => {
       }
     });
 
+    // 2.5 Lookup Last Invoice for "Age" Sorting
+    pipeline.push(
+      {
+        $lookup: {
+          from: "invoices",
+          let: { cId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: { $in: ["FINALIZED", "PRINTED", "SENT"] } } },
+            { $sort: { invoiceDate: -1 } },
+            { $limit: 1 }
+          ],
+          as: "lastInv"
+        }
+      },
+      { $unwind: { path: "$lastInv", preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          lastInvoiceDate: "$lastInv.invoiceDate",
+          lastInvoiceNumber: "$lastInv.invoiceNumber"
+        }
+      }
+    );
+
     const sort = {};
     const order = sortOrder === "desc" ? -1 : 1;
 
@@ -717,6 +740,12 @@ router.get("/", async (req, res) => {
         break;
       case "name":
         sort.name = order;
+        break;
+      case "margin":
+        sort.margin = order;
+        break;
+      case "age":
+        sort.lastInvoiceDate = order;
         break;
       case "createdAt":
         sort.createdAt = order;
@@ -807,7 +836,9 @@ router.get("/", async (req, res) => {
           debit: 1,
           credit: 1,
           closingBalance: 1,
-          netBalance: 1
+          netBalance: 1,
+          lastInvoiceDate: 1,
+          lastInvoiceNumber: 1
         }
       });
     }
