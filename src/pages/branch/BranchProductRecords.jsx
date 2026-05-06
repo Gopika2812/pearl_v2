@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaSync, FaFilter, FaSearch, FaHistory, FaFileExport, FaSort, FaSortAmountDown, FaSortAmountUp } from "react-icons/fa";
+import { FaSync, FaFilter, FaSearch, FaHistory, FaFileExport, FaSort, FaSortAmountDown, FaSortAmountUp, FaColumns, FaCheck, FaTimes } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
@@ -35,6 +35,38 @@ const BranchProductRecords = () => {
   const [customerSearch, setCustomerSearch] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+
+  // Column Selection for Export
+  const [showColumnSelector, setShowColumnSelector] = useState(false);
+  const [selectedExportColumns, setSelectedExportColumns] = useState([
+    "date", "time", "invoiceNo", "voucher", "customer", "product", "group", 
+    "purchasePrice", "sellingPrice", "qty", "gst", "discount", "margin", "profit"
+  ]);
+
+  const columnsConfig = [
+    { id: "date", label: "Date", getValue: r => new Date(r.date).toLocaleDateString() },
+    { id: "time", label: "Time", getValue: r => new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
+    { id: "invoiceNo", label: "Invoice No", getValue: r => r.invoiceNumber },
+    { id: "voucher", label: "Voucher", getValue: r => r.voucherType, permission: "voucher" },
+    { id: "customer", label: "Customer", getValue: r => r.customerName || "Walk-in" },
+    { id: "product", label: "Product", getValue: r => r.productName },
+    { id: "group", label: "Group", getValue: r => r.productGroupName || "No Group" },
+    { id: "purchasePrice", label: "Purchase Price", getValue: r => r.purchasingPrice?.toFixed(2), permission: "purchasePrice" },
+    { id: "sellingPrice", label: "Selling Price", getValue: r => r.sellingPrice?.toFixed(2), permission: "sellingPrice" },
+    { id: "qty", label: "Qty", getValue: r => r.qty, permission: "qty" },
+    { id: "gst", label: "GST %", getValue: r => r.gst, permission: "gst" },
+    { id: "discount", label: "Discount/Unit", getValue: r => r.discountPerUnit?.toFixed(2), permission: "discount" },
+    { id: "margin", label: "Profit %", getValue: r => r.profitPercent?.toFixed(1) + "%", permission: "margin" },
+    { id: "profit", label: "Gross Profit", getValue: r => (r.grossProfit * r.qty).toFixed(2), permission: "profit" }
+  ];
+
+  // Initialize selected columns based on permissions
+  useEffect(() => {
+    const allowed = columnsConfig
+      .filter(col => !col.permission || isFieldAllowed(col.permission))
+      .map(col => col.id);
+    setSelectedExportColumns(allowed);
+  }, [user]);
 
   const fetchHistory = async () => {
     if (!currentBranch?._id) return;
@@ -124,22 +156,15 @@ const BranchProductRecords = () => {
       const allRecords = data.history || [];
 
       // Create detailed export data
-      const exportData = allRecords.map(r => ({
-        "Date": new Date(r.date).toLocaleDateString(),
-        "Time": new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        "Invoice No": r.invoiceNumber,
-        "Voucher": r.voucherType,
-        "Customer": r.customerName || "Walk-in",
-        "Product": r.productName,
-        "Group": r.productGroupName || "No Group",
-        "Purchase Price": r.purchasingPrice?.toFixed(2),
-        "Selling Price": r.sellingPrice?.toFixed(2),
-        "Qty": r.qty,
-        "GST %": r.gst,
-        "Discount/Unit": r.discountPerUnit?.toFixed(2),
-        "Profit %": r.profitPercent?.toFixed(1) + "%",
-        "Gross Profit": (r.grossProfit * r.qty).toFixed(2)
-      }));
+      const exportData = allRecords.map(r => {
+        const row = {};
+        columnsConfig.forEach(col => {
+          if (selectedExportColumns.includes(col.id)) {
+            row[col.label] = col.getValue(r);
+          }
+        });
+        return row;
+      });
 
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
@@ -213,12 +238,21 @@ const BranchProductRecords = () => {
               </button>
             </div>
             {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
-              <button 
-                onClick={handleExportExcel}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold transition flex items-center gap-2 text-sm shadow-sm"
-              >
-                <FaFileExport /> Export Excel
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowColumnSelector(true)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg font-bold transition flex items-center gap-2 text-sm shadow-sm"
+                  title="Select Columns for Export"
+                >
+                  <FaColumns /> Columns
+                </button>
+                <button 
+                  onClick={handleExportExcel}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold transition flex items-center gap-2 text-sm shadow-sm"
+                >
+                  <FaFileExport /> Export Excel
+                </button>
+              </div>
             )}
             <button 
               onClick={fetchHistory}
@@ -677,6 +711,114 @@ const BranchProductRecords = () => {
           </div>
         </div>
       </div>
+      {/* Column Selection Modal */}
+      {showColumnSelector && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in duration-200">
+            <div className="bg-gradient-to-r from-slate-800 to-slate-900 p-6 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-3">
+                  <FaColumns className="text-[#319bab]" /> Select Export Columns
+                </h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Choose fields for Excel analysis</p>
+              </div>
+              <button 
+                onClick={() => setShowColumnSelector(false)}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const allAllowed = columnsConfig
+                        .filter(col => !col.permission || isFieldAllowed(col.permission))
+                        .map(col => col.id);
+                      setSelectedExportColumns(allAllowed);
+                    }}
+                    className="px-3 py-1.5 bg-[#319bab]/10 text-[#319bab] text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-[#319bab]/20 transition-colors"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={() => setSelectedExportColumns([])}
+                    className="px-3 py-1.5 bg-gray-100 text-gray-500 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                </div>
+                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                  {selectedExportColumns.length} Fields Selected
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+                {columnsConfig.map(col => {
+                  const isAllowed = !col.permission || isFieldAllowed(col.permission);
+                  if (!isAllowed) return null;
+                  
+                  return (
+                    <label 
+                      key={col.id} 
+                      className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer group ${
+                        selectedExportColumns.includes(col.id) 
+                          ? 'border-[#319bab]/50 bg-[#319bab]/5 text-[#319bab] shadow-sm' 
+                          : 'border-gray-50 bg-gray-50 text-gray-500 hover:border-gray-200'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                        selectedExportColumns.includes(col.id)
+                          ? 'bg-[#319bab] border-[#319bab]'
+                          : 'bg-white border-gray-300 group-hover:border-[#319bab]/30'
+                      }`}>
+                        {selectedExportColumns.includes(col.id) && <FaCheck className="text-white text-[10px]" />}
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="hidden"
+                        checked={selectedExportColumns.includes(col.id)}
+                        onChange={() => {
+                          if (selectedExportColumns.includes(col.id)) {
+                            setSelectedExportColumns(prev => prev.filter(f => f !== col.id));
+                          } else {
+                            setSelectedExportColumns(prev => [...prev, col.id]);
+                          }
+                        }}
+                      />
+                      <span className="text-xs font-bold">
+                        {col.label}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div className="mt-8 flex gap-3">
+                <button
+                  onClick={() => setShowColumnSelector(false)}
+                  className="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl transition-all font-black uppercase tracking-widest text-[11px]"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowColumnSelector(false);
+                    handleExportExcel();
+                  }}
+                  disabled={selectedExportColumns.length === 0}
+                  className="flex-1 px-6 py-3 bg-[#319bab] hover:bg-[#257f87] disabled:bg-gray-300 text-white rounded-xl transition-all font-black uppercase tracking-widest text-[11px] shadow-lg shadow-[#319bab]/20"
+                >
+                  Export Now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -169,29 +169,38 @@ router.get("/", async (req, res) => {
       query.$and = [searchCriteria];
     }
 
-    // 5. Date Filter
-    // 📅 Date Filtering: Respect specific dates if provided, or default to "Today" if no global search is active.
-    if (fromDate || toDate || (!search && !voucherType && !customerName)) {
+    // 5. Date Filter logic:
+    // 🎯 If a search or voucherType/customerName filter is active, we don't force 'Today's records.
+    // However, if the user EXPLICITLY provided dates, we respect them.
+    const hasSearch = search || voucherType || customerName || customerId;
+    
+    if (fromDate || toDate || !hasSearch) {
       let start, end;
       const IST = "Asia/Kolkata";
 
-      if (fromDate) {
-        start = moment.tz(fromDate, IST).startOf("day").toDate();
-      } else {
-        start = moment.tz(IST).startOf("day").toDate();
-      }
+      // If there's a search but NO dates provided, we SKIP the date filter to search globally.
+      // If there's NO search, we default to Today if dates are missing.
+      const shouldApplyDateFilter = (fromDate || toDate) || !hasSearch;
 
-      if (toDate) {
-        end = moment.tz(toDate, IST).endOf("day").toDate();
-      } else {
-        end = moment.tz(IST).endOf("day").toDate();
-      }
+      if (shouldApplyDateFilter) {
+        if (fromDate) {
+          start = moment.tz(fromDate, IST).startOf("day").toDate();
+        } else if (!hasSearch) {
+          start = moment.tz(IST).startOf("day").toDate();
+        }
 
-      if (start && end) {
-        // 🎯 STRICT FILTER: Use orderDate as the primary business date for filtering.
-        // This ensures tomorrow's orders don't show up today just because they were created today.
-        query.orderDate = { $gte: start, $lte: end };
-        console.log(`📅 [DEBUG] Date Range (IST): ${moment(start).tz(IST).format()} to ${moment(end).tz(IST).format()}`);
+        if (toDate) {
+          end = moment.tz(toDate, IST).endOf("day").toDate();
+        } else if (!hasSearch) {
+          end = moment.tz(IST).endOf("day").toDate();
+        }
+
+        if (start || end) {
+          query.orderDate = {};
+          if (start) query.orderDate.$gte = start;
+          if (end) query.orderDate.$lte = end;
+          console.log(`📅 [DEBUG] Date Filter Applied: ${start ? moment(start).format() : 'ANY'} to ${end ? moment(end).format() : 'ANY'}`);
+        }
       }
     }
 
@@ -1269,15 +1278,6 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
   }
 });
 
-// CREATE NEW SALES ORDER
-router.post("/", clearCachePrefix("/api/sales-orders"), async (req, res) => {
-  try {
-    const { customer, items, ...rest } = req.body;
-    // ... implementation
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
 
 // GET single sales order by ID (for credit note modal) - MUST BE LAST ROUTE
 router.get("/:id", async (req, res) => {

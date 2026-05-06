@@ -32,6 +32,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     creditLimit: 200000,
     creditLimitDays: 0,
     openingBalance: 0, // 🔒 Fixed March 31st Balance
+    riskStatus: "safe_zone",
   });
 
   const [isSafeMode, setIsSafeMode] = useState(false);
@@ -72,6 +73,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         creditLimit: editingItem.creditLimit !== undefined ? editingItem.creditLimit : 200000,
         creditLimitDays: editingItem.creditLimitDays !== undefined ? editingItem.creditLimitDays : 0,
         openingBalance: editingItem.openingBalance || 0,
+        riskStatus: editingItem.riskStatus || "safe_zone",
       });
     } else {
       setCustomer({
@@ -100,6 +102,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         creditLimit: 200000,
         creditLimitDays: 0,
         openingBalance: 0,
+        riskStatus: "safe_zone",
       });
     }
   }, [editingItem]);
@@ -561,7 +564,19 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                 </div>
 
                 {user?.role === "SUPER_ADMIN" && (
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4 border-t border-gray-50">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4 pt-4 border-t border-gray-50">
+                    <div>
+                      <label className={labelClass}>Zone</label>
+                      <select
+                        className={inputClass}
+                        value={customer.riskStatus}
+                        onChange={(e) => setCustomer({ ...customer, riskStatus: e.target.value })}
+                      >
+                        <option value="safe_zone">Safe Zone</option>
+                        <option value="medium_zone">Medium Zone</option>
+                        <option value="risk_zone">Risk Zone</option>
+                      </select>
+                    </div>
                     <div>
                       <label className={labelClass}>Default Margin (%)</label>
                       <input type="number" step="0.01" className={inputClass} value={customer.margin} onChange={(e) => setCustomer({ ...customer, margin: e.target.value })} />

@@ -583,16 +583,40 @@ const BranchFollowUp = () => {
                                                                 />
                                                             </td>
                                                             <td colSpan={3} className="px-4 py-3">
-                                                                <div className="flex flex-col items-center">
-                                                                    <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1">Sales Manager</label>
-                                                                    <select 
-                                                                        className="bg-white border border-indigo-100 rounded px-2 py-1 text-[10px] font-bold outline-none"
-                                                                        value={editForm.salesOwner || ""}
-                                                                        onChange={(e) => setEditForm({ ...editForm, salesOwner: e.target.value })}
-                                                                    >
-                                                                        <option value="">Select Owner</option>
-                                                                        {salesOwners.map(owner => <option key={owner._id} value={owner._id}>{owner.name}</option>)}
-                                                                    </select>
+                                                                <div className="flex items-center gap-4">
+                                                                    <div className="flex-1">
+                                                                        <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1">Zone</label>
+                                                                        <select 
+                                                                            className="w-full bg-white border border-indigo-100 rounded px-2 py-1 text-[10px] font-bold outline-none focus:border-indigo-500 transition-all"
+                                                                            value={editForm.riskStatus || "safe_zone"}
+                                                                            onChange={(e) => setEditForm({ ...editForm, riskStatus: e.target.value })}
+                                                                        >
+                                                                            <option value="safe_zone">Safe Zone</option>
+                                                                            <option value="medium_zone">Medium Zone</option>
+                                                                            <option value="risk_zone">Risk Zone</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div className="w-20">
+                                                                        <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1">Margin (%)</label>
+                                                                        <input 
+                                                                            type="number" 
+                                                                            step="0.01"
+                                                                            className="w-full bg-white border border-indigo-100 rounded px-2 py-1 text-right text-[11px] font-bold outline-none focus:border-indigo-500 transition-all"
+                                                                            value={editForm.margin || 0}
+                                                                            onChange={(e) => setEditForm({ ...editForm, margin: e.target.value })}
+                                                                        />
+                                                                    </div>
+                                                                    <div className="flex-1">
+                                                                        <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1 text-center">Sales Manager</label>
+                                                                        <select 
+                                                                            className="w-full bg-white border border-indigo-100 rounded px-2 py-1 text-[10px] font-bold outline-none focus:border-indigo-500 transition-all"
+                                                                            value={editForm.salesOwner || ""}
+                                                                            onChange={(e) => setEditForm({ ...editForm, salesOwner: e.target.value })}
+                                                                        >
+                                                                            <option value="">Select Owner</option>
+                                                                            {salesOwners.map(owner => <option key={owner._id} value={owner._id}>{owner.name}</option>)}
+                                                                        </select>
+                                                                    </div>
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -688,7 +712,7 @@ const BranchFollowUp = () => {
                                                                         days > 7 ? "bg-amber-50 text-amber-600 border-amber-100" : 
                                                                         "bg-indigo-50 text-indigo-600 border-indigo-100"
                                                                     }`}>
-                                                                        {days === 0 ? "Today" : `${days}D`}
+                                                                        {days === 0 ? "Today" : days}
                                                                     </span>
                                                                 );
                                                             })()

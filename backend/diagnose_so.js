@@ -11,27 +11,23 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 const SalesOrderSchema = new mongoose.Schema({}, { strict: false });
 const SalesOrder = mongoose.model('SalesOrder', SalesOrderSchema);
 
-async function checkApril1st() {
+async function check() {
   try {
+    console.log('Connecting to:', process.env.MONGO_URI);
     await mongoose.connect(process.env.MONGO_URI);
-    
-    // April 1st, 2026 IST
-    // Start: 2026-04-01T00:00:00+05:30 -> 2026-03-31T18:30:00Z
-    // End:   2026-04-01T23:59:59+05:30 -> 2026-04-01T18:29:59Z
-    
-    const start = new Date("2026-03-31T18:30:00Z");
-    const end = new Date("2026-04-01T18:29:59Z");
+    console.log('Connected!');
 
-    console.log(`Searching for orderDate between ${start.toISOString()} and ${end.toISOString()}`);
+    const count = await SalesOrder.countDocuments();
+    console.log('Total Sales Orders:', count);
 
-    const orders = await SalesOrder.find({
-      orderDate: { $gte: start, $lte: end }
-    }).select('invoiceId orderDate branchId status');
-
-    console.log(`Found ${orders.length} orders for April 1st, 2026.`);
-    orders.forEach(o => {
+    const latest = await SalesOrder.find().sort({ createdAt: -1 }).limit(5);
+    console.log('Latest 5 orders:');
+    latest.forEach(o => {
       console.log(`- ID: ${o.invoiceId}, Date: ${o.orderDate}, Branch: ${o.branchId}, Status: ${o.status}`);
     });
+
+    const branches = await SalesOrder.distinct('branchId');
+    console.log('Unique Branch IDs in SO:', branches);
 
     process.exit(0);
   } catch (err) {
@@ -40,4 +36,4 @@ async function checkApril1st() {
   }
 }
 
-checkApril1st();
+check();

@@ -97,8 +97,8 @@ export default function BranchQuickLinks() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20 px-3 md:px-6 pb-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20 px-3 md:px-10 pb-6">
+      <div className="max-w-full mx-auto">
         {/* Header */}
         <div className="bg-white/70 backdrop-blur-md rounded-2xl shadow-sm border border-white/50 p-4 mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">

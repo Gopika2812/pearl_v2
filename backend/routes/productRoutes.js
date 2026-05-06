@@ -150,7 +150,7 @@ router.post("/", async (req, res) => {
 // GET: Fetch All Products with Pagination
 router.get("/", async (req, res) => {
   try {
-    const { page = 1, limit = 10000, search = "", diag = "", branchId, productGroup, productCategory } = req.query;
+    const { page = 1, limit = 10000, search = "", diag = "", branchId, productGroup, productCategory, mini = false } = req.query;
 
     if (!branchId) {
       return res.status(400).json({ message: "branchId is required" });
@@ -188,6 +188,19 @@ router.get("/", async (req, res) => {
       .skip(skip)
       .limit(pageSize)
       .lean();
+
+    if (mini === "true" || mini === true) {
+        return res.json({
+            success: true,
+            data: products,
+            pagination: {
+                page: pageNum,
+                limit: pageSize,
+                total,
+                pages: Math.ceil(total / pageSize),
+            }
+        });
+    }
 
     // ⚡ SYNC: Fetch financial totals for the returned products to calculate "Tally Stock"
     const productIds = products.map(p => p._id);

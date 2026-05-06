@@ -1,6 +1,6 @@
 import axios from "axios";
 import React, { useEffect, useState, Fragment } from "react";
-import { FaEdit, FaTrash, FaCheck, FaTimes, FaPlus, FaPlusCircle, FaSync, FaSave, FaHistory, FaExclamationTriangle, FaBox, FaArrowLeft, FaEye, FaArrowRight, FaLink, FaExternalLinkAlt, FaImage, FaChevronDown, FaChevronLeft, FaChevronRight, FaChevronUp, FaSearch, FaFileExport } from "react-icons/fa";
+import { FaEdit, FaTrash, FaCheck, FaTimes, FaPlus, FaPlusCircle, FaSync, FaSave, FaHistory, FaExclamationTriangle, FaBox, FaArrowLeft, FaEye, FaArrowRight, FaLink, FaExternalLinkAlt, FaImage, FaChevronDown, FaChevronLeft, FaChevronRight, FaChevronUp, FaSearch, FaFileExport, FaColumns, FaFilter, FaLayerGroup, FaTags } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -42,57 +42,50 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   const [productGroups, setProductGroups] = useState([]);
   const [productCategories, setProductCategories] = useState([]);
   const [applyingMargin, setApplyingMargin] = useState(false);
+  
+  // New Filters for Product
+  const [selectedGroup, setSelectedGroup] = useState("All");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  
+  // Column Selection for Export
+  const [showColumnSelector, setShowColumnSelector] = useState(false);
+  const [selectedExportColumns, setSelectedExportColumns] = useState([]);
 
   const resourceConfig = QUICK_LINKS_CONFIG;
 
-  // 🛡️ Filter config based on permissions
-  const config = { ...resourceConfig[type] };
-  
-  // 🛡️ SECURITY: Even if they manually got to this type, block if not in allowedQuickLinks
-  const isAllowedType = !user?.allowedQuickLinks || user.allowedQuickLinks.length === 0 || user.allowedQuickLinks.includes(type);
-  if (!isAllowedType) {
-    return (
-      <div className="mt-6">
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
-          <p className="text-red-700 font-bold">Access Denied</p>
-          <p className="text-red-600 text-sm">You do not have permission to view {type.replace(/_/g, " ")} records.</p>
-        </div>
-      </div>
-    );
-  }
+  // 🛡️ Filter config based on permissions - Memoized to prevent re-renders and state resets
+  const config = React.useMemo(() => {
+    const baseConfig = { ...resourceConfig[type] };
+    if (!baseConfig) return null;
 
-  if (config && config.displayFields) {
-    config.displayFields = config.displayFields.filter(field => {
-      const granularKey = `${type}_${field}`;
-      
-      // 🛡️ Priority 1: Granular Key (explicitly set)
-      if (fieldPermissions[granularKey] === false) return false;
-      if (fieldPermissions[granularKey] === true) return true;
+    if (baseConfig.displayFields) {
+      baseConfig.displayFields = baseConfig.displayFields.filter(field => {
+        const granularKey = `${type}_${field}`;
+        if (fieldPermissions[granularKey] === false) return false;
+        if (fieldPermissions[granularKey] === true) return true;
+        if (field === "purchasingPrice" && fieldPermissions.purchasingPrice === false) return false;
+        if (field === "adminMargin" && fieldPermissions.adminMargin === false) return false;
+        if (["margin", "marginPercentage", "gst"].includes(field) && fieldPermissions.margin === false) return false;
+        if (["totalQty", "totalQtyUnit"].includes(field) && fieldPermissions.totalQty === false) return false;
+        return true;
+      });
+    }
 
-      // 🛡️ Priority 2: Global Keys (fallback)
-      if (field === "purchasingPrice" && fieldPermissions.purchasingPrice === false) return false;
-      if (field === "adminMargin" && fieldPermissions.adminMargin === false) return false;
-      if (["margin", "marginPercentage", "gst"].includes(field) && fieldPermissions.margin === false) return false;
-      if (["totalQty", "totalQtyUnit"].includes(field) && fieldPermissions.totalQty === false) return false;
-      
-      return true;
-    });
-  }
-  if (config && config.detailedFields) {
-    config.detailedFields = config.detailedFields.filter(field => {
-      const granularKey = `${type}_${field}`;
-      
-      if (fieldPermissions[granularKey] === false) return false;
-      if (fieldPermissions[granularKey] === true) return true;
+    if (baseConfig.detailedFields) {
+      baseConfig.detailedFields = baseConfig.detailedFields.filter(field => {
+        const granularKey = `${type}_${field}`;
+        if (fieldPermissions[granularKey] === false) return false;
+        if (fieldPermissions[granularKey] === true) return true;
+        if (field === "purchasingPrice" && fieldPermissions.purchasingPrice === false) return false;
+        if (field === "adminMargin" && fieldPermissions.adminMargin === false) return false;
+        if (["margin", "marginPercentage", "gst"].includes(field) && fieldPermissions.margin === false) return false;
+        if (["totalQty", "totalQtyUnit"].includes(field) && fieldPermissions.totalQty === false) return false;
+        return true;
+      });
+    }
 
-      if (field === "purchasingPrice" && fieldPermissions.purchasingPrice === false) return false;
-      if (field === "adminMargin" && fieldPermissions.adminMargin === false) return false;
-      if (["margin", "marginPercentage", "gst"].includes(field) && fieldPermissions.margin === false) return false;
-      if (["totalQty", "totalQtyUnit"].includes(field) && fieldPermissions.totalQty === false) return false;
-      
-      return true;
-    });
-  }
+    return baseConfig;
+  }, [type, JSON.stringify(fieldPermissions)]);
 
   // If config is not found, show error state
   if (!config) {
@@ -141,14 +134,30 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     if (branchId) {
       fetchData();
     }
-  }, [branchId, type]);
+  }, [branchId, type, selectedGroup, selectedCategory]);
 
-  // Fetch product groups and categories for group margin
+  // Initialize export columns ONLY when data type actually changes
   useEffect(() => {
-    if (type === "product" && showGroupMargin && branchId) {
+    if (config) {
+      if (type === "product") {
+        // Default to only Name and Selling Price for products as requested
+        setSelectedExportColumns(["name", "sellingPrice"]);
+      } else {
+        const allFields = Array.from(new Set([
+          ...(config.displayFields || []), 
+          ...(config.detailedFields || [])
+        ]));
+        setSelectedExportColumns(allFields);
+      }
+    }
+  }, [type]); // ONLY depend on type, not config object
+
+  // Fetch product groups and categories for filters and group margin
+  useEffect(() => {
+    if (type === "product" && branchId) {
       fetchProductGroupsAndCategories();
     }
-  }, [showGroupMargin, type, branchId]);
+  }, [type, branchId]);
 
   const fetchProductGroupsAndCategories = async () => {
     try {
@@ -167,9 +176,15 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await apiWithAuth.get(config.endpoint, {
-        params: { branchId, limit: 10000 }, // Request up to 10000 records
-      });
+      const params = { branchId, limit: 1000 };
+      
+      if (type === "product") {
+        params.mini = true; // Use optimized fast-loading mode
+        if (selectedGroup !== "All") params.productGroup = selectedGroup;
+        if (selectedCategory !== "All") params.productCategory = selectedCategory;
+      }
+
+      const response = await apiWithAuth.get(config.endpoint, { params });
       setData(Array.isArray(response.data) ? response.data : response.data.data || []);
     } catch (error) {
       console.error(`Error fetching ${type}:`, error);
@@ -356,8 +371,9 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
 
       const exportData = sortedData.map(item => {
         const row = {};
-        // Use displayFields for basic columns
-        config.displayFields.forEach(field => {
+        
+        // Use selectedExportColumns instead of hardcoded display/detailed fields
+        selectedExportColumns.forEach(field => {
           let value = item[field];
           let label = field.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase());
           
@@ -369,25 +385,14 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
             } else {
               row[label] = value.name || value._id || "-";
             }
+          } else if (typeof value === "number") {
+             // Round to 2 decimal places if it's a number
+             row[label] = Math.round(value * 100) / 100;
           } else {
             row[label] = value || "-";
           }
         });
 
-        // Also add detailedFields if they aren't already in displayFields
-        if (config.detailedFields) {
-           config.detailedFields.forEach(field => {
-             let label = field.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase());
-             if (row[label] === undefined) {
-                let value = item[field];
-                if (typeof value === "object" && value !== null) {
-                  row[label] = Array.isArray(value) ? value.map(v => v.name || v._id || "").filter(Boolean).join(", ") : (value.name || value._id || "-");
-                } else {
-                  row[label] = value || "-";
-                }
-             }
-           });
-        }
         return row;
       });
 
@@ -432,6 +437,17 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
       
       return searchableText.toLowerCase().includes(searchLower);
     });
+  }).filter(item => {
+    // Apply Product Group and Category Filters
+    if (type !== "product") return true;
+    
+    const groupMatch = selectedGroup === "All" || 
+      (item.productGroup && (item.productGroup._id === selectedGroup || item.productGroup.name === selectedGroup));
+    
+    const categoryMatch = selectedCategory === "All" || 
+      (item.productCategories && item.productCategories.some(cat => cat._id === selectedCategory || cat.name === selectedCategory));
+      
+    return groupMatch && categoryMatch;
   });
 
   // Sort the filtered data
@@ -493,12 +509,27 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
         <h2 className="text-3xl font-bold text-gray-900">{config.label} Records</h2>
         <div className="ml-auto flex items-center gap-2">
           {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || actionPermissions.export !== false) && (
-            <button
-              onClick={handleExportExcel}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg transition font-semibold shadow-md active:scale-95"
-            >
-              <FaFileExport /> Export Excel
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (type === "product" && selectedExportColumns.length === 0) {
+                    // Pre-select Name and Selling Price ONLY if nothing is selected yet
+                    setSelectedExportColumns(["name", "sellingPrice"]);
+                  }
+                  setShowColumnSelector(true);
+                }}
+                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg transition font-semibold shadow-sm"
+                title="Select Columns for Export"
+              >
+                <FaColumns /> Columns
+              </button>
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg transition font-semibold shadow-md active:scale-95"
+              >
+                <FaFileExport /> Export Excel
+              </button>
+            </div>
           )}
           {type === "product" && (
             <>
@@ -519,10 +550,10 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
         </div>
       </div>
 
-      {/* Search Filter */}
-      <div className="mb-6">
-        <div className="relative">
-          <FaSearch className="absolute left-4 top-4 text-gray-400 text-lg" />
+      {/* Search & Advanced Filters */}
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="flex-1 relative">
+          <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg" />
           <input
             type="text"
             placeholder={`Search by ${config.displayFields.join(", ")}...`}
@@ -533,18 +564,53 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 text-lg"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg"
             >
               <FaTimes />
             </button>
           )}
         </div>
-        {searchQuery && (
-          <p className="text-sm text-gray-600 mt-2">
-            Found {filteredData.length} of {data.length} {config.label.toLowerCase()} records
-          </p>
+
+        {type === "product" && (
+          <div className="flex items-center gap-3">
+            <div className="relative min-w-[200px]">
+              <select
+                className="w-full appearance-none bg-white border-2 border-gray-300 focus:border-primary rounded-lg pl-10 pr-10 py-3 text-sm font-bold text-gray-700 outline-none cursor-pointer transition-all shadow-sm"
+                value={selectedGroup}
+                onChange={(e) => setSelectedGroup(e.target.value)}
+              >
+                <option value="All">All Groups</option>
+                {productGroups.map(g => (
+                  <option key={g._id} value={g._id}>{g.name}</option>
+                ))}
+              </select>
+              <FaLayerGroup className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+              <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={12} />
+            </div>
+
+            <div className="relative min-w-[200px]">
+              <select
+                className="w-full appearance-none bg-white border-2 border-gray-300 focus:border-primary rounded-lg pl-10 pr-10 py-3 text-sm font-bold text-gray-700 outline-none cursor-pointer transition-all shadow-sm"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+              >
+                <option value="All">All Categories</option>
+                {productCategories.map(cat => (
+                  <option key={cat._id} value={cat._id}>{cat.name}</option>
+                ))}
+              </select>
+              <FaTags className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+              <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={12} />
+            </div>
+          </div>
         )}
       </div>
+
+      {searchQuery || selectedGroup !== "All" || selectedCategory !== "All" ? (
+        <p className="text-sm text-gray-600 mt-2 mb-4">
+          Found {filteredData.length} of {data.length} {config.label.toLowerCase()} records
+        </p>
+      ) : null}
 
       {loading ? (
         <div className="text-center py-8">
@@ -965,6 +1031,102 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
               >
                 {applyingMargin ? "Applying..." : "Apply Margin"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Column Selection Modal */}
+      {showColumnSelector && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in duration-200">
+            <div className="bg-gradient-to-r from-slate-800 to-slate-900 p-6 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-3">
+                  <FaColumns className="text-primary" /> Select Export Columns
+                </h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Choose which data fields to include in Excel</p>
+              </div>
+              <button 
+                onClick={() => setShowColumnSelector(false)}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const allFields = Array.from(new Set([...(config.displayFields || []), ...(config.detailedFields || [])]));
+                      setSelectedExportColumns(allFields);
+                    }}
+                    className="px-3 py-1.5 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-primary/20 transition-colors"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={() => setSelectedExportColumns([])}
+                    className="px-3 py-1.5 bg-gray-100 text-gray-500 text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                </div>
+                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                  {selectedExportColumns.length} Fields Selected
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+                {Array.from(new Set([...(config.displayFields || []), ...(config.detailedFields || [])])).map(field => (
+                  <div 
+                    key={field} 
+                    onClick={() => {
+                      if (selectedExportColumns.includes(field)) {
+                        setSelectedExportColumns(prev => prev.filter(f => f !== field));
+                      } else {
+                        setSelectedExportColumns(prev => [...prev, field]);
+                      }
+                    }}
+                    className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer group ${
+                      selectedExportColumns.includes(field) 
+                        ? 'border-primary/50 bg-primary/5 text-primary shadow-sm' 
+                        : 'border-gray-50 bg-gray-50 text-gray-500 hover:border-gray-200'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                      selectedExportColumns.includes(field)
+                        ? 'bg-primary border-primary'
+                        : 'bg-white border-gray-300 group-hover:border-primary/30'
+                    }`}>
+                      {selectedExportColumns.includes(field) && <FaCheck className="text-white text-[10px]" />}
+                    </div>
+                    <span className="text-xs font-bold capitalize">
+                      {field.replace(/([A-Z])/g, " $1")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 flex gap-3">
+                <button
+                  onClick={() => setShowColumnSelector(false)}
+                  className="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl transition-all font-black uppercase tracking-widest text-[11px]"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setShowColumnSelector(false);
+                    handleExportExcel();
+                  }}
+                  disabled={selectedExportColumns.length === 0}
+                  className="flex-1 px-6 py-3 bg-primary hover:bg-[#248d94] disabled:bg-gray-300 text-white rounded-xl transition-all font-black uppercase tracking-widest text-[11px] shadow-lg shadow-primary/20"
+                >
+                  Export Now
+                </button>
+              </div>
             </div>
           </div>
         </div>
