@@ -702,28 +702,32 @@ router.get("/", async (req, res) => {
       }
     });
 
-    // 2.5 Lookup Last Invoice for "Age" Sorting
-    pipeline.push(
-      {
-        $lookup: {
-          from: "invoices",
-          let: { cId: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: { $in: ["FINALIZED", "PRINTED", "SENT"] } } },
-            { $sort: { invoiceDate: -1 } },
-            { $limit: 1 }
-          ],
-          as: "lastInv"
-        }
-      },
-      { $unwind: { path: "$lastInv", preserveNullAndEmptyArrays: true } },
-      {
-        $addFields: {
-          lastInvoiceDate: "$lastInv.invoiceDate",
-          lastInvoiceNumber: "$lastInv.invoiceNumber"
-        }
-      }
-    );
+    const isAgeSort = sortBy === "age";
+
+    // 2.5 Lookup Last Invoice for "Age" Sorting (ONLY if sorting by age)
+    if (isAgeSort) {
+        pipeline.push(
+            {
+                $lookup: {
+                    from: "invoices",
+                    let: { cId: "$_id" },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: { $in: ["FINALIZED", "PRINTED", "SENT"] } } },
+                        { $sort: { invoiceDate: -1 } },
+                        { $limit: 1 }
+                    ],
+                    as: "lastInv"
+                }
+            },
+            { $unwind: { path: "$lastInv", preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    lastInvoiceDate: "$lastInv.invoiceDate",
+                    lastInvoiceNumber: "$lastInv.invoiceNumber"
+                }
+            }
+        );
+    }
 
     const sort = {};
     const order = sortOrder === "desc" ? -1 : 1;
@@ -759,6 +763,31 @@ router.get("/", async (req, res) => {
     // 4. Pagination
     pipeline.push({ $skip: skip });
     pipeline.push({ $limit: pageSize });
+
+    // 2.6 Deferred Lookup (If NOT sorting by age, we do it after limit to save 1000s of joins)
+    if (!isAgeSort) {
+        pipeline.push(
+            {
+                $lookup: {
+                    from: "invoices",
+                    let: { cId: "$_id" },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: { $in: ["FINALIZED", "PRINTED", "SENT"] } } },
+                        { $sort: { invoiceDate: -1 } },
+                        { $limit: 1 }
+                    ],
+                    as: "lastInv"
+                }
+            },
+            { $unwind: { path: "$lastInv", preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    lastInvoiceDate: "$lastInv.invoiceDate",
+                    lastInvoiceNumber: "$lastInv.invoiceNumber"
+                }
+            }
+        );
+    }
 
     // 5. Lookups (Population)
     pipeline.push(

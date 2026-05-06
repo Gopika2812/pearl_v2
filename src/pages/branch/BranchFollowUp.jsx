@@ -295,88 +295,92 @@ const BranchFollowUp = () => {
                     </div>
 
                     {/* Filters Row */}
-                    <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3 w-full">
+                    <div className="bg-white p-3 sm:p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center gap-3 w-full">
+                        {/* Search Bar */}
                         <div className="flex-1 relative">
                             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                                 <FaSearch size={14} />
                             </div>
                             <input
                                 type="text"
-                                placeholder="Search by name, mobile, or ID..."
-                                className="w-full bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-9 pr-3 py-2 text-sm font-semibold text-gray-800 outline-none transition-all"
+                                placeholder="Search by name, mobile..."
+                                className="w-full bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-9 pr-3 py-2.5 text-sm font-semibold text-gray-800 outline-none transition-all"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
 
-                        <div className="relative min-w-[150px]">
-                            <select
-                                className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
-                                value={groupFilter}
-                                onChange={(e) => setGroupFilter(e.target.value)}
-                            >
-                                <option value="All">All Groups</option>
-                                {customerGroups.map(g => (
-                                    <option key={g._id} value={g._id}>{g.name}</option>
-                                ))}
-                            </select>
-                            <FaFilter className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
-                        </div>
-
-                        <div className="relative min-w-[150px]">
-                            <select
-                                className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
-                                value={categoryFilter}
-                                onChange={(e) => setCategoryFilter(e.target.value)}
-                            >
-                                <option value="All">All Categories</option>
-                                {customerCategories.map(cat => (
-                                    <option key={cat._id} value={cat._id}>{cat.name}</option>
-                                ))}
-                            </select>
-                            <FaTag className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
-                        </div>
-
-                        <div className="relative min-w-[150px]">
-                            <select
-                                className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
-                                value={zoneFilter}
-                                onChange={(e) => setZoneFilter(e.target.value)}
-                            >
-                                <option value="All">All Zones</option>
-                                <option value="safe_zone">Safe Zone</option>
-                                <option value="medium_zone">Medium Zone</option>
-                                <option value="risk_zone">Risk Zone</option>
-                            </select>
-                            <FaClock className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
-                        </div>
-
-                        {user?.role === "SUPER_ADMIN" && (
-                            <div className="flex items-center gap-2">
-                                <input 
-                                    type="file" 
-                                    ref={fileInputRef} 
-                                    onChange={handleBulkCreditUpdate} 
-                                    className="hidden" 
-                                    accept=".xlsx, .xls"
-                                />
-                                <button 
-                                    onClick={() => fileInputRef.current.click()}
-                                    disabled={bulkUpdating}
-                                    className="w-9 h-9 bg-indigo-600 border border-indigo-700 rounded-lg flex items-center justify-center text-white hover:bg-indigo-700 transition-all shadow-sm shrink-0 disabled:opacity-50"
-                                    title="Bulk Update Credit Limits"
+                        {/* Filter Selects Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 lg:flex gap-2 lg:gap-3">
+                            <div className="relative min-w-[140px]">
+                                <select
+                                    className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2.5 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
+                                    value={groupFilter}
+                                    onChange={(e) => setGroupFilter(e.target.value)}
                                 >
-                                    {bulkUpdating ? <FaSpinner className="animate-spin" /> : <FaCloudUploadAlt size={16} />}
-                                </button>
-                                <button 
-                                    onClick={() => setIsManageCategoriesOpen(true)}
-                                    className="w-9 h-9 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all shrink-0"
-                                    title="Manage Master Data"
-                                >
-                                    <FaCog size={16} />
-                                </button>
+                                    <option value="All">Groups</option>
+                                    {customerGroups.map(g => (
+                                        <option key={g._id} value={g._id}>{g.name}</option>
+                                    ))}
+                                </select>
+                                <FaFilter className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
                             </div>
-                        )}
+
+                            <div className="relative min-w-[140px]">
+                                <select
+                                    className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2.5 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
+                                    value={categoryFilter}
+                                    onChange={(e) => setCategoryFilter(e.target.value)}
+                                >
+                                    <option value="All">Categories</option>
+                                    {customerCategories.map(cat => (
+                                        <option key={cat._id} value={cat._id}>{cat.name}</option>
+                                    ))}
+                                </select>
+                                <FaTag className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
+                            </div>
+
+                            <div className="relative min-w-[140px]">
+                                <select
+                                    className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2.5 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
+                                    value={zoneFilter}
+                                    onChange={(e) => setZoneFilter(e.target.value)}
+                                >
+                                    <option value="All">All Zones</option>
+                                    <option value="safe_zone">Safe Zone</option>
+                                    <option value="medium_zone">Medium Zone</option>
+                                    <option value="risk_zone">Risk Zone</option>
+                                </select>
+                                <FaClock className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
+                            </div>
+
+                            {user?.role === "SUPER_ADMIN" && (
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="file" 
+                                        ref={fileInputRef} 
+                                        onChange={handleBulkCreditUpdate} 
+                                        className="hidden" 
+                                        accept=".xlsx, .xls"
+                                    />
+                                    <button 
+                                        onClick={() => fileInputRef.current.click()}
+                                        disabled={bulkUpdating}
+                                        className="flex-1 lg:w-10 h-10 bg-indigo-600 border border-indigo-700 rounded-lg flex items-center justify-center text-white hover:bg-indigo-700 transition-all shadow-sm shrink-0 disabled:opacity-50"
+                                        title="Bulk Update Credit Limits"
+                                    >
+                                        {bulkUpdating ? <FaSpinner className="animate-spin" /> : <FaCloudUploadAlt size={16} />}
+                                    </button>
+                                    <button 
+                                        onClick={() => setIsManageCategoriesOpen(true)}
+                                        className="flex-1 lg:w-10 h-10 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all shrink-0"
+                                        title="Manage Master Data"
+                                    >
+                                        <FaCog size={16} />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
