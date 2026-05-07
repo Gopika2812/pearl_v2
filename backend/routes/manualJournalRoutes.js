@@ -85,7 +85,7 @@ router.post("/", auth, async (req, res) => {
     session.startTransaction();
 
     try {
-        const { by, to, amount, paymentMode, narration, entryType, branchId } = req.body;
+        const { by, to, amount, tax, grandTotal, paymentMode, narration, entryType, branchId } = req.body;
         const effectiveBranchId = branchId || req.user.branch || req.user._id;
         const finYear = getFinancialYear();
 
@@ -104,6 +104,9 @@ router.post("/", auth, async (req, res) => {
             by,
             to,
             amount,
+            tax: tax || 0,
+            taxPercentage: taxPercentage || 0,
+            grandTotal: grandTotal || (parseFloat(amount) + parseFloat(tax || 0)),
             entryType: entryType || "DEBIT",
             paymentMode,
             narration,
@@ -114,22 +117,23 @@ router.post("/", auth, async (req, res) => {
 
         await newJournal.save({ session });
 
-        // 3. Update "BY" Balance (Debit side)
+        // 3. Update "BY" Balance (Debit side) - Using Grand Total
+        const totalToImpact = newJournal.grandTotal;
         if (by.partyType === "DEBTOR") {
-            await Customer.findByIdAndUpdate(by.partyId, { $inc: { debit: amount } }, { session });
+            await Customer.findByIdAndUpdate(by.partyId, { $inc: { debit: totalToImpact } }, { session });
         } else if (by.partyType === "VENDOR") {
-            await Vendor.findByIdAndUpdate(by.partyId, { $inc: { debit: amount } }, { session });
+            await Vendor.findByIdAndUpdate(by.partyId, { $inc: { debit: totalToImpact } }, { session });
         } else if (by.partyType === "LEDGER") {
-            await TallyJournal.findByIdAndUpdate(by.partyId, { $inc: { debit: amount } }, { session });
+            await TallyJournal.findByIdAndUpdate(by.partyId, { $inc: { debit: totalToImpact } }, { session });
         }
 
-        // 4. Update "TO" Balance (Credit side)
+        // 4. Update "TO" Balance (Credit side) - Using Grand Total
         if (to.partyType === "DEBTOR") {
-            await Customer.findByIdAndUpdate(to.partyId, { $inc: { credit: amount } }, { session });
+            await Customer.findByIdAndUpdate(to.partyId, { $inc: { credit: totalToImpact } }, { session });
         } else if (to.partyType === "VENDOR") {
-            await Vendor.findByIdAndUpdate(to.partyId, { $inc: { credit: amount } }, { session });
+            await Vendor.findByIdAndUpdate(to.partyId, { $inc: { credit: totalToImpact } }, { session });
         } else if (to.partyType === "LEDGER") {
-            await TallyJournal.findByIdAndUpdate(to.partyId, { $inc: { credit: amount } }, { session });
+            await TallyJournal.findByIdAndUpdate(to.partyId, { $inc: { credit: totalToImpact } }, { session });
         }
 
         await session.commitTransaction();
@@ -149,57 +153,62 @@ router.put("/:id", auth, async (req, res) => {
     session.startTransaction();
 
     try {
-        const { by, to, amount, paymentMode, narration, primaryCategory } = req.body;
+        const { by, to, amount, tax, grandTotal, paymentMode, narration, primaryCategory } = req.body;
         const oldJournal = await ManualJournal.findById(req.params.id);
         
         if (!oldJournal) throw new Error("Journal entry not found");
 
-        // 1. REVERSE OLD IMPACT
-        const oldAmt = oldJournal.amount;
+        // 1. REVERSE OLD IMPACT - Use old grandTotal (fallback to amount if old record doesn't have it)
+        const oldImpact = oldJournal.grandTotal || oldJournal.amount;
         
         // Reverse Old BY (Debit)
         if (oldJournal.by.partyType === "DEBTOR") {
-            await Customer.findByIdAndUpdate(oldJournal.by.partyId, { $inc: { debit: -oldAmt } }, { session });
+            await Customer.findByIdAndUpdate(oldJournal.by.partyId, { $inc: { debit: -oldImpact } }, { session });
         } else if (oldJournal.by.partyType === "VENDOR") {
-            await Vendor.findByIdAndUpdate(oldJournal.by.partyId, { $inc: { debit: -oldAmt } }, { session });
+            await Vendor.findByIdAndUpdate(oldJournal.by.partyId, { $inc: { debit: -oldImpact } }, { session });
         } else if (oldJournal.by.partyType === "LEDGER") {
-            await TallyJournal.findByIdAndUpdate(oldJournal.by.partyId, { $inc: { debit: -oldAmt } }, { session });
+            await TallyJournal.findByIdAndUpdate(oldJournal.by.partyId, { $inc: { debit: -oldImpact } }, { session });
         }
 
         // Reverse Old TO (Credit)
         if (oldJournal.to.partyType === "DEBTOR") {
-            await Customer.findByIdAndUpdate(oldJournal.to.partyId, { $inc: { credit: -oldAmt } }, { session });
+            await Customer.findByIdAndUpdate(oldJournal.to.partyId, { $inc: { credit: -oldImpact } }, { session });
         } else if (oldJournal.to.partyType === "VENDOR") {
-            await Vendor.findByIdAndUpdate(oldJournal.to.partyId, { $inc: { credit: -oldAmt } }, { session });
+            await Vendor.findByIdAndUpdate(oldJournal.to.partyId, { $inc: { credit: -oldImpact } }, { session });
         } else if (oldJournal.to.partyType === "LEDGER") {
-            await TallyJournal.findByIdAndUpdate(oldJournal.to.partyId, { $inc: { credit: -oldAmt } }, { session });
+            await TallyJournal.findByIdAndUpdate(oldJournal.to.partyId, { $inc: { credit: -oldImpact } }, { session });
         }
 
-        // 2. APPLY NEW IMPACT
+        // 2. APPLY NEW IMPACT - Use new grandTotal
         const newAmt = parseFloat(amount);
+        const newTax = parseFloat(tax || 0);
+        const newTotal = grandTotal ? parseFloat(grandTotal) : (newAmt + newTax);
 
         // Apply New BY (Debit)
         if (by.partyType === "DEBTOR") {
-            await Customer.findByIdAndUpdate(by.partyId, { $inc: { debit: newAmt } }, { session });
+            await Customer.findByIdAndUpdate(by.partyId, { $inc: { debit: newTotal } }, { session });
         } else if (by.partyType === "VENDOR") {
-            await Vendor.findByIdAndUpdate(by.partyId, { $inc: { debit: newAmt } }, { session });
+            await Vendor.findByIdAndUpdate(by.partyId, { $inc: { debit: newTotal } }, { session });
         } else if (by.partyType === "LEDGER") {
-            await TallyJournal.findByIdAndUpdate(by.partyId, { $inc: { debit: newAmt } }, { session });
+            await TallyJournal.findByIdAndUpdate(by.partyId, { $inc: { debit: newTotal } }, { session });
         }
 
         // Apply New TO (Credit)
         if (to.partyType === "DEBTOR") {
-            await Customer.findByIdAndUpdate(to.partyId, { $inc: { credit: newAmt } }, { session });
+            await Customer.findByIdAndUpdate(to.partyId, { $inc: { credit: newTotal } }, { session });
         } else if (to.partyType === "VENDOR") {
-            await Vendor.findByIdAndUpdate(to.partyId, { $inc: { credit: newAmt } }, { session });
+            await Vendor.findByIdAndUpdate(to.partyId, { $inc: { credit: newTotal } }, { session });
         } else if (to.partyType === "LEDGER") {
-            await TallyJournal.findByIdAndUpdate(to.partyId, { $inc: { credit: newAmt } }, { session });
+            await TallyJournal.findByIdAndUpdate(to.partyId, { $inc: { credit: newTotal } }, { session });
         }
 
         // 3. Update the Journal Record
         oldJournal.by = by;
         oldJournal.to = to;
         oldJournal.amount = newAmt;
+        oldJournal.tax = newTax;
+        oldJournal.taxPercentage = parseFloat(req.body.taxPercentage || 0);
+        oldJournal.grandTotal = newTotal;
         oldJournal.paymentMode = paymentMode;
         oldJournal.narration = narration;
         oldJournal.primaryCategory = primaryCategory || oldJournal.primaryCategory;
