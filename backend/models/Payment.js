@@ -82,8 +82,19 @@ const paymentSchema = new mongoose.Schema(
     // Status
     status: {
       type: String,
-      enum: ["pending", "completed", "failed"],
+      enum: ["pending", "completed", "failed", "returned"],
       default: "completed",
+    },
+
+    isReturned: {
+      type: Boolean,
+      default: false
+    },
+    returnDate: Date,
+    returnNarration: String,
+    returnBank: {
+      type: String,
+      enum: ["ICICI", "STATE_BANK", "CASH", "OTHER"]
     },
 
     createdAt: {

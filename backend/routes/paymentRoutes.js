@@ -361,4 +361,50 @@ router.get("/summary/by-type", async (req, res) => {
   }
 });
 
+// RETURN PAYMENT
+router.post("/:id/return", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { returnNarration, returnBank } = req.body;
+    const payment = await Payment.findById(req.params.id);
+
+    if (!payment) {
+      throw new Error("Payment not found");
+    }
+
+    if (payment.isReturned) {
+      throw new Error("Payment is already returned");
+    }
+
+    // 1. Mark as returned
+    payment.isReturned = true;
+    payment.status = "returned";
+    payment.returnDate = new Date();
+    payment.returnNarration = returnNarration;
+    payment.returnBank = returnBank;
+    await payment.save({ session });
+
+    // 2. Increase Vendor Credit (Reverse the payment impact)
+    if (payment.paymentType === "vendor_payment" && payment.vendor?.vendorId) {
+      const vendorRecord = await Vendor.findById(payment.vendor.vendorId);
+      if (vendorRecord) {
+        const returnedAmount = payment.amount;
+        vendorRecord.credit = (vendorRecord.credit || 0) + returnedAmount;
+        await vendorRecord.save({ session });
+        console.log(`✅ Vendor "${vendorRecord.name}" credit restored (Return): ₹${returnedAmount}`);
+      }
+    }
+
+    await session.commitTransaction();
+    res.json({ success: true, message: "Payment returned successfully", data: payment });
+  } catch (err) {
+    await session.abortTransaction();
+    console.error("Payment return error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  } finally {
+    session.endSession();
+  }
+});
+
 export default router;
