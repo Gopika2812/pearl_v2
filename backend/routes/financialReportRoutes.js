@@ -425,6 +425,13 @@ router.get("/debug/journal-entries", async (req, res) => {
 /**
  * Day Book Aggregation
  * Shows all Sales (Debit) and Purchase (Credit) transactions in one place
+ */import ManualJournal from "../models/ManualJournal.js";
+
+// ... (existing imports)
+
+/**
+ * Day Book Aggregation
+ * Shows all Sales (Debit) and Purchase (Credit) transactions in one place
  */
 router.get("/day-book", async (req, res) => {
   try {
@@ -436,14 +443,12 @@ router.get("/day-book", async (req, res) => {
     const dateFilter = {};
     if (fromDate || toDate) {
       if (fromDate) {
-        // Align to 00:00 IST (which is 18:30 UTC of previous day)
         const dateArr = fromDate.split("-").map(Number);
         const startIST = new Date(Date.UTC(dateArr[0], dateArr[1]-1, dateArr[2], 0, 0, 0));
         startIST.setMinutes(startIST.getMinutes() - 330); 
         dateFilter.$gte = startIST;
       }
       if (toDate) {
-        // Align to 23:59:59 IST
         const dateArr = toDate.split("-").map(Number);
         const endIST = new Date(Date.UTC(dateArr[0], dateArr[1]-1, dateArr[2], 23, 59, 59, 999));
         endIST.setMinutes(endIST.getMinutes() - 330); 
@@ -451,194 +456,52 @@ router.get("/day-book", async (req, res) => {
       }
     }
 
-    // 1. Fetch Sales Orders (Original Orders)
-    const salesOrders = await SalesOrder.find({
-      branchId,
-      status: { $ne: "CANCELLED" },
-      ...(fromDate || toDate ? { 
-        $or: [
-          { orderDate: dateFilter },
-          { createdAt: dateFilter }
-        ] 
-      } : {})
-    }).select("invoiceId customer status grandTotal orderDate createdAt");
-
-    // 1b. Fetch Sales Invoices (Finalized Bills)
-    const Invoice = mongoose.model("Invoice");
-    const salesInvoices = await Invoice.find({
-      branchId,
-      ...(fromDate || toDate ? { 
-        $or: [
-          { invoiceDate: dateFilter },
-          { createdAt: dateFilter }
-        ] 
-      } : {})
-    }).select("invoiceNumber customer grandTotal invoiceDate createdAt");
-
-    // 2. Fetch Purchase Orders (Original Orders)
-    const PurchaseOrder = mongoose.model("PurchaseOrder");
-    const purchaseOrders = await PurchaseOrder.find({
-      branchId,
-      status: { $ne: "CANCELLED" },
-      ...(fromDate || toDate ? { 
-        $or: [
-          { date: dateFilter },
-          { createdAt: dateFilter }
-        ]
-      } : {})
-    }).select("invoiceId purchaseInvoiceId vendor status grandTotal date createdAt");
-
-    // 3. Fetch Purchase Invoices (Received/Finalized)
-    const purchaseInvoices = await PurchaseInvoice.find({
-      branchId,
-      ...(fromDate || toDate ? { 
-        $or: [
-          { vendorDate: dateFilter },
-          { invoiceDate: dateFilter },
-          { createdAt: dateFilter }
-        ]
-      } : {})
-    }).select("purchaseInvoiceId vendor voucherType grandTotal vendorDate invoiceDate createdAt");
-
-    // 4. Fetch Credit Notes
-    const filteredCreditNotes = await CreditNote.find({
-      branchId,
-      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
-    }).select("creditNoteId customer grandTotal createdAt");
-
-    // 5. Fetch Receipts
-    const receipts = await Receipt.find({
-      branchId,
-      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
-    }).select("receiptId customer amount createdAt");
-
-    // 6. Fetch Payments
-    const payments = await Payment.find({
-      branchId,
-      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
-    }).select("paymentId vendor expenseDetails amount createdAt");
-
-    // 7. Fetch Debit Notes
-    const debitNotes = await DebitNote.find({
-      branchId,
-      ...(fromDate || toDate ? { createdAt: dateFilter } : {})
-    }).select("debitNoteId vendor grandTotal createdAt");
-
-    // 8. Fetch Approved Physical Stock Adjustments (SJ)
-    const physicalStockEntries = await PhysicalStockEntry.find({
-      branchId,
-      status: "APPROVED",
-      ...(fromDate || toDate ? { entryDate: dateFilter } : {})
-    }).select("sjId productName productGroupName inwardQty outwardQty approvedBy entryDate createdAt").lean();
+    // 1. Fetch Sales Orders, Invoices, Purchases, etc...
+    const [salesOrders, salesInvoices, purchaseOrders, purchaseInvoices, filteredCreditNotes, receipts, payments, debitNotes, physicalStockEntries, manualJournals] = await Promise.all([
+      SalesOrder.find({ branchId, status: { $ne: "CANCELLED" }, ...(fromDate || toDate ? { $or: [{ orderDate: dateFilter }, { createdAt: dateFilter }] } : {}) }).select("invoiceId customer status grandTotal orderDate createdAt"),
+      mongoose.model("Invoice").find({ branchId, ...(fromDate || toDate ? { $or: [{ invoiceDate: dateFilter }, { createdAt: dateFilter }] } : {}) }).select("invoiceNumber customer grandTotal invoiceDate createdAt"),
+      mongoose.model("PurchaseOrder").find({ branchId, status: { $ne: "CANCELLED" }, ...(fromDate || toDate ? { $or: [{ date: dateFilter }, { createdAt: dateFilter }] } : {}) }).select("invoiceId vendor status grandTotal date createdAt"),
+      PurchaseInvoice.find({ branchId, ...(fromDate || toDate ? { $or: [{ vendorDate: dateFilter }, { invoiceDate: dateFilter }, { createdAt: dateFilter }] } : {}) }).select("purchaseInvoiceId vendor voucherType grandTotal vendorDate invoiceDate createdAt"),
+      CreditNote.find({ branchId, ...(fromDate || toDate ? { createdAt: dateFilter } : {}) }).select("creditNoteId customer grandTotal createdAt"),
+      Receipt.find({ branchId, ...(fromDate || toDate ? { createdAt: dateFilter } : {}) }).select("receiptId customer amount createdAt"),
+      Payment.find({ branchId, ...(fromDate || toDate ? { createdAt: dateFilter } : {}) }).select("paymentId vendor expenseDetails amount createdAt"),
+      DebitNote.find({ branchId, ...(fromDate || toDate ? { createdAt: dateFilter } : {}) }).select("debitNoteId vendor grandTotal createdAt"),
+      PhysicalStockEntry.find({ branchId, status: "APPROVED", ...(fromDate || toDate ? { entryDate: dateFilter } : {}) }).select("sjId productName productGroupName inwardQty outwardQty approvedBy entryDate createdAt").lean(),
+      ManualJournal.find({ branchId, ...(fromDate || toDate ? { journalDate: dateFilter } : {}) }).select("journalId by to amount narration journalDate createdAt")
+    ]);
 
     // Combine and Transform
     const dayBook = [
-      ...salesOrders.map(s => ({
-        _id: s._id,
-        date: s.createdAt || s.orderDate,
-        name: s.customer?.name || "Customer",
-        voucherType: "SO",
-        invoiceId: s.invoiceId,
-        debit: s.grandTotal || 0,
-        credit: 0,
-        type: "SALE",
-        status: s.status
-      })),
-      ...salesInvoices.map(si => ({
-        _id: si._id,
-        date: si.createdAt || si.invoiceDate,
-        name: si.customer?.name || "Customer",
-        voucherType: "SI",
-        invoiceId: si.invoiceNumber,
-        debit: si.grandTotal || 0,
-        credit: 0,
-        type: "SALE",
-        status: "FINALIZED"
-      })),
-      ...purchaseOrders.map(po => ({
-        _id: po._id,
-        date: po.createdAt || po.date,
-        name: po.vendor || "Supplier",
-        voucherType: "PO",
-        invoiceId: po.invoiceId,
-        debit: 0,
-        credit: po.grandTotal || 0,
-        type: "PURCHASE",
-        status: po.status
-      })),
-      ...purchaseInvoices.map(p => ({
-        _id: p._id,
-        date: p.createdAt || p.vendorDate || p.invoiceDate,
-        name: p.vendor || "N/A",
-        voucherType: p.voucherType || "PI",
-        invoiceId: p.purchaseInvoiceId,
-        debit: 0,
-        credit: p.grandTotal || 0,
-        type: "PURCHASE",
-        status: "INVOICED"
-      })),
-      ...filteredCreditNotes.map(cn => ({
-        _id: cn._id,
-        date: cn.createdAt,
-        name: cn.customer?.name || "Customer",
-        voucherType: "CN",
-        invoiceId: cn.creditNoteId,
-        debit: 0,
-        credit: cn.grandTotal || 0,
-        type: "CREDIT_NOTE"
-      })),
-      ...receipts.map(r => ({
-        _id: r._id,
-        date: r.createdAt,
-        name: r.customer?.name || "Customer",
-        voucherType: "REC",
-        invoiceId: r.receiptId,
-        debit: r.amount || 0,
-        credit: 0,
-        type: "RECEIPT"
-      })),
-      ...payments.map(p => ({
-        _id: p._id,
-        date: p.createdAt,
-        name: p.vendor?.name || p.expenseDetails?.personName || "N/A",
-        voucherType: "PAY",
-        invoiceId: p.paymentId,
-        debit: 0,
-        credit: p.amount || 0,
-        type: "PAYMENT"
-      })),
-      ...debitNotes.map(dn => ({
-        _id: dn._id,
-        date: dn.createdAt,
-        name: dn.vendor?.name || "N/A",
-        voucherType: "DN",
-        invoiceId: dn.debitNoteId,
-        debit: dn.grandTotal || 0,
-        credit: 0,
-        type: "DEBIT_NOTE"
-      })),
-      // ✅ Stock Adjustment entries from Physical Stock Verification
-      ...physicalStockEntries.map(psv => ({
-        _id: psv._id,
-        date: psv.entryDate || psv.createdAt,
-        name: psv.productName + (psv.productGroupName ? ` (${psv.productGroupName})` : ""),
-        voucherType: "SJ",
-        invoiceId: psv.sjId,
-        debit:  psv.inwardQty  > 0 ? psv.inwardQty  : 0,   // Inward = stock increases
-        credit: psv.outwardQty > 0 ? psv.outwardQty : 0,   // Outward = stock decreases
-        type: "STOCK_ADJUSTMENT",
-        approvedBy: psv.approvedBy?.username || "-"
+      ...salesOrders.map(s => ({ _id: s._id, date: s.createdAt || s.orderDate, name: s.customer?.name || "Customer", voucherType: "SO", invoiceId: s.invoiceId, debit: s.grandTotal || 0, credit: 0, type: "SALE", status: s.status })),
+      ...salesInvoices.map(si => ({ _id: si._id, date: si.createdAt || si.invoiceDate, name: si.customer?.name || "Customer", voucherType: "SI", invoiceId: si.invoiceNumber, debit: si.grandTotal || 0, credit: 0, type: "SALE", status: "FINALIZED" })),
+      ...purchaseOrders.map(po => ({ _id: po._id, date: po.createdAt || po.date, name: po.vendor || "Supplier", voucherType: "PO", invoiceId: po.invoiceId, debit: 0, credit: po.grandTotal || 0, type: "PURCHASE", status: po.status })),
+      ...purchaseInvoices.map(p => ({ _id: p._id, date: p.createdAt || p.vendorDate || p.invoiceDate, name: p.vendor || "N/A", voucherType: p.voucherType || "PI", invoiceId: p.purchaseInvoiceId, debit: 0, credit: p.grandTotal || 0, type: "PURCHASE", status: "INVOICED" })),
+      ...filteredCreditNotes.map(cn => ({ _id: cn._id, date: cn.createdAt, name: cn.customer?.name || "Customer", voucherType: "CN", invoiceId: cn.creditNoteId, debit: 0, credit: cn.grandTotal || 0, type: "CREDIT_NOTE" })),
+      ...receipts.map(r => ({ _id: r._id, date: r.createdAt, name: r.customer?.name || "Customer", voucherType: "REC", invoiceId: r.receiptId, debit: r.amount || 0, credit: 0, type: "RECEIPT" })),
+      ...payments.map(p => ({ _id: p._id, date: p.createdAt, name: p.vendor?.name || p.expenseDetails?.personName || "N/A", voucherType: "PAY", invoiceId: p.paymentId, debit: 0, credit: p.amount || 0, type: "PAYMENT" })),
+      ...debitNotes.map(dn => ({ _id: dn._id, date: dn.createdAt, name: dn.vendor?.name || "N/A", voucherType: "DN", invoiceId: dn.debitNoteId, debit: dn.grandTotal || 0, credit: 0, type: "DEBIT_NOTE" })),
+      ...physicalStockEntries.map(psv => ({ _id: psv._id, date: psv.entryDate || psv.createdAt, name: psv.productName + (psv.productGroupName ? ` (${psv.productGroupName})` : ""), voucherType: "SJ", invoiceId: psv.sjId, debit:  psv.inwardQty  > 0 ? psv.inwardQty  : 0, credit: psv.outwardQty > 0 ? psv.outwardQty : 0, type: "STOCK_ADJUSTMENT", approvedBy: psv.approvedBy?.username || "-" })),
+      ...manualJournals.map(mj => ({
+        _id: mj._id,
+        date: mj.journalDate || mj.createdAt,
+        name: `${mj.by?.partyName} → ${mj.to?.partyName}`,
+        voucherType: "JE",
+        invoiceId: mj.journalId,
+        debit: mj.amount || 0,
+        credit: mj.amount || 0,
+        type: "JOURNAL",
+        narration: mj.narration
       }))
     ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    res.json({
+    return res.json({
       success: true,
       data: dayBook,
       count: dayBook.length
     });
   } catch (error) {
     console.error("Day Book Error:", error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       success: false, 
       message: "Failed to fetch Day Book data",
       error: error.message 

@@ -7,6 +7,7 @@ import PurchaseOrder from "../models/PurchaseOrder.js";
 import PurchaseInvoice from "../models/PurchaseInvoice.js";
 import Payment from "../models/Payment.js";
 import DebitNote from "../models/DebitNote.js";
+import ManualJournal from "../models/ManualJournal.js";
 
 const router = express.Router();
 
@@ -531,11 +532,25 @@ router.get("/:id/ledger", async (req, res) => {
       createdAt: { $gte: start }
     }).select("grandTotal createdAt debitNoteId reason originalInvoiceId originalInvoiceDate").lean();
 
+    // 4.5 Fetch Manual Journals after start
+    const mjAfterBy = await ManualJournal.find({
+      "by.partyType": "VENDOR",
+      "by.partyId": id,
+      journalDate: { $gte: start }
+    }).select("amount");
+    const mjAfterTo = await ManualJournal.find({
+      "to.partyType": "VENDOR",
+      "to.partyId": id,
+      journalDate: { $gte: start }
+    }).select("amount");
+
     // Opening Balance = Current_Balance - (Credits after Start) + (Debits after Start)
-    const totalCreditsAfterStart = pisAfterStart.reduce((sum, pi) => sum + (pi.grandTotal || 0), 0);
+    const totalCreditsAfterStart = pisAfterStart.reduce((sum, pi) => sum + (pi.grandTotal || 0), 0) +
+                                  mjAfterTo.reduce((sum, mj) => sum + (mj.amount || 0), 0);
     const totalDebitsAfterStart =
       paymentsAfterStart.reduce((sum, p) => sum + (p.amount || 0), 0) +
-      dnAfterStart.reduce((sum, dn) => sum + (dn.grandTotal || 0), 0);
+      dnAfterStart.reduce((sum, dn) => sum + (dn.grandTotal || 0), 0) +
+      mjAfterBy.reduce((sum, mj) => sum + (mj.amount || 0), 0);
 
     const openingBalance = currentBalance - totalCreditsAfterStart + totalDebitsAfterStart;
 
@@ -543,6 +558,18 @@ router.get("/:id/ledger", async (req, res) => {
     const inRangePIs = pisAfterStart.filter(pi => new Date(pi.createdAt) <= end);
     const inRangePayments = paymentsAfterStart.filter(p => new Date(p.paymentDate) <= end);
     const inRangeDNs = dnAfterStart.filter(dn => new Date(dn.createdAt) <= end);
+    
+    const mjInRangeBy = await ManualJournal.find({
+      "by.partyType": "VENDOR",
+      "by.partyId": id,
+      journalDate: { $gte: start, $lte: end }
+    }).select("amount journalDate journalId narration userName paymentMode");
+
+    const mjInRangeTo = await ManualJournal.find({
+      "to.partyType": "VENDOR",
+      "to.partyId": id,
+      journalDate: { $gte: start, $lte: end }
+    }).select("amount journalDate journalId narration userName paymentMode");
 
     // 6. Format all transactions
     const txns = [
@@ -569,6 +596,22 @@ router.get("/:id/ledger", async (req, res) => {
         particulars: `Debit Note: ${dn.debitNoteId} (${dn.reason || "General"})${dn.originalInvoiceId ? ` [Against Inv: ${dn.originalInvoiceId}${dn.originalInvoiceDate ? ` Dt: ${new Date(dn.originalInvoiceDate).toLocaleDateString("en-IN", { day: '2-digit', month: 'short' })}` : ""}]` : ""}`,
         debit: dn.grandTotal || 0,
         credit: 0
+      })),
+      ...mjInRangeBy.map(mj => ({
+        id: `mjb-${mj._id}`,
+        date: mj.journalDate,
+        type: "JOURNAL_DR",
+        particulars: `Journal: ${mj.journalId} (DR) - ${mj.narration || "Manual Adjustment"}`,
+        debit: mj.amount || 0,
+        credit: 0
+      })),
+      ...mjInRangeTo.map(mj => ({
+        id: `mjt-${mj._id}`,
+        date: mj.journalDate,
+        type: "JOURNAL_CR",
+        particulars: `Journal: ${mj.journalId} (CR) - ${mj.narration || "Manual Adjustment"}`,
+        debit: 0,
+        credit: mj.amount || 0
       }))
     ].sort((a, b) => new Date(a.date) - new Date(b.date));
 

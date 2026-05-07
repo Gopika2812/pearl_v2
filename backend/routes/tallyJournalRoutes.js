@@ -1,6 +1,8 @@
 import express from "express";
+import mongoose from "mongoose";
 import TallyJournalGroup from "../models/TallyJournalGroup.js";
 import TallyJournal from "../models/TallyJournal.js";
+import Ledger from "../models/Ledger.js";
 import auth from "../middleware/auth.js";
 
 const router = express.Router();
@@ -67,15 +69,65 @@ router.post("/groups/bulk", auth, async (req, res) => {
 
 // --- JOURNALS ---
 
-// @desc    Get all journals
+// @desc    Get all journals/ledgers
 // @route   GET /api/tally-journals
 // @access  Private/Branch Area
 router.get("/", auth, async (req, res) => {
   try {
-    const branchId = req.user.branch || req.user._id;
-    const journals = await TallyJournal.find({ branch: branchId }).sort({ journalName: 1 });
-    res.json(journals);
+    const { fromDate, toDate, branchId } = req.query;
+    const effectiveBranchId = (branchId || req.user.branch || req.user._id)?.toString();
+
+    if (!effectiveBranchId) {
+      return res.status(400).json({ message: "Branch ID is required" });
+    }
+
+    const branchObjectId = mongoose.Types.ObjectId.isValid(effectiveBranchId)
+      ? new mongoose.Types.ObjectId(effectiveBranchId)
+      : null;
+
+    // 1. Fetch from TallyJournal (Manual Masters) with branch filter
+    let tallyQuery = {
+      $or: [
+        { branch: effectiveBranchId },
+        { branchId: effectiveBranchId }
+      ]
+    };
+    if (branchObjectId) {
+      tallyQuery.$or.push({ branch: branchObjectId });
+      tallyQuery.$or.push({ branchId: branchObjectId });
+    }
+
+    if (fromDate || toDate) {
+      tallyQuery.createdAt = {};
+      if (fromDate && fromDate !== "undefined") tallyQuery.createdAt.$gte = new Date(fromDate);
+      if (toDate && toDate !== "undefined") tallyQuery.createdAt.$lte = new Date(toDate);
+      if (Object.keys(tallyQuery.createdAt).length === 0) delete tallyQuery.createdAt;
+    }
+
+    const journals = await TallyJournal.find(tallyQuery).sort({ journalName: 1 }).lean();
+    
+    // 2. Fetch from Ledger (Standard Masters) with branch filter
+    const ledgerQuery = {
+      $or: [
+        { branchId: effectiveBranchId },
+        { branchId: branchObjectId }
+      ]
+    };
+    const standardLedgers = await Ledger.find(ledgerQuery).sort({ name: 1 }).lean();
+
+    // 3. Merge them together
+    const merged = [
+      ...journals.map(j => ({ ...j, isTally: true })),
+      ...standardLedgers.map(l => ({ ...l, journalName: l.name, isStandard: true }))
+    ];
+
+    res.json({
+      success: true,
+      data: merged,
+      count: merged.length
+    });
   } catch (error) {
+    console.error("GET /tally-journals error:", error);
     res.status(500).json({ message: error.message });
   }
 });

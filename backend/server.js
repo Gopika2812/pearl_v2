@@ -59,6 +59,7 @@ import followUpRoutes from "./routes/followUpRoutes.js";
 import deliveryReceiptRoutes from "./routes/deliveryReceiptRoutes.js";
 import hrPayrollRoutes from "./modules/hr-payroll/index.js";
 import physicalStockRoutes from "./routes/physicalStockRoutes.js";
+import manualJournalRoutes from "./routes/manualJournalRoutes.js";
 
 
 
@@ -135,6 +136,7 @@ app.use("/api/delivery-men", deliveryManRoutes);
 app.use("/api/commission-rules", commissionRuleRoutes);
 app.use("/api/reordering", reorderingRoutes);
 app.use("/api/tally-journals", tallyJournalRoutes);
+app.use("/api/manual-journals", manualJournalRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/gst", gstRoutes);
 app.use("/api/customer-locked-prices", customerLockedPriceRoutes);

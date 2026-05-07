@@ -548,7 +548,7 @@ const BranchCustomerLedger = () => {
                 {transactions.map((txn, index) => {
                   let docId = "-";
                   const invMatch = txn.particulars?.match(/for Invoice?s?:\s*([^\[(]+)/i);
-                  const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note):\s*([^\[(]+)/i);
+                  const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note|Journal):\s*([^\[( \n]+)/i);
 
                   if (invMatch) docId = invMatch[1].trim();
                   else if (pm) docId = pm[1].trim();
@@ -577,12 +577,16 @@ const BranchCustomerLedger = () => {
                         <div className={`text-[10px] text-slate-400 font-bold italic truncate max-w-[300px] mt-0.5 ${txn.type === 'CANCELLED' ? 'line-through' : ''}`} title={txn.particulars}>{txn.particulars}</div>
                       </td>
                       <td className="px-6 py-6 text-center">
-                        <span className={`px-2.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm border ${txn.type === "INVOICE" ? "bg-rose-50 text-rose-600 border-rose-100" :
-                            txn.type === "RECEIPT" || txn.type === "BOUNCED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                              txn.type === "CANCELLED" ? "bg-slate-100 text-slate-400 border-slate-200" :
-                                "bg-indigo-50 text-indigo-600 border-indigo-100"
-                          }`}>
-                          {txn.type === "RECEIPT" ? (txn.particulars?.match(/\(([^)]+)\)/)?.[1]?.toUpperCase() || "CASH") : txn.type}
+                        <span className={`px-2.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm border ${
+                          txn.type === "INVOICE" ? "bg-rose-50 text-rose-600 border-rose-100" :
+                          txn.type === "RECEIPT" || txn.type === "BOUNCED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                          txn.type === "CANCELLED" ? "bg-slate-100 text-slate-400 border-slate-200" :
+                          txn.type.includes("JOURNAL") ? "bg-purple-50 text-purple-600 border-purple-100" :
+                          "bg-indigo-50 text-indigo-600 border-indigo-100"
+                        }`}>
+                          {txn.type === "RECEIPT" ? (txn.particulars?.match(/\(([^)]+)\)/)?.[1]?.toUpperCase() || "CASH") : 
+                           txn.type === "JOURNAL_DR" ? "JOURNAL-DR" :
+                           txn.type === "JOURNAL_CR" ? "JOURNAL-CR" : txn.type}
                         </span>
                       </td>
                       <td className="px-6 py-6">

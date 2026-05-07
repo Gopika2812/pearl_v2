@@ -13,6 +13,7 @@ import FollowUp from "../models/FollowUp.js";
 import Invoice from "../models/Invoice.js";
 import OtherTransaction from "../models/OtherTransaction.js";
 import OverrideRequest from "../models/OverrideRequest.js";
+import ManualJournal from "../models/ManualJournal.js";
 import Receipt from "../models/Receipt.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
@@ -1554,11 +1555,25 @@ router.get("/:id/ledger", async (req, res) => {
       date: { $gte: start }
     }).select("grandTotal");
 
+    // 2.3 Fetch Manual Journals
+    const mjAfterBy = await ManualJournal.find({
+      "by.partyType": "DEBTOR",
+      "by.partyId": id,
+      journalDate: { $gte: start }
+    }).select("amount");
+    const mjAfterTo = await ManualJournal.find({
+      "to.partyType": "DEBTOR",
+      "to.partyId": id,
+      journalDate: { $gte: start }
+    }).select("amount");
+
     const totalDebitsAfter = invoicesAfter.reduce((sum, i) => sum + (i.grandTotal || 0), 0) +
-                            receiptsAfter.filter(r => r.status === "bounced").reduce((sum, r) => sum + (r.amount || 0), 0);
+                            receiptsAfter.filter(r => r.status === "bounced").reduce((sum, r) => sum + (r.amount || 0), 0) +
+                            mjAfterBy.reduce((sum, mj) => sum + (mj.amount || 0), 0);
     
     const totalCreditsAfter = receiptsAfter.filter(r => r.status === "confirmed").reduce((sum, r) => sum + (r.amount || 0), 0) + 
-                             cnAfter.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0);
+                             cnAfter.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0) +
+                             mjAfterTo.reduce((sum, mj) => sum + (mj.amount || 0), 0);
 
     const openingBalance = currentBalance - totalDebitsAfter + totalCreditsAfter;
 
@@ -1568,7 +1583,7 @@ router.get("/:id/ledger", async (req, res) => {
       branchId: customer.branchId,
       status: "FINALIZED",
       invoiceDate: { $gte: start, $lte: end }
-    }).select("grandTotal invoiceDate invoiceNumber salesOrderId status generatedBy deliveryPerson branchId")
+    }).select("grandTotal invoiceDate invoiceNumber salesOrderId status generatedBy deliveryPerson branchId createdAt")
       .populate("branchId", "name code")
       .populate({
         path: "salesOrderId",
@@ -1595,6 +1610,18 @@ router.get("/:id/ledger", async (req, res) => {
       date: { $gte: start, $lte: end }
     }).select("grandTotal date creditNoteId reasonForReturn originalSalesOrderId branchId")
       .populate("branchId", "name code");
+
+    const mjInRangeBy = await ManualJournal.find({
+        "by.partyType": "DEBTOR",
+        "by.partyId": id,
+        journalDate: { $gte: start, $lte: end }
+    }).select("amount journalDate journalId narration userName paymentMode");
+
+    const mjInRangeTo = await ManualJournal.find({
+        "to.partyType": "DEBTOR",
+        "to.partyId": id,
+        journalDate: { $gte: start, $lte: end }
+    }).select("amount journalDate journalId narration userName paymentMode");
 
     // Format all transactions
     const txns = [
@@ -1651,6 +1678,30 @@ router.get("/:id/ledger", async (req, res) => {
         branchName: cn.branchId?.name || "-",
         branchCode: cn.branchId?.code || "-",
         salesOrderId: cn.originalSalesOrderId?._id || cn.originalSalesOrderId
+      })),
+      ...mjInRangeBy.map(mj => ({
+        id: `mjb-${mj._id}`,
+        date: mj.journalDate,
+        type: "JOURNAL_DR",
+        particulars: `Journal: ${mj.journalId} (DR) - ${mj.narration || "Manual Adjustment"}`,
+        debit: mj.amount || 0,
+        credit: 0,
+        user: mj.userName || "Admin",
+        deliveryMan: "-",
+        branchName: "-",
+        branchCode: "-"
+      })),
+      ...mjInRangeTo.map(mj => ({
+        id: `mjt-${mj._id}`,
+        date: mj.journalDate,
+        type: "JOURNAL_CR",
+        particulars: `Journal: ${mj.journalId} (CR) - ${mj.narration || "Manual Adjustment"}`,
+        debit: 0,
+        credit: mj.amount || 0,
+        user: mj.userName || "Admin",
+        deliveryMan: "-",
+        branchName: "-",
+        branchCode: "-"
       }))
     ].sort((a, b) => new Date(a.date) - new Date(b.date));
 
