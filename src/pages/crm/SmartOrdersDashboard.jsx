@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
     FaUserPlus, FaBoxOpen, FaShoppingCart, FaLink, 
     FaHistory, FaChartLine, FaSearch, FaTimes, 
-    FaCheckCircle, FaChevronRight, FaPlus, FaMinus, FaTrash, FaArrowLeft
+    FaCheckCircle, FaChevronRight, FaPlus, FaMinus, FaTrash, FaArrowLeft,
+    FaWhatsapp
 } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -95,7 +96,8 @@ const SmartOrdersDashboard = () => {
             // 2. Generate Link
             const linkRes = await apiWithAuth.post('/crm-orders/links', {
                 sessionId: sessionRes.data._id,
-                expiryDays: 7
+                expiryDays: 7,
+                baseUrl: window.location.origin
             });
 
             setGeneratedLink(linkRes.data.link);
@@ -114,6 +116,15 @@ const SmartOrdersDashboard = () => {
     ).slice(0, 20);
 
     const cartTotal = cart.reduce((sum, item) => sum + (item.sellingPrice * item.qty), 0);
+
+    const handleWhatsappShare = () => {
+        if (!selectedCustomer) return;
+        const message = `Hello ${selectedCustomer.name},\n\nWe have prepared a special product selection for you. You can view it and place your order directly here:\n\n${generatedLink}\n\nLooking forward to your order!`;
+        const encodedMessage = encodeURIComponent(message);
+        const phone = selectedCustomer.whatsapp || selectedCustomer.phone || "";
+        const whatsappUrl = `https://wa.me/91${phone.replace(/\D/g, "")}?text=${encodedMessage}`;
+        window.open(whatsappUrl, "_blank");
+    };
 
     return (
         <div className="min-h-screen bg-[#f8fafc] p-4 md:p-8">
@@ -325,17 +336,25 @@ const SmartOrdersDashboard = () => {
                                             </button>
                                         </div>
                                     </div>
-                                    <button 
-                                        onClick={() => {
-                                            setGeneratedLink(null);
-                                            setCart([]);
-                                            setSelectedCustomer(null);
-                                            setNotes("");
-                                        }}
-                                        className="w-full py-4 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-white/5 transition"
-                                    >
-                                        Create New Order
-                                    </button>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button 
+                                            onClick={handleWhatsappShare}
+                                            className="py-4 bg-[#25D366] hover:bg-[#20bd5c] text-white rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+                                        >
+                                            <FaWhatsapp size={14} /> WhatsApp
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                setGeneratedLink(null);
+                                                setCart([]);
+                                                setSelectedCustomer(null);
+                                                setNotes("");
+                                            }}
+                                            className="py-4 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/5 transition"
+                                        >
+                                            Reset
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>

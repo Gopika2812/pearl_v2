@@ -111,9 +111,11 @@ export const generateLink = async (req, res) => {
     
     await CRMOrderSession.findByIdAndUpdate(sessionId, { status: "SHARED" });
 
+    const baseUrl = req.body.baseUrl || process.env.FRONTEND_URL || 'http://localhost:5173';
+
     res.status(201).json({ 
         token, 
-        link: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/shared-order/${token}` 
+        link: `${baseUrl}/shared-order/${token}` 
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
