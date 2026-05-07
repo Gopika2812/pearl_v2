@@ -59,5 +59,5 @@ tokenSchema.index({ branchId: 1, createdAt: -1 });
 tokenSchema.index({ status: 1, branchId: 1 });
 tokenSchema.index({ tokenId: 1, branchId: 1 }, { unique: true });
 
-const Token = mongoose.model("Token", tokenSchema);
+const Token = mongoose.models.Token || mongoose.model("Token", tokenSchema);
 export default Token;

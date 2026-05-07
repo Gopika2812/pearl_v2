@@ -6,6 +6,7 @@ import { useBranch } from "../../context/BranchContext";
 import FilterableSelect from "../../components/FilterableSelect";
 import { getInvoiceHTML } from "../../utils/invoiceUtils";
 import ScrollToggleButton from "../../components/ScrollToggleButton";
+import LiveScannerModal from "../../components/branch/LiveScannerModal";
 
 const BranchDeliveryFlow = () => {
   const { currentBranch, user } = useBranch();
@@ -39,6 +40,7 @@ const BranchDeliveryFlow = () => {
   const [selectedScanRole, setSelectedScanRole] = useState("storageMan"); // storageMan, stockChecker, deliveryPerson
   const [showScanCompletionModal, setShowScanCompletionModal] = useState(null); // invoice
   const [scanPaymentOptions, setScanPaymentOptions] = useState([]);
+  const [showLiveScanner, setShowLiveScanner] = useState(false);
 
   const addStaffSlot = (role) => {
     if (bulkData[role].length >= 5) {
@@ -360,11 +362,12 @@ const BranchDeliveryFlow = () => {
     }
   };
 
-  const handleScanSubmit = async (e) => {
+  const handleScanSubmit = async (e, manualCode = null) => {
     if (e) e.preventDefault();
-    if (!scanInput.trim()) return;
+    const inputToUse = manualCode || scanInput;
+    if (!inputToUse.trim()) return;
 
-    const invNo = scanInput.trim().toUpperCase();
+    const invNo = inputToUse.trim().toUpperCase();
     setScanInput("");
 
     // Find invoice in current list or fetch if not found
@@ -678,6 +681,7 @@ const BranchDeliveryFlow = () => {
                            type="text"
                            value={scanInput}
                            onChange={(e) => setScanInput(e.target.value)}
+                           onKeyDown={(e) => e.key === 'Enter' && handleScanSubmit()}
                            placeholder="Scan QR or Type SI No..."
                            className="w-full bg-slate-900 border border-slate-700 text-white px-5 py-3 rounded-2xl text-sm font-bold focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none placeholder:text-slate-600"
                         />
@@ -687,15 +691,29 @@ const BranchDeliveryFlow = () => {
                         </div>
                     </div>
                     <button 
-                        type="submit"
+                        type="button"
+                        onClick={() => scanInput.trim() ? handleScanSubmit() : setShowLiveScanner(true)}
                         className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition shadow-lg shadow-indigo-500/20 active:scale-95 border-0 cursor-pointer"
                     >
-                        Scan
+                        {scanInput.trim() ? "Submit" : "Scan"}
                     </button>
                  </form>
               </div>
            </div>
         </div>
+
+        {/* LIVE SCANNER MODAL */}
+        <LiveScannerModal 
+          show={showLiveScanner}
+          onClose={() => setShowLiveScanner(false)}
+          onScanSuccess={(code) => {
+            setScanInput(code);
+            // Handle auto-submit after scan
+            setTimeout(() => {
+                handleScanSubmit(null, code);
+            }, 100);
+          }}
+        />
 
         {/* MOBILE CARDS & TABLE WRAPPER */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">

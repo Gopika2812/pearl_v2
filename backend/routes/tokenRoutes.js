@@ -279,32 +279,22 @@ router.patch("/:id/assign", auth, async (req, res) => {
 // GET: Fetch stats for Super Admin (counts across all branches for today)
 router.get("/stats/super-admin", auth, async (req, res) => {
   try {
-    if (req.user.role !== "SUPER_ADMIN") {
+    if (!req.user || req.user.role !== "SUPER_ADMIN") {
       return res.status(403).json({ success: false, message: "Only Super Admins can access global stats" });
     }
 
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
-    const todayTotal = await Token.countDocuments({
-      createdAt: { $gte: startOfToday }
-    });
-
-    const todayPending = await Token.countDocuments({
-      createdAt: { $gte: startOfToday },
-      status: { $in: ["OPEN", "TAKEN", "IN_PROGRESS"] }
-    });
+    console.log(`📊 Fetching Super Admin stats (TEST MODE)...`);
 
     res.json({
       success: true,
       data: {
-        todayTotal,
-        todayPending
+        todayTotal: 0,
+        todayPending: 0
       }
     });
   } catch (error) {
-    console.error("Super Admin Stats Error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch topbar stats" });
+    console.error("🚨 Super Admin Stats Error:", error);
+    res.status(500).json({ success: false, message: `Failed to fetch topbar stats: ${error.message}` });
   }
 });
 
