@@ -58,6 +58,9 @@ import BranchFollowUp from "./pages/branch/BranchFollowUp";
 import BranchFollowUpRecords from "./pages/branch/BranchFollowUpRecords";
 import BranchPhysicalStock from "./pages/branch/BranchPhysicalStock";
 import BranchPhysicalStockRecords from "./pages/branch/BranchPhysicalStockRecords";
+import SmartOrdersDashboard from "./pages/crm/SmartOrdersDashboard";
+import TaskBoardPage from "./pages/crm/TaskBoardPage";
+import SharedLinkCustomerPage from "./pages/crm/SharedLinkCustomerPage";
 
 import BranchProductConfig from "./pages/branch/BranchProductConfig";
 import BranchCustomerLedger from "./pages/branch/BranchCustomerLedger";
@@ -70,8 +73,10 @@ import PayrollPage from "./pages/hr/PayrollPage";
 import SalaryStructurePage from "./pages/hr/SalaryStructurePage";
 import HRReportsPage from "./pages/hr/HRReportsPage";
 import AttendanceRecordPage from "./pages/hr/AttendanceRecordPage.jsx";
+import SalaryRecordsPage from "./pages/hr/SalaryRecordsPage";
 import AttendanceReportPage from "./pages/hr/AttendanceReportPage";
 
+import AIAssistantBot from "./components/AIAssistantBot";
 import BranchLoginPage from "./pages/BranchLoginPage";
 import BranchRegisterPage from "./pages/BranchRegisterPage";
 import UserRegistrationPage from "./pages/UserRegistrationPage";
@@ -162,7 +167,8 @@ function AppContent() {
     location.pathname === "/user-register" ||
     location.pathname === "/super-admin-login" ||
     location.pathname === "/customer-login" ||
-    location.pathname === "/pearls-shopping";
+    location.pathname === "/pearls-shopping" ||
+    location.pathname.startsWith("/shared-order/");
 
   // RBAC Permission Check
   useEffect(() => {
@@ -268,6 +274,8 @@ function AppContent() {
         "/branch/hr/payroll": "payroll-processing",
         "/branch/hr/salary-structure": "salary-structure",
         "/branch/hr/reports": "hr-reports",
+        "/branch/smart-orders": "smart-orders",
+        "/branch/tasks": "task-board",
       };
 
       const requiredPermission = pathPermissionMap[location.pathname];
@@ -276,7 +284,7 @@ function AppContent() {
       let hasAccess = false;
       if (!requiredPermission) {
         hasAccess = true; // No permission required for this route
-      } else if (allowedPages.includes(requiredPermission)) {
+      } else if (allowedPages.includes(requiredPermission) || requiredPermission === "smart-orders" || requiredPermission === "task-board") {
         hasAccess = true;
       } else if (requiredPermission === "quick-links") {
         // Special case for Quick Links: Allow if ANY master data module is allowed
@@ -524,6 +532,7 @@ function AppContent() {
           fontFamily: "Inter, sans-serif"
         }}
       />
+      <AIAssistantBot />
 
       <SecurityOverlay />
       
@@ -642,7 +651,11 @@ function AppContent() {
                   <Route path="/branch/hr/attendance-logs" element={<ProtectedRoute element={<AttendanceRecordPage />} />} />
                   <Route path="/branch/hr/payroll" element={<ProtectedRoute element={<PayrollPage />} />} />
                   <Route path="/branch/hr/salary-structure" element={<ProtectedRoute element={<SalaryStructurePage />} />} />
+                  <Route path="/branch/hr/salary-records" element={<ProtectedRoute element={<SalaryRecordsPage />} role={["SUPER_ADMIN"]} />} />
                   <Route path="/branch/hr/reports" element={<ProtectedRoute element={<HRReportsPage />} />} />
+                  <Route path="/branch/smart-orders" element={<ProtectedRoute element={<SmartOrdersDashboard />} />} />
+                  <Route path="/branch/tasks" element={<ProtectedRoute element={<TaskBoardPage />} />} />
+                  <Route path="/shared-order/:token" element={<SharedLinkCustomerPage />} />
 
                   {/* LEGACY ROUTES */}
                   <Route

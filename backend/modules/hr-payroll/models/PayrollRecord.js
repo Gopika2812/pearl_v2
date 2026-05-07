@@ -31,6 +31,22 @@ const payrollRecordSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    lateHoursDeduction: {
+      type: Number,
+      default: 0,
+    },
+    extraLeaveDeduction: {
+      type: Number,
+      default: 0,
+    },
+    manualBonus: {
+      type: Number,
+      default: 0,
+    },
+    manualFine: {
+      type: Number,
+      default: 0,
+    },
     netSalary: {
       type: Number,
       required: true,

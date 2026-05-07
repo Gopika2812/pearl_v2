@@ -4,7 +4,10 @@ import {
   updatePayrollStatus, 
   getSalaryStructure, 
   updateSalaryStructure,
-  getPayrollHistory
+  getPayrollHistory,
+  updatePayrollAdjustments,
+  getAllSalaryStructures,
+  revertPayrollStatus
 } from "../controllers/payrollController.js";
 import auth from "../../../middleware/auth.js";
 
@@ -14,6 +17,9 @@ router.use(auth);
 
 router.post("/generate", generatePayroll);
 router.patch("/status/:payrollId", updatePayrollStatus);
+router.post("/revert/:payrollId", revertPayrollStatus);
+router.patch("/adjustments/:payrollId", updatePayrollAdjustments);
+router.get("/structures", getAllSalaryStructures);
 router.get("/structure/:employeeId", getSalaryStructure);
 router.post("/structure", updateSalaryStructure);
 router.get("/history", getPayrollHistory);

@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
-import { FaCopy, FaSearch, FaUser, FaWhatsapp } from "react-icons/fa";
-import { API_BASE } from "../api";
+import { useState, useEffect } from "react";
+import { API_BASE, apiWithAuth } from "../api";
+import { useBranch } from "../context/BranchContext";
+import { useNavigate } from "react-router-dom";
+import { FaArrowLeft, FaCopy, FaSearch, FaUser, FaWhatsapp } from "react-icons/fa";
 
 export default function CRMPage() {
+  const { currentBranch } = useBranch();
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [activeTab, setActiveTab] = useState("orders");
@@ -12,19 +16,21 @@ export default function CRMPage() {
 
   // Fetch customers and sales orders
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    if (currentBranch?._id) {
+      fetchCustomers();
+    }
+  }, [currentBranch]);
 
   const fetchCustomers = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/customers`);
-      const data = await response.json();
+      const response = await apiWithAuth.get(`customers?branchId=${currentBranch._id}`);
+      const customerList = response.data.data;
 
-      if (Array.isArray(data)) {
-        setCustomers(data);
-        if (data.length > 0 && !selectedCustomer) {
-          setSelectedCustomer(data[0]);
+      if (Array.isArray(customerList)) {
+        setCustomers(customerList);
+        if (customerList.length > 0 && !selectedCustomer) {
+          setSelectedCustomer(customerList[0]);
         }
       }
     } catch (error) {
@@ -69,6 +75,12 @@ export default function CRMPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pl-20 px-4 sm:px-6">
+      <button 
+        onClick={() => navigate(-1)}
+        className="mb-4 flex items-center gap-2 text-slate-500 hover:text-primary transition-all font-black text-[10px] uppercase tracking-widest bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm"
+      >
+        <FaArrowLeft /> Back
+      </button>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
 
         {/* CUSTOMER LIST */}

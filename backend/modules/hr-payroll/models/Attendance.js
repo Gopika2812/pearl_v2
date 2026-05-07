@@ -54,7 +54,15 @@ const attendanceSchema = new mongoose.Schema(
     },
     markedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "BranchUser",
+      refPath: "markedByModel",
+    },
+    markedByModel: {
+      type: String,
+      enum: ["BranchUser", "SuperAdmin"],
+      default: "BranchUser",
+    },
+    markedByName: {
+      type: String,
     },
   },
   { timestamps: true }

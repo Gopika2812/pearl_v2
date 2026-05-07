@@ -43,6 +43,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const menu = [
     { name: "Home", path: "/", icon: <FaHome /> },
+    { name: "Smart Orders(CRM)", path: "/branch/smart-orders", icon: <FaChartBar /> },
   ];
 
   const adminItems = [

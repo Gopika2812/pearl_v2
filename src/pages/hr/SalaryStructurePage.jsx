@@ -5,14 +5,18 @@ import { fetchWithAuth, API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
 const SalaryStructurePage = () => {
-  const { currentBranch } = useBranch();
+  const { currentBranch, user } = useBranch();
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
   const [employees, setEmployees] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [structure, setStructure] = useState({
     basicSalary: 0,
     overtimeRate: 0,
     bonus: 0,
-    deductions: 0
+    deductions: 0,
+    shiftStartTime: "09:00",
+    shiftEndTime: "18:00",
+    allowedMonthlyLeaves: 0
   });
   const [loading, setLoading] = useState(true);
 
@@ -41,7 +45,7 @@ const SalaryStructurePage = () => {
       if (data.success && data.data) {
         setStructure(data.data);
       } else {
-        setStructure({ basicSalary: 0, overtimeRate: 0, bonus: 0, deductions: 0 });
+        setStructure({ basicSalary: 0, overtimeRate: 0, bonus: 0, deductions: 0, shiftStartTime: "09:00", shiftEndTime: "18:00", allowedMonthlyLeaves: 0 });
       }
     } catch (err) {
       toast.error("Failed to fetch salary structure");
@@ -72,6 +76,20 @@ const SalaryStructurePage = () => {
       toast.error("Failed to save structure");
     }
   };
+
+  if (!isSuperAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm animate-in fade-in duration-500">
+        <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center mb-6 border border-rose-100">
+          <FaUser className="text-3xl text-rose-400" />
+        </div>
+        <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Access Denied</h2>
+        <p className="text-slate-400 text-sm font-bold uppercase tracking-widest mt-2 max-w-xs">
+          Only Super Admin has permission to modify salary configurations.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -174,20 +192,51 @@ const SalaryStructurePage = () => {
                       </div>
                    </div>
 
-                   <div className="space-y-2">
-                      <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Standard Deductions (Tax/PF)</label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
-                        <input 
-                          type="number"
-                          value={structure.deductions}
-                          onChange={(e) => setStructure({...structure, deductions: parseFloat(e.target.value) || 0})}
-                          className="w-full bg-slate-50 border-none rounded-xl md:rounded-2xl py-3 md:py-4 pl-10 pr-4 text-xs md:text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-100 transition-all text-rose-500"
-                          placeholder="0.00"
-                        />
-                      </div>
-                   </div>
-                </div>
+                    <div className="space-y-2">
+                       <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Standard Deductions (Tax/PF)</label>
+                       <div className="relative">
+                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                         <input 
+                           type="number"
+                           value={structure.deductions}
+                           onChange={(e) => setStructure({...structure, deductions: parseFloat(e.target.value) || 0})}
+                           className="w-full bg-slate-50 border-none rounded-xl md:rounded-2xl py-3 md:py-4 pl-10 pr-4 text-xs md:text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-100 transition-all text-rose-500"
+                           placeholder="0.00"
+                         />
+                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                       <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Shift Start Time</label>
+                       <input 
+                         type="time"
+                         value={structure.shiftStartTime || "09:00"}
+                         onChange={(e) => setStructure({...structure, shiftStartTime: e.target.value})}
+                         className="w-full bg-slate-50 border-none rounded-xl md:rounded-2xl py-3 md:py-4 px-4 text-xs md:text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-100 transition-all"
+                       />
+                    </div>
+
+                    <div className="space-y-2">
+                       <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Shift End Time</label>
+                       <input 
+                         type="time"
+                         value={structure.shiftEndTime || "18:00"}
+                         onChange={(e) => setStructure({...structure, shiftEndTime: e.target.value})}
+                         className="w-full bg-slate-50 border-none rounded-xl md:rounded-2xl py-3 md:py-4 px-4 text-xs md:text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-100 transition-all"
+                       />
+                    </div>
+
+                    <div className="space-y-2">
+                       <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Allowed Monthly Leaves</label>
+                       <input 
+                         type="number"
+                         value={structure.allowedMonthlyLeaves || 0}
+                         onChange={(e) => setStructure({...structure, allowedMonthlyLeaves: parseInt(e.target.value) || 0})}
+                         className="w-full bg-slate-50 border-none rounded-xl md:rounded-2xl py-3 md:py-4 px-4 text-xs md:text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-100 transition-all"
+                         placeholder="0"
+                       />
+                    </div>
+                 </div>
 
                 <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
                    <div className="text-center sm:text-left w-full sm:w-auto">

@@ -194,7 +194,7 @@ const AttendanceReportPage = () => {
         (log.workingHours ?? 0).toFixed(2),
         (log.overtimeHours ?? 0).toFixed(2),
         log.presentLocation?.address || "No Data",
-        log.markedBy?.name || "Self",
+        log.markedByName || log.markedBy?.name || log.markedBy?.fullName || "Self",
       ].map(escape);
     });
 
@@ -447,7 +447,7 @@ const AttendanceReportPage = () => {
                       </td>
                       <td className="px-8 py-6">
                         <p className="text-[10px] font-black text-slate-400 uppercase italic">
-                          {log.markedBy?.name || "Self"}
+                          {log.markedByName || log.markedBy?.name || log.markedBy?.fullName || "Self"}
                         </p>
                       </td>
                     </tr>

@@ -33,13 +33,14 @@ const CustomerSummary = () => {
 
   // Fetch customers data - fetch all pages
   const fetchCustomers = async () => {
+    if (!currentBranch?._id) return;
     try {
       setLoading(true);
       setError(null);
       
       // First fetch to get total pages
-      const firstResponse = await fetch(`${API_BASE}/customers?page=1&limit=100`);
-      const firstData = await firstResponse.json();
+      const firstResponse = await apiWithAuth.get(`customers?branchId=${currentBranch._id}&page=1&limit=100`);
+      const firstData = firstResponse.data;
 
       if (!firstData.success) {
         setError("Failed to fetch customers");
@@ -54,7 +55,7 @@ const CustomerSummary = () => {
         const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
         
         const pageRequests = remainingPages.map(page =>
-          fetch(`${API_BASE}/customers?page=${page}&limit=100`).then(res => res.json())
+          apiWithAuth.get(`customers?branchId=${currentBranch._id}&page=${page}&limit=100`).then(res => res.data)
         );
 
         const results = await Promise.all(pageRequests);
@@ -77,9 +78,10 @@ const CustomerSummary = () => {
 
   // Fetch sales owners
   const fetchSalesOwners = async () => {
+    if (!currentBranch?._id) return;
     try {
-      const response = await fetch(`${API_BASE}/sales-owners`);
-      const data = await response.json();
+      const response = await apiWithAuth.get(`sales-owners?branchId=${currentBranch._id}`);
+      const data = response.data;
 
       if (data.success) {
         setSalesOwners(data.data);
@@ -91,9 +93,10 @@ const CustomerSummary = () => {
 
   // Fetch customer groups
   const fetchCustomerGroups = async () => {
+    if (!currentBranch?._id) return;
     try {
-      const response = await fetch(`${API_BASE}/customer-groups`);
-      const data = await response.json();
+      const response = await apiWithAuth.get(`customer-groups?branchId=${currentBranch._id}`);
+      const data = response.data;
 
       if (data.success) {
         setCustomerGroups(data.data);
@@ -104,10 +107,12 @@ const CustomerSummary = () => {
   };
 
   useEffect(() => {
-    fetchCustomers();
-    fetchSalesOwners();
-    fetchCustomerGroups();
-  }, []);
+    if (currentBranch?._id) {
+      fetchCustomers();
+      fetchSalesOwners();
+      fetchCustomerGroups();
+    }
+  }, [currentBranch]);
 
   // Force refresh after a short delay to ensure data is fresh
   useEffect(() => {

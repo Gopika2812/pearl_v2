@@ -57,7 +57,7 @@ export const createApiClient = (axiosInstance) => {
         console.warn("🔐 401 Unauthorized: Session may have expired.");
       } else if (error.response?.status === 404) {
         console.error(
-          `❌ 404 Error: Backend endpoint not found at ${API_BASE}`
+          `❌ 404 Error: Backend endpoint not found at ${error.config?.url || API_BASE}`
         );
       } else if (error.response?.status === 503) {
         console.error(`⚠️  503 Service Unavailable: Backend is temporarily down`);

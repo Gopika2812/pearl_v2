@@ -226,7 +226,7 @@ const AttendanceRecordPage = () => {
                           <FaUserShield className="text-xs" />
                         </div>
                         <span className="text-[11px] font-bold text-slate-600 truncate max-w-[100px]">
-                          {log.markedBy?.name || "System"}
+                          {log.markedByName || log.markedBy?.name || log.markedBy?.fullName || "System"}
                         </span>
                       </div>
                     </td>

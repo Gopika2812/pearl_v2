@@ -20,6 +20,25 @@ import moment from "moment-timezone";
 import { cacheData } from "../middleware/cacheMiddleware.js";
 
 const router = express.Router();
+
+// GET invoice by number (for scanning)
+router.get("/by-number/:invoiceNumber", async (req, res) => {
+  try {
+    const { invoiceNumber } = req.params;
+    const invoice = await Invoice.findOne({ 
+        invoiceNumber: { $regex: new RegExp(`^${invoiceNumber}$`, "i") } 
+    }).populate("branchId");
+    
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: "Invoice not found" });
+    }
+    
+    res.json({ success: true, data: invoice });
+  } catch (error) {
+    console.error("Error fetching invoice by number:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
 const upload = multer({ storage: multer.memoryStorage() });
 
 // GET invoice history (for Product Records)

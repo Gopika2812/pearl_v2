@@ -58,8 +58,10 @@ import tokenRoutes from "./routes/tokenRoutes.js";
 import followUpRoutes from "./routes/followUpRoutes.js";
 import deliveryReceiptRoutes from "./routes/deliveryReceiptRoutes.js";
 import hrPayrollRoutes from "./modules/hr-payroll/index.js";
+import crmOrderRoutes from "./modules/crm-orders/index.js";
 import physicalStockRoutes from "./routes/physicalStockRoutes.js";
 import manualJournalRoutes from "./routes/manualJournalRoutes.js";
+import aiBotRoutes from "./modules/ai-bot/index.js";
 
 
 
@@ -103,7 +105,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Routes - HR Module prioritized to prevent conflicts
+// Routes - CRM and HR Modules prioritized
+app.use("/api/ai-bot", aiBotRoutes);
+app.use("/api/crm-orders", crmOrderRoutes);
 app.use("/api/hr", hrPayrollRoutes);
 app.use("/api/super-admin", superAdminRoutes);
 app.use("/api/branches", branchRoutes);
@@ -184,4 +188,4 @@ app.use(/^\/api\/.*/, (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 [ANTIGRAVITY-v4] Server running on ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 [ANTIGRAVITY-v4.1] Server running on ${PORT}`));

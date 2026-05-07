@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Attendance from "../models/Attendance.js";
 import Branch from "../../../models/Branch.js";
 import BranchUser from "../../../models/BranchUser.js";
+import SuperAdmin from "../../../models/SuperAdmin.js";
 import { getAddressFromCoords } from "../utils/geocoder.js";
 
 // Mark Attendance
@@ -62,8 +63,25 @@ export const markAttendance = async (req, res) => {
       status,
       branch: new mongoose.Types.ObjectId(branchId),
       isApproved: !isBackdated,
-      markedBy: req.user?._id ? new mongoose.Types.ObjectId(req.user._id) : undefined,
+      markedBy: (req.user?.id || req.user?._id) ? new mongoose.Types.ObjectId(req.user.id || req.user._id) : undefined,
+      markedByModel: ["SUPERADMIN", "SUPER_ADMIN"].includes(req.user?.role?.toUpperCase()) ? "SuperAdmin" : "BranchUser",
+      markedByName: req.user?.username || "System", // Fallback to username from token
     };
+
+    // If possible, get the actual name/fullName for better display
+    try {
+      if (req.user?.id) {
+        if (updateData.markedByModel === "SuperAdmin") {
+          const admin = await SuperAdmin.findById(req.user.id);
+          if (admin) updateData.markedByName = admin.fullName;
+        } else {
+          const u = await BranchUser.findById(req.user.id);
+          if (u) updateData.markedByName = u.name || u.username;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch marker name:", e.message);
+    }
 
     // Sanitize location coordinates to avoid NaN errors
     const lat = Number(location?.lat);
@@ -151,7 +169,7 @@ export const getDailyAttendance = async (req, res) => {
       query.employeeId = req.user.id;
     }
 
-    const records = await Attendance.find(query);
+    const records = await Attendance.find(query).populate("markedBy", "name fullName");
 
     res.status(200).json({ success: true, data: records });
   } catch (error) {
@@ -366,7 +384,7 @@ export const getDetailedLogs = async (req, res) => {
         populate: { path: "branch", select: "name" }
       })
       .populate("branch", "name")
-      .populate("markedBy", "name")
+      .populate("markedBy", "name fullName")
       .sort({ date: -1, createdAt: -1 });
 
     console.log(`📊 Found ${logs.length} logs. Sample branch: "${logs[0]?.branch?.name || logs[0]?.employeeId?.branch?.name || logs[0]?.employeeId?.branchName}"`);

@@ -86,12 +86,6 @@ export const PAGE_CONFIG = [
         ]
       },
       { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["name", "gstin", "margin", "debit", "credit", "action_receipt", "action_return", "action_ledger"] },
-      {
-        id: "follow-up-dropdown", name: "Customer Follow-Up", icon: "phone", isDropdown: true, subItems: [
-          { id: "follow-up-form", name: "Log Follow-Up", path: "/branch/follow-up", icon: "add", permissionFields: ["name", "group", "category", "zone", "balance", "limit", "days", "token", "action_followup", "action_log", "action_ledger", "action_edit"] },
-          { id: "follow-up-records", name: "Follow-Up Records", path: "/branch/follow-up-records", icon: "history", permissionFields: ["dateLogged", "customer", "followUpBy", "result", "balance", "nextFollowUp", "remarks"] },
-        ]
-      },
     ]
   },
   {
@@ -106,8 +100,16 @@ export const PAGE_CONFIG = [
     ]
   },
   {
-    category: "Delivery",
+    category: "CRM",
     items: [
+      { id: "crm-dashboard", name: "CRM Dashboard", path: "/crm", icon: "users" },
+      { id: "smart-orders", name: "Smart Orders(CRM)", path: "/branch/smart-orders", icon: "chart" },
+      {
+        id: "follow-up-dropdown", name: "Customer Follow-Up", icon: "phone", isDropdown: true, subItems: [
+          { id: "follow-up-form", name: "Log Follow-Up", path: "/branch/follow-up", icon: "add", permissionFields: ["name", "group", "category", "zone", "balance", "limit", "days", "token", "action_followup", "action_log", "action_ledger", "action_edit"] },
+          { id: "follow-up-records", name: "Follow-Up Records", path: "/branch/follow-up-records", icon: "history", permissionFields: ["dateLogged", "customer", "followUpBy", "result", "balance", "nextFollowUp", "remarks"] },
+        ]
+      },
       {
         id: "delivery-dropdown", name: "Delivery", icon: "truck", isDropdown: true, subItems: [
           { id: "delivery-flow", name: "Delivery Flow", path: "/branch/delivery-flow", icon: "list" },
@@ -115,7 +117,8 @@ export const PAGE_CONFIG = [
           { id: "delivery-receipt", name: "Delivery Receipt", path: "/branch/delivery-receipt", icon: "receipt" },
           { id: "transferred-receipts", name: "Receipts Transferred", path: "/branch/transferred-receipts", icon: "history" },
         ]
-      }
+      },
+      { id: "task-board", name: "Task Board", path: "/branch/tasks", icon: "list" },
     ]
   },
   {
@@ -164,6 +167,7 @@ export const PAGE_CONFIG = [
           { id: "attendance-records", name: "Attendance Records", path: "/branch/hr/attendance-logs", icon: "history" },
           { id: "payroll-processing", name: "Process Payroll", path: "/branch/hr/payroll", icon: "payroll" },
           { id: "salary-structure", name: "Salary Structure", path: "/branch/hr/salary-structure", icon: "structure" },
+          { id: "salary-records", name: "Salary Records", path: "/branch/hr/salary-records", icon: "list" },
           { id: "hr-reports", name: "HR Reports", path: "/branch/hr/reports", icon: "chart" },
         ]
       }

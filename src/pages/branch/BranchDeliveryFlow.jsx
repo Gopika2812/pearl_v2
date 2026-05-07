@@ -35,6 +35,10 @@ const BranchDeliveryFlow = () => {
     deliveryPerson: [""],
     deliveryPersonComment: ""
   });
+  const [scanInput, setScanInput] = useState("");
+  const [selectedScanRole, setSelectedScanRole] = useState("storageMan"); // storageMan, stockChecker, deliveryPerson
+  const [showScanCompletionModal, setShowScanCompletionModal] = useState(null); // invoice
+  const [scanPaymentOptions, setScanPaymentOptions] = useState([]);
 
   const addStaffSlot = (role) => {
     if (bulkData[role].length >= 5) {
@@ -356,6 +360,93 @@ const BranchDeliveryFlow = () => {
     }
   };
 
+  const handleScanSubmit = async (e) => {
+    if (e) e.preventDefault();
+    if (!scanInput.trim()) return;
+
+    const invNo = scanInput.trim().toUpperCase();
+    setScanInput("");
+
+    // Find invoice in current list or fetch if not found
+    let inv = invoices.find(i => i.invoiceNumber === invNo);
+    
+    if (!inv) {
+        try {
+            setLoading(true);
+            const res = await fetchWithAuth(`${API_BASE}/invoices/by-number/${invNo}`);
+            const data = await res.json();
+            if (data.success) {
+                inv = data.data;
+            }
+        } catch (err) {
+            console.error("Fetch by number failed", err);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    if (!inv) {
+      toast.error(`Invoice ${invNo} not found.`);
+      return;
+    }
+
+    // Status Toggle Logic
+    const currentStatus = inv.deliveryStatus || "PENDING";
+    let nextStatus = currentStatus;
+
+    if (currentStatus === "PENDING") {
+        nextStatus = "PICKED";
+    } else if (currentStatus === "PICKED") {
+        setShowScanCompletionModal(inv);
+        return; // Stop here and wait for modal
+    } else if (currentStatus === "COMPLETED") {
+        toast.info(`Invoice ${invNo} is already COMPLETED`);
+        return;
+    }
+
+    await performScanUpdate(inv, nextStatus);
+  };
+
+  const performScanUpdate = async (inv, status, paymentOptions = []) => {
+    const commentField = selectedScanRole + "Comment";
+    const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
+    
+    const payload = { 
+      [selectedScanRole]: user?.username || user?.fullName || "System",
+      [commentField]: `status passed at ${timestamp}`,
+      deliveryStatus: status,
+      updatedBy: user?.username || "System",
+      updatedById: user?._id || user?.id || null
+    };
+
+    if (status === "COMPLETED") {
+        payload.deliveryPaymentType = paymentOptions.join(",");
+        payload.deliveryCompletedAt = new Date();
+    }
+
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/invoices/${inv._id}/delivery-flow`, {
+        method: "PATCH",
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`✅ ${inv.invoiceNumber} marked as ${status}`);
+        if (invoices.some(i => i._id === inv._id)) {
+            setInvoices(prev => prev.map(i => i._id === inv._id ? data.data : i));
+        } else {
+            fetchInvoices();
+        }
+        setShowScanCompletionModal(null);
+        setScanPaymentOptions([]);
+      } else {
+        toast.error(data.message || "Update failed");
+      }
+    } catch (err) {
+      toast.error("Failed to update record");
+    }
+  };
+
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
   // Check if invoice is 2+ days old (not today or yesterday)
@@ -542,6 +633,68 @@ const BranchDeliveryFlow = () => {
               </select>
             </div>
           </div>
+        </div>
+
+        {/* QUICK SCAN ASSIGNMENT */}
+        <div className="bg-slate-800 p-6 rounded-[2rem] shadow-xl mb-6 border border-slate-700 overflow-hidden relative group">
+           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-indigo-500/20 transition-all duration-700"></div>
+           <div className="relative flex flex-col md:flex-row items-center gap-6">
+              <div className="flex-1">
+                 <h2 className="text-white text-lg font-black uppercase tracking-tight flex items-center gap-2">
+                    <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
+                       <FaSearch className="text-white text-xs" />
+                    </div>
+                    Quick Scan Assignment
+                 </h2>
+                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1 ml-10">
+                    Select role and scan QR code to automatically assign yourself
+                 </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+                 <div className="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50">
+                    {[
+                       { id: 'storageMan', label: 'Storage' },
+                       { id: 'stockChecker', label: 'Checker' },
+                       { id: 'deliveryPerson', label: 'Delivery' }
+                    ].map(role => (
+                       <button
+                          key={role.id}
+                          onClick={() => setSelectedScanRole(role.id)}
+                          className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                             selectedScanRole === role.id 
+                             ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
+                             : "text-slate-500 hover:text-slate-300"
+                          }`}
+                       >
+                          {role.label}
+                       </button>
+                    ))}
+                 </div>
+
+                 <form onSubmit={handleScanSubmit} className="relative w-full sm:w-80 flex items-center gap-2">
+                    <div className="relative flex-1">
+                        <input 
+                           type="text"
+                           value={scanInput}
+                           onChange={(e) => setScanInput(e.target.value)}
+                           placeholder="Scan QR or Type SI No..."
+                           className="w-full bg-slate-900 border border-slate-700 text-white px-5 py-3 rounded-2xl text-sm font-bold focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none placeholder:text-slate-600"
+                        />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                           <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
+                           <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Live</span>
+                        </div>
+                    </div>
+                    <button 
+                        type="submit"
+                        className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition shadow-lg shadow-indigo-500/20 active:scale-95 border-0 cursor-pointer"
+                    >
+                        Scan
+                    </button>
+                 </form>
+              </div>
+           </div>
         </div>
 
         {/* MOBILE CARDS & TABLE WRAPPER */}
@@ -1172,9 +1325,84 @@ const BranchDeliveryFlow = () => {
           </div>
         </div>
       )}
+
+      {showScanCompletionModal && (
+        <ScanCompletionModal 
+          invoice={showScanCompletionModal}
+          onClose={() => {
+              setShowScanCompletionModal(null);
+              setScanPaymentOptions([]);
+          }}
+          selectedOptions={scanPaymentOptions}
+          setSelectedOptions={setScanPaymentOptions}
+          onConfirm={() => performScanUpdate(showScanCompletionModal, "COMPLETED", scanPaymentOptions)}
+        />
+      )}
+
     </div>
   );
 };
 
+// 💳 SCAN COMPLETION MODAL
+const ScanCompletionModal = ({ invoice, onClose, onConfirm, selectedOptions, setSelectedOptions }) => {
+    const options = ["CHEQUE", "OLD PAYMENT", "SPOTPAYMENTCASH", "SPOTPAYMENTUPI", "CASH & UPI", "SIGNATURE"];
+    
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+                <div className="bg-slate-800 p-6 flex items-center justify-between text-white">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
+                            <FaClipboardCheck className="text-white" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-black uppercase tracking-tight">Complete Delivery</h2>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{invoice.invoiceNumber}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition border-0 bg-transparent text-white cursor-pointer">
+                        <FaTimes />
+                    </button>
+                </div>
+                <div className="p-8">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Select Delivery Options (Multiple Allowed)</p>
+                    <div className="grid grid-cols-2 gap-3 mb-8">
+                        {options.map(opt => (
+                            <label key={opt} className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${selectedOptions.includes(opt) ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}>
+                                <input 
+                                    type="checkbox" 
+                                    className="hidden" 
+                                    checked={selectedOptions.includes(opt)}
+                                    onChange={() => {
+                                        if (selectedOptions.includes(opt)) setSelectedOptions(selectedOptions.filter(o => o !== opt));
+                                        else setSelectedOptions([...selectedOptions, opt]);
+                                    }}
+                                />
+                                <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${selectedOptions.includes(opt) ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-200 group-hover:border-slate-300'}`}>
+                                    {selectedOptions.includes(opt) && <FaCheckCircle className="text-white text-xs" />}
+                                </div>
+                                <span className="text-[10px] font-black uppercase tracking-tight">{opt}</span>
+                            </label>
+                        ))}
+                    </div>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={onClose}
+                            className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition"
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            onClick={onConfirm}
+                            className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition shadow-xl shadow-indigo-100 active:scale-95"
+                        >
+                            Mark as Completed
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export default BranchDeliveryFlow;

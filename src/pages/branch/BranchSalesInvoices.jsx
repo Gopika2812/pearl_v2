@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaFileExcel, FaTimes, FaTruck, FaFilePdf } from "react-icons/fa";
+import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaFileExcel, FaTimes, FaTruck, FaFilePdf, FaQrcode } from "react-icons/fa";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
@@ -10,6 +10,9 @@ import { getInvoiceHTML } from "../../utils/invoiceUtils";
 import FilterableSelect from "../../components/FilterableSelect";
 import BulkEInvoiceModal from "../../components/branch/BulkEInvoiceModal";
 import BulkPdfDownloadModal from "../../components/branch/BulkPdfDownloadModal";
+import InvoiceQrModal from "../../components/branch/InvoiceQrModal";
+
+// QR Implementation Fix
 
 const ExportColumnSelectorModal = ({ show, onClose, columns, selected, onSelect, exporting, onExport }) => {
   if (!show) return null;
@@ -98,6 +101,7 @@ const BranchSalesInvoices = () => {
   const [requestingAction, setRequestingAction] = useState(null); // ID of invoice currently requesting
   const [showEInvoiceModal, setShowEInvoiceModal] = useState(null);
   const [showCancelModal, setShowCancelModal] = useState(null); // Invoice to be cancelled
+  const [showQrModal, setShowQrModal] = useState(null);
   const [cancelReason, setCancelReason] = useState("");
   const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split("T")[0]);
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split("T")[0]);
@@ -687,6 +691,13 @@ const BranchSalesInvoices = () => {
         />
       )}
 
+      {showQrModal && (
+        <InvoiceQrModal
+          invoice={showQrModal}
+          onClose={() => setShowQrModal(null)}
+        />
+      )}
+
       <div className="w-full mx-auto px-4 sm:px-8 py-4">
         {/* HEADER */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
@@ -1110,6 +1121,17 @@ const BranchSalesInvoices = () => {
                                      </button>
                                    )}
                                  </div>
+                               )}
+                               {isFieldAllowed("action_qr") !== false && (
+                                 <button
+                                   onClick={(e) => {
+                                     e.stopPropagation();
+                                     setShowQrModal(inv);
+                                   }}
+                                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-white border border-slate-800 hover:bg-slate-900 text-[10px] font-black transition-all shadow-sm"
+                                 >
+                                   <FaQrcode size={12} /> QR
+                                 </button>
                                )}
                                {isFieldAllowed("action_cancel") && (
                                  <div className="flex gap-1">

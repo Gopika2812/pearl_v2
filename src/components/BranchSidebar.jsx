@@ -84,6 +84,7 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
     const allowedPages = user.allowedPages || [];
     
     // For all branch roles (ADMIN, MANAGER, etc.), respect the allowedPages configuration
+    if (page.id === "smart-orders" || page.id === "task-board" || page.id === "crm-dashboard") return true;
     return allowedPages.includes(page.id);
   };
 
