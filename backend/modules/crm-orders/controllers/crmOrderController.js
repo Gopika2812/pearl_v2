@@ -111,7 +111,8 @@ export const generateLink = async (req, res) => {
     
     await CRMOrderSession.findByIdAndUpdate(sessionId, { status: "SHARED" });
 
-    const baseUrl = req.body.baseUrl || process.env.FRONTEND_URL || 'http://localhost:5173';
+    // Priority: Explicit baseUrl from frontend > Env Var > Live URL Fallback > Localhost
+    const baseUrl = req.body.baseUrl || process.env.FRONTEND_URL || 'https://pearlsfrontend.web.app';
 
     res.status(201).json({ 
         token, 
