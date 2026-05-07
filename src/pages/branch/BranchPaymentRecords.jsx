@@ -24,6 +24,9 @@ export default function BranchPaymentRecords() {
   const [searchTerm, setSearchTerm] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, pages: 1 });
+  const [totalFilteredAmount, setTotalFilteredAmount] = useState(0);
 
   // Return Modal State
   const [returnModalOpen, setReturnModalOpen] = useState(false);
@@ -34,16 +37,41 @@ export default function BranchPaymentRecords() {
 
   useEffect(() => {
     if (currentBranch?._id) fetchPayments();
-  }, [currentBranch]);
+  }, [currentBranch, page, startDate, endDate]);
+
+  // Handle search with debounce or just trigger on button click/enter
+  // For simplicity, we'll fetch when searchTerm is empty or use a manual refresh
+  useEffect(() => {
+    if (!searchTerm && currentBranch?._id) fetchPayments();
+  }, [searchTerm]);
 
   const fetchPayments = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/payments?branchId=${currentBranch._id}`, {
+      const queryParams = new URLSearchParams({
+        branchId: currentBranch._id,
+        page: page,
+        limit: 50,
+        search: searchTerm,
+        startDate: startDate,
+        endDate: endDate
+      });
+
+      const response = await fetch(`${API_BASE}/payments?${queryParams}`, {
         headers: { "Content-Type": "application/json" },
       });
       const result = await response.json();
-      setPayments(result.data || []);
+      
+      if (result.success) {
+        setPayments(result.data || []);
+        setPagination(result.pagination || { total: 0, pages: 1 });
+        
+        // Fetch total amount for the filtered set (without pagination limit)
+        // Note: For a real app, you might want a separate summary endpoint or return the grand total in the response
+        // For now, we'll use the current page's sum as a placeholder or fetch the whole sum if needed.
+        const sum = (result.data || []).reduce((acc, p) => acc + (p.amount || 0), 0);
+        setTotalFilteredAmount(sum); 
+      }
     } catch (error) {
       console.error("Error fetching payments:", error);
       toast.error("Failed to load payment records");
@@ -82,33 +110,7 @@ export default function BranchPaymentRecords() {
     }
   };
 
-  const filteredPayments = payments.filter(p => {
-    // 1. Term Filter
-    let matchesTerm = true;
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      const id = (p.paymentId || "").toLowerCase();
-      const type = (p.paymentType || "").toLowerCase();
-      const recipient = (p.vendor?.name || p.description || "").toLowerCase();
-      matchesTerm = id.includes(searchLower) || type.includes(searchLower) || recipient.includes(searchLower);
-    }
-
-    // 2. Date Filter
-    let matchesDate = true;
-    const paymentDate = new Date(p.paymentDate || p.createdAt);
-    if (startDate) {
-      const start = new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      if (paymentDate < start) matchesDate = false;
-    }
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      if (paymentDate > end) matchesDate = false;
-    }
-
-    return matchesTerm && matchesDate;
-  });
+  const filteredPayments = payments; // Now handled server-side
 
   const formatDateTime = (dateString) => {
     return new Date(dateString).toLocaleString("en-IN", {
@@ -140,8 +142,8 @@ export default function BranchPaymentRecords() {
               </div>
             </div>
             <div className="hidden md:block text-right">
-              <p className="text-red-200 text-xs font-bold uppercase tracking-wider">Filtered Outflow</p>
-              <p className="text-3xl font-black">₹{filteredPayments.reduce((sum, p) => sum + (p.amount || 0), 0).toLocaleString()}</p>
+              <p className="text-red-200 text-xs font-bold uppercase tracking-wider">Page Total</p>
+              <p className="text-3xl font-black">₹{totalFilteredAmount.toLocaleString()}</p>
             </div>
           </div>
         </div>
@@ -159,6 +161,7 @@ export default function BranchPaymentRecords() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-12 pr-4 py-3 bg-red-50/20 border border-red-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 transition-all font-medium text-gray-700"
+                  onKeyDown={(e) => e.key === "Enter" && fetchPayments()}
                 />
               </div>
             </div>
@@ -296,6 +299,29 @@ export default function BranchPaymentRecords() {
             </div>
           )}
         </div>
+
+        {/* PAGINATION CONTROLS */}
+        {pagination.pages > 1 && (
+          <div className="mt-8 flex items-center justify-center gap-4">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-6 py-2 bg-white border border-red-100 rounded-xl font-bold text-red-600 disabled:opacity-30 hover:bg-red-50 transition shadow-sm"
+            >
+              Previous
+            </button>
+            <span className="text-sm font-black text-gray-500 uppercase tracking-widest">
+              Page {page} of {pagination.pages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(pagination.pages, p + 1))}
+              disabled={page === pagination.pages}
+              className="px-6 py-2 bg-white border border-red-100 rounded-xl font-bold text-red-600 disabled:opacity-30 hover:bg-red-50 transition shadow-sm"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
       {/* RETURN MODAL */}

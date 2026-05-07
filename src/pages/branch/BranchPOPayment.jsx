@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaChevronDown, FaChevronUp, FaCreditCard, FaDollarSign, FaPlus, FaSyncAlt, FaHistory } from "react-icons/fa";
+import { FaChevronDown, FaChevronUp, FaCreditCard, FaDollarSign, FaPlus, FaSyncAlt, FaHistory, FaSearch, FaCalendarAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { API_BASE } from "../../api";
@@ -27,37 +27,42 @@ export default function BranchPOPayment() {
   const [selectedPO, setSelectedPO] = useState(null);
   const [paymentData, setPaymentData] = useState({});
   const [expandedPOs, setExpandedPOs] = useState({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, pages: 1 });
 
   // Fetch all purchase orders
   const fetchPurchaseOrders = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/purchase-orders`);
-      const data = await response.json();
+      const queryParams = new URLSearchParams({
+        branchId: currentBranch?._id,
+        status: "INVOICED",
+        page: page,
+        limit: 50,
+        search: searchTerm,
+        fromDate: startDate,
+        toDate: endDate
+      });
 
-      if (data.success || Array.isArray(data.data || data)) {
-        let poData = data.data || data;
+      const response = await fetch(`${API_BASE}/purchase-orders?${queryParams}`);
+      const result = await response.json();
+
+      if (result.success) {
+        let poData = result.data || [];
+        setPagination(result.pagination || { total: 0, pages: 1 });
         
-        // Strictly filter to only INVOICED purchase orders for the active branch
-        const branchIdStr = currentBranch?._id?.toString();
-        poData = poData.filter(po => {
-           const poBranchId = po.branchId?.$oid || po.branchId?.toString();
-           return poBranchId === branchIdStr && po.status === "INVOICED";
-        });
-
-        // Apply granular voucher authorization
+        // Apply granular voucher authorization (client-side for now as it's role-based)
         if (user?.allowedVoucherTypes && user.allowedVoucherTypes.length > 0) {
           poData = poData.filter(po => user.allowedVoucherTypes.includes(po.voucherTypeId || po.voucherType?._id || po.voucherType));
         }
 
-        // Sort by latest first
-        const sorted = poData.sort((a, b) =>
-          new Date(b.createdAt) - new Date(a.createdAt)
-        );
-        setPurchaseOrders(sorted);
+        setPurchaseOrders(poData);
 
         // Fetch payment info for each PO
-        for (const po of sorted) {
+        for (const po of poData) {
           fetchPaymentInfoForPO(po._id);
         }
       }
@@ -91,8 +96,13 @@ export default function BranchPOPayment() {
   };
 
   useEffect(() => {
-    fetchPurchaseOrders();
-  }, []);
+    if (currentBranch?._id) fetchPurchaseOrders();
+  }, [currentBranch, page, startDate, endDate]);
+
+  // Handle search refresh
+  useEffect(() => {
+    if (!searchTerm && currentBranch?._id) fetchPurchaseOrders();
+  }, [searchTerm]);
 
   const handlePaymentSuccess = () => {
     setShowPaymentModal(false);
@@ -133,6 +143,8 @@ export default function BranchPOPayment() {
     return `₹${pending.toLocaleString()} Pending`;
   };
 
+  const filteredPurchaseOrders = purchaseOrders; // Now handled server-side
+
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
       <div className="w-full max-w-full mx-auto px-3 sm:px-6 py-4">
@@ -157,6 +169,55 @@ export default function BranchPOPayment() {
               >
                 <FaPlus /> Vendor Payment
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* SEARCH & FILTERS */}
+        <div className="bg-white rounded-2xl shadow-md p-6 mb-8 border border-[#319bab]/20">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+            {/* Search */}
+            <div className="md:col-span-1">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">Lookup Invoice / Vendor</label>
+              <div className="relative">
+                <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-[#319bab]" />
+                <input
+                  type="text"
+                  placeholder="Search by ID or Vendor..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-[#319bab]/5 border border-[#319bab]/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#319bab] transition-all font-medium text-gray-700"
+                  onKeyDown={(e) => e.key === "Enter" && fetchPurchaseOrders()}
+                />
+              </div>
+            </div>
+
+            {/* Start Date */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">Start Date</label>
+              <div className="relative">
+                <FaCalendarAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-[#319bab] opacity-50" />
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-[#319bab]/5 border border-[#319bab]/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#319bab] text-gray-700 font-medium"
+                />
+              </div>
+            </div>
+
+            {/* End Date */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">End Date</label>
+              <div className="relative">
+                <FaCalendarAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-[#319bab] opacity-50" />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-[#319bab]/5 border border-[#319bab]/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#319bab] text-gray-700 font-medium"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -205,7 +266,7 @@ export default function BranchPOPayment() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {purchaseOrders.map((po) => {
+                  {filteredPurchaseOrders.map((po) => {
                     const paid = paymentData[po._id]?.totalPaid || 0;
                     const pending = getPendingBalance(po);
                     const isExpanded = expandedPOs[po._id] || false;
@@ -384,6 +445,29 @@ export default function BranchPOPayment() {
           )}
         </div>
 
+        {/* PAGINATION CONTROLS */}
+        {pagination.pages > 1 && (
+          <div className="mt-8 flex items-center justify-center gap-4">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-6 py-2 bg-white border border-[#319bab]/20 rounded-xl font-bold text-[#319bab] disabled:opacity-30 hover:bg-[#319bab]/5 transition shadow-sm"
+            >
+              Previous
+            </button>
+            <span className="text-sm font-black text-gray-500 uppercase tracking-widest">
+              Page {page} of {pagination.pages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(pagination.pages, p + 1))}
+              disabled={page === pagination.pages}
+              className="px-6 py-2 bg-white border border-[#319bab]/20 rounded-xl font-bold text-[#319bab] disabled:opacity-30 hover:bg-[#319bab]/5 transition shadow-sm"
+            >
+              Next
+            </button>
+          </div>
+        )}
+
         {/* PAYMENT SUMMARY */}
         {purchaseOrders.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
@@ -402,7 +486,7 @@ export default function BranchPOPayment() {
               </p>
               <p className="text-3xl font-black text-green-600">
                 ₹
-                {purchaseOrders
+                {filteredPurchaseOrders
                   .reduce((sum, po) => sum + (paymentData[po._id]?.totalPaid || 0), 0)
                   .toLocaleString()}
               </p>
@@ -414,7 +498,7 @@ export default function BranchPOPayment() {
               </p>
               <p className="text-3xl font-black text-red-600">
                 ₹
-                {purchaseOrders
+                {filteredPurchaseOrders
                   .reduce((sum, po) => sum + getPendingBalance(po), 0)
                   .toLocaleString()}
               </p>

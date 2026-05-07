@@ -93,22 +93,66 @@ router.get("/next-id", async (req, res) => {
   }
 });
 
-// GET ALL PAYMENTS (optionally filtered by branchId and paymentType)
+// GET ALL PAYMENTS (REFINED WITH PAGINATION & FILTERS)
 router.get("/", async (req, res) => {
   try {
-    const { branchId, paymentType } = req.query;
+    const { 
+      branchId, 
+      paymentType, 
+      page = 1, 
+      limit = 50, 
+      search = "", 
+      startDate, 
+      endDate 
+    } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.max(1, parseInt(limit));
+    const skip = (pageNum - 1) * limitNum;
+
     const filter = {};
     if (branchId) filter.branchId = branchId;
     if (paymentType) filter.paymentType = paymentType;
 
+    // Search filter
+    if (search) {
+      filter.$or = [
+        { paymentId: { $regex: search, $options: "i" } },
+        { "vendor.name": { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+        { referenceNo: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    // Date range filter
+    if (startDate || endDate) {
+      filter.paymentDate = {};
+      if (startDate) filter.paymentDate.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        filter.paymentDate.$lte = end;
+      }
+    }
+
+    const total = await Payment.countDocuments(filter);
     const payments = await Payment.find(filter)
       .populate("vendor.vendorId", "name")
       .populate("purchaseOrder.poId", "invoiceId")
-      .sort({ paymentDate: -1 });
+      .sort({ paymentDate: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
 
     res.json({
       success: true,
       data: payments,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(total / limitNum)
+      }
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
