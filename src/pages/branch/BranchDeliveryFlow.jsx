@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { FaHistory, FaSearch, FaSync, FaTruck, FaCheckCircle, FaUser, FaCommentDots, FaMapMarkerAlt, FaChevronDown, FaBoxOpen, FaClipboardCheck, FaUndo, FaPlus, FaTrash } from "react-icons/fa";
+import { FaHistory, FaSearch, FaSync, FaTruck, FaCheckCircle, FaUser, FaCommentDots, FaMapMarkerAlt, FaChevronDown, FaBoxOpen, FaClipboardCheck, FaUndo, FaPlus, FaTrash, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
