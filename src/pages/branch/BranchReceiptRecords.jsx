@@ -307,7 +307,7 @@ export default function BranchReceiptRecords() {
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          {r.status === 'confirmed' && (
+                          {r.status === 'confirmed' && !r.isBounced && (
                             <div className="flex flex-wrap items-center justify-center gap-2">
                               <button 
                                 onClick={() => setEditReceipt(r)}
@@ -333,11 +333,11 @@ export default function BranchReceiptRecords() {
                               </button>
                             </div>
                           )}
+                          {(r.status === 'bounced' || r.isBounced) && (
+                            <span className="text-[10px] font-bold text-orange-600 uppercase italic bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">Bounced</span>
+                          )}
                           {r.status === 'cancelled' && (
                             <span className="text-[10px] font-bold text-red-600 uppercase italic bg-red-50 px-3 py-1.5 rounded-lg border border-red-100">Cancelled</span>
-                          )}
-                          {r.status === 'bounced' && (
-                            <span className="text-[10px] font-bold text-orange-600 uppercase italic bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">Bounced</span>
                           )}
                         </div>
                       </td>

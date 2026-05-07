@@ -288,7 +288,7 @@ const BranchCustomerLedger = () => {
       transactions.filter(txn => !String(txn.type).toUpperCase().includes("CANCEL")).forEach(txn => {
         let docId = "-";
         const invMatch = txn.particulars?.match(/for Inv:\s*([^\s(]+)/i);
-        const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note):\s*([^\s(]+)/i);
+        const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note|CHEQUE BOUNCE):\s*([^\s(]+)/i);
 
         if (invMatch) docId = invMatch[1];
         else if (pm) docId = pm[1];
@@ -548,7 +548,7 @@ const BranchCustomerLedger = () => {
                 {transactions.map((txn, index) => {
                   let docId = "-";
                   const invMatch = txn.particulars?.match(/for Invoice?s?:\s*([^\[(]+)/i);
-                  const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note|Journal):\s*([^\[( \n]+)/i);
+                  const pm = txn.particulars?.match(/(?:Invoice|Receipt|Note|Journal|CHEQUE BOUNCE):\s*([^\[( \n]+)/i);
 
                   if (invMatch) docId = invMatch[1].trim();
                   else if (pm) docId = pm[1].trim();
@@ -574,7 +574,9 @@ const BranchCustomerLedger = () => {
                             {txn.salesOrderId && <span className="ml-1 opacity-0 group-hover/btn:opacity-100 text-[8px] font-black bg-indigo-50 text-indigo-600 px-1 py-0.5 rounded transition-all">VIEW BILL</span>}
                           </div>
                         </button>
-                        <div className={`text-[10px] text-slate-400 font-bold italic truncate max-w-[300px] mt-0.5 ${txn.type === 'CANCELLED' ? 'line-through' : ''}`} title={txn.particulars}>{txn.particulars}</div>
+                        <div className={`text-[10px] text-slate-900 font-black italic line-clamp-2 mt-1 max-w-[250px] leading-tight ${txn.type === 'CANCELLED' ? 'line-through text-slate-400' : ''}`} title={txn.particulars}>
+                          {txn.particulars}
+                        </div>
                       </td>
                       <td className="px-6 py-6 text-center">
                         <span className={`px-2.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm border ${

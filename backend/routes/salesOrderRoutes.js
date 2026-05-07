@@ -1372,14 +1372,26 @@ router.get("/unpaid/:customerId", async (req, res) => {
       const receipts = await Receipt.find({ 
         $or: [
           { originalSalesOrderId: orderId },
-          { originalInvoiceId: inv.invoiceNumber }
+          { originalInvoiceId: inv.invoiceNumber },
+          { "relatedOrders.salesOrderId": orderId }
         ],
         status: { $in: ["confirmed", "bounced"] }
       });
       
       const totalReceived = (receipts || []).reduce((sum, r) => {
         const isBounced = r.status === "bounced" || r.paymentMethod === "BOUNCED";
-        const amt = parseFloat(r.amount) || 0;
+        
+        // Handle bulk receipts: find the specific amount allocated to this order
+        let amt = 0;
+        if (r.relatedOrders && r.relatedOrders.length > 0) {
+          const match = r.relatedOrders.find(ro => 
+            (ro.salesOrderId?._id || ro.salesOrderId)?.toString() === orderId.toString()
+          );
+          amt = match ? (match.amount || 0) : 0;
+        } else {
+          amt = parseFloat(r.amount) || 0;
+        }
+
         return isBounced ? sum - amt : sum + amt;
       }, 0);
 

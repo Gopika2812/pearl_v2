@@ -330,7 +330,7 @@ router.get("/branch/:branchId", auth, async (req, res) => {
     const { branchId } = req.params;
 
     // Strict Branch Check
-    if (req.user.role !== "SUPER_ADMIN" && req.user.branchId !== branchId) {
+    if (req.user.role !== "SUPER_ADMIN" && req.user.branch?.toString() !== branchId.toString()) {
       return res.status(403).json({ success: false, message: "Unauthorized access to this branch's data" });
     }
     const page = parseInt(req.query.page) || 1;
@@ -473,7 +473,7 @@ router.get("/:customerId/:productId", auth, async (req, res) => {
     }
 
     // Strict Branch Check
-    if (req.user.role !== "SUPER_ADMIN" && req.user.branchId !== branchId) {
+    if (req.user.role !== "SUPER_ADMIN" && req.user.branch?.toString() !== branchId.toString()) {
       return res.status(403).json({ success: false, message: "Unauthorized access to this branch's data" });
     }
 

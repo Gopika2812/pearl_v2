@@ -135,7 +135,7 @@ export default function BranchPOPayment() {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
-      <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4">
+      <div className="w-full max-w-full mx-auto px-3 sm:px-6 py-4">
         {/* HEADER */}
         <div className="bg-gradient-to-r from-[#257f87] to-[#319bab] text-white rounded-2xl shadow-lg p-8 mb-8">
           <div className="flex items-center justify-between">
@@ -310,66 +310,67 @@ export default function BranchPOPayment() {
                                   📦 Purchased Items
                                 </h4>
                                 <div className="overflow-x-auto">
-                                  <table className="w-full text-xs">
+                                  <table className="w-full text-xs bg-white rounded-lg border border-slate-100">
                                     <thead>
-                                      <tr className="bg-white">
-                                        <th className="px-3 py-2 text-left font-bold text-gray-700">
-                                          Product Name
-                                        </th>
-                                        <th className="px-3 py-2 text-center font-bold text-gray-700">
-                                          Qty
-                                        </th>
-                                        <th className="px-3 py-2 text-center font-bold text-gray-700">
-                                          Package
-                                        </th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">
-                                          Unit Price
-                                        </th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">
-                                          GST
-                                        </th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">
-                                          HSN Code
-                                        </th>
-                                        <th className="px-3 py-2 text-right font-bold text-gray-700">
-                                          Item Total
-                                        </th>
+                                      <tr className="bg-slate-50">
+                                        <th className="px-3 py-2 text-left font-bold text-gray-700">Product Name</th>
+                                        <th className="px-3 py-2 text-center font-bold text-gray-700">Qty</th>
+                                        <th className="px-3 py-2 text-center font-bold text-gray-700">Package</th>
+                                        <th className="px-3 py-2 text-right font-bold text-gray-700">Unit Price</th>
+                                        <th className="px-3 py-2 text-right font-bold text-gray-700">GST</th>
+                                        <th className="px-3 py-2 text-right font-bold text-gray-700">HSN</th>
+                                        <th className="px-3 py-2 text-right font-bold text-gray-700">Item Total</th>
                                       </tr>
                                     </thead>
-                                    <tbody className="divide-y">
+                                    <tbody className="divide-y divide-slate-50">
                                       {po.items.map((item, idx) => (
-                                        <tr
-                                          key={idx}
-                                          className="bg-white hover:bg-gray-50"
-                                        >
-                                          <td className="px-3 py-2 font-semibold text-gray-800">
-                                            {item.name}
-                                          </td>
-                                          <td className="px-3 py-2 text-center font-bold">
-                                            {item.qty}
-                                          </td>
-                                          <td className="px-3 py-2 text-center text-gray-600">
-                                            {item.perQty || "-"} {item.units || ""}
-                                          </td>
-                                          <td className="px-3 py-2 text-right">
-                                            ₹{item.purchasePrice}
-                                          </td>
-                                          <td className="px-3 py-2 text-right">
-                                            {item.igst
-                                              ? `IGST ${item.gst}%`
-                                              : `CGST ${item.cgst}% + SGST ${item.sgst}%`}
-                                          </td>
-                                          <td className="px-3 py-2 text-right text-gray-600">
-                                            {item.hsn || "-"}
-                                          </td>
-                                          <td className="px-3 py-2 text-right font-bold text-[#319bab]">
-                                            ₹{item.total}
-                                          </td>
+                                        <tr key={idx} className="bg-white hover:bg-gray-50">
+                                          <td className="px-3 py-2 font-semibold text-gray-800">{item.name}</td>
+                                          <td className="px-3 py-2 text-center font-bold">{item.qty}</td>
+                                          <td className="px-3 py-2 text-center text-gray-600">{item.perQty || "-"} {item.units || ""}</td>
+                                          <td className="px-3 py-2 text-right">₹{item.purchasePrice}</td>
+                                          <td className="px-3 py-2 text-right">{item.igst ? `IGST ${item.gst}%` : `CGST ${item.cgst}% + SGST ${item.sgst}%`}</td>
+                                          <td className="px-3 py-2 text-right text-gray-600">{item.hsn || "-"}</td>
+                                          <td className="px-3 py-2 text-right font-bold text-[#319bab]">₹{item.total}</td>
                                         </tr>
                                       ))}
                                     </tbody>
                                   </table>
                                 </div>
+
+                                {paymentData[po._id]?.payments?.length > 0 && (
+                                  <div className="mt-8">
+                                    <h4 className="text-green-600 font-bold text-sm mb-3 uppercase flex items-center gap-2">
+                                      <FaCreditCard /> Payment History
+                                    </h4>
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-xs bg-white rounded-lg border border-green-100">
+                                        <thead>
+                                          <tr className="bg-green-50/50">
+                                            <th className="px-4 py-2 text-left font-bold text-gray-700">Payment ID</th>
+                                            <th className="px-4 py-2 text-left font-bold text-gray-700">Date</th>
+                                            <th className="px-4 py-2 text-center font-bold text-gray-700">Method</th>
+                                            <th className="px-4 py-2 text-right font-bold text-gray-700">Amount</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-green-50">
+                                          {paymentData[po._id].payments.map((p, pidx) => (
+                                            <tr key={pidx} className="hover:bg-green-50/20">
+                                              <td className="px-4 py-2 text-gray-600 font-medium">{p.paymentId || "-"}</td>
+                                              <td className="px-4 py-2 text-gray-500">{formatDate(p.paymentDate || p.createdAt)}</td>
+                                              <td className="px-4 py-2 text-center">
+                                                <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-black uppercase text-[9px]">
+                                                  {p.paymentMethod}
+                                                </span>
+                                              </td>
+                                              <td className="px-4 py-2 text-right font-bold text-gray-800">₹{p.amount?.toLocaleString()}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>
