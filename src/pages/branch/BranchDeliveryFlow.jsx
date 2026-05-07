@@ -39,7 +39,7 @@ const BranchDeliveryFlow = () => {
   const [scanInput, setScanInput] = useState("");
   const [selectedScanRole, setSelectedScanRole] = useState("storageMan"); // storageMan, stockChecker, deliveryPerson
   const [showScanCompletionModal, setShowScanCompletionModal] = useState(null); // invoice
-  const [showScanPaymentOptions, setScanPaymentOptions] = useState([]);
+  const [scanPaymentOptions, setScanPaymentOptions] = useState([]);
   const [showLiveScanner, setShowLiveScanner] = useState(false);
   const [showBulkScanModal, setShowBulkScanModal] = useState(null); // array of inv numbers
 
