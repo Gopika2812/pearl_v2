@@ -30,9 +30,9 @@ const BranchFollowUp = () => {
     
     // Filters
     const [searchTerm, setSearchTerm] = useState("");
-    const [groupFilter, setGroupFilter] = useState("All");
-    const [categoryFilter, setCategoryFilter] = useState("All");
-    const [zoneFilter, setZoneFilter] = useState("All");
+    const [groupFilter, setGroupFilter] = useState("");
+    const [categoryFilter, setCategoryFilter] = useState("");
+    const [zoneFilter, setZoneFilter] = useState("");
     
     // Permission helper
     const isFieldAllowed = (fieldId) => {
@@ -318,7 +318,7 @@ const BranchFollowUp = () => {
                                     value={groupFilter}
                                     onChange={(e) => setGroupFilter(e.target.value)}
                                 >
-                                    <option value="All">Groups</option>
+                                    <option value="">All Groups</option>
                                     {customerGroups.map(g => (
                                         <option key={g._id} value={g._id}>{g.name}</option>
                                     ))}
@@ -332,7 +332,7 @@ const BranchFollowUp = () => {
                                     value={categoryFilter}
                                     onChange={(e) => setCategoryFilter(e.target.value)}
                                 >
-                                    <option value="All">Categories</option>
+                                    <option value="">All Categories</option>
                                     {customerCategories.map(cat => (
                                         <option key={cat._id} value={cat._id}>{cat.name}</option>
                                     ))}
@@ -346,7 +346,7 @@ const BranchFollowUp = () => {
                                     value={zoneFilter}
                                     onChange={(e) => setZoneFilter(e.target.value)}
                                 >
-                                    <option value="All">All Zones</option>
+                                    <option value="">All Zones</option>
                                     <option value="safe_zone">Safe Zone</option>
                                     <option value="medium_zone">Medium Zone</option>
                                     <option value="risk_zone">Risk Zone</option>

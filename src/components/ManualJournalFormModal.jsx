@@ -3,7 +3,7 @@ import { FaPlus, FaTimes, FaUser, FaStore, FaWallet, FaCheck, FaBook, FaSearch }
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../api";
 
-const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch }) => {
+const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch, editData }) => {
   const [formData, setFormData] = useState({
     by: { partyType: "DEBTOR", partyId: "", partyName: "", partyGroup: "Sundry Debtors" },
     to: { partyType: "VENDOR", partyId: "", partyName: "", partyGroup: "Sundry Creditors" },
@@ -145,6 +145,27 @@ const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch }) =
     setActiveDropdown(null);
   };
 
+  useEffect(() => {
+    if (editData && isOpen) {
+      setFormData({
+        by: editData.by,
+        to: editData.to,
+        amount: editData.amount,
+        paymentMode: editData.paymentMode || "CASH",
+        narration: editData.narration || "",
+        entryType: editData.entryType || "DEBIT"
+      });
+      setPrimaryCategory(editData.primaryCategory || "Indirect Expenses");
+      setSearchTerms({
+        by: editData.by.partyName,
+        to: editData.to.partyName
+      });
+      setGroupSearchTerm(editData.primaryCategory || "");
+    } else {
+      resetForm();
+    }
+  }, [editData, isOpen]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.by.partyId || !formData.to.partyId) return toast.error("Select both By and To parties");
@@ -152,8 +173,11 @@ const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch }) =
 
     setLoading(true);
     try {
-      const res = await fetchWithAuth(`${API_BASE}/manual-journals`, {
-        method: "POST",
+      const url = editData ? `${API_BASE}/manual-journals/${editData._id}` : `${API_BASE}/manual-journals`;
+      const method = editData ? "PUT" : "POST";
+
+      const res = await fetchWithAuth(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...formData, branchId: currentBranch._id, primaryCategory })
       });
@@ -316,24 +340,25 @@ const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch }) =
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-      <div 
-        ref={dropdownRef}
-        className="bg-slate-50 w-full max-w-2xl rounded-[1.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
-      >
-        <div className="bg-white px-5 py-4 border-b border-slate-100 flex justify-between items-center shrink-0">
+      <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in duration-300">
+        <div className="bg-slate-50 px-6 py-5 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100">
-              <FaBook className="text-white text-sm" />
+            <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+              <FaBook size={18} />
             </div>
             <div>
-              <h2 className="text-base font-black text-slate-900 uppercase tracking-tight">Journal Operation</h2>
+              <h2 className="text-sm font-black text-slate-800 uppercase tracking-tighter">
+                {editData ? 'Edit Journal Entry' : 'Journal Operation'}
+              </h2>
               <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Manual Accounting Post</p>
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Manual Accounting Post</span>
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><FaTimes size={12} /></button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white hover:shadow-sm text-slate-400 hover:text-red-500 transition-all">
+            <FaTimes size={14} />
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 md:p-6 space-y-5 overflow-y-auto max-h-[85vh]">
@@ -460,14 +485,16 @@ const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch }) =
             <button
               type="submit"
               disabled={loading}
-              className="flex-[2] bg-indigo-600 text-white py-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                  Saving...
-                </div>
-              ) : <><FaCheck size={12} /> Post Journal Entry</>}
+                <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <>
+                  <FaCheck size={14} />
+                  {editData ? 'Update Journal Entry' : 'Post Journal Entry'}
+                </>
+              )}
             </button>
           </div>
         </form>

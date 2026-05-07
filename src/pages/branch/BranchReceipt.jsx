@@ -4,7 +4,6 @@ import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import CustomerDebitReceiptModal from "../../components/sales/CustomerDebitReceiptModal";
 import CustomerReceiptModal from "../../components/inventory/CustomerReceiptModal";
-import BounceChequeModal from "../../components/sales/BounceChequeModal";
 import { useBranch } from "../../context/BranchContext";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
@@ -21,10 +20,8 @@ export default function BranchReceipt() {
   
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showDebitReceiptModal, setShowDebitReceiptModal] = useState(false);
-  const [showBounceModal, setShowBounceModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [selectedBounceInvoice, setSelectedBounceInvoice] = useState(null);
   const [expandedInvoices, setExpandedInvoices] = useState({});
 
   // Pagination & Data Control
@@ -164,17 +161,6 @@ export default function BranchReceipt() {
     setShowReceiptModal(false);
     setSelectedInvoice(null);
     setSelectedCustomer(null);
-    fetchData();
-  };
-
-  const handleBounceClick = (invoice) => {
-    setSelectedBounceInvoice(invoice);
-    setShowBounceModal(true);
-  };
-
-  const handleBounceSuccess = () => {
-    setShowBounceModal(false);
-    setSelectedBounceInvoice(null);
     fetchData();
   };
 
@@ -370,7 +356,6 @@ export default function BranchReceipt() {
                       isExpanded={expandedInvoices[item._id]}
                       onToggleExpand={toggleExpandInvoice}
                       onReceive={handleReceivePayment}
-                      onBounce={handleBounceClick}
                       receipts={getReceiptsForInvoice(item._id)}
                       isFieldAllowed={isFieldAllowed}
                       formatDateTime={formatDateTime}
@@ -517,14 +502,6 @@ export default function BranchReceipt() {
           fetchData();
         }}
       />
-
-      {/* CHEQUE BOUNCED MODAL */}
-      <BounceChequeModal
-        invoice={selectedBounceInvoice}
-        isOpen={showBounceModal}
-        onClose={() => setShowBounceModal(false)}
-        onBounceSuccess={handleBounceSuccess}
-      />
     </div>
   );
 }
@@ -535,7 +512,6 @@ const ReceiptRow = React.memo(({
   isExpanded, 
   onToggleExpand, 
   onReceive, 
-  onBounce, 
   receipts, 
   isFieldAllowed, 
   formatDateTime,
@@ -634,12 +610,6 @@ const ReceiptRow = React.memo(({
                      ✓ Paid
                    </span>
                  )}
-                 <button
-                   onClick={() => onBounce(item)}
-                   className="inline-flex items-center gap-2 bg-red-100 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-red-200 transition"
-                 >
-                   Bounce
-                 </button>
                </>
              ) : (
                <span className="text-[10px] text-gray-400 font-bold italic bg-gray-50 px-2 py-1 rounded">Settlement Log</span>

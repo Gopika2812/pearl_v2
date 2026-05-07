@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { FaBook, FaPlus, FaSync, FaSearch, FaUser, FaFilter, FaCalendarAlt, FaSortAmountDown, FaSortAmountUp, FaChevronLeft, FaChevronRight, FaTimes } from "react-icons/fa";
+import { FaBook, FaPlus, FaSync, FaSearch, FaUser, FaFilter, FaCalendarAlt, FaSortAmountDown, FaSortAmountUp, FaChevronLeft, FaChevronRight, FaTimes, FaEdit } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
@@ -10,6 +10,16 @@ const BranchJournalEntries = () => {
   const [journals, setJournals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Permission helper
+  const isFieldAllowed = (fieldId) => {
+    if (!user) return false;
+    const role = user.role?.toLowerCase();
+    // Keep absolute bypass ONLY for Superadmin safety
+    if (role === "superadmin") return true; 
+    const key = `journals_${fieldId}`;
+    return user.fieldPermissions?.[key] !== false; // Default to true
+  };
   
   // Default dates: Start and end of current month
   const now = new Date();
@@ -27,6 +37,7 @@ const BranchJournalEntries = () => {
 
   const [selectedGroup, setSelectedGroup] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState(null);
 
   const ACCOUNT_GROUPS = [
     "Indirect Expenses", "Direct Expenses", "Indirect Income", "Direct Income",
@@ -116,10 +127,11 @@ const BranchJournalEntries = () => {
   return (
     <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-6 md:pl-24 pb-12">
       <ManualJournalFormModal 
-        isOpen={createModalOpen} 
-        onClose={() => setCreateModalOpen(false)} 
+        isOpen={createModalOpen || !!editingEntry} 
+        onClose={() => { setCreateModalOpen(false); setEditingEntry(null); }} 
         onRefresh={fetchJournals} 
         currentBranch={currentBranch}
+        editData={editingEntry}
       />
 
       <div className="w-full px-4 sm:px-8">
@@ -221,12 +233,15 @@ const BranchJournalEntries = () => {
                     <div className="flex items-center justify-end gap-2">Amount {sortConfig.key === "amount" && (sortConfig.direction === "asc" ? <FaSortAmountUp /> : <FaSortAmountDown />)}</div>
                   </th>
                   <th className="px-8 py-6 text-center">User</th>
+                  {isFieldAllowed("action_edit") && (
+                    <th className="px-8 py-6 text-center">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {loading ? (
                   <tr>
-                    <td colSpan="6" className="px-8 py-20 text-center">
+                    <td colSpan="7" className="px-8 py-20 text-center">
                       <div className="flex flex-col items-center gap-4">
                         <div className="w-10 h-10 border-[4px] border-indigo-50 border-t-indigo-600 rounded-full animate-spin"></div>
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Loading Records...</p>
@@ -235,7 +250,7 @@ const BranchJournalEntries = () => {
                   </tr>
                 ) : processedJournals.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="px-8 py-32 text-center opacity-40">
+                    <td colSpan="7" className="px-8 py-32 text-center opacity-40">
                       <FaBook className="text-6xl mx-auto mb-6 text-slate-200" />
                       <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No Journal Entries Found</p>
                     </td>
@@ -280,6 +295,17 @@ const BranchJournalEntries = () => {
                           <span className="text-[10px] font-black text-slate-500 uppercase">{journal.userName}</span>
                         </div>
                       </td>
+                      {isFieldAllowed("action_edit") && (
+                        <td className="px-8 py-6 text-center">
+                          <button
+                            onClick={() => setEditingEntry(journal)}
+                            className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                            title="Edit Entry"
+                          >
+                            <FaEdit size={14} />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}

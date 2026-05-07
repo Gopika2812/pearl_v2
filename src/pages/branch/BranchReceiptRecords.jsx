@@ -61,6 +61,29 @@ export default function BranchReceiptRecords() {
     }
   };
 
+  const handleBounce = async (id) => {
+    const notes = window.prompt("Enter bounce notes (optional):");
+    if (notes === null) return; // User cancelled prompt
+
+    try {
+      const response = await fetch(`${API_BASE}/receipts/${id}/bounce`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes })
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success("Receipt marked as bounced. Customer debit increased.");
+        fetchReceipts();
+      } else {
+        toast.error(result.message || "Failed to bounce receipt");
+      }
+    } catch (error) {
+      console.error("Bounce error:", error);
+      toast.error("Error connecting to server");
+    }
+  };
+
   const filteredReceipts = React.useMemo(() => {
     return receipts.filter(r => {
       // 1. Term Filter
@@ -231,7 +254,7 @@ export default function BranchReceiptRecords() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filteredReceipts.map((r) => (
-                    <tr key={r._id} className={`hover:bg-blue-50/30 transition-colors group ${r.status === 'cancelled' ? 'opacity-60 grayscale-[0.5]' : ''}`}>
+                    <tr key={r._id} className={`hover:bg-blue-50/30 transition-colors group ${r.status === 'cancelled' || r.status === 'bounced' ? 'opacity-60 grayscale-[0.5]' : ''}`}>
                       <td className="px-6 py-4">
                         <span className="font-bold text-blue-600 group-hover:text-blue-700">{r.receiptId}</span>
                         {r.generatedBy?.name && (
@@ -273,37 +296,51 @@ export default function BranchReceiptRecords() {
                         {r.status === 'cancelled' && r.cancelReason && (
                              <p className="text-[8px] text-red-400 italic mt-1 max-w-[120px] mx-auto line-through">Reason: {r.cancelReason}</p>
                         )}
+                        {r.status === 'bounced' && (
+                             <p className="text-[8px] text-red-600 font-bold uppercase mt-1">Status: Bounced</p>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <p className={`text-lg font-black ${r.status === 'cancelled' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                           ₹{r.amount?.toLocaleString()}
                         </p>
                       </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            {r.status !== 'cancelled' && (
-                              <>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          {r.status === 'confirmed' && (
+                            <div className="flex flex-wrap items-center justify-center gap-2">
+                              <button 
+                                onClick={() => setEditReceipt(r)}
+                                className="bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-blue-700 transition shadow-md uppercase"
+                              >
+                                Edit
+                              </button>
+                              
+                              {r.paymentMethod === "CHEQUE" && (
                                 <button 
-                                  onClick={() => setEditReceipt(r)}
-                                  className="text-blue-400 hover:text-blue-600 transition p-2 hover:bg-blue-50 rounded-lg"
-                                  title="Edit Receipt"
+                                  onClick={() => handleBounce(r._id)}
+                                  className="bg-orange-500 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-orange-600 transition shadow-md uppercase"
                                 >
-                                  <FaEdit size={16} />
+                                  Bounce
                                 </button>
-                                <button 
-                                  onClick={() => handleCancel(r._id)}
-                                  className="text-red-400 hover:text-red-600 transition p-2 hover:bg-red-50 rounded-lg"
-                                  title="Cancel Receipt"
-                                >
-                                  <FaTimesCircle size={16} />
-                                </button>
-                              </>
-                            )}
-                            {r.status === 'cancelled' && (
-                              <span className="text-[10px] font-bold text-red-600 uppercase italic bg-red-50 px-2 py-1 rounded">Cancelled</span>
-                            )}
-                          </div>
-                        </td>
+                              )}
+                              
+                              <button 
+                                onClick={() => handleCancel(r._id)}
+                                className="bg-red-600 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-red-700 transition shadow-md uppercase"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+                          {r.status === 'cancelled' && (
+                            <span className="text-[10px] font-bold text-red-600 uppercase italic bg-red-50 px-3 py-1.5 rounded-lg border border-red-100">Cancelled</span>
+                          )}
+                          {r.status === 'bounced' && (
+                            <span className="text-[10px] font-bold text-orange-600 uppercase italic bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100">Bounced</span>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

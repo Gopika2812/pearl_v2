@@ -65,6 +65,10 @@ const receiptSchema = new mongoose.Schema(
 
     // Financial Year
     financialYear: String,
+
+    // 🔥 BOUNCE TRACKING
+    isBounced: { type: Boolean, default: false },
+    bounceId: { type: mongoose.Schema.Types.ObjectId, ref: "Receipt" },
   },
   { timestamps: true }
 );

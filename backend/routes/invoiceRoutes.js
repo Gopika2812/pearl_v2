@@ -45,9 +45,17 @@ router.get("/history", cacheData(120), async (req, res) => {
 
     if (fromDate || toDate) {
       const IST = "Asia/Kolkata";
+      let startStr = fromDate;
+      let endStr = toDate;
+
+      // 🛡️ Safeguard: If dates are inverted (Start > End), swap them
+      if (startStr && endStr && startStr > endStr) {
+        [startStr, endStr] = [endStr, startStr];
+      }
+
       matchQuery.invoiceDate = {};
-      if (fromDate) matchQuery.invoiceDate.$gte = moment.tz(fromDate, IST).startOf("day").toDate();
-      if (toDate) matchQuery.invoiceDate.$lte = moment.tz(toDate, IST).endOf("day").toDate();
+      if (startStr) matchQuery.invoiceDate.$gte = moment.tz(startStr, IST).startOf("day").toDate();
+      if (endStr) matchQuery.invoiceDate.$lte = moment.tz(endStr, IST).endOf("day").toDate();
     }
 
     const aggregation = [

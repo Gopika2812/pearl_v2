@@ -625,33 +625,43 @@ router.get("/", async (req, res) => {
       sortOrder = "desc"
     } = req.query;
 
-    const filter = { branchId: branchObjectId };
-    const andConditions = [];
+    const andConditions = [{ branchId: branchObjectId }];
+
+    // Helper to check if a filter value is truly set and not a placeholder
+    const isFilterSet = (val) => val && val !== "All" && val !== "null" && val !== "undefined" && val !== "";
 
     // 1️⃣ Group Filter (Check both new plural and legacy singular fields)
-    if (customerGroupId && customerGroupId !== "All") {
-      const gId = new mongoose.Types.ObjectId(customerGroupId);
-      andConditions.push({
-        $or: [
-          { customerGroups: gId },
-          { customerGroup: gId }
-        ]
-      });
+    if (isFilterSet(customerGroupId)) {
+      try {
+        const gId = new mongoose.Types.ObjectId(customerGroupId);
+        andConditions.push({
+          $or: [
+            { customerGroups: gId },
+            { customerGroup: gId }
+          ]
+        });
+      } catch (e) {
+        console.error("Invalid Group ID in filter:", customerGroupId);
+      }
     }
 
     // 2️⃣ Category Filter (Check both new plural and legacy singular fields)
-    if (customerCategoryId && customerCategoryId !== "All") {
-      const cId = new mongoose.Types.ObjectId(customerCategoryId);
-      andConditions.push({
-        $or: [
-          { customerCategories: cId },
-          { customerCategory: cId }
-        ]
-      });
+    if (isFilterSet(customerCategoryId)) {
+      try {
+        const cId = new mongoose.Types.ObjectId(customerCategoryId);
+        andConditions.push({
+          $or: [
+            { customerCategories: cId },
+            { customerCategory: cId }
+          ]
+        });
+      } catch (e) {
+        console.error("Invalid Category ID in filter:", customerCategoryId);
+      }
     }
 
     // 3️⃣ Zone / Risk Status Filter
-    if (riskStatus && riskStatus !== "All") {
+    if (isFilterSet(riskStatus)) {
       if (riskStatus === "safe_zone") {
         // Safe Zone filter includes customers with explicit 'safe_zone' or missing status
         andConditions.push({
@@ -668,21 +678,19 @@ router.get("/", async (req, res) => {
     }
 
     // 4️⃣ Search Filter
-    if (search) {
+    if (search && search.trim() !== "") {
+      const searchRegex = new RegExp(escapeRegex(search), "i");
       andConditions.push({
         $or: [
-          { name: { $regex: search, $options: "i" } },
-          { whatsapp: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
-          { gstin: { $regex: search, $options: "i" } },
+          { name: searchRegex },
+          { whatsapp: searchRegex },
+          { email: searchRegex },
+          { gstin: searchRegex },
         ]
       });
     }
 
-    // Combine all conditions into the main filter
-    if (andConditions.length > 0) {
-      filter.$and = andConditions;
-    }
+    const filter = andConditions.length > 1 ? { $and: andConditions } : andConditions[0];
 
 
     // ⚡ Build the Aggregation Pipeline
@@ -882,7 +890,7 @@ router.get("/", async (req, res) => {
     // ⚡ ONLY Calculate global totals if NOT in mini mode
     if (!isMini) {
       const totalsAggregation = await Customer.aggregate([
-        { $match: { branchId: branchObjectId } },
+        { $match: filter },
         {
           $project: {
             netBalance: { $subtract: [{ $ifNull: ["$debit", 0] }, { $ifNull: ["$credit", 0] }] }
@@ -1027,7 +1035,9 @@ router.post("/", async (req, res) => {
       debit: Number(debit) || 0,
       salesOwner: salesOwner && salesOwner !== "" ? salesOwner : null,
       customerCategories: Array.isArray(customerCategories) ? customerCategories.filter(c => c && c !== "") : [],
+      customerCategory: Array.isArray(customerCategories) && customerCategories.length > 0 ? customerCategories[0] : null,
       customerGroups: Array.isArray(customerGroups) ? customerGroups.filter(g => g && g !== "") : [],
+      customerGroup: Array.isArray(customerGroups) && customerGroups.length > 0 ? customerGroups[0] : null,
       accountHolder,
       accountNumber,
       ifsc,
@@ -1148,22 +1158,28 @@ router.put("/:id", async (req, res) => {
       updates.salesOwner = null;
     }
 
-    if (updates.customerCategories === "") {
-      updates.customerCategories = [];
-    } else if (updates.customerCategories && !Array.isArray(updates.customerCategories)) {
-      updates.customerCategories = [updates.customerCategories];
-    } else if (Array.isArray(updates.customerCategories)) {
-      // Remove empty strings from array
-      updates.customerCategories = updates.customerCategories.filter(id => id && id !== "");
+    // Sanitize and Sync Groups
+    if (updates.customerGroups === "" || !updates.customerGroups) {
+      updates.customerGroups = [];
+      updates.customerGroup = null;
+    } else {
+      if (!Array.isArray(updates.customerGroups)) {
+        updates.customerGroups = [updates.customerGroups];
+      }
+      updates.customerGroups = updates.customerGroups.filter(id => id && id !== "");
+      updates.customerGroup = updates.customerGroups.length > 0 ? updates.customerGroups[0] : null;
     }
 
-    if (updates.customerGroups === "") {
-      updates.customerGroups = [];
-    } else if (updates.customerGroups && !Array.isArray(updates.customerGroups)) {
-      updates.customerGroups = [updates.customerGroups];
-    } else if (Array.isArray(updates.customerGroups)) {
-      // Remove empty strings from array
-      updates.customerGroups = updates.customerGroups.filter(id => id && id !== "");
+    // Sanitize and Sync Categories
+    if (updates.customerCategories === "" || !updates.customerCategories) {
+      updates.customerCategories = [];
+      updates.customerCategory = null;
+    } else {
+      if (!Array.isArray(updates.customerCategories)) {
+        updates.customerCategories = [updates.customerCategories];
+      }
+      updates.customerCategories = updates.customerCategories.filter(id => id && id !== "");
+      updates.customerCategory = updates.customerCategories.length > 0 ? updates.customerCategories[0] : null;
     }
 
     const customer = await Customer.findByIdAndUpdate(id, updates, {
@@ -1524,8 +1540,17 @@ router.get("/:id/ledger", async (req, res) => {
     // Default dates: This month if not specified
     const now = new Date();
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    const start = startDate ? new Date(startDate) : firstDay;
-    const end = endDate ? new Date(endDate) : new Date();
+    
+    let startStr = startDate;
+    let endStr = endDate;
+
+    // 🛡️ Safeguard: If dates are inverted (Start > End), swap strings
+    if (startStr && endStr && startStr > endStr) {
+      [startStr, endStr] = [endStr, startStr];
+    }
+
+    const start = startStr ? new Date(startStr) : firstDay;
+    const end = endStr ? new Date(endStr) : new Date();
     end.setHours(23, 59, 59, 999);
 
     // 1. Calculate Dynamic Opening Balance
@@ -1538,7 +1563,10 @@ router.get("/:id/ledger", async (req, res) => {
       "customer.customerId": id,
       branchId: customer.branchId,
       status: "FINALIZED",
-      invoiceDate: { $gte: start }
+      $or: [
+        { invoiceDate: { $gte: start } },
+        { invoiceDate: { $exists: false }, createdAt: { $gte: start } }
+      ]
     }).select("grandTotal");
 
     const receiptsAfter = await Receipt.find({
@@ -1552,19 +1580,29 @@ router.get("/:id/ledger", async (req, res) => {
       "customer.customerId": id,
       branchId: customer.branchId,
       status: "Created",
-      date: { $gte: start }
+      $or: [
+        { date: { $gte: start } },
+        { date: { $exists: false }, createdAt: { $gte: start } }
+      ]
     }).select("grandTotal");
 
     // 2.3 Fetch Manual Journals
     const mjAfterBy = await ManualJournal.find({
       "by.partyType": "DEBTOR",
       "by.partyId": id,
-      journalDate: { $gte: start }
+      $or: [
+        { journalDate: { $gte: start } },
+        { journalDate: { $exists: false }, createdAt: { $gte: start } }
+      ]
     }).select("amount");
+
     const mjAfterTo = await ManualJournal.find({
       "to.partyType": "DEBTOR",
       "to.partyId": id,
-      journalDate: { $gte: start }
+      $or: [
+        { journalDate: { $gte: start } },
+        { journalDate: { $exists: false }, createdAt: { $gte: start } }
+      ]
     }).select("amount");
 
     const totalDebitsAfter = invoicesAfter.reduce((sum, i) => sum + (i.grandTotal || 0), 0) +
@@ -1582,7 +1620,10 @@ router.get("/:id/ledger", async (req, res) => {
       "customer.customerId": id,
       branchId: customer.branchId,
       status: "FINALIZED",
-      invoiceDate: { $gte: start, $lte: end }
+      $or: [
+        { invoiceDate: { $gte: start, $lte: end } },
+        { invoiceDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+      ]
     }).select("grandTotal invoiceDate invoiceNumber salesOrderId status generatedBy deliveryPerson branchId createdAt")
       .populate("branchId", "name code")
       .populate({
@@ -1607,20 +1648,29 @@ router.get("/:id/ledger", async (req, res) => {
       "customer.customerId": id,
       branchId: customer.branchId,
       status: "Created",
-      date: { $gte: start, $lte: end }
+      $or: [
+        { date: { $gte: start, $lte: end } },
+        { date: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+      ]
     }).select("grandTotal date creditNoteId reasonForReturn originalSalesOrderId branchId")
       .populate("branchId", "name code");
 
     const mjInRangeBy = await ManualJournal.find({
         "by.partyType": "DEBTOR",
         "by.partyId": id,
-        journalDate: { $gte: start, $lte: end }
+        $or: [
+          { journalDate: { $gte: start, $lte: end } },
+          { journalDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+        ]
     }).select("amount journalDate journalId narration userName paymentMode");
 
     const mjInRangeTo = await ManualJournal.find({
         "to.partyType": "DEBTOR",
         "to.partyId": id,
-        journalDate: { $gte: start, $lte: end }
+        $or: [
+          { journalDate: { $gte: start, $lte: end } },
+          { journalDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+        ]
     }).select("amount journalDate journalId narration userName paymentMode");
 
     // Format all transactions
@@ -1651,8 +1701,8 @@ router.get("/:id/ledger", async (req, res) => {
         return {
           id: `rcp-${r._id}`,
           date: r.createdAt,
-          type: r.status === "bounced" ? "BOUNCED" : (r.status === "cancelled" ? "CANCELLED" : "RECEIPT"),
-          particulars: `${r.status === "bounced" ? "BOUNCED: " : (r.status === "cancelled" ? "CANCELLED: " : "Receipt: ")}${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})${r.relatedOrders && r.relatedOrders.length > 0
+          type: r.status === "bounced" ? "CHEQUE BOUNCE" : (r.status === "cancelled" ? "CANCELLED" : "RECEIPT"),
+          particulars: `${r.status === "bounced" ? "CHEQUE BOUNCE: " : (r.status === "cancelled" ? "CANCELLED: " : "Receipt: ")}${r.receiptId} (${(r.paymentMethod || "CASH").toUpperCase()})${r.relatedOrders && r.relatedOrders.length > 0
               ? ` - for Invoices: ${r.relatedOrders.map(ro => ro.salesOrderId?.salesInvoiceId || ro.salesOrderId?.invoiceId || ro.invoiceId).join(", ")}`
               : (r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId ? ` - for Inv: ${r.originalSalesOrderId?.salesInvoiceId || r.originalSalesOrderId?.invoiceId || r.originalInvoiceId}` : "")
             }${r.status === 'cancelled' ? ` [By: ${canceller}${r.cancelReason ? ` | Reason: ${r.cancelReason}` : ""}]` : ""}`,

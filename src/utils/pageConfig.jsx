@@ -131,7 +131,7 @@ export const PAGE_CONFIG = [
       { id: "locked-prices", name: "Locked Prices", path: "/branch/locked-prices", icon: "lock", permissionFields: ["productInfo", "customer", "cost", "stdPrice", "lockedPrice", "margin", "action_edit", "action_delete"] },
       { id: "ledgers", name: "Ledger", path: "/branch/ledger", icon: "book", permissionFields: ["details", "hierarchy", "nature", "tax", "debit", "credit", "net"] },
 
-      { id: "journals", name: "Journal Master", path: "/branch/journals", icon: "book", permissionFields: ["name", "group", "gstin", "type", "debit", "credit"] },
+      { id: "journals", name: "Journal Master", path: "/branch/journals", icon: "book", permissionFields: ["name", "group", "gstin", "type", "debit", "credit", "action_edit"] },
 
       { id: "day-book", name: "Day Book", path: "/branch/day-book", icon: "bookOpen", permissionFields: ["date", "voucherType", "invoiceId", "accountName", "debit", "credit"] },
       { id: "extra-expense-ledger", name: "Extra Expense Ledger", path: "/branch/extra-expense-ledger", icon: "list", permissionFields: ["date", "type", "invoiceId", "partyName", "expenseName", "baseAmount", "gstPercent", "gstAmount", "total"] },

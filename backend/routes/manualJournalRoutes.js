@@ -142,6 +142,82 @@ router.post("/", auth, async (req, res) => {
     }
 });
 
+// @desc    Update manual journal and adjust balances
+// @route   PUT /api/manual-journals/:id
+router.put("/:id", auth, async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const { by, to, amount, paymentMode, narration, primaryCategory } = req.body;
+        const oldJournal = await ManualJournal.findById(req.params.id);
+        
+        if (!oldJournal) throw new Error("Journal entry not found");
+
+        // 1. REVERSE OLD IMPACT
+        const oldAmt = oldJournal.amount;
+        
+        // Reverse Old BY (Debit)
+        if (oldJournal.by.partyType === "DEBTOR") {
+            await Customer.findByIdAndUpdate(oldJournal.by.partyId, { $inc: { debit: -oldAmt } }, { session });
+        } else if (oldJournal.by.partyType === "VENDOR") {
+            await Vendor.findByIdAndUpdate(oldJournal.by.partyId, { $inc: { debit: -oldAmt } }, { session });
+        } else if (oldJournal.by.partyType === "LEDGER") {
+            await TallyJournal.findByIdAndUpdate(oldJournal.by.partyId, { $inc: { debit: -oldAmt } }, { session });
+        }
+
+        // Reverse Old TO (Credit)
+        if (oldJournal.to.partyType === "DEBTOR") {
+            await Customer.findByIdAndUpdate(oldJournal.to.partyId, { $inc: { credit: -oldAmt } }, { session });
+        } else if (oldJournal.to.partyType === "VENDOR") {
+            await Vendor.findByIdAndUpdate(oldJournal.to.partyId, { $inc: { credit: -oldAmt } }, { session });
+        } else if (oldJournal.to.partyType === "LEDGER") {
+            await TallyJournal.findByIdAndUpdate(oldJournal.to.partyId, { $inc: { credit: -oldAmt } }, { session });
+        }
+
+        // 2. APPLY NEW IMPACT
+        const newAmt = parseFloat(amount);
+
+        // Apply New BY (Debit)
+        if (by.partyType === "DEBTOR") {
+            await Customer.findByIdAndUpdate(by.partyId, { $inc: { debit: newAmt } }, { session });
+        } else if (by.partyType === "VENDOR") {
+            await Vendor.findByIdAndUpdate(by.partyId, { $inc: { debit: newAmt } }, { session });
+        } else if (by.partyType === "LEDGER") {
+            await TallyJournal.findByIdAndUpdate(by.partyId, { $inc: { debit: newAmt } }, { session });
+        }
+
+        // Apply New TO (Credit)
+        if (to.partyType === "DEBTOR") {
+            await Customer.findByIdAndUpdate(to.partyId, { $inc: { credit: newAmt } }, { session });
+        } else if (to.partyType === "VENDOR") {
+            await Vendor.findByIdAndUpdate(to.partyId, { $inc: { credit: newAmt } }, { session });
+        } else if (to.partyType === "LEDGER") {
+            await TallyJournal.findByIdAndUpdate(to.partyId, { $inc: { credit: newAmt } }, { session });
+        }
+
+        // 3. Update the Journal Record
+        oldJournal.by = by;
+        oldJournal.to = to;
+        oldJournal.amount = newAmt;
+        oldJournal.paymentMode = paymentMode;
+        oldJournal.narration = narration;
+        oldJournal.primaryCategory = primaryCategory || oldJournal.primaryCategory;
+        oldJournal.updatedBy = req.user.id || req.user._id;
+
+        await oldJournal.save({ session });
+
+        await session.commitTransaction();
+        res.json({ success: true, data: oldJournal });
+    } catch (error) {
+        await session.abortTransaction();
+        console.error("PUT /manual-journals/:id error:", error);
+        res.status(500).json({ message: error.message });
+    } finally {
+        session.endSession();
+    }
+});
+
 // @desc    Quick create ledger (Capital start, no duplicates)
 // @route   POST /api/manual-journals/instant-ledger
 router.post("/instant-ledger", auth, async (req, res) => {

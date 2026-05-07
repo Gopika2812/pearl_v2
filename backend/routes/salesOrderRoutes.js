@@ -180,6 +180,12 @@ router.get("/", async (req, res) => {
       let startStr = (fromDate && fromDate !== "undefined") ? fromDate : null;
       let endStr = (toDate && toDate !== "undefined") ? toDate : null;
 
+      // 🛡️ Safeguard: If dates are inverted (Start > End), swap them BEFORE applying startOf/endOf
+      if (startStr && endStr && startStr > endStr) {
+        console.log("⚠️ [DEBUG] Inverted date strings detected. Swapping strings.");
+        [startStr, endStr] = [endStr, startStr];
+      }
+
       // If no search and no dates provided, default both to today
       if (!hasSearch && !startStr && !endStr) {
         startStr = moment.tz(IST).format("YYYY-MM-DD");
@@ -197,17 +203,22 @@ router.get("/", async (req, res) => {
       if (start && !end) end = moment(start).endOf("day").toDate();
       if (!start && end) start = moment(end).startOf("day").toDate();
 
-      // 🛡️ Safeguard: If dates are inverted (Start > End), swap them
-      if (start && end && start > end) {
-        console.log("⚠️ [DEBUG] Inverted dates detected. Swapping start and end.");
-        [start, end] = [end, start];
-      }
-
       if (start || end) {
-        query.orderDate = {};
-        if (start) query.orderDate.$gte = start;
-        if (end) query.orderDate.$lte = end;
-        console.log(`📅 [DEBUG] Final Date Filter: ${start ? moment(start).format() : 'ANY'} to ${end ? moment(end).format() : 'ANY'}`);
+        // 🔄 FALLBACK: Some older records might not have 'orderDate'. 
+        // We search in orderDate OR (if missing) in createdAt.
+        const dateCriteria = {};
+        if (start) dateCriteria.$gte = start;
+        if (end) dateCriteria.$lte = end;
+
+        query.$and = query.$and || [];
+        query.$and.push({
+          $or: [
+            { orderDate: dateCriteria },
+            { orderDate: { $exists: false }, createdAt: dateCriteria }
+          ]
+        });
+        
+        console.log(`📅 [DEBUG] Final Date Filter Applied: ${start ? moment(start).format() : 'ANY'} to ${end ? moment(end).format() : 'ANY'}`);
       }
     }
 

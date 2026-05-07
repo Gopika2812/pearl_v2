@@ -2,13 +2,12 @@ import express from "express";
 import Customer from "../models/Customer.js";
 import Receipt from "../models/Receipt.js";
 import SalesOrder from "../models/SalesOrder.js";
-import Branch from "../models/Branch.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
 
 const router = express.Router();
- 
+
 /**
  * 🏗️ LIVE REPAIR: Drop the legacy global unique index to allow branch-specific numbering
  */
@@ -20,7 +19,7 @@ mongoose.connection.on("connected", async () => {
       const db = mongoose.connection.db;
       const indexes = await db.collection("receipts").indexes();
       const hasLegacyIndex = indexes.some(idx => idx.name === "receiptId_1");
-      
+
       if (hasLegacyIndex) {
         await db.collection("receipts").dropIndex("receiptId_1");
         console.log("✅ Legacy global Receipt index 'receiptId_1' dropped successfully.");
@@ -70,10 +69,10 @@ const generateBranchSpecificReceiptId = async (branchId, financialYear, prefix =
   if (exists) {
     console.warn(`🚨 Duplicate Receipt ID detected: ${candidateId}. Auto-healing counter...`);
     // Find the actual Maximum in the DB
-    const latestReceipts = await Receipt.find({ 
-      branchId, 
+    const latestReceipts = await Receipt.find({
+      branchId,
       financialYear,
-      receiptId: new RegExp(`^${voucher.prefix}/`) 
+      receiptId: new RegExp(`^${voucher.prefix}/`)
     }).select("receiptId").lean();
 
     const sequenceNumbers = latestReceipts.map(r => {
@@ -86,8 +85,8 @@ const generateBranchSpecificReceiptId = async (branchId, financialYear, prefix =
 
     // Update the counter to jumping past the duplicates
     voucher = await VoucherType.findByIdAndUpdate(
-      voucher._id, 
-      { counter: newCounter }, 
+      voucher._id,
+      { counter: newCounter },
       { new: true }
     );
     candidateId = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${financialYear}`;
@@ -104,10 +103,18 @@ router.get("/", async (req, res) => {
     const query = branchId ? { branchId } : {};
 
     if (fromDate || toDate) {
-      const start = fromDate ? new Date(fromDate) : new Date();
+      let startStr = fromDate;
+      let endStr = toDate;
+
+      // 🛡️ Safeguard: If dates are inverted (Start > End), swap them
+      if (startStr && endStr && startStr > endStr) {
+        [startStr, endStr] = [endStr, startStr];
+      }
+
+      const start = startStr ? new Date(startStr) : new Date();
       start.setHours(0, 0, 0, 0);
 
-      const end = toDate ? new Date(toDate) : new Date(start);
+      const end = endStr ? new Date(endStr) : new Date(start);
       end.setHours(23, 59, 59, 999);
 
       query.createdAt = { $gte: start, $lte: end };
@@ -301,9 +308,9 @@ router.post("/", async (req, res) => {
     );
 
     if (amount > maxAllowed + 1) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Receipt amount (₹${amount}) exceeds invoice total (₹${maxAllowed})` 
+      return res.status(400).json({
+        success: false,
+        message: `Receipt amount (₹${amount}) exceeds invoice total (₹${maxAllowed})`
       });
     }
 
@@ -387,7 +394,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-// CREATE BOUNCE RECORD (reverse payment & create ledger record)
+// CREATE BOUNCE RECORD (LEGACY: reverse payment & create ledger record)
 router.post("/bounce", async (req, res) => {
   try {
     const { originalSalesOrderId, amount, notes } = req.body;
@@ -422,11 +429,6 @@ router.post("/bounce", async (req, res) => {
     });
 
     await bounceReceipt.save();
-    const saved = true;
-
-    if (!saved) {
-      return res.status(500).json({ success: false, message: "System busy. Could not generate a unique receipt ID. Please try again." });
-    }
 
     // INCREASE CUSTOMER DEBIT (Customer owes the bounced amount again)
     const customerId = originalOrder.customer.customerId;
@@ -440,9 +442,12 @@ router.post("/bounce", async (req, res) => {
         closingBalance: newClosingBalance,
         totalBalance: newClosingBalance,
       });
-
-      console.log(`✅ Bounce processed - Customer debit increased to ₹${newDebit}`);
     }
+
+    // 🔥 FIX: ALSO Increase SalesOrder closing balance
+    await SalesOrder.findByIdAndUpdate(originalSalesOrderId, {
+      $inc: { closingBalance: amount }
+    });
 
     res.json({
       success: true,
@@ -452,6 +457,111 @@ router.post("/bounce", async (req, res) => {
   } catch (error) {
     console.error("Error creating bounce record:", error);
     res.status(500).json({ success: false, message: "Failed to record bounce" });
+  }
+});
+
+// ⚡ NEW: BOUNCE A SPECIFIC RECEIPT
+router.post("/:id/bounce", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { id } = req.params;
+    const { notes, userId, username } = req.body;
+
+    const receipt = await Receipt.findById(id).session(session);
+    if (!receipt) {
+      await session.abortTransaction();
+      return res.status(404).json({ success: false, message: "Receipt not found" });
+    }
+
+    if (receipt.status === "bounced") {
+      await session.abortTransaction();
+      return res.status(400).json({ success: false, message: "Receipt is already marked as bounced" });
+    }
+
+    if (receipt.status === "cancelled") {
+      await session.abortTransaction();
+      return res.status(400).json({ success: false, message: "Cannot bounce a cancelled receipt" });
+    }
+
+    // 1. Mark Original Receipt as Bounced (but keep confirmed status for the original credit row)
+    receipt.isBounced = true;
+    await receipt.save({ session });
+
+    // 2. Generate a NEW Reversal Receipt (for the Debit row)
+    const financialYear = getFinancialYear();
+    const bounceReceiptId = await generateBranchSpecificReceiptId(receipt.branchId, financialYear, "BNC");
+
+    const bounceReceipt = new Receipt({
+      receiptId: bounceReceiptId,
+      branchId: receipt.branchId,
+      generatedBy: userId || receipt.generatedBy,
+      originalSalesOrderId: receipt.originalSalesOrderId,
+      originalInvoiceId: receipt.originalInvoiceId,
+      relatedOrders: receipt.relatedOrders,
+      customer: receipt.customer,
+      amount: receipt.amount,
+      paymentMethod: "BOUNCED",
+      reference: `BOUNCE: ${receipt.receiptId}`,
+      notes: notes || "Cheque Bounced Reversal",
+      financialYear: financialYear,
+      status: "bounced",
+      bounceId: receipt._id, // Link to original
+    });
+
+    await bounceReceipt.save({ session });
+
+    // Link original to the bounce record
+    receipt.bounceId = bounceReceipt._id;
+    await receipt.save({ session });
+
+    // 3. Increase Customer Debit (Reverse the credit impact)
+    const customerId = receipt.customer.customerId;
+    const customer = await Customer.findById(customerId).session(session);
+    if (customer) {
+      const amount = receipt.amount || 0;
+      const newDebit = (customer.debit || 0) + amount;
+      const newClosingBalance = (customer.closingBalance || 0) + amount;
+
+      await Customer.findByIdAndUpdate(customerId, {
+        debit: newDebit,
+        closingBalance: newClosingBalance,
+        totalBalance: newClosingBalance,
+      }).session(session);
+    }
+
+    // 4. Restore Sales Order Closing Balances
+    if (receipt.relatedOrders && receipt.relatedOrders.length > 0) {
+      for (const ro of receipt.relatedOrders) {
+        await SalesOrder.findByIdAndUpdate(ro.salesOrderId, {
+          $inc: { closingBalance: ro.amount }
+        }).session(session);
+      }
+    } else if (receipt.originalSalesOrderId) {
+      await SalesOrder.findByIdAndUpdate(receipt.originalSalesOrderId, {
+        $inc: { closingBalance: receipt.amount }
+      }).session(session);
+    }
+
+    // 5. Audit Log
+    await createAuditLog({
+      userId: userId || "System",
+      username: username || "System",
+      branchId: receipt.branchId,
+      action: "BOUNCE_RECEIPT",
+      description: `Recorded bounce for receipt ${receipt.receiptId}. Created reversal record ${bounceReceiptId}.`,
+      targetId: receipt._id,
+      targetModel: "Receipt",
+    });
+
+    await session.commitTransaction();
+    res.json({ success: true, message: "Receipt bounce reversal record created successfully." });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("Bounce Receipt error:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to bounce receipt" });
+  } finally {
+    session.endSession();
   }
 });
 
@@ -477,7 +587,7 @@ router.put("/:id", async (req, res) => {
 
     const oldCustomerId = oldReceipt.customer.customerId;
     const oldCustomer = await Customer.findById(oldCustomerId).session(session);
-    
+
     // 1️⃣ REVERSE OLD IMPACT
     // Reverse Customer Balance
     if (oldCustomer) {
@@ -509,13 +619,13 @@ router.put("/:id", async (req, res) => {
     // Reverse Sales Order Balances
     if (oldReceipt.relatedOrders && oldReceipt.relatedOrders.length > 0) {
       for (const ro of oldReceipt.relatedOrders) {
-        await SalesOrder.findByIdAndUpdate(ro.salesOrderId, { 
-          $inc: { closingBalance: ro.amount } 
+        await SalesOrder.findByIdAndUpdate(ro.salesOrderId, {
+          $inc: { closingBalance: ro.amount }
         }).session(session);
       }
     } else if (oldReceipt.originalSalesOrderId) {
-      await SalesOrder.findByIdAndUpdate(oldReceipt.originalSalesOrderId, { 
-        $inc: { closingBalance: oldReceipt.amount } 
+      await SalesOrder.findByIdAndUpdate(oldReceipt.originalSalesOrderId, {
+        $inc: { closingBalance: oldReceipt.amount }
       }).session(session);
     }
 
@@ -537,7 +647,7 @@ router.put("/:id", async (req, res) => {
     if (finalCustomer) {
       // Re-fetch to get fresh state (might be same customer)
       const freshCustomer = await Customer.findById(finalCustomer._id).session(session);
-      
+
       let remainingAmount = newAmount;
       let cDebit = freshCustomer.debit || 0;
       let cCredit = freshCustomer.credit || 0;
@@ -584,8 +694,8 @@ router.put("/:id", async (req, res) => {
       // Note: This is complex for bulk receipts. For simplicity, we only handle single order updates here
       // if amount changed.
       if (oldReceipt.originalSalesOrderId && !oldReceipt.relatedOrders?.length) {
-        await SalesOrder.findByIdAndUpdate(oldReceipt.originalSalesOrderId, { 
-          $inc: { closingBalance: -newAmount } 
+        await SalesOrder.findByIdAndUpdate(oldReceipt.originalSalesOrderId, {
+          $inc: { closingBalance: -newAmount }
         }).session(session);
       }
       // Bulk receipts (relatedOrders) usually shouldn't be edited via this route, 
@@ -803,9 +913,9 @@ router.post("/bulk", async (req, res) => {
     // 🔥 Apply EXPLICIT Credit Utilization
     // If the frontend sent an explicit totalCreditAmount, subtract it from BOTH debit and credit.
     if (totalCreditAmount > 0) {
-       const actualCreditToUse = Math.min(currentCredit, totalCreditAmount);
-       currentDebit = Math.max(0, currentDebit - actualCreditToUse);
-       currentCredit -= actualCreditToUse;
+      const actualCreditToUse = Math.min(currentCredit, totalCreditAmount);
+      currentDebit = Math.max(0, currentDebit - actualCreditToUse);
+      currentCredit -= actualCreditToUse;
     }
 
     const newClosingBalance = (customer.closingBalance || 0) - totalCashAmount;
@@ -894,8 +1004,8 @@ router.post("/:id/cancel", async (req, res) => {
     // 2. REVERSE SALES ORDER BALANCE (if linked)
     if (receipt.relatedOrders && receipt.relatedOrders.length > 0) {
       for (const ro of receipt.relatedOrders) {
-        await SalesOrder.findByIdAndUpdate(ro.salesOrderId, { 
-          $inc: { closingBalance: ro.amount } 
+        await SalesOrder.findByIdAndUpdate(ro.salesOrderId, {
+          $inc: { closingBalance: ro.amount }
         }).session(session);
       }
     } else if (receipt.originalSalesOrderId) {
