@@ -8,6 +8,9 @@ const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch, edi
     by: { partyType: "DEBTOR", partyId: "", partyName: "", partyGroup: "Sundry Debtors" },
     to: { partyType: "VENDOR", partyId: "", partyName: "", partyGroup: "Sundry Creditors" },
     amount: "",
+    tax: "",
+    taxPercentage: "",
+    grandTotal: 0,
     paymentMode: "CASH",
     narration: "",
     entryType: "DEBIT"
@@ -137,6 +140,9 @@ const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch, edi
       by: { partyType: "DEBTOR", partyId: "", partyName: "", partyGroup: "Sundry Debtors" },
       to: { partyType: "VENDOR", partyId: "", partyName: "", partyGroup: "Sundry Creditors" },
       amount: "",
+      tax: "",
+      taxPercentage: "",
+      grandTotal: 0,
       paymentMode: "CASH",
       narration: "",
       entryType: "DEBIT"
@@ -151,6 +157,9 @@ const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch, edi
         by: editData.by,
         to: editData.to,
         amount: editData.amount,
+        tax: editData.tax || "",
+        taxPercentage: editData.taxPercentage || "",
+        grandTotal: editData.grandTotal || editData.amount,
         paymentMode: editData.paymentMode || "CASH",
         narration: editData.narration || "",
         entryType: editData.entryType || "DEBIT"
@@ -169,7 +178,13 @@ const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch, edi
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.by.partyId || !formData.to.partyId) return toast.error("Select both By and To parties");
-    if (!formData.amount || formData.amount <= 0) return toast.error("Enter a valid amount");
+    if (!formData.amount && !formData.tax) return toast.error("Enter a valid amount or tax");
+
+    const amount = parseFloat(formData.amount || 0);
+    const tax = parseFloat(formData.tax || 0);
+    const grandTotal = amount + tax;
+
+    if (grandTotal <= 0) return toast.error("Grand total must be greater than zero");
 
     setLoading(true);
     try {
@@ -179,7 +194,14 @@ const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch, edi
       const res = await fetchWithAuth(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, branchId: currentBranch._id, primaryCategory })
+        body: JSON.stringify({ 
+          ...formData, 
+          amount: parseFloat(formData.amount || 0),
+          tax: parseFloat(formData.tax || 0),
+          grandTotal: parseFloat(formData.amount || 0) + parseFloat(formData.tax || 0),
+          branchId: currentBranch._id, 
+          primaryCategory 
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
@@ -434,18 +456,76 @@ const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch, edi
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest px-1 text-right block">Amount (₹)</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-xl font-black text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 transition shadow-inner text-right"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  required
-                />
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 font-black text-sm">₹</span>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest px-1 text-right block">Amount (₹)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    placeholder="0.00"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-xl font-black text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 transition shadow-inner text-right"
+                    value={formData.amount}
+                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  />
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 font-black text-sm">₹</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center px-1">
+                  <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block">Tax (₹)</label>
+                  {formData.amount > 0 && formData.tax > 0 && (
+                    <span className="text-[8px] font-black text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded uppercase">
+                      {((parseFloat(formData.tax) / parseFloat(formData.amount)) * 100).toFixed(2)}% Rate
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      placeholder="Tax Amount"
+                      className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500 transition text-right"
+                      value={formData.tax}
+                      onChange={(e) => {
+                        const taxAmt = e.target.value;
+                        const amt = parseFloat(formData.amount || 0);
+                        let perc = "";
+                        if (amt > 0 && taxAmt) {
+                          perc = ((parseFloat(taxAmt) / amt) * 100).toFixed(2);
+                        }
+                        setFormData({ ...formData, tax: taxAmt, taxPercentage: perc });
+                      }}
+                    />
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 font-black text-xs">₹</span>
+                  </div>
+                  
+                  <div className="relative w-24">
+                    <input
+                      type="number"
+                      placeholder="%"
+                      className="w-full bg-indigo-50/30 border border-indigo-100 rounded-xl px-3 py-3 text-xs font-black text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 transition text-center"
+                      value={formData.taxPercentage}
+                      onChange={(e) => {
+                        const perc = e.target.value;
+                        const amt = parseFloat(formData.amount || 0);
+                        let taxAmt = formData.tax;
+                        if (amt > 0 && perc) {
+                          taxAmt = ((amt * parseFloat(perc)) / 100).toFixed(2);
+                        }
+                        setFormData({ ...formData, taxPercentage: perc, tax: taxAmt });
+                      }}
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-300 font-black text-[10px]">%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
+                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Grand Total</span>
+                <span className="text-xl font-black text-indigo-700">
+                  ₹{(parseFloat(formData.amount || 0) + parseFloat(formData.tax || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
 

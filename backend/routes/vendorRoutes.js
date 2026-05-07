@@ -516,18 +516,38 @@ router.get("/:id/ledger", async (req, res) => {
       createdAt: { $gte: start }
     }).select("grandTotal createdAt purchaseInvoiceId poNumber").lean();
 
-    // 3. Debits: Payments after startDate
+    console.log(`📊 Fetching Ledger for Vendor: ${vendor.name} (${id})`);
+    console.log(`📅 Range: ${start.toISOString()} to ${end.toISOString()}`);
+
+    // 3. Debits: Payments after startDate (or returned after startDate)
     const paymentsAfterStart = await Payment.find({
       branchId: vendor.branchId,
-      "vendor.vendorId": id,
-      status: "completed",
-      paymentDate: { $gte: start }
-    }).select("amount paymentDate paymentId paymentMethod purchaseOrder.invoiceId").lean();
+      $and: [
+        {
+          $or: [
+            { "vendor.vendorId": id },
+            { "vendor.name": vendor.name }
+          ]
+        },
+        {
+          $or: [
+            { paymentDate: { $gte: start } },
+            { returnDate: { $gte: start } }
+          ]
+        },
+        { status: { $in: ["completed", "returned"] } }
+      ]
+    }).select("amount paymentDate paymentId paymentMethod purchaseOrder.invoiceId isReturned returnDate returnBank returnNarration").lean();
+
+    console.log(`✅ Found ${paymentsAfterStart.length} payments/returns for this vendor after ${start.toISOString()}`);
 
     // 4. Debits: Debit Notes after startDate
     const dnAfterStart = await DebitNote.find({
       branchId: vendor.branchId,
-      "vendor.vendorId": id,
+      $or: [
+        { "vendor.vendorId": id },
+        { "vendor.name": vendor.name }
+      ],
       status: "Created",
       createdAt: { $gte: start }
     }).select("grandTotal createdAt debitNoteId reason originalInvoiceId originalInvoiceDate").lean();
@@ -544,11 +564,19 @@ router.get("/:id/ledger", async (req, res) => {
       journalDate: { $gte: start }
     }).select("amount");
 
+    // Calculate total returns after start (to adjust opening balance correctly)
+    const totalReturnsAfterStart = paymentsAfterStart
+      .filter(p => p.isReturned && new Date(p.returnDate) >= start)
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+
     // Opening Balance = Current_Balance - (Credits after Start) + (Debits after Start)
+    // Note: Returns are Credits for us (they increase our liability)
     const totalCreditsAfterStart = pisAfterStart.reduce((sum, pi) => sum + (pi.grandTotal || 0), 0) +
-                                  mjAfterTo.reduce((sum, mj) => sum + (mj.amount || 0), 0);
+                                  mjAfterTo.reduce((sum, mj) => sum + (mj.amount || 0), 0) +
+                                  totalReturnsAfterStart;
+    
     const totalDebitsAfterStart =
-      paymentsAfterStart.reduce((sum, p) => sum + (p.amount || 0), 0) +
+      paymentsAfterStart.filter(p => new Date(p.paymentDate) >= start).reduce((sum, p) => sum + (p.amount || 0), 0) +
       dnAfterStart.reduce((sum, dn) => sum + (dn.grandTotal || 0), 0) +
       mjAfterBy.reduce((sum, mj) => sum + (mj.amount || 0), 0);
 
@@ -556,9 +584,12 @@ router.get("/:id/ledger", async (req, res) => {
 
     // 5. Filter transactions within the [start, end] range
     const inRangePIs = pisAfterStart.filter(pi => new Date(pi.createdAt) <= end);
-    const inRangePayments = paymentsAfterStart.filter(p => new Date(p.paymentDate) <= end);
+    const inRangePayments = paymentsAfterStart.filter(p => new Date(p.paymentDate) >= start && new Date(p.paymentDate) <= end);
     const inRangeDNs = dnAfterStart.filter(dn => new Date(dn.createdAt) <= end);
     
+    // Also filter returns within range
+    const inRangeReturns = paymentsAfterStart.filter(p => p.isReturned && new Date(p.returnDate) >= start && new Date(p.returnDate) <= end);
+
     const mjInRangeBy = await ManualJournal.find({
       "by.partyType": "VENDOR",
       "by.partyId": id,
@@ -588,6 +619,14 @@ router.get("/:id/ledger", async (req, res) => {
         particulars: `Payment: ${p.paymentId} (${(p.paymentMethod || "CASH").toUpperCase()})${p.purchaseOrder?.invoiceId ? ` - for Inv: ${p.purchaseOrder.invoiceId}` : ""}`,
         debit: p.amount || 0,
         credit: 0
+      })),
+      ...inRangeReturns.map(p => ({
+        id: `ret-${p._id}`,
+        date: p.returnDate,
+        type: "PAYMENT_RETURN",
+        particulars: `Payment Return: ${p.paymentId} (Bank: ${p.returnBank})${p.purchaseOrder?.invoiceId ? ` [Against PI: ${p.purchaseOrder.invoiceId}]` : ""} - ${p.returnNarration || "Returned"}`,
+        debit: 0,
+        credit: p.amount || 0
       })),
       ...inRangeDNs.map(dn => ({
         id: `dn-${dn._id}`,

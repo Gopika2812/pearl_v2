@@ -70,10 +70,25 @@ router.get("/next-invoice/:voucherType", async (req, res) => {
   }
 });
 
-// GET ALL PURCHASE ORDERS
+// GET ALL PURCHASE ORDERS (REFINED WITH PAGINATION)
 router.get("/", async (req, res) => {
   try {
-    const { branchId, search, status, statuses, excludeStatus, fromDate, toDate } = req.query;
+    const { 
+      branchId, 
+      search, 
+      status, 
+      statuses, 
+      excludeStatus, 
+      fromDate, 
+      toDate,
+      page = 1,
+      limit = 50
+    } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.max(1, parseInt(limit));
+    const skip = (pageNum - 1) * limitNum;
+
     const query = {};
 
     // Filter by branchId if provided
@@ -96,28 +111,26 @@ router.get("/", async (req, res) => {
       }
     }
 
-    // Filter by single status (e.g., ?status=INVOICED)
+    // Filter by single status
     if (status) {
       query.status = status;
     }
 
-    // Filter by multiple statuses (e.g., ?statuses=INVOICED,PARTIALLY_RETURNED)
+    // Filter by multiple statuses
     if (statuses) {
       const statusArray = statuses.split(",").map(s => s.trim());
       query.status = { $in: statusArray };
     }
 
-    // Exclude specific statuses (e.g., ?excludeStatus=CANCELLED)
+    // Exclude specific statuses
     if (excludeStatus) {
       const excludeArray = excludeStatus.split(",").map(s => s.trim());
-      if (query.status) {
-        // If already filtering by status, skip excludeStatus
-      } else {
+      if (!query.status) {
         query.status = { $nin: excludeArray };
       }
     }
 
-    // 🔍 SERVER-SIDE SEARCH: invoiceId, Vendor, and Item Name
+    // Server-side search
     if (search) {
       query.$or = [
         { invoiceId: { $regex: search, $options: "i" } },
@@ -127,14 +140,27 @@ router.get("/", async (req, res) => {
       ];
     }
 
-    console.log("🔍 GET /api/purchase-orders - query:", JSON.stringify(query));
-    const orders = await PurchaseOrder.find(query).sort({ createdAt: -1 }).lean();
-    console.log(`✅ Found ${orders.length} purchase orders`);
+    const total = await PurchaseOrder.countDocuments(query);
+    const orders = await PurchaseOrder.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
 
-    res.json(orders);
+    res.json({
+      success: true,
+      data: orders,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(total / limitNum)
+      }
+    });
   } catch (err) {
     console.error("❌ Get POs error:", err);
     res.status(500).json({
+      success: false,
       message: err.message
     });
   }

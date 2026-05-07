@@ -40,7 +40,23 @@ const manualJournalSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: true,
-      min: [0.01, "Amount must be greater than zero"]
+      min: [0, "Amount must be zero or more"]
+    },
+
+    tax: {
+      type: Number,
+      default: 0
+    },
+
+    taxPercentage: {
+      type: Number,
+      default: 0
+    },
+
+    grandTotal: {
+      type: Number,
+      required: true,
+      min: [0.01, "Grand Total must be greater than zero"]
     },
     
     entryType: {

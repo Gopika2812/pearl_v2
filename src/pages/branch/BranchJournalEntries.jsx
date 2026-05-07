@@ -286,8 +286,15 @@ const BranchJournalEntries = () => {
                         </div>
                       </td>
                       <td className="px-8 py-6 text-right">
-                        <div className="text-base font-black text-slate-900">₹{journal.amount?.toLocaleString() || '0'}</div>
-                        <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{journal.paymentMode}</div>
+                        <div className="text-base font-black text-slate-900">₹{(journal.grandTotal || journal.amount)?.toLocaleString()}</div>
+                        <div className="flex flex-col items-end gap-1 mt-1">
+                          {journal.tax > 0 && (
+                            <span className="text-[7px] font-black text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded uppercase">
+                              Tax: ₹{journal.tax.toLocaleString()} {journal.taxPercentage > 0 && `(${journal.taxPercentage}%)`}
+                            </span>
+                          )}
+                          <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{journal.paymentMode}</div>
+                        </div>
                       </td>
                       <td className="px-8 py-6 text-center">
                         <div className="inline-flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full">
