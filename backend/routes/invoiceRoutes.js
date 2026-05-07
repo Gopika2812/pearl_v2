@@ -2037,6 +2037,46 @@ const generateDeliveryLogId = async (branchId) => {
 };
 
 // PATCH - Bulk update delivery flow fields for multiple invoices
+router.patch("/bulk-delivery-update", auth, async (req, res) => {
+  try {
+    const { invoiceNumbers, storageMan, stockChecker, updatedBy } = req.body;
+
+    if (!invoiceNumbers || !Array.isArray(invoiceNumbers)) {
+      return res.status(400).json({ success: false, message: "Invalid invoice numbers" });
+    }
+
+    const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
+    
+    const updateData = {
+      storageMan,
+      storageManComment: `Bulk assigned at ${timestamp}`,
+      stockChecker,
+      stockCheckerComment: `Bulk assigned at ${timestamp}`,
+      deliveryStatus: "PICKED",
+      updatedBy: updatedBy || req.user.username,
+      updatedById: req.user.id
+    };
+
+    const result = await Invoice.updateMany(
+      { invoiceNumber: { $in: invoiceNumbers } },
+      { $set: updateData }
+    );
+
+    await createAuditLog({
+      userId: req.user.id,
+      username: req.user.username,
+      action: "BULK_SCAN_UPDATE",
+      description: `Bulk updated ${result.modifiedCount} invoices via QR scan.`,
+      targetModel: "Invoice"
+    });
+
+    res.json({ success: true, message: `${result.modifiedCount} invoices updated` });
+  } catch (error) {
+    console.error("Bulk update error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.patch("/delivery-flow/bulk", auth, async (req, res) => {
   try {
     const { invoiceIds, storageMan, storageManComment, stockChecker, stockCheckerComment, deliveryPerson, deliveryPersonComment, updatedBy, updatedById } = req.body;

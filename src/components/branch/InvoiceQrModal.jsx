@@ -233,10 +233,14 @@ const InvoiceQrModal = ({ invoice, onClose }) => {
                    className="mix-blend-multiply"
                  />
                </div>
-               <div className="mt-4 sm:mt-6 text-center border-t border-slate-50 pt-4 w-full">
-                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.3em] mb-1">Invoice Reference</p>
-                  <p className="text-xs sm:text-sm font-black text-slate-800 tracking-tighter">{invoice.invoiceNumber}</p>
-               </div>
+                <div className="mt-4 sm:mt-6 text-center border-t border-slate-50 pt-4 w-full">
+                   <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.3em] mb-1">
+                      {invoice.isBulk ? "Bulk Reference" : "Invoice Reference"}
+                   </p>
+                   <p className="text-xs sm:text-sm font-black text-slate-800 tracking-tighter truncate max-w-full px-4">
+                      {invoice.invoiceNumber}
+                   </p>
+                </div>
             </div>
           </div>
 

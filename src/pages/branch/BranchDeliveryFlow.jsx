@@ -39,8 +39,9 @@ const BranchDeliveryFlow = () => {
   const [scanInput, setScanInput] = useState("");
   const [selectedScanRole, setSelectedScanRole] = useState("storageMan"); // storageMan, stockChecker, deliveryPerson
   const [showScanCompletionModal, setShowScanCompletionModal] = useState(null); // invoice
-  const [scanPaymentOptions, setScanPaymentOptions] = useState([]);
+  const [showScanPaymentOptions, setScanPaymentOptions] = useState([]);
   const [showLiveScanner, setShowLiveScanner] = useState(false);
+  const [showBulkScanModal, setShowBulkScanModal] = useState(null); // array of inv numbers
 
   const addStaffSlot = (role) => {
     if (bulkData[role].length >= 5) {
@@ -367,6 +368,13 @@ const BranchDeliveryFlow = () => {
     const inputToUse = manualCode || scanInput;
     if (!inputToUse.trim()) return;
 
+    if (inputToUse.startsWith("BULK:")) {
+        const invNos = inputToUse.replace("BULK:", "").split(",");
+        setShowBulkScanModal(invNos);
+        setScanInput("");
+        return;
+    }
+
     const invNo = inputToUse.trim().toUpperCase();
     setScanInput("");
 
@@ -400,8 +408,13 @@ const BranchDeliveryFlow = () => {
     if (currentStatus === "PENDING") {
         nextStatus = "PICKED";
     } else if (currentStatus === "PICKED") {
-        setShowScanCompletionModal(inv);
-        return; // Stop here and wait for modal
+        if (selectedScanRole === "deliveryPerson") {
+            setShowScanCompletionModal(inv);
+            return; // Stop here and wait for modal (Step 3: Delivery)
+        } else {
+            // Step 1 or 2: Just update assignment/checker info
+            nextStatus = "PICKED";
+        }
     } else if (currentStatus === "COMPLETED") {
         toast.info(`Invoice ${invNo} is already COMPLETED`);
         return;
@@ -1357,6 +1370,38 @@ const BranchDeliveryFlow = () => {
         />
       )}
 
+      {showBulkScanModal && (
+        <BulkScanAssignmentModal 
+          invNumbers={showBulkScanModal}
+          branchUsers={branchUsers}
+          onClose={() => setShowBulkScanModal(null)}
+          onConfirm={async (data) => {
+            setLoading(true);
+            try {
+              const res = await fetchWithAuth(`${API_BASE}/invoices/bulk-delivery-update`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  invoiceNumbers: showBulkScanModal,
+                  ...data
+                })
+              });
+              const resData = await res.json();
+              if (resData.success) {
+                toast.success(`✅ ${showBulkScanModal.length} invoices updated`);
+                fetchInvoices();
+                setShowBulkScanModal(null);
+              } else {
+                toast.error(resData.message || "Bulk update failed");
+              }
+            } catch (err) {
+              toast.error("Bulk update failed");
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+      )}
+
     </div>
   );
 };
@@ -1415,6 +1460,72 @@ const ScanCompletionModal = ({ invoice, onClose, onConfirm, selectedOptions, set
                             className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition shadow-xl shadow-indigo-100 active:scale-95"
                         >
                             Mark as Completed
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// 📦 BULK SCAN ASSIGNMENT MODAL
+const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }) => {
+    const [storageMan, setStorageMan] = useState("");
+    const [stockChecker, setStockChecker] = useState("");
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+                <div className="bg-indigo-600 p-6 flex items-center justify-between text-white">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                            <FaClipboardCheck className="text-white" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-black uppercase tracking-tight">Bulk Assignment</h2>
+                            <p className="text-[10px] text-indigo-100 font-bold uppercase tracking-widest">{invNumbers.length} Invoices Linked</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition border-0 bg-transparent text-white cursor-pointer">
+                        <FaTimes />
+                    </button>
+                </div>
+                
+                <div className="p-8 space-y-6">
+                    <div className="grid grid-cols-1 gap-6">
+                        <div>
+                            <label className="block text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Select Storage Man</label>
+                            <select 
+                                value={storageMan} 
+                                onChange={(e) => setStorageMan(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+                            >
+                                <option value="">Select Staff</option>
+                                {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Select Stock Checker</label>
+                            <select 
+                                value={stockChecker} 
+                                onChange={(e) => setStockChecker(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+                            >
+                                <option value="">Select Staff</option>
+                                {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="pt-4 flex gap-3">
+                        <button onClick={onClose} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition">Cancel</button>
+                        <button 
+                            disabled={!storageMan || !stockChecker}
+                            onClick={() => onConfirm({ storageMan, stockChecker })}
+                            className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition disabled:opacity-50 shadow-xl shadow-indigo-100"
+                        >
+                            Update All {invNumbers.length} Invoices
                         </button>
                     </div>
                 </div>

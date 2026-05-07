@@ -114,6 +114,7 @@ const BranchSalesInvoices = () => {
   const [branchUsers, setBranchUsers] = useState([]);
   const [sortField, setSortField] = useState("invoiceDate");
   const [sortOrder, setSortOrder] = useState("desc");
+  const [selectedInvoices, setSelectedInvoices] = useState([]);
   
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -876,6 +877,17 @@ const BranchSalesInvoices = () => {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50/80 text-slate-500 uppercase text-[10px] font-black border-b border-slate-100 tracking-wider">
                   <tr>
+                    <th className="px-6 py-5 text-left">
+                       <input 
+                         type="checkbox" 
+                         className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                         checked={selectedInvoices.length === invoices.length && invoices.length > 0}
+                         onChange={(e) => {
+                           if (e.target.checked) setSelectedInvoices(invoices.map(i => i._id));
+                           else setSelectedInvoices([]);
+                         }}
+                       />
+                    </th>
                     {isFieldAllowed("dateTime") && <th className="px-6 py-5 text-left">Date & Time</th>}
                     {isFieldAllowed("siId") && (
                       <th 
@@ -909,7 +921,18 @@ const BranchSalesInvoices = () => {
                 <tbody className="divide-y divide-slate-50">
                   {invoices.map((inv) => (
                     <React.Fragment key={inv._id}>
-                      <tr className="hover:bg-indigo-50/30 transition group">
+                      <tr className={`hover:bg-indigo-50/30 transition group ${selectedInvoices.includes(inv._id) ? 'bg-indigo-50/50' : ''}`}>
+                        <td className="px-6 py-5">
+                           <input 
+                             type="checkbox" 
+                             className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                             checked={selectedInvoices.includes(inv._id)}
+                             onChange={(e) => {
+                               if (e.target.checked) setSelectedInvoices([...selectedInvoices, inv._id]);
+                               else setSelectedInvoices(selectedInvoices.filter(id => id !== inv._id));
+                             }}
+                           />
+                        </td>
                         {isFieldAllowed("dateTime") && (
                           <td className="px-6 py-5 whitespace-nowrap">
                              <div className="text-[11px] font-black text-slate-700 tracking-tight">{formatIST(inv.createdAt || inv.invoiceDate)}</div>
@@ -1313,6 +1336,37 @@ const BranchSalesInvoices = () => {
                     NEXT
                 </button>
             </div>
+        )}
+
+        {/* BULK ACTION BAR */}
+        {selectedInvoices.length > 0 && (
+          <div className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] z-[1000] flex items-center gap-10 animate-in slide-in-from-bottom duration-300 border border-white/10 backdrop-blur-xl">
+             <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest leading-none mb-1">Bulk Operations</span>
+                <span className="text-sm font-black tracking-tight">{selectedInvoices.length} Invoices Selected</span>
+             </div>
+             
+             <div className="w-px h-8 bg-white/10"></div>
+             
+             <div className="flex items-center gap-4">
+                <button
+                   onClick={() => {
+                     const selectedData = invoices.filter(i => selectedInvoices.includes(i._id));
+                     const bulkRef = "BULK:" + selectedData.map(i => i.invoiceNumber).join(",");
+                     setShowQrModal({ invoiceNumber: bulkRef, isBulk: true, branchId: currentBranch });
+                   }}
+                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition flex items-center gap-2 shadow-lg shadow-indigo-500/20"
+                >
+                   <FaQrcode size={14} /> Generate Bulk QR
+                </button>
+                <button
+                   onClick={() => setSelectedInvoices([])}
+                   className="text-white/40 hover:text-white px-4 py-2 font-black text-[10px] uppercase tracking-widest transition"
+                >
+                   Clear Selection
+                </button>
+             </div>
+          </div>
         )}
       </div>
     </div>
