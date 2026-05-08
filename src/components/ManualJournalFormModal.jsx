@@ -196,9 +196,9 @@ const ManualJournalFormModal = ({ isOpen, onClose, onRefresh, currentBranch, edi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           ...formData, 
-          amount: parseFloat(formData.amount || 0),
-          tax: parseFloat(formData.tax || 0),
-          grandTotal: parseFloat(formData.amount || 0) + parseFloat(formData.tax || 0),
+          amount: parseFloat(formData.amount) || 0,
+          tax: parseFloat(formData.tax) || 0,
+          grandTotal: (parseFloat(formData.amount) || 0) + (parseFloat(formData.tax) || 0),
           branchId: currentBranch._id, 
           primaryCategory 
         })

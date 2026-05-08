@@ -85,7 +85,7 @@ router.post("/", auth, async (req, res) => {
     session.startTransaction();
 
     try {
-        const { by, to, amount, tax, grandTotal, paymentMode, narration, entryType, branchId } = req.body;
+        const { by, to, amount, tax, taxPercentage, grandTotal, paymentMode, narration, entryType, branchId } = req.body;
         const effectiveBranchId = branchId || req.user.branch || req.user._id;
         const finYear = getFinancialYear();
 
@@ -103,10 +103,10 @@ router.post("/", auth, async (req, res) => {
             branchId: effectiveBranchId,
             by,
             to,
-            amount,
-            tax: tax || 0,
-            taxPercentage: taxPercentage || 0,
-            grandTotal: grandTotal || (parseFloat(amount) + parseFloat(tax || 0)),
+            amount: parseFloat(amount) || 0,
+            tax: parseFloat(tax) || 0,
+            taxPercentage: parseFloat(taxPercentage) || 0,
+            grandTotal: grandTotal || (parseFloat(amount || 0) + parseFloat(tax || 0)),
             entryType: entryType || "DEBIT",
             paymentMode,
             narration,
@@ -153,7 +153,7 @@ router.put("/:id", auth, async (req, res) => {
     session.startTransaction();
 
     try {
-        const { by, to, amount, tax, grandTotal, paymentMode, narration, primaryCategory } = req.body;
+        const { by, to, amount, tax, taxPercentage, grandTotal, paymentMode, narration, primaryCategory } = req.body;
         const oldJournal = await ManualJournal.findById(req.params.id);
         
         if (!oldJournal) throw new Error("Journal entry not found");
