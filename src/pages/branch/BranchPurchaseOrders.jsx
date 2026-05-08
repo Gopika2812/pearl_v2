@@ -60,8 +60,8 @@ const BranchPurchaseOrders = () => {
 
       if (!res.ok) throw new Error(data.message || "Failed to fetch orders");
 
-      setPurchaseOrders(data || []);
-      toast.success(`Fetched ${data?.length || 0} purchase orders`);
+      setPurchaseOrders(data.data || []);
+      toast.success(`Fetched ${data?.data?.length || 0} purchase orders`);
     } catch (err) {
       console.error("Error fetching purchase orders:", err);
       toast.error(err.message || "Failed to fetch purchase orders");
