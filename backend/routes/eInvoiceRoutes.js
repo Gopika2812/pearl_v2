@@ -193,7 +193,7 @@ router.post("/bulk-validate", async (req, res) => {
       status: { $nin: ["DRAFT", "CANCELLED"] },
       einvoiceStatus: { $ne: "GENERATED" },
       "customer.gstin": { $exists: true, $ne: "", $not: /URP/i, $type: "string" }
-    }).populate("customer.customerId").populate("items.productId");
+    }).lean();
 
     // We only want customers whose GSTIN length >= 15
     const gstInvoices = invoices.filter(inv => inv.customer?.gstin?.length >= 15);
@@ -382,7 +382,7 @@ router.post("/bulk-pdf-count", async (req, res) => {
       invoiceDate: { $gte: startDate, $lte: endDate },
       einvoiceStatus: "GENERATED",
       invoicePdfUrl: { $exists: true, $ne: "" }
-    });
+    }).lean(); // lean count is slightly faster and lighter
 
     res.json({ success: true, total });
   } catch (error) {
@@ -416,7 +416,8 @@ router.post("/bulk-pdf-download", async (req, res) => {
     })
       .sort({ invoiceDate: 1 })
       .skip(skip)
-      .limit(parseInt(batchSize));
+      .limit(parseInt(batchSize))
+      .lean();
 
     if (invoices.length === 0) {
       return res.status(404).json({ success: false, message: "No generated E-Invoices found for this batch." });
@@ -426,6 +427,7 @@ router.post("/bulk-pdf-download", async (req, res) => {
     const mergedPdf = await PDFDocument.create();
 
     for (const inv of invoices) {
+      let pdfBytes = null;
       try {
         let pdfUrl = inv.invoicePdfUrl;
         if (pdfUrl.startsWith("/")) {
@@ -434,14 +436,17 @@ router.post("/bulk-pdf-download", async (req, res) => {
         
         const response = await fetch(pdfUrl);
         if (!response.ok) {
-          console.error(`Failed to fetch PDF for ${inv.invoiceNumber}: Status ${response.status} from ${pdfUrl}`);
+          console.error(`Failed to fetch PDF for ${inv.invoiceNumber}: Status ${response.status}`);
           continue;
         }
-        const pdfBytes = await response.arrayBuffer();
+        pdfBytes = await response.arrayBuffer();
         
         const invoiceDoc = await PDFDocument.load(pdfBytes);
         const copiedPages = await mergedPdf.copyPages(invoiceDoc, invoiceDoc.getPageIndices());
         copiedPages.forEach((page) => mergedPdf.addPage(page));
+        
+        // 🧹 Clear references to help Garbage Collection
+        pdfBytes = null; 
       } catch (err) {
         console.error(`Failed to fetch PDF for ${inv.invoiceNumber}:`, err.message);
       }
@@ -453,6 +458,11 @@ router.post("/bulk-pdf-download", async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=EInvoices_${month}_${year}_Part${page}.pdf`);
     res.send(buffer);
+
+    // 🧹 Final Cleanup
+    res.on('finish', () => {
+      mergedPdfBytes.buffer = null; 
+    });
 
   } catch (error) {
     console.error("Bulk PDF Download Error:", error);

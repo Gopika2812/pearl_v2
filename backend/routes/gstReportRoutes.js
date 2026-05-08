@@ -26,7 +26,9 @@ router.get("/gstr1", auth, async (req, res) => {
       branchId: branchObjectId,
       invoiceDate: { $gte: startDate, $lte: endDate },
       status: { $ne: "CANCELLED" }
-    }).lean();
+    })
+    .select("invoiceNumber invoiceDate grandTotal customer subtotal totalTax items.hsn items.name items.sellingPrice items.qty items.discountAmount items.total items.igst items.cgst items.sgst items.unit")
+    .lean();
 
     const b2b = [];
     const b2c = [];
@@ -134,7 +136,9 @@ router.get("/gstr3b", auth, async (req, res) => {
       branchId: branchObjectId,
       invoiceDate: { $gte: startDate, $lte: endDate },
       status: { $ne: "CANCELLED" }
-    }).lean();
+    })
+    .select("subtotal totalTax")
+    .lean();
 
     const outwardSupplies = {
       taxable: 0,
@@ -155,7 +159,9 @@ router.get("/gstr3b", auth, async (req, res) => {
       branchId: branchObjectId,
       invoiceDate: { $gte: startDate, $lte: endDate },
       status: { $ne: "CANCELLED" }
-    }).lean();
+    })
+    .select("subtotal totalTax")
+    .lean();
 
     const eligibleITC = {
       taxable: 0,
@@ -207,31 +213,32 @@ router.post("/bulk-fix-hsn", auth, async (req, res) => {
       { $set: { hsnCode: newHsn } }
     );
 
-    // 2. Update all Invoices in this month that have this product
-    // We update the specific item inside the items array
+    // 2. Prepare Bulk Update for Invoices in this month that have this product
     const invoices = await Invoice.find({
       branchId: branchObjectId,
       invoiceDate: { $gte: startDate, $lte: endDate },
       "items.name": productName
-    });
+    }).lean(); // Use lean for faster fetching
 
-    const updatePromises = invoices.map(async (inv) => {
-      let changed = false;
-      inv.items = inv.items.map(item => {
-        if (item.name === productName) {
-          item.hsn = newHsn;
-          changed = true;
-        }
-        return item;
+    if (invoices.length > 0) {
+      const bulkOps = invoices.map(inv => {
+        const updatedItems = inv.items.map(item => {
+          if (item.name === productName) {
+            return { ...item, hsn: newHsn };
+          }
+          return item;
+        });
+
+        return {
+          updateOne: {
+            filter: { _id: inv._id },
+            update: { $set: { items: updatedItems } }
+          }
+        };
       });
-      if (changed) {
-        // We use markModified because it's a nested array
-        inv.markModified('items');
-        return inv.save();
-      }
-    });
 
-    await Promise.all(updatePromises);
+      await Invoice.bulkWrite(bulkOps);
+    }
 
     res.json({
       success: true,

@@ -26,29 +26,34 @@ const BranchGstReports = () => {
 
   const years = [2024, 2025, 2026];
 
-  const fetchReports = async () => {
+  const fetchReports = () => {
     if (!branch?._id) return;
+    
+    // Independent loading: Clear old data but show structure
+    setGstr1Data(null);
+    setGstr3bData(null);
     setLoading(true);
-    try {
-      const query = `branchId=${branch._id}&month=${selectedMonth}&year=${selectedYear}`;
-      
-      const [r1Res, r3bRes] = await Promise.all([
-        fetchWithAuth(`${API_BASE}/gst-reports/gstr1?${query}`),
-        fetchWithAuth(`${API_BASE}/gst-reports/gstr3b?${query}`)
-      ]);
 
-      const r1 = await r1Res.json();
-      const r3b = await r3bRes.json();
+    const query = `branchId=${branch._id}&month=${selectedMonth}&year=${selectedYear}`;
 
-      if (r1.success) setGstr1Data(r1.data);
-      if (r3b.success) setGstr3bData(r3b.data);
+    // 🚀 Load GSTR-1 Independently
+    fetchWithAuth(`${API_BASE}/gst-reports/gstr1?${query}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setGstr1Data(data.data);
+        else toast.error("GSTR-1: " + (data.message || "Failed"));
+      })
+      .catch(() => toast.error("Error loading GSTR-1"));
 
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to fetch GST reports");
-    } finally {
-      setLoading(false);
-    }
+    // 🚀 Load GSTR-3B Independently
+    fetchWithAuth(`${API_BASE}/gst-reports/gstr3b?${query}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setGstr3bData(data.data);
+        else toast.error("GSTR-3B: " + (data.message || "Failed"));
+      })
+      .catch(() => toast.error("Error loading GSTR-3B"))
+      .finally(() => setLoading(false));
   };
 
   const handleBulkFixHsn = async () => {
