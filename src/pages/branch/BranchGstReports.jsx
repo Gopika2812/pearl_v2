@@ -72,16 +72,42 @@ const BranchGstReports = () => {
         })
       });
       const data = await res.json();
-      if (data.success) {
-        toast.success(data.message);
-        setFixingHsn(null);
-        setNewHsnValue("");
-        fetchReports(); // Refresh data
-      } else {
-        toast.error(data.message || "Failed to fix HSN");
+      if (!res.ok) throw new Error(data.message || "Failed to fix HSN");
+
+      toast.success("✅ HSN Updated successfully");
+      
+      // ⚡ INSTANT UI UPDATE: Modify the local state instead of re-fetching everything
+      if (gstr1Data && gstr1Data.hsnSummary) {
+        setGstr1Data(prev => {
+          const newSummary = [...prev.hsnSummary];
+          const oldHsn = fixingHsn.hsn || fixingHsn._id;
+          const targetIdx = newSummary.findIndex(h => (h.hsn || h._id) === oldHsn);
+          
+          if (targetIdx !== -1) {
+            // Check if the NEW HSN already exists in the list (to merge them)
+            const existingHsnIdx = newSummary.findIndex((h, idx) => idx !== targetIdx && (h.hsn || h._id) === newHsnValue);
+            
+            if (existingHsnIdx !== -1) {
+              // MERGE: Add values to the existing row and remove the old one
+              newSummary[existingHsnIdx].qty += newSummary[targetIdx].qty;
+              newSummary[existingHsnIdx].taxableValue += newSummary[targetIdx].taxableValue;
+              newSummary[existingHsnIdx].totalTax += newSummary[targetIdx].totalTax;
+              newSummary.splice(targetIdx, 1);
+            } else {
+              // RENAME: Just update the HSN code in the current row
+              newSummary[targetIdx].hsn = newHsnValue;
+              if (newSummary[targetIdx]._id) newSummary[targetIdx]._id = newHsnValue;
+            }
+          }
+          return { ...prev, hsnSummary: newSummary };
+        });
       }
+
+      setFixingHsn(null);
+      setNewHsnValue("");
     } catch (err) {
-      toast.error("Error updating HSN");
+      console.error(err);
+      toast.error(err.message || "Failed to update HSN");
     } finally {
       setIsFixing(false);
     }
