@@ -15,12 +15,14 @@ const BulkEInvoiceModal = ({ show, onClose, onRefresh }) => {
   const [generating, setGenerating] = useState(false);
   
   const [validationResult, setValidationResult] = useState(null);
-  const [activeTab, setActiveTab] = useState('ready'); // 'ready' or 'errors'
+  const [generationResults, setGenerationResults] = useState(null);
+  const [activeTab, setActiveTab] = useState('ready'); // 'ready', 'errors', or 'results'
 
   const handleValidate = async () => {
     if (!currentBranch?._id) return;
     setValidating(true);
     setValidationResult(null);
+    setGenerationResults(null);
     try {
       const res = await fetchWithAuth(`${API_BASE}/einvoice/bulk-validate`, {
         method: 'POST',
@@ -69,9 +71,15 @@ const BulkEInvoiceModal = ({ show, onClose, onRefresh }) => {
         const successCount = data.results.filter(r => r.success).length;
         const failCount = data.results.filter(r => !r.success).length;
         
+        
         toast.success(`Generated ${successCount} successfully! ${failCount > 0 ? `${failCount} failed.` : ''}`);
+        setGenerationResults(data.results);
         onRefresh();
-        onClose();
+        if (failCount > 0) {
+          setActiveTab('results');
+        } else {
+          onClose();
+        }
       } else {
         toast.error(data.message || "Bulk generation failed");
       }
@@ -162,11 +170,44 @@ const BulkEInvoiceModal = ({ show, onClose, onRefresh }) => {
                 >
                   Action Required ({validationResult.errors.length})
                 </button>
+                {generationResults && (
+                  <button
+                    onClick={() => setActiveTab('results')}
+                    className={`flex-1 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition ${
+                      activeTab === 'results' ? "bg-white text-amber-600 shadow-sm" : "text-slate-500 hover:bg-slate-200"
+                    }`}
+                  >
+                    Gen. Results ({generationResults.length})
+                  </button>
+                )}
               </div>
 
               {/* Tab Content */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 min-h-[250px] max-h-[400px] overflow-y-auto">
-                {activeTab === 'errors' ? (
+                {activeTab === 'results' ? (
+                  <div className="flex flex-col gap-3">
+                    {generationResults?.map((res, idx) => (
+                      <div key={idx} className={`p-4 rounded-xl shadow-sm border ${res.success ? "bg-emerald-50 border-emerald-200" : "bg-rose-50 border-rose-200"}`}>
+                        <div className="flex justify-between items-center">
+                          <span className={`font-black text-sm ${res.success ? "text-emerald-700" : "text-rose-700"}`}>
+                            {res.invoiceNumber || res.invoiceId}
+                          </span>
+                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${res.success ? "bg-emerald-200 text-emerald-800" : "bg-rose-200 text-rose-800"}`}>
+                            {res.success ? "SUCCESS" : "FAILED"}
+                          </span>
+                        </div>
+                        {!res.success && (
+                          <p className="text-xs font-bold text-rose-600 mt-2 leading-relaxed">
+                            Error: {res.message}
+                          </p>
+                        )}
+                        {res.success && (
+                          <p className="text-[10px] font-bold text-emerald-600 mt-1">IRN Generated Successfully</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : activeTab === 'errors' ? (
                   validationResult.errors.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-slate-400 font-bold">No errors found! All invoices are ready.</div>
                   ) : (

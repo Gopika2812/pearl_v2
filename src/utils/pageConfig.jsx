@@ -144,6 +144,7 @@ export const PAGE_CONFIG = [
     category: "Reports",
     items: [
       { id: "insights", name: "Insights & Analysis", path: "/branch/insights", icon: "chart" },
+      { id: "gst-reports", name: "GST Filing Records", path: "/branch/gst-reports", icon: "invoice" },
       { id: "stock-summary", name: "Stock Summary (Tally)", path: "/branch/stock-summary", icon: "bookOpen", permissionFields: ["groupName", "opening", "inwards", "outwards", "closingQty", "closingValue"] },
     ]
   },

@@ -185,6 +185,7 @@ const invoiceSchema = new mongoose.Schema(
       enum: ["NOT_GENERATED", "GENERATED", "CANCELLED", "FAILED"],
       default: "NOT_GENERATED",
     },
+    einvoiceError: String,
     irn: String,
     ackNo: String,
     ackDate: String,

@@ -52,6 +52,10 @@ router.post("/generate/:invoiceId", async (req, res) => {
     try {
       eInvoiceResult = await gstzenService.generateEInvoice(invoice);
     } catch (gstError) {
+      invoice.einvoiceStatus = "FAILED";
+      invoice.einvoiceError = gstError.message;
+      await invoice.save();
+
       return res.status(400).json({
         success: false,
         message: "E-Invoice generation failed",
@@ -60,6 +64,10 @@ router.post("/generate/:invoiceId", async (req, res) => {
     }
 
     if (!eInvoiceResult || !eInvoiceResult.success) {
+      invoice.einvoiceStatus = "FAILED";
+      invoice.einvoiceError = eInvoiceResult?.message || "Unknown error";
+      await invoice.save();
+
       return res.status(400).json({
         success: false,
         message: "Failed to generate E-Invoice",
@@ -69,6 +77,7 @@ router.post("/generate/:invoiceId", async (req, res) => {
 
     // Update invoice with E-Invoice details
     invoice.einvoiceStatus = "GENERATED";
+    invoice.einvoiceError = null; // Clear previous error
     invoice.irn = eInvoiceResult.irn;
     invoice.ackNo = eInvoiceResult.ackNo;
     invoice.ackDate = eInvoiceResult.ackDate;
@@ -212,6 +221,11 @@ router.post("/bulk-validate", async (req, res) => {
         errors.push(`Calculation mismatch: Expected ~${expectedTotal.toFixed(2)}, found ${inv.grandTotal}. Check math/roundoff.`);
       }
 
+      // 3. Include previous failure message if any
+      if (inv.einvoiceStatus === "FAILED" && inv.einvoiceError) {
+        errors.push(`Last Attempt Error: ${inv.einvoiceError}`);
+      }
+
       if (errors.length > 0) {
         errorInvoices.push({
           invoiceId: inv._id,
@@ -275,6 +289,7 @@ router.post("/bulk-generate", async (req, res) => {
 
         if (eInvoiceResult && eInvoiceResult.success) {
           invoice.einvoiceStatus = "GENERATED";
+          invoice.einvoiceError = null;
           invoice.irn = eInvoiceResult.irn;
           invoice.ackNo = eInvoiceResult.ackNo;
           invoice.ackDate = eInvoiceResult.ackDate;
@@ -303,10 +318,37 @@ router.post("/bulk-generate", async (req, res) => {
 
           results.push({ invoiceId, invoiceNumber: invoice.invoiceNumber, success: true });
         } else {
+          await Invoice.updateOne(
+            { _id: invoiceId },
+            { 
+              $set: { 
+                einvoiceStatus: "FAILED", 
+                einvoiceError: eInvoiceResult?.message || "Failed" 
+              } 
+            }
+          );
           results.push({ invoiceId, invoiceNumber: invoice.invoiceNumber, success: false, message: eInvoiceResult?.message || "Failed" });
         }
       } catch (err) {
-        results.push({ invoiceId, success: false, message: err.message });
+        // 🛡️ GUARANTEED PERSISTENCE: Use direct update to bypass full document validation
+        try {
+          await Invoice.updateOne(
+            { _id: invoiceId },
+            { 
+              $set: { 
+                einvoiceStatus: "FAILED", 
+                einvoiceError: err.message 
+              } 
+            }
+          );
+        } catch (saveErr) {
+          console.error("Failed to update error status for invoice:", invoiceId, saveErr);
+        }
+        results.push({ 
+          invoiceId, 
+          success: false, 
+          message: err.message 
+        });
       }
     }
 

@@ -422,6 +422,39 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
     setEditedItems(updated);
   };
 
+  // Handle HSN changes & Sync to Product Master
+  const handleHsnChange = async (index, newHsn) => {
+    const updated = [...editedItems];
+    let hsn = String(newHsn).trim();
+    
+    // Auto-padding for common 5/7 digit errors
+    if (/^\d+$/.test(hsn) && (hsn.length === 5 || hsn.length === 7)) {
+      hsn = hsn.padStart(hsn.length + 1, "0");
+    }
+
+    updated[index].hsn = hsn;
+    setEditedItems(updated);
+  };
+
+  const syncHsnToProduct = async (index) => {
+    const item = editedItems[index];
+    const productId = item.productId?._id || item.productId;
+    const hsn = item.hsn;
+
+    if (productId && hsn) {
+      try {
+        await fetchWithAuth(`${API_BASE}/products/${productId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hsnCode: hsn })
+        });
+        toast.success(`HSN updated in Master: ${hsn}`, { autoClose: 1000 });
+      } catch (err) {
+        console.error("Failed to sync HSN to product master:", err);
+      }
+    }
+  };
+
   // Generate preview
   const handleGeneratePreview = async () => {
     try {
@@ -1427,8 +1460,16 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                         <td className="p-3 font-medium">
                           {item.name || <span className="text-gray-400 italic text-xs">Product Name Missing</span>}
                         </td>
-                        <td className="p-3 text-center text-xs font-bold text-gray-500">
-                          {item.hsn || "-"}
+                        <td className="p-3 text-center">
+                          <input
+                            type="text"
+                            value={item.hsn || ""}
+                            onChange={(e) => handleHsnChange(idx, e.target.value)}
+                            onBlur={() => syncHsnToProduct(idx)}
+                            placeholder="HSN"
+                            className="w-20 p-1.5 text-[10px] font-black border-2 border-slate-100 rounded text-center text-slate-600 focus:border-blue-400 focus:outline-none transition-all uppercase"
+                            title="Edit HSN (Updates Product Master)"
+                          />
                         </td>
                         <td className="p-3 text-right text-gray-500">
                           <div className="flex flex-col items-end gap-1">

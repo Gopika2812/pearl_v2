@@ -62,6 +62,7 @@ import crmOrderRoutes from "./modules/crm-orders/index.js";
 import physicalStockRoutes from "./routes/physicalStockRoutes.js";
 import manualJournalRoutes from "./routes/manualJournalRoutes.js";
 import aiBotRoutes from "./modules/ai-bot/index.js";
+import gstReportRoutes from "./routes/gstReportRoutes.js";
 
 
 
@@ -143,6 +144,7 @@ app.use("/api/tally-journals", tallyJournalRoutes);
 app.use("/api/manual-journals", manualJournalRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/gst", gstRoutes);
+app.use("/api/gst-reports", gstReportRoutes);
 app.use("/api/customer-locked-prices", customerLockedPriceRoutes);
 app.use("/api/einvoice", eInvoiceRoutes);
 app.use("/api/other-transactions", otherTransactionRoutes);

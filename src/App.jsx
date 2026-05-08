@@ -58,6 +58,7 @@ import BranchFollowUp from "./pages/branch/BranchFollowUp";
 import BranchFollowUpRecords from "./pages/branch/BranchFollowUpRecords";
 import BranchPhysicalStock from "./pages/branch/BranchPhysicalStock";
 import BranchPhysicalStockRecords from "./pages/branch/BranchPhysicalStockRecords";
+import BranchGstReports from "./pages/branch/BranchGstReports";
 import SmartOrdersDashboard from "./pages/crm/SmartOrdersDashboard";
 import TaskBoardPage from "./pages/crm/TaskBoardPage";
 import SharedLinkCustomerPage from "./pages/crm/SharedLinkCustomerPage";
@@ -635,6 +636,7 @@ function AppContent() {
                   <Route path="/branch/product-config" element={<ProtectedRoute element={<BranchProductConfig />} />} />
                   <Route path="/branch/ledger" element={<ProtectedRoute element={<BranchLedger />} />} />
                   <Route path="/branch/customer-ledger/:customerId" element={<ProtectedRoute element={<BranchCustomerLedger />} />} />
+                  <Route path="/branch/gst-reports" element={<ProtectedRoute element={<BranchGstReports />} />} />
 
                   <Route path="/branch/follow-up" element={<ProtectedRoute element={<BranchFollowUp />} />} />
                   <Route path="/branch/follow-up-records" element={<ProtectedRoute element={<BranchFollowUpRecords />} />} />
