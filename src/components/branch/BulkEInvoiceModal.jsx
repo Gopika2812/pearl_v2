@@ -90,6 +90,30 @@ const BulkEInvoiceModal = ({ show, onClose, onRefresh }) => {
     }
   };
 
+  const handleConvertToB2C = async (invoiceId, invoiceNumber) => {
+    if (!window.confirm(`Are you sure you want to convert Invoice ${invoiceNumber} to B2C? This will remove the GSTIN and prevent E-Invoicing for this record.`)) return;
+
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/einvoice/convert-to-b2c/${invoiceId}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          userId: user?._id || user?.id,
+          username: user?.username || user?.fullName || "Staff"
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message);
+        // Refresh the list after conversion
+        handleValidate(); 
+      } else {
+        toast.error(data.message || "Conversion failed");
+      }
+    } catch (err) {
+      toast.error("Error connecting to server");
+    }
+  };
+
   const months = [
     { value: 1, label: "January" }, { value: 2, label: "February" }, { value: 3, label: "March" },
     { value: 4, label: "April" }, { value: 5, label: "May" }, { value: 6, label: "June" },
@@ -218,9 +242,17 @@ const BulkEInvoiceModal = ({ show, onClose, onRefresh }) => {
                             <span className="font-black text-rose-600 text-sm">{inv.invoiceNumber}</span>
                             <span className="text-xs font-bold text-slate-500">{inv.customerName} | ₹{inv.grandTotal}</span>
                           </div>
-                          <ul className="list-disc pl-5 text-xs font-semibold text-rose-500 space-y-1">
-                            {inv.errors.map((err, eIdx) => <li key={eIdx}>{err}</li>)}
-                          </ul>
+                          <div className="flex justify-between items-start">
+                            <ul className="list-disc pl-5 text-xs font-semibold text-rose-500 space-y-1">
+                              {inv.errors.map((err, eIdx) => <li key={eIdx}>{err}</li>)}
+                            </ul>
+                            <button
+                              onClick={() => handleConvertToB2C(inv.invoiceId, inv.invoiceNumber)}
+                              className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-black transition-colors shrink-0 ml-4 shadow-lg shadow-slate-200"
+                            >
+                              Convert to B2C
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>

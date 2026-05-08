@@ -460,4 +460,57 @@ router.post("/bulk-pdf-download", async (req, res) => {
   }
 });
 
+/**
+ * POST /api/einvoice/convert-to-b2c/:invoiceId
+ * Converts a B2B invoice (with GSTIN) to B2C by removing GSTIN.
+ * Also updates the customer record to prevent future issues.
+ */
+router.post("/convert-to-b2c/:invoiceId", async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    const { userId, username } = req.body;
+
+    const invoice = await Invoice.findById(invoiceId);
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: "Invoice not found" });
+    }
+
+    const oldGstin = invoice.customer?.gstin;
+
+    // 1. Update Invoice to B2C (remove GSTIN)
+    invoice.customer.gstin = "";
+    invoice.einvoiceStatus = "NOT_GENERATED"; // Reset status
+    invoice.einvoiceError = null; // Clear error
+    await invoice.save();
+
+    // 2. Update Customer Record (if linked)
+    if (invoice.customer?.customerId) {
+      await mongoose.model("Customer").findByIdAndUpdate(invoice.customer.customerId, {
+        gstin: "",
+        registrationType: "unregistered"
+      });
+    }
+
+    // 3. Audit Log
+    await createAuditLog({
+      userId: userId || "System",
+      username: username || "System",
+      branchId: invoice.branchId,
+      action: "CONVERT_TO_B2C",
+      description: `Invoice ${invoice.invoiceNumber} converted to B2C. Removed GSTIN: ${oldGstin}`,
+      targetId: invoice._id,
+      targetModel: "Invoice"
+    });
+
+    res.json({
+      success: true,
+      message: "Invoice converted to B2C successfully. It will no longer require an E-Invoice.",
+    });
+
+  } catch (error) {
+    console.error("Convert to B2C Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 export default router;
