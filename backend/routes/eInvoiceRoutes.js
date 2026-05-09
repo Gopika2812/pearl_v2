@@ -523,4 +523,44 @@ router.post("/convert-to-b2c/:invoiceId", async (req, res) => {
   }
 });
 
+// 🔄 CONVERT TO B2C: Handles invoices with cancelled/invalid GSTINs
+router.post("/convert-to-b2c", async (req, res) => {
+  try {
+    const { invoiceId, reason } = req.body;
+    if (!invoiceId) return res.status(400).json({ message: "Invoice ID required" });
+
+    const invoice = await Invoice.findById(invoiceId);
+    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+    // 1. Clear GSTIN from the invoice snapshot
+    const oldGstin = invoice.customer?.gstin;
+    if (invoice.customer) {
+      invoice.customer.gstin = ""; // Clear to make it B2C
+    }
+
+    // 2. Clear E-Invoice Status/Errors
+    invoice.einvoiceStatus = "NOT_GENERATED";
+    invoice.einvoiceError = `Converted to B2C: ${reason || "Cancelled GSTIN"}`;
+    
+    await invoice.save();
+
+    // 3. Log the action
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: invoice.branchId,
+      action: "CONVERT_TO_B2C",
+      description: `Converted Invoice ${invoice.invoiceNumber} to B2C (Old GSTIN: ${oldGstin}). Reason: ${reason || "Manual Conversion"}`,
+      targetId: invoice._id,
+      targetModel: "Invoice",
+    });
+
+    res.json({ success: true, message: "Invoice converted to B2C successfully." });
+  } catch (error) {
+    console.error("B2C conversion error:", error);
+    res.status(500).json({ success: false, message: "Failed to convert to B2C" });
+  }
+});
+
 export default router;

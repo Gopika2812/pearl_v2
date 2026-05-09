@@ -1049,6 +1049,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           invoice.billingPerson = finalizedByUsername || invoice.billingPerson || "System";
           invoice.generatedBy = finalizedByUsername || invoice.generatedBy || "System";
           invoice.deliveryMan = salesOrder.deliveryMan;
+          // 🛡️ LOCK DATE: Always use original SO date to prevent month-jumping during tax filing
           invoice.invoiceDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
           
           // ✨ RESET E-INVOICE STATUS: Clear old errors when user re-finalizes with new data
@@ -1059,7 +1060,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         } else {
           invoice = new Invoice({
             invoiceNumber,
-            invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(), // Use SO date for finalization
+            invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
             financialYear,
             salesOrderId: salesOrder._id,
             branchId: salesOrder.branchId,
@@ -1151,6 +1152,11 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           editedBy: req.user.username, // ✨ NEW
           note: `Invoice ${invoiceNumber} finalized. ${isCustomerSwapped ? 'Customer Swap Applied.' : ''}`
         });
+
+        // 🛡️ LOCK SO DATE: Ensure the original order date is preserved
+        if (!salesOrder.orderDate) {
+           salesOrder.orderDate = salesOrder.createdAt;
+        }
 
         await salesOrder.save({ session });
 

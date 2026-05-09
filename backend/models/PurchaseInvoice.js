@@ -95,8 +95,9 @@ const purchaseInvoiceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Compound unique index: same PI number allowed across branches, not within the same branch
+// Performance Indexes
 purchaseInvoiceSchema.index({ branchId: 1, purchaseInvoiceId: 1 }, { unique: true });
+purchaseInvoiceSchema.index({ branchId: 1, invoiceDate: -1 });
 purchaseInvoiceSchema.index({ createdAt: -1 });
 purchaseInvoiceSchema.index({ branchId: 1, createdAt: -1 });
 

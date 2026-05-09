@@ -117,22 +117,131 @@ const BranchGstReports = () => {
     fetchReports();
   }, [branch?._id, selectedMonth, selectedYear]);
 
+  const [dbStats, setDbStats] = useState(null);
+
+  useEffect(() => {
+    fetchDbStats();
+  }, []);
+
+  const fetchDbStats = async () => {
+    try {
+      const response = await api.get("/gst/reports/db-stats");
+      if (response.data.success) {
+        setDbStats(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch DB stats");
+    }
+  };
+
   const downloadGstr1Excel = () => {
     if (!gstr1Data) return;
 
     const wb = XLSX.utils.book_new();
 
-    // B2B Sheet
-    const b2bSheet = XLSX.utils.json_to_sheet(gstr1Data.b2b);
+    // 1. B2B Sheet
+    const b2bData = gstr1Data.b2b.map(row => ({
+      "GSTIN/UIN of Recipient": row.gstin,
+      "Receiver Name": row.customerName,
+      "Invoice Number": row.invoiceNo,
+      "Invoice Date": row.date,
+      "Invoice Value": row.value,
+      "Place Of Supply": row.placeOfSupply,
+      "Reverse Charge": row.reverseCharge,
+      "Invoice Type": row.invoiceType,
+      "Taxable Value": row.taxableValue,
+      "Integrated Tax": row.igst,
+      "Central Tax": row.cgst,
+      "State/UT Tax": row.sgst,
+      "Cess": row.cess
+    }));
+    const b2bSheet = XLSX.utils.json_to_sheet(b2bData);
     XLSX.utils.book_append_sheet(wb, b2bSheet, "B2B");
 
-    // B2C Sheet
-    const b2cSheet = XLSX.utils.json_to_sheet(gstr1Data.b2c);
-    XLSX.utils.book_append_sheet(wb, b2cSheet, "B2C");
+    // 2. B2C Sheet
+    const b2cData = gstr1Data.b2c.map(row => ({
+      "Type": row.type,
+      "Place Of Supply": row.placeOfSupply,
+      "Applicable % of Tax Rate": row.rate,
+      "Taxable Value": row.taxableValue,
+      "Cess": row.cess,
+      "E-Commerce GSTIN": ""
+    }));
+    const b2cSheet = XLSX.utils.json_to_sheet(b2cData);
+    XLSX.utils.book_append_sheet(wb, b2cSheet, "B2CS");
 
-    // HSN Sheet
-    const hsnSheet = XLSX.utils.json_to_sheet(gstr1Data.hsnSummary);
+    // 2b. Credit Notes Registered (CDNR)
+    const cdnrData = gstr1Data.cdnr.map(row => ({
+      "GSTIN/UIN of Recipient": row.gstin,
+      "Receiver Name": row.customerName,
+      "Note Number": row.noteNo,
+      "Note Date": row.noteDate,
+      "Note Type": row.noteType,
+      "Place Of Supply": row.placeOfSupply,
+      "Note Value": row.noteValue,
+      "Taxable Value": row.taxableValue,
+      "Integrated Tax": row.igst,
+      "Central Tax": row.cgst,
+      "State/UT Tax": row.sgst,
+      "Cess": row.cess
+    }));
+    const cdnrSheet = XLSX.utils.json_to_sheet(cdnrData);
+    XLSX.utils.book_append_sheet(wb, cdnrSheet, "CDNR");
+
+    // 2c. Credit Notes Unregistered (CDNUR)
+    const cdnurData = gstr1Data.cdnur.map(row => ({
+      "Type": row.type,
+      "Note Number": row.noteNo,
+      "Note Date": row.noteDate,
+      "Note Type": row.noteType,
+      "Place Of Supply": row.placeOfSupply,
+      "Note Value": row.noteValue,
+      "Taxable Value": row.taxableValue,
+      "Integrated Tax": row.igst,
+      "Central Tax": row.cgst,
+      "State/UT Tax": row.sgst,
+      "Cess": row.cess
+    }));
+    const cdnurSheet = XLSX.utils.json_to_sheet(cdnurData);
+    XLSX.utils.book_append_sheet(wb, cdnurSheet, "CDNUR");
+
+    // 3. Nil Rated Sheet
+    const nilRatedData = gstr1Data.nilRated.map(row => ({
+      "Description": row.description,
+      "Nil Rated Supplies": row.nilRated,
+      "Exempted (other than nil rated/non-GST supply)": row.exempt,
+      "Non-GST supplies": row.nonGst
+    }));
+    const nilRatedSheet = XLSX.utils.json_to_sheet(nilRatedData);
+    XLSX.utils.book_append_sheet(wb, nilRatedSheet, "Nil_Rated");
+
+    // 4. HSN Sheet
+    const hsnData = gstr1Data.hsnSummary.map(row => ({
+      "HSN": row.hsn,
+      "Description": row.description,
+      "UQC": row.uqc,
+      "Total Quantity": row.totalQty,
+      "Total Value": row.totalValue,
+      "Taxable Value": row.taxableValue,
+      "Integrated Tax Amount": row.igst,
+      "Central Tax Amount": row.cgst,
+      "State/UT Tax Amount": row.sgst,
+      "Cess Amount": row.cess
+    }));
+    const hsnSheet = XLSX.utils.json_to_sheet(hsnData);
     XLSX.utils.book_append_sheet(wb, hsnSheet, "HSN_Summary");
+
+    // 5. Doc Summary Sheet
+    const docData = gstr1Data.docSummary.map(row => ({
+      "Nature of Document": row.nature,
+      "Sr. No. From": row.from,
+      "Sr. No. To": row.to,
+      "Total Number": row.total,
+      "Cancelled": row.cancelled,
+      "Net Issue": row.net
+    }));
+    const docSheet = XLSX.utils.json_to_sheet(docData);
+    XLSX.utils.book_append_sheet(wb, docSheet, "Doc_Summary");
 
     XLSX.writeFile(wb, `GSTR1_${branch?.name}_${months[selectedMonth-1]}_${selectedYear}.xlsx`);
   };
@@ -183,6 +292,34 @@ const BranchGstReports = () => {
             ))}
           </select>
           <button 
+            onClick={async () => {
+              if (window.confirm("This will scan all invoices and pull those that 'jumped' months back to their original SO dates. Continue?")) {
+                setLoading(true);
+                try {
+                  const res = await fetchWithAuth(`${API_BASE}/gst-reports/bulk-fix-dates`, {
+                    method: "POST",
+                    body: JSON.stringify({ branchId: branch._id })
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    toast.success(data.message);
+                    fetchReports(); // Refresh data
+                  } else {
+                    toast.error(data.message);
+                  }
+                } catch (err) {
+                  toast.error("Failed to repair dates");
+                } finally {
+                  setLoading(false);
+                }
+              }
+            }}
+            className="flex items-center gap-2 bg-rose-50 text-rose-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-100 transition border border-rose-100"
+            title="Fix invoices that jumped from April to May"
+          >
+            🔧 Repair Month-Jump Errors
+          </button>
+          <button 
             onClick={fetchReports}
             className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
           >
@@ -198,24 +335,35 @@ const BranchGstReports = () => {
           <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 flex items-center gap-2">
              <FaChartLine /> Filing Overview (Count Check)
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Invoices</p>
               <p className="text-2xl font-black text-slate-900">{(gstr1Data?.b2b?.length || 0) + (gstr1Data?.b2c?.length || 0)}</p>
             </div>
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">B2B (Registered)</p>
-              <p className="text-2xl font-black text-emerald-600">{gstr1Data?.b2b?.length || 0}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">B2B / B2C</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xl font-black text-emerald-600">{gstr1Data?.b2b?.length || 0}</p>
+                <span className="text-slate-300">/</span>
+                <p className="text-xl font-black text-indigo-600">{gstr1Data?.b2c?.length || 0}</p>
+              </div>
             </div>
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">B2C (Unregistered)</p>
-              <p className="text-2xl font-black text-indigo-600">{gstr1Data?.b2c?.length || 0}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Credit Notes</p>
+              <p className="text-2xl font-black text-orange-600">{(gstr1Data?.cdnr?.length || 0) + (gstr1Data?.cdnur?.length || 0)}</p>
             </div>
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-rose-100 bg-rose-50/30">
-              <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">Invalid HSN Found</p>
+              <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">Invalid HSN</p>
               <p className="text-2xl font-black text-rose-600">
                 {gstr1Data?.hsnSummary?.filter(h => ![4, 6, 8].includes(h.hsn.toString().length)).length || 0}
               </p>
+            </div>
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-emerald-100 bg-emerald-50/10">
+              <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">DB Health</p>
+              <div className="flex items-baseline gap-1">
+                <p className="text-xl font-black text-slate-900">{dbStats?.totalStorageUsed || "..."}</p>
+                <span className="text-[10px] text-slate-400 font-bold">/ 512MB</span>
+              </div>
             </div>
           </div>
         </div>

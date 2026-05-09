@@ -137,8 +137,10 @@ const creditNoteSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Branch-specific uniqueness for Credit Note IDs
+// Performance Indexes
 creditNoteSchema.index({ branchId: 1, creditNoteId: 1 }, { unique: true });
+creditNoteSchema.index({ branchId: 1, date: -1 });
+creditNoteSchema.index({ "customer.customerId": 1, date: -1 });
 
 
 // POST-DELETE HOOK: Reverse the credit note impact
