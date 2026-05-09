@@ -23,6 +23,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
   const canEditPrice = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_price"] !== false;
   const canEditQty = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_qty"] !== false;
   const canEditDiscount = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_discount"] !== false;
+  const canEditGst = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_gst"] !== false;
   const canDelete = isSuperAdmin || user?.fieldPermissions?.["sales-order-list_action_wb_delete"] !== false;
   const [activeTab, setActiveTab] = useState("edit");
   const [loading, setLoading] = useState(false);
@@ -420,6 +421,35 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
     updated[index].total = Math.round((gross - discountAmount) * 100) / 100;
 
     setEditedItems(updated);
+  };
+
+  // Handle GST changes
+  const handleGstChange = (index, newGst) => {
+    const updated = [...editedItems];
+    const gst = Math.max(0, parseFloat(newGst) || 0);
+    updated[index].gst = gst;
+    updated[index].cgst = gst / 2;
+    updated[index].sgst = gst / 2;
+    setEditedItems(updated);
+  };
+
+  const syncGstToProduct = async (index) => {
+    const item = editedItems[index];
+    const productId = item.productId?._id || item.productId;
+    const gst = item.gst;
+
+    if (productId && gst !== undefined) {
+      try {
+        await fetchWithAuth(`${API_BASE}/products/${productId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gst: gst })
+        });
+        toast.success(`GST updated in Master: ${gst}%`, { autoClose: 1000 });
+      } catch (err) {
+        console.error("Failed to sync GST to product master:", err);
+      }
+    }
   };
 
   // Handle HSN changes & Sync to Product Master
@@ -1443,6 +1473,17 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                         />
                       </span>
                       <span className="font-bold text-gray-500">HSN: <span className="text-gray-700">{newItem.hsn}</span></span>
+                      <span className="font-bold text-gray-500 flex items-center gap-1">
+                        GST:
+                        <input
+                          type="number"
+                          value={newItem.gst}
+                          onChange={(e) => setNewItem({ ...newItem, gst: parseFloat(e.target.value) || 0 })}
+                          className="w-14 p-1 border rounded bg-white font-black text-gray-700 outline-none focus:ring-1 focus:ring-green-400"
+                          placeholder="GST"
+                        />
+                        %
+                      </span>
                       <span className="ml-auto font-black text-blue-600">Total: ₹{(Number(newItem.qty || 0) * Number(newItem.sellingPrice || 0)).toFixed(2)}</span>
                     </div>
                   )}
@@ -1456,6 +1497,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                     <tr className="bg-blue-600 text-white">
                       <th className="p-3 text-left">Product</th>
                       <th className="p-3 text-center">HSN</th>
+                      <th className="p-3 text-center">GST %</th>
                       <th className="p-3 text-right">Original Qty</th>
                       <th className="p-3 text-right">Confirmed Qty</th>
                       <th className="p-3 text-right text-[10px] uppercase">Back Order</th>
@@ -1480,7 +1522,18 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                             onBlur={() => syncHsnToProduct(idx)}
                             placeholder="HSN"
                             className="w-20 p-1.5 text-[10px] font-black border-2 border-slate-100 rounded text-center text-slate-600 focus:border-blue-400 focus:outline-none transition-all uppercase"
-                            title="Edit HSN (Updates Product Master)"
+                          />
+                        </td>
+                        <td className="p-3 text-center">
+                          <input
+                            type="number"
+                            value={item.gst || 0}
+                            onChange={(e) => handleGstChange(idx, e.target.value)}
+                            onBlur={() => syncGstToProduct(idx)}
+                            placeholder="GST"
+                            className="w-14 p-1.5 text-[10px] font-black border-2 border-slate-100 rounded text-center text-blue-600 focus:border-blue-400 focus:outline-none transition-all"
+                            title="Edit GST % (Updates Product Master on blur)"
+                            disabled={!canEditGst}
                           />
                         </td>
                         <td className="p-3 text-right text-gray-500">
