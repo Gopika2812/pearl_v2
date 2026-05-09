@@ -84,13 +84,17 @@ const SharedLinkCustomerPage = () => {
     };
 
     const updateQty = (productId, delta) => {
-        setCart(prev => prev.map(item => {
-            if (item.productId === productId) {
-                const newQty = Math.max(1, item.qty + delta);
-                return { ...item, qty: newQty };
-            }
-            return item;
-        }));
+        setCart(prev => {
+            const updated = prev.map(item => {
+                if (item.productId === productId) {
+                    const newQty = item.qty + delta;
+                    return { ...item, qty: newQty };
+                }
+                return item;
+            });
+            // Auto-remove if qty drops to 0
+            return updated.filter(item => item.qty > 0);
+        });
     };
 
     const removeFromCart = (productId) => {
@@ -332,7 +336,7 @@ const SharedLinkCustomerPage = () => {
                                 </div>
                             ) : (
                                 cart.map(item => (
-                                    <div key={item.productId} className="flex items-center gap-4 group">
+                                    <div key={item.productId} className="flex items-center gap-4 group relative">
                                         <div className="w-14 h-14 bg-slate-50 rounded-xl shrink-0 overflow-hidden border border-slate-100">
                                             {item.image ? (
                                                 <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
@@ -347,11 +351,28 @@ const SharedLinkCustomerPage = () => {
                                                 <p className="text-[8px] font-bold text-slate-400">₹{item.sellingPrice.toLocaleString()} / ea</p>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <button onClick={() => updateQty(item.productId, -1)} className="w-6 h-6 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 flex items-center justify-center"><FaMinus size={8} /></button>
-                                            <span className="text-[10px] font-black w-4 text-center">{item.qty}</span>
-                                            <button onClick={() => updateQty(item.productId, 1)} className="w-6 h-6 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 flex items-center justify-center"><FaPlus size={8} /></button>
+                                        <div className="flex items-center gap-1.5">
+                                            <button 
+                                                onClick={() => updateQty(item.productId, -1)} 
+                                                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
+                                                    item.qty <= 1 
+                                                        ? 'bg-rose-50 text-rose-500 hover:bg-rose-100' 
+                                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                }`}
+                                            >
+                                                {item.qty <= 1 ? <FaTrash size={8} /> : <FaMinus size={8} />}
+                                            </button>
+                                            <span className="text-[10px] font-black w-6 text-center">{item.qty}</span>
+                                            <button onClick={() => updateQty(item.productId, 1)} className="w-7 h-7 bg-slate-100 text-slate-600 rounded-lg hover:bg-indigo-100 hover:text-indigo-600 flex items-center justify-center transition-all"><FaPlus size={8} /></button>
                                         </div>
+                                        {/* Swipe-to-delete button (always visible) */}
+                                        <button 
+                                            onClick={() => removeFromCart(item.productId)} 
+                                            className="w-7 h-7 bg-rose-50 text-rose-400 rounded-lg hover:bg-rose-500 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 absolute -right-2 -top-2 shadow-sm border border-rose-100"
+                                            title="Remove from bag"
+                                        >
+                                            <FaTrash size={8} />
+                                        </button>
                                     </div>
                                 ))
                             )}
