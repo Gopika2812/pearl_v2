@@ -859,12 +859,18 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
               <!-- TOP HEADER WITH LOGO -->
               <div class="top-header">
                 <div class="logo-box"><img src="${previewData?.seller?.logo || "/logo.jpeg"}" alt="Logo" /></div>
-                <div class="company-header">
-                  <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
-                  <div class="company-address">
-                    <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
-                    Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
-                    GPAY No: ${previewData?.seller?.gpayNo || currentBranch?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
+                <div class="company-header" style="display: flex; align-items: flex-start; gap: 8px;">
+                  <div style="flex: 1;">
+                    <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
+                    <div class="company-address">
+                      <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
+                      Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
+                      GPAY No: ${previewData?.seller?.gpayNo || currentBranch?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
+                    </div>
+                  </div>
+                  <div style="text-align: center; flex-shrink: 0;">
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(generatedInvoice?.invoiceNumber || previewData?.invoiceNumber || order?.invoiceId || 'N/A')}" style="width: 20mm; height: 20mm; border: 2px solid #000; padding: 1mm;" alt="Delivery QR" />
+                    <div style="font-size: 7px; font-weight: 900; text-transform: uppercase; margin-top: 2px;">Delivery QR</div>
                   </div>
                 </div>
               </div>
@@ -1021,12 +1027,18 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
               <!-- TOP HEADER WITH LOGO -->
               <div class="top-header">
                 <div class="logo-box"><img src="${previewData?.seller?.logo || "/logo.jpeg"}" alt="Logo" /></div>
-                <div class="company-header">
-                  <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
-                  <div class="company-address">
-                    <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
-                    Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
-                    GPAY No: ${previewData?.seller?.gpayNo || currentBranch?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
+                <div class="company-header" style="display: flex; align-items: flex-start; gap: 8px;">
+                  <div style="flex: 1;">
+                    <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
+                    <div class="company-address">
+                      <strong>${previewData?.seller?.address || "12/13, South By-Pass Road, Vanarpettai, Tirunelveli - 627003, Tamil Nadu"}</strong><br/>
+                      Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
+                      GPAY No: ${previewData?.seller?.gpayNo || currentBranch?.gpayNo || ""} | State: ${previewData?.seller?.state || "Tamil Nadu"} (Code: ${previewData?.seller?.stateCode || "33"})
+                    </div>
+                  </div>
+                  <div style="text-align: center; flex-shrink: 0;">
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(generatedInvoice?.invoiceNumber || previewData?.invoiceNumber || order?.invoiceId || 'N/A')}" style="width: 20mm; height: 20mm; border: 2px solid #000; padding: 1mm;" alt="Delivery QR" />
+                    <div style="font-size: 7px; font-weight: 900; text-transform: uppercase; margin-top: 2px;">Delivery QR</div>
                   </div>
                 </div>
               </div>

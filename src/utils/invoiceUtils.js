@@ -186,10 +186,16 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                 </div>
 
                 <div class="top-grid">
-                  <div class="seller-info">
-                    <div class="seller-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
-                    <div>${previewData?.seller?.address || "N/A"}</div>
-                    <div>GST : ${previewData?.seller?.gstin || "N/A"}</div>
+                  <div class="seller-info" style="display: flex; align-items: center; gap: 4mm;">
+                    <div style="flex: 1;">
+                      <div class="seller-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
+                      <div>${previewData?.seller?.address || "N/A"}</div>
+                      <div>GST : ${previewData?.seller?.gstin || "N/A"}</div>
+                    </div>
+                    <div style="text-align: center; flex-shrink: 0;">
+                       <img src="${trackingQr}" style="width: 15mm; height: 15mm; border: 1px solid #000; padding: 1mm;" alt="Tracking QR" />
+                       <div style="font-size: 6px; font-weight: 900; text-transform: uppercase; margin-top: 2px;">Delivery QR</div>
+                    </div>
                   </div>
                   <div class="info-box">
                     <div class="net-amount-box">
@@ -356,7 +362,10 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
             </div>
           `;
         } else {
-          // --- EXISTING INVOICE LAYOUT ---
+        // --- EXISTING INVOICE LAYOUT ---
+          const trackingData = previewData.isBulk ? previewData.invoiceNumber : (previewData.invoiceNumber || previewData.creditNoteId || "N/A");
+          const trackingQr = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(trackingData)}`;
+
           html += `
             <div class="page">
               <div class="page-content">
@@ -365,11 +374,17 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                 </div>
                 <div class="top-header">
                   <div class="logo-box"><img src="${previewData?.seller?.logo || "/logo.jpeg"}" alt="Logo" /></div>
-                  <div class="company-header">
-                    <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
-                    <div class="company-address">
-                      <strong>${previewData?.seller?.address || "N/A"}</strong><br/>
-                      Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
+                  <div class="company-header" style="display: flex; align-items: center; justify-content: center; gap: 5mm;">
+                    <div style="flex: 1;">
+                      <div class="company-name">${previewData?.seller?.name || "PEARL AGENCY"}</div>
+                      <div class="company-address">
+                        <strong>${previewData?.seller?.address || "N/A"}</strong><br/>
+                        Mobile: ${previewData?.seller?.phone || "-"} | GSTIN: ${previewData?.seller?.gstin || "-"}<br/>
+                      </div>
+                    </div>
+                    <div style="text-align: center; flex-shrink: 0;">
+                       <img src="${trackingQr}" style="width: 20mm; height: 20mm; border: 1.5px solid #000; padding: 1mm;" alt="Tracking QR" />
+                       <div style="font-size: 7px; font-weight: 900; text-transform: uppercase; margin-top: 2px;">Delivery QR</div>
                     </div>
                   </div>
                 </div>

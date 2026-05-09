@@ -172,9 +172,9 @@ const SmartOrdersDashboard = () => {
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-                {/* Left Side: Product Selection */}
-                <div className="lg:col-span-8 space-y-8">
+            <div className="max-w-7xl mx-auto flex flex-col lg:grid lg:grid-cols-12 gap-8">
+                {/* Left Side: Product Selection (Bottom on mobile, Left on desktop) */}
+                <div className="lg:col-span-8 space-y-8 order-2 lg:order-1">
                     
                     {/* Recommendations Section */}
                     {selectedCustomer && recommendations.length > 0 && (
@@ -246,8 +246,8 @@ const SmartOrdersDashboard = () => {
                     </div>
                 </div>
 
-                {/* Right Side: Cart & Actions */}
-                <div className="lg:col-span-4 space-y-6">
+                {/* Right Side: Cart & Actions (Top on mobile, Right on desktop) */}
+                <div className="lg:col-span-4 space-y-6 order-1 lg:order-2">
                     <div className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-2xl shadow-indigo-900/20 sticky top-24">
                         <div className="flex items-center justify-between mb-8">
                             <h2 className="text-xl font-black flex items-center gap-3">

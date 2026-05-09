@@ -1154,17 +1154,7 @@ const BranchSalesInvoices = () => {
                                    )}
                                  </div>
                                )}
-                               {isFieldAllowed("action_qr") !== false && (
-                                 <button
-                                   onClick={(e) => {
-                                     e.stopPropagation();
-                                     setShowQrModal(inv);
-                                   }}
-                                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-white border border-slate-800 hover:bg-slate-900 text-[10px] font-black transition-all shadow-sm"
-                                 >
-                                   <FaQrcode size={12} /> QR
-                                 </button>
-                               )}
+                               {/* Individual QR button removed per user request - Bulk QR should be used instead */}
                                {isFieldAllowed("action_cancel") && (
                                  <div className="flex gap-1">
                                     {inv.status === "CANCELLED" ? (

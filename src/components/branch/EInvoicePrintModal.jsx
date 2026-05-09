@@ -18,6 +18,10 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
     qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(invoice.signedQrCode)}`;
   }
 
+  // 📦 INTERNAL TRACKING QR (For warehouse scanning)
+  const trackingData = invoice.isBulk ? invoice.invoiceNumber : (invoice.invoiceNumber || invoice.creditNoteId || "N/A");
+  const trackingQr = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(trackingData)}`;
+
   // 🏪 ROBUST SELLER DATA (Fallback to BranchId if Seller Snapshot is missing)
   const seller = {
     name: invoice.seller?.name || invoice.branchId?.name || "PEARL AGENCY",
@@ -132,11 +136,19 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
       <div class="page">
         <div class="header">
           <div class="company-info">
-            <h1 class="company-name">${seller.name}</h1>
-            <div class="company-details">
-              ${seller.address} <br/>
-              GSTIN: <strong>${seller.gstin}</strong> | Mobile: ${seller.phone}${seller.gpayNo ? ` | GPay: ${seller.gpayNo}` : ""} <br/>
-              State: ${seller.state} (Code: ${seller.stateCode})
+            <div style="display: flex; align-items: flex-start; gap: 6mm; margin-bottom: 2mm;">
+              <div style="flex: 1;">
+                <h1 class="company-name" style="margin: 0; line-height: 1.2;">${seller.name}</h1>
+                <div class="company-details" style="margin-top: 2mm;">
+                  ${seller.address} <br/>
+                  GSTIN: <strong>${seller.gstin}</strong> | Mobile: ${seller.phone}${seller.gpayNo ? ` | GPay: ${seller.gpayNo}` : ""} <br/>
+                  State: ${seller.state} (Code: ${seller.stateCode})
+                </div>
+              </div>
+              <div style="text-align: center; flex-shrink: 0; margin-top: 1mm;">
+                <img src="${trackingQr}" style="width: 20mm; height: 20mm; border: 2px solid #0f172a; padding: 1mm; background: white;" alt="Delivery QR" />
+                <div style="font-size: 7px; font-weight: 900; text-transform: uppercase; margin-top: 2px; color: #0f172a;">Delivery QR</div>
+              </div>
             </div>
             
             <div style="margin-top: 4mm; display: flex; gap: 8mm;">
@@ -152,16 +164,19 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
             </div>
           </div>
           
-          <div class="qr-section">
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 1mm;">
-              ${qrImage ? `<img src="${qrImage}" class="qr-code" alt="E-Invoice QR" />` : `<div class="qr-code" style="display:flex;align-items:center;justify-content:center;color:#ccc;font-size:8px;">[ QR CODE EMPTY ]</div>`}
-              <div style="font-size: 8px; font-weight: bold; text-align: center; text-transform: uppercase;">E-INVOICE SIGNED</div>
-
-              <div style="margin-top: 1mm; text-align: center; white-space: nowrap;">
-                 <span style="font-size: 11px; font-weight: 900; color: #0f172a;">${invoice.invoiceNumber || invoice.creditNoteId}</span>
-                 <span style="font-size: 10px; font-weight: 700; color: #475569; margin-left: 2mm;">Date: ${new Date(invoice.invoiceDate || invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
-              </div>
-
+          <div class="qr-section" style="width: 45mm;">
+            <div style="display: flex; align-items: center; justify-content: flex-end;">
+              ${qrImage ? `
+                <div style="text-align: center;">
+                  <img src="${qrImage}" class="qr-code" style="width: 25mm; height: 25mm;" alt="E-Invoice QR" />
+                  <div style="font-size: 7px; font-weight: 800; text-transform: uppercase; margin-top: 1mm;">E-Invoice</div>
+                </div>
+              ` : ""}
+            </div>
+            
+            <div style="margin-top: 3mm; text-align: right; border-top: 1px solid #e2e8f0; padding-top: 2mm;">
+               <div style="font-size: 13px; font-weight: 900; color: #0f172a;">${invoice.invoiceNumber || invoice.creditNoteId}</div>
+               <div style="font-size: 10px; font-weight: 700; color: #475569;">Date: ${new Date(invoice.invoiceDate || invoice.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
             </div>
           </div>
         </div>
@@ -304,26 +319,32 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
         <div className="p-12 overflow-y-auto max-h-[70vh] bg-slate-50 flex flex-col items-center gap-8 text-slate-800">
            <div className="bg-white shadow-xl rounded-lg p-8 w-full max-w-[210mm] border border-gray-100 transform origin-top scale-[0.85]">
               <div className="flex justify-between items-start border-b-2 pb-4 mb-4">
-                <div>
-                  <div className="text-2xl font-black text-gray-800 uppercase tracking-tighter">{seller.name}</div>
-                  <div className="text-xs text-gray-500 font-bold mt-1 max-w-xs">{seller.address}</div>
+                <div className="flex-1">
+                  <div className="flex items-start justify-between gap-4 mb-2">
+                    <div className="flex-1">
+                      <div className="text-2xl font-black text-gray-800 uppercase tracking-tighter leading-tight">{seller.name}</div>
+                      <div className="text-xs text-gray-500 font-bold mt-1 max-w-xs">{seller.address}</div>
+                    </div>
+                    <div className="w-20 h-20 bg-white border-2 border-slate-900 rounded-lg flex flex-col items-center justify-center overflow-hidden p-1 shrink-0 shadow-sm">
+                      <img src={trackingQr} className="w-full h-full object-contain" alt="Internal QR" />
+                      <span className="text-[6px] font-black uppercase text-slate-900 mt-1 tracking-tighter">Delivery QR</span>
+                    </div>
+                  </div>
                 </div>
                 
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-24 h-24 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-                    {qrImage ? (
-                      <img src={qrImage} className="w-full h-full object-contain p-1" alt="Preview QR" />
-                    ) : (
-                      <div className="text-[10px] text-gray-300 font-bold text-center p-2 underline decoration-red-500 decoration-2">
-                         [ QR MISSING ]
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    {qrImage && (
+                      <div className="w-20 h-20 bg-gray-50 border border-gray-100 rounded-lg flex flex-col items-center justify-center overflow-hidden p-1">
+                        <img src={qrImage} className="w-full h-full object-contain" alt="E-Inv QR" />
+                        <span className="text-[6px] font-black uppercase text-gray-400 mt-0.5">E-Invoice</span>
                       </div>
                     )}
                   </div>
-                  <div className="text-center bg-gray-50 px-3 py-1 rounded-full border border-gray-100">
-                     <span className="text-[11px] font-black text-slate-800 tracking-tight">{invoice.invoiceNumber || invoice.creditNoteId}</span>
-                     <span className="text-[10px] font-bold text-gray-500 ml-3 border-l pl-3 border-gray-200">Date: {new Date(invoice.invoiceDate || invoice.date).toLocaleDateString('en-IN')}</span>
+                  <div className="text-right bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
+                     <span className="text-[12px] font-black text-slate-800 tracking-tight block">{invoice.invoiceNumber || invoice.creditNoteId}</span>
+                     <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Date: {new Date(invoice.invoiceDate || invoice.date).toLocaleDateString('en-IN')}</span>
                   </div>
-
                 </div>
               </div>
 
