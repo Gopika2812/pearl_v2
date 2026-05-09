@@ -117,23 +117,6 @@ const BranchGstReports = () => {
     fetchReports();
   }, [branch?._id, selectedMonth, selectedYear]);
 
-  const [dbStats, setDbStats] = useState(null);
-
-  useEffect(() => {
-    fetchDbStats();
-  }, []);
-
-  const fetchDbStats = async () => {
-    try {
-      const response = await api.get("/gst/reports/db-stats");
-      if (response.data.success) {
-        setDbStats(response.data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch DB stats");
-    }
-  };
-
   const downloadGstr1Excel = () => {
     if (!gstr1Data) return;
 
@@ -296,9 +279,13 @@ const BranchGstReports = () => {
               if (window.confirm("This will scan all invoices and pull those that 'jumped' months back to their original SO dates. Continue?")) {
                 setLoading(true);
                 try {
-                  const res = await fetchWithAuth(`${API_BASE}/gst-reports/bulk-fix-dates`, {
+                  const res = await fetchWithAuth(`${API_BASE}/gst-reports/super-repair`, {
                     method: "POST",
-                    body: JSON.stringify({ branchId: branch._id })
+                    body: JSON.stringify({ 
+                      branchId: branch._id,
+                      month: selectedMonth,
+                      year: selectedYear
+                    })
                   });
                   const data = await res.json();
                   if (data.success) {
@@ -335,35 +322,28 @@ const BranchGstReports = () => {
           <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 flex items-center gap-2">
              <FaChartLine /> Filing Overview (Count Check)
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Invoices</p>
-              <p className="text-2xl font-black text-slate-900">{(gstr1Data?.b2b?.length || 0) + (gstr1Data?.b2c?.length || 0)}</p>
+              <p className="text-2xl font-black text-slate-900">{gstr1Data?.rawCounts?.total || 0}</p>
             </div>
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">B2B / B2C</p>
               <div className="flex items-center gap-2">
-                <p className="text-xl font-black text-emerald-600">{gstr1Data?.b2b?.length || 0}</p>
+                <p className="text-xl font-black text-emerald-600">{gstr1Data?.rawCounts?.b2b || 0}</p>
                 <span className="text-slate-300">/</span>
-                <p className="text-xl font-black text-indigo-600">{gstr1Data?.b2c?.length || 0}</p>
+                <p className="text-xl font-black text-indigo-600">{gstr1Data?.rawCounts?.b2c || 0}</p>
               </div>
             </div>
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Credit Notes</p>
-              <p className="text-2xl font-black text-orange-600">{(gstr1Data?.cdnr?.length || 0) + (gstr1Data?.cdnur?.length || 0)}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Cancelled Invoices</p>
+              <p className="text-2xl font-black text-rose-600">{gstr1Data?.rawCounts?.cancelled || 0}</p>
             </div>
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-rose-100 bg-rose-50/30">
               <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">Invalid HSN</p>
               <p className="text-2xl font-black text-rose-600">
                 {gstr1Data?.hsnSummary?.filter(h => ![4, 6, 8].includes(h.hsn.toString().length)).length || 0}
               </p>
-            </div>
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-emerald-100 bg-emerald-50/10">
-              <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">DB Health</p>
-              <div className="flex items-baseline gap-1">
-                <p className="text-xl font-black text-slate-900">{dbStats?.totalStorageUsed || "..."}</p>
-                <span className="text-[10px] text-slate-400 font-bold">/ 512MB</span>
-              </div>
             </div>
           </div>
         </div>
@@ -433,8 +413,11 @@ const BranchGstReports = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {gstr1Data?.b2b?.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 transition-all">
-                      <td className="px-6 py-4 text-[10px] font-bold text-slate-600 uppercase">{row.gstin}</td>
+                    <tr key={idx} className={`hover:bg-slate-50 transition-all ${row.status === 'CANCELLED' ? 'opacity-50' : ''}`}>
+                      <td className="px-6 py-4 text-[10px] font-bold text-slate-600 uppercase">
+                        {row.gstin}
+                        {row.status === 'CANCELLED' && <span className="ml-2 bg-rose-100 text-rose-600 px-2 py-0.5 rounded text-[8px] font-black">CANCELLED</span>}
+                      </td>
                       <td className="px-6 py-4 text-[10px] font-black text-indigo-600">{row.invoiceNo}</td>
                       <td className="px-6 py-4 text-[10px] font-bold text-slate-700">₹{row.taxableValue.toFixed(2)}</td>
                       <td className="px-6 py-4 text-[10px] font-black text-slate-900 text-right">₹{(row.igst + row.cgst + row.sgst).toFixed(2)}</td>
