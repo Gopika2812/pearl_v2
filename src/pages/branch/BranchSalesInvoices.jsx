@@ -1015,6 +1015,15 @@ const BranchSalesInvoices = () => {
                                   </span>
                                   <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold truncate w-24" title={inv.irn}>{inv.irn?.substring(0, 12)}...</code>
                                 </div>
+                              ) : inv.einvoiceStatus === "FAILED" ? (
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-red-200">
+                                    ❌ FAILED
+                                  </span>
+                                  <div className="text-[8px] text-red-500 font-black max-w-[120px] text-center leading-tight break-words">
+                                    {inv.einvoiceError || "Error details missing"}
+                                  </div>
+                                </div>
                               ) : (
                                 <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-yellow-200">
                                   📄 SI PENDING

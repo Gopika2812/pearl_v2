@@ -43,6 +43,12 @@ class GSTZenService {
     try {
       console.log("\n🚀 Generating E-Invoice IRN...");
 
+      // 🛡️ LINE ITEM PRE-CHECK
+      const hasLineItems = invoiceData.items && invoiceData.items.some(item => Number(item.qty || 0) > 0);
+      if (!hasLineItems) {
+        throw new Error("This invoice has no valid line items with quantity > 0. E-Invoice cannot be generated.");
+      }
+
       // 🛡️ HSN PRE-CHECK: GSTZen/NIC/Tax Portal requires a minimum of 6 digits for B2B E-Invoices.
       // (NIC strictly rejects 4-digit HSNs for businesses above the ₹5Cr threshold).
       if (invoiceData.items && Array.isArray(invoiceData.items)) {
@@ -74,6 +80,15 @@ class GSTZenService {
       const docNo = String(invoiceData.invoiceNumber || invoiceData.creditNoteId || "");
       if (docNo.length > 16) {
         throw new Error(`Document Number "${docNo}" is too long (${docNo.length} chars). Max 16 allowed for E-Invoicing.`);
+      }
+
+      // 🛡️ 30-DAY COMPLIANCE PRE-CHECK
+      const invDate = new Date(invoiceData.invoiceDate || invoiceData.date);
+      const today = new Date();
+      const diffTime = Math.abs(today - invDate);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays > 30) {
+        throw new Error(`E-Invoice cannot be generated for invoices older than 30 days (This invoice is ${diffDays} days old).`);
       }
 
       const sellerGstin = invoiceData.seller?.gstin || invoiceData.branchId?.gstin || "33DULPS2600Q1Z6";
@@ -326,11 +341,24 @@ class GSTZenService {
           signedQrCodeImgUrl: qrImgData // Base64 if returned
         };
       } else {
-        throw new Error(result.message || "Tax Portal Validation Error");
+        // Extract specific error details if available
+        let detailedError = result.message || "Tax Portal Validation Error";
+        if (result.ErrorDetails && Array.isArray(result.ErrorDetails)) {
+          detailedError = result.ErrorDetails.map(d => d.ErrorMessage || d.error_message).join(" | ");
+        } else if (result.InfoDtls && Array.isArray(result.InfoDtls)) {
+          detailedError = result.InfoDtls.map(i => i.Desc).join(" | ");
+        }
+        throw new Error(detailedError);
       }
     } catch (error) {
-      console.error("❌ E-Invoice Fail:", error.response?.data || error.message);
-      throw error;
+      let finalMsg = error.message;
+      if (error.response?.data) {
+        const d = error.response.data;
+        finalMsg = d.message || d.error || finalMsg;
+        if (d.ErrorDetails) finalMsg += " - " + JSON.stringify(d.ErrorDetails);
+      }
+      console.error("❌ E-Invoice Fail:", finalMsg);
+      throw new Error(finalMsg);
     }
   }
 

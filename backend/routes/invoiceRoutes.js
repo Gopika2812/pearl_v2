@@ -849,7 +849,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             sgst: item.sgst !== undefined ? Number(item.sgst) : (originalItem ? (originalItem.sgst || (item.igst ? 0 : gstPercent / 2)) : (item.igst ? 0 : gstPercent / 2)),
             igst: item.igst !== undefined ? Number(item.igst) : (originalItem ? (originalItem.igst || 0) : 0),
             name: item.name || (originalItem ? originalItem.name : "Unknown Product"),
-            hsn: item.hsn || (originalItem ? originalItem.hsn : "")
+            hsn: item.hsn || item.hsnCode || (originalItem ? (originalItem.hsn || originalItem.hsnCode) : "")
           };
 
           if (originalItem) {
@@ -1049,12 +1049,18 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           invoice.billingPerson = finalizedByUsername || invoice.billingPerson || "System";
           invoice.generatedBy = finalizedByUsername || invoice.generatedBy || "System";
           invoice.deliveryMan = salesOrder.deliveryMan;
+          // 🛡️ LOCK DATE: Always use original SO date to prevent month-jumping during tax filing
           invoice.invoiceDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
+          
+          // ✨ RESET E-INVOICE STATUS: Clear old errors when user re-finalizes with new data
+          invoice.einvoiceStatus = null;
+          invoice.einvoiceError = null;
+          
           await invoice.save({ session });
         } else {
           invoice = new Invoice({
             invoiceNumber,
-            invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(), // Use SO date for finalization
+            invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
             financialYear,
             salesOrderId: salesOrder._id,
             branchId: salesOrder.branchId,
@@ -1146,6 +1152,11 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           editedBy: req.user.username, // ✨ NEW
           note: `Invoice ${invoiceNumber} finalized. ${isCustomerSwapped ? 'Customer Swap Applied.' : ''}`
         });
+
+        // 🛡️ LOCK SO DATE: Ensure the original order date is preserved
+        if (!salesOrder.orderDate) {
+           salesOrder.orderDate = salesOrder.createdAt;
+        }
 
         await salesOrder.save({ session });
 
@@ -1688,6 +1699,7 @@ router.get("", async (req, res) => {
         transportCharge: 1,
         extraExpenseAmount: 1,
         einvoiceStatus: 1,
+        einvoiceError: 1,
         ewayBillNo: 1,
         openingBalance: 1,
         closingBalance: 1,

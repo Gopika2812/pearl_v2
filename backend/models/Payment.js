@@ -109,6 +109,9 @@ const paymentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Performance Indexes
 paymentSchema.index({ branchId: 1, paymentId: 1 }, { unique: true });
+paymentSchema.index({ branchId: 1, paymentDate: -1 });
+paymentSchema.index({ "vendor.vendorId": 1, paymentDate: -1 });
 
 export default mongoose.model("Payment", paymentSchema);

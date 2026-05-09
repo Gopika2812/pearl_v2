@@ -52,6 +52,10 @@ router.post("/generate/:invoiceId", async (req, res) => {
     try {
       eInvoiceResult = await gstzenService.generateEInvoice(invoice);
     } catch (gstError) {
+      invoice.einvoiceStatus = "FAILED";
+      invoice.einvoiceError = gstError.message;
+      await invoice.save();
+
       return res.status(400).json({
         success: false,
         message: "E-Invoice generation failed",
@@ -60,6 +64,10 @@ router.post("/generate/:invoiceId", async (req, res) => {
     }
 
     if (!eInvoiceResult || !eInvoiceResult.success) {
+      invoice.einvoiceStatus = "FAILED";
+      invoice.einvoiceError = eInvoiceResult?.message || "Unknown error";
+      await invoice.save();
+
       return res.status(400).json({
         success: false,
         message: "Failed to generate E-Invoice",
@@ -69,6 +77,7 @@ router.post("/generate/:invoiceId", async (req, res) => {
 
     // Update invoice with E-Invoice details
     invoice.einvoiceStatus = "GENERATED";
+    invoice.einvoiceError = null; // Clear previous error
     invoice.irn = eInvoiceResult.irn;
     invoice.ackNo = eInvoiceResult.ackNo;
     invoice.ackDate = eInvoiceResult.ackDate;
@@ -184,7 +193,7 @@ router.post("/bulk-validate", async (req, res) => {
       status: { $nin: ["DRAFT", "CANCELLED"] },
       einvoiceStatus: { $ne: "GENERATED" },
       "customer.gstin": { $exists: true, $ne: "", $not: /URP/i, $type: "string" }
-    }).populate("customer.customerId").populate("items.productId");
+    }).lean();
 
     // We only want customers whose GSTIN length >= 15
     const gstInvoices = invoices.filter(inv => inv.customer?.gstin?.length >= 15);
@@ -210,6 +219,11 @@ router.post("/bulk-validate", async (req, res) => {
       // Allow minor decimal mismatch (roundoff up to 2 rupees)
       if (Math.abs(expectedTotal - (inv.grandTotal || 0)) > 2 && Math.abs(itemsTotal - (inv.grandTotal || 0)) > 2) {
         errors.push(`Calculation mismatch: Expected ~${expectedTotal.toFixed(2)}, found ${inv.grandTotal}. Check math/roundoff.`);
+      }
+
+      // 3. Include previous failure message if any
+      if (inv.einvoiceStatus === "FAILED" && inv.einvoiceError) {
+        errors.push(`Last Attempt Error: ${inv.einvoiceError}`);
       }
 
       if (errors.length > 0) {
@@ -275,6 +289,7 @@ router.post("/bulk-generate", async (req, res) => {
 
         if (eInvoiceResult && eInvoiceResult.success) {
           invoice.einvoiceStatus = "GENERATED";
+          invoice.einvoiceError = null;
           invoice.irn = eInvoiceResult.irn;
           invoice.ackNo = eInvoiceResult.ackNo;
           invoice.ackDate = eInvoiceResult.ackDate;
@@ -303,10 +318,37 @@ router.post("/bulk-generate", async (req, res) => {
 
           results.push({ invoiceId, invoiceNumber: invoice.invoiceNumber, success: true });
         } else {
+          await Invoice.updateOne(
+            { _id: invoiceId },
+            { 
+              $set: { 
+                einvoiceStatus: "FAILED", 
+                einvoiceError: eInvoiceResult?.message || "Failed" 
+              } 
+            }
+          );
           results.push({ invoiceId, invoiceNumber: invoice.invoiceNumber, success: false, message: eInvoiceResult?.message || "Failed" });
         }
       } catch (err) {
-        results.push({ invoiceId, success: false, message: err.message });
+        // 🛡️ GUARANTEED PERSISTENCE: Use direct update to bypass full document validation
+        try {
+          await Invoice.updateOne(
+            { _id: invoiceId },
+            { 
+              $set: { 
+                einvoiceStatus: "FAILED", 
+                einvoiceError: err.message 
+              } 
+            }
+          );
+        } catch (saveErr) {
+          console.error("Failed to update error status for invoice:", invoiceId, saveErr);
+        }
+        results.push({ 
+          invoiceId, 
+          success: false, 
+          message: err.message 
+        });
       }
     }
 
@@ -340,7 +382,7 @@ router.post("/bulk-pdf-count", async (req, res) => {
       invoiceDate: { $gte: startDate, $lte: endDate },
       einvoiceStatus: "GENERATED",
       invoicePdfUrl: { $exists: true, $ne: "" }
-    });
+    }).lean(); // lean count is slightly faster and lighter
 
     res.json({ success: true, total });
   } catch (error) {
@@ -374,7 +416,8 @@ router.post("/bulk-pdf-download", async (req, res) => {
     })
       .sort({ invoiceDate: 1 })
       .skip(skip)
-      .limit(parseInt(batchSize));
+      .limit(parseInt(batchSize))
+      .lean();
 
     if (invoices.length === 0) {
       return res.status(404).json({ success: false, message: "No generated E-Invoices found for this batch." });
@@ -384,6 +427,7 @@ router.post("/bulk-pdf-download", async (req, res) => {
     const mergedPdf = await PDFDocument.create();
 
     for (const inv of invoices) {
+      let pdfBytes = null;
       try {
         let pdfUrl = inv.invoicePdfUrl;
         if (pdfUrl.startsWith("/")) {
@@ -392,14 +436,17 @@ router.post("/bulk-pdf-download", async (req, res) => {
         
         const response = await fetch(pdfUrl);
         if (!response.ok) {
-          console.error(`Failed to fetch PDF for ${inv.invoiceNumber}: Status ${response.status} from ${pdfUrl}`);
+          console.error(`Failed to fetch PDF for ${inv.invoiceNumber}: Status ${response.status}`);
           continue;
         }
-        const pdfBytes = await response.arrayBuffer();
+        pdfBytes = await response.arrayBuffer();
         
         const invoiceDoc = await PDFDocument.load(pdfBytes);
         const copiedPages = await mergedPdf.copyPages(invoiceDoc, invoiceDoc.getPageIndices());
         copiedPages.forEach((page) => mergedPdf.addPage(page));
+        
+        // 🧹 Clear references to help Garbage Collection
+        pdfBytes = null; 
       } catch (err) {
         console.error(`Failed to fetch PDF for ${inv.invoiceNumber}:`, err.message);
       }
@@ -412,9 +459,107 @@ router.post("/bulk-pdf-download", async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=EInvoices_${month}_${year}_Part${page}.pdf`);
     res.send(buffer);
 
+    // 🧹 Final Cleanup
+    res.on('finish', () => {
+      mergedPdfBytes.buffer = null; 
+    });
+
   } catch (error) {
     console.error("Bulk PDF Download Error:", error);
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/einvoice/convert-to-b2c/:invoiceId
+ * Converts a B2B invoice (with GSTIN) to B2C by removing GSTIN.
+ * Also updates the customer record to prevent future issues.
+ */
+router.post("/convert-to-b2c/:invoiceId", async (req, res) => {
+  try {
+    const { invoiceId } = req.params;
+    const { userId, username } = req.body;
+
+    const invoice = await Invoice.findById(invoiceId);
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: "Invoice not found" });
+    }
+
+    const oldGstin = invoice.customer?.gstin;
+
+    // 1. Update Invoice to B2C (remove GSTIN)
+    invoice.customer.gstin = "";
+    invoice.einvoiceStatus = "NOT_GENERATED"; // Reset status
+    invoice.einvoiceError = null; // Clear error
+    await invoice.save();
+
+    // 2. Update Customer Record (if linked)
+    if (invoice.customer?.customerId) {
+      await mongoose.model("Customer").findByIdAndUpdate(invoice.customer.customerId, {
+        gstin: "",
+        registrationType: "unregistered"
+      });
+    }
+
+    // 3. Audit Log
+    await createAuditLog({
+      userId: userId || "System",
+      username: username || "System",
+      branchId: invoice.branchId,
+      action: "CONVERT_TO_B2C",
+      description: `Invoice ${invoice.invoiceNumber} converted to B2C. Removed GSTIN: ${oldGstin}`,
+      targetId: invoice._id,
+      targetModel: "Invoice"
+    });
+
+    res.json({
+      success: true,
+      message: "Invoice converted to B2C successfully. It will no longer require an E-Invoice.",
+    });
+
+  } catch (error) {
+    console.error("Convert to B2C Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 🔄 CONVERT TO B2C: Handles invoices with cancelled/invalid GSTINs
+router.post("/convert-to-b2c", async (req, res) => {
+  try {
+    const { invoiceId, reason } = req.body;
+    if (!invoiceId) return res.status(400).json({ message: "Invoice ID required" });
+
+    const invoice = await Invoice.findById(invoiceId);
+    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+    // 1. Clear GSTIN from the invoice snapshot
+    const oldGstin = invoice.customer?.gstin;
+    if (invoice.customer) {
+      invoice.customer.gstin = ""; // Clear to make it B2C
+    }
+
+    // 2. Clear E-Invoice Status/Errors
+    invoice.einvoiceStatus = "NOT_GENERATED";
+    invoice.einvoiceError = `Converted to B2C: ${reason || "Cancelled GSTIN"}`;
+    
+    await invoice.save();
+
+    // 3. Log the action
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: invoice.branchId,
+      action: "CONVERT_TO_B2C",
+      description: `Converted Invoice ${invoice.invoiceNumber} to B2C (Old GSTIN: ${oldGstin}). Reason: ${reason || "Manual Conversion"}`,
+      targetId: invoice._id,
+      targetModel: "Invoice",
+    });
+
+    res.json({ success: true, message: "Invoice converted to B2C successfully." });
+  } catch (error) {
+    console.error("B2C conversion error:", error);
+    res.status(500).json({ success: false, message: "Failed to convert to B2C" });
   }
 });
 
