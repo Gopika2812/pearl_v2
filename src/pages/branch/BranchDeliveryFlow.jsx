@@ -42,6 +42,7 @@ const BranchDeliveryFlow = () => {
   const [scanPaymentOptions, setScanPaymentOptions] = useState([]);
   const [showLiveScanner, setShowLiveScanner] = useState(false);
   const [showBulkScanModal, setShowBulkScanModal] = useState(null); // array of inv numbers
+  const [verifiedInvoices, setVerifiedInvoices] = useState({}); // { invoiceId: boolean }
 
   const addStaffSlot = (role) => {
     if (bulkData[role].length >= 5) {
@@ -429,7 +430,7 @@ const BranchDeliveryFlow = () => {
     
     const payload = { 
       [selectedScanRole]: user?.username || user?.fullName || "System",
-      [commentField]: `status passed at ${timestamp}`,
+      [commentField]: `${selectedScanRole.replace(/([A-Z])/g, ' $1')} confirmed by ${user?.username || 'System'} at ${timestamp}`,
       deliveryStatus: status,
       updatedBy: user?.username || "System",
       updatedById: user?._id || user?.id || null
@@ -947,6 +948,22 @@ const BranchDeliveryFlow = () => {
                                 </label>
                               ))}
                             </div>
+                            {/* Completion verification checkbox */}
+                            {inv.deliveryStatus === 'PICKED' && (
+                              <label className="flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-100 rounded-xl cursor-pointer group hover:bg-indigo-100 transition-all">
+                                <input
+                                  type="checkbox"
+                                  className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                  checked={!!verifiedInvoices[inv._id]}
+                                  onChange={(e) => setVerifiedInvoices(prev => ({ ...prev, [inv._id]: e.target.checked }))}
+                                />
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-black text-indigo-700 uppercase tracking-tight">Verify Dispatch</span>
+                                  <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest">Mandatory for Completion</span>
+                                </div>
+                              </label>
+                            )}
+
                             {/* Action buttons */}
                             <div className="flex gap-1.5">
                               {inv.deliveryStatus === 'PENDING' && (
@@ -981,8 +998,8 @@ const BranchDeliveryFlow = () => {
                                 </button>
                               )}
                               <button
-                                onClick={() => !completingAnim[inv._id] && (rowPayments[inv._id] || []).length > 0 && areNotesFilled(inv) && handleCompleteWithAnimation(inv._id)}
-                                disabled={(rowPayments[inv._id] || []).length === 0 || !areNotesFilled(inv) || !!completingAnim[inv._id]}
+                                onClick={() => !completingAnim[inv._id] && verifiedInvoices[inv._id] && (rowPayments[inv._id] || []).length > 0 && areNotesFilled(inv) && handleCompleteWithAnimation(inv._id)}
+                                disabled={(rowPayments[inv._id] || []).length === 0 || !areNotesFilled(inv) || !verifiedInvoices[inv._id] || !!completingAnim[inv._id]}
                                 className={`group flex-[2] flex items-center justify-center gap-1.5 py-2 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-md transition-all duration-500 ${
                                   completingAnim[inv._id] === 'done'
                                     ? 'bg-emerald-500 shadow-emerald-200 scale-105'
@@ -1169,6 +1186,21 @@ const BranchDeliveryFlow = () => {
                               </label>
                            ))}
                         </div>
+                        {/* Mobile Verification Checkbox */}
+                        {inv.deliveryStatus === 'PICKED' && (
+                          <label className="flex items-center gap-2 p-4 bg-indigo-50 border border-indigo-100 rounded-2xl cursor-pointer mb-3">
+                            <input
+                              type="checkbox"
+                              className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              checked={!!verifiedInvoices[inv._id]}
+                              onChange={(e) => setVerifiedInvoices(prev => ({ ...prev, [inv._id]: e.target.checked }))}
+                            />
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-black text-indigo-700 uppercase tracking-tight">Verify Dispatch</span>
+                              <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-widest">Mandatory to Complete</span>
+                            </div>
+                          </label>
+                        )}
                         <div className="flex gap-2">
                              {inv.deliveryStatus === 'PENDING' && (
                                <button
@@ -1204,8 +1236,8 @@ const BranchDeliveryFlow = () => {
                                </button>
                              )}
                             <button 
-                               onClick={() => !completingAnim[inv._id] && (rowPayments[inv._id] || []).length > 0 && areNotesFilled(inv) && handleCompleteWithAnimation(inv._id)} 
-                               disabled={(rowPayments[inv._id] || []).length === 0 || !areNotesFilled(inv) || !!completingAnim[inv._id]}
+                               onClick={() => !completingAnim[inv._id] && verifiedInvoices[inv._id] && (rowPayments[inv._id] || []).length > 0 && areNotesFilled(inv) && handleCompleteWithAnimation(inv._id)} 
+                               disabled={(rowPayments[inv._id] || []).length === 0 || !areNotesFilled(inv) || !verifiedInvoices[inv._id] || !!completingAnim[inv._id]}
                                className={`group flex-[2] flex items-center justify-center gap-2 py-3.5 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all duration-500 ${
                                  completingAnim[inv._id] === 'done'
                                    ? 'bg-emerald-500 shadow-emerald-200 scale-[1.05]'
@@ -1472,6 +1504,17 @@ const ScanCompletionModal = ({ invoice, onClose, onConfirm, selectedOptions, set
 const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }) => {
     const [storageMan, setStorageMan] = useState("");
     const [stockChecker, setStockChecker] = useState("");
+    const [storageManComment, setStorageManComment] = useState("");
+    const [stockCheckerComment, setStockCheckerComment] = useState("");
+
+    // Auto-update comments when staff is selected
+    useEffect(() => {
+        if (storageMan || stockChecker) {
+            const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
+            setStorageManComment(`Picked by ${storageMan || '...'} | Checked by ${stockChecker || '...'} at ${timestamp}`);
+            setStockCheckerComment(`Checked by ${stockChecker || '...'} | Picked by ${storageMan || '...'} at ${timestamp}`);
+        }
+    }, [storageMan, stockChecker]);
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
@@ -1482,8 +1525,8 @@ const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }
                             <FaClipboardCheck className="text-white" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-black uppercase tracking-tight">Bulk Assignment</h2>
-                            <p className="text-[10px] text-indigo-100 font-bold uppercase tracking-widest">{invNumbers.length} Invoices Linked</p>
+                            <h2 className="text-lg font-black uppercase tracking-tight">Bulk Scan Assignment</h2>
+                            <p className="text-[10px] text-indigo-100 font-bold uppercase tracking-widest">{invNumbers.length} Invoices Detected</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition border-0 bg-transparent text-white cursor-pointer">
@@ -1493,40 +1536,66 @@ const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }
                 
                 <div className="p-8 space-y-6">
                     <div className="grid grid-cols-1 gap-6">
-                        <div>
-                            <label className="block text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Select Storage Man</label>
-                            <select 
-                                value={storageMan} 
-                                onChange={(e) => setStorageMan(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
-                            >
-                                <option value="">Select Staff</option>
-                                {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
-                            </select>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Select Storage Man</label>
+                                <select 
+                                    value={storageMan} 
+                                    onChange={(e) => setStorageMan(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+                                >
+                                    <option value="">Select Staff</option>
+                                    {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
+                                </select>
+                            </div>
+                            <input 
+                                type="text"
+                                value={storageManComment}
+                                onChange={(e) => setStorageManComment(e.target.value)}
+                                placeholder="Edit storage comment..."
+                                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
+                            />
                         </div>
 
-                        <div>
-                            <label className="block text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Select Stock Checker</label>
-                            <select 
-                                value={stockChecker} 
-                                onChange={(e) => setStockChecker(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
-                            >
-                                <option value="">Select Staff</option>
-                                {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
-                            </select>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Select Stock Checker</label>
+                                <select 
+                                    value={stockChecker} 
+                                    onChange={(e) => setStockChecker(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+                                >
+                                    <option value="">Select Staff</option>
+                                    {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
+                                </select>
+                            </div>
+                            <input 
+                                type="text"
+                                value={stockCheckerComment}
+                                onChange={(e) => setStockCheckerComment(e.target.value)}
+                                placeholder="Edit checker comment..."
+                                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
+                            />
                         </div>
                     </div>
 
-                    <div className="pt-4 flex gap-3">
-                        <button onClick={onClose} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition">Cancel</button>
-                        <button 
-                            disabled={!storageMan || !stockChecker}
-                            onClick={() => onConfirm({ storageMan, stockChecker })}
-                            className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition disabled:opacity-50 shadow-xl shadow-indigo-100"
-                        >
-                            Update All {invNumbers.length} Invoices
-                        </button>
+                    <div className="pt-4 flex flex-col gap-4">
+                        <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center gap-3">
+                            <FaBoxOpen className="text-amber-500 text-xl" />
+                            <p className="text-[10px] font-black text-amber-800 uppercase tracking-tight leading-relaxed">
+                                Clicking update will automatically mark all {invNumbers.length} invoices as <span className="bg-amber-500 text-white px-1.5 py-0.5 rounded">PICKED</span> status.
+                            </p>
+                        </div>
+                        <div className="flex gap-3">
+                            <button onClick={onClose} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition">Cancel</button>
+                            <button 
+                                disabled={!storageMan || !stockChecker}
+                                onClick={() => onConfirm({ storageMan, stockChecker, storageManComment, stockCheckerComment, deliveryStatus: 'PICKED' })}
+                                className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition disabled:opacity-50 shadow-xl shadow-indigo-100"
+                            >
+                                Mark All as Picked
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
