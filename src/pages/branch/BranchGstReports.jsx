@@ -275,6 +275,135 @@ const BranchGstReports = () => {
     XLSX.writeFile(wb, `GSTR1_${branch?.name}_${months[selectedMonth - 1]}_${selectedYear}.xlsx`);
   };
 
+  const downloadGstr1Json = () => {
+    if (!gstr1Data) return;
+
+    // Standard Helper to format date for GST Portal (DD-MM-YYYY)
+    const formatPortalDate = (d) => {
+      if (!d) return "";
+      // Handle DD-MMM-YYYY to DD-MM-YYYY
+      const parts = d.split("-");
+      if (parts.length === 3 && isNaN(parts[1])) {
+        const monthsMap = { Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06", Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12" };
+        return `${parts[0]}-${monthsMap[parts[1]] || "01"}-${parts[2]}`;
+      }
+      return d;
+    };
+
+    // Group B2B by GSTIN (as required by Portal JSON)
+    const b2bGroups = {};
+    gstr1Data.b2b.forEach(inv => {
+      const gstin = inv.gstin.trim().toUpperCase();
+      if (!b2bGroups[gstin]) b2bGroups[gstin] = { ctin: gstin, inv: [] };
+      b2bGroups[gstin].inv.push({
+        inum: inv.invoiceNo,
+        idt: formatPortalDate(inv.date),
+        val: parseFloat(inv.value.toFixed(2)),
+        pos: inv.placeOfSupply.substring(0, 2),
+        rchrg: inv.reverseCharge || "N",
+        inv_typ: "R",
+        itms: [{
+          num: 1,
+          itm_det: { 
+            rt: parseFloat(inv.rate.toFixed(2)), 
+            txval: parseFloat(inv.taxableValue.toFixed(2)), 
+            iamt: parseFloat((inv.igst || 0).toFixed(2)), 
+            camt: parseFloat((inv.cgst || 0).toFixed(2)), 
+            samt: parseFloat((inv.sgst || 0).toFixed(2)), 
+            csamt: parseFloat((inv.cess || 0).toFixed(2)) 
+          }
+        }]
+      });
+    });
+
+    const portalJson = {
+      gstin: branch?.gstin?.trim().toUpperCase() || "STILL_NOT_SET",
+      fp: `${String(selectedMonth).padStart(2, "0")}${selectedYear}`,
+      cur_gt: 0,
+      gt: 0,
+      b2b: Object.values(b2bGroups),
+      b2cs: gstr1Data.b2cs.map(row => ({
+        sply_ty: row.placeOfSupply.startsWith(branch?.stateCode || "33") ? "INTRA" : "INTER",
+        pos: row.placeOfSupply.substring(0, 2),
+        typ: "OE",
+        rt: parseFloat(row.rate.toFixed(2)),
+        txval: parseFloat(row.taxableValue.toFixed(2)),
+        iamt: parseFloat((row.igst || 0).toFixed(2)),
+        csamt: parseFloat((row.cess || 0).toFixed(2))
+      })),
+      cdnr: gstr1Data.cdnr.map(note => ({
+        ctin: note.gstin.trim().toUpperCase(),
+        nt: [{
+          nt_num: note.noteNo,
+          nt_dt: formatPortalDate(note.noteDate),
+          ntty: note.noteType,
+          val: parseFloat(note.noteValue.toFixed(2)),
+          p_gst: note.preGst || "N",
+          pos: note.placeOfSupply.substring(0, 2),
+          itms: [{
+            num: 1,
+            itm_det: { 
+              rt: parseFloat(note.rate.toFixed(2)), 
+              txval: parseFloat(note.taxableValue.toFixed(2)), 
+              iamt: parseFloat((note.igst || 0).toFixed(2)), 
+              camt: parseFloat((note.cgst || 0).toFixed(2)), 
+              samt: parseFloat((note.sgst || 0).toFixed(2)), 
+              csamt: parseFloat((note.cess || 0).toFixed(2)) 
+            }
+          }]
+        }]
+      })),
+      nil: {
+        inv: gstr1Data.nilRated.map(row => ({
+          sply_ty: row.description.includes("Inter-State") ? "INTER" : "INTRA",
+          nil_amt: parseFloat(row.nilRated.toFixed(2)),
+          expt_amt: parseFloat(row.exempt.toFixed(2)),
+          ngsply_amt: parseFloat(row.nonGst.toFixed(2))
+        }))
+      },
+      hsn: {
+        data: [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].map((row, idx) => ({
+          num: idx + 1,
+          hsn_sc: String(row.hsn),
+          desc: row.description,
+          uqc: row.uqc.split("-")[0],
+          qty: parseFloat(row.totalQty.toFixed(2)),
+          val: parseFloat(row.totalValue.toFixed(2)),
+          txval: parseFloat(row.taxableValue.toFixed(2)),
+          iamt: parseFloat((row.igst || 0).toFixed(2)),
+          camt: parseFloat((row.cgst || 0).toFixed(2)),
+          samt: parseFloat((row.sgst || 0).toFixed(2)),
+          csamt: parseFloat((row.cess || 0).toFixed(2))
+        }))
+      },
+      exp: [],
+      at: [],
+      atadj: [],
+      doc_issue: {
+        doc_det: gstr1Data.docSummary.map((doc, idx) => ({
+          doc_num: idx + 1,
+          docs: [{
+            from: doc.from,
+            to: doc.to,
+            totcnt: doc.total,
+            canc: doc.cancelled,
+            net_issue: doc.net
+          }]
+        }))
+      }
+    };
+
+    const blob = new Blob([JSON.stringify(portalJson, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `GSTR1_${branch?.name}_${months[selectedMonth - 1]}_${selectedYear}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const SummaryCard = ({ title, value, color, icon: Icon }) => (
     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center justify-between">
       <div>
@@ -435,6 +564,12 @@ const BranchGstReports = () => {
               }`}
             >
               <FaDownload /> Download Tally Excel
+            </button>
+            <button 
+              onClick={downloadGstr1Json}
+              className="flex items-center gap-2 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition shadow-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100"
+            >
+              <FaDownload /> Download Portal JSON
             </button>
           </div>
         </div>

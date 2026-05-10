@@ -121,14 +121,24 @@ router.get("/gstr1", auth, async (req, res) => {
       const isB2B = gstin.length === 15 && !gstin.includes("URP");
       
       // Normalize POS Name
-      let stateName = (inv.customer?.state || "Tamil Nadu").trim();
-      const rawState = stateName.toLowerCase().replace(/\s/g, "");
+      let stateName = (inv.customer?.state || "").trim();
       const rawCode = String(inv.customer?.stateCode || "").trim();
-      
-      if (rawState === "tamilnadu" || rawState === "tn" || rawState.includes("tamilnadu")) stateName = "Tamil Nadu";
+      const rawState = stateName.toLowerCase().replace(/\s/g, "");
+
+      // Official State Mapping for GST
+      const stateMap = {
+        "33": "Tamil Nadu", "32": "Kerala", "29": "Karnataka", "37": "Andhra Pradesh",
+        "27": "Maharashtra", "36": "Telangana", "07": "Delhi", "24": "Gujarat", "09": "Uttar Pradesh"
+      };
+
+      if (rawState === "tamilnadu" || rawState === "tn" || rawState.includes("tamilnadu") || rawCode === "33") {
+        stateName = "Tamil Nadu";
+      } else if (!stateName || !isNaN(stateName)) {
+        stateName = stateMap[rawCode] || "Tamil Nadu";
+      }
       
       // If it's NOT 33 and NOT Tamil Nadu, it MUST be Inter-state
-      const isIntra = (rawCode === "33") || (rawState === "tamilnadu") || (rawState === "tn") || (rawState.includes("tamilnadu"));
+      const isIntra = (rawCode === "33") || (stateName === "Tamil Nadu");
       const isInterstate = !isIntra;
       const pos = (rawCode || "33") + "-" + stateName;
       
@@ -290,9 +300,19 @@ router.get("/gstr1", auth, async (req, res) => {
       const isRegistered = gstin.length === 15 && !gstin.includes("URP");
       
       // Normalize POS for Credit Notes too
-      let stateName = (note.customer.state || "Tamil Nadu").trim();
-      if (stateName.toLowerCase().replace(/\s/g, "") === "tamilnadu") stateName = "Tamil Nadu";
-      const pos = (note.customer.stateCode || "33") + "-" + stateName;
+      let stateName = (note.customer?.state || "").trim();
+      const rawCode = String(note.customer?.stateCode || "").trim();
+      const rawState = stateName.toLowerCase().replace(/\s/g, "");
+
+      if (rawState === "tamilnadu" || rawState === "tn" || rawState.includes("tamilnadu") || rawCode === "33") {
+        stateName = "Tamil Nadu";
+      } else if (!stateName || !isNaN(stateName)) {
+        // Simple map for CNs
+        const cnStateMap = { "33": "Tamil Nadu", "32": "Kerala", "29": "Karnataka" };
+        stateName = cnStateMap[rawCode] || "Tamil Nadu";
+      }
+      
+      const pos = (rawCode || "33") + "-" + stateName;
 
       const entry = {
         gstin: note.customer.gstin,
