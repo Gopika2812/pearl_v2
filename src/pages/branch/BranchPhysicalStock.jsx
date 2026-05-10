@@ -165,7 +165,7 @@ export default function BranchPhysicalStock() {
       } finally {
         setIsSearching(false);
       }
-    }, 400);
+    }, 10);
     return () => clearTimeout(timer);
   }, [productSearch, currentBranch?._id]);
 
@@ -211,7 +211,7 @@ export default function BranchPhysicalStock() {
       if (productSearch.length >= 0) {
         setShowProductDrop(true);
       }
-    }, 300);
+    }, 50);
     return () => clearTimeout(t);
   }, [productSearch, groupFilter]);
 
@@ -403,7 +403,7 @@ export default function BranchPhysicalStock() {
       if (!row.expiryDate) return toast.warning("Expiry Date is mandatory");
     }
     
-    if (!row.checkedBy || row.checkedBy.length === 0) return toast.warning("At least one Staff Member must be selected");
+    
     setRows(prev => prev.map(r => r.rowId === row.rowId ? { ...r, saving: true } : r));
     try {
       const isNoAction = row.physicalQty === "NO_ACTION";
@@ -467,10 +467,16 @@ export default function BranchPhysicalStock() {
       return r.productName.toLowerCase().includes(productSearch.toLowerCase());
     })
     .sort((a, b) => {
-      const valA = a.savedId ? 1 : 2;
-      const valB = b.savedId ? 1 : 2;
+      // 1. Primary Sort: Status (Not Entered/Draft vs Saved/Pending/Approved)
+      const valA = a.savedId ? 2 : 1;
+      const valB = b.savedId ? 2 : 1;
       if (valA !== valB) return valA - valB;
-      return 0;
+
+      // 2. Secondary Sort for Drafts (Top): Show newest added at the very top
+      if (valA === 1) return b.rowId - a.rowId;
+
+      // 3. Secondary Sort for Saved (Bottom): Keep them in completion order or alphabetical
+      return a.productName.localeCompare(b.productName);
     });
 
   const exportToExcel = () => {
@@ -717,10 +723,11 @@ export default function BranchPhysicalStock() {
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row, idx) => {
+                    sortedRows.map((row, idx) => {
                       const { inward, outward } = calc(row);
+                      const isSaved = !!row.savedId;
                       return (
-                        <tr key={row.rowId} className={`hover:bg-gray-50 transition-colors ${row.status === "APPROVED" ? "bg-green-50" : ""}`}>
+                        <tr key={row.rowId} className={`hover:bg-gray-50 transition-colors ${row.status === "APPROVED" ? "bg-green-50" : isSaved ? "bg-emerald-50/50" : "bg-rose-50"}`}>
                           <td className="px-1.5 py-3 border-r border-gray-100 font-black text-gray-300 text-center">{idx + 1}</td>
                           {isFieldVisible("productName") && (
                             <td className="px-1.5 py-3 border-r border-gray-100">
