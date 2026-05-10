@@ -122,111 +122,157 @@ const BranchGstReports = () => {
 
     const wb = XLSX.utils.book_new();
 
-    // 1. B2B Sheet
+    // Helper to add sheet with default empty row if no data
+    const addSheet = (name, data, columns) => {
+      const formatted = data.length > 0 ? data : [columns.reduce((acc, col) => ({ ...acc, [col]: "" }), {})];
+      const sheet = XLSX.utils.json_to_sheet(formatted);
+      XLSX.utils.book_append_sheet(wb, sheet, name);
+    };
+
+    // 1. B2B Sheet (b2b,sez,de)
+    const b2bCols = ["GSTIN/UIN of Recipient", "Receiver Name", "Invoice Number", "Invoice date", "Invoice Value", "Place Of Supply", "Reverse Charge", "Applicable % of Tax Rate", "Invoice Type", "E-Commerce GSTIN", "Rate", "Taxable Value", "Cess Amount"];
     const b2bData = gstr1Data.b2b.map(row => ({
       "GSTIN/UIN of Recipient": row.gstin,
       "Receiver Name": row.customerName,
       "Invoice Number": row.invoiceNo,
-      "Invoice Date": row.date,
+      "Invoice date": row.date,
       "Invoice Value": row.value,
       "Place Of Supply": row.placeOfSupply,
       "Reverse Charge": row.reverseCharge,
+      "Applicable % of Tax Rate": row.applicablePercent,
       "Invoice Type": row.invoiceType,
+      "E-Commerce GSTIN": row.ecommerceGstin,
+      "Rate": row.rate,
       "Taxable Value": row.taxableValue,
-      "Integrated Tax": row.igst,
-      "Central Tax": row.cgst,
-      "State/UT Tax": row.sgst,
-      "Cess": row.cess
+      "Cess Amount": row.cess
     }));
-    const b2bSheet = XLSX.utils.json_to_sheet(b2bData);
-    XLSX.utils.book_append_sheet(wb, b2bSheet, "B2B");
+    addSheet("b2b,sez,de", b2bData, b2bCols);
 
-    // 2. B2C Sheet
-    const b2cData = gstr1Data.b2c.map(row => ({
+    // 2. B2BA (Amendments)
+    const b2baCols = ["GSTIN/UIN of Recipient", "Receiver Name", "Original Invoice Number", "Original Invoice date", "Revised Invoice Number", "Revised Invoice date", "Invoice Value", "Place Of Supply", "Reverse Charge", "Applicable % of Tax Rate", "Invoice Type", "E-Commerce GSTIN", "Rate", "Taxable Value", "Cess Amount"];
+    addSheet("b2ba", [], b2baCols);
+
+    // 3. B2CL (B2C Large)
+    const b2clCols = ["Invoice Number", "Invoice date", "Invoice Value", "Place Of Supply", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount", "E-Commerce GSTIN"];
+    const b2clData = (gstr1Data.b2cl || []).map(row => ({
+      "Invoice Number": row.invoiceNo,
+      "Invoice date": row.date,
+      "Invoice Value": row.value,
+      "Place Of Supply": row.placeOfSupply,
+      "Applicable % of Tax Rate": row.applicablePercent,
+      "Rate": row.rate,
+      "Taxable Value": row.taxableValue,
+      "Cess Amount": row.cess,
+      "E-Commerce GSTIN": row.ecommerceGstin
+    }));
+    addSheet("b2cl", b2clData, b2clCols);
+
+    // 4. B2CLA
+    const b2claCols = ["Original Invoice Number", "Original Invoice date", "Original Place Of Supply", "Revised Invoice Number", "Revised Invoice date", "Invoice Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount", "E-Commerce GSTIN"];
+    addSheet("b2cla", [], b2claCols);
+
+    // 5. B2CS (B2C Small)
+    const b2csCols = ["Type", "Place Of Supply", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount", "E-Commerce GSTIN"];
+    const b2csData = (gstr1Data.b2cs || []).map(row => ({
       "Type": row.type,
       "Place Of Supply": row.placeOfSupply,
-      "Applicable % of Tax Rate": row.rate,
+      "Applicable % of Tax Rate": "",
+      "Rate": row.rate,
       "Taxable Value": row.taxableValue,
-      "Cess": row.cess,
-      "E-Commerce GSTIN": ""
+      "Cess Amount": row.cess,
+      "E-Commerce GSTIN": row.ecommerceGstin || ""
     }));
-    const b2cSheet = XLSX.utils.json_to_sheet(b2cData);
-    XLSX.utils.book_append_sheet(wb, b2cSheet, "B2CS");
+    addSheet("b2cs", b2csData, b2csCols);
 
-    // 2b. Credit Notes Registered (CDNR)
-    const cdnrData = gstr1Data.cdnr.map(row => ({
+    // 6. B2CSA
+    const b2csaCols = ["Financial Year", "Original Month", "Place Of Supply", "Type", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount", "E-Commerce GSTIN"];
+    addSheet("b2csa", [], b2csaCols);
+
+    // 7. CDNR (Credit/Debit Notes Registered)
+    const cdnrCols = ["GSTIN/UIN of Recipient", "Receiver Name", "Note Number", "Note Date", "Note Type", "Place Of Supply", "Reverse Charge", "Note Supply Type", "Note Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount"];
+    const cdnrData = (gstr1Data.cdnr || []).map(row => ({
       "GSTIN/UIN of Recipient": row.gstin,
       "Receiver Name": row.customerName,
       "Note Number": row.noteNo,
       "Note Date": row.noteDate,
       "Note Type": row.noteType,
       "Place Of Supply": row.placeOfSupply,
+      "Reverse Charge": row.reverseCharge,
+      "Note Supply Type": row.noteSupplyType,
       "Note Value": row.noteValue,
+      "Applicable % of Tax Rate": row.applicablePercent,
+      "Rate": row.rate,
       "Taxable Value": row.taxableValue,
-      "Integrated Tax": row.igst,
-      "Central Tax": row.cgst,
-      "State/UT Tax": row.sgst,
-      "Cess": row.cess
+      "Cess Amount": row.cess
     }));
-    const cdnrSheet = XLSX.utils.json_to_sheet(cdnrData);
-    XLSX.utils.book_append_sheet(wb, cdnrSheet, "CDNR");
+    addSheet("cdnr", cdnrData, cdnrCols);
 
-    // 2c. Credit Notes Unregistered (CDNUR)
-    const cdnurData = gstr1Data.cdnur.map(row => ({
-      "Type": row.type,
+    // 8. CDNRA / CDNUR / CDNURA
+    const cdnraCols = ["GSTIN/UIN of Recipient", "Receiver Name", "Original Note Number", "Original Note Date", "Revised Note Number", "Revised Note Date", "Note Type", "Place Of Supply", "Reverse Charge", "Note Supply Type", "Note Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount"];
+    addSheet("cdnra", [], cdnraCols);
+
+    const cdnurCols = ["UR Type", "Note Number", "Note Date", "Note Type", "Place Of Supply", "Note Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount"];
+    const cdnurData = (gstr1Data.cdnur || []).map(row => ({
+      "UR Type": row.type,
       "Note Number": row.noteNo,
       "Note Date": row.noteDate,
       "Note Type": row.noteType,
       "Place Of Supply": row.placeOfSupply,
       "Note Value": row.noteValue,
+      "Applicable % of Tax Rate": row.applicablePercent,
+      "Rate": row.rate,
       "Taxable Value": row.taxableValue,
-      "Integrated Tax": row.igst,
-      "Central Tax": row.cgst,
-      "State/UT Tax": row.sgst,
-      "Cess": row.cess
-    }));
-    const cdnurSheet = XLSX.utils.json_to_sheet(cdnurData);
-    XLSX.utils.book_append_sheet(wb, cdnurSheet, "CDNUR");
-
-    // 3. Nil Rated Sheet
-    const nilRatedData = gstr1Data.nilRated.map(row => ({
-      "Description": row.description,
-      "Nil Rated Supplies": row.nilRated,
-      "Exempted (other than nil rated/non-GST supply)": row.exempt,
-      "Non-GST supplies": row.nonGst
-    }));
-    const nilRatedSheet = XLSX.utils.json_to_sheet(nilRatedData);
-    XLSX.utils.book_append_sheet(wb, nilRatedSheet, "Nil_Rated");
-
-    // 4. HSN Sheet
-    const hsnData = gstr1Data.hsnSummary.map(row => ({
-      "HSN": row.hsn,
-      "Description": row.description,
-      "UQC": row.uqc,
-      "Total Quantity": row.totalQty,
-      "Total Value": row.totalValue,
-      "Taxable Value": row.taxableValue,
-      "Integrated Tax Amount": row.igst,
-      "Central Tax Amount": row.cgst,
-      "State/UT Tax Amount": row.sgst,
       "Cess Amount": row.cess
     }));
-    const hsnSheet = XLSX.utils.json_to_sheet(hsnData);
-    XLSX.utils.book_append_sheet(wb, hsnSheet, "HSN_Summary");
+    addSheet("cdnur", cdnurData, cdnurCols);
 
-    // 5. Doc Summary Sheet
-    const docData = gstr1Data.docSummary.map(row => ({
-      "Nature of Document": row.nature,
-      "Sr. No. From": row.from,
-      "Sr. No. To": row.to,
-      "Total Number": row.total,
-      "Cancelled": row.cancelled,
-      "Net Issue": row.net
+    const cdnuraCols = ["UR Type", "Original Note Number", "Original Note Date", "Revised Note Number", "Revised Note Date", "Note Type", "Place Of Supply", "Note Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount"];
+    addSheet("cdnura", [], cdnuraCols);
+
+    // 9. Exports / Advance Tax
+    addSheet("exp", [], ["Export Type", "Invoice Number", "Invoice date", "Invoice Value", "Port Code", "Shipping Bill Number", "Shipping Bill Date", "Rate", "Taxable Value", "Cess Amount"]);
+    addSheet("expa", [], ["Export Type", "Original Invoice Number", "Original Invoice date", "Revised Invoice Number", "Revised Invoice date", "Invoice Value", "Port Code", "Shipping Bill Number", "Shipping Bill Date", "Rate", "Taxable Value", "Cess Amount"]);
+    addSheet("at", [], ["Place Of Supply", "Applicable % of Tax Rate", "Rate", "Gross Advance Received", "Cess Amount"]);
+    addSheet("ata", [], ["Financial Year", "Original Month", "Place Of Supply", "Applicable % of Tax Rate", "Rate", "Gross Advance Received", "Cess Amount"]);
+    addSheet("atadj", [], ["Place Of Supply", "Applicable % of Tax Rate", "Rate", "Gross Advance Adjusted", "Cess Amount"]);
+    addSheet("atadja", [], ["Financial Year", "Original Month", "Place Of Supply", "Applicable % of Tax Rate", "Rate", "Gross Advance Adjusted", "Cess Amount"]);
+
+    // 10. EXEMP (Exempted)
+    const exempCols = ["Description", "Nil Rated", "Exempted", "Non GST supplies"];
+    const exempData = (gstr1Data.nilRated || []).map(row => ({
+      "Description": row.description,
+      "Nil Rated": row.nilRated,
+      "Exempted": row.exempt,
+      "Non GST supplies": row.nonGst
     }));
-    const docSheet = XLSX.utils.json_to_sheet(docData);
-    XLSX.utils.book_append_sheet(wb, docSheet, "Doc_Summary");
+    addSheet("exemp", exempData, exempCols);
 
-    XLSX.writeFile(wb, `GSTR1_${branch?.name}_${months[selectedMonth-1]}_${selectedYear}.xlsx`);
+    // 11. HSN Sheets
+    const hsnCols = ["HSN", "Description", "UQC", "Total Quantity", "Total Value", "Rate", "Taxable Value", "Integrated Tax Amount", "Central Tax Amount", "State/UT Tax Amount", "Cess Amount"];
+    const hsnB2B = (gstr1Data.hsnSummaryB2B || []).map(row => ({
+      "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Quantity": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue,
+      "Integrated Tax Amount": row.igst, "Central Tax Amount": row.cgst, "State/UT Tax Amount": row.sgst, "Cess Amount": row.cess
+    }));
+    addSheet("hsn(b2b)", hsnB2B, hsnCols);
+
+    const hsnB2C = (gstr1Data.hsnSummaryB2C || []).map(row => ({
+      "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Quantity": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue,
+      "Integrated Tax Amount": row.igst, "Central Tax Amount": row.cgst, "State/UT Tax Amount": row.sgst, "Cess Amount": row.cess
+    }));
+    addSheet("hsn(b2c)", hsnB2C, hsnCols);
+
+    // 12. DOCS Sheet
+    const docCols = ["Nature of Document", "Sr. No. From", "Sr. No. To", "Total Number", "Cancelled"];
+    const docData = (gstr1Data.docSummary || []).map(row => ({
+      "Nature of Document": row.nature, "Sr. No. From": row.from, "Sr. No. To": row.to, "Total Number": row.total, "Cancelled": row.cancelled
+    }));
+    // Add the "Inward Supply" row even if empty to match screenshot
+    if (!docData.find(d => d["Nature of Document"].includes("inward supply"))) {
+      docData.push({ "Nature of Document": "Invoices for inward supply from unregistered person", "Sr. No. From": "", "Sr. No. To": "", "Total Number": 0, "Cancelled": 0 });
+    }
+    addSheet("docs", docData, docCols);
+
+    XLSX.writeFile(wb, `GSTR1_${branch?.name}_${months[selectedMonth - 1]}_${selectedYear}.xlsx`);
   };
 
   const SummaryCard = ({ title, value, color, icon: Icon }) => (
