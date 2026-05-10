@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { FaFileInvoice, FaDownload, FaSync, FaChartLine, FaCheckCircle, FaExclamationCircle } from "react-icons/fa";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
@@ -120,16 +121,50 @@ const BranchGstReports = () => {
   const downloadGstr1Excel = () => {
     if (!gstr1Data) return;
 
-    const wb = XLSX.utils.book_new();
+    const fileName = `${branch?.gstin || "NO_GSTIN"}_GSTR1_${months[selectedMonth - 1]}_${selectedYear}`;
+    
+    const workbook = new ExcelJS.Workbook();
+    
+    // Helper to add styled sheet
+    const addStyledSheet = (name, data, columns) => {
+      const sheet = workbook.addWorksheet(name);
+      
+      // Add Headers with style
+      const headerRow = sheet.addRow(columns);
+      headerRow.eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF4F46E5" } // Indigo-600
+        };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" }
+        };
+      });
 
-    // Helper to add sheet with default empty row if no data
-    const addSheet = (name, data, columns) => {
-      const formatted = data.length > 0 ? data : [columns.reduce((acc, col) => ({ ...acc, [col]: "" }), {})];
-      const sheet = XLSX.utils.json_to_sheet(formatted);
-      XLSX.utils.book_append_sheet(wb, sheet, name);
+      // Add Data
+      data.forEach(row => {
+        const values = columns.map(col => row[col]);
+        sheet.addRow(values);
+      });
+
+      // Auto-width columns
+      sheet.columns.forEach((column) => {
+        let maxLength = 0;
+        column.eachCell({ includeEmpty: true }, (cell) => {
+          const columnLength = cell.value ? cell.value.toString().length : 10;
+          if (columnLength > maxLength) maxLength = columnLength;
+        });
+        column.width = maxLength < 12 ? 12 : maxLength + 2;
+      });
     };
 
-    // 1. B2B Sheet (b2b,sez,de)
+    // 1. B2B
     const b2bCols = ["GSTIN/UIN of Recipient", "Receiver Name", "Invoice Number", "Invoice date", "Invoice Value", "Place Of Supply", "Reverse Charge", "Applicable % of Tax Rate", "Invoice Type", "E-Commerce GSTIN", "Rate", "Taxable Value", "Cess Amount"];
     const b2bData = gstr1Data.b2b.map(row => ({
       "GSTIN/UIN of Recipient": row.gstin,
@@ -146,133 +181,70 @@ const BranchGstReports = () => {
       "Taxable Value": row.taxableValue,
       "Cess Amount": row.cess
     }));
-    addSheet("b2b,sez,de", b2bData, b2bCols);
+    addStyledSheet("b2b,sez,de", b2bData, b2bCols);
 
-    // 2. B2BA (Amendments)
-    const b2baCols = ["GSTIN/UIN of Recipient", "Receiver Name", "Original Invoice Number", "Original Invoice date", "Revised Invoice Number", "Revised Invoice date", "Invoice Value", "Place Of Supply", "Reverse Charge", "Applicable % of Tax Rate", "Invoice Type", "E-Commerce GSTIN", "Rate", "Taxable Value", "Cess Amount"];
-    addSheet("b2ba", [], b2baCols);
+    // 2. B2BA
+    addStyledSheet("b2ba", [], ["GSTIN/UIN of Recipient", "Receiver Name", "Original Invoice Number", "Original Invoice date", "Revised Invoice Number", "Revised Invoice date", "Invoice Value", "Place Of Supply", "Reverse Charge", "Applicable % of Tax Rate", "Invoice Type", "E-Commerce GSTIN", "Rate", "Taxable Value", "Cess Amount"]);
 
-    // 3. B2CL (B2C Large)
+    // 3. B2CL
     const b2clCols = ["Invoice Number", "Invoice date", "Invoice Value", "Place Of Supply", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount", "E-Commerce GSTIN"];
     const b2clData = (gstr1Data.b2cl || []).map(row => ({
-      "Invoice Number": row.invoiceNo,
-      "Invoice date": row.date,
-      "Invoice Value": row.value,
-      "Place Of Supply": row.placeOfSupply,
-      "Applicable % of Tax Rate": row.applicablePercent,
-      "Rate": row.rate,
-      "Taxable Value": row.taxableValue,
-      "Cess Amount": row.cess,
-      "E-Commerce GSTIN": row.ecommerceGstin
+      "Invoice Number": row.invoiceNo, "Invoice date": row.date, "Invoice Value": row.value, "Place Of Supply": row.placeOfSupply, "Applicable % of Tax Rate": row.applicablePercent, "Rate": row.rate, "Taxable Value": row.taxableValue, "Cess Amount": row.cess, "E-Commerce GSTIN": row.ecommerceGstin
     }));
-    addSheet("b2cl", b2clData, b2clCols);
+    addStyledSheet("b2cl", b2clData, b2clCols);
 
-    // 4. B2CLA
-    const b2claCols = ["Original Invoice Number", "Original Invoice date", "Original Place Of Supply", "Revised Invoice Number", "Revised Invoice date", "Invoice Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount", "E-Commerce GSTIN"];
-    addSheet("b2cla", [], b2claCols);
-
-    // 5. B2CS (B2C Small)
+    // 4. B2CS
     const b2csCols = ["Type", "Place Of Supply", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount", "E-Commerce GSTIN"];
     const b2csData = (gstr1Data.b2cs || []).map(row => ({
-      "Type": row.type,
-      "Place Of Supply": row.placeOfSupply,
-      "Applicable % of Tax Rate": "",
-      "Rate": row.rate,
-      "Taxable Value": row.taxableValue,
-      "Cess Amount": row.cess,
-      "E-Commerce GSTIN": row.ecommerceGstin || ""
+      "Type": row.type, "Place Of Supply": row.placeOfSupply, "Applicable % of Tax Rate": "", "Rate": row.rate, "Taxable Value": row.taxableValue, "Cess Amount": row.cess, "E-Commerce GSTIN": row.ecommerceGstin || ""
     }));
-    addSheet("b2cs", b2csData, b2csCols);
+    addStyledSheet("b2cs", b2csData, b2csCols);
 
-    // 6. B2CSA
-    const b2csaCols = ["Financial Year", "Original Month", "Place Of Supply", "Type", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount", "E-Commerce GSTIN"];
-    addSheet("b2csa", [], b2csaCols);
-
-    // 7. CDNR (Credit/Debit Notes Registered)
+    // 5. CDNR
     const cdnrCols = ["GSTIN/UIN of Recipient", "Receiver Name", "Note Number", "Note Date", "Note Type", "Place Of Supply", "Reverse Charge", "Note Supply Type", "Note Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount"];
     const cdnrData = (gstr1Data.cdnr || []).map(row => ({
-      "GSTIN/UIN of Recipient": row.gstin,
-      "Receiver Name": row.customerName,
-      "Note Number": row.noteNo,
-      "Note Date": row.noteDate,
-      "Note Type": row.noteType,
-      "Place Of Supply": row.placeOfSupply,
-      "Reverse Charge": row.reverseCharge,
-      "Note Supply Type": row.noteSupplyType,
-      "Note Value": row.noteValue,
-      "Applicable % of Tax Rate": row.applicablePercent,
-      "Rate": row.rate,
-      "Taxable Value": row.taxableValue,
-      "Cess Amount": row.cess
+      "GSTIN/UIN of Recipient": row.gstin, "Receiver Name": row.customerName, "Note Number": row.noteNo, "Note Date": row.noteDate, "Note Type": row.noteType, "Place Of Supply": row.placeOfSupply, "Reverse Charge": row.reverseCharge, "Note Supply Type": row.noteSupplyType, "Note Value": row.noteValue, "Applicable % of Tax Rate": row.applicablePercent, "Rate": row.rate, "Taxable Value": row.taxableValue, "Cess Amount": row.cess
     }));
-    addSheet("cdnr", cdnrData, cdnrCols);
+    addStyledSheet("cdnr", cdnrData, cdnrCols);
 
-    // 8. CDNRA / CDNUR / CDNURA
-    const cdnraCols = ["GSTIN/UIN of Recipient", "Receiver Name", "Original Note Number", "Original Note Date", "Revised Note Number", "Revised Note Date", "Note Type", "Place Of Supply", "Reverse Charge", "Note Supply Type", "Note Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount"];
-    addSheet("cdnra", [], cdnraCols);
-
+    // 6. CDNUR
     const cdnurCols = ["UR Type", "Note Number", "Note Date", "Note Type", "Place Of Supply", "Note Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount"];
     const cdnurData = (gstr1Data.cdnur || []).map(row => ({
-      "UR Type": row.type,
-      "Note Number": row.noteNo,
-      "Note Date": row.noteDate,
-      "Note Type": row.noteType,
-      "Place Of Supply": row.placeOfSupply,
-      "Note Value": row.noteValue,
-      "Applicable % of Tax Rate": row.applicablePercent,
-      "Rate": row.rate,
-      "Taxable Value": row.taxableValue,
-      "Cess Amount": row.cess
+      "UR Type": row.type, "Note Number": row.noteNo, "Note Date": row.noteDate, "Note Type": row.noteType, "Place Of Supply": row.placeOfSupply, "Note Value": row.noteValue, "Applicable % of Tax Rate": row.applicablePercent, "Rate": row.rate, "Taxable Value": row.taxableValue, "Cess Amount": row.cess
     }));
-    addSheet("cdnur", cdnurData, cdnurCols);
+    addStyledSheet("cdnur", cdnurData, cdnurCols);
 
-    const cdnuraCols = ["UR Type", "Original Note Number", "Original Note Date", "Revised Note Number", "Revised Note Date", "Note Type", "Place Of Supply", "Note Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount"];
-    addSheet("cdnura", [], cdnuraCols);
-
-    // 9. Exports / Advance Tax
-    addSheet("exp", [], ["Export Type", "Invoice Number", "Invoice date", "Invoice Value", "Port Code", "Shipping Bill Number", "Shipping Bill Date", "Rate", "Taxable Value", "Cess Amount"]);
-    addSheet("expa", [], ["Export Type", "Original Invoice Number", "Original Invoice date", "Revised Invoice Number", "Revised Invoice date", "Invoice Value", "Port Code", "Shipping Bill Number", "Shipping Bill Date", "Rate", "Taxable Value", "Cess Amount"]);
-    addSheet("at", [], ["Place Of Supply", "Applicable % of Tax Rate", "Rate", "Gross Advance Received", "Cess Amount"]);
-    addSheet("ata", [], ["Financial Year", "Original Month", "Place Of Supply", "Applicable % of Tax Rate", "Rate", "Gross Advance Received", "Cess Amount"]);
-    addSheet("atadj", [], ["Place Of Supply", "Applicable % of Tax Rate", "Rate", "Gross Advance Adjusted", "Cess Amount"]);
-    addSheet("atadja", [], ["Financial Year", "Original Month", "Place Of Supply", "Applicable % of Tax Rate", "Rate", "Gross Advance Adjusted", "Cess Amount"]);
-
-    // 10. EXEMP (Exempted)
+    // 7. EXEMP
     const exempCols = ["Description", "Nil Rated", "Exempted", "Non GST supplies"];
     const exempData = (gstr1Data.nilRated || []).map(row => ({
-      "Description": row.description,
-      "Nil Rated": row.nilRated,
-      "Exempted": row.exempt,
-      "Non GST supplies": row.nonGst
+      "Description": row.description, "Nil Rated": row.nilRated, "Exempted": row.exempt, "Non GST supplies": row.nonGst
     }));
-    addSheet("exemp", exempData, exempCols);
+    addStyledSheet("exemp", exempData, exempCols);
 
-    // 11. HSN Sheets
+    // 8. HSN
     const hsnCols = ["HSN", "Description", "UQC", "Total Quantity", "Total Value", "Rate", "Taxable Value", "Integrated Tax Amount", "Central Tax Amount", "State/UT Tax Amount", "Cess Amount"];
     const hsnB2B = (gstr1Data.hsnSummaryB2B || []).map(row => ({
-      "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Quantity": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue,
-      "Integrated Tax Amount": row.igst, "Central Tax Amount": row.cgst, "State/UT Tax Amount": row.sgst, "Cess Amount": row.cess
+      "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Quantity": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "Integrated Tax Amount": row.igst, "Central Tax Amount": row.cgst, "State/UT Tax Amount": row.sgst, "Cess Amount": row.cess
     }));
-    addSheet("hsn(b2b)", hsnB2B, hsnCols);
+    addStyledSheet("hsn(b2b)", hsnB2B, hsnCols);
 
-    const hsnB2C = (gstr1Data.hsnSummaryB2C || []).map(row => ({
-      "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Quantity": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue,
-      "Integrated Tax Amount": row.igst, "Central Tax Amount": row.cgst, "State/UT Tax Amount": row.sgst, "Cess Amount": row.cess
-    }));
-    addSheet("hsn(b2c)", hsnB2C, hsnCols);
-
-    // 12. DOCS Sheet
+    // 9. DOCS
     const docCols = ["Nature of Document", "Sr. No. From", "Sr. No. To", "Total Number", "Cancelled"];
     const docData = (gstr1Data.docSummary || []).map(row => ({
       "Nature of Document": row.nature, "Sr. No. From": row.from, "Sr. No. To": row.to, "Total Number": row.total, "Cancelled": row.cancelled
     }));
-    // Add the "Inward Supply" row even if empty to match screenshot
-    if (!docData.find(d => d["Nature of Document"].includes("inward supply"))) {
-      docData.push({ "Nature of Document": "Invoices for inward supply from unregistered person", "Sr. No. From": "", "Sr. No. To": "", "Total Number": 0, "Cancelled": 0 });
-    }
-    addSheet("docs", docData, docCols);
+    addStyledSheet("docs", docData, docCols);
 
-    XLSX.writeFile(wb, `GSTR1_${branch?.name}_${months[selectedMonth - 1]}_${selectedYear}.xlsx`);
+    // Generate and Download
+    workbook.xlsx.writeBuffer().then((buffer) => {
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fileName}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    });
   };
 
   const downloadGstr1Json = () => {
@@ -397,7 +369,7 @@ const BranchGstReports = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `GSTR1_${branch?.name}_${months[selectedMonth - 1]}_${selectedYear}.json`;
+    link.download = `${branch?.gstin || "NO_GSTIN"}_GSTR1_${months[selectedMonth - 1]}_${selectedYear}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
