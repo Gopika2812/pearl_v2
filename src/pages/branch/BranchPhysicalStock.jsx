@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { FaBoxes, FaPlus, FaTrash, FaCheck, FaSearch, FaTimes, FaHistory, FaChevronDown, FaDownload, FaPrint } from "react-icons/fa";
+import { FaBoxes, FaPlus, FaTrash, FaCheck, FaSearch, FaTimes, FaHistory, FaChevronDown, FaDownload, FaPrint, FaSort, FaSortUp, FaSortDown } from "react-icons/fa";
 import * as XLSX from "xlsx";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
@@ -130,6 +130,7 @@ export default function BranchPhysicalStock() {
   const [entryDate, setEntryDate] = useState(new Date().toISOString().split("T")[0]);
   const [expandedMobileRows, setExpandedMobileRows] = useState({});
   const [mobileViewMode, setMobileViewMode] = useState("CARD"); // "CARD" or "TABLE"
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const dropRef = useRef(null);
 
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
@@ -140,6 +141,20 @@ export default function BranchPhysicalStock() {
     const key = `physical-stock-entry_${fieldId}`;
     if (user.fieldPermissions?.[key] === false) return false;
     return true;
+  };
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc"
+    }));
+  };
+
+  const SortIcon = ({ col }) => {
+    if (sortConfig.key !== col) return <FaSort className="inline ml-1 opacity-20" size={8} />;
+    return sortConfig.direction === "asc"
+      ? <FaSortUp className="inline ml-1 text-blue-500" size={8} />
+      : <FaSortDown className="inline ml-1 text-blue-500" size={8} />;
   };
 
   useEffect(() => {
@@ -472,10 +487,25 @@ export default function BranchPhysicalStock() {
       const valB = b.savedId ? 2 : 1;
       if (valA !== valB) return valA - valB;
 
-      // 2. Secondary Sort for Drafts (Top): Show newest added at the very top
+      // 2. Secondary Sort: Manual sort from header (ONLY within the same status group)
+      if (sortConfig.key) {
+        let aVal = a[sortConfig.key];
+        let bVal = b[sortConfig.key];
+
+        // Numeric handling
+        if (["systemQty", "damagedQty", "expiredQty", "physicalQty", "mrp"].includes(sortConfig.key)) {
+          aVal = Number(aVal) || 0;
+          bVal = Number(bVal) || 0;
+        }
+
+        if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
+      }
+
+      // 3. Tertiary Sort for Drafts (Top): Show newest added at the very top
       if (valA === 1) return b.rowId - a.rowId;
 
-      // 3. Secondary Sort for Saved (Bottom): Keep them in completion order or alphabetical
+      // 4. Default Sort for Saved (Bottom): Alphabetical
       return a.productName.localeCompare(b.productName);
     });
 
@@ -699,19 +729,19 @@ export default function BranchPhysicalStock() {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">#</th>
-                    {isFieldVisible("productName") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Product</th>}
-                    {isFieldVisible("productGroupName") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Group</th>}
-                    {isFieldVisible("systemQty") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">System</th>}
-                    {isFieldVisible("damagedQty") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Damage</th>}
-                    {isFieldVisible("expiredQty") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Expired</th>}
-                    {isFieldVisible("physicalQty") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Physical</th>}
+                    {isFieldVisible("productName") && <th onClick={() => handleSort("productName")} className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap cursor-pointer hover:bg-gray-100">Product <SortIcon col="productName" /></th>}
+                    {isFieldVisible("productGroupName") && <th onClick={() => handleSort("productGroupName")} className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap cursor-pointer hover:bg-gray-100">Group <SortIcon col="productGroupName" /></th>}
+                    {isFieldVisible("systemQty") && <th onClick={() => handleSort("systemQty")} className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap cursor-pointer hover:bg-gray-100">System <SortIcon col="systemQty" /></th>}
+                    {isFieldVisible("damagedQty") && <th onClick={() => handleSort("damagedQty")} className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap cursor-pointer hover:bg-gray-100">Damage <SortIcon col="damagedQty" /></th>}
+                    {isFieldVisible("expiredQty") && <th onClick={() => handleSort("expiredQty")} className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap cursor-pointer hover:bg-gray-100">Expired <SortIcon col="expiredQty" /></th>}
+                    {isFieldVisible("physicalQty") && <th onClick={() => handleSort("physicalQty")} className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap cursor-pointer hover:bg-gray-100">Physical <SortIcon col="physicalQty" /></th>}
                     {isFieldVisible("inward") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Inward</th>}
                     {isFieldVisible("outward") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Outward</th>}
-                    {isFieldVisible("mrp") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">MRP</th>}
-                    {isFieldVisible("batch") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Batch</th>}
-                    {isFieldVisible("expiryDate") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Expiry</th>}
+                    {isFieldVisible("mrp") && <th onClick={() => handleSort("mrp")} className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap cursor-pointer hover:bg-gray-100">MRP <SortIcon col="mrp" /></th>}
+                    {isFieldVisible("batch") && <th onClick={() => handleSort("batch")} className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap cursor-pointer hover:bg-gray-100">Batch <SortIcon col="batch" /></th>}
+                    {isFieldVisible("expiryDate") && <th onClick={() => handleSort("expiryDate")} className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap cursor-pointer hover:bg-gray-100">Expiry <SortIcon col="expiryDate" /></th>}
                     {isFieldVisible("checkedBy") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Staff</th>}
-                    {isFieldVisible("status") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Status</th>}
+                    {isFieldVisible("status") && <th onClick={() => handleSort("status")} className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap cursor-pointer hover:bg-gray-100">Status <SortIcon col="status" /></th>}
                     <th className="px-1.5 py-4 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>

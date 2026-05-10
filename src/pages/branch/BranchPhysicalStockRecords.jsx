@@ -137,6 +137,8 @@ export default function BranchPhysicalStockRecords() {
         case "productName": va = a.productName; vb = b.productName; break;
         case "productGroupName": va = a.productGroupName; vb = b.productGroupName; break;
         case "systemQty":  va = a.systemQty; vb = b.systemQty; break;
+        case "damagedQty": va = a.damagedQty || 0; vb = b.damagedQty || 0; break;
+        case "expiredQty": va = a.expiredQty || 0; vb = b.expiredQty || 0; break;
         case "physicalQty": va = a.physicalQty; vb = b.physicalQty; break;
         case "inwardQty":  va = a.inwardQty; vb = b.inwardQty; break;
         case "outwardQty": va = a.outwardQty; vb = b.outwardQty; break;
