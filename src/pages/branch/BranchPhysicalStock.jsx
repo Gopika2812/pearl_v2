@@ -244,6 +244,8 @@ export default function BranchPhysicalStock() {
           productGroupId: product.productGroup?._id || product.productGroup,
           productGroupName: typeof product.productGroup === 'object' ? product.productGroup?.name : "",
           systemQty: record.systemQty || 0,
+          damagedQty: record.damagedQty || 0,
+          expiredQty: record.expiredQty || 0,
           physicalQty: record.noAction ? "NO_ACTION" : record.physicalQty,
           mrp: record.mrp || 0,
           batch: record.batch || "",
@@ -262,6 +264,8 @@ export default function BranchPhysicalStock() {
           productGroupId: product.productGroup?._id || product.productGroup,
           productGroupName: typeof product.productGroup === 'object' ? product.productGroup?.name : "",
           systemQty: product.availableQty || 0,
+          damagedQty: "",
+          expiredQty: "",
           physicalQty: "",
           mrp: product.mrp || 0,
           batch: product.batch || "",
@@ -281,6 +285,8 @@ export default function BranchPhysicalStock() {
         productGroupId: product.productGroup?._id || product.productGroup,
         productGroupName: typeof product.productGroup === 'object' ? product.productGroup?.name : "",
         systemQty: product.availableQty || 0,
+        damagedQty: "",
+        expiredQty: "",
         physicalQty: "",
         mrp: product.mrp || 0,
         batch: product.batch || "",
@@ -329,6 +335,8 @@ export default function BranchPhysicalStock() {
               productGroupId: p.productGroup?._id || p.productGroup,
               productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
               systemQty: record.systemQty || 0,
+              damagedQty: record.damagedQty || 0,
+              expiredQty: record.expiredQty || 0,
               physicalQty: record.noAction ? "NO_ACTION" : record.physicalQty,
               mrp: record.mrp || 0,
               batch: record.batch || "",
@@ -347,6 +355,8 @@ export default function BranchPhysicalStock() {
             productGroupId: p.productGroup?._id || p.productGroup,
             productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
             systemQty: p.availableQty || 0,
+            damagedQty: "",
+            expiredQty: "",
             physicalQty: "",
             mrp: p.mrp || 0,
             batch: p.batch || "",
@@ -409,6 +419,8 @@ export default function BranchPhysicalStock() {
         productId: row.productId,
         productName: row.productName,
         systemQty: Number(row.systemQty),
+        damagedQty: Number(row.damagedQty) || 0,
+        expiredQty: Number(row.expiredQty) || 0,
         physicalQty: isNoAction ? Number(row.systemQty) : (Number(row.physicalQty) || 0),
         mrp: Number(row.mrp) || 0,
         batch: skipMandatory ? (isNoAction ? "NO_ACTION" : "ZERO_STOCK") : (row.batch || ""),
@@ -470,13 +482,15 @@ export default function BranchPhysicalStock() {
       [`STOCK JOURNAL ENTRY - ${monthName}`],
       [`GROUP: ${groupName.toUpperCase()}`],
       [""],
-      ["PRODUCT NAME", "SYSTEM STOCK", "PHYSICAL QTY", "MRP", "BATCH", "EXPIRY DATE", "STAFF CHECKING"]
+      ["PRODUCT NAME", "SYSTEM STOCK", "DAMAGE", "EXPIRED", "PHYSICAL QTY", "MRP", "BATCH", "EXPIRY DATE", "STAFF CHECKING"]
     ];
 
     sortedRows.forEach(r => {
       worksheetData.push([
         r.productName,
         r.systemQty,
+        r.damagedQty || 0,
+        r.expiredQty || 0,
         r.physicalQty === "NO_ACTION" ? "NO ACTION" : r.physicalQty,
         Number(r.mrp) === 0 ? "" : r.mrp,
         r.batch === "NO_ACTION" ? "NO ACTION" : (r.batch || ""),
@@ -518,8 +532,10 @@ export default function BranchPhysicalStock() {
           <table>
             <thead>
               <tr>
-                <th style="width: 35%">Product</th>
+                <th style="width: 25%">Product</th>
                 <th style="width: 8%">System</th>
+                <th style="width: 8%">Damage</th>
+                <th style="width: 8%">Expired</th>
                 <th style="width: 8%">Phys</th>
                 <th style="width: 8%">MRP</th>
                 <th style="width: 12%">Batch</th>
@@ -531,6 +547,8 @@ export default function BranchPhysicalStock() {
               ${sortedRows.map(r => `<tr>
                 <td>${r.productName}</td>
                 <td style="text-align: center">${r.systemQty}</td>
+                <td style="text-align: center">${r.damagedQty || 0}</td>
+                <td style="text-align: center">${r.expiredQty || 0}</td>
                 <td style="text-align: center">${r.physicalQty === "NO_ACTION" ? "N/A" : r.physicalQty}</td>
                 <td style="text-align: center">${Number(r.mrp) === 0 ? "" : r.mrp}</td>
                 <td>${r.batch === "NO_ACTION" ? "N/A" : (r.batch || "")}</td>
@@ -678,6 +696,8 @@ export default function BranchPhysicalStock() {
                     {isFieldVisible("productName") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Product</th>}
                     {isFieldVisible("productGroupName") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Group</th>}
                     {isFieldVisible("systemQty") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">System</th>}
+                    {isFieldVisible("damagedQty") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Damage</th>}
+                    {isFieldVisible("expiredQty") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Expired</th>}
                     {isFieldVisible("physicalQty") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Physical</th>}
                     {isFieldVisible("inward") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Inward</th>}
                     {isFieldVisible("outward") && <th className="px-1.5 py-4 border-r border-gray-200 font-black text-[9px] uppercase tracking-widest text-gray-400 whitespace-nowrap">Outward</th>}
@@ -709,6 +729,26 @@ export default function BranchPhysicalStock() {
                           )}
                           {isFieldVisible("productGroupName") && <td className="px-1.5 py-3 border-r border-gray-100 text-[9px] text-gray-400 font-black uppercase">{row.productGroupName || "-"}</td>}
                           {isFieldVisible("systemQty") && <td className="px-1.5 py-3 border-r border-gray-100 text-center font-black text-[10px] text-blue-500">{row.systemQty}</td>}
+                          {isFieldVisible("damagedQty") && (
+                            <td className="px-1.5 py-3 border-r border-gray-100">
+                                <input type="number" 
+                                  value={row.damagedQty} 
+                                  onChange={e => updateRow(row.rowId, "damagedQty", e.target.value)}
+                                  disabled={row.status === "APPROVED"}
+                                  className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-black outline-none focus:border-blue-400 disabled:bg-gray-50 shadow-sm text-rose-500" 
+                                  placeholder="0" />
+                            </td>
+                          )}
+                          {isFieldVisible("expiredQty") && (
+                            <td className="px-1.5 py-3 border-r border-gray-100">
+                                <input type="number" 
+                                  value={row.expiredQty} 
+                                  onChange={e => updateRow(row.rowId, "expiredQty", e.target.value)}
+                                  disabled={row.status === "APPROVED"}
+                                  className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] font-black outline-none focus:border-blue-400 disabled:bg-gray-50 shadow-sm text-orange-500" 
+                                  placeholder="0" />
+                            </td>
+                          )}
                           {isFieldVisible("physicalQty") && (
                             <td className="px-1.5 py-3 border-r border-gray-100">
                               <div className="relative group/edit">

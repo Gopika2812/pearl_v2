@@ -28,6 +28,8 @@ const physicalStockEntrySchema = new mongoose.Schema({
 
   // Stock quantities
   systemQty:         { type: Number, default: 0 },   // Snapshot of closing qty at time of entry
+  damagedQty:        { type: Number, default: 0 },   // Damage qty recorded separately
+  expiredQty:        { type: Number, default: 0 },   // Expired qty recorded separately
   physicalQty:       { type: Number, default: 0 },   // What was counted physically
 
   // Auto-calculated on save

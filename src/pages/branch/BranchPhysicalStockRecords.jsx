@@ -256,6 +256,8 @@ export default function BranchPhysicalStockRecords() {
                     <Th label="Product Group" col="productGroupName" />
                     <Th label="Product" col="productName" />
                     <Th label="System Qty" col="systemQty" right />
+                    <Th label="Damage" col="damagedQty" right />
+                    <Th label="Expired" col="expiredQty" right />
                     <Th label="Physical Qty" col="physicalQty" right />
                     <Th label="MRP" col="mrp" right />
                     <Th label="Inward ↑" col="inwardQty" right />
@@ -309,6 +311,8 @@ export default function BranchPhysicalStockRecords() {
                             <p className="text-xs font-black text-gray-800 max-w-[150px] truncate">{r.productName}</p>
                           </td>
                           <td className="px-4 py-4 text-right text-xs font-black text-blue-600">{r.systemQty}</td>
+                          <td className="px-4 py-4 text-right text-xs font-black text-rose-500">{r.damagedQty || 0}</td>
+                          <td className="px-4 py-4 text-right text-xs font-black text-orange-500">{r.expiredQty || 0}</td>
                           <td className="px-4 py-4 text-right text-xs font-black text-gray-800">{r.physicalQty}</td>
                           <td className="px-4 py-4 text-right text-xs font-black text-blue-600">₹{r.mrp || 0}</td>
                           <td className="px-4 py-4 text-right">
