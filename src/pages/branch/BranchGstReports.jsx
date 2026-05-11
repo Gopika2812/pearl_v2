@@ -294,29 +294,43 @@ const BranchGstReports = () => {
       return d;
     };
 
-    // Group B2B by GSTIN (as required by Portal JSON)
+    // Group B2B by GSTIN then by Invoice Number
     const b2bGroups = {};
-    gstr1Data.b2b.forEach(inv => {
-      const gstin = inv.gstin.trim().toUpperCase();
+    gstr1Data.b2b.forEach(row => {
+      const gstin = row.gstin.trim().toUpperCase();
+      const invNo = row.invoiceNo;
       if (!b2bGroups[gstin]) b2bGroups[gstin] = { ctin: gstin, inv: [] };
-      b2bGroups[gstin].inv.push({
-        inum: inv.invoiceNo,
-        idt: formatPortalDate(inv.date),
-        val: parseFloat(inv.value.toFixed(2)),
-        pos: inv.placeOfSupply.substring(0, 2),
-        rchrg: inv.reverseCharge || "N",
-        inv_typ: "R",
-        itms: [{
-          num: 1,
-          itm_det: { 
-            rt: parseFloat(inv.rate.toFixed(2)), 
-            txval: parseFloat(inv.taxableValue.toFixed(2)), 
-            iamt: parseFloat((inv.igst || 0).toFixed(2)), 
-            camt: parseFloat((inv.cgst || 0).toFixed(2)), 
-            samt: parseFloat((inv.sgst || 0).toFixed(2)), 
-            csamt: parseFloat((inv.cess || 0).toFixed(2)) 
-          }
-        }]
+      let existingInv = b2bGroups[gstin].inv.find(i => i.inum === invNo);
+      if (!existingInv) {
+        existingInv = {
+          inum: invNo, idt: formatPortalDate(row.date), val: parseFloat(row.value.toFixed(2)),
+          pos: row.placeOfSupply.substring(0, 2), rchrg: row.reverseCharge || "N", inv_typ: "R", itms: []
+        };
+        b2bGroups[gstin].inv.push(existingInv);
+      }
+      existingInv.itms.push({
+        num: existingInv.itms.length + 1,
+        itm_det: { rt: parseFloat(row.rate.toFixed(2)), txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)), samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)) }
+      });
+    });
+
+    // Group CDNR by GSTIN then by Note Number
+    const cdnrGroups = {};
+    gstr1Data.cdnr.forEach(row => {
+      const gstin = row.gstin.trim().toUpperCase();
+      const ntNo = row.noteNo;
+      if (!cdnrGroups[gstin]) cdnrGroups[gstin] = { ctin: gstin, nt: [] };
+      let existingNt = cdnrGroups[gstin].nt.find(n => n.nt_num === ntNo);
+      if (!existingNt) {
+        existingNt = {
+          val: parseFloat(row.noteValue.toFixed(2)), ntty: row.noteType, nt_num: ntNo, nt_dt: formatPortalDate(row.noteDate),
+          pos: row.placeOfSupply.substring(0, 2), rchrg: row.reverseCharge || "N", inv_typ: "R", itms: []
+        };
+        cdnrGroups[gstin].nt.push(existingNt);
+      }
+      existingNt.itms.push({
+        num: existingNt.itms.length + 1,
+        itm_det: { rt: parseFloat(row.rate.toFixed(2)), txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)), samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)) }
       });
     });
 
@@ -327,57 +341,39 @@ const BranchGstReports = () => {
       gt: 0,
       b2b: Object.values(b2bGroups),
       b2cs: gstr1Data.b2cs.map(row => ({
-        sply_ty: row.placeOfSupply.startsWith(branch?.stateCode || "33") ? "INTRA" : "INTER",
-        pos: row.placeOfSupply.substring(0, 2),
         typ: "OE",
+        sply_ty: row.placeOfSupply.startsWith(branch?.stateCode || "33") ? "INTRA" : "INTER",
         rt: parseFloat(row.rate.toFixed(2)),
+        pos: row.placeOfSupply.substring(0, 2),
         txval: parseFloat(row.taxableValue.toFixed(2)),
         iamt: parseFloat((row.igst || 0).toFixed(2)),
+        camt: parseFloat((row.cgst || 0).toFixed(2)),
+        samt: parseFloat((row.sgst || 0).toFixed(2)),
         csamt: parseFloat((row.cess || 0).toFixed(2))
       })),
-      cdnr: gstr1Data.cdnr.map(note => ({
-        ctin: note.gstin.trim().toUpperCase(),
-        nt: [{
-          nt_num: note.noteNo,
-          nt_dt: formatPortalDate(note.noteDate),
-          ntty: note.noteType,
-          val: parseFloat(note.noteValue.toFixed(2)),
-          p_gst: note.preGst || "N",
-          pos: note.placeOfSupply.substring(0, 2),
-          itms: [{
-            num: 1,
-            itm_det: { 
-              rt: parseFloat(note.rate.toFixed(2)), 
-              txval: parseFloat(note.taxableValue.toFixed(2)), 
-              iamt: parseFloat((note.igst || 0).toFixed(2)), 
-              camt: parseFloat((note.cgst || 0).toFixed(2)), 
-              samt: parseFloat((note.sgst || 0).toFixed(2)), 
-              csamt: parseFloat((note.cess || 0).toFixed(2)) 
-            }
-          }]
-        }]
-      })),
+      cdnr: Object.values(cdnrGroups),
       nil: {
         inv: gstr1Data.nilRated.map(row => ({
-          sply_ty: row.description.includes("Inter-State") ? "INTER" : "INTRA",
+          sply_ty: (row.description.includes("Inter-State") ? "INTER" : "INTRA") + (row.description.includes("registered") ? "B2B" : "B2C"),
           nil_amt: parseFloat(row.nilRated.toFixed(2)),
           expt_amt: parseFloat(row.exempt.toFixed(2)),
-          ngsply_amt: parseFloat(row.nonGst.toFixed(2))
+          ngsup_amt: parseFloat(row.nonGst.toFixed(2))
         }))
       },
       hsn: {
-        data: [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].map((row, idx) => ({
-          num: idx + 1,
-          hsn_sc: String(row.hsn),
-          desc: row.description,
-          uqc: row.uqc.split("-")[0],
-          qty: parseFloat(row.totalQty.toFixed(2)),
-          val: parseFloat(row.totalValue.toFixed(2)),
-          txval: parseFloat(row.taxableValue.toFixed(2)),
-          iamt: parseFloat((row.igst || 0).toFixed(2)),
-          camt: parseFloat((row.cgst || 0).toFixed(2)),
-          samt: parseFloat((row.sgst || 0).toFixed(2)),
-          csamt: parseFloat((row.cess || 0).toFixed(2))
+        hsn_b2b: (gstr1Data.hsnSummaryB2B || []).map((row, idx) => ({
+          num: idx + 1, hsn_sc: String(row.hsn), txval: parseFloat(row.taxableValue.toFixed(2)),
+          iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)),
+          samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)),
+          desc: "", user_desc: row.description || "", uqc: row.uqc.split("-")[0],
+          qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
+        })),
+        hsn_b2c: (gstr1Data.hsnSummaryB2C || []).map((row, idx) => ({
+          num: idx + 1, hsn_sc: String(row.hsn), txval: parseFloat(row.taxableValue.toFixed(2)),
+          iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)),
+          samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)),
+          desc: "", user_desc: row.description || "", uqc: row.uqc.split("-")[0],
+          qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
         }))
       },
       exp: [],
@@ -387,10 +383,11 @@ const BranchGstReports = () => {
         doc_det: gstr1Data.docSummary.map((doc, idx) => ({
           doc_num: idx + 1,
           docs: [{
+            num: 1,
             from: doc.from,
             to: doc.to,
-            totcnt: doc.total,
-            canc: doc.cancelled,
+            totnum: doc.total,
+            cancel: doc.cancelled,
             net_issue: doc.net
           }]
         }))
@@ -402,6 +399,130 @@ const BranchGstReports = () => {
     const link = document.createElement("a");
     link.href = url;
     link.download = `${branch?.gstin || "NO_GSTIN"}_GSTR1_${months[selectedMonth - 1]}_${selectedYear}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadSectionJson = (sectionKey) => {
+    if (!gstr1Data) return;
+    
+    // Standard Helper to format date for GST Portal (DD-MM-YYYY)
+    const formatPortalDate = (d) => {
+      if (!d) return "";
+      const parts = d.split("-");
+      if (parts.length === 3 && isNaN(parts[1])) {
+        const monthsMap = { Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06", Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12" };
+        return `${parts[0]}-${monthsMap[parts[1]] || "01"}-${parts[2]}`;
+      }
+      return d;
+    };
+
+    let sectionData = null;
+    let fileNamePart = sectionKey.toUpperCase();
+
+    if (sectionKey === 'b2b') {
+      const b2bGroups = {};
+      gstr1Data.b2b.forEach(row => {
+        const gstin = row.gstin.trim().toUpperCase();
+        const invNo = row.invoiceNo;
+        if (!b2bGroups[gstin]) b2bGroups[gstin] = { ctin: gstin, inv: [] };
+        let existingInv = b2bGroups[gstin].inv.find(i => i.inum === invNo);
+        if (!existingInv) {
+          existingInv = {
+            inum: invNo, idt: formatPortalDate(row.date), val: parseFloat(row.value.toFixed(2)),
+            pos: row.placeOfSupply.substring(0, 2), rchrg: row.reverseCharge || "N", inv_typ: "R", itms: []
+          };
+          b2bGroups[gstin].inv.push(existingInv);
+        }
+        existingInv.itms.push({
+          num: existingInv.itms.length + 1,
+          itm_det: { rt: parseFloat(row.rate.toFixed(2)), txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)), samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)) }
+        });
+      });
+      sectionData = { b2b: Object.values(b2bGroups) };
+    } else if (sectionKey === 'b2cs') {
+      sectionData = {
+        b2cs: gstr1Data.b2cs.map(row => ({
+          typ: "OE", sply_ty: row.placeOfSupply.startsWith(branch?.stateCode || "33") ? "INTRA" : "INTER",
+          rt: parseFloat(row.rate.toFixed(2)), pos: row.placeOfSupply.substring(0, 2),
+          txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)),
+          camt: parseFloat((row.cgst || 0).toFixed(2)), samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2))
+        }))
+      };
+    } else if (sectionKey === 'cdnr') {
+      const cdnrGroups = {};
+      gstr1Data.cdnr.forEach(row => {
+        const gstin = row.gstin.trim().toUpperCase();
+        const ntNo = row.noteNo;
+        if (!cdnrGroups[gstin]) cdnrGroups[gstin] = { ctin: gstin, nt: [] };
+        let existingNt = cdnrGroups[gstin].nt.find(n => n.nt_num === ntNo);
+        if (!existingNt) {
+          existingNt = {
+            val: parseFloat(row.noteValue.toFixed(2)), ntty: row.noteType, nt_num: ntNo, nt_dt: formatPortalDate(row.noteDate),
+            pos: row.placeOfSupply.substring(0, 2), rchrg: row.reverseCharge || "N", inv_typ: "R", itms: []
+          };
+          cdnrGroups[gstin].nt.push(existingNt);
+        }
+        existingNt.itms.push({
+          num: existingNt.itms.length + 1,
+          itm_det: { rt: parseFloat(row.rate.toFixed(2)), txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)), samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)) }
+        });
+      });
+      sectionData = { cdnr: Object.values(cdnrGroups) };
+    } else if (sectionKey === 'hsn') {
+      sectionData = {
+        hsn: {
+          hsn_b2b: (gstr1Data.hsnSummaryB2B || []).map((row, idx) => ({
+            num: idx + 1, hsn_sc: String(row.hsn), txval: parseFloat(row.taxableValue.toFixed(2)),
+            iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)),
+            samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)),
+            desc: "", user_desc: row.description || "", uqc: row.uqc.split("-")[0],
+            qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
+          })),
+          hsn_b2c: (gstr1Data.hsnSummaryB2C || []).map((row, idx) => ({
+            num: idx + 1, hsn_sc: String(row.hsn), txval: parseFloat(row.taxableValue.toFixed(2)),
+            iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)),
+            samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)),
+            desc: "", user_desc: row.description || "", uqc: row.uqc.split("-")[0],
+            qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
+          }))
+        }
+      };
+    } else if (sectionKey === 'nil') {
+      sectionData = {
+        nil: {
+          inv: gstr1Data.nilRated.map(row => ({
+            sply_ty: (row.description.includes("Inter-State") ? "INTER" : "INTRA") + (row.description.includes("registered") ? "B2B" : "B2C"),
+            nil_amt: parseFloat(row.nilRated.toFixed(2)), expt_amt: parseFloat(row.exempt.toFixed(2)), ngsup_amt: parseFloat(row.nonGst.toFixed(2))
+          }))
+        }
+      };
+    } else if (sectionKey === 'doc_issue') {
+      sectionData = {
+        doc_issue: {
+          doc_det: gstr1Data.docSummary.map((doc, idx) => ({
+            doc_num: idx + 1,
+            docs: [{ num: 1, from: doc.from, to: doc.to, totnum: doc.total, cancel: doc.cancelled, net_issue: doc.net }]
+          }))
+        }
+      };
+    }
+
+    if (!sectionData) return;
+
+    const portalJson = {
+      gstin: branch?.gstin?.trim().toUpperCase() || "STILL_NOT_SET",
+      fp: `${String(selectedMonth).padStart(2, "0")}${selectedYear}`,
+      ...sectionData
+    };
+
+    const blob = new Blob([JSON.stringify(portalJson, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${branch?.gstin || "NO_GSTIN"}_GSTR1_${fileNamePart}_${months[selectedMonth - 1]}_${selectedYear}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -617,6 +738,25 @@ const BranchGstReports = () => {
           >
             🔧 Repair Month-Jump Errors
           </button>
+          <div className="flex flex-col gap-2">
+            <button 
+              onClick={downloadGstr1Json}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg"
+            >
+              <FaDownload /> Download Full GSTR-1 JSON
+            </button>
+            <div className="flex flex-wrap gap-2">
+              {['b2b', 'b2cs', 'cdnr', 'hsn', 'nil', 'doc_issue'].map(sec => (
+                <button 
+                  key={sec}
+                  onClick={() => downloadSectionJson(sec)}
+                  className="bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase hover:bg-slate-50 transition"
+                >
+                  {sec.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
+          </div>
           <button 
             onClick={fetchReports}
             className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
