@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaFileInvoice, FaDownload, FaSync, FaChartLine, FaCheckCircle, FaExclamationCircle } from "react-icons/fa";
+import { FaFileInvoice, FaDownload, FaSync, FaChartLine, FaCheckCircle, FaExclamationCircle, FaExclamationTriangle, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
@@ -19,6 +19,7 @@ const BranchGstReports = () => {
   const [fixingHsn, setFixingHsn] = useState(null);
   const [newHsnValue, setNewHsnValue] = useState("");
   const [isFixing, setIsFixing] = useState(false);
+  const [filterRate, setFilterRate] = useState(null);
 
   const months = [
     "January", "February", "March", "April", "May", "June",
@@ -41,8 +42,33 @@ const BranchGstReports = () => {
     fetchWithAuth(`${API_BASE}/gst-reports/gstr1?${query}`)
       .then(res => res.json())
       .then(data => {
-        if (data.success) setGstr1Data(data.data);
-        else toast.error("GSTR-1: " + (data.message || "Failed"));
+        if (data.success) {
+          const reportData = data.data;
+          // Merge HSN summaries for UI visibility and validation
+          const mergedHsn = {};
+          [...(reportData.hsnSummaryB2B || []), ...(reportData.hsnSummaryB2C || [])].forEach(row => {
+            const key = `${row.hsn}_${row.rate}`;
+            if (!mergedHsn[key]) {
+              mergedHsn[key] = { ...row, invoiceNumbers: [...(row.invoiceNumbers || [])] };
+            } else {
+              mergedHsn[key].totalQty += row.totalQty;
+              mergedHsn[key].totalValue += row.totalValue;
+              mergedHsn[key].taxableValue += row.taxableValue;
+              mergedHsn[key].igst += row.igst || 0;
+              mergedHsn[key].cgst += row.cgst || 0;
+              mergedHsn[key].sgst += row.sgst || 0;
+              mergedHsn[key].cess += row.cess || 0;
+              // Unique invoices
+              const existingInvoices = new Set(mergedHsn[key].invoiceNumbers);
+              (row.invoiceNumbers || []).forEach(num => existingInvoices.add(num));
+              mergedHsn[key].invoiceNumbers = Array.from(existingInvoices);
+            }
+          });
+          reportData.hsnSummary = Object.values(mergedHsn);
+          setGstr1Data(reportData);
+        } else {
+          toast.error("GSTR-1: " + (data.message || "Failed"));
+        }
       })
       .catch(() => toast.error("Error loading GSTR-1"));
 
@@ -227,6 +253,12 @@ const BranchGstReports = () => {
       "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Quantity": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "Integrated Tax Amount": row.igst, "Central Tax Amount": row.cgst, "State/UT Tax Amount": row.sgst, "Cess Amount": row.cess
     }));
     addStyledSheet("hsn(b2b)", hsnB2B, hsnCols);
+    
+    // 8.1 HSN B2C
+    const hsnB2C = (gstr1Data.hsnSummaryB2C || []).map(row => ({
+      "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Quantity": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "Integrated Tax Amount": row.igst, "Central Tax Amount": row.cgst, "State/UT Tax Amount": row.sgst, "Cess Amount": row.cess
+    }));
+    addStyledSheet("hsn(b2c)", hsnB2C, hsnCols);
 
     // 9. DOCS
     const docCols = ["Nature of Document", "Sr. No. From", "Sr. No. To", "Total Number", "Cancelled"];
@@ -376,6 +408,138 @@ const BranchGstReports = () => {
     URL.revokeObjectURL(url);
   };
 
+  const downloadGstr3bExcel = () => {
+    if (!gstr3bData || !gstr1Data) return;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("GSTR-3B_Compliance");
+    const fileName = `${branch?.gstin || "NO_GSTIN"}_GSTR3B_${months[selectedMonth - 1]}_${selectedYear}`;
+
+    // 1. Column Definitions
+    sheet.columns = [
+      { header: "", key: "a", width: 60 },
+      { header: "", key: "b", width: 22 },
+      { header: "", key: "c", width: 15 },
+      { header: "", key: "d", width: 15 },
+      { header: "", key: "e", width: 15 },
+      { header: "", key: "f", width: 15 },
+      { header: "", key: "g", width: 22 },
+    ];
+
+    // 2. High-End Business Header
+    sheet.mergeCells("A1:G1");
+    const agencyName = sheet.getCell("A1");
+    agencyName.value = branch?.name || "PEARL AGENCY";
+    agencyName.font = { bold: true, size: 20, color: { argb: "FF1E293B" } };
+    agencyName.alignment = { horizontal: "center" };
+
+    sheet.mergeCells("A2:G2");
+    const agencyAddress = sheet.getCell("A2");
+    agencyAddress.value = branch?.address || "Vannarpettai, Tirunelveli - 627003";
+    agencyAddress.font = { size: 10, color: { argb: "FF64748B" } };
+    agencyAddress.alignment = { horizontal: "center" };
+
+    sheet.mergeCells("A3:G3");
+    const agencyMeta = sheet.getCell("A3");
+    agencyMeta.value = `GSTIN: ${branch?.gstin || ""} | Phone: ${branch?.phone || ""} | Email: ${branch?.email || ""}`;
+    agencyMeta.font = { size: 10, italic: true, color: { argb: "FF64748B" } };
+    agencyMeta.alignment = { horizontal: "center" };
+
+    // 3. Report Info Section
+    sheet.addRow([]);
+    sheet.getRow(5).values = ["REPORT TYPE:", "GSTR-3B FILING HELPER"];
+    sheet.getRow(5).font = { bold: true };
+    sheet.getRow(6).values = ["PERIOD:", `${months[selectedMonth - 1]} ${selectedYear}`];
+    sheet.getRow(6).font = { bold: true };
+    sheet.getRow(7).values = ["GENERATED ON:", new Date().toLocaleDateString()];
+    sheet.getRow(7).font = { size: 9 };
+
+    // 4. Summary Cards (Visual Representation in Excel)
+    sheet.addRow([]);
+    const summaryRow = sheet.addRow(["VOUCHER SUMMARY", "COUNT"]);
+    summaryRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    summaryRow.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+    });
+
+    sheet.addRow(["Total Invoices Processed", gstr1Data.rawCounts.total || 0]);
+    sheet.addRow(["Active Invoices (Included)", gstr1Data.rawCounts.total - gstr1Data.rawCounts.cancelled]);
+    sheet.addRow(["Anomalies / Uncertain Transactions", gstr1Data.hsnSummary?.filter(h => ![4, 6, 8].includes(h.hsn.toString().length)).length || 0]);
+    sheet.getCell("B12").font = { color: { argb: "FFEF4444" }, bold: true };
+
+    // 5. TAX LIABILITY TABLE (Section 3.1)
+    sheet.addRow([]);
+    const liabilityHeader = sheet.addRow(["3.1 DETAILS OF OUTWARD SUPPLIES", "TAXABLE VAL", "", "IGST", "CGST", "SGST", "TOTAL TAX"]);
+    liabilityHeader.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    liabilityHeader.alignment = { horizontal: "center" };
+    liabilityHeader.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+    });
+
+    const out = gstr3bData.outwardSupplies;
+    const outTax = (out.igst || 0) + (out.cgst || 0) + (out.sgst || 0);
+    const row31a = sheet.addRow([
+      "(a) Taxable Outward Supplies (Other than zero rated, nil rated and exempted)",
+      out.taxable, "", out.igst, out.cgst, out.sgst, outTax
+    ]);
+    row31a.font = { bold: true };
+
+    sheet.addRow(["(c) Other Outward Supplies (Nil rated, exempted)", out.nilRated, "", 0, 0, 0, 0]);
+
+    // 6. ELIGIBLE ITC TABLE (Section 4)
+    sheet.addRow([]);
+    const itcHeader = sheet.addRow(["4. ELIGIBLE INPUT TAX CREDIT (ITC)", "", "", "IGST", "CGST", "SGST", "TOTAL ITC"]);
+    itcHeader.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    itcHeader.alignment = { horizontal: "center" };
+    itcHeader.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } }; // Emerald-600
+    });
+
+    const itc = gstr3bData.eligibleITC;
+    const itcTax = (itc.igst || 0) + (itc.cgst || 0) + (itc.sgst || 0);
+    const itcRow = sheet.addRow([
+      "(A)(5) All other ITC (Purchases)",
+      "", "", itc.igst, itc.cgst, itc.sgst, itcTax
+    ]);
+    itcRow.font = { bold: true };
+    itcRow.getCell(1).font = { color: { argb: "FF059669" }, bold: true };
+
+    // 7. FINAL NET PAYABLE
+    sheet.addRow([]);
+    const netRow = sheet.addRow(["NET TAX PAYABLE (Liability - ITC)", "", "", out.igst - itc.igst, out.cgst - itc.cgst, out.sgst - itc.sgst, outTax - itcTax]);
+    netRow.font = { bold: true, size: 12 };
+    netRow.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+      cell.border = { top: { style: 'medium' }, bottom: { style: 'medium' } };
+    });
+
+    // Formatting numbers and borders
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber >= 15) {
+        [2, 4, 5, 6, 7].forEach(col => {
+          const cell = row.getCell(col);
+          if (typeof cell.value === 'number') {
+            cell.numFmt = '₹#,##0.00';
+          }
+        });
+      }
+    });
+
+    // Footer
+    sheet.addRow([]);
+    sheet.addRow(["* This is a system-generated summary helper for GST portal filing."]).font = { italic: true, size: 8, color: { argb: "FF94A3B8" } };
+
+    workbook.xlsx.writeBuffer().then((buffer) => {
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fileName}_Professional.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    });
+  };
+
+
   const SummaryCard = ({ title, value, color, icon: Icon }) => (
     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center justify-between">
       <div>
@@ -520,6 +684,179 @@ const BranchGstReports = () => {
           />
         </div>
 
+        {/* GSTR-3B Helper Section */}
+        <div className="mt-12 mb-12">
+           <div className="flex items-center justify-between mb-8">
+              <div>
+                 <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2 flex items-center gap-2">
+                    <FaChartLine /> GSTR-3B Filing Helper (Copy-Paste Data)
+                 </h2>
+                 <p className="text-xs text-slate-500 font-bold uppercase tracking-tighter">Use these tables to fill your GSTR-3B return on the GST portal</p>
+              </div>
+              <button 
+                onClick={downloadGstr3bExcel}
+                className="flex items-center gap-2 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition shadow-lg bg-indigo-600 text-white hover:bg-indigo-700 border border-indigo-500"
+              >
+                <FaDownload /> Download 3B Excel
+              </button>
+           </div>
+
+           <div className="grid grid-cols-1 gap-8">
+              {/* Table 3.1 & Table 4 Combined View */}
+              <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
+                 <div className="px-8 py-6 bg-slate-900 text-white flex justify-between items-center">
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-[0.2em] opacity-50">Section 3.1 & 4</span>
+                      <h3 className="text-lg font-black uppercase tracking-tight">Tax Liability & ITC Summary</h3>
+                    </div>
+                    <div className="text-right">
+                       <span className="text-[10px] font-black uppercase opacity-50">Net Tax Payable</span>
+                       <p className="text-xl font-black text-emerald-400">
+                          ₹{((gstr3bData?.outwardSupplies?.igst || 0) + (gstr3bData?.outwardSupplies?.cgst || 0) + (gstr3bData?.outwardSupplies?.sgst || 0) - ((gstr3bData?.eligibleITC?.igst || 0) + (gstr3bData?.eligibleITC?.cgst || 0) + (gstr3bData?.eligibleITC?.sgst || 0))).toLocaleString()}
+                       </p>
+                    </div>
+                 </div>
+                 
+                 <div className="p-2 overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                       <thead>
+                          <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                             <th className="px-8 py-5">Particulars / Table Ref</th>
+                             <th className="px-6 py-5 text-right">Taxable Value</th>
+                             <th className="px-6 py-5 text-right text-indigo-600">IGST</th>
+                             <th className="px-6 py-5 text-right text-emerald-600">CGST</th>
+                             <th className="px-6 py-5 text-right text-emerald-600">SGST/UTGST</th>
+                             <th className="px-6 py-5 text-right font-black text-slate-900">Total Tax</th>
+                          </tr>
+                       </thead>
+                       <tbody className="divide-y divide-slate-50">
+                          {/* 3.1(a) */}
+                          <tr className="hover:bg-slate-50 transition-colors">
+                             <td className="px-8 py-5">
+                                <p className="text-[11px] font-black text-slate-800 uppercase">3.1(a) Outward Taxable Supplies</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">(Other than Nil/Exempt)</p>
+                             </td>
+                             <td className="px-6 py-5 text-[11px] font-black text-slate-900 text-right">₹{gstr3bData?.outwardSupplies?.taxable?.toLocaleString()}</td>
+                             <td className="px-6 py-5 text-[11px] font-black text-indigo-600 text-right">₹{gstr3bData?.outwardSupplies?.igst?.toLocaleString()}</td>
+                             <td className="px-6 py-5 text-[11px] font-black text-emerald-600 text-right">₹{gstr3bData?.outwardSupplies?.cgst?.toLocaleString()}</td>
+                             <td className="px-6 py-5 text-[11px] font-black text-emerald-600 text-right">₹{gstr3bData?.outwardSupplies?.sgst?.toLocaleString()}</td>
+                             <td className="px-6 py-5 text-[11px] font-black text-slate-900 text-right">₹{((gstr3bData?.outwardSupplies?.igst || 0) + (gstr3bData?.outwardSupplies?.cgst || 0) + (gstr3bData?.outwardSupplies?.sgst || 0)).toLocaleString()}</td>
+                          </tr>
+                          
+                          {/* 4(A)(5) */}
+                          <tr className="bg-indigo-50/30 hover:bg-indigo-50/50 transition-colors">
+                             <td className="px-8 py-5 border-l-4 border-indigo-600">
+                                <p className="text-[11px] font-black text-indigo-900 uppercase">4(A)(5) Eligible ITC (Purchases)</p>
+                                <p className="text-[9px] font-bold text-indigo-400 uppercase mt-0.5">(All other ITC available)</p>
+                             </td>
+                             <td className="px-6 py-5 text-[11px] font-black text-slate-400 text-right">---</td>
+                             <td className="px-6 py-5 text-[11px] font-black text-indigo-600 text-right">₹{gstr3bData?.eligibleITC?.igst?.toLocaleString()}</td>
+                             <td className="px-6 py-5 text-[11px] font-black text-indigo-600 text-right">₹{gstr3bData?.eligibleITC?.cgst?.toLocaleString()}</td>
+                             <td className="px-6 py-5 text-[11px] font-black text-indigo-600 text-right">₹{gstr3bData?.eligibleITC?.sgst?.toLocaleString()}</td>
+                             <td className="px-6 py-5 text-[11px] font-black text-indigo-900 text-right">₹{((gstr3bData?.eligibleITC?.igst || 0) + (gstr3bData?.eligibleITC?.cgst || 0) + (gstr3bData?.eligibleITC?.sgst || 0)).toLocaleString()}</td>
+                          </tr>
+
+                          {/* 5 */}
+                          <tr className="hover:bg-slate-50 transition-colors">
+                             <td className="px-8 py-5">
+                                <p className="text-[11px] font-black text-slate-800 uppercase">5. Exempt, Nil Rated Inward</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">(From Composition/Nil rated suppliers)</p>
+                             </td>
+                             <td className="px-6 py-5 text-[11px] font-black text-slate-900 text-right">₹{gstr3bData?.eligibleITC?.nilRated?.toLocaleString()}</td>
+                             <td className="px-6 py-5 text-[11px] font-black text-slate-400 text-right">₹0.00</td>
+                             <td className="px-6 py-5 text-[11px] font-black text-slate-400 text-right">₹0.00</td>
+                             <td className="px-6 py-5 text-[11px] font-black text-slate-400 text-right">₹0.00</td>
+                             <td className="px-6 py-5 text-[11px] font-black text-slate-400 text-right">₹0.00</td>
+                          </tr>
+                       </tbody>
+                    </table>
+                 </div>
+                 <div className="bg-slate-50 px-8 py-4 flex items-center justify-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Live Data Synchronized with Database</span>
+                 </div>
+              </div>
+           </div>
+        </div>
+
+        {/* Tax Rate Auditor Section */}
+        {gstr1Data && (
+          <div className="mb-12 bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-xl shadow-slate-200/50">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">Tax Rate Auditor</h2>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">
+                  {filterRate ? `Showing Invoices for ${filterRate}% Rate` : 'Detecting billing anomalies & rate errors'}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {[0, 5, 12, 18, 28].map(rate => {
+                   const hasRate = [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].some(h => Math.round(h.rate) === rate);
+                   if (!hasRate) return null;
+                   const isAnomalous = ![0, 5, 18].includes(rate);
+                   return (
+                     <button 
+                       key={rate} 
+                       onClick={() => setFilterRate(filterRate === rate ? null : rate)}
+                       className={`px-4 py-2 rounded-xl border flex items-center gap-2 transition-all ${
+                         filterRate === rate 
+                         ? 'ring-2 ring-indigo-500 scale-105' 
+                         : 'hover:scale-105'
+                       } ${isAnomalous ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+                     >
+                        <span className="text-[11px] font-black">{rate}%</span>
+                        {isAnomalous && <FaExclamationTriangle size={10} className={filterRate === rate ? "" : "animate-pulse"} />}
+                        {filterRate === rate && <FaTimes size={8} className="ml-1" />}
+                     </button>
+                   );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+               {/* 12% Anomalies */}
+               {[12, 28].map(badRate => {
+                 const anomalousHsn = [...(gstr1Data?.hsnSummaryB2B || []), ...(gstr1Data?.hsnSummaryB2C || [])].filter(h => Math.round(h.rate) === badRate);
+                 if (anomalousHsn.length === 0) return null;
+                 return (
+                   <div key={badRate} className="bg-rose-50/50 border border-rose-100 rounded-3xl p-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-8 h-8 bg-rose-600 rounded-lg flex items-center justify-center text-white font-black text-xs">{badRate}%</div>
+                        <h3 className="text-xs font-black text-rose-900 uppercase tracking-widest">Detected in {anomalousHsn.length} Items</h3>
+                      </div>
+                      <div className="space-y-3">
+                        {anomalousHsn.map((h, i) => (
+                          <div key={i} className="bg-white p-3 rounded-xl border border-rose-100 shadow-sm">
+                             <p className="text-[10px] font-black text-slate-800 uppercase">{h.description}</p>
+                             <div className="flex flex-col gap-1 mt-2">
+                               <div className="flex justify-between items-center">
+                                 <span className="text-[9px] font-bold text-slate-400">HSN: {h.hsn}</span>
+                                 <span className="text-[10px] font-black text-rose-600">₹{h.taxableValue.toLocaleString()}</span>
+                               </div>
+                               <p className="text-[8px] font-black text-indigo-500 uppercase tracking-tighter mt-1 bg-indigo-50/50 px-2 py-1 rounded-md border border-indigo-100">
+                                 Found in: {h.invoiceNumbers?.join(", ") || "Unknown"}
+                               </p>
+                             </div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[9px] text-rose-400 font-bold uppercase mt-4 text-center">Check Invoice Items for these Products</p>
+                   </div>
+                 );
+               })}
+               {![12, 28].some(r => [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].some(h => Math.round(h.rate) === r)) && (
+                 <div className="col-span-full py-10 flex flex-col items-center justify-center bg-emerald-50 rounded-3xl border border-emerald-100">
+                    <div className="w-12 h-12 bg-emerald-600 rounded-full flex items-center justify-center text-white mb-3">
+                      <FaCheckCircle size={20} />
+                    </div>
+                    <p className="text-sm font-black text-emerald-900 uppercase tracking-widest">No Rate Anomalies Detected</p>
+                    <p className="text-[10px] text-emerald-600 font-bold uppercase mt-1">All sales are currently 0%, 5%, or 18%</p>
+                 </div>
+               )}
+            </div>
+          </div>
+        )}
+
         {/* GSTR-1 Section */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-2">
@@ -565,7 +902,7 @@ const BranchGstReports = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {gstr1Data?.b2b?.map((row, idx) => (
+                  {gstr1Data?.b2b?.filter(row => !filterRate || Math.round(row.rate) === filterRate).map((row, idx) => (
                     <tr key={idx} className={`hover:bg-slate-50 transition-all ${row.status === 'CANCELLED' ? 'opacity-50' : ''}`}>
                       <td className="px-6 py-4 text-[10px] font-bold text-slate-600 uppercase">
                         {row.gstin}
@@ -625,6 +962,48 @@ const BranchGstReports = () => {
             </div>
           </div>
 
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+           {/* B2C Table Explorer */}
+           <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+              <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">B2C Invoices (Retail)</span>
+              <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[9px] font-black">{gstr1Data?.b2cRaw?.length || 0} Records</span>
+            </div>
+            <div className="max-h-[400px] overflow-y-auto">
+              <table className="w-full text-left">
+                <thead className="bg-white sticky top-0">
+                  <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                    <th className="px-6 py-4">Invoice</th>
+                    <th className="px-6 py-4">Date</th>
+                    <th className="px-6 py-4">Customer</th>
+                    <th className="px-6 py-4 text-right">Taxable</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {gstr1Data?.b2cRaw?.filter(row => !filterRate || row.rates?.includes(filterRate)).map((row, idx) => (
+                    <tr key={idx} className={`hover:bg-slate-50 transition-all ${row.status === 'CANCELLED' ? 'opacity-50' : ''}`}>
+                      <td className="px-6 py-4 text-[10px] font-black text-indigo-600">{row.invoiceNo}</td>
+                      <td className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase">{row.date}</td>
+                      <td className="px-6 py-4 text-[10px] font-bold text-slate-700 uppercase truncate max-w-[150px]">{row.customerName}</td>
+                      <td className="px-6 py-4 text-[10px] font-black text-slate-900 text-right">₹{row.taxableValue.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 flex flex-col items-center justify-center text-center">
+             <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center mb-4">
+                <FaFileInvoice size={32} />
+             </div>
+             <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Need More Detail?</h3>
+             <p className="text-xs text-slate-500 font-bold max-w-xs mt-2 uppercase tracking-tighter">
+                Download the Portal JSON or Tally Excel to see the full line-item breakdown of every transaction for this period.
+             </p>
+          </div>
         </div>
 
         {/* Info Box */}

@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import Invoice from "../models/Invoice.js";
 import PurchaseInvoice from "../models/PurchaseInvoice.js";
 import CreditNote from "../models/CreditNote.js";
+import Branch from "../models/Branch.js";
+import Vendor from "../models/Vendor.js";
 import auth from "../middleware/auth.js";
 import moment from "moment-timezone";
 
@@ -172,7 +174,7 @@ router.get("/gstr1", auth, async (req, res) => {
             const hsnKey = `${hsn}_${rate}`; // Group by HSN and Rate
  
             if (!hsnSummaryB2B[hsnKey]) {
-              hsnSummaryB2B[hsnKey] = { hsn: hsn, description: item.name, uqc: getUQC(item.unit || "NOS"), totalQty: 0, totalValue: 0, rate: rate, taxableValue: 0, igst: 0, cgst: 0, sgst: 0, cess: 0 };
+              hsnSummaryB2B[hsnKey] = { hsn: hsn, description: item.name, uqc: getUQC(item.unit || "NOS"), totalQty: 0, totalValue: 0, rate: rate, taxableValue: 0, igst: 0, cgst: 0, sgst: 0, cess: 0, invoiceNumbers: new Set() };
             }
             hsnSummaryB2B[hsnKey].totalQty += (item.qty || 0);
             hsnSummaryB2B[hsnKey].totalValue += item.total || 0;
@@ -180,6 +182,8 @@ router.get("/gstr1", auth, async (req, res) => {
             hsnSummaryB2B[hsnKey].igst += (item.igst || 0);
             hsnSummaryB2B[hsnKey].cgst += (item.cgst || 0);
             hsnSummaryB2B[hsnKey].sgst += (item.sgst || 0);
+            const invDate = moment(inv.invoiceDate).format("DD-MMM");
+            hsnSummaryB2B[hsnKey].invoiceNumbers.add(`${inv.invoiceNumber} (${invDate})`);
           });
 
           // Push a row for each rate in this invoice (GST Portal Requirement)
@@ -222,7 +226,8 @@ router.get("/gstr1", auth, async (req, res) => {
           igst: isCancelled ? 0 : (inv.totalTax?.igst || 0),
           cgst: isCancelled ? 0 : (inv.totalTax?.cgst || 0),
           sgst: isCancelled ? 0 : (inv.totalTax?.sgst || 0),
-          status: inv.status
+          status: inv.status,
+          rates: isCancelled ? [] : Array.from(new Set(inv.items.map(item => Math.round(item.gst || 0))))
         });
         if (!isCancelled) {
           inv.items.forEach(item => {
@@ -273,7 +278,7 @@ router.get("/gstr1", auth, async (req, res) => {
             const hsnKey = `${hsn}_${rate}`; // Group by HSN and Rate
  
             if (!hsnSummaryB2C[hsnKey]) {
-              hsnSummaryB2C[hsnKey] = { hsn: hsn, description: item.name, uqc: getUQC(item.unit || "NOS"), totalQty: 0, totalValue: 0, rate: rate, taxableValue: 0, igst: 0, cgst: 0, sgst: 0, cess: 0 };
+              hsnSummaryB2C[hsnKey] = { hsn: hsn, description: item.name, uqc: getUQC(item.unit || "NOS"), totalQty: 0, totalValue: 0, rate: rate, taxableValue: 0, igst: 0, cgst: 0, sgst: 0, cess: 0, invoiceNumbers: new Set() };
             }
             hsnSummaryB2C[hsnKey].totalQty += (item.qty || 0);
             hsnSummaryB2C[hsnKey].totalValue += item.total || 0;
@@ -281,6 +286,8 @@ router.get("/gstr1", auth, async (req, res) => {
             hsnSummaryB2C[hsnKey].igst += (item.igst || 0);
             hsnSummaryB2C[hsnKey].cgst += (item.cgst || 0);
             hsnSummaryB2C[hsnKey].sgst += (item.sgst || 0);
+            const invDate = moment(inv.invoiceDate).format("DD-MMM");
+            hsnSummaryB2C[hsnKey].invoiceNumbers.add(`${inv.invoiceNumber} (${invDate})`);
           });
         }
       }
@@ -390,8 +397,8 @@ router.get("/gstr1", auth, async (req, res) => {
           { description: "Inter-State supplies to unregistered persons", nilRated: Math.max(0, nilRated.interUnreg), exempt: 0, nonGst: 0 },
           { description: "Intra-State supplies to unregistered persons", nilRated: Math.max(0, nilRated.intraUnreg), exempt: 0, nonGst: 0 }
         ],
-        hsnSummaryB2B: Object.values(hsnSummaryB2B),
-        hsnSummaryB2C: Object.values(hsnSummaryB2C),
+        hsnSummaryB2B: Object.values(hsnSummaryB2B).map(h => ({ ...h, invoiceNumbers: Array.from(h.invoiceNumbers) })),
+        hsnSummaryB2C: Object.values(hsnSummaryB2C).map(h => ({ ...h, invoiceNumbers: Array.from(h.invoiceNumbers) })),
         docSummary,
         rawCounts: {
           b2b: b2b.length,
@@ -427,7 +434,7 @@ router.get("/gstr3b", auth, async (req, res) => {
     const [sales, returns, purchases] = await Promise.all([
       Invoice.find({ branchId: branchObjectId, invoiceDate: { $gte: startDate, $lte: endDate }, status: { $ne: "CANCELLED" } }).select("subtotal totalTax").lean(),
       CreditNote.find({ branchId: branchObjectId, date: { $gte: startDate, $lte: endDate }, status: { $ne: "Cancelled" } }).select("subtotal totalTax").lean(),
-      PurchaseInvoice.find({ branchId: branchObjectId, invoiceDate: { $gte: startDate, $lte: endDate }, status: { $ne: "CANCELLED" } }).select("subtotal totalTax").lean()
+      PurchaseInvoice.find({ branchId: branchObjectId, invoiceDate: { $gte: startDate, $lte: endDate }, status: { $ne: "CANCELLED" } }).select("subtotal totalTax items extraExpenses").lean()
     ]);
 
     const outwardSupplies = { taxable: 0, igst: 0, cgst: 0, sgst: 0, nilRated: 0 };
@@ -448,18 +455,64 @@ router.get("/gstr3b", auth, async (req, res) => {
       outwardSupplies.sgst -= note.totalTax?.sgst || 0;
     });
 
+    // Fetch branch state for state-wise tax splitting
+    const branch = await Branch.findById(branchObjectId).select("state").lean();
+    const branchState = branch?.state?.toLowerCase() || "";
+
+    // Fetch all vendors for this branch to get their states
+    const vendors = await Vendor.find({ branchId: branchObjectId }).select("name state").lean();
+    const vendorMap = {};
+    vendors.forEach(v => { vendorMap[v.name] = v.state?.toLowerCase() || ""; });
+
     const eligibleITC = {
       taxable: 0,
       igst: 0,
       cgst: 0,
-      sgst: 0
+      sgst: 0,
+      nilRated: 0
     };
 
     purchases.forEach(inv => {
-      eligibleITC.taxable += inv.subtotal || 0;
-      eligibleITC.igst += inv.totalTax?.igst || 0;
-      eligibleITC.cgst += inv.totalTax?.cgst || 0;
-      eligibleITC.sgst += inv.totalTax?.sgst || 0;
+      const taxableValue = inv.subtotal || 0;
+      const totalTaxAmount = inv.totalTax || 0;
+
+      let itemIgst = 0, itemCgst = 0, itemSgst = 0;
+
+      if (totalTaxAmount > 0) {
+        // Determine the split based on vendor state
+        const vendorState = vendorMap[inv.vendor] || "";
+        const isInterState = vendorState && branchState && vendorState !== branchState;
+
+        if (isInterState) {
+          itemIgst = totalTaxAmount;
+        } else {
+          itemCgst = totalTaxAmount / 2;
+          itemSgst = totalTaxAmount / 2;
+        }
+
+        eligibleITC.taxable += taxableValue;
+        eligibleITC.igst += itemIgst;
+        eligibleITC.cgst += itemCgst;
+        eligibleITC.sgst += itemSgst;
+      } else if (taxableValue > 0) {
+        // If totalTax is 0 but subtotal > 0, it's Nil Rated/Exempt
+        eligibleITC.nilRated += taxableValue;
+      }
+      
+      // Add taxes from extra expenses (if not already included in totalTax)
+      // Usually totalTax includes everything, but we check if extra expenses have their own tax breakdown
+      if (inv.extraExpenses && inv.extraExpenses.length > 0) {
+        inv.extraExpenses.forEach(exp => {
+          // If the invoice totalTax was 0, we add these. 
+          // If it wasn't, we assume they are already part of it unless they are distinct.
+          // To be safe, let's only add if the totalTax was 0.
+          if (totalTaxAmount === 0) {
+             eligibleITC.igst += exp.igst || 0;
+             eligibleITC.cgst += exp.cgst || 0;
+             eligibleITC.sgst += exp.sgst || 0;
+          }
+        });
+      }
     });
 
     res.json({
