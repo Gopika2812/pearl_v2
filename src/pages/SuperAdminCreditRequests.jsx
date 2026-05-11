@@ -9,6 +9,8 @@ export default function SuperAdminCreditRequests() {
   const [activeTab, setActiveTab] = useState("pending"); // "pending" or "history"
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [creditRequests, setCreditRequests] = useState([]);
+  const [processingId, setProcessingId] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [branches, setBranches] = useState([]);
   const [branchFilter, setBranchFilter] = useState("all");
