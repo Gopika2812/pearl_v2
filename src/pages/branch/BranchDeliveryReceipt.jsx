@@ -482,7 +482,7 @@ const BranchDeliveryReceipt = () => {
             </div>
             
             <div className="flex flex-wrap items-center gap-3">
-                {(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN" || user?.role?.toUpperCase() === "SUPERADMIN") && (
+                {(user?.role?.toUpperCase() === "ADMIN" || user?.role?.toUpperCase() === "SUPER_ADMIN" || user?.role?.toUpperCase() === "SUPERADMIN" || user?.role?.toUpperCase() === "MANAGER") && (
                    <button 
                     onClick={() => setShowBankModal(true)}
                     className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all animate-in fade-in zoom-in duration-300 disabled:opacity-50 disabled:cursor-not-allowed"

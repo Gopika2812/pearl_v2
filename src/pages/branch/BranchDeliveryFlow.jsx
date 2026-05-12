@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { FaHistory, FaSearch, FaSync, FaTruck, FaCheckCircle, FaUser, FaCommentDots, FaMapMarkerAlt, FaChevronDown, FaBoxOpen, FaClipboardCheck, FaUndo, FaPlus, FaTrash, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
+import { useSearchParams } from "react-router-dom";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import FilterableSelect from "../../components/FilterableSelect";
@@ -10,10 +11,18 @@ import LiveScannerModal from "../../components/branch/LiveScannerModal";
 
 const BranchDeliveryFlow = () => {
   const { currentBranch, user } = useBranch();
+  const [searchParams] = useSearchParams();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState("ALL"); // ALL, PENDING, PICKED, COMPLETED
+  const [filterStatus, setFilterStatus] = useState(searchParams.get("status") || "ALL"); // ALL, PENDING, PICKED, COMPLETED
+
+  useEffect(() => {
+    const statusParam = searchParams.get("status");
+    if (statusParam) {
+      setFilterStatus(statusParam);
+    }
+  }, [searchParams]);
   const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split("T")[0]);
   const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split("T")[0]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -241,7 +250,7 @@ const BranchDeliveryFlow = () => {
 
   const handleMarkStatus = async (invoiceId, status, paymentType = "NONE") => {
     // Permission Check: Only Admin/SuperAdmin can revert to PENDING
-    if (status === "PENDING" && user?.role !== "ADMIN" && user?.role !== "SUPER_ADMIN") {
+    if (status === "PENDING" && user?.role !== "ADMIN" && user?.role !== "SUPER_ADMIN" && user?.role !== "MANAGER") {
       toast.error("Only Admins can revert status");
       return;
     }
@@ -464,7 +473,7 @@ const BranchDeliveryFlow = () => {
     }
   };
 
-  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
   // Check if invoice is 2+ days old (not today or yesterday)
   const isOldRecord = (inv) => {

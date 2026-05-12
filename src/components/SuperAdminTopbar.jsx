@@ -280,13 +280,13 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
             </button>
 
             {/* Delayed Pickups Notification */}
-            {delayedPickups > 0 && (
+            {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.role === "MANAGER") && delayedPickups > 0 && (
               <button
                 onClick={() => {
                   if (superAdminViewBranch) {
-                    navigate("/branch-home"); // Or a specific delivery page if global
+                    navigate("/branch/delivery-flow?status=PENDING");
                   } else {
-                    navigate("/admin/branches"); // Maybe a global delivery view if it exists
+                    navigate("/admin/branches");
                   }
                 }}
                 className="flex items-center gap-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-amber-500/20 relative shadow-lg shadow-amber-500/5"

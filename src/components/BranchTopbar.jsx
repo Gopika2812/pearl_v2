@@ -94,9 +94,9 @@ export default function BranchTopbar({ onMenuClick }) {
         {/* Right Side: User & Actions */}
         <div className="flex items-center gap-5">
           {/* Delayed Pickups Notification */}
-          {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && delayedPickups > 0 && (
+          {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.role === "MANAGER") && delayedPickups > 0 && (
             <button
-              onClick={() => navigate("/branch/delivery-flow?deliveryStatus=PENDING")}
+              onClick={() => navigate("/branch/delivery-flow?status=PENDING")}
               className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 transition-all relative group text-amber-600 border border-amber-100 shadow-sm"
               title={`${delayedPickups} Orders not picked for more than 24 hours`}
             >
