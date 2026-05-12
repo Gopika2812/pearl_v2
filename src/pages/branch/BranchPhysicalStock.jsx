@@ -760,8 +760,8 @@ export default function BranchPhysicalStock() {
                         <tr key={row.rowId} className={`hover:bg-gray-50 transition-colors ${row.status === "APPROVED" ? "bg-green-50" : isSaved ? "bg-emerald-50/50" : "bg-rose-50"}`}>
                           <td className="px-1.5 py-3 border-r border-gray-100 font-black text-gray-300 text-center">{idx + 1}</td>
                           {isFieldVisible("productName") && (
-                            <td className="px-1.5 py-3 border-r border-gray-100">
-                              <p className="font-black text-gray-700 text-[10px] uppercase truncate max-w-[160px]">{row.productName}</p>
+                            <td className="px-1.5 py-3 border-r border-gray-100 min-w-[250px]">
+                              <p className="font-black text-gray-700 text-[10px] uppercase truncate max-w-[400px]">{row.productName}</p>
                             </td>
                           )}
                           {isFieldVisible("productGroupName") && <td className="px-1.5 py-3 border-r border-gray-100 text-[9px] text-gray-400 font-black uppercase">{row.productGroupName || "-"}</td>}

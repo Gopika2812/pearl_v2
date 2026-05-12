@@ -243,7 +243,10 @@ const BranchGstReports = () => {
   const downloadGstr1Excel = () => {
     if (!gstr1Data) return;
 
-    const fileName = `${branch?.gstin || "NO_GSTIN"}_GSTR1_${months[selectedMonth - 1]}_${selectedYear}`;
+    const displayGstin = gstr1Data.branchGstin || branch?.gstin || "NO_GSTIN";
+    const displayName = gstr1Data.branchName || branch?.name || "N/A";
+
+    const fileName = `${displayGstin}_GSTR1_${months[selectedMonth - 1]}_${selectedYear}`;
     
     const workbook = new ExcelJS.Workbook();
     
@@ -378,7 +381,10 @@ const BranchGstReports = () => {
   const downloadGstr1SummaryExcel = () => {
     if (!gstr1Data) return;
 
-    const fileName = `${branch?.gstin || "NO_GSTIN"}_GSTR1_SUMMARY_${months[selectedMonth - 1]}_${selectedYear}`;
+    const displayGstin = gstr1Data.branchGstin || branch?.gstin || "NO_GSTIN";
+    const displayName = gstr1Data.branchName || branch?.name || "N/A";
+
+    const fileName = `${displayGstin}_GSTR1_SUMMARY_${months[selectedMonth - 1]}_${selectedYear}`;
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Filing_Summary");
 
@@ -397,8 +403,8 @@ const BranchGstReports = () => {
     title.font = { bold: true, size: 16, color: { argb: "FF1E293B" } };
     title.alignment = { horizontal: "center" };
 
-    sheet.addRow([`Branch: ${branch?.name}`, "", "", `Period: ${months[selectedMonth - 1]} ${selectedYear}`]);
-    sheet.addRow([`GSTIN: ${branch?.gstin}`, "", "", `Generated: ${new Date().toLocaleDateString()}`]);
+    sheet.addRow([`Branch: ${displayName}`, "", "", `Period: ${months[selectedMonth - 1]} ${selectedYear}`]);
+    sheet.addRow([`GSTIN: ${displayGstin}`, "", "", `Generated: ${new Date().toLocaleDateString()}`]);
     sheet.addRow([]);
 
     // 2. Main Summary Table
@@ -793,7 +799,7 @@ const BranchGstReports = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${branch?.gstin || "33DULPS2600Q4Z3"}_GSTR1_DIRECT_${months[selectedMonth - 1]}_${selectedYear}.json`;
+    link.download = `${gstr1Data.branchGstin || branch?.gstin || "33DULPS2600Q4Z3"}_GSTR1_DIRECT_${months[selectedMonth - 1]}_${selectedYear}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
