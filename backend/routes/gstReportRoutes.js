@@ -84,7 +84,7 @@ router.get("/gstr1", auth, async (req, res) => {
         branchId: branchObjectId,
         date: { $gte: startDate, $lte: endDate }
       })
-      .select("creditNoteId date grandTotal subtotal totalTax customer.gstin customer.name customer.state customer.stateCode status")
+      .select("creditNoteId date grandTotal subtotal totalTax items customer.gstin customer.name customer.state customer.stateCode status")
       .lean()
     ]);
 
@@ -324,7 +324,6 @@ router.get("/gstr1", auth, async (req, res) => {
       const gstin = note.customer?.gstin || "";
       const isRegistered = gstin.length === 15 && !gstin.includes("URP");
       
-      // Normalize POS for Credit Notes too
       let stateName = (note.customer?.state || "").trim();
       const rawCode = String(note.customer?.stateCode || "").trim();
       const rawState = stateName.toLowerCase().replace(/\s/g, "");
@@ -332,51 +331,33 @@ router.get("/gstr1", auth, async (req, res) => {
       if (rawState === "tamilnadu" || rawState === "tn" || rawState.includes("tamilnadu") || rawCode === "33") {
         stateName = "Tamil Nadu";
       } else if (!stateName || !isNaN(stateName)) {
-        // Simple map for CNs
         const cnStateMap = { "33": "Tamil Nadu", "32": "Kerala", "29": "Karnataka" };
         stateName = cnStateMap[rawCode] || "Tamil Nadu";
       }
       
       const pos = (rawCode || "33") + "-" + stateName;
+      const isIntraNote = pos.includes("Tamil Nadu") || pos.startsWith("33-");
 
-      const entry = {
-        gstin: note.customer.gstin,
-        customerName: note.customer.name,
-        noteNo: note.creditNoteId,
-        noteDate: moment(note.date).format("DD-MMM-YYYY"),
-        noteType: "C",
-        placeOfSupply: pos,
-        reverseCharge: "N",
-        noteSupplyType: "Regular",
-        noteValue: note.grandTotal,
-        applicablePercent: "",
-        rate: note.items?.[0]?.gst || Math.round(((note.grandTotal - note.subtotal) / note.subtotal) * 100) || 0,
-        taxableValue: note.subtotal,
-        igst: note.totalTax?.igst || (pos.startsWith("33") ? 0 : (note.grandTotal - note.subtotal)),
-        cgst: note.totalTax?.cgst || (pos.startsWith("33") ? (note.grandTotal - note.subtotal) / 2 : 0),
-        sgst: note.totalTax?.sgst || (pos.startsWith("33") ? (note.grandTotal - note.subtotal) / 2 : 0),
-        cess: 0,
-        preGst: "N"
-      };
+      const noteGroups = {};
 
-      if (isRegistered) cdnr.push(entry);
-      else {
-        // For CDNUR, type is required
-        const noteValue = note.grandTotal;
-        const isB2CLReturn = pos !== "33-Tamil Nadu" && noteValue > 250000;
-        cdnur.push({ 
-          ...entry, 
-          type: isB2CLReturn ? "B2CL" : "B2CS" 
-        });
-      }
-
-      // C. Process Nil-Rated / Exempted for Credit Notes (Deduct from total)
-      if (!isCancelled) {
-        note.items?.forEach(item => {
-          const taxable = ((item.sellingPrice || 0) * (item.qty || 0)) - (item.discountAmount || 0);
+      if (note.items && note.items.length > 0) {
+        note.items.forEach(item => {
           const rate = Math.round(item.gst || 0);
+          const taxable = ((item.sellingPrice || 0) * (item.qty || 0)) - (item.discountAmount || 0);
+          
+          const itemIgst = !isIntraNote ? (taxable * rate / 100) : 0;
+          const itemCgst = isIntraNote ? (taxable * (rate / 2) / 100) : 0;
+          const itemSgst = isIntraNote ? (taxable * (rate / 2) / 100) : 0;
+
+          if (!noteGroups[rate]) {
+            noteGroups[rate] = { taxableValue: 0, igst: 0, cgst: 0, sgst: 0 };
+          }
+          noteGroups[rate].taxableValue += taxable;
+          noteGroups[rate].igst += itemIgst;
+          noteGroups[rate].cgst += itemCgst;
+          noteGroups[rate].sgst += itemSgst;
+
           if (rate === 0) {
-            const isIntraNote = pos.includes("Tamil Nadu") || pos.startsWith("33-");
             if (isRegistered) {
               if (!isIntraNote) nilRated.interReg -= taxable;
               else nilRated.intraReg -= taxable;
@@ -386,7 +367,49 @@ router.get("/gstr1", auth, async (req, res) => {
             }
           }
         });
+      } else {
+        // Fallback for legacy notes without item-level rates
+        const rate = Math.round(((note.grandTotal - note.subtotal) / (note.subtotal || 1)) * 100) || 0;
+        noteGroups[rate] = {
+          taxableValue: note.subtotal,
+          igst: note.totalTax?.igst || (!isIntraNote ? (note.grandTotal - note.subtotal) : 0),
+          cgst: note.totalTax?.cgst || (isIntraNote ? (note.grandTotal - note.subtotal) / 2 : 0),
+          sgst: note.totalTax?.sgst || (isIntraNote ? (note.grandTotal - note.subtotal) / 2 : 0)
+        };
       }
+
+      Object.keys(noteGroups).forEach(rateStr => {
+        const rate = parseFloat(rateStr);
+        const rData = noteGroups[rateStr];
+        
+        const entry = {
+          gstin: note.customer.gstin,
+          customerName: note.customer.name,
+          noteNo: note.creditNoteId,
+          noteDate: moment(note.date).format("DD-MMM-YYYY"),
+          noteType: "C",
+          placeOfSupply: pos,
+          reverseCharge: "N",
+          noteSupplyType: "Regular",
+          noteValue: note.grandTotal,
+          applicablePercent: "",
+          rate: rate,
+          taxableValue: rData.taxableValue,
+          igst: rData.igst,
+          cgst: rData.cgst,
+          sgst: rData.sgst,
+          cess: 0,
+          preGst: "N"
+        };
+
+        if (isRegistered) cdnr.push(entry);
+        else {
+          cdnur.push({ 
+            ...entry, 
+            type: (!isIntraNote && note.grandTotal > 250000) ? "B2CL" : "B2CS" 
+          });
+        }
+      });
     });
 
     // Count Unique Invoice Numbers and Group by Prefix for Document Summary
