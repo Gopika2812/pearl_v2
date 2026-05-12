@@ -533,12 +533,26 @@ const BranchGstReports = () => {
     }));
     addStyledSheet("Credit_Notes", cnData, cnCols);
 
-    // 4. HSN Summary
+    // 4. HSN Summaries
     const hsnCols = ["HSN", "Description", "UQC", "Total Qty", "Total Value", "Rate", "Taxable Value", "IGST", "CGST", "SGST"];
-    const hsnData = [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].map(row => ({
+    
+    // Combined (Official Filing)
+    const hsnCombined = [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].map(row => ({
       "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Qty": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
     }));
-    addStyledSheet("HSN_Summary", hsnData, hsnCols);
+    addStyledSheet("HSN_Combined", hsnCombined, hsnCols);
+
+    // B2B Only
+    const hsnB2B = (gstr1Data.hsnSummaryB2B || []).map(row => ({
+      "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Qty": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
+    }));
+    addStyledSheet("HSN_B2B", hsnB2B, hsnCols);
+
+    // B2C Only
+    const hsnB2C = (gstr1Data.hsnSummaryB2C || []).map(row => ({
+      "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Qty": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
+    }));
+    addStyledSheet("HSN_B2C", hsnB2C, hsnCols);
 
     workbook.xlsx.writeBuffer().then((buffer) => {
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
