@@ -424,7 +424,53 @@ const BranchGstReports = () => {
     sheet.addRow(["Credit Note", "Registered & Unregistered Returns", (gstr1Data.cdnr?.length || 0) + (gstr1Data.cdnur?.length || 0), cnTaxable, cnTax]);
     sheet.addRow(["Nil Rated", "Exempted / Non-GST Supplies", gstr1Data.nilRated?.length || 0, nilTaxable, 0]);
     
-    // 3. Document Summary
+    // 3. Rate-wise Breakdown
+    sheet.addRow([]);
+    const rateHeader = sheet.addRow(["SECTION", "TAX RATE", "ITEM COUNT", "TAXABLE VALUE", "TOTAL TAX"]);
+    rateHeader.eachCell(cell => { 
+      Object.assign(cell, headerStyle); 
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0891B2' } }; // Cyan-600
+    });
+
+    const gstRates = [0, 5, 12, 18, 28];
+    
+    // B2B Rates
+    gstRates.forEach(rate => {
+      const filtered = gstr1Data.b2b.filter(r => Math.round(r.rate) === rate);
+      if (filtered.length > 0) {
+        const taxable = filtered.reduce((s, r) => s + (r.taxableValue || 0), 0);
+        const tax = filtered.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+        sheet.addRow(["B2B", `${rate}%`, filtered.length, taxable, tax]);
+      }
+    });
+
+    // B2C Rates
+    gstRates.forEach(rate => {
+      const filteredS = (gstr1Data.b2cs || []).filter(r => Math.round(r.rate) === rate);
+      const filteredL = (gstr1Data.b2cl || []).filter(r => Math.round(r.rate) === rate);
+      if (filteredS.length > 0 || filteredL.length > 0) {
+        const taxable = filteredS.reduce((s, r) => s + (r.taxableValue || 0), 0) + filteredL.reduce((s, r) => s + (r.taxableValue || 0), 0);
+        const tax = filteredS.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + filteredL.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+        
+        // Count unique invoices from b2cRaw that contain this specific rate
+        const invCount = gstr1Data.b2cRaw?.filter(inv => inv.rates?.includes(rate)).length || 0;
+        
+        sheet.addRow(["B2C", `${rate}%`, invCount, taxable, tax]);
+      }
+    });
+
+    // CDNR Rates
+    gstRates.forEach(rate => {
+      const filteredR = (gstr1Data.cdnr || []).filter(r => Math.round(r.rate) === rate);
+      const filteredUR = (gstr1Data.cdnur || []).filter(r => Math.round(r.rate) === rate);
+      if (filteredR.length > 0 || filteredUR.length > 0) {
+        const taxable = filteredR.reduce((s, r) => s + (r.taxableValue || 0), 0) + filteredUR.reduce((s, r) => s + (r.taxableValue || 0), 0);
+        const tax = filteredR.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + filteredUR.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+        sheet.addRow(["Credit Note", `${rate}%`, filteredR.length + filteredUR.length, taxable, tax]);
+      }
+    });
+
+    // 4. Document Summary
     sheet.addRow([]);
     const docHeader = sheet.addRow(["NATURE OF DOCUMENT", "FROM", "TO", "TOTAL", "CANCELLED"]);
     docHeader.eachCell(cell => { 
