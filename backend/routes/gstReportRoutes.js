@@ -3,8 +3,54 @@ import mongoose from "mongoose";
 import Invoice from "../models/Invoice.js";
 import PurchaseInvoice from "../models/PurchaseInvoice.js";
 import CreditNote from "../models/CreditNote.js";
+import Branch from "../models/Branch.js";
+import Vendor from "../models/Vendor.js";
 import auth from "../middleware/auth.js";
 import moment from "moment-timezone";
+
+// Official GST UQC Mapping Helper
+const getUQC = (unit) => {
+  const u = String(unit || "").toUpperCase().trim();
+  const mapping = {
+    "KG": "KGS-KILOGRAMS",
+    "KGS": "KGS-KILOGRAMS",
+    "KILOGRAM": "KGS-KILOGRAMS",
+    "KILOGRAMS": "KGS-KILOGRAMS",
+    "NOS": "NOS-NUMBERS",
+    "NO": "NOS-NUMBERS",
+    "NUMBER": "NOS-NUMBERS",
+    "NUMBERS": "NOS-NUMBERS",
+    "PCS": "PCS-PIECES",
+    "PIECE": "PCS-PIECES",
+    "PIECES": "PCS-PIECES",
+    "BOX": "BOX-BOX",
+    "BOXES": "BOX-BOX",
+    "BAG": "BAG-BAGS",
+    "BAGS": "BAG-BAGS",
+    "BTL": "BTL-BOTTLES",
+    "BOTTLE": "BTL-BOTTLES",
+    "BOTTLES": "BTL-BOTTLES",
+    "CAN": "CAN-CANS",
+    "CANS": "CAN-CANS",
+    "CSE": "CSE-CASE",
+    "CASE": "CSE-CASE",
+    "CASES": "CSE-CASE",
+    "MTR": "MTR-METERS",
+    "METER": "MTR-METERS",
+    "METERS": "MTR-METERS",
+    "LTR": "LTR-LITRES",
+    "LITRE": "LTR-LITRES",
+    "LITRES": "LTR-LITRES",
+    "ML": "MLT-MILLILITRE",
+    "GM": "GMS-GRAMMES",
+    "GMS": "GMS-GRAMMES",
+    "GRAM": "GMS-GRAMMES",
+    "GRAMS": "GMS-GRAMMES",
+    "SET": "SET-SETS",
+    "SETS": "SET-SETS"
+  };
+  return mapping[u] || mapping[u.replace(/S$/, "")] || "OTH-OTHERS";
+};
 
 const router = express.Router();
 
@@ -25,36 +71,44 @@ router.get("/gstr1", auth, async (req, res) => {
 
     const branchObjectId = new mongoose.Types.ObjectId(branchId);
 
-    // 1. Fetch Invoices and Credit Notes
+    // 1. Fetch Invoices and Credit Notes - Optimized with field selection
     const [invoices, creditNotes] = await Promise.all([
       Invoice.find({
         branchId: branchObjectId,
-        invoiceDate: { $gte: startDate, $lte: endDate },
-        status: { $ne: "CANCELLED" }
-      }).lean(),
+        invoiceDate: { $gte: startDate, $lte: endDate }
+        // Removed status: { $ne: "CANCELLED" } to include ALL invoices
+      })
+      .select("invoiceNumber invoiceDate grandTotal subtotal totalTax items.hsn items.name items.sellingPrice items.qty items.discountAmount items.total items.gst items.igst items.cgst items.sgst items.unit customer.gstin customer.name customer.state customer.stateCode status")
+      .lean(),
       CreditNote.find({
         branchId: branchObjectId,
-        date: { $gte: startDate, $lte: endDate },
-        status: { $ne: "Cancelled" }
-      }).lean()
+        date: { $gte: startDate, $lte: endDate }
+      })
+      .select("creditNoteId date grandTotal subtotal totalTax customer.gstin customer.name customer.state customer.stateCode status")
+      .lean()
     ]);
 
     const b2b = [];
     const cdnr = []; // Credit Notes Registered
     const cdnur = []; // Credit Notes Unregistered
-    const hsnSummary = {};
+    const hsnSummaryB2B = {}; // Grouped by HSN + Rate
+    const hsnSummaryB2C = {}; // Grouped by HSN + Rate
     const nilRated = {
-      taxable: 0,
-      exempt: 0,
-      nilRated: 0,
-      nonGst: 0
+      intraReg: 0, intraUnreg: 0, interReg: 0, interUnreg: 0
     };
     
+    // Raw Counts for UI
+    let rawB2BCount = 0;
+    let rawB2CCount = 0;
+    let cancelledCount = 0;
+
     // Track Invoice Range
     let minInvoice = null;
     let maxInvoice = null;
 
-    const b2cGroups = {}; // To group B2C by Place of Supply and Tax Rate
+    const b2cGroups = {}; // To group B2C Small (B2CS) by Place of Supply and Tax Rate
+    const b2cLarge = [];  // To list B2C Large (B2CL) individually
+    const b2cRaw = [];    // Individual B2C records for detailed report
 
     // A. Process Invoices
     invoices.forEach(inv => {
@@ -62,65 +116,210 @@ router.get("/gstr1", auth, async (req, res) => {
       if (!minInvoice || invNum < minInvoice) minInvoice = invNum;
       if (!maxInvoice || invNum > maxInvoice) maxInvoice = invNum;
 
-      const gstin = inv.customer?.gstin || "";
+      const isCancelled = inv.status === "CANCELLED";
+      if (isCancelled) cancelledCount++;
+
+      const gstin = (inv.customer?.gstin || "").trim(); // Trim to avoid length mismatch
       const isB2B = gstin.length === 15 && !gstin.includes("URP");
-      const pos = (inv.customer.stateCode || "33") + "-" + (inv.customer.state || "Tamil Nadu");
       
-      // Items for HSN and Tax Split
-      inv.items.forEach(item => {
-        const taxable = ((item.sellingPrice || 0) * (item.qty || 0)) - (item.discountAmount || 0);
-        const rate = item.gst || 0;
-        const totalTax = (item.igst || 0) + (item.cgst || 0) + (item.sgst || 0);
-        if (rate === 0) nilRated.nilRated += taxable;
+      // Normalize POS Name
+      let stateName = (inv.customer?.state || "").trim();
+      const rawCode = String(inv.customer?.stateCode || "").trim();
+      const rawState = stateName.toLowerCase().replace(/\s/g, "");
 
-        // Group B2C by POS and Rate
-        if (!isB2B) {
-          const key = `${pos}_${rate}`;
-          if (!b2cGroups[key]) {
-            b2cGroups[key] = {
-              type: "OE",
-              placeOfSupply: pos,
-              rate: rate,
-              taxableValue: 0,
-              cess: 0
-            };
-          }
-          b2cGroups[key].taxableValue += taxable;
-        }
+      // Official State Mapping for GST
+      const stateMap = {
+        "33": "Tamil Nadu", "32": "Kerala", "29": "Karnataka", "37": "Andhra Pradesh",
+        "27": "Maharashtra", "36": "Telangana", "07": "Delhi", "24": "Gujarat", "09": "Uttar Pradesh"
+      };
 
-        // HSN Logic
-        let hsnRaw = String(item.hsn || "").trim();
-        if (hsnRaw.length === 5 || hsnRaw.length === 7) hsnRaw = "0" + hsnRaw;
-        const hsn = hsnRaw || "9999";
-
-        if (!hsnSummary[hsn]) {
-          hsnSummary[hsn] = { hsn: hsn, description: item.name, uqc: item.unit || "NOS", totalQty: 0, totalValue: 0, taxableValue: 0, igst: 0, cgst: 0, sgst: 0, cess: 0 };
-        }
-        hsnSummary[hsn].totalQty += (item.qty || 0);
-        hsnSummary[hsn].totalValue += item.total || 0;
-        hsnSummary[hsn].taxableValue += taxable;
-        hsnSummary[hsn].igst += (item.igst || 0);
-        hsnSummary[hsn].cgst += (item.cgst || 0);
-        hsnSummary[hsn].sgst += (item.sgst || 0);
-      });
-
+      if (rawState === "tamilnadu" || rawState === "tn" || rawState.includes("tamilnadu") || rawCode === "33") {
+        stateName = "Tamil Nadu";
+      } else if (!stateName || !isNaN(stateName)) {
+        stateName = stateMap[rawCode] || "Tamil Nadu";
+      }
+      
+      // If it's NOT 33 and NOT Tamil Nadu, it MUST be Inter-state
+      const isIntra = (rawCode === "33") || (stateName === "Tamil Nadu");
+      const isInterstate = !isIntra;
+      const pos = (rawCode || "33") + "-" + stateName;
+      
       if (isB2B) {
-        b2b.push({
-          gstin: inv.customer.gstin, customerName: inv.customer.name, invoiceNo: inv.invoiceNumber,
-          date: moment(inv.invoiceDate).format("DD-MMM-YYYY"), value: inv.grandTotal,
+        // Handle B2B
+        if (!isCancelled) {
+          const b2bInvoiceGroups = {}; // To split one B2B invoice by different rates
+          // Items for HSN and Tax Split
+          inv.items.forEach(item => {
+            const taxable = ((item.sellingPrice || 0) * (item.qty || 0)) - (item.discountAmount || 0);
+            const rate = Math.round(item.gst || 0);
+            if (rate === 0) {
+              if (isInterstate) nilRated.interReg += taxable;
+              else nilRated.intraReg += taxable;
+            }
+
+            // Group by rate for this specific invoice
+            const itemRate = item.gst || 0;
+            if (!b2bInvoiceGroups[itemRate]) {
+              b2bInvoiceGroups[itemRate] = { taxableValue: 0, igst: 0, cgst: 0, sgst: 0 };
+            }
+            b2bInvoiceGroups[itemRate].taxableValue += taxable;
+            b2bInvoiceGroups[itemRate].igst += (item.igst || 0);
+            b2bInvoiceGroups[itemRate].cgst += (item.cgst || 0);
+            b2bInvoiceGroups[itemRate].sgst += (item.sgst || 0);
+ 
+            // HSN Logic
+            let hsnRaw = String(item.hsn || "").trim();
+            if (hsnRaw.length === 5 || hsnRaw.length === 7) hsnRaw = "0" + hsnRaw;
+            const hsn = hsnRaw || "9999";
+            const hsnKey = `${hsn}_${rate}`; // Group by HSN and Rate
+ 
+            if (!hsnSummaryB2B[hsnKey]) {
+              hsnSummaryB2B[hsnKey] = { hsn: hsn, description: item.name, uqc: getUQC(item.unit || "NOS"), totalQty: 0, totalValue: 0, rate: rate, taxableValue: 0, igst: 0, cgst: 0, sgst: 0, cess: 0, invoiceNumbers: new Set() };
+            }
+            hsnSummaryB2B[hsnKey].totalQty += (item.qty || 0);
+            hsnSummaryB2B[hsnKey].totalValue += item.total || 0;
+            hsnSummaryB2B[hsnKey].taxableValue += taxable;
+            hsnSummaryB2B[hsnKey].igst += (item.igst || 0);
+            hsnSummaryB2B[hsnKey].cgst += (item.cgst || 0);
+            hsnSummaryB2B[hsnKey].sgst += (item.sgst || 0);
+            const invDate = moment(inv.invoiceDate).format("DD-MMM");
+            hsnSummaryB2B[hsnKey].invoiceNumbers.add(`${inv.invoiceNumber} (${invDate})`);
+          });
+
+          // Push a row for each rate in this invoice (GST Portal Requirement)
+          Object.keys(b2bInvoiceGroups).forEach(rateStr => {
+            const rData = b2bInvoiceGroups[rateStr];
+            const rate = parseFloat(rateStr);
+            b2b.push({
+              gstin: gstin, customerName: inv.customer.name, invoiceNo: inv.invoiceNumber,
+              date: moment(inv.invoiceDate).format("DD-MMM-YYYY"), value: inv.grandTotal,
+              placeOfSupply: pos,
+              reverseCharge: "N", invoiceType: "Regular", 
+              applicablePercent: "", ecommerceGstin: "",
+              rate: rate, taxableValue: rData.taxableValue,
+              igst: rData.igst, cgst: rData.cgst, sgst: rData.sgst, cess: 0,
+              status: inv.status
+            });
+          });
+        } else {
+          b2b.push({
+            gstin: gstin, customerName: inv.customer.name, invoiceNo: inv.invoiceNumber,
+            date: moment(inv.invoiceDate).format("DD-MMM-YYYY"), value: 0,
+            placeOfSupply: pos,
+            reverseCharge: "N", invoiceType: "Regular", 
+            applicablePercent: "", ecommerceGstin: "",
+            rate: 0, taxableValue: 0,
+            igst: 0, cgst: 0, sgst: 0, cess: 0,
+            status: "CANCELLED"
+          });
+        }
+      } else {
+        // Handle B2C
+        rawB2CCount++;
+        b2cRaw.push({
+          invoiceNo: inv.invoiceNumber,
+          date: moment(inv.invoiceDate).format("DD-MMM-YYYY"),
+          customerName: inv.customer?.name || "URP",
           placeOfSupply: pos,
-          reverseCharge: "N", invoiceType: "Regular", taxableValue: inv.subtotal,
-          igst: inv.totalTax?.igst || 0, cgst: inv.totalTax?.cgst || 0, sgst: inv.totalTax?.sgst || 0, cess: 0
+          value: isCancelled ? 0 : inv.grandTotal,
+          taxableValue: isCancelled ? 0 : inv.subtotal,
+          igst: isCancelled ? 0 : (inv.totalTax?.igst || 0),
+          cgst: isCancelled ? 0 : (inv.totalTax?.cgst || 0),
+          sgst: isCancelled ? 0 : (inv.totalTax?.sgst || 0),
+          status: inv.status,
+          rates: isCancelled ? [] : Array.from(new Set(inv.items.map(item => Math.round(item.gst || 0))))
         });
+        if (!isCancelled) {
+          inv.items.forEach(item => {
+            const taxable = ((item.sellingPrice || 0) * (item.qty || 0)) - (item.discountAmount || 0);
+            const rate = Math.round(item.gst || 0); // Round to avoid 4.99 issues
+            
+            const isInterstate = !isIntra;
+            if (rate === 0) {
+              if (isInterstate) nilRated.interUnreg += taxable;
+              else nilRated.intraUnreg += taxable;
+            }
+
+            const isLarge = isInterstate && inv.grandTotal > 250000;
+ 
+            if (isLarge) {
+              // B2C Large Logic: One row per rate per invoice
+              b2cLarge.push({
+                invoiceNo: inv.invoiceNumber,
+                date: moment(inv.invoiceDate).format("DD-MMM-YYYY"),
+                value: inv.grandTotal,
+                placeOfSupply: pos,
+                applicablePercent: "",
+                rate: rate,
+                taxableValue: taxable,
+                cess: 0,
+                ecommerceGstin: ""
+              });
+            } else {
+              // B2C Small Logic: Grouped by POS and Rate
+              const key = `${pos}_${rate}`;
+              if (!b2cGroups[key]) {
+                b2cGroups[key] = {
+                  type: "OE",
+                  placeOfSupply: pos,
+                  rate: rate,
+                  taxableValue: 0,
+                  cess: 0,
+                  ecommerceGstin: ""
+                };
+              }
+              b2cGroups[key].taxableValue += taxable;
+            }
+ 
+            // HSN Logic for B2C
+            let hsnRaw = String(item.hsn || "").trim();
+            if (hsnRaw.length === 5 || hsnRaw.length === 7) hsnRaw = "0" + hsnRaw;
+            const hsn = hsnRaw || "9999";
+            const hsnKey = `${hsn}_${rate}`; // Group by HSN and Rate
+ 
+            if (!hsnSummaryB2C[hsnKey]) {
+              hsnSummaryB2C[hsnKey] = { hsn: hsn, description: item.name, uqc: getUQC(item.unit || "NOS"), totalQty: 0, totalValue: 0, rate: rate, taxableValue: 0, igst: 0, cgst: 0, sgst: 0, cess: 0, invoiceNumbers: new Set() };
+            }
+            hsnSummaryB2C[hsnKey].totalQty += (item.qty || 0);
+            hsnSummaryB2C[hsnKey].totalValue += item.total || 0;
+            hsnSummaryB2C[hsnKey].taxableValue += taxable;
+            hsnSummaryB2C[hsnKey].igst += (item.igst || 0);
+            hsnSummaryB2C[hsnKey].cgst += (item.cgst || 0);
+            hsnSummaryB2C[hsnKey].sgst += (item.sgst || 0);
+            const invDate = moment(inv.invoiceDate).format("DD-MMM");
+            hsnSummaryB2C[hsnKey].invoiceNumbers.add(`${inv.invoiceNumber} (${invDate})`);
+          });
+        }
       }
     });
+
+    // Update Raw Counts to be 100% accurate
+    rawB2BCount = b2b.length;
 
     const b2c = Object.values(b2cGroups);
 
     // B. Process Credit Notes
     creditNotes.forEach(note => {
+      const isCancelled = note.status === "Cancelled" || note.status === "CANCELLED";
+      if (isCancelled) return;
+
       const gstin = note.customer?.gstin || "";
       const isRegistered = gstin.length === 15 && !gstin.includes("URP");
+      
+      // Normalize POS for Credit Notes too
+      let stateName = (note.customer?.state || "").trim();
+      const rawCode = String(note.customer?.stateCode || "").trim();
+      const rawState = stateName.toLowerCase().replace(/\s/g, "");
+
+      if (rawState === "tamilnadu" || rawState === "tn" || rawState.includes("tamilnadu") || rawCode === "33") {
+        stateName = "Tamil Nadu";
+      } else if (!stateName || !isNaN(stateName)) {
+        // Simple map for CNs
+        const cnStateMap = { "33": "Tamil Nadu", "32": "Kerala", "29": "Karnataka" };
+        stateName = cnStateMap[rawCode] || "Tamil Nadu";
+      }
+      
+      const pos = (rawCode || "33") + "-" + stateName;
 
       const entry = {
         gstin: note.customer.gstin,
@@ -128,8 +327,12 @@ router.get("/gstr1", auth, async (req, res) => {
         noteNo: note.creditNoteId,
         noteDate: moment(note.date).format("DD-MMM-YYYY"),
         noteType: "C",
-        placeOfSupply: (note.customer.stateCode || "33") + "-" + (note.customer.state || "Tamil Nadu"),
+        placeOfSupply: pos,
+        reverseCharge: "N",
+        noteSupplyType: "Regular",
         noteValue: note.grandTotal,
+        applicablePercent: "",
+        rate: note.items?.[0]?.gst || 0,
         taxableValue: note.subtotal,
         igst: note.totalTax?.igst || 0,
         cgst: note.totalTax?.cgst || 0,
@@ -139,21 +342,70 @@ router.get("/gstr1", auth, async (req, res) => {
       };
 
       if (isRegistered) cdnr.push(entry);
-      else cdnur.push({ ...entry, type: "B2CL" }); // Standard B2C Return label
+      else {
+        // For CDNUR, type is required
+        const noteValue = note.grandTotal;
+        const isB2CLReturn = pos !== "33-Tamil Nadu" && noteValue > 250000;
+        cdnur.push({ 
+          ...entry, 
+          type: isB2CLReturn ? "B2CL" : "B2CS" 
+        });
+      }
+
+      // C. Process Nil-Rated / Exempted for Credit Notes (Deduct from total)
+      if (!isCancelled) {
+        note.items?.forEach(item => {
+          const taxable = ((item.sellingPrice || 0) * (item.qty || 0)) - (item.discountAmount || 0);
+          const rate = Math.round(item.gst || 0);
+          if (rate === 0) {
+            const isIntraNote = pos.includes("Tamil Nadu") || pos.startsWith("33-");
+            if (isRegistered) {
+              if (!isIntraNote) nilRated.interReg -= taxable;
+              else nilRated.intraReg -= taxable;
+            } else {
+              if (!isIntraNote) nilRated.interUnreg -= taxable;
+              else nilRated.intraUnreg -= taxable;
+            }
+          }
+        });
+      }
     });
 
+    // Update Raw Counts to be 100% accurate from final arrays
+    // Total = All B2B (including cancelled) + All B2C (raw bill count)
+    const totalProcessed = b2b.length + rawB2CCount;
+
     const docSummary = [
-      { nature: "Invoices for outward supply", from: minInvoice || "N/A", to: maxInvoice || "N/A", total: invoices.length, cancelled: 0, net: invoices.length },
+      { nature: "Invoices for outward supply", from: minInvoice || "N/A", to: maxInvoice || "N/A", total: totalProcessed, cancelled: cancelledCount, net: totalProcessed - cancelledCount },
       { nature: "Credit Notes", from: creditNotes[0]?.creditNoteId || "N/A", to: creditNotes[creditNotes.length-1]?.creditNoteId || "N/A", total: creditNotes.length, cancelled: 0, net: creditNotes.length }
     ];
+
+    // Filter out zero-value rows before sending
+    const finalB2CS = Object.values(b2cGroups).filter(row => row.taxableValue > 0);
+    const finalB2CL = b2cLarge.filter(row => row.taxableValue > 0);
 
     res.json({
       success: true,
       data: {
-        b2b, b2c, cdnr, cdnur,
-        nilRated: [{ description: "Intra-state supplies", nilRated: nilRated.nilRated, exempt: 0, nonGst: 0 }],
-        hsnSummary: Object.values(hsnSummary),
-        docSummary
+        b2b: b2b.filter(row => row.taxableValue > 0 || row.status === "CANCELLED"), 
+        b2cl: finalB2CL, 
+        b2cs: finalB2CS, 
+        b2cRaw, cdnr, cdnur,
+        nilRated: [
+          { description: "Inter-State supplies to registered persons", nilRated: Math.max(0, nilRated.interReg), exempt: 0, nonGst: 0 },
+          { description: "Intra-State supplies to registered persons", nilRated: Math.max(0, nilRated.intraReg), exempt: 0, nonGst: 0 },
+          { description: "Inter-State supplies to unregistered persons", nilRated: Math.max(0, nilRated.interUnreg), exempt: 0, nonGst: 0 },
+          { description: "Intra-State supplies to unregistered persons", nilRated: Math.max(0, nilRated.intraUnreg), exempt: 0, nonGst: 0 }
+        ],
+        hsnSummaryB2B: Object.values(hsnSummaryB2B).map(h => ({ ...h, invoiceNumbers: Array.from(h.invoiceNumbers) })),
+        hsnSummaryB2C: Object.values(hsnSummaryB2C).map(h => ({ ...h, invoiceNumbers: Array.from(h.invoiceNumbers) })),
+        docSummary,
+        rawCounts: {
+          b2b: b2b.length,
+          b2c: rawB2CCount,
+          cancelled: cancelledCount,
+          total: totalProcessed
+        }
       }
     });
   } catch (error) {
@@ -178,11 +430,11 @@ router.get("/gstr3b", auth, async (req, res) => {
     const endDate = moment.tz(`${year}-${month}-01`, "YYYY-MM-DD", IST).endOf("month").toDate();
     const branchObjectId = new mongoose.Types.ObjectId(branchId);
 
-    // Fetch Sales, Returns, and Purchases
+    // Fetch Sales, Returns, and Purchases - Optimized
     const [sales, returns, purchases] = await Promise.all([
-      Invoice.find({ branchId: branchObjectId, invoiceDate: { $gte: startDate, $lte: endDate }, status: { $ne: "CANCELLED" } }).lean(),
-      CreditNote.find({ branchId: branchObjectId, date: { $gte: startDate, $lte: endDate }, status: { $ne: "Cancelled" } }).lean(),
-      PurchaseInvoice.find({ branchId: branchObjectId, invoiceDate: { $gte: startDate, $lte: endDate }, status: { $ne: "CANCELLED" } }).lean()
+      Invoice.find({ branchId: branchObjectId, invoiceDate: { $gte: startDate, $lte: endDate }, status: { $ne: "CANCELLED" } }).select("subtotal totalTax").lean(),
+      CreditNote.find({ branchId: branchObjectId, date: { $gte: startDate, $lte: endDate }, status: { $ne: "Cancelled" } }).select("subtotal totalTax").lean(),
+      PurchaseInvoice.find({ branchId: branchObjectId, invoiceDate: { $gte: startDate, $lte: endDate }, status: { $ne: "CANCELLED" } }).select("subtotal totalTax items extraExpenses").lean()
     ]);
 
     const outwardSupplies = { taxable: 0, igst: 0, cgst: 0, sgst: 0, nilRated: 0 };
@@ -203,18 +455,64 @@ router.get("/gstr3b", auth, async (req, res) => {
       outwardSupplies.sgst -= note.totalTax?.sgst || 0;
     });
 
+    // Fetch branch state for state-wise tax splitting
+    const branch = await Branch.findById(branchObjectId).select("state").lean();
+    const branchState = branch?.state?.toLowerCase() || "";
+
+    // Fetch all vendors for this branch to get their states
+    const vendors = await Vendor.find({ branchId: branchObjectId }).select("name state").lean();
+    const vendorMap = {};
+    vendors.forEach(v => { vendorMap[v.name] = v.state?.toLowerCase() || ""; });
+
     const eligibleITC = {
       taxable: 0,
       igst: 0,
       cgst: 0,
-      sgst: 0
+      sgst: 0,
+      nilRated: 0
     };
 
     purchases.forEach(inv => {
-      eligibleITC.taxable += inv.subtotal || 0;
-      eligibleITC.igst += inv.totalTax?.igst || 0;
-      eligibleITC.cgst += inv.totalTax?.cgst || 0;
-      eligibleITC.sgst += inv.totalTax?.sgst || 0;
+      const taxableValue = inv.subtotal || 0;
+      const totalTaxAmount = inv.totalTax || 0;
+
+      let itemIgst = 0, itemCgst = 0, itemSgst = 0;
+
+      if (totalTaxAmount > 0) {
+        // Determine the split based on vendor state
+        const vendorState = vendorMap[inv.vendor] || "";
+        const isInterState = vendorState && branchState && vendorState !== branchState;
+
+        if (isInterState) {
+          itemIgst = totalTaxAmount;
+        } else {
+          itemCgst = totalTaxAmount / 2;
+          itemSgst = totalTaxAmount / 2;
+        }
+
+        eligibleITC.taxable += taxableValue;
+        eligibleITC.igst += itemIgst;
+        eligibleITC.cgst += itemCgst;
+        eligibleITC.sgst += itemSgst;
+      } else if (taxableValue > 0) {
+        // If totalTax is 0 but subtotal > 0, it's Nil Rated/Exempt
+        eligibleITC.nilRated += taxableValue;
+      }
+      
+      // Add taxes from extra expenses (if not already included in totalTax)
+      // Usually totalTax includes everything, but we check if extra expenses have their own tax breakdown
+      if (inv.extraExpenses && inv.extraExpenses.length > 0) {
+        inv.extraExpenses.forEach(exp => {
+          // If the invoice totalTax was 0, we add these. 
+          // If it wasn't, we assume they are already part of it unless they are distinct.
+          // To be safe, let's only add if the totalTax was 0.
+          if (totalTaxAmount === 0) {
+             eligibleITC.igst += exp.igst || 0;
+             eligibleITC.cgst += exp.cgst || 0;
+             eligibleITC.sgst += exp.sgst || 0;
+          }
+        });
+      }
     });
 
     res.json({
@@ -395,6 +693,110 @@ router.get("/db-stats", auth, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to fetch stats" });
+  }
+});
+
+/**
+ * POST /api/gst/reports/super-repair
+ * High-power fixing for thousands of bills: Dates, Types, and Items
+ */
+router.post("/super-repair", auth, async (req, res) => {
+  try {
+    const { month, year } = req.body; // Ignore branchId for the search
+    
+    const IST = "Asia/Kolkata";
+    const startDate = moment.tz(`${year}-${month}-01`, "YYYY-MM-DD", IST).startOf("month").toDate();
+    const endDate = moment.tz(`${year}-${month}-01`, "YYYY-MM-DD", IST).endOf("month").toDate();
+
+    // 1. Search the WHOLE database for GEK bills in April
+    const invoices = await Invoice.find({
+      invoiceNumber: { $regex: /^GEK/i },
+      invoiceDate: { $gte: startDate, $lte: endDate }
+    }).select("invoiceNumber branchId invoiceDate status invoiceType lastInvoicedItems items").lean();
+
+    const bulkOps = [];
+    let count = 0;
+
+    for (const inv of invoices) {
+      const updateData = {};
+      let needsUpdate = false;
+
+      // Force TAX_INVOICE
+      if (inv.invoiceType !== "TAX_INVOICE") {
+        updateData.invoiceType = "TAX_INVOICE";
+        needsUpdate = true;
+      }
+      
+      // Force FINALIZED
+      if (inv.status !== "FINALIZED" && inv.status !== "PRINTED" && inv.status !== "SENT") {
+        updateData.status = "FINALIZED";
+        needsUpdate = true;
+      }
+
+      // Recover items
+      if ((!inv.items || inv.items.length === 0) && inv.lastInvoicedItems && inv.lastInvoicedItems.length > 0) {
+        updateData.items = inv.lastInvoicedItems;
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: inv._id },
+            update: { $set: updateData }
+          }
+        });
+        count++;
+      }
+    }
+
+    if (bulkOps.length > 0) {
+      await Invoice.bulkWrite(bulkOps);
+    }
+
+    res.json({ success: true, message: `RESCUED ${count} BILLS! They should appear now.` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/gst/reports/search-and-rescue
+ * Scans the WHOLE database for a prefix (like GEK) to find where bills are hiding
+ */
+router.get("/search-and-rescue", auth, async (req, res) => {
+  try {
+    const { prefix } = req.query;
+    if (!prefix) return res.status(400).json({ message: "Prefix required" });
+
+    // Search for any invoice starting with the prefix
+    const invoices = await Invoice.find({
+      invoiceNumber: { $regex: new RegExp(`^${prefix}`, "i") }
+    }).select("invoiceNumber branchId invoiceDate status invoiceType createdAt items").lean();
+
+    // Group them by Branch ID and check for EMPTY items
+    const summary = {};
+    invoices.forEach(inv => {
+      const bId = inv.branchId.toString();
+      if (!summary[bId]) summary[bId] = { count: 0, status: {}, emptyItems: 0, samples: [] };
+      summary[bId].count++;
+      summary[bId].status[inv.status] = (summary[bId].status[inv.status] || 0) + 1;
+      
+      const isEmpty = !inv.items || inv.items.length === 0;
+      if (isEmpty) summary[bId].emptyItems++;
+
+      if (summary[bId].samples.length < 5) {
+        summary[bId].samples.push({
+          no: inv.invoiceNumber,
+          items: inv.items?.length || 0,
+          date: inv.invoiceDate
+        });
+      }
+    });
+
+    res.json({ success: true, totalFound: invoices.length, branchSplit: summary });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

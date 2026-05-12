@@ -40,7 +40,14 @@ const overrideRequestSchema = new mongoose.Schema(
     },
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "SuperAdmin",
+      refPath: "approvedByModel",
+    },
+    approvedByModel: {
+      type: String,
+      enum: ["BranchUser", "SuperAdmin"],
+    },
+    requestedValue: {
+      type: Number, // The new limit or days being requested
     },
     approvalToken: {
       type: String, // Unique token to allow the SO creation once

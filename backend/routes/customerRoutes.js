@@ -1262,16 +1262,32 @@ router.patch("/:id/request-credit-bypass", async (req, res) => {
 /**
  * PATCH: Approve Credit Limit Bypass
  */
-router.patch("/:id/approve-credit-bypass", async (req, res) => {
+router.patch("/:id/approve-credit-bypass", auth, async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Check previous approval count
+    const approvedCount = await OverrideRequest.countDocuments({
+      customerId: id,
+      requestType: "CREDIT_LIMIT",
+      status: "APPROVED"
+    });
+
+    // Policy: If 3 or more approvals already exist, only Super Admin can approve the next one.
+    if (approvedCount >= 3 && req.user?.role !== "SUPER_ADMIN") {
+      return res.status(403).json({ 
+        success: false, 
+        message: `This customer has already had ${approvedCount} credit approvals. This request now requires Super Admin authorization.` 
+      });
+    }
 
     // 1. Update the persistent record
     await OverrideRequest.findOneAndUpdate(
       { customerId: id, status: "PENDING", requestType: "CREDIT_LIMIT" },
       {
         status: "APPROVED",
-        approvedBy: req.user?._id
+        approvedBy: req.user?._id,
+        approvedByModel: req.user?.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser"
       },
       { sort: { createdAt: -1 } }
     );
@@ -1299,7 +1315,7 @@ router.patch("/:id/approve-credit-bypass", async (req, res) => {
 /**
  * PATCH: Reject Credit Limit Bypass
  */
-router.patch("/:id/reject-credit-bypass", async (req, res) => {
+router.patch("/:id/reject-credit-bypass", auth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1308,7 +1324,8 @@ router.patch("/:id/reject-credit-bypass", async (req, res) => {
       { customerId: id, status: "PENDING", requestType: "CREDIT_LIMIT" },
       {
         status: "REJECTED",
-        approvedBy: req.user?._id
+        approvedBy: req.user?._id,
+        approvedByModel: req.user?.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser"
       },
       { sort: { createdAt: -1 } }
     );
@@ -1373,7 +1390,7 @@ router.get("/credit-requests/total-count", async (req, res) => {
   try {
     const count = await Customer.countDocuments({
       creditLimitRequestStatus: "PENDING",
-      creditLimitRequiresSuperAdmin: true // Only those requiring Super Admin
+      // creditLimitRequiresSuperAdmin: true // Super Admin can see ALL now
     });
     res.json({ success: true, count });
   } catch (error) {
@@ -1388,7 +1405,7 @@ router.get("/credit-requests/all", async (req, res) => {
   try {
     const customers = await Customer.find({
       creditLimitRequestStatus: "PENDING",
-      creditLimitRequiresSuperAdmin: true // Only High-Risk (4th time+)
+      // creditLimitRequiresSuperAdmin: true // Super Admin can see ALL now
     }).select("name whatsapp debit creditLimit creditLimitRequestBy creditLimitRequestAt branchId")
       .populate("branchId", "name code");
 
@@ -1406,6 +1423,50 @@ router.get("/credit-requests/all", async (req, res) => {
 
     res.json({ success: true, data: requestsWithHistory });
   } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * GET: Fetch ALL Credit Limit Approval History (Global for Super Admin)
+ */
+router.get("/credit-requests/history", async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    const filter = {
+      requestType: "CREDIT_LIMIT",
+      status: { $in: ["APPROVED", "REJECTED"] }
+    };
+
+    if (branchId && branchId !== "all") {
+      filter.branchId = branchId;
+    }
+
+    const history = await OverrideRequest.find(filter)
+    .populate("customerId", "name whatsapp")
+    .populate("branchId", "name code")
+    .populate("approvedBy", "name username")
+    .populate("requestedBy", "name username")
+    .sort({ updatedAt: -1 })
+    .limit(500);
+
+    // Calculate request counts for each customer in the history
+    const customerIds = [...new Set(history.map(h => h.customerId?._id).filter(id => id))];
+    const counts = await OverrideRequest.aggregate([
+      { $match: { customerId: { $in: customerIds }, requestType: "CREDIT_LIMIT" } },
+      { $group: { _id: "$customerId", count: { $sum: 1 } } }
+    ]);
+
+    const countMap = Object.fromEntries(counts.map(c => [c._id.toString(), c.count]));
+
+    const dataWithCounts = history.map(h => ({
+      ...h.toObject(),
+      customerRequestCount: countMap[h.customerId?._id?.toString()] || 0
+    }));
+
+    res.json({ success: true, data: dataWithCounts });
+  } catch (error) {
+    console.error("Credit History Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

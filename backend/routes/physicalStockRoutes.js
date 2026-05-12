@@ -90,7 +90,7 @@ router.post("/", async (req, res) => {
     const {
       branchId, productGroupId, productGroupName,
       productId, productName,
-      systemQty, physicalQty,
+      systemQty, damagedQty, expiredQty, physicalQty,
       mrp, batch, expiryDate,
       checkedBy,
       userId, username
@@ -112,7 +112,10 @@ router.post("/", async (req, res) => {
       productGroupId: productGroupId || null,
       productGroupName: productGroupName || "",
       productId, productName,
-      systemQty: sQty, physicalQty: pQty,
+      systemQty: sQty, 
+      damagedQty: Number(damagedQty) || 0,
+      expiredQty: Number(expiredQty) || 0,
+      physicalQty: pQty,
       inwardQty, outwardQty,
       mrp: Number(mrp) || 0,
       batch: batch || "",
@@ -141,7 +144,7 @@ router.post("/", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.put("/:id", async (req, res) => {
   try {
-    const { physicalQty, mrp, checkedBy, batch, expiryDate, userId, username } = req.body;
+    const { physicalQty, damagedQty, expiredQty, mrp, checkedBy, batch, expiryDate, userId, username } = req.body;
 
     const entry = await PhysicalStockEntry.findById(req.params.id);
     if (!entry) return res.status(404).json({ success: false, message: "Entry not found" });
@@ -160,6 +163,9 @@ router.put("/:id", async (req, res) => {
 
       entry.physicalEditLog.push({ userId, username, oldQty, newQty: pQty, editedAt: new Date() });
     }
+    
+    if (damagedQty !== undefined) entry.damagedQty = Number(damagedQty) || 0;
+    if (expiredQty !== undefined) entry.expiredQty = Number(expiredQty) || 0;
 
     if (checkedBy !== undefined) entry.checkedBy = checkedBy;
     if (mrp !== undefined) entry.mrp = Number(mrp) || 0;
