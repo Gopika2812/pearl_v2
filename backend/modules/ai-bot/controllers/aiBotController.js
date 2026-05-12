@@ -2,189 +2,118 @@ import SalesOrder from "../../../models/SalesOrder.js";
 import Customer from "../../../models/Customer.js";
 import Product from "../../../models/Product.js";
 import BranchUser from "../../../models/BranchUser.js";
-import AuditLog from "../../../models/AuditLog.js";
 import Attendance from "../../hr-payroll/models/Attendance.js";
-import Vendor from "../../../models/Vendor.js";
 import Invoice from "../../../models/Invoice.js";
-import CRMTask from "../../crm-orders/models/CRMTask.js";
+import Branch from "../../../models/Branch.js";
 import mongoose from "mongoose";
 
-const KNOWLEDGE_BASE = {
-  saravanan: {
-    name: "Saravanan Kumar",
-    description: "Saravanan Kumar is the Managing Director and the visionary leader of this company. He oversees the strategic growth, premium quality standards, and overall business ecosystem across all branches.",
-  },
-  app: {
-    features: ["Inventory Management", "Sales & Purchase Orders", "CRM Assisted Smart Orders", "Automated Delivery Flow", "HR & Payroll", "Kanban Task Board", "Real-time Analytics"],
-    version: "2.5.0 (AI Assisted)",
-    developer: "HIG AI Automation LLP"
-  }
-};
+/**
+ * Pearl AI Assistant Bot Controller
+ * Handles data-driven queries with branch-scoping and Super Admin fallbacks.
+ */
 
-const getDateRange = (query) => {
-  const now = new Date();
-  const start = new Date(now);
-  let label = "overall";
-
-  if (query.includes("today")) {
-    start.setHours(0, 0, 0, 0);
-    label = "today";
-  } else if (query.includes("yesterday")) {
-    start.setDate(now.getDate() - 1);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setHours(23, 59, 59, 999);
-    return { range: { $gte: start, $lte: end }, label: "yesterday" };
-  } else if (query.includes("week")) {
-    start.setDate(now.getDate() - 7);
-    label = "this week";
-  } else if (query.includes("month")) {
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-    label = "this month";
-  } else if (query.includes("year")) {
-    start.setMonth(0, 1);
-    start.setHours(0, 0, 0, 0);
-    label = "this year";
-  } else {
-    return { range: null, label: "overall" };
-  }
-
-  return { range: { $gte: start }, label };
+// Helper to identify Super Admin role
+const isSuperAdminUser = (user) => {
+  const role = String(user.role || "").toUpperCase();
+  return role === "SUPER_ADMIN" || role === "SUPERADMIN";
 };
 
 export const queryBot = async (req, res) => {
   try {
-    const { query, branchId } = req.body;
-    if (!query) return res.status(400).json({ success: false, message: "Query is required" });
+    const { query, branchId: bodyBranchId } = req.body;
+    const user = req.user || {};
+    const bId = user.branchId || bodyBranchId;
+    const isSuperAdmin = isSuperAdminUser(user);
 
-    const lowerQuery = query.toLowerCase();
-    const { range, label } = getDateRange(lowerQuery);
-    
-    let response = {
-      type: "text",
-      text: "I'm not sure about that. I can help with 'profit', 'sales', 'tasks', or 'stock' details.",
-      data: null
-    };
+    const q = (query || "").toLowerCase();
+    let response = { type: "text", text: "", data: null };
 
-    // 1. Profit Queries
-    if (lowerQuery.includes("profit") || lowerQuery.includes("margin") || lowerQuery.includes("gain")) {
-      const matchQuery = { branchId: new mongoose.Types.ObjectId(branchId), status: "FINALIZED" };
-      if (range) matchQuery.createdAt = range;
-
-      const profitData = await Invoice.aggregate([
-        { $match: matchQuery },
-        { $unwind: "$items" },
-        {
-          $lookup: {
-            from: "products",
-            localField: "items.productId",
-            foreignField: "_id",
-            as: "productInfo"
-          }
-        },
-        { $unwind: "$productInfo" },
-        {
-          $project: {
-            revenue: { $multiply: ["$items.sellingPrice", "$items.qty"] },
-            cost: { $multiply: ["$productInfo.purchasingPrice", "$items.qty"] }
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalRevenue: { $sum: "$revenue" },
-            totalCost: { $sum: "$cost" }
-          }
+    // ── Build Branch Filter ──
+    let bQuery = {};
+    if (bId && mongoose.isValidObjectId(bId)) {
+        const branchExists = await Branch.exists({ _id: bId });
+        if (branchExists) {
+            const branchObjectId = new mongoose.Types.ObjectId(bId);
+            bQuery = { $or: [{ branch: branchObjectId }, { branchId: branchObjectId }] };
+        } else if (!isSuperAdmin) {
+            // Normal user fallback to provided ID
+            const branchObjectId = new mongoose.Types.ObjectId(bId);
+            bQuery = { $or: [{ branch: branchObjectId }, { branchId: branchObjectId }] };
         }
-      ]);
-
-      if (profitData.length > 0) {
-        const profit = profitData[0].totalRevenue - profitData[0].totalCost;
-        const margin = (profit / profitData[0].totalRevenue) * 100;
-        response.text = `Analysis for ${label}: We generated ₹${profitData[0].totalRevenue.toLocaleString()} in revenue with a total cost of ₹${profitData[0].totalCost.toLocaleString()}. The net profit is ₹${profit.toLocaleString()} (approx ${margin.toFixed(2)}% margin).`;
-      } else {
-        response.text = `I couldn't find any finalized invoice records for ${label} to calculate profit.`;
-      }
-      return res.json({ success: true, ...response });
+        // Super Admin with invalid branch defaults to global bQuery = {}
     }
 
-    // 2. Sales / Revenue Queries
-    if (lowerQuery.includes("sales") || lowerQuery.includes("revenue") || lowerQuery.includes("invoice") || lowerQuery.includes("billing")) {
-      const matchQuery = { branchId: new mongoose.Types.ObjectId(branchId) };
-      if (range) matchQuery.createdAt = range;
+    // ── Attendance Queries ──
+    if (q.includes("attendance") || q.includes("present today") || q.includes("who is present")) {
+        const todayStart = new Date();
+        todayStart.setUTCHours(0, 0, 0, 0);
+        const todayEnd = new Date(todayStart);
+        todayEnd.setUTCHours(23, 59, 59, 999);
 
-      const salesStats = await Invoice.aggregate([
-        { $match: matchQuery },
-        { $group: { _id: null, total: { $sum: "$grandTotal" }, count: { $sum: 1 } } }
-      ]);
+        // Fetch counts for branch
+        let presentCount = await Attendance.countDocuments({ 
+            ...bQuery, 
+            date: { $gte: todayStart, $lte: todayEnd }, 
+            status: { $regex: /^present/i } 
+        });
+        
+        let totalStaff = await BranchUser.countDocuments({ 
+            ...bQuery, 
+            status: { $regex: /^active/i } 
+        });
 
-      if (salesStats.length > 0) {
-        response.text = `Sales for ${label}: ₹${salesStats[0].total.toLocaleString()} from ${salesStats[0].count} invoices.`;
-        const recent = await Invoice.find(matchQuery).sort({ createdAt: -1 }).limit(3);
-        if (recent.length > 0) {
-          response.type = "list";
-          response.data = recent.map(i => `${i.invoiceNumber}: ₹${i.grandTotal.toLocaleString()} (${i.customer?.name || 'Unknown'})`);
+        // ── Super Admin Global Fallback ──
+        // If results are zero but user is super admin, show global stats
+        if (presentCount === 0 && totalStaff === 0 && isSuperAdmin && Object.keys(bQuery).length > 0) {
+            presentCount = await Attendance.countDocuments({ date: { $gte: todayStart, $lte: todayEnd }, status: { $regex: /^present/i } });
+            totalStaff = await BranchUser.countDocuments({ status: { $regex: /^active/i } });
+            
+            response.text = `**Global Attendance Summary (All Branches)**\n\n` +
+              `✅ Present: **${presentCount}**\n` +
+              `👥 Total Staff: **${totalStaff}**\n` +
+              `❌ Absent: **${Math.max(0, totalStaff - presentCount)}**\n\n` +
+              `*(Showing system-wide data as no records were found for the current branch context)*`;
+        } else {
+            response.text = `**Attendance Summary**\n\n` +
+              `✅ Present: **${presentCount}**\n` +
+              `👥 Total Staff: **${totalStaff}**\n` +
+              `❌ Absent: **${Math.max(0, totalStaff - presentCount)}**`;
         }
-      } else {
-        response.text = `No sales records found for ${label}.`;
-      }
-      return res.json({ success: true, ...response });
-    }
 
-    // 3. Task / Kanban Queries
-    if (lowerQuery.includes("task") || lowerQuery.includes("todo") || lowerQuery.includes("kanban")) {
-      const tasks = await CRMTask.find({ branchId }).sort({ createdAt: -1 }).limit(10);
-      const stats = await CRMTask.aggregate([
-        { $match: { branchId: new mongoose.Types.ObjectId(branchId) } },
-        { $group: { _id: "$status", count: { $sum: 1 } } }
-      ]);
-
-      const statSummary = stats.map(s => `${s._id}: ${s.count}`).join(", ");
-      response.text = `Task status: ${statSummary}. Recent items:`;
-      response.type = "list";
-      response.data = tasks.map(t => `${t.title} [${t.status}]`);
-      return res.json({ success: true, ...response });
-    }
-
-    // 4. Stock / Inventory Queries
-    if (lowerQuery.includes("stock") || lowerQuery.includes("product") || lowerQuery.includes("inventory")) {
-      const productCount = await Product.countDocuments({ branchId });
-      const lowStock = await Product.find({ branchId, totalQty: { $lt: 10 } }).limit(5);
-      response.text = `Inventory Summary: ${productCount} products total. ${lowStock.length > 0 ? "Alert: Low stock items found." : "Stock is stable."}`;
-      if (lowStock.length > 0) {
-        response.type = "list";
-        response.data = lowStock.map(p => `${p.name}: ${p.totalQty} remaining`);
-      }
-      return res.json({ success: true, ...response });
-    }
-
-    // 5. User Status Check
-    const userMatch = lowerQuery.match(/(?:is|where is|what is|about)\s+([a-zA-Z]+)(?:\s+working|\s+doing|\s+on|\s+present)?/i);
-    const potentialName = userMatch ? userMatch[1] : (lowerQuery.includes("saravanan") ? "saravanan" : null);
-
-    if (potentialName) {
-      const targetUser = await BranchUser.findOne({ name: new RegExp(potentialName, "i") });
-      if (targetUser) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const attendance = await Attendance.findOne({ employeeId: targetUser._id, date: { $gte: today } });
-        const latestLog = await AuditLog.findOne({ user: targetUser._id }).sort({ createdAt: -1 });
-
-        let statusText = attendance && attendance.status === "Present" 
-          ? `${targetUser.name} is currently PRESENT.` 
-          : `${targetUser.name} is not marked as present today.`;
-
-        let activityText = latestLog ? ` Last seen on [${latestLog.action}] at ${new Date(latestLog.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` : "";
-        let bioText = targetUser.name.toLowerCase().includes("saravanan") ? ` ${KNOWLEDGE_BASE.saravanan.description}` : "";
-        response.text = `${statusText}${activityText}${bioText}`;
-        return res.json({ success: true, ...response });
-      }
+        // Include staff names if any are present
+        if (presentCount > 0) {
+            const list = await Attendance.find({ 
+                ...(presentCount > 0 && totalStaff === 0 ? {} : bQuery), // use global if fallback was triggered
+                date: { $gte: todayStart, $lte: todayEnd }, 
+                status: { $regex: /^present/i } 
+            }).populate("employeeId", "name").limit(10);
+            
+            response.type = "list";
+            response.data = list.map(u => u.employeeId?.name || "Unknown Staff");
+        }
+    } 
+    // ── Sales Queries ──
+    else if (q.includes("sale") || q.includes("revenue") || q.includes("billing")) {
+        const match = { ...bQuery, status: { $ne: "CANCELLED" } };
+        const stats = await Invoice.aggregate([
+            { $match: match }, 
+            { $group: { _id: null, total: { $sum: "$grandTotal" }, count: { $sum: 1 } } }
+        ]);
+        
+        if (stats.length > 0) {
+          response.text = `**Sales Overview**\n\n💰 Total Revenue: **₹${stats[0].total.toLocaleString("en-IN")}**\n📄 Total Invoices: **${stats[0].count}**`;
+        } else {
+          response.text = "No sales records found for this period.";
+        }
+    } 
+    // ── Default Greeting / Info ──
+    else {
+        response.text = "Hello! I'm your Pearl ERP Assistant. You can ask me about **attendance today**, **sales summaries**, or **inventory levels**.";
     }
 
     res.json({ success: true, ...response });
   } catch (error) {
     console.error("AI Bot Error:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: "Internal error in AI assistant module." });
   }
 };

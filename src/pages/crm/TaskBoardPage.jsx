@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     FaPlus, FaSearch, FaFilter, FaCalendarAlt, 
     FaUser, FaEllipsisV, FaCheckCircle, FaExclamationCircle,
-    FaTrash, FaClock
+    FaTrash, FaClock, FaTicketAlt, FaPhoneAlt, FaFileInvoice, FaShoppingCart
 } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { apiWithAuth } from '../../api';
@@ -18,10 +18,17 @@ const COLUMNS = [
 const TaskBoardPage = () => {
     const { currentBranch, user } = useBranch();
     const [tasks, setTasks] = useState([]);
+    const [branchUsers, setBranchUsers] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
+    const [editingTask, setEditingTask] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
     
+    // Filters
+    const [userFilter, setUserFilter] = useState("");
+    const [fromDate, setFromDate] = useState("");
+    const [toDate, setToDate] = useState("");
+
     // New Task Form State
     const [newTask, setNewTask] = useState({
         title: "",
@@ -34,13 +41,28 @@ const TaskBoardPage = () => {
     useEffect(() => {
         if (currentBranch) {
             fetchTasks();
+            fetchBranchUsers();
         }
-    }, [currentBranch]);
+    }, [currentBranch, userFilter, fromDate, toDate]);
+
+    const fetchBranchUsers = async () => {
+        try {
+            const res = await apiWithAuth.get(`/branch-users?branchId=${currentBranch._id}`);
+            setBranchUsers(res.data.data || []);
+        } catch (error) {
+            console.error("Failed to fetch branch users", error);
+        }
+    };
 
     const fetchTasks = async () => {
         setIsLoading(true);
         try {
-            const res = await apiWithAuth.get(`/crm-orders/tasks?branchId=${currentBranch._id}`);
+            let url = `/crm-orders/tasks?branchId=${currentBranch._id}`;
+            if (userFilter) url += `&assignedTo=${userFilter}`;
+            if (fromDate) url += `&fromDate=${fromDate}`;
+            if (toDate) url += `&toDate=${toDate}`;
+            
+            const res = await apiWithAuth.get(url);
             setTasks(res.data);
         } catch (error) {
             toast.error("Failed to fetch tasks");
@@ -90,93 +112,183 @@ const TaskBoardPage = () => {
         t.description?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const renderTaskCard = (task) => (
-        <div 
-            key={task._id}
-            className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group relative mb-4"
-        >
-            <div className="flex justify-between items-start mb-3">
-                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg ${
-                    task.priority === 'URGENT' ? 'bg-rose-100 text-rose-600' :
-                    task.priority === 'HIGH' ? 'bg-amber-100 text-amber-600' :
-                    task.priority === 'MEDIUM' ? 'bg-indigo-100 text-indigo-600' :
-                    'bg-slate-100 text-slate-500'
-                }`}>
-                    {task.priority}
-                </span>
-                <button 
-                    onClick={() => handleDeleteTask(task._id)}
-                    className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-all"
-                >
-                    <FaTrash size={12} />
-                </button>
-            </div>
-            
-            <h4 className="text-sm font-bold text-slate-800 mb-1 leading-tight">{task.title}</h4>
-            <p className="text-xs text-slate-500 line-clamp-2 mb-4 leading-relaxed">{task.description}</p>
-            
-            <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-                <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center text-[10px] font-black">
-                        {task.assignedTo?.substring(0, 2).toUpperCase() || <FaUser size={8} />}
+    const renderTaskCard = (task) => {
+        const typeColors = {
+            TOKEN: 'bg-amber-100 text-amber-700 border-amber-200',
+            FOLLOW_UP: 'bg-rose-100 text-rose-700 border-rose-200',
+            INVOICE: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+            SALES_ORDER: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+            MANUAL: 'bg-slate-100 text-slate-700 border-slate-200'
+        };
+
+        const typeIcons = {
+            TOKEN: <FaTicketAlt size={10} />,
+            FOLLOW_UP: <FaPhoneAlt size={10} />,
+            INVOICE: <FaFileInvoice size={10} />,
+            SALES_ORDER: <FaShoppingCart size={10} />,
+            MANUAL: <FaCheckCircle size={10} />
+        };
+
+        const isReadOnly = task.type !== 'MANUAL';
+
+        return (
+            <div 
+                key={task._id}
+                onClick={() => !isReadOnly && setEditingTask(task)}
+                className={`bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group relative mb-4 ${!isReadOnly ? 'cursor-pointer hover:border-indigo-300' : ''}`}
+            >
+                <div className="flex justify-between items-start mb-3">
+                    <div className="flex gap-2">
+                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border flex items-center gap-1 ${typeColors[task.type || 'MANUAL']}`}>
+                            {typeIcons[task.type || 'MANUAL']}
+                            {task.type || 'MANUAL'}
+                        </span>
+                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg ${
+                            task.priority === 'URGENT' ? 'bg-rose-100 text-rose-600' :
+                            task.priority === 'HIGH' ? 'bg-amber-100 text-amber-600' :
+                            task.priority === 'MEDIUM' ? 'bg-indigo-100 text-indigo-600' :
+                            'bg-slate-100 text-slate-500'
+                        }`}>
+                            {task.priority}
+                        </span>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400">{task.assignedTo || 'Unassigned'}</span>
+                    {!isReadOnly && (
+                        <button 
+                            onClick={() => handleDeleteTask(task._id)}
+                            className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-all"
+                        >
+                            <FaTrash size={12} />
+                        </button>
+                    )}
                 </div>
-                {task.dueDate && (
-                    <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400">
-                        <FaClock size={10} />
-                        {new Date(task.dueDate).toLocaleDateString()}
+                
+                <h4 className="text-sm font-bold text-slate-800 mb-1 leading-tight">{task.title}</h4>
+                <p className="text-xs text-slate-500 line-clamp-2 mb-4 leading-relaxed">{task.description}</p>
+                
+                <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+                    <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center text-[10px] font-black">
+                            {task.assignedTo?.substring(0, 2).toUpperCase() || <FaUser size={8} />}
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400">{task.assignedTo || 'Unassigned'}</span>
+                    </div>
+                    {task.dueDate && (
+                        <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400">
+                            <FaClock size={10} />
+                            {new Date(task.dueDate).toLocaleDateString()}
+                        </div>
+                    )}
+                </div>
+
+                {/* Status Quick Actions (Only for Manual Tasks) */}
+                {!isReadOnly && (
+                    <div className="mt-4 flex gap-1">
+                        {COLUMNS.filter(c => c.id !== task.status).map(col => (
+                            <button 
+                                key={col.id}
+                                onClick={() => handleUpdateStatus(task._id, col.id)}
+                                className="text-[8px] font-black uppercase tracking-tighter px-2 py-1 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-400 rounded-md transition-colors"
+                            >
+                                Move to {col.title}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {/* Info for automated tasks */}
+                {isReadOnly && (
+                    <div className="mt-3 text-[8px] font-black text-slate-300 uppercase tracking-widest italic">
+                        Auto-tracked System Activity
                     </div>
                 )}
             </div>
-
-            {/* Status Quick Actions */}
-            <div className="mt-4 flex gap-1">
-                {COLUMNS.filter(c => c.id !== task.status).map(col => (
-                    <button 
-                        key={col.id}
-                        onClick={() => handleUpdateStatus(task._id, col.id)}
-                        className="text-[8px] font-black uppercase tracking-tighter px-2 py-1 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-400 rounded-md transition-colors"
-                    >
-                        Move to {col.title}
-                    </button>
-                ))}
-            </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <div className="min-h-screen bg-[#f8fafc] p-4 md:p-8">
             {/* Header */}
             <div className="max-w-[1600px] mx-auto mb-8">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
-                    <div>
-                        <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-                            <span className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-                                <FaCheckCircle />
-                            </span>
-                            Task Board <span className="text-indigo-500 font-medium text-sm bg-indigo-50 px-3 py-1 rounded-full uppercase tracking-widest">CRM Management</span>
-                        </h1>
-                        <p className="text-slate-500 mt-1 font-medium">Assign tasks, track progress, and manage customer follow-ups.</p>
+                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-8">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div>
+                            <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+                                <span className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                                    <FaCheckCircle />
+                                </span>
+                                Task Board <span className="text-indigo-500 font-medium text-sm bg-indigo-50 px-3 py-1 rounded-full uppercase tracking-widest">CRM Management</span>
+                            </h1>
+                            <p className="text-slate-500 mt-1 font-medium">Assign tasks, track progress, and manage customer follow-ups.</p>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                            <button 
+                                onClick={() => setIsNewTaskModalOpen(true)}
+                                className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 active:scale-95"
+                            >
+                                <FaPlus /> New Task
+                            </button>
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <div className="relative hidden sm:block">
+                    {/* Filters Row */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-8 border-t border-slate-50">
+                        <div className="relative">
                             <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input 
                                 type="text"
                                 placeholder="Search tasks..."
-                                className="pl-11 pr-6 py-3 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl outline-none transition-all w-64 text-sm font-medium"
+                                className="w-full pl-11 pr-6 py-3 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-xl outline-none transition-all text-xs font-bold"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
-                        <button 
-                            onClick={() => setIsNewTaskModalOpen(true)}
-                            className="bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 active:scale-95"
-                        >
-                            <FaPlus /> New Task
-                        </button>
+
+                        {/* User Filter (Admin Only) */}
+                        {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                            <div className="relative">
+                                <FaUser className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <select 
+                                    className="w-full pl-11 pr-6 py-3 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-xl outline-none transition-all text-xs font-bold appearance-none"
+                                    value={userFilter}
+                                    onChange={(e) => setUserFilter(e.target.value)}
+                                >
+                                    <option value="">All Users</option>
+                                    {branchUsers.map(u => (
+                                        <option key={u._id} value={u.username}>{u.name || u.username}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        <div className="flex gap-2 col-span-2">
+                            <div className="flex-1 relative">
+                                <FaCalendarAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input 
+                                    type="date"
+                                    className="w-full pl-11 pr-6 py-3 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-xl outline-none transition-all text-xs font-bold"
+                                    value={fromDate}
+                                    onChange={(e) => setFromDate(e.target.value)}
+                                />
+                                <span className="absolute -top-5 left-2 text-[8px] font-black uppercase text-slate-400">From Date</span>
+                            </div>
+                            <div className="flex-1 relative">
+                                <FaCalendarAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input 
+                                    type="date"
+                                    className="w-full pl-11 pr-6 py-3 bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-xl outline-none transition-all text-xs font-bold"
+                                    value={toDate}
+                                    onChange={(e) => setToDate(e.target.value)}
+                                />
+                                <span className="absolute -top-5 left-2 text-[8px] font-black uppercase text-slate-400">To Date</span>
+                            </div>
+                            <button 
+                                onClick={() => { setUserFilter(""); setFromDate(""); setToDate(""); setSearchTerm(""); }}
+                                className="px-4 py-3 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold uppercase hover:bg-slate-200 transition"
+                            >
+                                Clear
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -230,12 +342,16 @@ const TaskBoardPage = () => {
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Assign To</label>
-                                    <input 
-                                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl p-4 text-sm outline-none transition-all"
-                                        placeholder="Username"
+                                    <select 
+                                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl p-4 text-sm outline-none transition-all appearance-none"
                                         value={newTask.assignedTo}
                                         onChange={(e) => setNewTask({...newTask, assignedTo: e.target.value})}
-                                    />
+                                    >
+                                        <option value="">Select Staff</option>
+                                        {branchUsers.map(u => (
+                                            <option key={u._id} value={u.username}>{u.name || u.username}</option>
+                                        ))}
+                                    </select>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Priority</label>
@@ -274,6 +390,78 @@ const TaskBoardPage = () => {
                                 >
                                     Create Task
                                 </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Task Modal */}
+            {editingTask && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 bg-amber-500 text-white">
+                            <h2 className="text-2xl font-black uppercase tracking-tight">Edit Task</h2>
+                            <p className="text-amber-100 text-[10px] font-bold uppercase tracking-widest mt-1 opacity-70">Modify task details and assignment</p>
+                        </div>
+                        <form onSubmit={async (e) => {
+                            e.preventDefault();
+                            try {
+                                await apiWithAuth.patch(`/crm-orders/tasks/${editingTask._id}`, editingTask);
+                                setTasks(prev => prev.map(t => t._id === editingTask._id ? editingTask : t));
+                                setEditingTask(null);
+                                toast.success("Task updated!");
+                            } catch (error) { toast.error("Failed to update"); }
+                        }} className="p-8 space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Task Title</label>
+                                <input 
+                                    required
+                                    className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl p-4 text-sm outline-none transition-all"
+                                    value={editingTask.title}
+                                    onChange={(e) => setEditingTask({...editingTask, title: e.target.value})}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Description</label>
+                                <textarea 
+                                    className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl p-4 text-sm outline-none transition-all"
+                                    rows="3"
+                                    value={editingTask.description}
+                                    onChange={(e) => setEditingTask({...editingTask, description: e.target.value})}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Assign To</label>
+                                    <select 
+                                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl p-4 text-sm outline-none transition-all appearance-none"
+                                        value={editingTask.assignedTo}
+                                        onChange={(e) => setEditingTask({...editingTask, assignedTo: e.target.value})}
+                                    >
+                                        <option value="">Select Staff</option>
+                                        {branchUsers.map(u => (
+                                            <option key={u._id} value={u.username}>{u.name || u.username}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Priority</label>
+                                    <select 
+                                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-500 rounded-2xl p-4 text-sm outline-none transition-all appearance-none"
+                                        value={editingTask.priority}
+                                        onChange={(e) => setEditingTask({...editingTask, priority: e.target.value})}
+                                    >
+                                        <option value="LOW">LOW</option>
+                                        <option value="MEDIUM">MEDIUM</option>
+                                        <option value="HIGH">HIGH</option>
+                                        <option value="URGENT">URGENT</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="flex gap-4 pt-4">
+                                <button type="button" onClick={() => setEditingTask(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest">Cancel</button>
+                                <button type="submit" className="flex-1 py-4 bg-amber-500 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-amber-100">Update Task</button>
                             </div>
                         </form>
                     </div>

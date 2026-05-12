@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FaRobot, FaPaperPlane, FaTimes, FaChevronDown, FaMinus, FaExternalLinkAlt } from "react-icons/fa";
+import { FaRobot, FaPaperPlane, FaTimes, FaMinus } from "react-icons/fa";
 import { useBranch } from "../context/BranchContext";
 import { apiWithAuth } from "../api";
+import ReactMarkdown from "react-markdown";
 
 const AIAssistantBot = () => {
   const { currentBranch } = useBranch();
@@ -15,15 +16,17 @@ const AIAssistantBot = () => {
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, loading]);
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const isAuthorized = user.role === "SUPER_ADMIN" || user.role === "BRANCH_ADMIN" || user.role === "Admin";
+  const isAuthorized = user.role === "SUPER_ADMIN" || user.role === "BRANCH_ADMIN" || user.role === "Admin" || user.role === "SUPERADMIN";
 
   if (!isAuthorized) return null;
 
@@ -50,7 +53,7 @@ const AIAssistantBot = () => {
           data: response.data.data 
         }]);
       } else {
-        setMessages(prev => [...prev, { role: "bot", text: "Sorry, I encountered an error. Please try again." }]);
+        setMessages(prev => [...prev, { role: "bot", text: "I couldn't find enough information to answer that accurately. could you please call our admin : +91 9514423300" }]);
       }
     } catch (error) {
       setMessages(prev => [...prev, { role: "bot", text: "I'm having trouble connecting to the server. Please check your connection." }]);
@@ -60,10 +63,10 @@ const AIAssistantBot = () => {
   };
 
   const suggestions = [
-    "What does Gopika do?",
-    "Fast moving products",
-    "Client details",
-    "Sales overview",
+    "How to create a new invoice?",
+    "Check stock of Milk Compound",
+    "Who is present today?",
+    "Recent sales summary",
     "App features"
   ];
 
@@ -95,14 +98,14 @@ const AIAssistantBot = () => {
                 <FaRobot />
               </div>
               <div>
-                <h3 className="font-bold text-sm">Pearl AI Assistant</h3>
-                <div className="flex items-center gap-1.5">
+                <h3 className="font-bold text-sm text-white">Pearl AI Assistant</h3>
+                <div className="flex items-center gap-1.5 text-white">
                   <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
                   <span className="text-[10px] opacity-80 uppercase tracking-widest font-black">Online</span>
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 text-white">
               <button onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized); }} className="hover:bg-white/10 p-1.5 rounded transition">
                 <FaMinus size={14} />
               </button>
@@ -123,7 +126,9 @@ const AIAssistantBot = () => {
                       ? "bg-indigo-600 text-white rounded-tr-none" 
                       : "bg-white text-slate-700 border border-slate-100 rounded-tl-none"
                     }`}>
-                      <p className="leading-relaxed">{msg.text}</p>
+                      <div className="prose prose-sm prose-slate leading-relaxed">
+                        <ReactMarkdown>{msg.text}</ReactMarkdown>
+                      </div>
                       
                       {msg.type === "list" && msg.data && (
                         <div className="mt-2 space-y-1 border-t pt-2 border-slate-100">
@@ -138,6 +143,7 @@ const AIAssistantBot = () => {
                     </div>
                   </div>
                 ))}
+
                 {loading && (
                   <div className="flex justify-start">
                     <div className="bg-white border border-slate-100 p-3 rounded-2xl rounded-tl-none shadow-sm flex gap-1">

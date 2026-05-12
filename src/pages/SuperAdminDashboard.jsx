@@ -3,6 +3,7 @@ import { FaCheck, FaTimes, FaTrash, FaUser, FaBriefcase, FaShieldAlt, FaFilter, 
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { API_BASE } from "../api";
+import { useBranch } from "../context/BranchContext";
 
 export default function SuperAdminDashboard() {
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ export default function SuperAdminDashboard() {
   const today = new Date().toISOString().split("T")[0];
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
+  const { setSuperAdminViewBranch } = useBranch();
   const [selectedBranch, setSelectedBranch] = useState("");
   const [branches, setBranches] = useState([]);
   const [stats, setStats] = useState({
@@ -96,6 +98,7 @@ export default function SuperAdminDashboard() {
     setStartDate(today);
     setEndDate(today);
     setSelectedBranch("");
+    setSuperAdminViewBranch(null);
   };
 
   const fetchPendingRegistrations = async () => {
@@ -245,7 +248,12 @@ export default function SuperAdminDashboard() {
               <FaBuilding className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
               <select
                 value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
+                onChange={(e) => {
+                  const bId = e.target.value;
+                  setSelectedBranch(bId);
+                  const branchObj = branches.find(b => b._id === bId);
+                  setSuperAdminViewBranch(branchObj || null);
+                }}
                 className="w-full bg-gray-50 border border-gray-200 text-secondary text-sm rounded-xl pl-10 pr-4 py-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary appearance-none font-medium"
               >
                 <option value="">All Branches</option>

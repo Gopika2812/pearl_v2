@@ -9,6 +9,9 @@ import VoucherType from "../../../models/VoucherType.js";
 import { getFinancialYear } from "../../../utils/financialYear.js";
 import crypto from "crypto";
 import CRMTask from "../models/CRMTask.js";
+import Token from "../../../models/Token.js";
+import FollowUp from "../../../models/FollowUp.js";
+import Invoice from "../../../models/Invoice.js";
 
 export const getFrequentCustomers = async (req, res) => {
   try {
@@ -284,10 +287,162 @@ export const confirmPublicOrder = async (req, res) => {
 // Task Board Logic
 export const getTasks = async (req, res) => {
   try {
-    const { branchId } = req.query;
-    const tasks = await CRMTask.find({ branchId }).populate("customerId").sort({ createdAt: -1 });
-    res.json(tasks);
+    const { branchId, assignedTo: filterUser, fromDate, toDate } = req.query;
+    const userId = req.user.id || req.user._id;
+    const username = req.user.username;
+    const name = req.user.name;
+
+    if (!branchId) return res.status(400).json({ message: "branchId is required" });
+
+    const isAdmin = req.user.role === "ADMIN" || req.user.role === "SUPER_ADMIN" || req.user.role === "SUPERADMIN" || req.user.role === "MANAGER";
+
+    // Date Range Setup
+    let dateQuery = {};
+    if (fromDate && toDate) {
+      dateQuery = { createdAt: { $gte: new Date(fromDate), $lte: new Date(toDate) } };
+    }
+
+    // 1. Fetch Manual CRM Tasks
+    let manualTaskQuery = { branchId, ...dateQuery };
+    if (filterUser) {
+      manualTaskQuery.$or = [{ assignedTo: filterUser }, { createdBy: filterUser }];
+    } else if (!isAdmin) {
+      manualTaskQuery.$or = [{ assignedTo: username }, { assignedTo: name }, { createdBy: username }];
+    }
+    const manualTasks = await CRMTask.find(manualTaskQuery).populate("customerId").sort({ createdAt: -1 });
+
+    // 2. Fetch Tokens
+    let tokenQuery = { branchId, status: { $in: ["OPEN", "TAKEN", "IN_PROGRESS"] }, ...dateQuery };
+    if (filterUser) {
+      // Find user to get their ID if filterUser is a username
+      const TokenUser = await mongoose.model("BranchUser").findOne({ $or: [{ username: filterUser }, { name: filterUser }] });
+      if (TokenUser) {
+        tokenQuery.$or = [{ "assignedTo.id": TokenUser._id }, { takenBy: TokenUser._id }];
+      } else {
+        tokenQuery = { _id: null }; // No user found, return nothing
+      }
+    } else if (!isAdmin) {
+      tokenQuery.$or = [{ "assignedTo.id": userId }, { takenBy: userId }];
+    }
+    const tokens = await Token.find(tokenQuery).populate("customer.id");
+
+    const tokenTasks = tokens.map(t => ({
+      _id: `token-${t._id}`,
+      title: `Token: ${t.tokenId}`,
+      description: t.message,
+      status: t.status === "OPEN" ? "TODO" : (t.status === "IN_PROGRESS" ? "IN_PROGRESS" : "REVIEW"),
+      priority: "HIGH",
+      assignedTo: t.assignedTo?.name || t.takenBy?.name || "Unassigned",
+      customerId: t.customer?.id,
+      type: "TOKEN",
+      refId: t._id,
+      createdAt: t.createdAt
+    }));
+
+    // 3. Fetch Follow-Ups
+    const followUpQuery = isAdmin ? { branchId, status: "PENDING" } : { branchId, status: "PENDING", followUpBy: { $in: [username, name] } };
+    const followUps = await FollowUp.find(followUpQuery).populate("customerId");
+
+    const followUpTasks = followUps.map(f => ({
+      _id: `followup-${f._id}`,
+      title: `Follow Up: ${f.customerId?.name || "Customer"}`,
+      description: f.remarks || "Regular follow up",
+      status: "TODO",
+      priority: "MEDIUM",
+      assignedTo: f.followUpBy,
+      customerId: f.customerId,
+      dueDate: f.nextFollowUpDate,
+      type: "FOLLOW_UP",
+      refId: f._id,
+      createdAt: f.createdAt
+    }));
+
+    // 4. Fetch Sales Orders & Invoices
+    let invoiceQuery = { branchId, status: { $ne: "CANCELLED" }, ...dateQuery };
+    if (filterUser) {
+      // Fetch user ID for objectId fields
+      const InvUser = await mongoose.model("BranchUser").findOne({ $or: [{ username: filterUser }, { name: filterUser }] });
+      invoiceQuery.$or = [
+        { storageMan: filterUser },
+        { stockChecker: filterUser },
+        { deliveryPerson: filterUser },
+        { billingPerson: filterUser }
+      ];
+      if (InvUser) invoiceQuery.$or.push({ deliveryMan: InvUser._id });
+    } else if (!isAdmin) {
+      invoiceQuery.$or = [
+        { storageMan: username }, { storageMan: name },
+        { stockChecker: username }, { stockChecker: name },
+        { deliveryPerson: username }, { deliveryPerson: name },
+        { billingPerson: username }, { billingPerson: name },
+        { deliveryMan: userId }
+      ];
+    }
+    const activeInvoices = await Invoice.find(invoiceQuery).populate("customer.customerId").sort({ createdAt: -1 });
+
+    const invoiceTasks = activeInvoices.map(inv => {
+      let status = "IN_PROGRESS";
+      if (inv.deliveryStatus === "COMPLETED") status = "DONE";
+      else if (inv.status === "FINALIZED" || inv.status === "PRINTED") status = "REVIEW";
+
+      return {
+        _id: `invoice-${inv._id}`,
+        title: `Inv: ${inv.invoiceNumber}`,
+        description: `Customer: ${inv.customer?.name} | Area: ${inv.area || "N/A"}`,
+        status: status,
+        priority: "MEDIUM",
+        assignedTo: inv.storageMan || inv.billingPerson || "Unassigned",
+        customerId: inv.customer?.customerId,
+        type: "INVOICE",
+        refId: inv._id,
+        createdAt: inv.createdAt
+      };
+    });
+
+    let soQuery = { branchId, status: "PLACED", ...dateQuery };
+    if (filterUser) {
+        const SOUser = await mongoose.model("BranchUser").findOne({ $or: [{ username: filterUser }, { name: filterUser }] });
+        soQuery.$or = [
+            { salesOwner: filterUser },
+            { agent: filterUser },
+            { billingPerson: filterUser }
+        ];
+        if (SOUser) soQuery.$or.push({ salesMan: SOUser._id });
+    } else if (!isAdmin) {
+      soQuery.$or = [
+        { salesOwner: username }, { salesOwner: name },
+        { agent: username }, { agent: name },
+        { billingPerson: username }, { billingPerson: name },
+        { salesMan: userId }
+      ];
+    }
+    const activeSalesOrders = await SalesOrder.find(soQuery).populate("customer.customerId");
+
+    const soTasks = activeSalesOrders.map(so => ({
+      _id: `so-${so._id}`,
+      title: `SO: ${so.invoiceId}`,
+      description: `New order for ${so.customer?.name}`,
+      status: "IN_PROGRESS",
+      priority: "MEDIUM",
+      assignedTo: so.salesOwner || so.billingPerson || "Unassigned",
+      customerId: so.customer?.customerId,
+      type: "SALES_ORDER",
+      refId: so._id,
+      createdAt: so.createdAt
+    }));
+
+    // Combine all tasks
+    const allTasks = [
+      ...manualTasks.map(t => ({ ...t.toObject(), type: "MANUAL" })),
+      ...tokenTasks,
+      ...followUpTasks,
+      ...invoiceTasks,
+      ...soTasks
+    ];
+
+    res.json(allTasks);
   } catch (error) {
+    console.error("Unified Task Board Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
