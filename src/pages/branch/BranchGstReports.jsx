@@ -144,6 +144,102 @@ const BranchGstReports = () => {
     fetchReports();
   }, [branch?._id, selectedMonth, selectedYear]);
 
+  const downloadB2BExcel_Standalone = () => {
+    if (!gstr1Data || !gstr1Data.b2b) return;
+    const fileName = `${branch?.gstin || "NO_GSTIN"}_B2B_RECORDS_${months[selectedMonth - 1]}_${selectedYear}`;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("B2B_Records");
+    
+    const columns = ["GSTIN/UIN of Recipient", "Receiver Name", "Invoice Number", "Invoice date", "Invoice Value", "Place Of Supply", "Reverse Charge", "Applicable % of Tax Rate", "Invoice Type", "E-Commerce GSTIN", "Rate", "Taxable Value", "Cess Amount"];
+    
+    const headerRow = sheet.addRow(columns);
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" }
+      };
+    });
+
+    gstr1Data.b2b.forEach(row => {
+      sheet.addRow([
+        row.gstin, row.customerName, row.invoiceNo, row.date, row.value, row.placeOfSupply, row.reverseCharge, row.applicablePercent, row.invoiceType, row.ecommerceGstin, row.rate, row.taxableValue, row.cess
+      ]);
+    });
+
+    // Auto-width
+    sheet.columns.forEach((column) => {
+      let maxLength = 0;
+      column.eachCell({ includeEmpty: true }, (cell) => {
+        const columnLength = cell.value ? cell.value.toString().length : 10;
+        if (columnLength > maxLength) maxLength = columnLength;
+      });
+      column.width = maxLength < 12 ? 12 : maxLength + 2;
+    });
+
+    workbook.xlsx.writeBuffer().then((buffer) => {
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fileName}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    });
+  };
+
+  const downloadB2CExcel_Standalone = () => {
+    if (!gstr1Data || !gstr1Data.b2cRaw) return;
+    const fileName = `${branch?.gstin || "NO_GSTIN"}_B2C_RECORDS_${months[selectedMonth - 1]}_${selectedYear}`;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("B2C_Records");
+    
+    const columns = ["Invoice Number", "Date", "Customer Name", "Taxable Value", "CGST", "SGST", "IGST", "Total Value", "Rates"];
+    
+    const headerRow = sheet.addRow(columns);
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" }
+      };
+    });
+
+    gstr1Data.b2cRaw.forEach(inv => {
+      sheet.addRow([
+        inv.invoiceNo, inv.date, inv.customerName, inv.taxableValue, inv.cgst, inv.sgst, inv.igst || 0, inv.value, inv.rates?.join(", ")
+      ]);
+    });
+
+    // Auto-width
+    sheet.columns.forEach((column) => {
+      let maxLength = 0;
+      column.eachCell({ includeEmpty: true }, (cell) => {
+        const columnLength = cell.value ? cell.value.toString().length : 10;
+        if (columnLength > maxLength) maxLength = columnLength;
+      });
+      column.width = maxLength < 12 ? 12 : maxLength + 2;
+    });
+
+    workbook.xlsx.writeBuffer().then((buffer) => {
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fileName}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    });
+  };
+
   const downloadGstr1Excel = () => {
     if (!gstr1Data) return;
 
@@ -268,6 +364,83 @@ const BranchGstReports = () => {
     addStyledSheet("docs", docData, docCols);
 
     // Generate and Download
+    workbook.xlsx.writeBuffer().then((buffer) => {
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fileName}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    });
+  };
+  
+  const downloadGstr1SummaryExcel = () => {
+    if (!gstr1Data) return;
+
+    const fileName = `${branch?.gstin || "NO_GSTIN"}_GSTR1_SUMMARY_${months[selectedMonth - 1]}_${selectedYear}`;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Filing_Summary");
+
+    // Styling
+    const headerStyle = {
+      font: { bold: true, color: { argb: "FFFFFFFF" }, size: 11 },
+      fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } },
+      alignment: { horizontal: "center", vertical: "middle" },
+      border: { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } }
+    };
+
+    // 1. Report Title
+    sheet.mergeCells("A1:E1");
+    const title = sheet.getCell("A1");
+    title.value = "GST FILING RECORD SUMMARY (GSTR-1)";
+    title.font = { bold: true, size: 16, color: { argb: "FF1E293B" } };
+    title.alignment = { horizontal: "center" };
+
+    sheet.addRow([`Branch: ${branch?.name}`, "", "", `Period: ${months[selectedMonth - 1]} ${selectedYear}`]);
+    sheet.addRow([`GSTIN: ${branch?.gstin}`, "", "", `Generated: ${new Date().toLocaleDateString()}`]);
+    sheet.addRow([]);
+
+    // 2. Main Summary Table
+    const tableHeader = sheet.addRow(["SECTION", "PARTICULARS", "RECORD COUNT", "TAXABLE VALUE", "TOTAL TAX"]);
+    tableHeader.eachCell(cell => { 
+      Object.assign(cell, headerStyle);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+    });
+
+    const b2bTaxable = gstr1Data.b2b.reduce((s, r) => s + (r.taxableValue || 0), 0);
+    const b2bTax = gstr1Data.b2b.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+
+    const b2cTaxable = (gstr1Data.b2cl || []).reduce((s, r) => s + (r.taxableValue || 0), 0) + (gstr1Data.b2cs || []).reduce((s, r) => s + (r.taxableValue || 0), 0);
+    const b2cTax = (gstr1Data.b2cl || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + (gstr1Data.b2cs || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+
+    const cnTaxable = (gstr1Data.cdnr || []).reduce((s, r) => s + (r.taxableValue || 0), 0) + (gstr1Data.cdnur || []).reduce((s, r) => s + (r.taxableValue || 0), 0);
+    const cnTax = (gstr1Data.cdnr || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + (gstr1Data.cdnur || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+
+    const nilTaxable = (gstr1Data.nilRated || []).reduce((s, r) => s + (r.nilRated || 0) + (r.exempt || 0) + (r.nonGst || 0), 0);
+
+    sheet.addRow(["B2B", "Business to Business Supplies", gstr1Data.b2b.length, b2bTaxable, b2bTax]);
+    sheet.addRow(["B2C", "Business to Consumer Supplies", gstr1Data.b2cRaw?.length || 0, b2cTaxable, b2cTax]);
+    sheet.addRow(["Credit Note", "Registered & Unregistered Returns", (gstr1Data.cdnr?.length || 0) + (gstr1Data.cdnur?.length || 0), cnTaxable, cnTax]);
+    sheet.addRow(["Nil Rated", "Exempted / Non-GST Supplies", gstr1Data.nilRated?.length || 0, nilTaxable, 0]);
+    
+    // 3. Document Summary
+    sheet.addRow([]);
+    const docHeader = sheet.addRow(["NATURE OF DOCUMENT", "FROM", "TO", "TOTAL", "CANCELLED"]);
+    docHeader.eachCell(cell => { 
+      Object.assign(cell, headerStyle); 
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }; 
+    });
+
+    (gstr1Data.docSummary || []).forEach(doc => {
+      sheet.addRow([doc.nature, doc.from, doc.to, doc.total, doc.cancelled]);
+    });
+
+    // Formatting
+    sheet.getColumn(4).numFmt = "₹#,##0.00";
+    sheet.getColumn(5).numFmt = "₹#,##0.00";
+    sheet.columns.forEach(col => col.width = 25);
+
     workbook.xlsx.writeBuffer().then((buffer) => {
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = window.URL.createObjectURL(blob);
@@ -1240,6 +1413,12 @@ const BranchGstReports = () => {
           </h2>
           <div className="flex gap-4">
             <button 
+              onClick={downloadGstr1SummaryExcel}
+              className="flex items-center gap-2 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition shadow-lg bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100"
+            >
+              <FaDownload /> Download Summary Excel
+            </button>
+            <button 
               onClick={downloadGstr1Excel}
               disabled={gstr1Data?.hsnSummary?.some(h => ![4, 6, 8].includes(h.hsn.toString().length))}
               className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition shadow-lg ${
@@ -1265,7 +1444,15 @@ const BranchGstReports = () => {
           <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
               <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">B2B Invoices</span>
-              <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[9px] font-black">{gstr1Data?.b2b?.length || 0} Records</span>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={downloadB2BExcel_Standalone}
+                  className="flex items-center gap-1.5 bg-white border border-slate-200 text-indigo-600 px-3 py-1 rounded-lg text-[9px] font-black uppercase hover:bg-slate-50 transition shadow-sm"
+                >
+                  <FaDownload size={10} /> Excel
+                </button>
+                <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[9px] font-black">{gstr1Data?.b2b?.length || 0} Records</span>
+              </div>
             </div>
             <div className="max-h-[400px] overflow-y-auto">
               <table className="w-full text-left">
@@ -1345,7 +1532,15 @@ const BranchGstReports = () => {
            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
               <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">B2C Invoices (Retail)</span>
-              <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[9px] font-black">{gstr1Data?.b2cRaw?.length || 0} Records</span>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={downloadB2CExcel_Standalone}
+                  className="flex items-center gap-1.5 bg-white border border-slate-200 text-indigo-600 px-3 py-1 rounded-lg text-[9px] font-black uppercase hover:bg-slate-50 transition shadow-sm"
+                >
+                  <FaDownload size={10} /> Excel
+                </button>
+                <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[9px] font-black">{gstr1Data?.b2cRaw?.length || 0} Records</span>
+              </div>
             </div>
             <div className="max-h-[400px] overflow-y-auto">
               <table className="w-full text-left">
