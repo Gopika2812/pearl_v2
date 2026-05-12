@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { FaBars, FaBell, FaSignOutAlt, FaUser, FaCalendarDay } from "react-icons/fa";
+import { FaBars, FaBell, FaSignOutAlt, FaUser, FaCalendarDay, FaTruck, FaExclamationTriangle } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { API_BASE, fetchWithAuth } from "../api";
 import { useBranch } from "../context/BranchContext";
@@ -9,6 +9,7 @@ export default function BranchTopbar({ onMenuClick }) {
   const navigate = useNavigate();
   const [upcomingOrders, setUpcomingOrders] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [delayedPickups, setDelayedPickups] = useState(0);
   const dropdownRef = useRef(null);
 
   const fetchUpcomingOrders = async () => {
@@ -24,9 +25,26 @@ export default function BranchTopbar({ onMenuClick }) {
     }
   };
 
+  const fetchDelayedPickups = async () => {
+    if (!currentBranch?._id) return;
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/invoices/stats/delayed-pickups?branchId=${currentBranch._id}`);
+      const data = await res.json();
+      if (data.success) {
+        setDelayedPickups(data.count || 0);
+      }
+    } catch (err) {
+      console.error("Error fetching delayed pickups:", err);
+    }
+  };
+
   useEffect(() => {
     fetchUpcomingOrders();
-    const interval = setInterval(fetchUpcomingOrders, 300000); // Refresh every 5 mins
+    fetchDelayedPickups();
+    const interval = setInterval(() => {
+      fetchUpcomingOrders();
+      fetchDelayedPickups();
+    }, 300000); // Refresh every 5 mins
     return () => clearInterval(interval);
   }, [currentBranch?._id]);
 
@@ -75,6 +93,23 @@ export default function BranchTopbar({ onMenuClick }) {
 
         {/* Right Side: User & Actions */}
         <div className="flex items-center gap-5">
+          {/* Delayed Pickups Notification */}
+          {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && delayedPickups > 0 && (
+            <button
+              onClick={() => navigate("/branch/delivery-flow?deliveryStatus=PENDING")}
+              className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 transition-all relative group text-amber-600 border border-amber-100 shadow-sm"
+              title={`${delayedPickups} Orders not picked for more than 24 hours`}
+            >
+              <div className="relative">
+                <FaTruck size={18} />
+                <FaExclamationTriangle size={10} className="absolute -top-2 -right-2 text-rose-500 animate-bounce" />
+              </div>
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white ring-2 ring-white">
+                {delayedPickups}
+              </span>
+            </button>
+          )}
+
           {/* Notifications */}
           <div className="relative" ref={dropdownRef}>
             <button 

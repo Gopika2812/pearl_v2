@@ -2245,5 +2245,34 @@ router.patch("/:invoiceId/delivery-flow", async (req, res) => {
   }
 });
 
+
+// GET - Count of delayed unpicked orders
+router.get("/stats/delayed-pickups", auth, async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    
+    // Logic: deliveryStatus: "PENDING", status: NOT "CANCELLED", createdAt < (current date - 1 day)
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const query = {
+      deliveryStatus: "PENDING",
+      status: { $in: ["FINALIZED", "PRINTED", "SENT"] }, // Only valid finalized invoices
+      createdAt: { $lt: yesterday }
+    };
+
+    if (branchId && branchId !== "null" && branchId !== "undefined") {
+      query.branchId = new mongoose.Types.ObjectId(branchId);
+    }
+
+    const count = await Invoice.countDocuments(query);
+    res.json({ success: true, count });
+  } catch (error) {
+    console.error("Error fetching delayed pickups count:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
 export default router;
+
 

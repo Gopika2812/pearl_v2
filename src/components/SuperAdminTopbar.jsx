@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   FaBars, FaBell, FaBuilding, FaChevronDown, FaEye,
-  FaShieldAlt, FaSignOutAlt,
+  FaShieldAlt, FaSignOutAlt, FaTruck, FaExclamationTriangle
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { API_BASE } from "../api";
@@ -12,6 +12,7 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
   const { superAdminViewBranch, setSuperAdminViewBranch } = useBranch();
   const [tokenStats, setTokenStats] = useState({ todayTotal: 0, todayPending: 0 });
   const [pendingCreditRequests, setPendingCreditRequests] = useState(0);
+  const [delayedPickups, setDelayedPickups] = useState(0);
   const [time, setTime] = useState(new Date());
   const [openProfile, setOpenProfile] = useState(false);
   const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
@@ -26,57 +27,60 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch global token stats for Super Admin
+  // Fetch global stats for Super Admin
   useEffect(() => {
     const fetchTokenStats = async () => {
       try {
         const token = localStorage.getItem("token");
         if (!token) return;
-        
         const res = await fetch(`${API_BASE}/tokens/stats/super-admin`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
-
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-
-        const contentType = res.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          throw new TypeError("Expected JSON response but received something else");
-        }
-
-        const data = await res.json();
-        if (data.success) {
-          setTokenStats(data.data);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) setTokenStats(data.data);
         }
       } catch (err) {
-        console.error("Failed to fetch super admin token stats:", err.message);
+        console.error("Failed to fetch token stats:", err);
       }
     };
 
-    fetchTokenStats();
-    
     const fetchCreditRequestCount = async () => {
       try {
         const res = await fetch(`${API_BASE}/customers/credit-requests/total-count`);
         const data = await res.json();
-        if (data.success) {
-          setPendingCreditRequests(data.count || 0);
-        }
+        if (data.success) setPendingCreditRequests(data.count || 0);
       } catch (err) {
         console.error("Failed to fetch credit request count:", err);
       }
     };
 
+    const fetchDelayedPickups = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+        const branchQuery = superAdminViewBranch ? `?branchId=${superAdminViewBranch._id}` : "";
+        const res = await fetch(`${API_BASE}/invoices/stats/delayed-pickups${branchQuery}`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success) setDelayedPickups(data.count || 0);
+      } catch (err) {
+        console.error("Failed to fetch delayed pickups count:", err);
+      }
+    };
+
+    fetchTokenStats();
     fetchCreditRequestCount();
+    fetchDelayedPickups();
 
     const interval = setInterval(() => {
       fetchTokenStats();
       fetchCreditRequestCount();
+      fetchDelayedPickups();
     }, 60000); // refresh every minute
     return () => clearInterval(interval);
-  }, []);
+  }, [superAdminViewBranch?._id]);
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -274,6 +278,30 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
                 </div>
               </div>
             </button>
+
+            {/* Delayed Pickups Notification */}
+            {delayedPickups > 0 && (
+              <button
+                onClick={() => {
+                  if (superAdminViewBranch) {
+                    navigate("/branch-home"); // Or a specific delivery page if global
+                  } else {
+                    navigate("/admin/branches"); // Maybe a global delivery view if it exists
+                  }
+                }}
+                className="flex items-center gap-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-amber-500/20 relative shadow-lg shadow-amber-500/5"
+                title={`${delayedPickups} Orders not picked for more than 24 hours`}
+              >
+                <div className="relative">
+                  <FaTruck className="text-amber-500" />
+                  <FaExclamationTriangle className="absolute -top-1.5 -right-1.5 text-rose-500 text-[8px] animate-bounce" />
+                </div>
+                <span>Delivery Delay</span>
+                <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-secondary shadow-lg">
+                  {delayedPickups}
+                </span>
+              </button>
+            )}
 
             {/* Credit Requests Badge */}
             {pendingCreditRequests > 0 && (
