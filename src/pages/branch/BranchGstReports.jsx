@@ -144,6 +144,102 @@ const BranchGstReports = () => {
     fetchReports();
   }, [branch?._id, selectedMonth, selectedYear]);
 
+  const downloadB2BExcel_Standalone = () => {
+    if (!gstr1Data || !gstr1Data.b2b) return;
+    const fileName = `${branch?.gstin || "NO_GSTIN"}_B2B_RECORDS_${months[selectedMonth - 1]}_${selectedYear}`;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("B2B_Records");
+    
+    const columns = ["GSTIN/UIN of Recipient", "Receiver Name", "Invoice Number", "Invoice date", "Invoice Value", "Place Of Supply", "Reverse Charge", "Applicable % of Tax Rate", "Invoice Type", "E-Commerce GSTIN", "Rate", "Taxable Value", "Cess Amount"];
+    
+    const headerRow = sheet.addRow(columns);
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" }
+      };
+    });
+
+    gstr1Data.b2b.forEach(row => {
+      sheet.addRow([
+        row.gstin, row.customerName, row.invoiceNo, row.date, row.value, row.placeOfSupply, row.reverseCharge, row.applicablePercent, row.invoiceType, row.ecommerceGstin, row.rate, row.taxableValue, row.cess
+      ]);
+    });
+
+    // Auto-width
+    sheet.columns.forEach((column) => {
+      let maxLength = 0;
+      column.eachCell({ includeEmpty: true }, (cell) => {
+        const columnLength = cell.value ? cell.value.toString().length : 10;
+        if (columnLength > maxLength) maxLength = columnLength;
+      });
+      column.width = maxLength < 12 ? 12 : maxLength + 2;
+    });
+
+    workbook.xlsx.writeBuffer().then((buffer) => {
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fileName}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    });
+  };
+
+  const downloadB2CExcel_Standalone = () => {
+    if (!gstr1Data || !gstr1Data.b2cRaw) return;
+    const fileName = `${branch?.gstin || "NO_GSTIN"}_B2C_RECORDS_${months[selectedMonth - 1]}_${selectedYear}`;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("B2C_Records");
+    
+    const columns = ["Invoice Number", "Date", "Customer Name", "Taxable Value", "CGST", "SGST", "IGST", "Total Value", "Rates"];
+    
+    const headerRow = sheet.addRow(columns);
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" }
+      };
+    });
+
+    gstr1Data.b2cRaw.forEach(inv => {
+      sheet.addRow([
+        inv.invoiceNo, inv.date, inv.customerName, inv.taxableValue, inv.cgst, inv.sgst, inv.igst || 0, inv.value, inv.rates?.join(", ")
+      ]);
+    });
+
+    // Auto-width
+    sheet.columns.forEach((column) => {
+      let maxLength = 0;
+      column.eachCell({ includeEmpty: true }, (cell) => {
+        const columnLength = cell.value ? cell.value.toString().length : 10;
+        if (columnLength > maxLength) maxLength = columnLength;
+      });
+      column.width = maxLength < 12 ? 12 : maxLength + 2;
+    });
+
+    workbook.xlsx.writeBuffer().then((buffer) => {
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fileName}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    });
+  };
+
   const downloadGstr1Excel = () => {
     if (!gstr1Data) return;
 
@@ -278,14 +374,202 @@ const BranchGstReports = () => {
       window.URL.revokeObjectURL(url);
     });
   };
+  
+  const downloadGstr1SummaryExcel = () => {
+    if (!gstr1Data) return;
+
+    const fileName = `${branch?.gstin || "NO_GSTIN"}_GSTR1_SUMMARY_${months[selectedMonth - 1]}_${selectedYear}`;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Filing_Summary");
+
+    // Styling
+    const headerStyle = {
+      font: { bold: true, color: { argb: "FFFFFFFF" }, size: 11 },
+      fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } },
+      alignment: { horizontal: "center", vertical: "middle" },
+      border: { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } }
+    };
+
+    // 1. Report Title
+    sheet.mergeCells("A1:E1");
+    const title = sheet.getCell("A1");
+    title.value = "GST FILING RECORD SUMMARY (GSTR-1)";
+    title.font = { bold: true, size: 16, color: { argb: "FF1E293B" } };
+    title.alignment = { horizontal: "center" };
+
+    sheet.addRow([`Branch: ${branch?.name}`, "", "", `Period: ${months[selectedMonth - 1]} ${selectedYear}`]);
+    sheet.addRow([`GSTIN: ${branch?.gstin}`, "", "", `Generated: ${new Date().toLocaleDateString()}`]);
+    sheet.addRow([]);
+
+    // 2. Main Summary Table
+    const tableHeader = sheet.addRow(["SECTION", "PARTICULARS", "RECORD COUNT", "TAXABLE VALUE", "TOTAL TAX"]);
+    tableHeader.eachCell(cell => { 
+      Object.assign(cell, headerStyle);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+    });
+
+    const b2bTaxable = gstr1Data.b2b.reduce((s, r) => s + (r.taxableValue || 0), 0);
+    const b2bTax = gstr1Data.b2b.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+
+    const b2cTaxable = (gstr1Data.b2cl || []).reduce((s, r) => s + (r.taxableValue || 0), 0) + (gstr1Data.b2cs || []).reduce((s, r) => s + (r.taxableValue || 0), 0);
+    const b2cTax = (gstr1Data.b2cl || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + (gstr1Data.b2cs || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+
+    const cnTaxable = (gstr1Data.cdnr || []).reduce((s, r) => s + (r.taxableValue || 0), 0) + (gstr1Data.cdnur || []).reduce((s, r) => s + (r.taxableValue || 0), 0);
+    const cnTax = (gstr1Data.cdnr || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + (gstr1Data.cdnur || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+
+    const nilTaxable = (gstr1Data.nilRated || []).reduce((s, r) => s + (r.nilRated || 0) + (r.exempt || 0) + (r.nonGst || 0), 0);
+
+    sheet.addRow(["B2B", "Business to Business Supplies", gstr1Data.b2b.length, b2bTaxable, b2bTax]);
+    sheet.addRow(["B2C", "Business to Consumer Supplies", gstr1Data.b2cRaw?.length || 0, b2cTaxable, b2cTax]);
+    sheet.addRow(["Credit Note", "Registered & Unregistered Returns", (gstr1Data.cdnr?.length || 0) + (gstr1Data.cdnur?.length || 0), cnTaxable, cnTax]);
+    sheet.addRow(["Nil Rated", "Exempted / Non-GST Supplies", gstr1Data.nilRated?.length || 0, nilTaxable, 0]);
+    
+    // 3. Rate-wise Breakdown
+    sheet.addRow([]);
+    const rateHeader = sheet.addRow(["SECTION", "TAX RATE", "ITEM COUNT", "TAXABLE VALUE", "TOTAL TAX"]);
+    rateHeader.eachCell(cell => { 
+      Object.assign(cell, headerStyle); 
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0891B2' } }; // Cyan-600
+    });
+
+    const gstRates = [0, 5, 12, 18, 28];
+    
+    // B2B Rates
+    gstRates.forEach(rate => {
+      const filtered = gstr1Data.b2b.filter(r => Math.round(r.rate) === rate);
+      if (filtered.length > 0) {
+        const taxable = filtered.reduce((s, r) => s + (r.taxableValue || 0), 0);
+        const tax = filtered.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+        sheet.addRow(["B2B", `${rate}%`, filtered.length, taxable, tax]);
+      }
+    });
+
+    // B2C Rates
+    gstRates.forEach(rate => {
+      const filteredS = (gstr1Data.b2cs || []).filter(r => Math.round(r.rate) === rate);
+      const filteredL = (gstr1Data.b2cl || []).filter(r => Math.round(r.rate) === rate);
+      if (filteredS.length > 0 || filteredL.length > 0) {
+        const taxable = filteredS.reduce((s, r) => s + (r.taxableValue || 0), 0) + filteredL.reduce((s, r) => s + (r.taxableValue || 0), 0);
+        const tax = filteredS.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + filteredL.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+        
+        // Count unique invoices from b2cRaw that contain this specific rate
+        const invCount = gstr1Data.b2cRaw?.filter(inv => inv.rates?.includes(rate)).length || 0;
+        
+        sheet.addRow(["B2C", `${rate}%`, invCount, taxable, tax]);
+      }
+    });
+
+    // CDNR Rates
+    gstRates.forEach(rate => {
+      const filteredR = (gstr1Data.cdnr || []).filter(r => Math.round(r.rate) === rate);
+      const filteredUR = (gstr1Data.cdnur || []).filter(r => Math.round(r.rate) === rate);
+      if (filteredR.length > 0 || filteredUR.length > 0) {
+        const taxable = filteredR.reduce((s, r) => s + (r.taxableValue || 0), 0) + filteredUR.reduce((s, r) => s + (r.taxableValue || 0), 0);
+        const tax = filteredR.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + filteredUR.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+        sheet.addRow(["Credit Note", `${rate}%`, filteredR.length + filteredUR.length, taxable, tax]);
+      }
+    });
+
+    // 4. Document Summary
+    sheet.addRow([]);
+    const docHeader = sheet.addRow(["NATURE OF DOCUMENT", "FROM", "TO", "TOTAL", "CANCELLED"]);
+    docHeader.eachCell(cell => { 
+      Object.assign(cell, headerStyle); 
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }; 
+    });
+
+    (gstr1Data.docSummary || []).forEach(doc => {
+      sheet.addRow([doc.nature, doc.from, doc.to, doc.total, doc.cancelled]);
+    });
+
+    // Formatting for Summary
+    sheet.getColumn(4).numFmt = "₹#,##0.00";
+    sheet.getColumn(5).numFmt = "₹#,##0.00";
+    sheet.columns.forEach(col => col.width = 25);
+
+    // --- NEW: Add Detailed Pages ---
+    
+    const addStyledSheet = (name, data, columns) => {
+      const s = workbook.addWorksheet(name);
+      const hRow = s.addRow(columns);
+      hRow.eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+        cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      });
+      data.forEach(row => {
+        const values = columns.map(col => row[col]);
+        s.addRow(values);
+      });
+      s.columns.forEach((column) => {
+        let maxLength = 0;
+        column.eachCell({ includeEmpty: true }, (cell) => {
+          const columnLength = cell.value ? cell.value.toString().length : 10;
+          if (columnLength > maxLength) maxLength = columnLength;
+        });
+        column.width = maxLength < 12 ? 12 : (maxLength > 50 ? 50 : maxLength + 2);
+      });
+    };
+
+    // 1. B2B Details
+    const b2bCols = ["GSTIN", "Customer Name", "Invoice No", "Date", "Value", "POS", "Rate", "Taxable Value", "IGST", "CGST", "SGST"];
+    const b2bData = gstr1Data.b2b.map(row => ({
+      "GSTIN": row.gstin, "Customer Name": row.customerName, "Invoice No": row.invoiceNo, "Date": row.date, "Value": row.value, "POS": row.placeOfSupply, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
+    }));
+    addStyledSheet("B2B_Details", b2bData, b2bCols);
+
+    // 2. B2C Details (Raw)
+    const b2cCols = ["Invoice No", "Date", "Customer Name", "POS", "Value", "Taxable Value", "IGST", "CGST", "SGST", "Rates"];
+    const b2cData = (gstr1Data.b2cRaw || []).map(row => ({
+      "Invoice No": row.invoiceNo, "Date": row.date, "Customer Name": row.customerName, "POS": row.placeOfSupply, "Value": row.value, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst, "Rates": (row.rates || []).join(", ")
+    }));
+    addStyledSheet("B2C_Retail_Details", b2cData, b2cCols);
+
+    // 3. Credit Notes
+    const cnCols = ["GSTIN", "Customer Name", "Note No", "Date", "Type", "POS", "Value", "Rate", "Taxable Value", "IGST", "CGST", "SGST"];
+    const cnData = [...(gstr1Data.cdnr || []), ...(gstr1Data.cdnur || [])].map(row => ({
+      "GSTIN": row.gstin, "Customer Name": row.customerName, "Note No": row.noteNo, "Date": row.noteDate, "Type": row.noteType, "POS": row.placeOfSupply, "Value": row.noteValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
+    }));
+    addStyledSheet("Credit_Notes", cnData, cnCols);
+
+    // 4. HSN Summaries
+    const hsnCols = ["HSN", "Description", "UQC", "Total Qty", "Total Value", "Rate", "Taxable Value", "IGST", "CGST", "SGST"];
+    
+    // Combined (Official Filing)
+    const hsnCombined = [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].map(row => ({
+      "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Qty": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
+    }));
+    addStyledSheet("HSN_Combined", hsnCombined, hsnCols);
+
+    // B2B Only
+    const hsnB2B = (gstr1Data.hsnSummaryB2B || []).map(row => ({
+      "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Qty": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
+    }));
+    addStyledSheet("HSN_B2B", hsnB2B, hsnCols);
+
+    // B2C Only
+    const hsnB2C = (gstr1Data.hsnSummaryB2C || []).map(row => ({
+      "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Qty": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
+    }));
+    addStyledSheet("HSN_B2C", hsnB2C, hsnCols);
+
+    workbook.xlsx.writeBuffer().then((buffer) => {
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fileName}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    });
+  };
 
   const downloadGstr1Json = () => {
     if (!gstr1Data) return;
 
-    // Standard Helper to format date for GST Portal (DD-MM-YYYY)
     const formatPortalDate = (d) => {
       if (!d) return "";
-      // Handle DD-MMM-YYYY to DD-MM-YYYY
       const parts = d.split("-");
       if (parts.length === 3 && isNaN(parts[1])) {
         const monthsMap = { Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06", Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12" };
@@ -294,7 +578,6 @@ const BranchGstReports = () => {
       return d;
     };
 
-    // Group B2B by GSTIN then by Invoice Number
     const b2bGroups = {};
     gstr1Data.b2b.forEach(row => {
       const gstin = row.gstin.trim().toUpperCase();
@@ -314,7 +597,6 @@ const BranchGstReports = () => {
       });
     });
 
-    // Group CDNR by GSTIN then by Note Number
     const cdnrGroups = {};
     gstr1Data.cdnr.forEach(row => {
       const gstin = row.gstin.trim().toUpperCase();
@@ -334,62 +616,49 @@ const BranchGstReports = () => {
       });
     });
 
+    const hsn_b2b = (gstr1Data.hsnSummaryB2B || []).map((row, idx) => ({
+      num: idx + 1, hsn_sc: String(row.hsn), txval: parseFloat(row.taxableValue.toFixed(2)),
+      iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)),
+      samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)),
+      desc: "", user_desc: row.description || "", uqc: row.uqc?.split("-")[0] || "OTH",
+      qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
+    }));
+
+    const hsn_b2c = (gstr1Data.hsnSummaryB2C || []).map((row, idx) => ({
+      num: idx + 1, hsn_sc: String(row.hsn), txval: parseFloat(row.taxableValue.toFixed(2)),
+      iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)),
+      samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)),
+      desc: "", user_desc: row.description || "", uqc: row.uqc?.split("-")[0] || "OTH",
+      qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
+    }));
+
     const portalJson = {
-      gstin: branch?.gstin?.trim().toUpperCase() || "STILL_NOT_SET",
+      gstin: branch?.gstin?.trim().toUpperCase() || "33DULPS2600Q4Z3",
       fp: `${String(selectedMonth).padStart(2, "0")}${selectedYear}`,
       cur_gt: 0,
       gt: 0,
       b2b: Object.values(b2bGroups),
       b2cs: gstr1Data.b2cs.map(row => ({
-        typ: "OE",
-        sply_ty: row.placeOfSupply.startsWith(branch?.stateCode || "33") ? "INTRA" : "INTER",
-        rt: parseFloat(row.rate.toFixed(2)),
-        pos: row.placeOfSupply.substring(0, 2),
-        txval: parseFloat(row.taxableValue.toFixed(2)),
-        iamt: parseFloat((row.igst || 0).toFixed(2)),
-        camt: parseFloat((row.cgst || 0).toFixed(2)),
-        samt: parseFloat((row.sgst || 0).toFixed(2)),
-        csamt: parseFloat((row.cess || 0).toFixed(2))
+        typ: "OE", sply_ty: row.placeOfSupply.startsWith(branch?.stateCode || "33") ? "INTRA" : "INTER",
+        rt: parseFloat(row.rate.toFixed(2)), pos: row.placeOfSupply.substring(0, 2),
+        txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)),
+        camt: parseFloat((row.cgst || 0).toFixed(2)), samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2))
       })),
       cdnr: Object.values(cdnrGroups),
-      nil: {
-        inv: gstr1Data.nilRated.map(row => ({
-          sply_ty: (row.description.includes("Inter-State") ? "INTER" : "INTRA") + (row.description.includes("registered") ? "B2B" : "B2C"),
-          nil_amt: parseFloat(row.nilRated.toFixed(2)),
-          expt_amt: parseFloat(row.exempt.toFixed(2)),
-          ngsup_amt: parseFloat(row.nonGst.toFixed(2))
-        }))
-      },
-      hsn: {
-        hsn_b2b: (gstr1Data.hsnSummaryB2B || []).map((row, idx) => ({
-          num: idx + 1, hsn_sc: String(row.hsn), txval: parseFloat(row.taxableValue.toFixed(2)),
-          iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)),
-          samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)),
-          desc: "", user_desc: row.description || "", uqc: row.uqc.split("-")[0],
-          qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
-        })),
-        hsn_b2c: (gstr1Data.hsnSummaryB2C || []).map((row, idx) => ({
-          num: idx + 1, hsn_sc: String(row.hsn), txval: parseFloat(row.taxableValue.toFixed(2)),
-          iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)),
-          samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)),
-          desc: "", user_desc: row.description || "", uqc: row.uqc.split("-")[0],
-          qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
-        }))
-      },
+      hsn: { hsn_b2b, hsn_b2c },
       exp: [],
       at: [],
       atadj: [],
+      nil: {
+        inv: gstr1Data.nilRated.map(row => ({
+          sply_ty: (row.description.includes("Inter-State") ? "INTER" : "INTRA") + (row.description.includes("registered") ? "B2B" : "B2C"),
+          nil_amt: parseFloat(row.nilRated.toFixed(2)), expt_amt: parseFloat(row.exempt.toFixed(2)), ngsup_amt: parseFloat(row.nonGst.toFixed(2))
+        }))
+      },
       doc_issue: {
         doc_det: gstr1Data.docSummary.map((doc, idx) => ({
           doc_num: idx + 1,
-          docs: [{
-            num: 1,
-            from: doc.from,
-            to: doc.to,
-            totnum: doc.total,
-            cancel: doc.cancelled,
-            net_issue: doc.net
-          }]
+          docs: [{ num: 1, from: doc.from, to: doc.to, totnum: doc.total, cancel: doc.cancelled, net_issue: doc.net }]
         }))
       }
     };
@@ -405,10 +674,135 @@ const BranchGstReports = () => {
     URL.revokeObjectURL(url);
   };
 
+
+  const downloadGstr1DirectPortalJson = () => {
+    if (!gstr1Data) return;
+
+    const formatPortalDate = (d) => {
+      if (!d) return "";
+      const parts = d.split("-");
+      if (parts.length === 3 && isNaN(parts[1])) {
+        const monthsMap = { Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06", Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12" };
+        return `${parts[0]}-${monthsMap[parts[1]] || "01"}-${parts[2]}`;
+      }
+      return d;
+    };
+
+    const b2bGroups = {};
+    gstr1Data.b2b.forEach(row => {
+      const gstin = row.gstin.trim().toUpperCase();
+      const invNo = row.invoiceNo;
+      if (!b2bGroups[gstin]) b2bGroups[gstin] = { ctin: gstin, inv: [] };
+      let existingInv = b2bGroups[gstin].inv.find(i => i.inum === invNo);
+      if (!existingInv) {
+        existingInv = {
+          inum: invNo, idt: formatPortalDate(row.date), val: parseFloat(row.value.toFixed(2)),
+          pos: row.placeOfSupply.substring(0, 2), rchrg: row.reverseCharge || "N", inv_typ: "R", itms: []
+        };
+        b2bGroups[gstin].inv.push(existingInv);
+      }
+      existingInv.itms.push({
+        num: existingInv.itms.length + 1,
+        itm_det: { rt: parseFloat(row.rate.toFixed(2)), txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)), samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)) }
+      });
+    });
+
+    const cdnrGroups = {};
+    gstr1Data.cdnr.forEach(row => {
+      const gstin = row.gstin.trim().toUpperCase();
+      const ntNo = row.noteNo;
+      if (!cdnrGroups[gstin]) cdnrGroups[gstin] = { ctin: gstin, nt: [] };
+      let existingNt = cdnrGroups[gstin].nt.find(n => n.nt_num === ntNo);
+      if (!existingNt) {
+        existingNt = {
+          val: parseFloat(row.noteValue.toFixed(2)), ntty: row.noteType, nt_num: ntNo, nt_dt: formatPortalDate(row.noteDate),
+          pos: row.placeOfSupply.substring(0, 2), p_gst: "N", rchrg: row.reverseCharge || "N", inv_typ: "R", itms: []
+        };
+        cdnrGroups[gstin].nt.push(existingNt);
+      }
+      existingNt.itms.push({
+        num: existingNt.itms.length + 1,
+        itm_det: { rt: parseFloat(row.rate.toFixed(2)), txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)), samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)) }
+      });
+    });
+
+    const hsnMap = {};
+    [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].forEach(row => {
+      const key = `${row.hsn}_${row.rate}_${row.uqc}`;
+      if (!hsnMap[key]) {
+        hsnMap[key] = { ...row };
+      } else {
+        hsnMap[key].totalQty += row.totalQty;
+        hsnMap[key].totalValue += row.totalValue;
+        hsnMap[key].taxableValue += row.taxableValue;
+        hsnMap[key].igst += (row.igst || 0);
+        hsnMap[key].cgst += (row.cgst || 0);
+        hsnMap[key].sgst += (row.sgst || 0);
+        hsnMap[key].cess += (row.cess || 0);
+      }
+    });
+
+    const hsnData = Object.values(hsnMap).map((row, idx) => ({
+      num: idx + 1,
+      hsn_sc: String(row.hsn).padStart(4, '0'),
+      desc: (row.description || "").substring(0, 30),
+      uqc: row.uqc?.split("-")[0] || "OTH",
+      qty: parseFloat(row.totalQty.toFixed(2)),
+      val: parseFloat(row.totalValue.toFixed(2)),
+      txval: parseFloat(row.taxableValue.toFixed(2)),
+      iamt: parseFloat((row.igst || 0).toFixed(2)),
+      camt: parseFloat((row.cgst || 0).toFixed(2)),
+      samt: parseFloat((row.sgst || 0).toFixed(2)),
+      csamt: parseFloat((row.cess || 0).toFixed(2))
+    }));
+
+    const portalJson = {
+      gstin: branch?.gstin?.trim().toUpperCase() || "33DULPS2600Q4Z3",
+      fp: `${String(selectedMonth).padStart(2, "0")}${selectedYear}`,
+      cur_gt: 0,
+      gt: 0,
+      b2b: Object.values(b2bGroups),
+      b2cs: gstr1Data.b2cs.map(row => ({
+        typ: "OE", sply_ty: row.placeOfSupply.startsWith(branch?.stateCode || "33") ? "INTRA" : "INTER",
+        rt: parseFloat(row.rate.toFixed(2)), pos: row.placeOfSupply.substring(0, 2),
+        txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)),
+        camt: parseFloat((row.cgst || 0).toFixed(2)), samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2))
+      })),
+      cdnr: Object.values(cdnrGroups),
+      hsn: { data: hsnData },
+      nil: {
+        inv: gstr1Data.nilRated.map(row => ({
+          sply_ty: (row.description.includes("Inter-State") ? "INTER" : "INTRA") + (row.description.includes("registered") ? "B2B" : "B2C"),
+          nil_amt: parseFloat(row.nilRated.toFixed(2)), expt_amt: parseFloat(row.exempt.toFixed(2)), ngsup_amt: parseFloat(row.nonGst.toFixed(2))
+        }))
+      },
+      doc_issue: {
+        doc_det: gstr1Data.docSummary.map((doc) => {
+          let docNum = 1; // Default for Invoices
+          if (doc.nature.includes("Credit Note")) docNum = 5;
+          else if (doc.nature.includes("Debit Note")) docNum = 4;
+          return {
+            doc_num: docNum,
+            docs: [{ num: 1, from: doc.from, to: doc.to, totnum: doc.total, cancel: doc.cancelled, net_issue: doc.net }]
+          };
+        })
+      }
+    };
+
+    const blob = new Blob([JSON.stringify(portalJson, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${branch?.gstin || "33DULPS2600Q4Z3"}_GSTR1_DIRECT_${months[selectedMonth - 1]}_${selectedYear}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const downloadSectionJson = (sectionKey) => {
     if (!gstr1Data) return;
     
-    // Standard Helper to format date for GST Portal (DD-MM-YYYY)
     const formatPortalDate = (d) => {
       if (!d) return "";
       const parts = d.split("-");
@@ -472,24 +866,21 @@ const BranchGstReports = () => {
       });
       sectionData = { cdnr: Object.values(cdnrGroups) };
     } else if (sectionKey === 'hsn') {
-      sectionData = {
-        hsn: {
-          hsn_b2b: (gstr1Data.hsnSummaryB2B || []).map((row, idx) => ({
-            num: idx + 1, hsn_sc: String(row.hsn), txval: parseFloat(row.taxableValue.toFixed(2)),
-            iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)),
-            samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)),
-            desc: "", user_desc: row.description || "", uqc: row.uqc.split("-")[0],
-            qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
-          })),
-          hsn_b2c: (gstr1Data.hsnSummaryB2C || []).map((row, idx) => ({
-            num: idx + 1, hsn_sc: String(row.hsn), txval: parseFloat(row.taxableValue.toFixed(2)),
-            iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)),
-            samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)),
-            desc: "", user_desc: row.description || "", uqc: row.uqc.split("-")[0],
-            qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
-          }))
-        }
-      };
+      const hsn_b2b = (gstr1Data.hsnSummaryB2B || []).map((row, idx) => ({
+        num: idx + 1, hsn_sc: String(row.hsn), txval: parseFloat(row.taxableValue.toFixed(2)),
+        iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)),
+        samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)),
+        desc: "", user_desc: row.description || "", uqc: row.uqc?.split("-")[0] || "OTH",
+        qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
+      }));
+      const hsn_b2c = (gstr1Data.hsnSummaryB2C || []).map((row, idx) => ({
+        num: idx + 1, hsn_sc: String(row.hsn), txval: parseFloat(row.taxableValue.toFixed(2)),
+        iamt: parseFloat((row.igst || 0).toFixed(2)), camt: parseFloat((row.cgst || 0).toFixed(2)),
+        samt: parseFloat((row.sgst || 0).toFixed(2)), csamt: parseFloat((row.cess || 0).toFixed(2)),
+        desc: "", user_desc: row.description || "", uqc: row.uqc?.split("-")[0] || "OTH",
+        qty: parseFloat(row.totalQty.toFixed(2)), rt: parseFloat(row.rate.toFixed(2))
+      }));
+      sectionData = { hsn: { hsn_b2b, hsn_b2c } };
     } else if (sectionKey === 'nil') {
       sectionData = {
         nil: {
@@ -502,10 +893,15 @@ const BranchGstReports = () => {
     } else if (sectionKey === 'doc_issue') {
       sectionData = {
         doc_issue: {
-          doc_det: gstr1Data.docSummary.map((doc, idx) => ({
-            doc_num: idx + 1,
-            docs: [{ num: 1, from: doc.from, to: doc.to, totnum: doc.total, cancel: doc.cancelled, net_issue: doc.net }]
-          }))
+          doc_det: gstr1Data.docSummary.map((doc) => {
+            let docNum = 1;
+            if (doc.nature.includes("Credit Note")) docNum = 5;
+            else if (doc.nature.includes("Debit Note")) docNum = 4;
+            return {
+              doc_num: docNum,
+              docs: [{ num: 1, from: doc.from, to: doc.to, totnum: doc.total, cancel: doc.cancelled, net_issue: doc.net }]
+            };
+          })
         }
       };
     }
@@ -513,8 +909,10 @@ const BranchGstReports = () => {
     if (!sectionData) return;
 
     const portalJson = {
-      gstin: branch?.gstin?.trim().toUpperCase() || "STILL_NOT_SET",
+      gstin: branch?.gstin?.trim().toUpperCase() || "33DULPS2600Q4Z3",
       fp: `${String(selectedMonth).padStart(2, "0")}${selectedYear}`,
+      cur_gt: 0,
+      gt: 0,
       ...sectionData
     };
 
@@ -522,7 +920,7 @@ const BranchGstReports = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${branch?.gstin || "NO_GSTIN"}_GSTR1_${fileNamePart}_${months[selectedMonth - 1]}_${selectedYear}.json`;
+    link.download = `${branch?.gstin || "33DULPS2600Q4Z3"}_GSTR1_${fileNamePart}_${months[selectedMonth - 1]}_${selectedYear}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -739,12 +1137,20 @@ const BranchGstReports = () => {
             🔧 Repair Month-Jump Errors
           </button>
           <div className="flex flex-col gap-2">
-            <button 
-              onClick={downloadGstr1Json}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg"
-            >
-              <FaDownload /> Download Full GSTR-1 JSON
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button 
+                onClick={downloadGstr1Json}
+                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg"
+              >
+                <FaDownload /> Download JSON (Offline Tool)
+              </button>
+              <button 
+                onClick={downloadGstr1DirectPortalJson}
+                className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition shadow-lg"
+              >
+                <FaDownload /> Download JSON (Direct Website)
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2">
               {['b2b', 'b2cs', 'cdnr', 'hsn', 'nil', 'doc_issue'].map(sec => (
                 <button 
@@ -919,6 +1325,100 @@ const BranchGstReports = () => {
            </div>
         </div>
 
+        {/* B2C Sales Auditor */}
+        <div className="mb-12">
+          <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 flex items-center gap-2">
+             <FaChartLine /> B2C Sales Auditor (Item-wise Verification)
+          </h2>
+          <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-black text-slate-900 uppercase">Rate-wise Breakdown</h3>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Compare these totals with your manual records</p>
+              </div>
+            </div>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-5 gap-4">
+              {[0, 5, 12, 18, 28].map(rate => {
+                const totalForRate = gstr1Data?.b2cs?.find(b => b.rt === rate)?.txval || 0;
+                const invoicesForRate = gstr1Data?.b2cRaw?.filter(inv => inv.rates.includes(rate)) || [];
+                return (
+                  <div key={rate} className={`p-6 rounded-3xl border ${totalForRate > 0 ? 'bg-slate-50 border-slate-200' : 'bg-slate-50/30 border-slate-100 opacity-50'}`}>
+                    <div className="flex justify-between items-start mb-4">
+                      <span className="text-xs font-black text-slate-900">{rate}% Rate</span>
+                      <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">{invoicesForRate.length} Bills</span>
+                    </div>
+                    <p className="text-xl font-black text-slate-900">₹{totalForRate.toLocaleString()}</p>
+                    {totalForRate > 0 && (
+                      <div className="mt-4 pt-4 border-t border-slate-200">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter mb-2">Sample Invoices:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {invoicesForRate.slice(0, 5).map(inv => (
+                            <span key={inv.invoiceNo} className="text-[8px] font-bold bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-600">
+                              #{inv.invoiceNo.split('/').pop()}
+                            </span>
+                          ))}
+                          {invoicesForRate.length > 5 && <span className="text-[8px] font-bold text-slate-400">+{invoicesForRate.length - 5} more</span>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="bg-slate-900 p-4 text-center">
+               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                 Total B2C Taxable Value: <span className="text-emerald-400 ml-2">₹{gstr1Data?.b2cs?.reduce((acc, b) => acc + b.txval, 0).toLocaleString()}</span>
+               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed B2C Verification List */}
+        <div className="mb-20">
+          <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 flex items-center gap-2">
+             <FaChartLine /> Detailed B2C Verification List (Line-by-Line)
+          </h2>
+          <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest">
+                    <th className="px-6 py-4">Inv No</th>
+                    <th className="px-6 py-4">Date</th>
+                    <th className="px-6 py-4 text-right">Taxable Val</th>
+                    <th className="px-6 py-4 text-right">CGST+SGST</th>
+                    <th className="px-6 py-4 text-right">Grand Total</th>
+                    <th className="px-6 py-4">Rates</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {gstr1Data?.b2cRaw?.map((inv, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-3 text-[11px] font-black text-slate-900">{inv.invoiceNo}</td>
+                      <td className="px-6 py-3 text-[10px] font-bold text-slate-500">{inv.date}</td>
+                      <td className="px-6 py-3 text-[11px] font-black text-slate-900 text-right">₹{inv.taxableValue.toLocaleString()}</td>
+                      <td className="px-6 py-3 text-[11px] font-bold text-emerald-600 text-right">₹{(inv.cgst + inv.sgst).toLocaleString()}</td>
+                      <td className="px-6 py-3 text-[11px] font-black text-indigo-600 text-right">₹{inv.value.toLocaleString()}</td>
+                      <td className="px-6 py-3">
+                         <div className="flex gap-1">
+                            {inv.rates.map(r => (
+                              <span key={r} className="text-[8px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md">{r}%</span>
+                            ))}
+                         </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {(!gstr1Data?.b2cRaw || gstr1Data.b2cRaw.length === 0) && (
+               <div className="p-20 text-center">
+                  <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No B2C Invoices found for this period</p>
+               </div>
+            )}
+          </div>
+        </div>
+
         {/* Tax Rate Auditor Section */}
         {gstr1Data && (
           <div className="mb-12 bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-xl shadow-slate-200/50">
@@ -926,10 +1426,22 @@ const BranchGstReports = () => {
               <div>
                 <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">Tax Rate Auditor</h2>
                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">
-                  {filterRate ? `Showing Invoices for ${filterRate}% Rate` : 'Detecting billing anomalies & rate errors'}
+                  {filterRate ? `Showing Invoices for ${filterRate}% Rate` : 'Detecting billing anomalies & data entry errors'}
                 </p>
               </div>
               <div className="flex gap-2">
+                {/* Check for Unknown/Missing Data */}
+                {([...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].some(h => h.hsn === "9999" || h.description === "Unknown Product")) && (
+                  <button 
+                    onClick={() => setFilterRate('UNKNOWN')}
+                    className={`px-4 py-2 rounded-xl border flex items-center gap-2 transition-all ${
+                      filterRate === 'UNKNOWN' ? 'ring-2 ring-rose-500 bg-rose-600 text-white' : 'bg-rose-50 border-rose-200 text-rose-700 hover:scale-105'
+                    }`}
+                  >
+                    <FaExclamationTriangle size={12} className={filterRate === 'UNKNOWN' ? "" : "animate-pulse"} />
+                    <span className="text-[11px] font-black uppercase">Fix Unknown Items</span>
+                  </button>
+                )}
                 {[0, 5, 12, 18, 28].map(rate => {
                    const hasRate = [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].some(h => Math.round(h.rate) === rate);
                    if (!hasRate) return null;
@@ -954,37 +1466,47 @@ const BranchGstReports = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-               {/* 12% Anomalies */}
-               {[12, 28].map(badRate => {
-                 const anomalousHsn = [...(gstr1Data?.hsnSummaryB2B || []), ...(gstr1Data?.hsnSummaryB2C || [])].filter(h => Math.round(h.rate) === badRate);
+               {/* 12% Anomalies / Unknown Data */}
+               {(filterRate === 'UNKNOWN' ? ['UNKNOWN'] : [12, 28]).map(badRate => {
+                 const anomalousHsn = [...(gstr1Data?.hsnSummaryB2B || []), ...(gstr1Data?.hsnSummaryB2C || [])].filter(h => 
+                    badRate === 'UNKNOWN' 
+                    ? (h.hsn === "9999" || h.description === "Unknown Product" || h.description === "")
+                    : Math.round(h.rate) === badRate
+                 );
                  if (anomalousHsn.length === 0) return null;
                  return (
                    <div key={badRate} className="bg-rose-50/50 border border-rose-100 rounded-3xl p-6">
                       <div className="flex items-center gap-3 mb-4">
-                        <div className="w-8 h-8 bg-rose-600 rounded-lg flex items-center justify-center text-white font-black text-xs">{badRate}%</div>
-                        <h3 className="text-xs font-black text-rose-900 uppercase tracking-widest">Detected in {anomalousHsn.length} Items</h3>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-black text-xs ${badRate === 'UNKNOWN' ? 'bg-rose-900' : 'bg-rose-600'}`}>
+                           {badRate === 'UNKNOWN' ? '?' : `${badRate}%`}
+                        </div>
+                        <h3 className="text-xs font-black text-rose-900 uppercase tracking-widest">
+                          {badRate === 'UNKNOWN' ? 'Incomplete Records' : `Detected in ${anomalousHsn.length} Items`}
+                        </h3>
                       </div>
                       <div className="space-y-3">
                         {anomalousHsn.map((h, i) => (
                           <div key={i} className="bg-white p-3 rounded-xl border border-rose-100 shadow-sm">
-                             <p className="text-[10px] font-black text-slate-800 uppercase">{h.description}</p>
+                             <p className="text-[10px] font-black text-slate-800 uppercase">{h.description || "NO NAME"}</p>
                              <div className="flex flex-col gap-1 mt-2">
                                <div className="flex justify-between items-center">
                                  <span className="text-[9px] font-bold text-slate-400">HSN: {h.hsn}</span>
                                  <span className="text-[10px] font-black text-rose-600">₹{h.taxableValue.toLocaleString()}</span>
                                </div>
                                <p className="text-[8px] font-black text-indigo-500 uppercase tracking-tighter mt-1 bg-indigo-50/50 px-2 py-1 rounded-md border border-indigo-100">
-                                 Found in: {h.invoiceNumbers?.join(", ") || "Unknown"}
+                                 Check Bills: {h.invoiceNumbers?.join(", ") || "Unknown"}
                                </p>
                              </div>
                           </div>
                         ))}
                       </div>
-                      <p className="text-[9px] text-rose-400 font-bold uppercase mt-4 text-center">Check Invoice Items for these Products</p>
+                      <p className="text-[9px] text-rose-400 font-bold uppercase mt-4 text-center">
+                        {badRate === 'UNKNOWN' ? 'Fix these HSN/Names in Invoice Edit' : 'Check Invoice Items for these Products'}
+                      </p>
                    </div>
                  );
                })}
-               {![12, 28].some(r => [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].some(h => Math.round(h.rate) === r)) && (
+               {![12, 28].some(r => [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].some(h => Math.round(h.rate) === r)) && filterRate !== 'UNKNOWN' && (
                  <div className="col-span-full py-10 flex flex-col items-center justify-center bg-emerald-50 rounded-3xl border border-emerald-100">
                     <div className="w-12 h-12 bg-emerald-600 rounded-full flex items-center justify-center text-white mb-3">
                       <FaCheckCircle size={20} />
@@ -1003,6 +1525,12 @@ const BranchGstReports = () => {
              <FaFileInvoice /> GSTR-1 Breakdown (Sales)
           </h2>
           <div className="flex gap-4">
+            <button 
+              onClick={downloadGstr1SummaryExcel}
+              className="flex items-center gap-2 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition shadow-lg bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100"
+            >
+              <FaDownload /> Download Summary Excel
+            </button>
             <button 
               onClick={downloadGstr1Excel}
               disabled={gstr1Data?.hsnSummary?.some(h => ![4, 6, 8].includes(h.hsn.toString().length))}
@@ -1029,7 +1557,15 @@ const BranchGstReports = () => {
           <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
               <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">B2B Invoices</span>
-              <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[9px] font-black">{gstr1Data?.b2b?.length || 0} Records</span>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={downloadB2BExcel_Standalone}
+                  className="flex items-center gap-1.5 bg-white border border-slate-200 text-indigo-600 px-3 py-1 rounded-lg text-[9px] font-black uppercase hover:bg-slate-50 transition shadow-sm"
+                >
+                  <FaDownload size={10} /> Excel
+                </button>
+                <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-[9px] font-black">{gstr1Data?.b2b?.length || 0} Records</span>
+              </div>
             </div>
             <div className="max-h-[400px] overflow-y-auto">
               <table className="w-full text-left">
@@ -1109,7 +1645,15 @@ const BranchGstReports = () => {
            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
               <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">B2C Invoices (Retail)</span>
-              <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[9px] font-black">{gstr1Data?.b2cRaw?.length || 0} Records</span>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={downloadB2CExcel_Standalone}
+                  className="flex items-center gap-1.5 bg-white border border-slate-200 text-indigo-600 px-3 py-1 rounded-lg text-[9px] font-black uppercase hover:bg-slate-50 transition shadow-sm"
+                >
+                  <FaDownload size={10} /> Excel
+                </button>
+                <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-[9px] font-black">{gstr1Data?.b2cRaw?.length || 0} Records</span>
+              </div>
             </div>
             <div className="max-h-[400px] overflow-y-auto">
               <table className="w-full text-left">

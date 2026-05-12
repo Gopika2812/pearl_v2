@@ -84,7 +84,7 @@ router.get("/gstr1", auth, async (req, res) => {
         branchId: branchObjectId,
         date: { $gte: startDate, $lte: endDate }
       })
-      .select("creditNoteId date grandTotal subtotal totalTax customer.gstin customer.name customer.state customer.stateCode status")
+      .select("creditNoteId date grandTotal subtotal totalTax items customer.gstin customer.name customer.state customer.stateCode status")
       .lean()
     ]);
 
@@ -159,13 +159,17 @@ router.get("/gstr1", auth, async (req, res) => {
 
             // Group by rate for this specific invoice
             const itemRate = item.gst || 0;
+            const itemIgst = isInterstate ? (taxable * rate / 100) : 0;
+            const itemCgst = isIntra ? (taxable * (rate / 2) / 100) : 0;
+            const itemSgst = isIntra ? (taxable * (rate / 2) / 100) : 0;
+
             if (!b2bInvoiceGroups[itemRate]) {
               b2bInvoiceGroups[itemRate] = { taxableValue: 0, igst: 0, cgst: 0, sgst: 0 };
             }
             b2bInvoiceGroups[itemRate].taxableValue += taxable;
-            b2bInvoiceGroups[itemRate].igst += (item.igst || 0);
-            b2bInvoiceGroups[itemRate].cgst += (item.cgst || 0);
-            b2bInvoiceGroups[itemRate].sgst += (item.sgst || 0);
+            b2bInvoiceGroups[itemRate].igst += itemIgst;
+            b2bInvoiceGroups[itemRate].cgst += itemCgst;
+            b2bInvoiceGroups[itemRate].sgst += itemSgst;
  
             // HSN Logic
             let hsnRaw = String(item.hsn || "").trim();
@@ -179,9 +183,9 @@ router.get("/gstr1", auth, async (req, res) => {
             hsnSummaryB2B[hsnKey].totalQty += (item.qty || 0);
             hsnSummaryB2B[hsnKey].totalValue += item.total || 0;
             hsnSummaryB2B[hsnKey].taxableValue += taxable;
-            hsnSummaryB2B[hsnKey].igst += (item.igst || 0);
-            hsnSummaryB2B[hsnKey].cgst += (item.cgst || 0);
-            hsnSummaryB2B[hsnKey].sgst += (item.sgst || 0);
+            hsnSummaryB2B[hsnKey].igst += itemIgst;
+            hsnSummaryB2B[hsnKey].cgst += itemCgst;
+            hsnSummaryB2B[hsnKey].sgst += itemSgst;
             const invDate = moment(inv.invoiceDate).format("DD-MMM");
             hsnSummaryB2B[hsnKey].invoiceNumbers.add(`${inv.invoiceNumber} (${invDate})`);
           });
@@ -234,7 +238,10 @@ router.get("/gstr1", auth, async (req, res) => {
             const taxable = ((item.sellingPrice || 0) * (item.qty || 0)) - (item.discountAmount || 0);
             const rate = Math.round(item.gst || 0); // Round to avoid 4.99 issues
             
-            const isInterstate = !isIntra;
+            const itemIgst = isInterstate ? (taxable * rate / 100) : 0;
+            const itemCgst = isIntra ? (taxable * (rate / 2) / 100) : 0;
+            const itemSgst = isIntra ? (taxable * (rate / 2) / 100) : 0;
+
             if (rate === 0) {
               if (isInterstate) nilRated.interUnreg += taxable;
               else nilRated.intraUnreg += taxable;
@@ -252,11 +259,17 @@ router.get("/gstr1", auth, async (req, res) => {
                 applicablePercent: "",
                 rate: rate,
                 taxableValue: taxable,
+                igst: itemIgst, cgst: itemCgst, sgst: itemSgst,
                 cess: 0,
                 ecommerceGstin: ""
               });
             } else {
               // B2C Small Logic: Grouped by POS and Rate
+              const totalItemBase = (item.sellingPrice || 0) * (item.qty || 0);
+              const totalInvoiceBase = inv.items.reduce((sum, i) => sum + ((i.sellingPrice || 0) * (i.qty || 0)), 0);
+              const billLevelRatio = totalInvoiceBase > 0 ? (inv.subtotal / totalInvoiceBase) : 1;
+              const taxable = totalItemBase * billLevelRatio;
+
               const key = `${pos}_${rate}`;
               if (!b2cGroups[key]) {
                 b2cGroups[key] = {
@@ -264,11 +277,15 @@ router.get("/gstr1", auth, async (req, res) => {
                   placeOfSupply: pos,
                   rate: rate,
                   taxableValue: 0,
+                  igst: 0, cgst: 0, sgst: 0,
                   cess: 0,
                   ecommerceGstin: ""
                 };
               }
               b2cGroups[key].taxableValue += taxable;
+              b2cGroups[key].igst += itemIgst;
+              b2cGroups[key].cgst += itemCgst;
+              b2cGroups[key].sgst += itemSgst;
             }
  
             // HSN Logic for B2C
@@ -277,15 +294,16 @@ router.get("/gstr1", auth, async (req, res) => {
             const hsn = hsnRaw || "9999";
             const hsnKey = `${hsn}_${rate}`; // Group by HSN and Rate
  
+
             if (!hsnSummaryB2C[hsnKey]) {
               hsnSummaryB2C[hsnKey] = { hsn: hsn, description: item.name, uqc: getUQC(item.unit || "NOS"), totalQty: 0, totalValue: 0, rate: rate, taxableValue: 0, igst: 0, cgst: 0, sgst: 0, cess: 0, invoiceNumbers: new Set() };
             }
             hsnSummaryB2C[hsnKey].totalQty += (item.qty || 0);
             hsnSummaryB2C[hsnKey].totalValue += item.total || 0;
             hsnSummaryB2C[hsnKey].taxableValue += taxable;
-            hsnSummaryB2C[hsnKey].igst += (item.igst || 0);
-            hsnSummaryB2C[hsnKey].cgst += (item.cgst || 0);
-            hsnSummaryB2C[hsnKey].sgst += (item.sgst || 0);
+            hsnSummaryB2C[hsnKey].igst += itemIgst;
+            hsnSummaryB2C[hsnKey].cgst += itemCgst;
+            hsnSummaryB2C[hsnKey].sgst += itemSgst;
             const invDate = moment(inv.invoiceDate).format("DD-MMM");
             hsnSummaryB2C[hsnKey].invoiceNumbers.add(`${inv.invoiceNumber} (${invDate})`);
           });
@@ -306,7 +324,6 @@ router.get("/gstr1", auth, async (req, res) => {
       const gstin = note.customer?.gstin || "";
       const isRegistered = gstin.length === 15 && !gstin.includes("URP");
       
-      // Normalize POS for Credit Notes too
       let stateName = (note.customer?.state || "").trim();
       const rawCode = String(note.customer?.stateCode || "").trim();
       const rawState = stateName.toLowerCase().replace(/\s/g, "");
@@ -314,51 +331,33 @@ router.get("/gstr1", auth, async (req, res) => {
       if (rawState === "tamilnadu" || rawState === "tn" || rawState.includes("tamilnadu") || rawCode === "33") {
         stateName = "Tamil Nadu";
       } else if (!stateName || !isNaN(stateName)) {
-        // Simple map for CNs
         const cnStateMap = { "33": "Tamil Nadu", "32": "Kerala", "29": "Karnataka" };
         stateName = cnStateMap[rawCode] || "Tamil Nadu";
       }
       
       const pos = (rawCode || "33") + "-" + stateName;
+      const isIntraNote = pos.includes("Tamil Nadu") || pos.startsWith("33-");
 
-      const entry = {
-        gstin: note.customer.gstin,
-        customerName: note.customer.name,
-        noteNo: note.creditNoteId,
-        noteDate: moment(note.date).format("DD-MMM-YYYY"),
-        noteType: "C",
-        placeOfSupply: pos,
-        reverseCharge: "N",
-        noteSupplyType: "Regular",
-        noteValue: note.grandTotal,
-        applicablePercent: "",
-        rate: note.items?.[0]?.gst || 0,
-        taxableValue: note.subtotal,
-        igst: note.totalTax?.igst || 0,
-        cgst: note.totalTax?.cgst || 0,
-        sgst: note.totalTax?.sgst || 0,
-        cess: 0,
-        preGst: "N"
-      };
+      const noteGroups = {};
 
-      if (isRegistered) cdnr.push(entry);
-      else {
-        // For CDNUR, type is required
-        const noteValue = note.grandTotal;
-        const isB2CLReturn = pos !== "33-Tamil Nadu" && noteValue > 250000;
-        cdnur.push({ 
-          ...entry, 
-          type: isB2CLReturn ? "B2CL" : "B2CS" 
-        });
-      }
-
-      // C. Process Nil-Rated / Exempted for Credit Notes (Deduct from total)
-      if (!isCancelled) {
-        note.items?.forEach(item => {
-          const taxable = ((item.sellingPrice || 0) * (item.qty || 0)) - (item.discountAmount || 0);
+      if (note.items && note.items.length > 0) {
+        note.items.forEach(item => {
           const rate = Math.round(item.gst || 0);
+          const taxable = ((item.sellingPrice || 0) * (item.qty || 0)) - (item.discountAmount || 0);
+          
+          const itemIgst = !isIntraNote ? (taxable * rate / 100) : 0;
+          const itemCgst = isIntraNote ? (taxable * (rate / 2) / 100) : 0;
+          const itemSgst = isIntraNote ? (taxable * (rate / 2) / 100) : 0;
+
+          if (!noteGroups[rate]) {
+            noteGroups[rate] = { taxableValue: 0, igst: 0, cgst: 0, sgst: 0 };
+          }
+          noteGroups[rate].taxableValue += taxable;
+          noteGroups[rate].igst += itemIgst;
+          noteGroups[rate].cgst += itemCgst;
+          noteGroups[rate].sgst += itemSgst;
+
           if (rate === 0) {
-            const isIntraNote = pos.includes("Tamil Nadu") || pos.startsWith("33-");
             if (isRegistered) {
               if (!isIntraNote) nilRated.interReg -= taxable;
               else nilRated.intraReg -= taxable;
@@ -368,17 +367,97 @@ router.get("/gstr1", auth, async (req, res) => {
             }
           }
         });
+      } else {
+        // Fallback for legacy notes without item-level rates
+        const rate = Math.round(((note.grandTotal - note.subtotal) / (note.subtotal || 1)) * 100) || 0;
+        noteGroups[rate] = {
+          taxableValue: note.subtotal,
+          igst: note.totalTax?.igst || (!isIntraNote ? (note.grandTotal - note.subtotal) : 0),
+          cgst: note.totalTax?.cgst || (isIntraNote ? (note.grandTotal - note.subtotal) / 2 : 0),
+          sgst: note.totalTax?.sgst || (isIntraNote ? (note.grandTotal - note.subtotal) / 2 : 0)
+        };
       }
+
+      Object.keys(noteGroups).forEach(rateStr => {
+        const rate = parseFloat(rateStr);
+        const rData = noteGroups[rateStr];
+        
+        const entry = {
+          gstin: note.customer.gstin,
+          customerName: note.customer.name,
+          noteNo: note.creditNoteId,
+          noteDate: moment(note.date).format("DD-MMM-YYYY"),
+          noteType: "C",
+          placeOfSupply: pos,
+          reverseCharge: "N",
+          noteSupplyType: "Regular",
+          noteValue: note.grandTotal,
+          applicablePercent: "",
+          rate: rate,
+          taxableValue: rData.taxableValue,
+          igst: rData.igst,
+          cgst: rData.cgst,
+          sgst: rData.sgst,
+          cess: 0,
+          preGst: "N"
+        };
+
+        if (isRegistered) cdnr.push(entry);
+        else {
+          cdnur.push({ 
+            ...entry, 
+            type: (!isIntraNote && note.grandTotal > 250000) ? "B2CL" : "B2CS" 
+          });
+        }
+      });
     });
 
-    // Update Raw Counts to be 100% accurate from final arrays
-    // Total = All B2B (including cancelled) + All B2C (raw bill count)
-    const totalProcessed = b2b.length + rawB2CCount;
+    // Count Unique Invoice Numbers and Group by Prefix for Document Summary
+    const groups = {};
+    invoices.forEach(inv => {
+      const num = inv.invoiceNumber;
+      const prefix = num.includes("/") ? num.split("/")[0] : (num.includes("-") ? num.split("-")[0] : "INV");
+      
+      if (!groups[prefix]) {
+        groups[prefix] = { from: num, to: num, uniqueNumbers: new Set(), cancelledCount: 0 };
+      }
+      
+      groups[prefix].uniqueNumbers.add(num);
+      if (inv.status === "CANCELLED") groups[prefix].cancelledCount++;
+      
+      // Update From/To strings
+      if (num < groups[prefix].from) groups[prefix].from = num;
+      if (num > groups[prefix].to) groups[prefix].to = num;
+    });
 
-    const docSummary = [
-      { nature: "Invoices for outward supply", from: minInvoice || "N/A", to: maxInvoice || "N/A", total: totalProcessed, cancelled: cancelledCount, net: totalProcessed - cancelledCount },
-      { nature: "Credit Notes", from: creditNotes[0]?.creditNoteId || "N/A", to: creditNotes[creditNotes.length-1]?.creditNoteId || "N/A", total: creditNotes.length, cancelled: 0, net: creditNotes.length }
-    ];
+    const docSummary = Object.keys(groups).map(prefix => {
+      const g = groups[prefix];
+      const total = g.uniqueNumbers.size;
+      return {
+        nature: `Invoices for outward supply (${prefix})`,
+        from: g.from,
+        to: g.to,
+        total: total,
+        cancelled: g.cancelledCount,
+        net: total - g.cancelledCount
+      };
+    });
+
+    // Restore these for the rawCounts response
+    const totalProcessed = Object.values(groups).reduce((acc, g) => acc + g.uniqueNumbers.size, 0);
+    cancelledCount = Object.values(groups).reduce((acc, g) => acc + g.cancelledCount, 0);
+
+    // Add Credit Notes to summary
+    if (creditNotes.length > 0) {
+      docSummary.push({
+        nature: "Credit Notes",
+        from: creditNotes[0]?.creditNoteId || "N/A",
+        to: creditNotes[creditNotes.length - 1]?.creditNoteId || "N/A",
+        total: creditNotes.length,
+        cancelled: 0,
+        net: creditNotes.length
+      });
+    }
 
     // Filter out zero-value rows before sending
     const finalB2CS = Object.values(b2cGroups).filter(row => row.taxableValue > 0);
