@@ -482,10 +482,63 @@ const BranchGstReports = () => {
       sheet.addRow([doc.nature, doc.from, doc.to, doc.total, doc.cancelled]);
     });
 
-    // Formatting
+    // Formatting for Summary
     sheet.getColumn(4).numFmt = "₹#,##0.00";
     sheet.getColumn(5).numFmt = "₹#,##0.00";
     sheet.columns.forEach(col => col.width = 25);
+
+    // --- NEW: Add Detailed Pages ---
+    
+    const addStyledSheet = (name, data, columns) => {
+      const s = workbook.addWorksheet(name);
+      const hRow = s.addRow(columns);
+      hRow.eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+        cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      });
+      data.forEach(row => {
+        const values = columns.map(col => row[col]);
+        s.addRow(values);
+      });
+      s.columns.forEach((column) => {
+        let maxLength = 0;
+        column.eachCell({ includeEmpty: true }, (cell) => {
+          const columnLength = cell.value ? cell.value.toString().length : 10;
+          if (columnLength > maxLength) maxLength = columnLength;
+        });
+        column.width = maxLength < 12 ? 12 : (maxLength > 50 ? 50 : maxLength + 2);
+      });
+    };
+
+    // 1. B2B Details
+    const b2bCols = ["GSTIN", "Customer Name", "Invoice No", "Date", "Value", "POS", "Rate", "Taxable Value", "IGST", "CGST", "SGST"];
+    const b2bData = gstr1Data.b2b.map(row => ({
+      "GSTIN": row.gstin, "Customer Name": row.customerName, "Invoice No": row.invoiceNo, "Date": row.date, "Value": row.value, "POS": row.placeOfSupply, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
+    }));
+    addStyledSheet("B2B_Details", b2bData, b2bCols);
+
+    // 2. B2C Details (Raw)
+    const b2cCols = ["Invoice No", "Date", "Customer Name", "POS", "Value", "Taxable Value", "IGST", "CGST", "SGST", "Rates"];
+    const b2cData = (gstr1Data.b2cRaw || []).map(row => ({
+      "Invoice No": row.invoiceNo, "Date": row.date, "Customer Name": row.customerName, "POS": row.placeOfSupply, "Value": row.value, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst, "Rates": (row.rates || []).join(", ")
+    }));
+    addStyledSheet("B2C_Retail_Details", b2cData, b2cCols);
+
+    // 3. Credit Notes
+    const cnCols = ["GSTIN", "Customer Name", "Note No", "Date", "Type", "POS", "Value", "Rate", "Taxable Value", "IGST", "CGST", "SGST"];
+    const cnData = [...(gstr1Data.cdnr || []), ...(gstr1Data.cdnur || [])].map(row => ({
+      "GSTIN": row.gstin, "Customer Name": row.customerName, "Note No": row.noteNo, "Date": row.noteDate, "Type": row.noteType, "POS": row.placeOfSupply, "Value": row.noteValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
+    }));
+    addStyledSheet("Credit_Notes", cnData, cnCols);
+
+    // 4. HSN Summary
+    const hsnCols = ["HSN", "Description", "UQC", "Total Qty", "Total Value", "Rate", "Taxable Value", "IGST", "CGST", "SGST"];
+    const hsnData = [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].map(row => ({
+      "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Qty": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
+    }));
+    addStyledSheet("HSN_Summary", hsnData, hsnCols);
 
     workbook.xlsx.writeBuffer().then((buffer) => {
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
