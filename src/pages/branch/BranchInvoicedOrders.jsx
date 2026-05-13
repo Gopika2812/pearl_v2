@@ -399,15 +399,15 @@ const BranchInvoicedOrders = () => {
     try {
       const payload = {
         salesInvoiceNumber: currentSpottedOrder.invoiceId,
-        name: currentSpottedOrder.customer?.name || "Counter Sales",
-        phoneNumber: currentSpottedOrder.customer?.whatsapp || "0000000000",
+        name: currentSpottedOrder.spottedCustomerName || currentSpottedOrder.customer?.name || "Counter Sales",
+        phoneNumber: currentSpottedOrder.spottedPhoneNumber || currentSpottedOrder.customer?.whatsapp || "0000000000",
         billInvoice: currentSpottedOrder._id,
         grandTotal: currentSpottedOrder.grandTotal,
         cashAmount: spottedPaymentData.cash,
         upiAmount: spottedPaymentData.upi,
         branchId: currentBranch._id,
         collectedBy: user?._id || user?.id,
-        collectedByUsername: user?.fullName || user?.username || user?.name || "System",
+        collectedByUsername: currentSpottedOrder.billingPerson || user?.fullName || user?.username || user?.name || "System",
         dateTime: new Date().toISOString()
       };
 
@@ -1852,7 +1852,9 @@ const BranchInvoicedOrders = () => {
                 <FaFileInvoice />
               </div>
               <h2 className="text-3xl font-black uppercase tracking-tighter mb-2">Received Payment</h2>
-              <p className="text-blue-100 font-bold opacity-80 uppercase tracking-widest text-xs">Reference: {currentSpottedOrder.invoiceId}</p>
+              <p className="text-blue-100 font-bold opacity-80 uppercase tracking-widest text-[10px]">
+                {currentSpottedOrder.spottedCustomerName || "Counter Sales"} ({currentSpottedOrder.invoiceId})
+              </p>
               
               <div className="mt-6 bg-white/20 backdrop-blur-md rounded-2xl p-4 inline-block border border-white/30">
                 <span className="block text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">Grand Total</span>

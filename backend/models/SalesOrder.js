@@ -317,6 +317,9 @@ const salesOrderSchema = new mongoose.Schema(
     salesInvoiceId: { type: String }, // Links to separate Invoice document (SI/xxx)
     printCount: { type: Number, default: 0 }, // Tracks number of times the invoice was printed
     orderDate: { type: Date, default: Date.now },
+
+    spottedCustomerName: String,
+    spottedPhoneNumber: String,
   },
   { timestamps: true }
 );

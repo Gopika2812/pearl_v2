@@ -1052,6 +1052,10 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           // 🛡️ LOCK DATE: Always use original SO date to prevent month-jumping during tax filing
           invoice.invoiceDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
           
+          // Copy spotted fields if they exist
+          invoice.spottedCustomerName = salesOrder.spottedCustomerName;
+          invoice.spottedPhoneNumber = salesOrder.spottedPhoneNumber;
+          
           // ✨ RESET E-INVOICE STATUS: Clear old errors when user re-finalizes with new data
           invoice.einvoiceStatus = null;
           invoice.einvoiceError = null;
@@ -1085,6 +1089,8 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             generatedBy: finalizedByUsername || "System",
             deliveryMan: salesOrder.deliveryMan,
             status: "FINALIZED",
+            spottedCustomerName: salesOrder.spottedCustomerName,
+            spottedPhoneNumber: salesOrder.spottedPhoneNumber,
           });
           await invoice.save({ session });
         }

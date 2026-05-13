@@ -228,6 +228,9 @@ const invoiceSchema = new mongoose.Schema(
     deliverySignature: { type: String }, // Base64 or image URL
     isReverted: { type: Boolean, default: false },
     deliveryLogId: { type: String }, // e.g., DL-BR01-0001
+
+    spottedCustomerName: String,
+    spottedPhoneNumber: String,
   },
   { timestamps: true }
 );
