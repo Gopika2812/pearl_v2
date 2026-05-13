@@ -45,6 +45,22 @@ const BranchInvoicedOrders = () => {
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [cancelNarration, setCancelNarration] = useState("");
   const [cancelling, setCancelling] = useState(false);
+  
+  // Spotted Customer Payment Modal State
+  const [showSpottedPaymentModal, setShowSpottedPaymentModal] = useState(false);
+  const [spottedPaymentData, setSpottedPaymentData] = useState({ cash: 0, upi: 0 });
+  const [currentSpottedOrder, setCurrentSpottedOrder] = useState(null);
+  const [triggerSpottedOnSuccess, setTriggerSpottedOnSuccess] = useState(false);
+
+  const isSpottedCustomer = (customer) => {
+    if (!customer) return false;
+    const groupName = customer.customerGroups?.[0]?.name || 
+                      customer.customerGroup?.name || 
+                      (typeof customer.customerGroup === 'string' ? customer.customerGroup : "");
+    
+    return groupName.toLowerCase().includes("spotted customer") || 
+           customer.name?.toLowerCase().includes("counter sales");
+  };
 
   // Filter states
   const [filterVoucherType, setFilterVoucherType] = useState("");
@@ -159,9 +175,10 @@ const BranchInvoicedOrders = () => {
     toast.info("Filters reset to Today");
   };
 
-  const handleGenerateInvoice = (order, asSo = false) => {
+  const handleGenerateInvoice = (order, asSo = false, triggerSpotted = false) => {
     setSelectedOrder(order);
     setUseSoFormat(asSo);
+    setTriggerSpottedOnSuccess(triggerSpotted);
     setShowModal(true); // Open the Back Order Workbench / Generator
   };
 
@@ -250,6 +267,9 @@ const BranchInvoicedOrders = () => {
 
       toast.success("✅ Invoice generated and print triggered!");
       fetchSalesOrders(); // Refresh list
+
+      // 🎯 SPOTTED CUSTOMER TRIGGER
+      triggerSpottedPaymentFlow(selectedOrder);
     } catch (err) {
       console.error("Direct print failed:", err);
       toast.error(err.message || "Failed to generate invoice");
@@ -372,6 +392,73 @@ const BranchInvoicedOrders = () => {
       toast.error(err.message || "Failed to cancel order");
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleSpottedPaymentSubmit = async () => {
+    try {
+      const payload = {
+        salesInvoiceNumber: currentSpottedOrder.invoiceId,
+        name: currentSpottedOrder.customer?.name || "Counter Sales",
+        phoneNumber: currentSpottedOrder.customer?.whatsapp || "0000000000",
+        billInvoice: currentSpottedOrder._id,
+        grandTotal: currentSpottedOrder.grandTotal,
+        cashAmount: spottedPaymentData.cash,
+        upiAmount: spottedPaymentData.upi,
+        branchId: currentBranch._id,
+        collectedBy: user?._id || user?.id,
+        collectedByUsername: user?.fullName || user?.username || user?.name || "System",
+        dateTime: new Date().toISOString()
+      };
+
+      const res = await fetchWithAuth(`${API_BASE}/spotted-customer-ledger`, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        toast.success("Payment recorded in Spotted Ledger");
+        setShowSpottedPaymentModal(false);
+        setCurrentSpottedOrder(null);
+      } else {
+        const data = await res.json();
+        toast.error(data.message || "Failed to record payment");
+      }
+    } catch (err) {
+      toast.error("Error recording payment");
+    }
+  };
+
+  const triggerSpottedPaymentFlow = async (order) => {
+    if (!order || !isSpottedCustomer(order.customer)) {
+        setSelectedOrder(null);
+        return;
+    }
+    
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/spotted-customer-ledger/check/${order._id}`);
+      const data = await res.json();
+      
+      if (data.success && data.isPaid) {
+        console.log("Spotted payment already recorded for this order. Skipping modal.");
+        setSelectedOrder(null);
+        return;
+      }
+      
+      setCurrentSpottedOrder({
+        ...order,
+        invoiceId: order.salesInvoiceId || order.invoiceId
+      });
+      setSpottedPaymentData({ cash: 0, upi: 0 });
+      setShowSpottedPaymentModal(true);
+    } catch (err) {
+      console.error("Error checking payment status:", err);
+      setCurrentSpottedOrder({
+        ...order,
+        invoiceId: order.salesInvoiceId || order.invoiceId
+      });
+      setSpottedPaymentData({ cash: 0, upi: 0 });
+      setShowSpottedPaymentModal(true);
     }
   };
 
@@ -1026,11 +1113,11 @@ const BranchInvoicedOrders = () => {
                                             toast.error("Failed to record print attempt.");
                                           });
 
-                                        handleGenerateInvoice(order, false);
+                                        handleGenerateInvoice(order, false, true);
                                       }
                                       return;
                                     }
-                                    handleGenerateInvoice(order, false);
+                                    handleGenerateInvoice(order, false, true);
                                   }}
                                   disabled={!(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.printCount > 0}
                                   className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-black shadow-md border 
@@ -1051,7 +1138,7 @@ const BranchInvoicedOrders = () => {
 
                               {isFieldAllowed("action_gen_invoice") && (
                                 <button
-                                  onClick={() => handleGenerateInvoice(order, true)}
+                                  onClick={() => handleGenerateInvoice(order, true, false)}
                                   className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-sm shadow-[#319bab]/20"
                                   disabled={order.status === "CANCELLED"}
                                 >
@@ -1581,9 +1668,19 @@ const BranchInvoicedOrders = () => {
             fetchSalesOrders(); // Refresh list
           }}
           onSuccess={() => {
+            const customer = selectedOrder?.customer;
+            const orderId = selectedOrder?.invoiceId;
+            const grandTotal = selectedOrder?.grandTotal;
+
             setShowModal(false);
-            setSelectedOrder(null);
-            fetchSalesOrders(); // Refresh list
+            fetchSalesOrders();
+
+            // 🎯 SPOTTED CUSTOMER TRIGGER - ONLY IF triggerSpottedOnSuccess IS TRUE
+            if (triggerSpottedOnSuccess) {
+                triggerSpottedPaymentFlow(selectedOrder);
+            } else {
+              setSelectedOrder(null);
+            }
           }}
         />
       )}
@@ -1742,6 +1839,78 @@ const BranchInvoicedOrders = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ══ SPOTTED CUSTOMER PAYMENT MODAL ══ */}
+      {showSpottedPaymentModal && currentSpottedOrder && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[10000] p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-100 animate-in fade-in zoom-in duration-300">
+            <div className="bg-[#319bab] p-8 text-white text-center relative">
+              <div className="absolute top-4 right-4 opacity-20 text-6xl">
+                <FaFileInvoice />
+              </div>
+              <h2 className="text-3xl font-black uppercase tracking-tighter mb-2">Received Payment</h2>
+              <p className="text-blue-100 font-bold opacity-80 uppercase tracking-widest text-xs">Reference: {currentSpottedOrder.invoiceId}</p>
+              
+              <div className="mt-6 bg-white/20 backdrop-blur-md rounded-2xl p-4 inline-block border border-white/30">
+                <span className="block text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">Grand Total</span>
+                <span className="text-4xl font-black">₹{currentSpottedOrder.grandTotal?.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="p-8 space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest">Cash Amount</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-400">₹</span>
+                    <input
+                      type="number"
+                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-4 pl-8 pr-4 focus:ring-4 focus:ring-[#319bab]/10 focus:border-[#319bab] outline-none transition-all font-black text-xl text-gray-800"
+                      value={spottedPaymentData.cash || ""}
+                      onChange={(e) => setSpottedPaymentData(prev => ({ ...prev, cash: Number(e.target.value) }))}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest">UPI Amount</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-gray-400">₹</span>
+                    <input
+                      type="number"
+                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-4 pl-8 pr-4 focus:ring-4 focus:ring-[#319bab]/10 focus:border-[#319bab] outline-none transition-all font-black text-xl text-gray-800"
+                      value={spottedPaymentData.upi || ""}
+                      onChange={(e) => setSpottedPaymentData(prev => ({ ...prev, upi: Number(e.target.value) }))}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-2xl p-4 flex justify-between items-center border border-gray-100">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Total Entered</span>
+                <span className={`text-2xl font-black ${ (Number(spottedPaymentData.cash) + Number(spottedPaymentData.upi)) === currentSpottedOrder.grandTotal ? 'text-emerald-500' : 'text-rose-500' }`}>
+                  ₹{(Number(spottedPaymentData.cash) + Number(spottedPaymentData.upi)).toLocaleString()}
+                </span>
+              </div>
+
+              { (Number(spottedPaymentData.cash) + Number(spottedPaymentData.upi)) !== currentSpottedOrder.grandTotal && (
+                <p className="text-center text-xs font-bold text-rose-500 animate-pulse uppercase tracking-tight">
+                  ⚠️ Entered amount must match the grand total exactly
+                </p>
+              )}
+
+              <button
+                onClick={handleSpottedPaymentSubmit}
+                disabled={(Number(spottedPaymentData.cash) + Number(spottedPaymentData.upi)) !== currentSpottedOrder.grandTotal}
+                className="w-full bg-[#319bab] hover:bg-[#257f87] disabled:bg-gray-200 disabled:text-gray-400 text-white py-5 rounded-2xl font-black uppercase tracking-widest transition-all shadow-xl shadow-[#319bab]/20 active:scale-95 flex items-center justify-center gap-3"
+              >
+                Complete Payment & Save Record
+              </button>
             </div>
           </div>
         </div>

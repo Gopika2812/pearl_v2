@@ -137,6 +137,8 @@ export default function InventorySalesOrderEntry({
   const [isClaim, setIsClaim] = useState(false);
   const [isLocked, setIsLocked] = useState(false); // New state for Lock Price checkbox
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split("T")[0]);
+  const [spottedCustomerName, setSpottedCustomerName] = useState("");
+  const [spottedPhoneNumber, setSpottedPhoneNumber] = useState("");
 
   // UNIT CONVERSION STATES
   const [convValue, setConvValue] = useState("");
@@ -792,6 +794,17 @@ export default function InventorySalesOrderEntry({
       return;
     }
 
+    const customerGroupName = selectedCustomer?.customerGroups?.[0]?.name || 
+                              selectedCustomer?.customerGroup?.name || 
+                              (typeof selectedCustomer?.customerGroup === 'string' ? selectedCustomer.customerGroup : "");
+
+    const isSpotted = customerGroupName.toLowerCase().includes("spotted customer") || 
+                      selectedCustomer?.name?.toLowerCase().includes("counter sales");
+
+    if (isSpotted) {
+      alert("asks payment");
+    }
+
     // 🛡️ BLOCK ZERO PRICE ADDITION
     if (Number(sellingPrice) <= 0) {
       toast.error("Add Item Blocked: Selling price cannot be ₹0. Please set a price.");
@@ -1107,6 +1120,8 @@ export default function InventorySalesOrderEntry({
     billingPerson,
     isClaim,
     orderDate,
+    spottedCustomerName,
+    spottedPhoneNumber,
   };
 
   const handleAddExtraExpense = async () => {
@@ -1208,6 +1223,8 @@ export default function InventorySalesOrderEntry({
     setExpensePrice("");
 
     setIsClaim(false);
+    setSpottedCustomerName("");
+    setSpottedPhoneNumber("");
   };
 
   const handleFinalAction = async () => {
@@ -1259,6 +1276,7 @@ export default function InventorySalesOrderEntry({
 
       console.log("✅ Sales Order Created:", data.invoiceId);
       toast.success(`Sales Order Created: ${data.invoiceId}`);
+      
       setTimeout(() => {
         window.location.reload();
       }, 1500);
@@ -1296,6 +1314,39 @@ export default function InventorySalesOrderEntry({
   };
 
 
+
+  const handleSpottedPaymentSubmit = async () => {
+    const totalReceived = Number(spottedPaymentData.cash) + Number(spottedPaymentData.upi);
+    if (totalReceived !== currentGrandTotal) {
+      return toast.error(`Entered amount (₹${totalReceived}) must match Bill Grand Total (₹${currentGrandTotal})`);
+    }
+
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/spotted-customer-ledger`, {
+        method: "POST",
+        body: JSON.stringify({
+          salesInvoiceNumber: currentInvoiceNumber,
+          name: spottedCustomerName,
+          phoneNumber: spottedPhoneNumber,
+          billInvoice: currentOrderId,
+          grandTotal: currentGrandTotal,
+          cashAmount: Number(spottedPaymentData.cash),
+          upiAmount: Number(spottedPaymentData.upi),
+          branchId: branchId
+        })
+      });
+
+      if (!res.ok) throw new Error("Failed to save payment record");
+
+      toast.success("Payment recorded successfully!");
+      setShowSpottedPaymentModal(false);
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
 
   const isAnyCreditProblem = creditStatus.isBlocked;
 
@@ -1529,6 +1580,37 @@ export default function InventorySalesOrderEntry({
               <input className={inputClass} value={selectedCustomer?.state || ""} readOnly />
               <input className={inputClass} value={selectedCustomer?.pincode || ""} readOnly />
             </div>
+
+            {/* SPOTTED CUSTOMER EXTRA FIELDS */}
+            {((selectedCustomer?.customerGroups?.[0]?.name?.toLowerCase().includes("spotted customer") || 
+               selectedCustomer?.customerGroup?.name?.toLowerCase().includes("spotted customer") || 
+               (typeof selectedCustomer?.customerGroup === 'string' && selectedCustomer.customerGroup.toLowerCase().includes("spotted customer"))) ||
+               selectedCustomer?.name?.toLowerCase().includes("counter sales")) && (
+              <div className="lg:col-span-3 grid grid-cols-2 gap-4 bg-blue-50/50 p-3 rounded-lg border border-blue-100 mt-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-blue-600 mb-1 uppercase tracking-tight">Customer Name *</label>
+                  <input
+                    type="text"
+                    className={`${inputClass} border-blue-200 focus:ring-blue-500`}
+                    value={spottedCustomerName}
+                    onChange={(e) => setSpottedCustomerName(e.target.value)}
+                    placeholder="Enter Name"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-blue-600 mb-1 uppercase tracking-tight">Phone Number *</label>
+                  <input
+                    type="text"
+                    className={`${inputClass} border-blue-200 focus:ring-blue-500`}
+                    value={spottedPhoneNumber}
+                    onChange={(e) => setSpottedPhoneNumber(e.target.value)}
+                    placeholder="Enter Phone"
+                    required
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 🛡️ CREDIT SECURITY ALARM SECTION - MOVED HERE FOR MAXIMUM VISIBILITY */}
