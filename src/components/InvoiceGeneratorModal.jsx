@@ -573,7 +573,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
       // and complete the initial DOM-heavy parts.
       setTimeout(() => {
         if (isMounted.current && onSuccess) {
-          onSuccess();
+          onSuccess(data.invoice);
         }
       }, 1000); // Increased from 300ms to 1000ms for safety
     } catch (error) {

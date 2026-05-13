@@ -269,7 +269,7 @@ const BranchInvoicedOrders = () => {
       fetchSalesOrders(); // Refresh list
 
       // 🎯 SPOTTED CUSTOMER TRIGGER
-      triggerSpottedPaymentFlow(selectedOrder);
+      triggerSpottedPaymentFlow(selectedOrder, finalizeData.invoice);
     } catch (err) {
       console.error("Direct print failed:", err);
       toast.error(err.message || "Failed to generate invoice");
@@ -429,7 +429,7 @@ const BranchInvoicedOrders = () => {
     }
   };
 
-  const triggerSpottedPaymentFlow = async (order) => {
+  const triggerSpottedPaymentFlow = async (order, invoice = null) => {
     if (!order || !isSpottedCustomer(order.customer)) {
         setSelectedOrder(null);
         return;
@@ -447,7 +447,8 @@ const BranchInvoicedOrders = () => {
       
       setCurrentSpottedOrder({
         ...order,
-        invoiceId: order.salesInvoiceId || order.invoiceId
+        grandTotal: invoice ? (invoice.grandTotal || invoice.total) : (order.grandTotal),
+        invoiceId: invoice ? invoice.invoiceNumber : (order.salesInvoiceId || order.invoiceId)
       });
       setSpottedPaymentData({ cash: 0, upi: 0 });
       setShowSpottedPaymentModal(true);
@@ -455,7 +456,8 @@ const BranchInvoicedOrders = () => {
       console.error("Error checking payment status:", err);
       setCurrentSpottedOrder({
         ...order,
-        invoiceId: order.salesInvoiceId || order.invoiceId
+        grandTotal: invoice ? (invoice.grandTotal || invoice.total) : (order.grandTotal),
+        invoiceId: invoice ? invoice.invoiceNumber : (order.salesInvoiceId || order.invoiceId)
       });
       setSpottedPaymentData({ cash: 0, upi: 0 });
       setShowSpottedPaymentModal(true);
@@ -1667,7 +1669,7 @@ const BranchInvoicedOrders = () => {
             setSelectedOrder(null);
             fetchSalesOrders(); // Refresh list
           }}
-          onSuccess={() => {
+          onSuccess={(invoice) => {
             const customer = selectedOrder?.customer;
             const orderId = selectedOrder?.invoiceId;
             const grandTotal = selectedOrder?.grandTotal;
@@ -1677,7 +1679,7 @@ const BranchInvoicedOrders = () => {
 
             // 🎯 SPOTTED CUSTOMER TRIGGER - ONLY IF triggerSpottedOnSuccess IS TRUE
             if (triggerSpottedOnSuccess) {
-                triggerSpottedPaymentFlow(selectedOrder);
+                triggerSpottedPaymentFlow(selectedOrder, invoice);
             } else {
               setSelectedOrder(null);
             }
