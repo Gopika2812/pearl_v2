@@ -1,5 +1,6 @@
 import express from "express";
 import SpottedCustomerLedger from "../models/SpottedCustomerLedger.js";
+import mongoose from "mongoose";
 
 const router = express.Router();
 
@@ -18,9 +19,19 @@ router.get("/check/:orderId", async (req, res) => {
 router.get("/:branchId", async (req, res) => {
   try {
     const { branchId } = req.params;
-    const { search, sortField, sortOrder } = req.query;
+    const { search, sortField, sortOrder, fromDate, toDate } = req.query;
 
-    let query = { branchId };
+    let query = { branchId: new mongoose.Types.ObjectId(branchId) };
+
+    if (fromDate || toDate) {
+      query.dateTime = {};
+      if (fromDate) query.dateTime.$gte = new Date(fromDate);
+      if (toDate) {
+        const end = new Date(toDate);
+        end.setHours(23, 59, 59, 999);
+        query.dateTime.$lte = end;
+      }
+    }
 
     if (search) {
       query.$or = [
@@ -37,8 +48,41 @@ router.get("/:branchId", async (req, res) => {
       sort = { dateTime: -1 };
     }
 
-    const records = await SpottedCustomerLedger.find(query).sort(sort);
-    res.status(200).json({ success: true, data: records });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    // Calculate totals for the filtered query (all pages)
+    const totals = await SpottedCustomerLedger.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          totalCash: { $sum: "$cashAmount" },
+          totalUpi: { $sum: "$upiAmount" }
+        }
+      }
+    ]);
+
+    const globalTotals = totals.length > 0 ? totals[0] : { totalCash: 0, totalUpi: 0 };
+
+    const totalRecords = await SpottedCustomerLedger.countDocuments(query);
+    const records = await SpottedCustomerLedger.find(query)
+      .sort(sort)
+      .skip(skip)
+      .limit(limit);
+
+    res.status(200).json({ 
+      success: true, 
+      data: records,
+      totals: globalTotals,
+      pagination: {
+        totalRecords,
+        totalPages: Math.ceil(totalRecords / limit),
+        currentPage: page,
+        limit
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -1240,6 +1240,22 @@ export default function InventorySalesOrderEntry({
         return toast.error("🚫 BILLING BLOCKED: This customer has exceeded their credit limit or has overdue payments. Please request approval from Super Admin.");
     }
 
+    // 🛡️ VALIDATE SPOTTED CUSTOMER DETAILS
+    const customerGroupName = selectedCustomer?.customerGroups?.[0]?.name || 
+                              selectedCustomer?.customerGroup?.name || 
+                              (typeof selectedCustomer?.customerGroup === 'string' ? selectedCustomer.customerGroup : "");
+    const isSpotted = customerGroupName.toLowerCase().includes("spotted customer") || 
+                      selectedCustomer?.name?.toLowerCase().includes("counter sales");
+
+    if (isSpotted) {
+      if (!spottedCustomerName.trim()) {
+        return toast.error("⚠️ Mandatory Field: Please enter Customer Name for Spotted Customer");
+      }
+      if (!spottedPhoneNumber.trim() || spottedPhoneNumber === "0000000000") {
+        return toast.error("⚠️ Mandatory Field: Please enter a valid Phone Number for Spotted Customer");
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
