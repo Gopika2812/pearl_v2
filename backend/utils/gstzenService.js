@@ -296,7 +296,7 @@ class GSTZenService {
       if (invoiceData.vehicleNo) {
         payload.EwbDtls = {
           TransMode: invoiceData.transportMode || "1",
-          Distance: Number(invoiceData.transportDistance || 50),
+          ...(Number(invoiceData.transportDistance || 0) > 0 ? { Distance: Number(invoiceData.transportDistance) } : {}),
           VehNo: String(invoiceData.vehicleNo).replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
           VehType: invoiceData.vehicleType === "OVERSIZED" ? "O" : "R"
         };
@@ -371,12 +371,11 @@ class GSTZenService {
       console.log(`\n🚚 [${now}] FORCING Standalone E-Way Bill Update...`);
 
       const cleanVehNo = String(invoiceData.vehicleNo).replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-      const distance = Number(invoiceData.transportDistance || 59);
+      const distance = Number(invoiceData.transportDistance ?? 0);
 
       const payload = {
         Version: "1.1",
         Irn: irnData.irn || invoiceData.irn,
-        // Including TranDtls and DocDtls forces GSTZen to treat this as a fresh validation attempt
         TranDtls: { TaxSch: "GST", SupTyp: "B2B", RegRev: "N", IgstOnIntra: "N" },
         DocDtls: {
           Typ: docType,
@@ -386,7 +385,7 @@ class GSTZenService {
         SellerDtls: { Gstin: invoiceData.seller?.gstin || invoiceData.branchId?.gstin || "33DULPS2600Q1Z6" },
         EwbDtls: {
           TransMode: invoiceData.transportMode || "1",
-          Distance: distance,
+          ...(distance > 0 ? { Distance: distance } : {}),
           TransGstin: invoiceData.transporterId || "",
           TransName: invoiceData.transporterName || "",
           VehNo: cleanVehNo,
