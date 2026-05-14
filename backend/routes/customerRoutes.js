@@ -622,10 +622,21 @@ router.get("/", async (req, res) => {
       customerCategoryId,
       riskStatus,
       sortBy = "createdAt",
-      sortOrder = "desc"
+      sortOrder = "desc",
+      excludeLinked = "false"
     } = req.query;
 
     const andConditions = [{ branchId: branchObjectId }];
+
+    // 0️⃣ Exclude customers linked to vendors if requested
+    if (excludeLinked === "true") {
+      andConditions.push({ 
+        $or: [
+          { linkedVendorId: { $exists: false } },
+          { linkedVendorId: null }
+        ]
+      });
+    }
 
     // Helper to check if a filter value is truly set and not a placeholder
     const isFilterSet = (val) => val && val !== "All" && val !== "null" && val !== "undefined" && val !== "";
@@ -1001,6 +1012,7 @@ router.post("/", async (req, res) => {
       upi,
       branchId,
       isLockedPriceEnabled,
+      linkedVendorId,
     } = req.body;
 
     // Basic validation - only name and branchId are required
@@ -1044,6 +1056,7 @@ router.post("/", async (req, res) => {
       branch,
       upi,
       isLockedPriceEnabled: isLockedPriceEnabled === true || isLockedPriceEnabled === "true",
+      linkedVendorId: linkedVendorId && linkedVendorId !== "" ? linkedVendorId : null,
       openingBalance: (Number(debit) || 0) - (Number(credit) || 0),
       manualOpeningDate: new Date(),
     });

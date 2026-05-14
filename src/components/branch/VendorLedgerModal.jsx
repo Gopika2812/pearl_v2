@@ -247,7 +247,14 @@ const VendorLedgerModal = ({ isOpen, onClose, supplier: propSupplier }) => {
             </div>
             <div>
               <h2 className="text-xl font-bold uppercase tracking-tight">Supplier Ledger</h2>
-              <p className="text-teal-100 text-xs font-bold opacity-80 uppercase tracking-widest">{supplier.name}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-[10px] opacity-70 uppercase font-black tracking-widest">{supplier?.name || "Loading..."}</p>
+                {transactions.some(t => ["SALES_INVOICE", "CUSTOMER_RECEIPT", "CREDIT_NOTE"].includes(t.type)) && (
+                  <span className="bg-amber-400 text-amber-950 text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter animate-pulse shadow-lg shadow-amber-400/20">
+                    Consolidated Account
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -556,6 +563,9 @@ const VendorLedgerModal = ({ isOpen, onClose, supplier: propSupplier }) => {
                         <td className="px-6 py-4">
                           <span className={`px-2 py-1 rounded-lg text-[10px] uppercase font-black tracking-widest ${
                             txn.type === "INVOICE" ? "bg-red-100 text-red-600" : 
+                            txn.type === "SALES_INVOICE" ? "bg-indigo-100 text-indigo-600 border border-indigo-200" :
+                            txn.type === "CREDIT_NOTE" ? "bg-indigo-50 text-indigo-500 border border-indigo-100" :
+                            txn.type === "CUSTOMER_RECEIPT" ? "bg-indigo-50 text-indigo-400 border border-indigo-100" :
                             txn.type === "PAYMENT" ? "bg-green-100 text-green-600" : 
                             txn.type === "PAYMENT_RETURN" ? "bg-blue-100 text-blue-600" : 
                             txn.type.includes("JOURNAL") ? "bg-purple-100 text-purple-600" :
@@ -563,6 +573,9 @@ const VendorLedgerModal = ({ isOpen, onClose, supplier: propSupplier }) => {
                           }`}>
                             {txn.type === "JOURNAL_DR" ? "JOURNAL-DR" :
                              txn.type === "JOURNAL_CR" ? "JOURNAL-CR" : 
+                             txn.type === "SALES_INVOICE" ? "SALES" :
+                             txn.type === "CREDIT_NOTE" ? "RETURN" :
+                             txn.type === "CUSTOMER_RECEIPT" ? "RECEIPT" :
                              txn.type.replace("_", " ")}
                           </span>
                         </td>

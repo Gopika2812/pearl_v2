@@ -77,6 +77,14 @@ const customerSchema = new mongoose.Schema(
       default: "safe_zone",
       index: true
     },
+    
+    // Linked Vendor (For consolidated ledgers)
+    linkedVendorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Vendor",
+      default: null,
+      index: true
+    },
   },
   { timestamps: true }
 );

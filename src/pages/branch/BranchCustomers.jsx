@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaWhatsapp, FaMapMarkerAlt, FaEnvelope, FaUserTie, FaTags, FaObjectGroup } from "react-icons/fa";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaWhatsapp, FaMapMarkerAlt, FaEnvelope, FaUserTie, FaTags, FaObjectGroup, FaEdit } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
@@ -42,6 +42,7 @@ const BranchCustomers = () => {
   const [selectedCreditNoteCustomer, setSelectedCreditNoteCustomer] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [selectedCustomerForEdit, setSelectedCustomerForEdit] = useState(null);
   const [expandedRows, setExpandedRows] = useState({});
   const [exportDate, setExportDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSafeMode, setIsSafeMode] = useState(false); // Mode for info-only updates
@@ -128,7 +129,7 @@ const BranchCustomers = () => {
   const fetchCustomers = async (page = 1) => {
     try {
       setLoading(true);
-      const url = `${API_BASE}/customers?branchId=${branchId}&page=${page}&limit=100&search=${encodeURIComponent(
+      const url = `${API_BASE}/customers?branchId=${branchId}&page=${page}&limit=100&excludeLinked=true&search=${encodeURIComponent(
         searchTerm
       )}`;
       console.log("Fetching customers from:", url);
@@ -184,6 +185,7 @@ const BranchCustomers = () => {
         const { _id, ...updatePayload } = data;
         await updateData("customer", _id, updatePayload);
         toast.success("Customer updated successfully");
+        setSelectedCustomerForEdit(null);
       } else {
         const dataWithBranch = { ...data, branchId };
         await addData("customer", dataWithBranch);
@@ -631,9 +633,18 @@ const BranchCustomers = () => {
                   className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-blue-600"
                 >
                   {/* Name */}
-                  <h3 className="text-base md:text-lg font-bold text-gray-800 mb-3 truncate">
-                    {customer.name}
-                  </h3>
+                  <div className="flex justify-between items-start mb-3">
+                    <h3 className="text-base md:text-lg font-bold text-gray-800 truncate">
+                      {customer.name}
+                    </h3>
+                    <button 
+                      onClick={() => { setSelectedCustomerForEdit(customer); setIsAddModalOpen(true); }}
+                      className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors"
+                      title="Edit Customer"
+                    >
+                      <FaEdit size={14} />
+                    </button>
+                  </div>
 
                   {/* Details */}
                   <div className="space-y-2 mb-4 text-xs md:text-sm">
@@ -853,15 +864,26 @@ const BranchCustomers = () => {
                                     Return
                                   </button>
                                 )}
-                                {isFieldAllowed("action_ledger") && (
+                                  {isFieldAllowed("action_ledger") && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); navigate(`/branch/customer-ledger/${customer._id}`); }}
+                                      className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                                    >
+                                      Ledger
+                                    </button>
+                                  )}
                                   <button
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/branch/customer-ledger/${customer._id}`); }}
-                                    className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedCustomerForEdit(customer);
+                                      setIsAddModalOpen(true);
+                                    }}
+                                    className="bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200 p-2 rounded-md transition shadow-sm"
+                                    title="Edit Profile"
                                   >
-                                    Ledger
+                                    <FaEdit size={10} />
                                   </button>
-                                )}
-                              </div>
+                                </div>
                             </td>
                           )}
                         </tr>
@@ -909,7 +931,7 @@ const BranchCustomers = () => {
                                       {customer.customerGroup?.name || "No Group"}
                                     </span>
                                   </div>
-                                  <div className="mt-3">
+                                  <div className="mt-3 flex items-center gap-4">
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -918,6 +940,16 @@ const BranchCustomers = () => {
                                       className="text-secondary hover:underline text-xs font-bold"
                                     >
                                       View Detailed Ledger →
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedCustomerForEdit(customer);
+                                        setIsAddModalOpen(true);
+                                      }}
+                                      className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 text-[10px] font-black uppercase tracking-widest border border-blue-200 px-2 py-1 rounded-lg bg-blue-50 transition-all active:scale-95"
+                                    >
+                                      <FaEdit size={10} /> Edit Profile
                                     </button>
                                   </div>
                                 </div>
@@ -978,8 +1010,12 @@ const BranchCustomers = () => {
       {isAddModalOpen && (
         <InventoryAddCustomerModal
           isOpen={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
+          onClose={() => {
+            setIsAddModalOpen(false);
+            setSelectedCustomerForEdit(null);
+          }}
           onSave={handleAddCustomer}
+          initialData={selectedCustomerForEdit}
           salesOwners={salesOwners}
           customerCategories={customerCategories}
           customerGroups={customerGroups}

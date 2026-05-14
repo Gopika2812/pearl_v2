@@ -61,6 +61,13 @@ const BranchCustomerLedger = () => {
       const data = await response.json();
       if (response.ok) {
         setCustomer(data);
+        if (data.linkedVendorId) {
+          toast.info("This is a Consolidated Account. Redirecting to Vendor Ledger...");
+          // Find the supplier in the list or just pass the ID
+          setTimeout(() => {
+             navigate(`/branch/suppliers?ledgerVendorId=${data.linkedVendorId}`);
+          }, 1500);
+        }
       } else {
         toast.error("Customer not found");
         navigate("/branch/customers");
@@ -367,6 +374,40 @@ const BranchCustomerLedger = () => {
 
   return (
     <div className="space-y-6">
+      {customer?.linkedVendorId && (
+        <div className="bg-indigo-50 border-2 border-indigo-100 p-10 rounded-[3rem] shadow-2xl shadow-indigo-100 flex flex-col items-center text-center gap-6 animate-in zoom-in duration-500">
+          <div className="bg-indigo-600 text-white p-6 rounded-3xl shadow-xl shadow-indigo-200">
+            <FaExchangeAlt className="text-4xl" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black text-indigo-900 uppercase tracking-tighter italic">Consolidated Ledger</h1>
+            <p className="text-indigo-600 text-sm font-bold uppercase tracking-widest mt-2 max-w-xl mx-auto">
+              This account is linked to a Vendor profile. To maintain absolute financial accuracy, 
+              all transactions (Sales & Purchases) are stored in the Vendor's primary ledger.
+            </p>
+          </div>
+          <div className="flex flex-col md:flex-row gap-4 w-full max-w-md">
+            <button 
+              onClick={() => navigate("/branch/suppliers")}
+              className="flex-1 bg-indigo-600 text-white px-8 py-4 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2"
+            >
+              <FaArrowLeft className="text-[10px]" /> Go to Vendor Ledger
+            </button>
+            <button 
+              onClick={() => navigate("/branch/customers")}
+              className="flex-1 bg-white text-indigo-600 border-2 border-indigo-100 px-8 py-4 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-50 transition-all active:scale-95"
+            >
+              Back to Customers
+            </button>
+          </div>
+          <p className="text-[10px] text-indigo-300 font-black uppercase tracking-[0.2em] mt-4">
+            Financial Consolidation Mode: Active
+          </p>
+        </div>
+      )}
+
+      {customer?.linkedVendorId ? null : (
+        <>
       {/* PREMIUM HEADER */}
       <div className="relative overflow-hidden bg-white/50 backdrop-blur-md p-8 rounded-3xl border border-white/50 shadow-sm">
         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
@@ -408,6 +449,8 @@ const BranchCustomerLedger = () => {
           </div>
         </div>
       </div>
+        </>
+      )}
 
       {/* QUICK STATS & FILTERS */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

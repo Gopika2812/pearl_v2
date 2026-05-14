@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { FaList, FaSpinner, FaThLarge, FaPlus, FaFileExport, FaChevronDown, FaChevronUp, FaMapMarkerAlt, FaPhone, FaEnvelope, FaMoneyBillWave, FaExchangeAlt, FaUndoAlt, FaBook, FaEdit } from "react-icons/fa";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaFileExport, FaChevronDown, FaChevronUp, FaMapMarkerAlt, FaPhone, FaEnvelope, FaMoneyBillWave, FaExchangeAlt, FaUndoAlt, FaBook, FaEdit, FaUserPlus } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
@@ -16,6 +16,7 @@ const BranchSuppliers = () => {
   const { branch, branchLoaded, user } = useBranch();
   const branchId = branch?._id;
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -59,6 +60,25 @@ const BranchSuppliers = () => {
       fetchSuppliers(debouncedSearchTerm, page);
     }
   }, [branchLoaded, branchId, debouncedSearchTerm, page]);
+
+  useEffect(() => {
+    const ledgerVendorId = searchParams.get("ledgerVendorId");
+    if (ledgerVendorId && branchLoaded) {
+      // Fetch specifically this vendor to open the ledger
+      const fetchSpecificVendor = async () => {
+        try {
+          const res = await fetchWithAuth(`${API_BASE}/vendors/${ledgerVendorId}`);
+          const data = await res.json();
+          if (res.ok) {
+            setSelectedLedgerSupplier(data);
+          }
+        } catch (err) {
+          console.error("Error fetching specific vendor for ledger:", err);
+        }
+      };
+      fetchSpecificVendor();
+    }
+  }, [searchParams, branchLoaded]);
 
   const fetchSuppliers = async (search = "", pageNum = 1) => {
     try {
@@ -113,6 +133,50 @@ const BranchSuppliers = () => {
   const handleEdit = (supplier) => {
     setEditingSupplier(supplier);
     setIsAddModalOpen(true);
+  };
+
+  const handleMakeCustomer = async (supplier) => {
+    try {
+      const confirm = window.confirm(`Are you sure you want to create or link a customer record for "${supplier.name}"? This will consolidate all sales and purchases into this vendor's ledger.`);
+      if (!confirm) return;
+
+      const customerData = {
+        name: supplier.name,
+        phone: supplier.phone,
+        whatsapp: supplier.phone,
+        email: supplier.email,
+        address: supplier.address,
+        gstin: supplier.gstin,
+        state: supplier.stateName,
+        linkedVendorId: supplier._id,
+        branchId: branchId,
+        registrationType: supplier.gstRegistrationType || "regular"
+      };
+
+      // Check if customer already exists with this name to perform a link instead of create
+      const checkRes = await fetchWithAuth(`${API_BASE}/customers?branchId=${branchId}&search=${encodeURIComponent(supplier.name)}&limit=1`);
+      const checkData = await checkRes.json();
+      const existingCustomer = checkData.data?.find(c => c.name.toLowerCase() === supplier.name.toLowerCase());
+
+      if (existingCustomer) {
+        if (existingCustomer.linkedVendorId === supplier._id) {
+          return toast.info("This vendor is already linked to its customer record.");
+        }
+        
+        const linkConfirm = window.confirm(`A customer named "${supplier.name}" already exists. Should we link it to this vendor for consolidated ledger reporting?`);
+        if (linkConfirm) {
+          await updateData("customer", existingCustomer._id, { linkedVendorId: supplier._id });
+          toast.success(`Successfully linked existing customer "${supplier.name}" to this vendor.`);
+          return;
+        }
+      }
+
+      await addData("customer", customerData);
+      toast.success(`${supplier.name} is now also a Customer and linked successfully!`);
+    } catch (error) {
+      console.error("Make Customer Error:", error);
+      toast.error(error.message || "Failed to create customer");
+    }
   };
 
 
@@ -536,6 +600,13 @@ const BranchSuppliers = () => {
                 >
                   <FaEdit />
                 </button>
+                <button
+                  onClick={() => handleMakeCustomer(supplier)}
+                  className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg border border-indigo-200 transition active:scale-95"
+                  title="Make as Customer"
+                >
+                  <FaUserPlus />
+                </button>
               </div>
             </div>
           ))}
@@ -650,6 +721,13 @@ const BranchSuppliers = () => {
                               title="Edit Supplier"
                             >
                               <FaEdit size={10} />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleMakeCustomer(supplier); }}
+                              className="p-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 rounded-md transition active:scale-95"
+                              title="Make as Customer"
+                            >
+                              <FaUserPlus size={10} />
                             </button>
                           </div>
                         </td>
