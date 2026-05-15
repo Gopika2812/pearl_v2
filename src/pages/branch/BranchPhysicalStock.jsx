@@ -168,10 +168,15 @@ export default function BranchPhysicalStock() {
   useEffect(() => {
     if (rows.length === 0) return;
     const seen = new Set();
-    const hasDuplicates = rows.some(r => {
-      if (seen.has(r.productId)) return true;
-      seen.add(r.productId);
-      return false;
+    let hasDuplicates = false;
+    
+    rows.forEach(r => {
+      const pid = String(r.productId);
+      if (seen.has(pid)) {
+        hasDuplicates = true;
+      } else {
+        seen.add(pid);
+      }
     });
 
     if (hasDuplicates) {
@@ -179,8 +184,9 @@ export default function BranchPhysicalStock() {
         const unique = [];
         const uniqueIds = new Set();
         prev.forEach(r => {
-          if (!uniqueIds.has(r.productId)) {
-            uniqueIds.add(r.productId);
+          const pid = String(r.productId);
+          if (!uniqueIds.has(pid)) {
+            uniqueIds.add(pid);
             unique.push(r);
           }
         });
@@ -356,6 +362,7 @@ export default function BranchPhysicalStock() {
       setRows([]); 
       return;
     }
+    setRows([]); // Atomic reset before loading new group
     try {
       // 1. Fetch Products in this group
       const prodUrl = `${API_BASE}/products?branchId=${currentBranch._id}&productGroup=${groupId}&limit=500`;
@@ -372,17 +379,18 @@ export default function BranchPhysicalStock() {
 
       if (prodData.success && prodData.data) {
         const productsToAdd = prodData.data;
-        // Deduplicate by productId before setting rows
+        // Deduplicate by productId (as String) before setting rows
         const uniqueRowsMap = new Map();
         
         productsToAdd.forEach(p => {
-          if (uniqueRowsMap.has(p._id)) return;
+          const pid = String(p._id);
+          if (uniqueRowsMap.has(pid)) return;
 
-          const record = existingRecords.find(r => r.productId === p._id);
+          const record = existingRecords.find(r => String(r.productId) === pid);
           if (record) {
-            uniqueRowsMap.set(p._id, {
+            uniqueRowsMap.set(pid, {
               rowId: record._id,
-              productId: p._id,
+              productId: pid,
               productName: p.name,
               productGroupId: p.productGroup?._id || p.productGroup,
               productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
@@ -399,9 +407,9 @@ export default function BranchPhysicalStock() {
               saving: false
             });
           } else {
-            uniqueRowsMap.set(p._id, {
+            uniqueRowsMap.set(pid, {
               rowId: Math.random() + Date.now(),
-              productId: p._id,
+              productId: pid,
               productName: p.name,
               productGroupId: p.productGroup?._id || p.productGroup,
               productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
