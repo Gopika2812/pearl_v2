@@ -1981,30 +1981,6 @@ router.get("/:id/ledger", async (req, res) => {
         credit: mj.amount || 0,
         user: mj.userName || "-",
         deliveryMan: "-"
-      })),
-      ...mjInRangeBy.map(mj => ({
-        id: `mjb-${mj._id}`,
-        date: mj.journalDate,
-        type: "JOURNAL_DR",
-        particulars: `Journal: ${mj.journalId} (DR) - ${mj.narration || "Manual Adjustment"}`,
-        debit: mj.amount || 0,
-        credit: 0,
-        user: mj.userName || "Admin",
-        deliveryMan: "-",
-        branchName: "-",
-        branchCode: "-"
-      })),
-      ...mjInRangeTo.map(mj => ({
-        id: `mjt-${mj._id}`,
-        date: mj.journalDate,
-        type: "JOURNAL_CR",
-        particulars: `Journal: ${mj.journalId} (CR) - ${mj.narration || "Manual Adjustment"}`,
-        debit: 0,
-        credit: mj.amount || 0,
-        user: mj.userName || "Admin",
-        deliveryMan: "-",
-        branchName: "-",
-        branchCode: "-"
       }))
     ].sort((a, b) => new Date(a.date) - new Date(b.date));
 

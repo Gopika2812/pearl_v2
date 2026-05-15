@@ -345,33 +345,6 @@ const BranchStockSummary = () => {
               >
                 <FaSync className={loading ? "animate-spin" : ""} /> Refresh
               </button>
-
-              <button
-                onClick={async () => {
-                  if (!window.confirm("CRITICAL RECONCILIATION:\n\nThis will force your Current Stock to match:\n[Mar 31st Anchor] + [Total Inwards] - [Total Outwards].\n\nUse this if your 'Available Qty' looks wrong. Proceed?")) return;
-                  setLoading(true);
-                  try {
-                    const res = await fetchWithAuth(`${API_BASE}/products/reconcile-stock`, {
-                      method: "POST",
-                      body: JSON.stringify({ branchId: currentBranch._id })
-                    });
-                    const result = await res.json();
-                    if (result.success) {
-                      toast.success(result.message);
-                      fetchStockSummary();
-                    } else {
-                      throw new Error(result.message);
-                    }
-                  } catch (err) {
-                    toast.error(err.message || "Sync failed");
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                className="bg-orange-500 text-white px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-orange-200 hover:bg-orange-600 transition flex items-center justify-center gap-2 w-full"
-              >
-                <FaSync className={loading ? "animate-spin" : ""} /> Sync Stock
-              </button>
             </div>
 
             <div className="grid grid-cols-2 md:flex items-center gap-2 w-full md:w-auto">
