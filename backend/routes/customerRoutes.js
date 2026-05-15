@@ -1607,10 +1607,11 @@ router.get("/:id/ledger", async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid customer ID" });
     }
 
-    const customer = await Customer.findById(id);
+    const customer = await Customer.findById(id).populate("linkedVendorId");
     if (!customer) {
       return res.status(404).json({ success: false, message: "Customer not found" });
     }
+    const vendor = customer.linkedVendorId;
     // Default dates: This month if not specified
     const now = new Date();
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -1627,10 +1628,10 @@ router.get("/:id/ledger", async (req, res) => {
     const end = endStr ? new Date(endStr) : new Date();
     end.setHours(23, 59, 59, 999);
 
-    // 1. Calculate Dynamic Opening Balance
-    // Start from the current live balance and subtract all branch transactions since startDate.
-    // This ensures consistency with the "Snapshot" exports and handles cases where the static openingBalance field is 0.
-    const currentBalance = (customer.debit || 0) - (customer.credit || 0);
+    // Start from the current live balances of BOTH sides if linked
+    const customerBal = (customer.debit || 0) - (customer.credit || 0);
+    const vendorBal = vendor ? (vendor.debit || 0) - (vendor.credit || 0) : 0;
+    const currentBalance = customerBal + vendorBal;
 
     // Fetch all transactions since startDate for delta calculation
     const invoicesAfter = await Invoice.find({
@@ -1679,13 +1680,70 @@ router.get("/:id/ledger", async (req, res) => {
       ]
     }).select("amount");
 
+    // 2.4 Fetch Vendor-side movements since start (if linked)
+    let vendorDebitsAfter = 0;
+    let vendorCreditsAfter = 0;
+
+    if (vendor) {
+      const vid = vendor._id;
+      const vInvoicesAfter = await mongoose.model("PurchaseInvoice").find({
+        "vendor.vendorId": vid,
+        branchId: customer.branchId,
+        $or: [
+          { invoiceDate: { $gte: start } },
+          { invoiceDate: { $exists: false }, createdAt: { $gte: start } }
+        ]
+      }).select("grandTotal");
+
+      const vPaymentsAfter = await mongoose.model("Payment").find({
+        "vendor.vendorId": vid,
+        branchId: customer.branchId,
+        status: { $ne: "cancelled" },
+        createdAt: { $gte: start }
+      }).select("amount");
+
+      const vDebitNotesAfter = await mongoose.model("DebitNote").find({
+        "vendor.vendorId": vid,
+        branchId: customer.branchId,
+        status: "Created",
+        createdAt: { $gte: start }
+      }).select("grandTotal");
+
+      const vMjAfterBy = await ManualJournal.find({
+        "by.partyType": "VENDOR",
+        "by.partyId": vid,
+        $or: [
+          { journalDate: { $gte: start } },
+          { journalDate: { $exists: false }, createdAt: { $gte: start } }
+        ]
+      }).select("amount");
+
+      const vMjAfterTo = await ManualJournal.find({
+        "to.partyType": "VENDOR",
+        "to.partyId": vid,
+        $or: [
+          { journalDate: { $gte: start } },
+          { journalDate: { $exists: false }, createdAt: { $gte: start } }
+        ]
+      }).select("amount");
+
+      vendorCreditsAfter = vInvoicesAfter.reduce((sum, i) => sum + (i.grandTotal || 0), 0) +
+                           vMjAfterTo.reduce((sum, mj) => sum + (mj.amount || 0), 0);
+      
+      vendorDebitsAfter = vPaymentsAfter.reduce((sum, p) => sum + (p.amount || 0), 0) +
+                          vDebitNotesAfter.reduce((sum, dn) => sum + (dn.grandTotal || 0), 0) +
+                          vMjAfterBy.reduce((sum, mj) => sum + (mj.amount || 0), 0);
+    }
+
     const totalDebitsAfter = invoicesAfter.reduce((sum, i) => sum + (i.grandTotal || 0), 0) +
                             receiptsAfter.filter(r => r.status === "bounced").reduce((sum, r) => sum + (r.amount || 0), 0) +
-                            mjAfterBy.reduce((sum, mj) => sum + (mj.amount || 0), 0);
+                            mjAfterBy.reduce((sum, mj) => sum + (mj.amount || 0), 0) +
+                            vendorDebitsAfter;
     
     const totalCreditsAfter = receiptsAfter.filter(r => r.status === "confirmed").reduce((sum, r) => sum + (r.amount || 0), 0) + 
                              cnAfter.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0) +
-                             mjAfterTo.reduce((sum, mj) => sum + (mj.amount || 0), 0);
+                             mjAfterTo.reduce((sum, mj) => sum + (mj.amount || 0), 0) +
+                             vendorCreditsAfter;
 
     const openingBalance = currentBalance - totalDebitsAfter + totalCreditsAfter;
 
@@ -1747,6 +1805,57 @@ router.get("/:id/ledger", async (req, res) => {
         ]
     }).select("amount journalDate journalId narration userName paymentMode");
 
+    // 4. Fetch Vendor-side transactions for the range
+    let vendorInvoicesInRange = [];
+    let vendorPaymentsInRange = [];
+    let vendorDNInRange = [];
+    let vendorMjInRangeBy = [];
+    let vendorMjInRangeTo = [];
+
+    if (vendor) {
+      const vid = vendor._id;
+      vendorInvoicesInRange = await mongoose.model("PurchaseInvoice").find({
+        "vendor.vendorId": vid,
+        branchId: customer.branchId,
+        $or: [
+          { invoiceDate: { $gte: start, $lte: end } },
+          { invoiceDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+        ]
+      }).select("grandTotal invoiceDate purchaseInvoiceId vendorInvoiceNumber voucherType createdAt");
+
+      vendorPaymentsInRange = await mongoose.model("Payment").find({
+        "vendor.vendorId": vid,
+        branchId: customer.branchId,
+        status: { $ne: "cancelled" },
+        createdAt: { $gte: start, $lte: end }
+      }).select("amount createdAt paymentId paymentMode");
+
+      vendorDNInRange = await mongoose.model("DebitNote").find({
+        "vendor.vendorId": vid,
+        branchId: customer.branchId,
+        status: "Created",
+        createdAt: { $gte: start, $lte: end }
+      }).select("grandTotal createdAt debitNoteId reason");
+
+      vendorMjInRangeBy = await ManualJournal.find({
+        "by.partyType": "VENDOR",
+        "by.partyId": vid,
+        $or: [
+          { journalDate: { $gte: start, $lte: end } },
+          { journalDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+        ]
+      }).select("amount journalDate journalId narration userName paymentMode");
+
+      vendorMjInRangeTo = await ManualJournal.find({
+        "to.partyType": "VENDOR",
+        "to.partyId": vid,
+        $or: [
+          { journalDate: { $gte: start, $lte: end } },
+          { journalDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+        ]
+      }).select("amount journalDate journalId narration userName paymentMode");
+    }
+
     // Format all transactions
     const txns = [
       ...invoicesInRange.map(s => {
@@ -1802,6 +1911,76 @@ router.get("/:id/ledger", async (req, res) => {
         branchName: cn.branchId?.name || "-",
         branchCode: cn.branchId?.code || "-",
         salesOrderId: cn.originalSalesOrderId?._id || cn.originalSalesOrderId
+      })),
+      ...vendorInvoicesInRange.map(p => ({
+        id: `pur-${p._id}`,
+        date: p.createdAt || p.invoiceDate,
+        type: "PURCHASE",
+        particulars: `${p.voucherType || "Purchase"}: ${p.purchaseInvoiceId}${p.vendorInvoiceNumber ? ` [Ref: ${p.vendorInvoiceNumber}]` : ""}`,
+        debit: 0,
+        credit: p.grandTotal || 0,
+        user: "-",
+        deliveryMan: "-"
+      })),
+      ...vendorPaymentsInRange.map(p => ({
+        id: `vpay-${p._id}`,
+        date: p.date || p.createdAt,
+        type: "VENDOR_PAYMENT",
+        particulars: `Vendor Payment: ${p.paymentId} (${(p.paymentMode || "CASH").toUpperCase()})`,
+        debit: p.amount || 0,
+        credit: 0,
+        user: "-",
+        deliveryMan: "-"
+      })),
+      ...vendorDNInRange.map(dn => ({
+        id: `dn-${dn._id}`,
+        date: dn.createdAt,
+        type: "DEBIT_NOTE",
+        particulars: `Debit Note: ${dn.debitNoteId} (${dn.reason || "Vendor Return"})`,
+        debit: dn.grandTotal || 0,
+        credit: 0,
+        user: "-",
+        deliveryMan: "-"
+      })),
+      ...mjInRangeBy.map(mj => ({
+        id: `mj-dr-${mj._id}`,
+        date: mj.journalDate || mj.createdAt,
+        type: "JOURNAL",
+        particulars: `Journal: ${mj.journalId} [DR] - ${mj.narration || ""}`,
+        debit: mj.amount || 0,
+        credit: 0,
+        user: mj.userName || "-",
+        deliveryMan: "-"
+      })),
+      ...mjInRangeTo.map(mj => ({
+        id: `mj-cr-${mj._id}`,
+        date: mj.journalDate || mj.createdAt,
+        type: "JOURNAL",
+        particulars: `Journal: ${mj.journalId} [CR] - ${mj.narration || ""}`,
+        debit: 0,
+        credit: mj.amount || 0,
+        user: mj.userName || "-",
+        deliveryMan: "-"
+      })),
+      ...vendorMjInRangeBy.map(mj => ({
+        id: `vmj-dr-${mj._id}`,
+        date: mj.journalDate || mj.createdAt,
+        type: "VENDOR_JOURNAL",
+        particulars: `Vendor Journal: ${mj.journalId} [DR] - ${mj.narration || ""}`,
+        debit: mj.amount || 0,
+        credit: 0,
+        user: mj.userName || "-",
+        deliveryMan: "-"
+      })),
+      ...vendorMjInRangeTo.map(mj => ({
+        id: `vmj-cr-${mj._id}`,
+        date: mj.journalDate || mj.createdAt,
+        type: "VENDOR_JOURNAL",
+        particulars: `Vendor Journal: ${mj.journalId} [CR] - ${mj.narration || ""}`,
+        debit: 0,
+        credit: mj.amount || 0,
+        user: mj.userName || "-",
+        deliveryMan: "-"
       })),
       ...mjInRangeBy.map(mj => ({
         id: `mjb-${mj._id}`,

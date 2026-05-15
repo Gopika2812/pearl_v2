@@ -270,7 +270,10 @@ export default function BranchPhysicalStock() {
           savedId: record._id,
           saving: false
         };
-        setRows(prev => [...prev, existingRow]);
+        setRows(prev => {
+          if (prev.find(r => r.productId === product._id)) return prev;
+          return [...prev, existingRow];
+        });
       } else {
         const newRow = {
           rowId: Date.now() + Math.random(),
@@ -289,7 +292,10 @@ export default function BranchPhysicalStock() {
           status: "DRAFT",
           saving: false
         };
-        setRows(prev => [...prev, newRow]);
+        setRows(prev => {
+          if (prev.find(r => r.productId === product._id)) return prev;
+          return [...prev, newRow];
+        });
       }
     } catch {
       // Fallback to new row if fetch fails
@@ -310,7 +316,10 @@ export default function BranchPhysicalStock() {
         status: "DRAFT",
         saving: false
       };
-      setRows(prev => [...prev, newRow]);
+      setRows(prev => {
+        if (prev.find(r => r.productId === product._id)) return prev;
+        return [...prev, newRow];
+      });
     }
     
     setShowProductDrop(false);
@@ -338,12 +347,15 @@ export default function BranchPhysicalStock() {
 
       if (prodData.success && prodData.data) {
         const productsToAdd = prodData.data;
-        const newRows = productsToAdd.map(p => {
-          // Check if we already have a record for this product today
+        // Deduplicate by productId before setting rows
+        const uniqueRowsMap = new Map();
+        
+        productsToAdd.forEach(p => {
+          if (uniqueRowsMap.has(p._id)) return;
+
           const record = existingRecords.find(r => r.productId === p._id);
-          
           if (record) {
-            return {
+            uniqueRowsMap.set(p._id, {
               rowId: record._id,
               productId: p._id,
               productName: p.name,
@@ -360,28 +372,29 @@ export default function BranchPhysicalStock() {
               status: record.status || "PENDING",
               savedId: record._id,
               saving: false
-            };
+            });
+          } else {
+            uniqueRowsMap.set(p._id, {
+              rowId: Math.random() + Date.now(),
+              productId: p._id,
+              productName: p.name,
+              productGroupId: p.productGroup?._id || p.productGroup,
+              productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
+              systemQty: p.availableQty || 0,
+              damagedQty: "",
+              expiredQty: "",
+              physicalQty: "",
+              mrp: p.mrp || 0,
+              batch: p.batch || "",
+              expiryDate: p.expiryDate ? new Date(p.expiryDate).toISOString().split('T')[0] : "",
+              checkedBy: [],
+              status: "DRAFT",
+              saving: false
+            });
           }
-
-          return {
-            rowId: Math.random() + Date.now(),
-            productId: p._id,
-            productName: p.name,
-            productGroupId: p.productGroup?._id || p.productGroup,
-            productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
-            systemQty: p.availableQty || 0,
-            damagedQty: "",
-            expiredQty: "",
-            physicalQty: "",
-            mrp: p.mrp || 0,
-            batch: p.batch || "",
-            expiryDate: p.expiryDate ? new Date(p.expiryDate).toISOString().split('T')[0] : "",
-            checkedBy: [],
-            status: "DRAFT",
-            saving: false
-          };
         });
-        setRows(newRows);
+
+        setRows(Array.from(uniqueRowsMap.values()));
         toast.info(`Loaded ${productsToAdd.length} items (${existingRecords.length} saved)`);
       }
     } catch (err) {
