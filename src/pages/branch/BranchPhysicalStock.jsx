@@ -164,6 +164,31 @@ export default function BranchPhysicalStock() {
     }
   }, [currentBranch?._id]);
 
+  // Nuclear Deduplication: Ensure no duplicate productIds ever exist in the rows state
+  useEffect(() => {
+    if (rows.length === 0) return;
+    const seen = new Set();
+    const hasDuplicates = rows.some(r => {
+      if (seen.has(r.productId)) return true;
+      seen.add(r.productId);
+      return false;
+    });
+
+    if (hasDuplicates) {
+      setRows(prev => {
+        const unique = [];
+        const uniqueIds = new Set();
+        prev.forEach(r => {
+          if (!uniqueIds.has(r.productId)) {
+            uniqueIds.add(r.productId);
+            unique.push(r);
+          }
+        });
+        return unique;
+      });
+    }
+  }, [rows]);
+
   useEffect(() => {
     const timer = setTimeout(async () => {
       if (!productSearch || productSearch.trim().length < 2) {
@@ -491,8 +516,10 @@ export default function BranchPhysicalStock() {
 
   const sortedRows = [...rows]
     .filter(r => {
-      if (!productSearch || productSearch.trim().length === 0) return true;
-      return r.productName.toLowerCase().includes(productSearch.toLowerCase());
+      const search = productSearch?.trim().toLowerCase();
+      if (!search) return true;
+      const name = r.productName?.toLowerCase() || "";
+      return name.includes(search);
     })
     .sort((a, b) => {
       // 1. Primary Sort: Status (Not Entered/Draft vs Saved/Pending/Approved)
@@ -771,10 +798,13 @@ export default function BranchPhysicalStock() {
                       const isSaved = !!row.savedId;
                       return (
                         <tr key={row.rowId} className={`hover:bg-gray-50 transition-colors ${row.status === "APPROVED" ? "bg-green-50" : isSaved ? "bg-emerald-50/50" : "bg-rose-50"}`}>
-                          <td className="px-1.5 py-3 border-r border-gray-100 font-black text-gray-300 text-center">{idx + 1}</td>
+                          <td className="px-1.5 py-3 border-r border-gray-100 font-black text-gray-400 text-center text-[10px]">{idx + 1}</td>
                           {isFieldVisible("productName") && (
                             <td className="px-1.5 py-3 border-r border-gray-100 min-w-[250px]">
-                              <p className="font-black text-gray-700 text-[10px] uppercase truncate max-w-[400px]">{row.productName}</p>
+                              <div className="flex flex-col">
+                                <p className="font-black text-gray-700 text-[10px] uppercase truncate max-w-[400px]">{row.productName}</p>
+                                <span className="text-[8px] text-gray-300 font-bold">ID: ...{row.productId?.toString().slice(-6)}</span>
+                              </div>
                             </td>
                           )}
                           {isFieldVisible("productGroupName") && <td className="px-1.5 py-3 border-r border-gray-100 text-[9px] text-gray-400 font-black uppercase">{row.productGroupName || "-"}</td>}
