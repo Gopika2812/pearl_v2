@@ -562,30 +562,36 @@ export default function BranchPhysicalStock() {
       return name.includes(search);
     })
     .sort((a, b) => {
-      // 1. Primary Sort: Status (Not Entered/Draft vs Saved/Pending/Approved)
-      const valA = a.savedId ? 2 : 1;
-      const valB = b.savedId ? 2 : 1;
-      if (valA !== valB) return valA - valB;
+      // 0. Search Priority: If searching, keep matches at top
+      const search = productSearch?.trim().toLowerCase();
+      if (search) {
+        const aExact = a.productName.toLowerCase() === search;
+        const bExact = b.productName.toLowerCase() === search;
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+      }
 
-      // 2. Secondary Sort: Manual sort from header (ONLY within the same status group)
+      // 1. Primary Sort: Status (Not Entered/Draft vs Saved/Pending/Approved)
+      // If we are searching, we might want to ignore status to show the match at top
+      if (!productSearch) {
+        const valA = a.savedId ? 2 : 1;
+        const valB = b.savedId ? 2 : 1;
+        if (valA !== valB) return valA - valB;
+      }
+
+      // 2. Secondary Sort: Manual sort from header
       if (sortConfig.key) {
         let aVal = a[sortConfig.key];
         let bVal = b[sortConfig.key];
-
-        // Numeric handling
         if (["systemQty", "damagedQty", "expiredQty", "physicalQty", "mrp"].includes(sortConfig.key)) {
           aVal = Number(aVal) || 0;
           bVal = Number(bVal) || 0;
         }
-
         if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
         if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
       }
 
-      // 3. Tertiary Sort for Drafts (Top): Show newest added at the very top
-      if (valA === 1) return b.rowId - a.rowId;
-
-      // 4. Default Sort for Saved (Bottom): Alphabetical
+      // 3. Alphabetical / Recency
       return a.productName.localeCompare(b.productName);
     });
 
