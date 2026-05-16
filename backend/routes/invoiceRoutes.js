@@ -21,19 +21,47 @@ import moment from "moment-timezone";
 import { cacheData } from "../middleware/cacheMiddleware.js";
 
 const router = express.Router();
+import auth from "../middleware/auth.js";
+
+// GET - Count of delayed unpicked orders (MUST be above /:id)
+router.get("/stats/delayed-pickups", auth, async (req, res) => {
+  try {
+    const { branchId } = req.query;
+
+    // Logic: deliveryStatus: "PENDING", status: NOT "CANCELLED", createdAt < (current date - 1 day)
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const query = {
+      deliveryStatus: "PENDING",
+      status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
+      createdAt: { $lt: yesterday }
+    };
+
+    if (branchId && branchId !== "null" && branchId !== "undefined") {
+      query.branchId = new mongoose.Types.ObjectId(branchId);
+    }
+
+    const count = await Invoice.countDocuments(query);
+    res.json({ success: true, count });
+  } catch (error) {
+    console.error("Error fetching delayed pickups count:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
 
 // GET invoice by number (for scanning)
 router.get("/by-number/:invoiceNumber", async (req, res) => {
   try {
     const { invoiceNumber } = req.params;
-    const invoice = await Invoice.findOne({ 
-        invoiceNumber: { $regex: new RegExp(`^${invoiceNumber}$`, "i") } 
+    const invoice = await Invoice.findOne({
+      invoiceNumber: { $regex: new RegExp(`^${invoiceNumber}$`, "i") }
     }).populate("branchId");
-    
+
     if (!invoice) {
       return res.status(404).json({ success: false, message: "Invoice not found" });
     }
-    
+
     res.json({ success: true, data: invoice });
   } catch (error) {
     console.error("Error fetching invoice by number:", error);
@@ -578,7 +606,6 @@ router.post("/preview/:salesOrderId", async (req, res) => {
   }
 });
 
-import auth from "../middleware/auth.js";
 
 
 // POST - Finalize Invoice (save and generate)
@@ -986,7 +1013,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
 
           target.debit = Math.round(d);
           target.credit = Math.round(c);
-          
+
           if (!isVendor) {
             target.closingBalance = Math.round((target.closingBalance || 0) + (isRevert ? -amount : amount));
             target.totalBalance = target.closingBalance;
@@ -1061,15 +1088,15 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           invoice.deliveryMan = salesOrder.deliveryMan;
           // 🛡️ LOCK DATE: Always use original SO date to prevent month-jumping during tax filing
           invoice.invoiceDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
-          
+
           // Copy spotted fields if they exist
           invoice.spottedCustomerName = salesOrder.spottedCustomerName;
           invoice.spottedPhoneNumber = salesOrder.spottedPhoneNumber;
-          
+
           // ✨ RESET E-INVOICE STATUS: Clear old errors when user re-finalizes with new data
           invoice.einvoiceStatus = null;
           invoice.einvoiceError = null;
-          
+
           await invoice.save({ session });
         } else {
           invoice = new Invoice({
@@ -1171,7 +1198,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
 
         // 🛡️ LOCK SO DATE: Ensure the original order date is preserved
         if (!salesOrder.orderDate) {
-           salesOrder.orderDate = salesOrder.createdAt;
+          salesOrder.orderDate = salesOrder.createdAt;
         }
 
         await salesOrder.save({ session });
@@ -1232,7 +1259,7 @@ router.put("/:invoiceId/print", async (req, res) => {
       if (invoice.salesOrderId) {
         console.log(`🎯 [DEBUG] Syncing printCount to SalesOrder: ${invoice.salesOrderId}`);
         const updateResult = await SalesOrder.findByIdAndUpdate(
-          invoice.salesOrderId, 
+          invoice.salesOrderId,
           { $inc: { printCount: 1 } },
           { new: true }
         );
@@ -1355,100 +1382,6 @@ router.get("/customer/:customerId", async (req, res) => {
   }
 });
 
-// PUT - Cancel Invoice
-router.put("/:invoiceId/cancel", async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const { invoiceId } = req.params;
-    const { reason, cancelledBy } = req.body;
-
-    const invoice = await Invoice.findById(invoiceId).session(session);
-    if (!invoice) {
-      await session.abortTransaction();
-      return res.status(404).json({ message: "Invoice not found" });
-    }
-
-    if (invoice.status === "CANCELLED") {
-      await session.abortTransaction();
-      return res.status(400).json({ message: "Invoice is already cancelled" });
-    }
-
-    // 1. REVERT CUSTOMER BALANCE
-    const customer = await Customer.findById(invoice.customer.customerId).session(session);
-    if (customer) {
-      const amountToRevert = invoice.grandTotal || 0;
-      let curDebit = customer.debit || 0;
-      let curCredit = customer.credit || 0;
-
-      // Reduction: Consume debit first, then increase credit
-      if (curDebit >= amountToRevert) {
-        curDebit -= amountToRevert;
-      } else {
-        const excess = amountToRevert - curDebit;
-        curDebit = 0;
-        curCredit += excess;
-      }
-
-      customer.debit = Math.round(curDebit);
-      customer.credit = Math.round(curCredit);
-      customer.closingBalance = Math.round((customer.closingBalance || 0) - amountToRevert);
-      customer.totalBalance = customer.closingBalance;
-      await customer.save({ session });
-      console.log(`💰 Balance Reverted for ${customer.name}: -₹${amountToRevert}`);
-    }
-
-    // 2. REVERT STOCK
-    for (const item of invoice.items) {
-      const product = await Product.findById(item.productId).session(session);
-      if (product) {
-        product.totalQty = (product.totalQty || 0) + (item.qty || 0);
-        await product.save({ session });
-        console.log(`📦 Stock Reverted for ${product.name}: +${item.qty}`);
-      }
-    }
-
-    // 3. UPDATE INVOICE STATUS
-    invoice.status = "CANCELLED";
-    invoice.cancelReason = reason || "No reason provided";
-    invoice.cancelledAt = new Date();
-    invoice.cancelledBy = cancelledBy || "System";
-    await invoice.save({ session });
-
-    // 4. UPDATE SALES ORDER
-    if (invoice.salesOrderId) {
-      const salesOrder = await SalesOrder.findById(invoice.salesOrderId).session(session);
-      if (salesOrder) {
-        salesOrder.invoiceGenerated = false;
-        salesOrder.salesInvoiceId = null;
-        salesOrder.status = "PLACED"; // Reset to placed so it can be invoiced again
-
-        // Add cancellation to history
-        salesOrder.editHistory.push({
-          version: (salesOrder.editHistory.length || 0) + 1,
-          editType: "PRE_INVOICE_EDIT",
-          items: salesOrder.items,
-          subtotal: salesOrder.subtotal,
-          totalTax: salesOrder.totalTax,
-          grandTotal: salesOrder.grandTotal,
-          editedAt: new Date(),
-          note: `Invoice ${invoice.invoiceNumber} CANCELLED. Reason: ${reason}`
-        });
-
-        await salesOrder.save({ session });
-      }
-    }
-
-    await session.commitTransaction();
-    res.json({ success: true, message: "Invoice cancelled successfully" });
-  } catch (error) {
-    await session.abortTransaction();
-    console.error("❌ Error cancelling invoice:", error);
-    res.status(500).json({ message: error.message || "Failed to cancel invoice" });
-  } finally {
-    session.endSession();
-  }
-});
 
 // PUT - Revoke (Restore) Cancelled Invoice
 router.put("/:invoiceId/revoke", async (req, res) => {
@@ -1565,7 +1498,6 @@ router.post("/last-by-customers", async (req, res) => {
     if (!customerIds || !Array.isArray(customerIds) || customerIds.length === 0) {
       return res.status(400).json({ success: false, message: "customerIds array required" });
     }
-
     const objectIds = customerIds
       .filter(id => mongoose.Types.ObjectId.isValid(id))
       .map(id => new mongoose.Types.ObjectId(id));
@@ -1881,7 +1813,7 @@ router.put("/:invoiceId/cancel", auth, async (req, res) => {
 
         target.debit = Math.round(curDebit);
         target.credit = Math.round(curCredit);
-        
+
         if (!isVendor) {
           target.closingBalance = Math.round((target.closingBalance || 0) - amountToRevert);
           target.totalBalance = target.closingBalance;
@@ -2006,7 +1938,7 @@ router.delete("/:invoiceId", auth, async (req, res) => {
 
         target.debit = Math.round(curDebit);
         target.credit = Math.round(curCredit);
-        
+
         if (!isVendor) {
           target.closingBalance = Math.round((target.closingBalance || 0) - amount);
           target.totalBalance = target.closingBalance;
@@ -2100,7 +2032,7 @@ router.patch("/bulk-delivery-update", auth, async (req, res) => {
     }
 
     const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
-    
+
     const updateData = {
       storageMan,
       storageManComment: `Bulk assigned at ${timestamp}`,
@@ -2288,32 +2220,6 @@ router.patch("/:invoiceId/delivery-flow", async (req, res) => {
 });
 
 
-// GET - Count of delayed unpicked orders
-router.get("/stats/delayed-pickups", auth, async (req, res) => {
-  try {
-    const { branchId } = req.query;
-    
-    // Logic: deliveryStatus: "PENDING", status: NOT "CANCELLED", createdAt < (current date - 1 day)
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    const query = {
-      deliveryStatus: "PENDING",
-      status: { $in: ["FINALIZED", "PRINTED", "SENT"] }, // Only valid finalized invoices
-      createdAt: { $lt: yesterday }
-    };
-
-    if (branchId && branchId !== "null" && branchId !== "undefined") {
-      query.branchId = new mongoose.Types.ObjectId(branchId);
-    }
-
-    const count = await Invoice.countDocuments(query);
-    res.json({ success: true, count });
-  } catch (error) {
-    console.error("Error fetching delayed pickups count:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
 
 export default router;
 
