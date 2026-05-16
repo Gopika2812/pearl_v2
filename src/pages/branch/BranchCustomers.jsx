@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaWhatsapp, FaMapMarkerAlt, FaEnvelope, FaUserTie, FaTags, FaObjectGroup } from "react-icons/fa";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaWhatsapp, FaMapMarkerAlt, FaEnvelope, FaUserTie, FaTags, FaObjectGroup, FaEdit, FaTruck } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
@@ -42,6 +42,7 @@ const BranchCustomers = () => {
   const [selectedCreditNoteCustomer, setSelectedCreditNoteCustomer] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [selectedCustomerForEdit, setSelectedCustomerForEdit] = useState(null);
   const [expandedRows, setExpandedRows] = useState({});
   const [exportDate, setExportDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSafeMode, setIsSafeMode] = useState(false); // Mode for info-only updates
@@ -184,6 +185,7 @@ const BranchCustomers = () => {
         const { _id, ...updatePayload } = data;
         await updateData("customer", _id, updatePayload);
         toast.success("Customer updated successfully");
+        setSelectedCustomerForEdit(null);
       } else {
         const dataWithBranch = { ...data, branchId };
         await addData("customer", dataWithBranch);
@@ -245,6 +247,75 @@ const BranchCustomers = () => {
     } catch (err) {
       console.error("Merge error:", err);
       toast.error("An error occurred during merge", { id: "merge" });
+    }
+  };
+
+  const handleMakeVendor = async (customer) => {
+    if (customer.linkedVendorId) {
+      return toast.info("This customer is already linked to a vendor.");
+    }
+
+    try {
+      toast.loading(`Checking for existing vendor: ${customer.name}...`, { id: "make-vendor" });
+      
+      // 1. Search for existing vendor by name
+      const searchRes = await fetchWithAuth(`${API_BASE}/vendors?branchId=${branchId}&search=${encodeURIComponent(customer.name)}&limit=5`);
+      const searchData = await searchRes.json();
+      
+      let targetVendorId = null;
+      const existingVendor = (searchData.data || []).find(v => v.name.toLowerCase().trim() === customer.name.toLowerCase().trim());
+
+      if (existingVendor) {
+        toast.dismiss("make-vendor");
+        if (window.confirm(`A vendor named "${existingVendor.name}" already exists. Link this customer to that vendor profile for a consolidated ledger?`)) {
+          targetVendorId = existingVendor._id;
+        } else {
+          return;
+        }
+      } else {
+        toast.dismiss("make-vendor");
+        if (!window.confirm(`Create a new Vendor profile for "${customer.name}" and link it to this customer?`)) {
+          return;
+        }
+        
+        toast.loading("Creating vendor profile...", { id: "make-vendor" });
+        const createRes = await fetchWithAuth(`${API_BASE}/vendors`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: customer.name,
+            email: customer.email,
+            phone: customer.whatsapp,
+            address: customer.address,
+            gstin: customer.gstin,
+            branchId: branchId,
+            openingBalance: 0
+          })
+        });
+        
+        const createData = await createRes.json();
+        if (!createRes.ok) throw new Error(createData.message || "Failed to create vendor");
+        targetVendorId = createData.data?._id || createData._id;
+      }
+
+      if (targetVendorId) {
+        toast.loading("Linking profiles...", { id: "make-vendor" });
+        const linkRes = await fetchWithAuth(`${API_BASE}/customers/${customer._id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ linkedVendorId: targetVendorId })
+        });
+        
+        if (linkRes.ok) {
+          toast.success("Successfully linked to Vendor profile!", { id: "make-vendor" });
+          fetchCustomers(currentPage);
+        } else {
+          throw new Error("Failed to update customer link");
+        }
+      }
+    } catch (err) {
+      console.error("Make Vendor Error:", err);
+      toast.error(err.message || "An error occurred", { id: "make-vendor" });
     }
   };
 
@@ -631,9 +702,23 @@ const BranchCustomers = () => {
                   className="bg-white rounded-lg shadow-md hover:shadow-lg transition p-4 md:p-5 border-t-4 border-blue-600"
                 >
                   {/* Name */}
-                  <h3 className="text-base md:text-lg font-bold text-gray-800 mb-3 truncate">
-                    {customer.name}
-                  </h3>
+                  <div className="flex justify-between items-start mb-3">
+                    <h3 className="text-base md:text-lg font-bold text-gray-800 truncate flex items-center gap-2">
+                      {customer.name}
+                      {customer.linkedVendorId && (
+                        <span className="bg-indigo-100 text-indigo-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter shadow-sm border border-indigo-200">
+                          Consolidated
+                        </span>
+                      )}
+                    </h3>
+                    <button 
+                      onClick={() => { setSelectedCustomerForEdit(customer); setIsAddModalOpen(true); }}
+                      className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors"
+                      title="Edit Customer"
+                    >
+                      <FaEdit size={14} />
+                    </button>
+                  </div>
 
                   {/* Details */}
                   <div className="space-y-2 mb-4 text-xs md:text-sm">
@@ -728,6 +813,15 @@ const BranchCustomers = () => {
 
                       <span>📅</span> Ledger
                     </button>
+                    {!customer.linkedVendorId && (
+                      <button
+                        onClick={() => handleMakeVendor(customer)}
+                        className="flex-1 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg border border-indigo-200 text-xs flex items-center justify-center gap-1 transition"
+                        title="Link to Vendor profile"
+                      >
+                        <span>🚚</span> Make Vendor
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -811,7 +905,14 @@ const BranchCustomers = () => {
                           </td>
                           {isFieldAllowed("name") && (
                             <td className="px-3 md:px-5 py-2 md:py-3 text-xs md:text-sm font-semibold text-gray-800">
-                              {customer.name}
+                              <div className="flex items-center gap-2">
+                                {customer.name}
+                                {customer.linkedVendorId && (
+                                  <span className="bg-indigo-100 text-indigo-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter border border-indigo-200" title="Consolidated with Vendor Account">
+                                    Linked
+                                  </span>
+                                )}
+                              </div>
                             </td>
                           )}
                           {isFieldAllowed("gstin") && (
@@ -853,15 +954,35 @@ const BranchCustomers = () => {
                                     Return
                                   </button>
                                 )}
-                                {isFieldAllowed("action_ledger") && (
+                                  {isFieldAllowed("action_ledger") && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); navigate(`/branch/customer-ledger/${customer._id}`); }}
+                                      className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                                    >
+                                      Ledger
+                                    </button>
+                                  )}
+                                  {!customer.linkedVendorId && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleMakeVendor(customer); }}
+                                      className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap flex items-center gap-1"
+                                      title="Convert/Link to Vendor"
+                                    >
+                                      <FaTruck size={10} /> Vendor
+                                    </button>
+                                  )}
                                   <button
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/branch/customer-ledger/${customer._id}`); }}
-                                    className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-tighter transition shadow-sm whitespace-nowrap"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedCustomerForEdit(customer);
+                                      setIsAddModalOpen(true);
+                                    }}
+                                    className="bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200 p-2 rounded-md transition shadow-sm"
+                                    title="Edit Profile"
                                   >
-                                    Ledger
+                                    <FaEdit size={10} />
                                   </button>
-                                )}
-                              </div>
+                                </div>
                             </td>
                           )}
                         </tr>
@@ -909,7 +1030,7 @@ const BranchCustomers = () => {
                                       {customer.customerGroup?.name || "No Group"}
                                     </span>
                                   </div>
-                                  <div className="mt-3">
+                                  <div className="mt-3 flex items-center gap-4">
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -918,6 +1039,16 @@ const BranchCustomers = () => {
                                       className="text-secondary hover:underline text-xs font-bold"
                                     >
                                       View Detailed Ledger →
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedCustomerForEdit(customer);
+                                        setIsAddModalOpen(true);
+                                      }}
+                                      className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 text-[10px] font-black uppercase tracking-widest border border-blue-200 px-2 py-1 rounded-lg bg-blue-50 transition-all active:scale-95"
+                                    >
+                                      <FaEdit size={10} /> Edit Profile
                                     </button>
                                   </div>
                                 </div>
@@ -978,8 +1109,12 @@ const BranchCustomers = () => {
       {isAddModalOpen && (
         <InventoryAddCustomerModal
           isOpen={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
+          onClose={() => {
+            setIsAddModalOpen(false);
+            setSelectedCustomerForEdit(null);
+          }}
           onSave={handleAddCustomer}
+          initialData={selectedCustomerForEdit}
           salesOwners={salesOwners}
           customerCategories={customerCategories}
           customerGroups={customerGroups}

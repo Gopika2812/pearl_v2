@@ -61,6 +61,9 @@ const BranchCustomerLedger = () => {
       const data = await response.json();
       if (response.ok) {
         setCustomer(data);
+        if (data.linkedVendorId) {
+          toast.info("Consolidated Ledger Active: Includes Purchase History");
+        }
       } else {
         toast.error("Customer not found");
         navigate("/branch/customers");
@@ -366,48 +369,77 @@ const BranchCustomerLedger = () => {
   if (!customer) return null;
 
   return (
-    <div className="space-y-6">
-      {/* PREMIUM HEADER */}
-      <div className="relative overflow-hidden bg-white/50 backdrop-blur-md p-8 rounded-3xl border border-white/50 shadow-sm">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
-
-        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <button
-              onClick={() => navigate(-1)}
-              className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:shadow-lg transition-all border border-slate-100"
-            >
-              <FaArrowLeft />
-            </button>
+    <div className="space-y-6">      {customer?.linkedVendorId && (
+        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 p-6 rounded-3xl shadow-sm flex items-center justify-between animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="flex items-center gap-4">
+            <div className="bg-indigo-600 text-white p-3 rounded-2xl shadow-lg">
+              <FaExchangeAlt />
+            </div>
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-widest rounded-md">Finance</span>
-                <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Customer Ledger</span>
-              </div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-none uppercase italic">
-                {customer.name} <span className="text-indigo-600 not-italic">Ledger</span>
-              </h1>
-              <p className="text-slate-500 text-sm font-semibold mt-1">Full transaction history and automated financial reconciliation</p>
+              <h1 className="text-lg font-black text-indigo-900 uppercase tracking-tight">Consolidated Ledger Active</h1>
+              <p className="text-indigo-600 text-[10px] font-bold uppercase tracking-widest mt-0.5">
+                Linked Vendor: <span className="text-indigo-800">{customer.linkedVendorId?.name}</span> • Showing both Sales & Purchases
+              </p>
             </div>
           </div>
+          <button 
+            onClick={() => navigate(`/branch/suppliers?ledgerVendorId=${customer.linkedVendorId?._id}`)}
+            className="bg-white text-indigo-600 border border-indigo-100 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-50 transition-all active:scale-95 flex items-center gap-2"
+          >
+            Switch to Vendor View →
+          </button>
+        </div>
+      )}
 
-          <div className="flex flex-wrap items-center gap-4">
-            <button
-              onClick={handleExportPDF}
-              className="group flex items-center gap-3 bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-lg hover:-translate-y-0.5 active:translate-y-0"
-            >
-              <FaDownload className="text-indigo-500" /> PDF
-            </button>
-            <button
-              onClick={handleExportExcel}
-              className="group flex items-center gap-3 bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-lg hover:-translate-y-0.5 active:translate-y-0"
-            >
-              <FaDownload className="text-emerald-500" /> Excel
-            </button>
+
+      {customer?.linkedVendorId ? null : (
+        <>
+      {/* PREMIUM HEADER */}
+      {!customer?.linkedVendorId && (
+        <div className="relative overflow-hidden bg-white/50 backdrop-blur-md p-8 rounded-3xl border border-white/50 shadow-sm">
+          {/* Existing header content */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
+
+          <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <button
+                onClick={() => navigate(-1)}
+                className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:shadow-lg transition-all border border-slate-100"
+              >
+                <FaArrowLeft />
+              </button>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-widest rounded-md">Finance</span>
+                  <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                  <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Customer Ledger</span>
+                </div>
+                <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-none uppercase italic">
+                  {customer.name} <span className="text-indigo-600 not-italic">Ledger</span>
+                </h1>
+                <p className="text-slate-500 text-sm font-semibold mt-1">Full transaction history and automated financial reconciliation</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4">
+              <button
+                onClick={handleExportPDF}
+                className="group flex items-center gap-3 bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-lg hover:-translate-y-0.5 active:translate-y-0"
+              >
+                <FaDownload className="text-indigo-500" /> PDF
+              </button>
+              <button
+                onClick={handleExportExcel}
+                className="group flex items-center gap-3 bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-lg hover:-translate-y-0.5 active:translate-y-0"
+              >
+                <FaDownload className="text-emerald-500" /> Excel
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+        </>
+      )}
 
       {/* QUICK STATS & FILTERS */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -582,11 +614,15 @@ const BranchCustomerLedger = () => {
                         <span className={`px-2.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm border ${
                           txn.type === "INVOICE" ? "bg-rose-50 text-rose-600 border-rose-100" :
                           txn.type === "RECEIPT" || txn.type === "BOUNCED" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                          txn.type === "PURCHASE" ? "bg-amber-50 text-amber-600 border-amber-100" :
+                          txn.type === "VENDOR_PAYMENT" ? "bg-blue-50 text-blue-600 border-blue-100" :
                           txn.type === "CANCELLED" ? "bg-slate-100 text-slate-400 border-slate-200" :
                           txn.type.includes("JOURNAL") ? "bg-purple-50 text-purple-600 border-purple-100" :
                           "bg-indigo-50 text-indigo-600 border-indigo-100"
                         }`}>
                           {txn.type === "RECEIPT" ? (txn.particulars?.match(/\(([^)]+)\)/)?.[1]?.toUpperCase() || "CASH") : 
+                           txn.type === "PURCHASE" ? "PURCHASE" :
+                           txn.type === "VENDOR_PAYMENT" ? "V-PAYMENT" :
                            txn.type === "JOURNAL_DR" ? "JOURNAL-DR" :
                            txn.type === "JOURNAL_CR" ? "JOURNAL-CR" : txn.type}
                         </span>

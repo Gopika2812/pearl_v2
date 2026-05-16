@@ -1378,7 +1378,7 @@ const TransportDetailsModal = ({ invoice, onClose, onConfirm }) => {
   const [details, setDetails] = useState({
     vehicleNo: invoice.vehicleNo || "",
     transportMode: invoice.transportMode || "1",
-    transportDistance: invoice.transportDistance || 50, // Default to 50 for safety
+    transportDistance: invoice.transportDistance || 0, // Default to 0 for auto-calculation
     vehicleType: invoice.vehicleType || "REGULAR",
     transporterId: invoice.transporterId || "",
     transporterName: invoice.transporterName || ""
@@ -1428,7 +1428,7 @@ const TransportDetailsModal = ({ invoice, onClose, onConfirm }) => {
               <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Distance (approx KM)</label>
               <input
                 type="number"
-                placeholder="50"
+                placeholder="0 (Auto-calculate)"
                 value={details.transportDistance}
                 onChange={(e) => setDetails({ ...details, transportDistance: e.target.value })}
                 className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"

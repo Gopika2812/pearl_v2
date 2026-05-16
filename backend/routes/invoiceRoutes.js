@@ -12,6 +12,7 @@ import SalesMan from "../models/SalesMan.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
 import VoucherType from "../models/VoucherType.js";
+import Vendor from "../models/Vendor.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
 
@@ -983,48 +984,57 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         }
 
         // ==========================================
-        // 4️⃣ UPDATE CUSTOMER BALANCE (SINGLE-PASS)
+        // 4️⃣ UPDATE BALANCE (SINGLE-PASS)
         // ==========================================
+        const updateBalance = async (cust, amount, isRevert = false) => {
+          let target = cust;
+          let isVendor = false;
+          if (cust.linkedVendorId) {
+            const linkedVendor = await Vendor.findById(cust.linkedVendorId).session(session);
+            if (linkedVendor) {
+              target = linkedVendor;
+              isVendor = true;
+            }
+          }
+
+          let d = target.debit || 0, c = target.credit || 0;
+          let remaining = Math.abs(amount);
+          const isAddition = isRevert ? amount < 0 : amount > 0;
+
+          if (isAddition) {
+            // Adding Debit (or reducing Credit)
+            if (c >= remaining) c -= remaining;
+            else { remaining -= c; c = 0; d += remaining; }
+          } else {
+            // Adding Credit (or reducing Debit)
+            if (d >= remaining) d -= remaining;
+            else { remaining -= d; d = 0; c += remaining; }
+          }
+
+          target.debit = Math.round(d);
+          target.credit = Math.round(c);
+
+          if (!isVendor) {
+            target.closingBalance = Math.round((target.closingBalance || 0) + (isRevert ? -amount : amount));
+            target.totalBalance = target.closingBalance;
+          }
+          await target.save({ session });
+          return isVendor;
+        };
+
         if (isCustomerSwapped && salesOrder.invoiceGenerated) {
           // A. Revert old customer
           const oldCustomer = await Customer.findById(lastCustomerId).session(session);
           if (oldCustomer) {
-            let remaining = lastGrandTotal;
-            let d = oldCustomer.debit || 0, c = oldCustomer.credit || 0;
-            if (d >= remaining) d -= remaining;
-            else { remaining -= d; d = 0; c += remaining; }
-            oldCustomer.debit = Math.round(d); oldCustomer.credit = Math.round(c);
-            oldCustomer.closingBalance = Math.round((oldCustomer.closingBalance || 0) - lastGrandTotal);
-            oldCustomer.totalBalance = oldCustomer.closingBalance;
-            await oldCustomer.save({ session });
+            await updateBalance(oldCustomer, lastGrandTotal, true);
           }
           // B. Apply to new customer
-          let d = customer.debit || 0, c = customer.credit || 0;
-          let remaining = grandTotal;
-          if (c >= remaining) c -= remaining;
-          else { remaining -= c; c = 0; d += remaining; }
-          customer.debit = Math.round(d); customer.credit = Math.round(c);
-          customer.closingBalance = Math.round((customer.closingBalance || 0) + grandTotal);
-          customer.totalBalance = customer.closingBalance;
-          await customer.save({ session });
+          await updateBalance(customer, grandTotal, false);
         } else {
           // Standard delta for same customer
           const totalDelta = salesOrder.invoiceGenerated ? (grandTotal - lastGrandTotal) : grandTotal;
           if (totalDelta !== 0) {
-            let d = customer.debit || 0, c = customer.credit || 0;
-            let delta = totalDelta;
-            if (delta > 0) {
-              if (c >= delta) c -= delta;
-              else { delta -= c; c = 0; d += delta; }
-            } else {
-              const absDelta = Math.abs(delta);
-              if (d >= absDelta) d -= absDelta;
-              else { const excess = absDelta - d; d = 0; c += excess; }
-            }
-            customer.debit = Math.round(d); customer.credit = Math.round(c);
-            customer.closingBalance = Math.round((customer.closingBalance || 0) + totalDelta);
-            customer.totalBalance = customer.closingBalance;
-            await customer.save({ session });
+            await updateBalance(customer, totalDelta, false);
           }
         }
 
@@ -1079,6 +1089,10 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           // 🛡️ LOCK DATE: Always use original SO date to prevent month-jumping during tax filing
           invoice.invoiceDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
 
+          // Copy spotted fields if they exist
+          invoice.spottedCustomerName = salesOrder.spottedCustomerName;
+          invoice.spottedPhoneNumber = salesOrder.spottedPhoneNumber;
+
           // ✨ RESET E-INVOICE STATUS: Clear old errors when user re-finalizes with new data
           invoice.einvoiceStatus = null;
           invoice.einvoiceError = null;
@@ -1112,6 +1126,8 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             generatedBy: finalizedByUsername || "System",
             deliveryMan: salesOrder.deliveryMan,
             status: "FINALIZED",
+            spottedCustomerName: salesOrder.spottedCustomerName,
+            spottedPhoneNumber: salesOrder.spottedPhoneNumber,
           });
           await invoice.save({ session });
         }
@@ -1867,9 +1883,19 @@ router.put("/:invoiceId/cancel", auth, async (req, res) => {
       const customerId = invoice.customer?.customerId || invoice.customer;
       const customer = await Customer.findById(customerId).session(session);
       if (customer && invoice.grandTotal > 0) {
+        let target = customer;
+        let isVendor = false;
+        if (customer.linkedVendorId) {
+          const linkedVendor = await Vendor.findById(customer.linkedVendorId).session(session);
+          if (linkedVendor) {
+            target = linkedVendor;
+            isVendor = true;
+          }
+        }
+
         const amountToRevert = invoice.grandTotal;
-        let curDebit = customer.debit || 0;
-        let curCredit = customer.credit || 0;
+        let curDebit = target.debit || 0;
+        let curCredit = target.credit || 0;
 
         if (curDebit >= amountToRevert) {
           curDebit -= amountToRevert;
@@ -1879,11 +1905,14 @@ router.put("/:invoiceId/cancel", auth, async (req, res) => {
           curCredit += excess;
         }
 
-        customer.debit = Math.round(curDebit);
-        customer.credit = Math.round(curCredit);
-        customer.closingBalance = Math.round((customer.closingBalance || 0) - amountToRevert);
-        customer.totalBalance = customer.closingBalance;
-        await customer.save({ session });
+        target.debit = Math.round(curDebit);
+        target.credit = Math.round(curCredit);
+
+        if (!isVendor) {
+          target.closingBalance = Math.round((target.closingBalance || 0) - amountToRevert);
+          target.totalBalance = target.closingBalance;
+        }
+        await target.save({ session });
       }
 
       // 3. Mark Invoice as Cancelled
@@ -1979,9 +2008,19 @@ router.delete("/:invoiceId", auth, async (req, res) => {
       const customerId = invoice.customer?.customerId || invoice.customer;
       const customer = await Customer.findById(customerId).session(session);
       if (customer && invoice.grandTotal > 0) {
+        let target = customer;
+        let isVendor = false;
+        if (customer.linkedVendorId) {
+          const linkedVendor = await Vendor.findById(customer.linkedVendorId).session(session);
+          if (linkedVendor) {
+            target = linkedVendor;
+            isVendor = true;
+          }
+        }
+
         let amount = invoice.grandTotal;
-        let curDebit = customer.debit || 0;
-        let curCredit = customer.credit || 0;
+        let curDebit = target.debit || 0;
+        let curCredit = target.credit || 0;
 
         if (curDebit >= amount) {
           curDebit -= amount;
@@ -1991,11 +2030,14 @@ router.delete("/:invoiceId", auth, async (req, res) => {
           curCredit += excess;
         }
 
-        customer.debit = Math.round(curDebit);
-        customer.credit = Math.round(curCredit);
-        customer.closingBalance = Math.round((customer.closingBalance || 0) - amount);
-        customer.totalBalance = customer.closingBalance;
-        await customer.save({ session });
+        target.debit = Math.round(curDebit);
+        target.credit = Math.round(curCredit);
+
+        if (!isVendor) {
+          target.closingBalance = Math.round((target.closingBalance || 0) - amount);
+          target.totalBalance = target.closingBalance;
+        }
+        await target.save({ session });
       }
 
       // 3. Reset Sales Order

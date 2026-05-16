@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { FaHistory, FaSort, FaSortUp, FaSortDown, FaFilter, FaSearch, FaCalendarAlt, FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { toast } from "react-toastify";
+import * as XLSX from "xlsx";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
@@ -24,6 +25,7 @@ export default function BranchPhysicalStockRecords() {
   const [groupFilter, setGroupFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [adjFilter, setAdjFilter] = useState("ALL"); // ALL | INWARD | OUTWARD
+  const [viewMode, setViewMode] = useState("LIST"); // LIST | VOUCHER
 
   // Sort
   const [sortConfig, setSortConfig] = useState({ key: "entryDate", direction: "desc" });
@@ -70,18 +72,31 @@ export default function BranchPhysicalStockRecords() {
     let successCount = 0;
     let failCount = 0;
 
-    for (const id of selectedRecords) {
-      try {
-        const res = await fetchWithAuth(`${API_BASE}/physical-stock/${id}/approve`, {
-          method: "POST",
-          body: JSON.stringify({ userId: user?._id || user?.id, username: user?.username || user?.fullName, role: user?.role })
-        });
-        const data = await res.json();
-        if (data.success) successCount++;
-        else failCount++;
-      } catch {
-        failCount++;
+    try {
+      const vchRes = await fetchWithAuth(`${API_BASE}/physical-stock/next-vch-id?branchId=${currentBranch._id}`);
+      const vchData = await vchRes.json();
+      const voucherId = vchData.success ? vchData.nextVchId : null;
+
+      for (const id of selectedRecords) {
+        try {
+          const res = await fetchWithAuth(`${API_BASE}/physical-stock/${id}/approve`, {
+            method: "POST",
+            body: JSON.stringify({ 
+              userId: user?._id || user?.id, 
+              username: user?._id === "662f3a694939794936d76813" ? "superadmin" : (user?.username || user?.fullName),
+              role: user?.role,
+              voucherId: voucherId 
+            })
+          });
+          const data = await res.json();
+          if (data.success) successCount++;
+          else failCount++;
+        } catch {
+          failCount++;
+        }
       }
+    } catch (err) {
+      toast.error("Voucher generation failed");
     }
 
     setApproving(false);
@@ -96,6 +111,73 @@ export default function BranchPhysicalStockRecords() {
     setSelectedRecords(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
+  const exportToTally = () => {
+    const dataToExport = selectedRecords.length > 0 
+      ? records.filter(r => selectedRecords.includes(r._id))
+      : filteredSorted;
+
+    if (dataToExport.length === 0) return toast.warning("No data to export");
+    
+    const sourceItems = dataToExport.filter(r => r.outwardQty > 0);
+    const destinationItems = dataToExport.filter(r => r.inwardQty > 0);
+
+    const worksheetData = [
+      ["Stock Journal Voucher"],
+      [`Branch: ${currentBranch?.name}`],
+      [`Period: ${fromDate} to ${toDate}`],
+      [""],
+      ["Item Name", "Godown", "Quantity", "Rate", "Amount"],
+      ["Source (Consumption)", "", "", "", ""]
+    ];
+
+    let totalSource = 0;
+    sourceItems.forEach(r => {
+      const qty = r.outwardQty;
+      const rate = r.productId?.purchasingPrice || 0;
+      const amt = qty * rate;
+      totalSource += amt;
+      worksheetData.push([
+        r.productName,
+        currentBranch?.name || "Main Location",
+        `${qty} ${r.productId?.units || 'pkt'}`,
+        rate.toFixed(2),
+        amt.toFixed(2)
+      ]);
+    });
+    worksheetData.push(["", "", "", "Total Source:", totalSource.toFixed(2)]);
+    worksheetData.push([""]);
+    
+    worksheetData.push(["Destination (Production)", "", "", "", ""]);
+    let totalDest = 0;
+    destinationItems.forEach(r => {
+      const qty = r.inwardQty;
+      const rate = r.productId?.purchasingPrice || 0;
+      const amt = qty * rate;
+      totalDest += amt;
+      worksheetData.push([
+        r.productName,
+        currentBranch?.name || "Main Location",
+        `${qty} ${r.productId?.units || 'pkt'}`,
+        rate.toFixed(2),
+        amt.toFixed(2)
+      ]);
+    });
+    worksheetData.push(["", "", "", "Total Destination:", totalDest.toFixed(2)]);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+    
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 4 } }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, "Stock Journal Voucher");
+    XLSX.writeFile(wb, `Tally_Stock_Journal_${toDate}.xlsx`);
+    toast.success("Tally Voucher exported!");
+  };
+
   const toggleSelectAll = (filtered) => {
     if (selectedRecords.length === filtered.length) setSelectedRecords([]);
     else setSelectedRecords(filtered.map(r => r._id));
@@ -103,7 +185,6 @@ export default function BranchPhysicalStockRecords() {
 
   const isFieldVisible = (fieldId) => {
     if (!user) return false;
-    // Show everything by default
     const key = `physical-stock-entry_${fieldId}`;
     if (user.fieldPermissions?.[key] === false) return false;
     return true;
@@ -202,6 +283,10 @@ export default function BranchPhysicalStockRecords() {
                   className="px-5 py-3 bg-violet-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-violet-700 transition shadow-lg shadow-violet-600/20 disabled:opacity-50 w-full">
                   {loading ? "..." : "Search"}
                 </button>
+                <button onClick={exportToTally}
+                  className="px-5 py-3 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-600/20 w-full">
+                  Tally Export
+                </button>
                 <a href="/branch/physical-stock"
                   className="px-5 py-3 bg-gray-800 text-white text-[10px] font-black uppercase rounded-xl hover:bg-900 transition text-center w-full shadow-lg shadow-gray-200">
                   + New
@@ -211,8 +296,21 @@ export default function BranchPhysicalStockRecords() {
           </div>
         </div>
 
-        {/* FILTERS */}
+        {/* FILTERS & VIEW TOGGLE */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 mb-4 flex flex-col md:flex-row items-center gap-3">
+          <div className="flex bg-gray-100 p-1 rounded-xl w-full md:w-auto">
+            <button 
+              onClick={() => setViewMode("LIST")}
+              className={`flex-1 md:w-32 px-4 py-2 text-[10px] font-black uppercase rounded-lg transition ${viewMode === "LIST" ? "bg-white text-violet-600 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}>
+              Detailed List
+            </button>
+            <button 
+              onClick={() => setViewMode("VOUCHER")}
+              className={`flex-1 md:w-32 px-4 py-2 text-[10px] font-black uppercase rounded-lg transition ${viewMode === "VOUCHER" ? "bg-white text-violet-600 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}>
+              Grouped (VCH)
+            </button>
+          </div>
+          <div className="w-px h-6 bg-gray-200 hidden md:block" />
           <div className="relative w-full md:flex-1">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
             <input type="text" placeholder="Search SJ ID, product..."
@@ -241,247 +339,289 @@ export default function BranchPhysicalStockRecords() {
         </div>
 
         <div className="space-y-4">
-          {/* DESKTOP TABLE */}
+          {/* DESKTOP VIEW */}
           <div className="hidden md:block bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-gray-50/80 border-b border-gray-100">
-                    <th className="px-4 py-4 w-10">
-                      <input type="checkbox" 
-                        checked={selectedRecords.length > 0 && selectedRecords.length === filteredSorted.filter(r => r.status !== "APPROVED").length}
-                        onChange={() => toggleSelectAll(filteredSorted.filter(r => r.status !== "APPROVED"))}
-                        className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
-                    </th>
-                    <Th label="SJ ID" col="sjId" />
-                    <Th label="Date" col="entryDate" />
-                    <Th label="Product Group" col="productGroupName" />
-                    <Th label="Product" col="productName" />
-                    <Th label="System Qty" col="systemQty" right />
-                    <Th label="Damage" col="damagedQty" right />
-                    <Th label="Expired" col="expiredQty" right />
-                    <Th label="Physical Qty" col="physicalQty" right />
-                    <Th label="MRP" col="mrp" right />
-                    <Th label="Inward ↑" col="inwardQty" right />
-                    <Th label="Outward ↓" col="outwardQty" right />
-                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Batch / Expiry</th>
-                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Checked By</th>
-                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Approved By</th>
-                    <Th label="Status" col="status" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {loading ? (
-                    <tr><td colSpan="13" className="px-6 py-20 text-center">
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="w-10 h-10 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">Loading records...</p>
-                      </div>
-                    </td></tr>
-                  ) : filteredSorted.length === 0 ? (
-                    <tr><td colSpan="13" className="px-6 py-20 text-center">
-                      <div className="opacity-30 flex flex-col items-center gap-2">
-                        <FaHistory size={48} className="text-gray-400" />
-                        <p className="text-lg font-bold text-gray-800">No records found</p>
-                      </div>
-                    </td></tr>
-                  ) : (
-                    filteredSorted.map(r => (
-                      <React.Fragment key={r._id}>
-                        <tr className={`hover:bg-gray-50/80 transition-colors group ${selectedRecords.includes(r._id) ? "bg-violet-50/50" : ""}`}>
-                          <td className="px-4 py-4">
-                            {r.status !== "APPROVED" && (
-                              <input type="checkbox" 
-                                checked={selectedRecords.includes(r._id)}
-                                onChange={() => toggleSelect(r._id)}
-                                className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
-                            )}
-                          </td>
-                          <td className="px-4 py-4">
-                            <span className="text-xs font-black text-violet-600">{r.sjId}</span>
-                          </td>
-                          <td className="px-4 py-4">
-                            <p className="text-[10px] font-black text-gray-800 uppercase">
-                              {new Date(r.entryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-                            </p>
-                            <p className="text-[9px] text-gray-400 font-bold">
-                              {new Date(r.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}
-                            </p>
-                          </td>
-                          <td className="px-4 py-4 text-[10px] font-black text-gray-600">{r.productGroupName || "-"}</td>
-                          <td className="px-4 py-4">
-                            <p className="text-xs font-black text-gray-800 max-w-[150px] truncate">{r.productName}</p>
-                          </td>
-                          <td className="px-4 py-4 text-right text-xs font-black text-blue-600">{r.systemQty}</td>
-                          <td className="px-4 py-4 text-right text-xs font-black text-rose-500">{r.damagedQty || 0}</td>
-                          <td className="px-4 py-4 text-right text-xs font-black text-orange-500">{r.expiredQty || 0}</td>
-                          <td className="px-4 py-4 text-right text-xs font-black text-gray-800">{r.physicalQty}</td>
-                          <td className="px-4 py-4 text-right text-xs font-black text-blue-600">₹{r.mrp || 0}</td>
-                          <td className="px-4 py-4 text-right">
-                            {r.inwardQty > 0
-                              ? <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg text-[10px] font-black">+{r.inwardQty}</span>
-                              : <span className="text-gray-200 text-[10px]">-</span>}
-                          </td>
-                          <td className="px-4 py-4 text-right">
-                            {r.outwardQty > 0
-                              ? <span className="bg-rose-100 text-rose-700 px-2 py-1 rounded-lg text-[10px] font-black">-{r.outwardQty}</span>
-                              : <span className="text-gray-200 text-[10px]">-</span>}
-                          </td>
-                          <td className="px-4 py-4">
-                            {r.batch && <p className="text-[9px] font-bold text-gray-600">Batch: {r.batch}</p>}
-                            {r.expiryDate && <p className="text-[9px] font-bold text-orange-500">
-                              Exp: {new Date(r.expiryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" })}
-                            </p>}
-                            {!r.batch && !r.expiryDate && <span className="text-gray-200 text-[10px]">-</span>}
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="flex flex-wrap gap-1 max-w-[140px]">
-                              {(r.checkedBy || []).map((c, i) => (
-                                <span key={i} className="bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded text-[9px] font-black">
-                                  {c.username}
-                                </span>
-                              ))}
-                              {(!r.checkedBy || r.checkedBy.length === 0) && <span className="text-gray-200 text-[10px]">-</span>}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4">
-                            {r.physicalEditLog?.length > 0 && (
-                              <button onClick={() => setExpandedRow(expandedRow === r._id ? null : r._id)}
-                                className="flex items-center gap-1 text-[9px] font-black text-gray-400 hover:text-violet-600 transition uppercase">
-                                {r.physicalEditLog.length} edit{r.physicalEditLog.length > 1 ? "s" : ""}
-                                {expandedRow === r._id ? <FaChevronUp size={8} /> : <FaChevronDown size={8} />}
-                              </button>
-                            )}
-                          </td>
-                          <td className="px-4 py-4">
-                            {r.approvedBy?.username
-                              ? <div>
+                {viewMode === "LIST" ? (
+                  <>
+                    <thead>
+                      <tr className="bg-gray-50/80 border-b border-gray-100">
+                        <th className="px-4 py-4 w-10">
+                          <input type="checkbox" 
+                            checked={selectedRecords.length > 0 && selectedRecords.length === filteredSorted.filter(r => r.status !== "APPROVED").length}
+                            onChange={() => toggleSelectAll(filteredSorted.filter(r => r.status !== "APPROVED"))}
+                            className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                        </th>
+                        <Th label="SJ ID" col="sjId" />
+                        <Th label="Date" col="entryDate" />
+                        <Th label="Group" col="productGroupName" />
+                        <Th label="Product" col="productName" />
+                        <Th label="System" col="systemQty" right />
+                        <Th label="Damage" col="damagedQty" right />
+                        <Th label="Expired" col="expiredQty" right />
+                        <Th label="Phys" col="physicalQty" right />
+                        <Th label="MRP" col="mrp" right />
+                        <Th label="In ↑" col="inwardQty" right />
+                        <Th label="Out ↓" col="outwardQty" right />
+                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Batch/Exp</th>
+                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 whitespace-nowrap">Approved By</th>
+                        <Th label="Status" col="status" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {loading ? (
+                        <tr><td colSpan="15" className="px-6 py-20 text-center"><div className="w-8 h-8 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin mx-auto" /></td></tr>
+                      ) : (
+                        filteredSorted.map(r => (
+                          <tr key={r._id} className={`hover:bg-gray-50/80 transition-colors group ${selectedRecords.includes(r._id) ? "bg-violet-50/50" : ""}`}>
+                            <td className="px-4 py-4">
+                              {r.status !== "APPROVED" && (
+                                <input type="checkbox" 
+                                  checked={selectedRecords.includes(r._id)}
+                                  onChange={() => toggleSelect(r._id)}
+                                  className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                              )}
+                            </td>
+                            <td className="px-4 py-4 font-black text-violet-600 text-[11px]">{r.sjId}</td>
+                            <td className="px-4 py-4">
+                              <p className="text-[10px] font-black text-gray-800 uppercase">{new Date(r.entryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</p>
+                              <p className="text-[9px] text-gray-400 font-bold">{new Date(r.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</p>
+                            </td>
+                            <td className="px-4 py-4 text-[10px] font-black text-gray-600">{r.productGroupName || "-"}</td>
+                            <td className="px-4 py-4 font-black text-gray-800 text-[11px] max-w-[150px] truncate">{r.productName}</td>
+                            <td className="px-4 py-4 text-right font-black text-blue-600">{r.systemQty}</td>
+                            <td className="px-4 py-4 text-right font-black text-rose-500">{r.damagedQty || 0}</td>
+                            <td className="px-4 py-4 text-right font-black text-orange-500">{r.expiredQty || 0}</td>
+                            <td className="px-4 py-4 text-right font-black text-gray-800">{r.physicalQty}</td>
+                            <td className="px-4 py-4 text-right font-black text-blue-600">₹{r.mrp || 0}</td>
+                            <td className="px-4 py-4 text-right">
+                              {r.inwardQty > 0 ? <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg text-[10px] font-black">+{r.inwardQty}</span> : "-"}
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              {r.outwardQty > 0 ? <span className="bg-rose-100 text-rose-700 px-2 py-1 rounded-lg text-[10px] font-black">-{r.outwardQty}</span> : "-"}
+                            </td>
+                            <td className="px-4 py-4">
+                              {r.batch && <p className="text-[9px] font-bold text-gray-600">B: {r.batch}</p>}
+                              {r.expiryDate && <p className="text-[9px] font-bold text-orange-500">E: {new Date(r.expiryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</p>}
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              {r.approvedBy?.username ? (
+                                <div>
                                   <p className="text-[10px] font-black text-emerald-600">{r.approvedBy.username}</p>
-                                  {r.approvedBy.approvedAt && (
-                                    <p className="text-[9px] text-gray-400 font-bold">
-                                      {new Date(r.approvedBy.approvedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                                    </p>
-                                  )}
+                                  {r.voucherId && <p className="text-[8px] font-black text-violet-400 uppercase tracking-tighter">VCH: {r.voucherId}</p>}
                                 </div>
-                              : <span className="text-gray-300 text-[10px]">Pending</span>}
-                          </td>
-                          <td className="px-4 py-4">
-                            {r.status === "APPROVED"
-                              ? <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase">✓ Approved</span>
-                              : <span className="bg-amber-100 text-amber-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase">Draft</span>}
-                          </td>
-                        </tr>
-                        {/* Edit History Expand Row */}
-                        {expandedRow === r._id && (
-                          <tr className="bg-violet-50/30">
-                            <td colSpan="13" className="px-6 py-4">
-                              <div className="bg-white rounded-xl border border-violet-100 p-4">
-                                <p className="text-[10px] font-black text-violet-600 uppercase tracking-widest mb-3">Physical Qty Edit History</p>
-                                <div className="space-y-2">
-                                  {r.physicalEditLog.map((log, i) => (
-                                    <div key={i} className="flex items-center gap-4 text-[10px]">
-                                      <span className="font-black text-gray-600">{log.username}</span>
-                                      <span className="text-gray-400">
-                                        {log.oldQty !== null && log.oldQty !== undefined ? `${log.oldQty} →` : "Initial:"} <strong>{log.newQty}</strong>
-                                      </span>
-                                      <span className="text-gray-300">
-                                        {new Date(log.editedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true })}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
+                              ) : <span className="text-gray-300 text-[10px]">Pending</span>}
+                            </td>
+                            <td className="px-4 py-4">
+                              <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${r.status === "APPROVED" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                {r.status}
+                              </span>
                             </td>
                           </tr>
-                        )}
-                      </React.Fragment>
-                    ))
-                  )}
-                </tbody>
+                        ))
+                      )}
+                    </tbody>
+                  </>
+                ) : (
+                  <>
+                    <thead>
+                      <tr className="bg-gray-50/80 border-b border-gray-100">
+                        <th className="px-6 py-4 w-10">
+                          <input type="checkbox" 
+                            checked={selectedRecords.length > 0 && Object.values(filteredSorted.reduce((acc, r) => {
+                              const vchId = r.voucherId || `NO_VCH_${r._id}`;
+                              if (!acc[vchId]) acc[vchId] = { id: vchId, items: r.status !== "APPROVED" ? [r] : [] };
+                              return acc;
+                            }, {})).every(vch => vch.items.every(item => selectedRecords.includes(item._id)))}
+                            onChange={() => {
+                              const allIds = filteredSorted.map(r => r._id);
+                              if (selectedRecords.length === allIds.length) setSelectedRecords([]);
+                              else setSelectedRecords(allIds);
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                        </th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 w-16">Voucher</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Date</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 text-center">Items</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right">Inward Val</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right">Outward Val</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Approved By</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {loading ? (
+                        <tr><td colSpan="7" className="px-6 py-20 text-center"><div className="w-8 h-8 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin mx-auto" /></td></tr>
+                      ) : (
+                        Object.values(filteredSorted.reduce((acc, r) => {
+                          const vchId = r.voucherId || `NO_VCH_${r._id}`;
+                          if (!acc[vchId]) acc[vchId] = { id: vchId, date: r.entryDate, items: [], status: r.status, approvedBy: r.approvedBy, isIndividual: !r.voucherId };
+                          acc[vchId].items.push(r);
+                          return acc;
+                        }, {})).map(vch => (
+                          <React.Fragment key={vch.id}>
+                            <tr className="hover:bg-violet-50/50 cursor-pointer transition-colors group">
+                              <td className="px-6 py-4">
+                                <input type="checkbox" 
+                                  checked={vch.items.every(item => selectedRecords.includes(item._id))}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    const ids = vch.items.map(i => i._id);
+                                    if (vch.items.every(item => selectedRecords.includes(item._id))) {
+                                      setSelectedRecords(prev => prev.filter(id => !ids.includes(id)));
+                                    } else {
+                                      setSelectedRecords(prev => [...new Set([...prev, ...ids])]);
+                                    }
+                                  }}
+                                  className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
+                              </td>
+                              <td className="px-6 py-4" onClick={() => setExpandedRow(expandedRow === vch.id ? null : vch.id)}>
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition ${expandedRow === vch.id ? "bg-violet-600 text-white" : "bg-violet-100 text-violet-600"}`}>
+                                    {expandedRow === vch.id ? <FaChevronUp size={8} /> : <FaChevronDown size={8} />}
+                                  </div>
+                                  <span className={`text-[11px] font-black ${vch.isIndividual ? "text-gray-400 italic" : "text-violet-600"}`}>
+                                    {vch.isIndividual ? "Single Item" : vch.id}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <p className="text-[10px] font-black text-gray-800 uppercase">{new Date(vch.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-lg text-[10px] font-black">{vch.items.length} Product{vch.items.length > 1 ? "s" : ""}</span>
+                              </td>
+                              <td className="px-6 py-4 text-right font-black text-emerald-600 text-[11px]">
+                                {vch.items.reduce((sum, item) => sum + (item.inwardQty || 0), 0)} Qty
+                              </td>
+                              <td className="px-6 py-4 text-right font-black text-rose-500 text-[11px]">
+                                {vch.items.reduce((sum, item) => sum + (item.outwardQty || 0), 0)} Qty
+                              </td>
+                              <td className="px-6 py-4">
+                                {vch.approvedBy?.username ? (
+                                  <p className="text-[10px] font-black text-emerald-600">{vch.approvedBy.username}</p>
+                                ) : <span className="text-gray-300 text-[10px]">Pending</span>}
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${vch.status === "APPROVED" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                  {vch.status}
+                                </span>
+                              </td>
+                            </tr>
+                            {expandedRow === vch.id && (
+                              <tr className="bg-gray-50/50">
+                                <td colSpan="7" className="p-0">
+                                  <div className="p-4 border-l-4 border-violet-600 bg-white ml-6 my-2 rounded-xl shadow-inner overflow-hidden">
+                                    <table className="w-full text-left">
+                                      <thead>
+                                        <tr className="border-b border-gray-100">
+                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 uppercase">SJ ID</th>
+                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 uppercase">Product</th>
+                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 uppercase text-right">System</th>
+                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 uppercase text-right">Phys</th>
+                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 uppercase text-right text-emerald-600">In ↑</th>
+                                          <th className="px-3 py-2 text-[9px] font-black text-gray-400 uppercase text-right text-rose-500">Out ↓</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-50">
+                                        {vch.items.map(item => (
+                                          <tr key={item._id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-3 py-2 text-[10px] font-bold text-violet-500">{item.sjId}</td>
+                                            <td className="px-3 py-2 text-[10px] font-black text-gray-700">{item.productName}</td>
+                                            <td className="px-3 py-2 text-right text-[10px] font-bold text-gray-400">{item.systemQty}</td>
+                                            <td className="px-3 py-2 text-right text-[10px] font-black text-gray-800">{item.physicalQty}</td>
+                                            <td className="px-3 py-2 text-right text-[10px] font-black text-emerald-600">{item.inwardQty || "-"}</td>
+                                            <td className="px-3 py-2 text-right text-[10px] font-black text-rose-500">{item.outwardQty || "-"}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))
+                      )}
+                    </tbody>
+                  </>
+                )}
               </table>
             </div>
           </div>
 
-          {/* MOBILE COMPACT TABLE (Horizontal Scroll) */}
-          <div className="md:hidden">
-            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[700px]">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="px-3 py-3 w-8 border-r border-gray-200">
-                        <input type="checkbox" 
-                          checked={selectedRecords.length > 0 && selectedRecords.length === filteredSorted.filter(r => r.status !== "APPROVED").length}
-                          onChange={() => toggleSelectAll(filteredSorted.filter(r => r.status !== "APPROVED"))}
-                          className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
-                      </th>
-                      {["Date", "SJ ID", "Product", "Type", "Qty", "Phy Qty", "MRP", "Status"].map(h => (
-                        <th key={h} className="px-3 py-3 font-black text-[9px] uppercase tracking-widest text-gray-400 border-r last:border-0">{h}</th>
+          {/* MOBILE VIEW */}
+          <div className="md:hidden space-y-3">
+            {loading ? (
+              <div className="p-10 text-center animate-pulse text-[10px] font-black text-gray-400 uppercase">Fetching records...</div>
+            ) : filteredSorted.length === 0 ? (
+              <div className="p-10 text-center text-[10px] font-black text-gray-300 uppercase italic">No records found</div>
+            ) : viewMode === "LIST" ? (
+              filteredSorted.map(r => (
+                <div key={r._id} className={`bg-white p-4 rounded-2xl border ${selectedRecords.includes(r._id) ? "border-violet-500 bg-violet-50/20" : "border-gray-200"} shadow-sm`}>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center gap-3">
+                      {r.status !== "APPROVED" && (
+                        <input type="checkbox" checked={selectedRecords.includes(r._id)} onChange={() => toggleSelect(r._id)} />
+                      )}
+                      <div>
+                        <p className="text-[11px] font-black text-violet-600">{r.sjId}</p>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase">{new Date(r.entryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</p>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${r.status === "APPROVED" ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"}`}>{r.status}</span>
+                  </div>
+                  <h3 className="text-[11px] font-black text-gray-800 uppercase mb-2 leading-tight">{r.productName}</h3>
+                  <div className="grid grid-cols-3 gap-2 border-t border-gray-50 pt-2">
+                    <div className="text-center"><p className="text-[8px] font-bold text-gray-400 uppercase">System</p><p className="text-[10px] font-black text-blue-600">{r.systemQty}</p></div>
+                    <div className="text-center"><p className="text-[8px] font-bold text-gray-400 uppercase">Physical</p><p className="text-[10px] font-black text-gray-700">{r.physicalQty}</p></div>
+                    <div className="text-center">
+                      <p className="text-[8px] font-bold text-gray-400 uppercase">Adj</p>
+                      <p className={`text-[10px] font-black ${r.inwardQty > 0 ? "text-emerald-600" : "text-rose-500"}`}>
+                        {r.inwardQty > 0 ? `+${r.inwardQty}` : r.outwardQty > 0 ? `-${r.outwardQty}` : "0"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              Object.values(filteredSorted.reduce((acc, r) => {
+                const vchId = r.voucherId || `IND_${r._id}`;
+                if (!acc[vchId]) acc[vchId] = { id: vchId, date: r.entryDate, items: [], status: r.status };
+                acc[vchId].items.push(r);
+                return acc;
+              }, {})).map(vch => (
+                <div key={vch.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                  <div className="p-4 flex justify-between items-center" onClick={() => setExpandedRow(expandedRow === vch.id ? null : vch.id)}>
+                    <div>
+                      <p className="text-[11px] font-black text-violet-600 uppercase">{vch.id.startsWith("IND_") ? "Single Adjustment" : vch.id}</p>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase">{new Date(vch.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-[10px] font-black text-gray-700">{vch.items.length} Items</p>
+                        <p className="text-[8px] font-black uppercase text-emerald-600">+{vch.items.reduce((s,i)=>s+(i.inwardQty||0),0)} / <span className="text-rose-500">-{vch.items.reduce((s,i)=>s+(i.outwardQty||0),0)}</span></p>
+                      </div>
+                      <FaChevronDown className={`text-gray-300 transition-transform ${expandedRow === vch.id ? "rotate-180" : ""}`} size={10} />
+                    </div>
+                  </div>
+                  {expandedRow === vch.id && (
+                    <div className="bg-gray-50 p-3 border-t border-gray-100 space-y-2">
+                      {vch.items.map(item => (
+                        <div key={item._id} className="bg-white p-2 rounded-lg border border-gray-100 flex justify-between items-center">
+                          <p className="text-[9px] font-black text-gray-700 uppercase flex-1 truncate mr-2">{item.productName}</p>
+                          <div className="flex gap-3">
+                            <span className="text-[9px] font-black text-blue-500">S:{item.systemQty}</span>
+                            <span className="text-[9px] font-black text-gray-700">P:{item.physicalQty}</span>
+                          </div>
+                        </div>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {loading ? (
-                      <tr>
-                        <td colSpan="7" className="py-20 text-center">
-                          <div className="w-8 h-8 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin mx-auto mb-2" />
-                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Loading...</p>
-                        </td>
-                      </tr>
-                    ) : filteredSorted.length === 0 ? (
-                      <tr>
-                        <td colSpan="7" className="py-12 text-center text-gray-300 font-black uppercase text-[10px] tracking-widest">
-                          No records found
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredSorted.map(r => (
-                        <tr key={r._id} className={`hover:bg-gray-50 transition-colors ${selectedRecords.includes(r._id) ? "bg-violet-50/30" : ""}`}>
-                          <td className="px-3 py-3 border-r border-gray-100 text-center">
-                            {r.status !== "APPROVED" && (
-                              <input type="checkbox" 
-                                checked={selectedRecords.includes(r._id)}
-                                onChange={() => toggleSelect(r._id)}
-                                className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
-                            )}
-                          </td>
-                          <td className="px-3 py-3 border-r border-gray-100 text-[10px] font-bold text-gray-500">
-                            {new Date(r.entryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                          </td>
-                          <td className="px-3 py-3 border-r border-gray-100 font-black text-[10px] text-violet-600">
-                            {r.sjId}
-                          </td>
-                          <td className="px-3 py-3 border-r border-gray-100 min-w-[150px]">
-                            <p className="font-black text-gray-700 text-[10px] uppercase truncate leading-tight">{r.productName}</p>
-                            <p className="text-[8px] font-bold text-gray-400 uppercase">{r.productGroupName || "-"}</p>
-                          </td>
-                          <td className="px-3 py-3 border-r border-gray-100 text-center">
-                            {r.inwardQty > 0 && <span className="text-emerald-600 font-black text-[9px]">INWARD</span>}
-                            {r.outwardQty > 0 && <span className="text-rose-500 font-black text-[9px]">OUTWARD</span>}
-                            {r.inwardQty === 0 && r.outwardQty === 0 && <span className="text-gray-300">-</span>}
-                          </td>
-                          <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-[10px] text-gray-700">
-                            {r.inwardQty || r.outwardQty || 0}
-                          </td>
-                          <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-[10px] text-gray-800">
-                            {r.physicalQty}
-                          </td>
-                          <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-[10px] text-blue-600">
-                            ₹{r.mrp || 0}
-                          </td>
-                          <td className="px-3 py-3">
-                            {r.status === "APPROVED" 
-                              ? <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase">Approved</span>
-                              : <span className="text-[8px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-full uppercase">Draft</span>
-                            }
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

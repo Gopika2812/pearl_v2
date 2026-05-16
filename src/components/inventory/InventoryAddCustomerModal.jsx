@@ -33,11 +33,13 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     creditLimitDays: 0,
     openingBalance: 0, // 🔒 Fixed March 31st Balance
     riskStatus: "safe_zone",
+    linkedVendorId: null,
   });
 
   const [isSafeMode, setIsSafeMode] = useState(false);
   const [isFetchingGst, setIsFetchingGst] = useState(false);
   const [uploadResults, setUploadResults] = useState(null);
+  const [vendors, setVendors] = useState([]);
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -74,6 +76,7 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         creditLimitDays: editingItem.creditLimitDays !== undefined ? editingItem.creditLimitDays : 0,
         openingBalance: editingItem.openingBalance || 0,
         riskStatus: editingItem.riskStatus || "safe_zone",
+        linkedVendorId: editingItem.linkedVendorId || null,
       });
     } else {
       setCustomer({
@@ -103,9 +106,28 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
         creditLimitDays: 0,
         openingBalance: 0,
         riskStatus: "safe_zone",
+        linkedVendorId: null,
       });
     }
   }, [editingItem]);
+
+  useEffect(() => {
+    if (isOpen && branchId) {
+      fetchVendors();
+    }
+  }, [isOpen, branchId]);
+
+  const fetchVendors = async () => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/vendors?branchId=${branchId}&limit=1000`);
+      const result = await res.json();
+      if (result.success) {
+        setVendors(result.data || []);
+      }
+    } catch (err) {
+      console.error("Fetch vendors error:", err);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -527,6 +549,20 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className={labelClass}>Link to Vendor Ledger (Optional)</label>
+                    <FilterableSelect
+                      options={vendors}
+                      value={customer.linkedVendorId}
+                      onChange={(val) => setCustomer({ ...customer, linkedVendorId: val })}
+                      placeholder="Search Vendor..."
+                      className={inputClass}
+                    />
+                    <p className="text-[9px] text-blue-500 font-bold mt-1 uppercase tracking-tighter">
+                      Consolidates sales into vendor ledger
+                    </p>
+                  </div>
+
                   <div>
                     <label className={labelClass}>Registration Type</label>
                     <select

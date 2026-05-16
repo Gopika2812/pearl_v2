@@ -79,7 +79,7 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
     if (!user) return false;
     
     // Global Super Admin sees everything
-    if (user.role === "SUPER_ADMIN") return true;
+    if (user.role === "SUPER_ADMIN" || user.role === "SUPERADMIN") return true;
     
     const allowedPages = user.allowedPages || [];
     

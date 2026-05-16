@@ -54,6 +54,7 @@ const physicalStockEntrySchema = new mongoose.Schema({
     username:  { type: String },
     approvedAt: { type: Date }
   },
+  voucherId:         { type: String },
   adjustmentApplied: { type: Boolean, default: false },
 
 }, { timestamps: true });

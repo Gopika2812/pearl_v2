@@ -463,9 +463,20 @@ router.get("/gstr1", auth, async (req, res) => {
     const finalB2CS = Object.values(b2cGroups).filter(row => row.taxableValue > 0);
     const finalB2CL = b2cLarge.filter(row => row.taxableValue > 0);
 
+    // Fetch branch info for the report
+    const branchInfo = await Branch.findById(branchObjectId).select("gstin name").lean();
+    let finalGstin = branchInfo?.gstin || "NO_GSTIN";
+    
+    // Fallback for Gomathi branches if GSTIN is missing
+    if (finalGstin === "NO_GSTIN" && branchInfo?.name?.toLowerCase().includes("gomathi")) {
+      finalGstin = "33DULPS2600Q4Z3";
+    }
+
     res.json({
       success: true,
       data: {
+        branchGstin: finalGstin,
+        branchName: branchInfo?.name || "N/A",
         b2b: b2b.filter(row => row.taxableValue > 0 || row.status === "CANCELLED"), 
         b2cl: finalB2CL, 
         b2cs: finalB2CS, 

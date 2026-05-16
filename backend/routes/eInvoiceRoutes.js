@@ -39,7 +39,7 @@ router.post("/generate/:invoiceId", async (req, res) => {
       
       invoice.vehicleNo = vehicleNo || invoice.vehicleNo;
       invoice.transportMode = transportMode || invoice.transportMode || "1";
-      invoice.transportDistance = Number(transportDistance || 50);
+      invoice.transportDistance = transportDistance !== undefined && transportDistance !== "" ? Number(transportDistance) : 0;
       invoice.vehicleType = vehicleType || invoice.vehicleType || "REGULAR";
       invoice.transporterId = transporterId || invoice.transporterId;
       invoice.transporterName = transporterName || invoice.transporterName;
@@ -139,7 +139,7 @@ router.post("/generate-ewb-only/:invoiceId", async (req, res) => {
     if (transportDetails) {
       invoice.vehicleNo = transportDetails.vehicleNo || invoice.vehicleNo;
       invoice.transportMode = transportDetails.transportMode || invoice.transportMode || "1";
-      invoice.transportDistance = Number(transportDetails.transportDistance || 50);
+      invoice.transportDistance = transportDetails.transportDistance !== undefined && transportDetails.transportDistance !== "" ? Number(transportDetails.transportDistance) : 0;
       invoice.vehicleType = transportDetails.vehicleType || invoice.vehicleType || "REGULAR";
       await invoice.save();
     }

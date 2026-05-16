@@ -391,22 +391,22 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer, branch, onBalanceUpdat
                    .formal-ledger { font-family: 'Times New Roman', Times, serif; color: #000; padding: 20px; }
                    .formal-h { display: flex; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
                    .formal-c-info { flex: 1; text-align: center; }
-                   .formal-c-name { font-size: 28px; font-weight: 900; text-transform: uppercase; margin-bottom: 5px; }
-                   .formal-c-addr { font-size: 13px; line-height: 1.4; font-weight: 600; }
+                   .formal-c-name { font-size: 28px; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+                   .formal-c-addr { font-size: 13px; line-height: 1.4; font-weight: normal; }
                    
                    .formal-sb-box { display: flex; border: 1.5px solid #000; margin-bottom: 20px; }
                    .formal-sb-half { flex: 1; padding: 12px; font-size: 13px; line-height: 1.5; }
                    .formal-sb-half:first-child { border-right: 1.5px solid #000; }
-                   .formal-sb-lab { font-weight: 900; text-transform: uppercase; border-bottom: 1px solid #000; margin-bottom: 5px; padding-bottom: 2px; display: block; font-size: 11px; }
+                   .formal-sb-lab { font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #000; margin-bottom: 5px; padding-bottom: 2px; display: block; font-size: 11px; }
                    
                    .formal-t { width: 100%; border-collapse: collapse; border: 1.5px solid #000; font-size: 13px; margin-bottom: 1px; }
-                   .formal-t th { border: 1px solid #000; padding: 10px 5px; background: #f0f0f0; font-weight: 900; text-transform: uppercase; text-align: center; }
-                   .formal-t td { border: 1px solid #000; padding: 6px 6px 8px 6px; vertical-align: middle; font-weight: 700; line-height: 1.3; }
+                   .formal-t th { border: 1px solid #000; padding: 10px 5px; background: #f0f0f0; font-weight: bold; text-transform: uppercase; text-align: center; }
+                   .formal-t td { border: 1px solid #000; padding: 6px 6px 8px 6px; vertical-align: middle; font-weight: normal; line-height: 1.3; }
                    
-                   .formal-sum-bar { display: flex; border: 1.5px solid #000; border-top: none; background: #fff; color: #000; font-weight: 900; font-size: 14px; }
+                   .formal-sum-bar { display: flex; border: 1.5px solid #000; border-top: none; background: #fff; color: #000; font-weight: bold; font-size: 14px; }
                    .formal-sum-item { padding: 10px; border-right: 1.5px solid #000; }
                    
-                   .v-c { font-weight: 900; font-size: 11px; display: inline-block; }
+                   .v-c { font-weight: bold; font-size: 11px; display: inline-block; }
                  `}
                </style>
 
@@ -424,20 +424,20 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer, branch, onBalanceUpdat
                </div>
 
                <div style={{ textAlign: 'center', marginBottom: '15px' }}>
-                  <span style={{ fontWeight: 900, textTransform: 'uppercase', textDecoration: 'underline', fontSize: '16px' }}>Customer Ledger Account</span>
+                  <span style={{ fontWeight: 'bold', textTransform: 'uppercase', textDecoration: 'underline', fontSize: '16px' }}>Customer Ledger Account</span>
                </div>
 
                <div className="formal-sb-box">
                   <div className="formal-sb-half">
                     <span className="formal-sb-lab">Account Details</span>
-                    <div style={{ fontSize: '14px', fontWeight: 900, color: '#000' }}>{customer.name}</div>
+                    <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#000' }}>{customer.name}</div>
                     <div>{customer.address}</div>
                     <div>WhatsApp: {customer.whatsapp}</div>
                     <div>GSTIN: {customer.gstin || "Unregistered"}</div>
                   </div>
                   <div className="formal-sb-half">
                     <span className="formal-sb-lab">Period Covered</span>
-                    <div style={{ fontWeight: 900, fontStyle: 'italic' }}>{formatDate(startDate)} TO {formatDate(endDate)}</div>
+                    <div style={{ fontWeight: 'bold', fontStyle: 'italic' }}>{formatDate(startDate)} TO {formatDate(endDate)}</div>
                     <div style={{ marginTop: '10px', fontSize: '10px', opacity: 0.6 }}>Generated on: {new Date().toLocaleString()}</div>
                   </div>
                </div>
@@ -458,11 +458,11 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer, branch, onBalanceUpdat
                     <tr style={{ background: '#f5f5f5', fontStyle: 'italic' }}>
                       <td style={{ textAlign: 'center' }}>-</td>
                       <td style={{ textAlign: 'center' }}>{formatDate(startDate)}</td>
-                      <td style={{ fontWeight: 900 }}>OPENING BALANCE B/F</td>
+                      <td style={{ fontWeight: 'bold' }}>OPENING BALANCE B/F</td>
                       <td style={{ textAlign: 'center' }}>O/B</td>
                       <td style={{ textAlign: 'right' }}>-</td>
                       <td style={{ textAlign: 'right' }}>-</td>
-                      <td style={{ textAlign: 'right', fontWeight: 900 }}>₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 'bold' }}>₹{Math.abs(openingBalance).toLocaleString()} {balanceLabel(openingBalance)}</td>
                     </tr>
                     {transactions.map((txn, idx) => {
                        let docId = "-";
@@ -482,11 +482,11 @@ const CustomerLedgerModal = ({ isOpen, onClose, customer, branch, onBalanceUpdat
                          <tr key={txn.id}>
                            <td style={{ textAlign: 'center' }}>{idx+1}</td>
                            <td style={{ textAlign: 'center' }}>{formatDate(txn.date)}</td>
-                           <td><span style={{ fontWeight: 900 }}>{docId}</span></td>
+                           <td><span style={{ fontWeight: 'normal' }}>{docId}</span></td>
                            <td style={{ textAlign: 'center' }}><span className="v-c">{vt}</span></td>
-                           <td style={{ textAlign: 'right', fontWeight: 900, color: '#b91c1c' }}>{txn.debit > 0 ? `₹${txn.debit.toLocaleString()}` : "-"}</td>
-                           <td style={{ textAlign: 'right', fontWeight: 900, color: '#15803d' }}>{txn.credit > 0 ? `₹${txn.credit.toLocaleString()}` : "-"}</td>
-                           <td style={{ textAlign: 'right', fontWeight: 900 }}>₹{Math.abs(txn.balance).toLocaleString()} {balanceLabel(txn.balance)}</td>
+                           <td style={{ textAlign: 'right', fontWeight: 'normal', color: '#b91c1c' }}>{txn.debit > 0 ? `₹${txn.debit.toLocaleString()}` : "-"}</td>
+                           <td style={{ textAlign: 'right', fontWeight: 'normal', color: '#15803d' }}>{txn.credit > 0 ? `₹${txn.credit.toLocaleString()}` : "-"}</td>
+                           <td style={{ textAlign: 'right', fontWeight: 'normal' }}>₹{Math.abs(txn.balance).toLocaleString()} {balanceLabel(txn.balance)}</td>
                          </tr>
                        )
                     })}

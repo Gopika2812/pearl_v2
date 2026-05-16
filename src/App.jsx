@@ -59,6 +59,7 @@ import BranchFollowUpRecords from "./pages/branch/BranchFollowUpRecords";
 import BranchPhysicalStock from "./pages/branch/BranchPhysicalStock";
 import BranchPhysicalStockRecords from "./pages/branch/BranchPhysicalStockRecords";
 import BranchGstReports from "./pages/branch/BranchGstReports";
+import BranchSpottedCustomerLedger from "./pages/branch/BranchSpottedCustomerLedger";
 import SmartOrdersDashboard from "./pages/crm/SmartOrdersDashboard";
 import TaskBoardPage from "./pages/crm/TaskBoardPage";
 import SharedLinkCustomerPage from "./pages/crm/SharedLinkCustomerPage";
@@ -228,7 +229,7 @@ function AppContent() {
 
       // 2. GRANULAR PERMISSION ENFORCEMENT
       // Skip check ONLY for SUPER_ADMIN. Normal branch ADMINS must respect allowedPages.
-      if (user.role === "SUPER_ADMIN") return;
+      if (user.role === "SUPER_ADMIN" || user.role === "SUPERADMIN") return;
 
       const pathPermissionMap = {
         "/branch-home": "home",
@@ -277,6 +278,7 @@ function AppContent() {
         "/branch/hr/reports": "hr-reports",
         "/branch/smart-orders": "smart-orders",
         "/branch/tasks": "task-board",
+        "/branch/spotted-customer-ledger": "spotted-ledger",
       };
 
       const requiredPermission = pathPermissionMap[location.pathname];
@@ -637,6 +639,7 @@ function AppContent() {
                   <Route path="/branch/ledger" element={<ProtectedRoute element={<BranchLedger />} />} />
                   <Route path="/branch/customer-ledger/:customerId" element={<ProtectedRoute element={<BranchCustomerLedger />} />} />
                   <Route path="/branch/gst-reports" element={<ProtectedRoute element={<BranchGstReports />} />} />
+                  <Route path="/branch/spotted-customer-ledger" element={<ProtectedRoute element={<BranchSpottedCustomerLedger />} />} />
 
                   <Route path="/branch/follow-up" element={<ProtectedRoute element={<BranchFollowUp />} />} />
                   <Route path="/branch/follow-up-records" element={<ProtectedRoute element={<BranchFollowUpRecords />} />} />

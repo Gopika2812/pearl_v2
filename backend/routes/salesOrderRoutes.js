@@ -241,7 +241,7 @@ router.get("/", async (req, res) => {
 
     // ⚡ Optimized Fetch
     const salesOrders = await SalesOrder.find(query)
-      .select("invoiceId salesInvoiceId printCount customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt orderDate invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount invoiceItems lastInvoicedItems invoiceSubtotal invoiceTotalTax invoiceGrandTotal invoiceOpeningBalance invoiceClosingBalance deliveryMan")
+      .select("invoiceId salesInvoiceId printCount customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt orderDate invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount invoiceItems lastInvoicedItems invoiceSubtotal invoiceTotalTax invoiceGrandTotal invoiceOpeningBalance invoiceClosingBalance deliveryMan spottedCustomerName spottedPhoneNumber")
       .populate('salesOwner', 'name')
       .populate('deliveryMan', 'name phone')
       .populate('items.productId')
@@ -497,6 +497,8 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
       commonDiscount,
       isClaim,
       orderDate,
+      spottedCustomerName,
+      spottedPhoneNumber,
     } = req.body;
 
     console.log("📤 POST /sales-orders received");
@@ -610,6 +612,8 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
       financialYear: currentFY,
       isClaim: isClaim || false,
       orderDate: orderDate ? new Date(orderDate) : new Date(),
+      spottedCustomerName,
+      spottedPhoneNumber,
     });
 
     await salesOrder.save();

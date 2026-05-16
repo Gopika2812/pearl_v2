@@ -17,6 +17,16 @@ async function getNextSjId(branchId) {
   return `SJ${String(counter.seq).padStart(3, "0")}`;
 }
 
+async function getNextVoucherId(branchId) {
+  const counter = await PhysicalStockCounter.findOneAndUpdate(
+    { branchId },
+    { $inc: { vchSeq: 1 } }, // Using a separate field for voucher sequence
+    { new: true, upsert: true }
+  );
+  const seq = counter.vchSeq || 1;
+  return `VCH${String(seq).padStart(3, "0")}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/physical-stock/next-id?branchId=...
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,6 +77,7 @@ router.get("/", async (req, res) => {
         .skip(skip)
         .limit(Number(limit))
         .populate("productGroupId", "name")
+        .populate("productId", "purchasingPrice units")
         .lean(),
       PhysicalStockEntry.countDocuments(filter)
     ]);
@@ -91,7 +102,7 @@ router.post("/", async (req, res) => {
       branchId, productGroupId, productGroupName,
       productId, productName,
       systemQty, damagedQty, expiredQty, physicalQty,
-      mrp, batch, expiryDate,
+      mrp, batch, expiryDate, entryDate,
       checkedBy,
       userId, username
     } = req.body;
@@ -128,7 +139,8 @@ router.post("/", async (req, res) => {
         newQty: pQty,
         editedAt: new Date()
       }],
-      status: "DRAFT"
+      status: "DRAFT",
+      entryDate: entryDate ? new Date(entryDate) : new Date()
     });
 
     await entry.save();
@@ -144,7 +156,7 @@ router.post("/", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.put("/:id", async (req, res) => {
   try {
-    const { physicalQty, damagedQty, expiredQty, mrp, checkedBy, batch, expiryDate, userId, username } = req.body;
+    const { physicalQty, damagedQty, expiredQty, mrp, checkedBy, batch, expiryDate, entryDate, userId, username } = req.body;
 
     const entry = await PhysicalStockEntry.findById(req.params.id);
     if (!entry) return res.status(404).json({ success: false, message: "Entry not found" });
@@ -171,6 +183,7 @@ router.put("/:id", async (req, res) => {
     if (mrp !== undefined) entry.mrp = Number(mrp) || 0;
     if (batch !== undefined) entry.batch = batch;
     if (expiryDate !== undefined) entry.expiryDate = expiryDate ? new Date(expiryDate) : null;
+    if (entryDate !== undefined) entry.entryDate = entryDate ? new Date(entryDate) : new Date();
 
     await entry.save();
     res.json({ success: true, data: entry, message: "Entry updated" });
@@ -188,7 +201,7 @@ router.put("/:id", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/:id/approve", async (req, res) => {
   try {
-    const { userId, username, role } = req.body;
+    const { userId, username, role, voucherId } = req.body;
 
     if (!["ADMIN", "SUPER_ADMIN"].includes(role)) {
       return res.status(403).json({ success: false, message: "Only ADMIN or SUPER_ADMIN can approve PSV entries" });
@@ -203,6 +216,7 @@ router.post("/:id/approve", async (req, res) => {
     entry.status = "APPROVED";
     entry.adjustmentApplied = true;
     entry.approvedBy = { userId, username, approvedAt: new Date() };
+    if (voucherId) entry.voucherId = voucherId;
 
     await entry.save();
     res.json({
@@ -230,6 +244,17 @@ router.delete("/:id", async (req, res) => {
     res.json({ success: true, message: "Entry deleted" });
   } catch (err) {
     console.error("Delete PSV error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/physical-stock/next-vch-id?branchId=...
+router.get("/next-vch-id", async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    const vchId = await getNextVoucherId(branchId);
+    res.json({ success: true, nextVchId: vchId });
+  } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });

@@ -215,10 +215,20 @@ router.post("/general", async (req, res) => {
       return res.status(500).json({ success: false, message: "System busy. Could not generate a unique receipt ID. Please try again." });
     }
 
-    // UPDATE CUSTOMER BALANCE
+    // UPDATE BALANCE
+    let target = customer;
+    let isVendor = false;
+    if (customer.linkedVendorId) {
+      const linkedVendor = await Vendor.findById(customer.linkedVendorId);
+      if (linkedVendor) {
+        target = linkedVendor;
+        isVendor = true;
+      }
+    }
+
     let remainingAmount = amount;
-    let currentDebit = customer.debit || 0;
-    let currentCredit = customer.credit || 0;
+    let currentDebit = target.debit || 0;
+    let currentCredit = target.credit || 0;
 
     if (currentDebit >= remainingAmount) {
       currentDebit -= remainingAmount;
@@ -229,14 +239,20 @@ router.post("/general", async (req, res) => {
       currentCredit += remainingAmount;
     }
 
-    const newClosingBalance = (customer.closingBalance || 0) - amount;
-
-    await Customer.findByIdAndUpdate(customerId, {
-      debit: currentDebit,
-      credit: currentCredit,
-      closingBalance: newClosingBalance,
-      totalBalance: newClosingBalance,
-    });
+    if (isVendor) {
+      await Vendor.findByIdAndUpdate(target._id, {
+        debit: currentDebit,
+        credit: currentCredit,
+      });
+    } else {
+      const newClosingBalance = (customer.closingBalance || 0) - amount;
+      await Customer.findByIdAndUpdate(customerId, {
+        debit: currentDebit,
+        credit: currentCredit,
+        closingBalance: newClosingBalance,
+        totalBalance: newClosingBalance,
+      });
+    }
 
     // CREATE AUDIT LOG
     await createAuditLog({
@@ -343,35 +359,48 @@ router.post("/", async (req, res) => {
       return res.status(500).json({ success: false, message: "System busy. Could not generate a unique receipt ID. Please try again." });
     }
 
-    // UPDATE CUSTOMER DEBIT (DECREASE for payment) AND CREDIT
+    // UPDATE BALANCE
     const customerId = originalOrder.customer.customerId;
     const customer = await Customer.findById(customerId);
     if (customer) {
-      let remainingAmount = amount;
-      let currentDebit = customer.debit || 0;
-      let currentCredit = customer.credit || 0;
+      let target = customer;
+      let isVendor = false;
+      if (customer.linkedVendorId) {
+        const linkedVendor = await Vendor.findById(customer.linkedVendorId);
+        if (linkedVendor) {
+          target = linkedVendor;
+          isVendor = true;
+        }
+      }
 
-      // Payment reduces debit first
+      let remainingAmount = amount;
+      let currentDebit = target.debit || 0;
+      let currentCredit = target.credit || 0;
+
       if (currentDebit >= remainingAmount) {
         currentDebit -= remainingAmount;
         remainingAmount = 0;
       } else {
-        // Excess goes to credit
         remainingAmount -= currentDebit;
         currentDebit = 0;
         currentCredit += remainingAmount;
       }
 
-      const newClosingBalance = (customer.closingBalance || 0) - amount;
-
-      await Customer.findByIdAndUpdate(customerId, {
-        debit: currentDebit,
-        credit: currentCredit,
-        closingBalance: newClosingBalance,
-        totalBalance: newClosingBalance,
-      });
-
-      console.log(`✅ Customer balance updated: debit: ₹${currentDebit}, credit: ₹${currentCredit}, closingBalance: ₹${newClosingBalance}`);
+      if (isVendor) {
+        await Vendor.findByIdAndUpdate(target._id, {
+          debit: currentDebit,
+          credit: currentCredit,
+        });
+      } else {
+        const newClosingBalance = (customer.closingBalance || 0) - amount;
+        await Customer.findByIdAndUpdate(customerId, {
+          debit: currentDebit,
+          credit: currentCredit,
+          closingBalance: newClosingBalance,
+          totalBalance: newClosingBalance,
+        });
+      }
+      console.log(`✅ Balance updated for ${isVendor ? 'Vendor' : 'Customer'}: debit: ₹${currentDebit}, credit: ₹${currentCredit}`);
     }
 
     // 🔄 UPDATE SALES ORDER CLOSING BALANCE
@@ -430,18 +459,47 @@ router.post("/bounce", async (req, res) => {
 
     await bounceReceipt.save();
 
-    // INCREASE CUSTOMER DEBIT (Customer owes the bounced amount again)
+    // INCREASE BALANCE (Customer owes the bounced amount again)
     const customerId = originalOrder.customer.customerId;
     const customer = await Customer.findById(customerId);
     if (customer) {
-      const newDebit = (customer.debit || 0) + amount;
-      const newClosingBalance = (customer.closingBalance || 0) + amount;
+      let target = customer;
+      let isVendor = false;
+      if (customer.linkedVendorId) {
+        const linkedVendor = await Vendor.findById(customer.linkedVendorId);
+        if (linkedVendor) {
+          target = linkedVendor;
+          isVendor = true;
+        }
+      }
 
-      await Customer.findByIdAndUpdate(customerId, {
-        debit: newDebit,
-        closingBalance: newClosingBalance,
-        totalBalance: newClosingBalance,
-      });
+      let amountToTakeBack = amount;
+      let currentDebit = target.debit || 0;
+      let currentCredit = target.credit || 0;
+
+      // Reverse the netted logic
+      if (currentCredit >= amountToTakeBack) {
+        currentCredit -= amountToTakeBack;
+      } else {
+        amountToTakeBack -= currentCredit;
+        currentCredit = 0;
+        currentDebit += amountToTakeBack;
+      }
+
+      if (isVendor) {
+        await Vendor.findByIdAndUpdate(target._id, {
+          debit: currentDebit,
+          credit: currentCredit,
+        });
+      } else {
+        const newClosingBalance = (customer.closingBalance || 0) + amount;
+        await Customer.findByIdAndUpdate(customerId, {
+          debit: currentDebit,
+          credit: currentCredit,
+          closingBalance: newClosingBalance,
+          totalBalance: newClosingBalance,
+        });
+      }
     }
 
     // 🔥 FIX: ALSO Increase SalesOrder closing balance
@@ -515,19 +573,47 @@ router.post("/:id/bounce", async (req, res) => {
     receipt.bounceId = bounceReceipt._id;
     await receipt.save({ session });
 
-    // 3. Increase Customer Debit (Reverse the credit impact)
+    // 3. Reverse Impact on Balance
     const customerId = receipt.customer.customerId;
     const customer = await Customer.findById(customerId).session(session);
     if (customer) {
-      const amount = receipt.amount || 0;
-      const newDebit = (customer.debit || 0) + amount;
-      const newClosingBalance = (customer.closingBalance || 0) + amount;
+      let target = customer;
+      let isVendor = false;
+      if (customer.linkedVendorId) {
+        const linkedVendor = await Vendor.findById(customer.linkedVendorId).session(session);
+        if (linkedVendor) {
+          target = linkedVendor;
+          isVendor = true;
+        }
+      }
 
-      await Customer.findByIdAndUpdate(customerId, {
-        debit: newDebit,
-        closingBalance: newClosingBalance,
-        totalBalance: newClosingBalance,
-      }).session(session);
+      const amountToTakeBack = receipt.amount || 0;
+      let currentDebit = target.debit || 0;
+      let currentCredit = target.credit || 0;
+
+      // Reverse the netted logic
+      if (currentCredit >= amountToTakeBack) {
+        currentCredit -= amountToTakeBack;
+      } else {
+        const remainingToTakeBack = amountToTakeBack - currentCredit;
+        currentCredit = 0;
+        currentDebit += remainingToTakeBack;
+      }
+
+      if (isVendor) {
+        await Vendor.findByIdAndUpdate(target._id, {
+          debit: currentDebit,
+          credit: currentCredit,
+        }).session(session);
+      } else {
+        const newClosingBalance = (customer.closingBalance || 0) + amountToTakeBack;
+        await Customer.findByIdAndUpdate(customerId, {
+          debit: currentDebit,
+          credit: currentCredit,
+          closingBalance: newClosingBalance,
+          totalBalance: newClosingBalance,
+        }).session(session);
+      }
     }
 
     // 4. Restore Sales Order Closing Balances
@@ -752,34 +838,50 @@ router.delete("/:receiptId", async (req, res) => {
       return res.status(404).json({ success: false, message: "Receipt not found" });
     }
 
-    // REVERSE customer payment update
+    // REVERSE balance update
     const customerId = receipt.customer.customerId;
     const customer = await Customer.findById(customerId);
     if (customer) {
-      let remainingAmountToReverse = receipt.amount;
-      let currentDebit = customer.debit || 0;
-      let currentCredit = customer.credit || 0;
-
-      // Reversing a payment: first reduce credit, then increase debit
-      if (currentCredit >= remainingAmountToReverse) {
-        currentCredit -= remainingAmountToReverse;
-        remainingAmountToReverse = 0;
-      } else {
-        remainingAmountToReverse -= currentCredit;
-        currentCredit = 0;
-        currentDebit += remainingAmountToReverse;
+      let target = customer;
+      let isVendor = false;
+      if (customer.linkedVendorId) {
+        const linkedVendor = await Vendor.findById(customer.linkedVendorId);
+        if (linkedVendor) {
+          target = linkedVendor;
+          isVendor = true;
+        }
       }
 
-      const reversedBalance = (customer.closingBalance || 0) + receipt.amount;
+      let amountToReverse = receipt.amount;
+      let currentDebit = target.debit || 0;
+      let currentCredit = target.credit || 0;
 
-      await Customer.findByIdAndUpdate(customerId, {
-        debit: currentDebit,
-        credit: currentCredit,
-        closingBalance: reversedBalance,
-        totalBalance: reversedBalance,
-      });
+      // Reversing a payment: first reduce credit, then increase debit
+      if (currentCredit >= amountToReverse) {
+        currentCredit -= amountToReverse;
+        amountToReverse = 0;
+      } else {
+        amountToReverse -= currentCredit;
+        currentCredit = 0;
+        currentDebit += amountToReverse;
+      }
 
-      console.log(`✅ Receipt cancelled - Customer balance reverted`);
+      if (isVendor) {
+        await Vendor.findByIdAndUpdate(target._id, {
+          debit: currentDebit,
+          credit: currentCredit,
+        });
+      } else {
+        const reversedBalance = (customer.closingBalance || 0) + receipt.amount;
+        await Customer.findByIdAndUpdate(customerId, {
+          debit: currentDebit,
+          credit: currentCredit,
+          closingBalance: reversedBalance,
+          totalBalance: reversedBalance,
+        });
+      }
+
+      console.log(`✅ Receipt cancelled - Balance reverted`);
     }
 
     res.json({

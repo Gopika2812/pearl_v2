@@ -416,10 +416,21 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // 2️⃣ INCREASE CUSTOMER CREDIT (they get money back) - Netted
+    // 2️⃣ UPDATE BALANCE
+    let target = customer;
+    let isVendor = false;
+    if (customer.linkedVendorId) {
+      const Vendor = mongoose.model("Vendor");
+      const linkedVendor = await Vendor.findById(customer.linkedVendorId);
+      if (linkedVendor) {
+        target = linkedVendor;
+        isVendor = true;
+      }
+    }
+
     let amountToReturn = Math.round(grandTotal);
-    let currentDebit = customer.debit || 0;
-    let currentCredit = customer.credit || 0;
+    let currentDebit = target.debit || 0;
+    let currentCredit = target.credit || 0;
 
     if (currentDebit >= amountToReturn) {
       currentDebit -= amountToReturn;
@@ -430,13 +441,21 @@ router.post("/", async (req, res) => {
       currentCredit += amountToReturn;
     }
 
-    const reducedBalance = Math.round((customer.closingBalance || 0) - Math.round(grandTotal));
-    await Customer.findByIdAndUpdate(customer._id, {
-      debit: currentDebit,
-      credit: currentCredit,
-      closingBalance: reducedBalance,
-      totalBalance: reducedBalance,
-    });
+    if (isVendor) {
+      const Vendor = mongoose.model("Vendor");
+      await Vendor.findByIdAndUpdate(target._id, {
+        debit: Math.round(currentDebit),
+        credit: Math.round(currentCredit),
+      });
+    } else {
+      const reducedBalance = Math.round((customer.closingBalance || 0) - Math.round(grandTotal));
+      await Customer.findByIdAndUpdate(customer._id, {
+        debit: Math.round(currentDebit),
+        credit: Math.round(currentCredit),
+        closingBalance: reducedBalance,
+        totalBalance: reducedBalance,
+      });
+    }
 
     // CREATE AUDIT LOG
     try {
@@ -544,10 +563,21 @@ router.post("/general", async (req, res) => {
 
     await creditNote.save();
 
-    // Update Customer Balance (Increase Credit) - Netted
+    // Update Balance (Netted)
+    let target = customer;
+    let isVendor = false;
+    if (customer.linkedVendorId) {
+      const Vendor = mongoose.model("Vendor");
+      const linkedVendor = await Vendor.findById(customer.linkedVendorId);
+      if (linkedVendor) {
+        target = linkedVendor;
+        isVendor = true;
+      }
+    }
+
     let amountToReturn = amount;
-    let currentDebit = customer.debit || 0;
-    let currentCredit = customer.credit || 0;
+    let currentDebit = target.debit || 0;
+    let currentCredit = target.credit || 0;
 
     if (currentDebit >= amountToReturn) {
       currentDebit -= amountToReturn;
@@ -558,14 +588,21 @@ router.post("/general", async (req, res) => {
       currentCredit += amountToReturn;
     }
 
-    const newClosingBalance = (customer.closingBalance || 0) - amount;
-
-    await Customer.findByIdAndUpdate(customerId, {
-      debit: currentDebit,
-      credit: currentCredit,
-      closingBalance: newClosingBalance,
-      totalBalance: newClosingBalance,
-    });
+    if (isVendor) {
+      const Vendor = mongoose.model("Vendor");
+      await Vendor.findByIdAndUpdate(target._id, {
+        debit: Math.round(currentDebit),
+        credit: Math.round(currentCredit),
+      });
+    } else {
+      const newClosingBalance = (customer.closingBalance || 0) - amount;
+      await Customer.findByIdAndUpdate(customerId, {
+        debit: Math.round(currentDebit),
+        credit: Math.round(currentCredit),
+        closingBalance: newClosingBalance,
+        totalBalance: newClosingBalance,
+      });
+    }
 
     // Create Audit Log
     await createAuditLog({
@@ -618,14 +655,24 @@ router.put("/:id", async (req, res) => {
       }
     }
 
-    // Reverse Customer Balance (Old Customer)
+    // Reverse Balance Impact
     const oldCustomerId = oldCN.customer.customerId;
     const oldCustomer = await Customer.findById(oldCustomerId);
     if (oldCustomer) {
-      const restoredBalance = (oldCustomer.closingBalance || 0) + oldCN.grandTotal;
+      let target = oldCustomer;
+      let isVendor = false;
+      if (oldCustomer.linkedVendorId) {
+        const Vendor = mongoose.model("Vendor");
+        const linkedVendor = await Vendor.findById(oldCustomer.linkedVendorId);
+        if (linkedVendor) {
+          target = linkedVendor;
+          isVendor = true;
+        }
+      }
+
       let amountToTakeBack = oldCN.grandTotal;
-      let currentDebit = oldCustomer.debit || 0;
-      let currentCredit = oldCustomer.credit || 0;
+      let currentDebit = target.debit || 0;
+      let currentCredit = target.credit || 0;
 
       // Reverse the netted logic
       if (currentCredit >= amountToTakeBack) {
@@ -636,12 +683,21 @@ router.put("/:id", async (req, res) => {
         currentDebit += amountToTakeBack;
       }
 
-      await Customer.findByIdAndUpdate(oldCustomer._id, {
-        debit: currentDebit,
-        credit: currentCredit,
-        closingBalance: restoredBalance,
-        totalBalance: restoredBalance,
-      });
+      if (isVendor) {
+        const Vendor = mongoose.model("Vendor");
+        await Vendor.findByIdAndUpdate(target._id, {
+          debit: Math.round(currentDebit),
+          credit: Math.round(currentCredit),
+        });
+      } else {
+        const restoredBalance = (oldCustomer.closingBalance || 0) + oldCN.grandTotal;
+        await Customer.findByIdAndUpdate(oldCustomer._id, {
+          debit: Math.round(currentDebit),
+          credit: Math.round(currentCredit),
+          closingBalance: restoredBalance,
+          totalBalance: restoredBalance,
+        });
+      }
     }
 
     // 2️⃣ HANDLE CUSTOMER CHANGE IF NECESSARY
@@ -691,31 +747,47 @@ router.put("/:id", async (req, res) => {
       }
     }
 
-    // Apply Customer Balance (Final Customer - might be new)
+    // Apply Balance Impact (Final Customer - might be new)
     if (finalCustomer) {
-      // Re-fetch to get current state after potential old impact reversal (if same customer) 
-      // or fresh state (if new customer)
       const freshCustomer = await Customer.findById(finalCustomer._id);
-      
-      const newBalance = (freshCustomer.closingBalance || 0) - Math.round(grandTotal);
-      let amountToReturn = Math.round(grandTotal);
-      let cDebit = freshCustomer.debit || 0;
-      let cCredit = freshCustomer.credit || 0;
-
-      if (cDebit >= amountToReturn) {
-        cDebit -= amountToReturn;
-      } else {
-        amountToReturn -= cDebit;
-        cDebit = 0;
-        cCredit += amountToReturn;
+      let target = freshCustomer;
+      let isVendor = false;
+      if (freshCustomer.linkedVendorId) {
+        const Vendor = mongoose.model("Vendor");
+        const linkedVendor = await Vendor.findById(freshCustomer.linkedVendorId);
+        if (linkedVendor) {
+          target = linkedVendor;
+          isVendor = true;
+        }
       }
 
-      await Customer.findByIdAndUpdate(freshCustomer._id, {
-        debit: cDebit,
-        credit: cCredit,
-        closingBalance: newBalance,
-        totalBalance: newBalance,
-      });
+      let amountToReturn = Math.round(grandTotal);
+      let currentDebit = target.debit || 0;
+      let currentCredit = target.credit || 0;
+
+      if (currentDebit >= amountToReturn) {
+        currentDebit -= amountToReturn;
+      } else {
+        amountToReturn -= currentDebit;
+        currentDebit = 0;
+        currentCredit += amountToReturn;
+      }
+
+      if (isVendor) {
+        const Vendor = mongoose.model("Vendor");
+        await Vendor.findByIdAndUpdate(target._id, {
+          debit: Math.round(currentDebit),
+          credit: Math.round(currentCredit),
+        });
+      } else {
+        const newBalance = (freshCustomer.closingBalance || 0) - Math.round(grandTotal);
+        await Customer.findByIdAndUpdate(freshCustomer._id, {
+          debit: Math.round(currentDebit),
+          credit: Math.round(currentCredit),
+          closingBalance: newBalance,
+          totalBalance: newBalance,
+        });
+      }
     }
 
     // 5️⃣ UPDATE RECORD

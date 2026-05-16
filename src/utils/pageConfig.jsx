@@ -85,6 +85,7 @@ export const PAGE_CONFIG = [
           { id: "receipt-records", name: "Receipt Records", path: "/branch/receipt-records", icon: "history", permissionFields: ["receiptId", "date", "customer", "amount", "mode", "action"] },
         ]
       },
+      { id: "spotted-ledger", name: "Spotted Customers Ledger", path: "/branch/spotted-customer-ledger", icon: "list" },
       { id: "customers", name: "Customers (Debtors)", path: "/branch/customers", icon: "users", permissionFields: ["name", "gstin", "margin", "debit", "credit", "action_receipt", "action_return", "action_ledger"] },
     ]
   },

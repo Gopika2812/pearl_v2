@@ -163,6 +163,43 @@ export default function BranchPhysicalStock() {
       fetchNextId();
     }
   }, [currentBranch?._id]);
+  
+  // Clear rows when date changes to avoid confusion
+  useEffect(() => {
+    setRows([]);
+    setGroupFilter("ALL");
+  }, [entryDate]);
+
+  // Nuclear Deduplication: Ensure no duplicate productIds ever exist in the rows state
+  useEffect(() => {
+    if (rows.length === 0) return;
+    const seen = new Set();
+    let hasDuplicates = false;
+    
+    rows.forEach(r => {
+      const pid = String(r.productId);
+      if (seen.has(pid)) {
+        hasDuplicates = true;
+      } else {
+        seen.add(pid);
+      }
+    });
+
+    if (hasDuplicates) {
+      setRows(prev => {
+        const unique = [];
+        const uniqueIds = new Set();
+        prev.forEach(r => {
+          const pid = String(r.productId);
+          if (!uniqueIds.has(pid)) {
+            uniqueIds.add(pid);
+            unique.push(r);
+          }
+        });
+        return unique;
+      });
+    }
+  }, [rows]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -243,10 +280,10 @@ export default function BranchPhysicalStock() {
   const addRow = async (product) => {
     if (rows.find(r => r.productId === product._id)) return;
     
-    // Check if a record exists for today
+    // Check if a record exists for the selected entry date
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const recUrl = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&productId=${product._id}&fromDate=${todayStr}&toDate=${todayStr}&limit=1`;
+      const dateStr = entryDate;
+      const recUrl = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&productId=${product._id}&fromDate=${dateStr}&toDate=${dateStr}&limit=1`;
       const recRes = await fetchWithAuth(recUrl);
       const recData = await recRes.json();
       
@@ -270,15 +307,30 @@ export default function BranchPhysicalStock() {
           savedId: record._id,
           saving: false
         };
-        setRows(prev => [...prev, existingRow]);
+        setRows(prev => {
+          if (prev.find(r => r.productId === product._id)) return prev;
+          return [...prev, existingRow];
+        });
       } else {
+        // Fetch accurate system quantity for this specific date
+        let calculatedSystemQty = product.availableQty || 0;
+        try {
+          const journalUrl = `${API_BASE}/products/stock-journal?branchId=${currentBranch._id}&startDate=${entryDate}&endDate=${entryDate}&search=${product.name}`;
+          const journalRes = await fetchWithAuth(journalUrl);
+          const journalData = await journalRes.json();
+          if (journalData.success && journalData.data?.length > 0) {
+            const item = journalData.data.find(it => String(it.productId) === String(product._id));
+            if (item) calculatedSystemQty = item.closing.qty;
+          }
+        } catch {}
+
         const newRow = {
           rowId: Date.now() + Math.random(),
           productId: product._id,
           productName: product.name,
           productGroupId: product.productGroup?._id || product.productGroup,
           productGroupName: typeof product.productGroup === 'object' ? product.productGroup?.name : "",
-          systemQty: product.availableQty || 0,
+          systemQty: calculatedSystemQty,
           damagedQty: "",
           expiredQty: "",
           physicalQty: "",
@@ -289,10 +341,13 @@ export default function BranchPhysicalStock() {
           status: "DRAFT",
           saving: false
         };
-        setRows(prev => [...prev, newRow]);
+        setRows(prev => {
+          if (prev.find(r => r.productId === product._id)) return prev;
+          return [...prev, newRow];
+        });
       }
     } catch {
-      // Fallback to new row if fetch fails
+      // Fallback to current available qty if fetch fails
       const newRow = {
         rowId: Date.now() + Math.random(),
         productId: product._id,
@@ -310,7 +365,10 @@ export default function BranchPhysicalStock() {
         status: "DRAFT",
         saving: false
       };
-      setRows(prev => [...prev, newRow]);
+      setRows(prev => {
+        if (prev.find(r => r.productId === product._id)) return prev;
+        return [...prev, newRow];
+      });
     }
     
     setShowProductDrop(false);
@@ -322,30 +380,45 @@ export default function BranchPhysicalStock() {
       setRows([]); 
       return;
     }
+    setRows([]); // Atomic reset before loading new group
     try {
       // 1. Fetch Products in this group
       const prodUrl = `${API_BASE}/products?branchId=${currentBranch._id}&productGroup=${groupId}&limit=500`;
       const prodRes = await fetchWithAuth(prodUrl);
       const prodData = await prodRes.json();
       
-      // 2. Fetch today's physical stock records for this group
-      const todayStr = new Date().toISOString().split('T')[0];
-      const recUrl = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&productGroupId=${groupId}&fromDate=${todayStr}&toDate=${todayStr}&limit=500`;
+      // 2. Fetch physical stock records for the selected entry date
+      const dateStr = entryDate;
+      const recUrl = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&productGroupId=${groupId}&fromDate=${dateStr}&toDate=${dateStr}&limit=500`;
       const recRes = await fetchWithAuth(recUrl);
       const recData = await recRes.json();
       
       const existingRecords = recData.success ? recData.data : [];
 
+      // 3. Fetch Stock Journal for the selected date to get accurate "System Qty" for that day
+      const journalUrl = `${API_BASE}/products/stock-journal?branchId=${currentBranch._id}&startDate=${dateStr}&endDate=${dateStr}&productGroupId=${groupId}`;
+      const journalRes = await fetchWithAuth(journalUrl);
+      const journalData = await journalRes.json();
+      const journalMap = new Map();
+      if (journalData.success && Array.isArray(journalData.data)) {
+        journalData.data.forEach(item => {
+          journalMap.set(String(item.productId), item.closing.qty);
+        });
+      }
+
       if (prodData.success && prodData.data) {
         const productsToAdd = prodData.data;
-        const newRows = productsToAdd.map(p => {
-          // Check if we already have a record for this product today
-          const record = existingRecords.find(r => r.productId === p._id);
-          
+        const uniqueRowsMap = new Map();
+        
+        productsToAdd.forEach(p => {
+          const pid = String(p._id);
+          if (uniqueRowsMap.has(pid)) return;
+
+          const record = existingRecords.find(r => String(r.productId) === pid);
           if (record) {
-            return {
+            uniqueRowsMap.set(pid, {
               rowId: record._id,
-              productId: p._id,
+              productId: pid,
               productName: p.name,
               productGroupId: p.productGroup?._id || p.productGroup,
               productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
@@ -360,29 +433,33 @@ export default function BranchPhysicalStock() {
               status: record.status || "PENDING",
               savedId: record._id,
               saving: false
-            };
+            });
+          } else {
+            // Use calculated journal quantity if available, else fallback to current availableQty
+            const calculatedSystemQty = journalMap.has(pid) ? journalMap.get(pid) : (p.availableQty || 0);
+            
+            uniqueRowsMap.set(pid, {
+              rowId: Math.random() + Date.now(),
+              productId: pid,
+              productName: p.name,
+              productGroupId: p.productGroup?._id || p.productGroup,
+              productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
+              systemQty: calculatedSystemQty,
+              damagedQty: "",
+              expiredQty: "",
+              physicalQty: "",
+              mrp: p.mrp || 0,
+              batch: p.batch || "",
+              expiryDate: p.expiryDate ? new Date(p.expiryDate).toISOString().split('T')[0] : "",
+              checkedBy: [],
+              status: "DRAFT",
+              saving: false
+            });
           }
-
-          return {
-            rowId: Math.random() + Date.now(),
-            productId: p._id,
-            productName: p.name,
-            productGroupId: p.productGroup?._id || p.productGroup,
-            productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
-            systemQty: p.availableQty || 0,
-            damagedQty: "",
-            expiredQty: "",
-            physicalQty: "",
-            mrp: p.mrp || 0,
-            batch: p.batch || "",
-            expiryDate: p.expiryDate ? new Date(p.expiryDate).toISOString().split('T')[0] : "",
-            checkedBy: [],
-            status: "DRAFT",
-            saving: false
-          };
         });
-        setRows(newRows);
-        toast.info(`Loaded ${productsToAdd.length} items (${existingRecords.length} saved)`);
+
+        setRows(Array.from(uniqueRowsMap.values()));
+        toast.info(`Loaded ${productsToAdd.length} items (${existingRecords.length} saved for ${entryDate})`);
       }
     } catch (err) {
       toast.error("Failed to load group products");
@@ -443,7 +520,8 @@ export default function BranchPhysicalStock() {
         noAction: isNoAction,
         checkedBy: row.checkedBy,
         userId: user?._id || user?.id,
-        username: user?.username || user?.fullName || "Staff"
+        username: user?.username || user?.fullName || "Staff",
+        entryDate: entryDate
       };
 
       let res, data;
@@ -478,8 +556,10 @@ export default function BranchPhysicalStock() {
 
   const sortedRows = [...rows]
     .filter(r => {
-      if (!productSearch || productSearch.trim().length === 0) return true;
-      return r.productName.toLowerCase().includes(productSearch.toLowerCase());
+      const search = productSearch?.trim().toLowerCase();
+      if (!search) return true;
+      const name = r.productName?.toLowerCase() || "";
+      return name.includes(search);
     })
     .sort((a, b) => {
       // 1. Primary Sort: Status (Not Entered/Draft vs Saved/Pending/Approved)
@@ -758,10 +838,13 @@ export default function BranchPhysicalStock() {
                       const isSaved = !!row.savedId;
                       return (
                         <tr key={row.rowId} className={`hover:bg-gray-50 transition-colors ${row.status === "APPROVED" ? "bg-green-50" : isSaved ? "bg-emerald-50/50" : "bg-rose-50"}`}>
-                          <td className="px-1.5 py-3 border-r border-gray-100 font-black text-gray-300 text-center">{idx + 1}</td>
+                          <td className="px-1.5 py-3 border-r border-gray-100 font-black text-gray-400 text-center text-[10px]">{idx + 1}</td>
                           {isFieldVisible("productName") && (
-                            <td className="px-1.5 py-3 border-r border-gray-100">
-                              <p className="font-black text-gray-700 text-[10px] uppercase truncate max-w-[160px]">{row.productName}</p>
+                            <td className="px-1.5 py-3 border-r border-gray-100 min-w-[250px]">
+                              <div className="flex flex-col">
+                                <p className="font-black text-gray-700 text-[10px] uppercase truncate max-w-[400px]">{row.productName}</p>
+                                <span className="text-[8px] text-gray-300 font-bold">ID: ...{row.productId?.toString().slice(-6)}</span>
+                              </div>
                             </td>
                           )}
                           {isFieldVisible("productGroupName") && <td className="px-1.5 py-3 border-r border-gray-100 text-[9px] text-gray-400 font-black uppercase">{row.productGroupName || "-"}</td>}
