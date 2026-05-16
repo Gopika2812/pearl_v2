@@ -26,7 +26,7 @@ import auth from "../middleware/auth.js";
 router.get("/stats/delayed-pickups", auth, async (req, res) => {
   try {
     const { branchId } = req.query;
-    
+
     // Logic: deliveryStatus: "PENDING", status: NOT "CANCELLED", createdAt < (current date - 1 day)
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -53,14 +53,14 @@ router.get("/stats/delayed-pickups", auth, async (req, res) => {
 router.get("/by-number/:invoiceNumber", async (req, res) => {
   try {
     const { invoiceNumber } = req.params;
-    const invoice = await Invoice.findOne({ 
-        invoiceNumber: { $regex: new RegExp(`^${invoiceNumber}$`, "i") } 
+    const invoice = await Invoice.findOne({
+      invoiceNumber: { $regex: new RegExp(`^${invoiceNumber}$`, "i") }
     }).populate("branchId");
-    
+
     if (!invoice) {
       return res.status(404).json({ success: false, message: "Invoice not found" });
     }
-    
+
     res.json({ success: true, data: invoice });
   } catch (error) {
     console.error("Error fetching invoice by number:", error);
@@ -1078,11 +1078,11 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           invoice.deliveryMan = salesOrder.deliveryMan;
           // 🛡️ LOCK DATE: Always use original SO date to prevent month-jumping during tax filing
           invoice.invoiceDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
-          
+
           // ✨ RESET E-INVOICE STATUS: Clear old errors when user re-finalizes with new data
           invoice.einvoiceStatus = null;
           invoice.einvoiceError = null;
-          
+
           await invoice.save({ session });
         } else {
           invoice = new Invoice({
@@ -1182,7 +1182,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
 
         // 🛡️ LOCK SO DATE: Ensure the original order date is preserved
         if (!salesOrder.orderDate) {
-           salesOrder.orderDate = salesOrder.createdAt;
+          salesOrder.orderDate = salesOrder.createdAt;
         }
 
         await salesOrder.save({ session });
@@ -1243,7 +1243,7 @@ router.put("/:invoiceId/print", async (req, res) => {
       if (invoice.salesOrderId) {
         console.log(`🎯 [DEBUG] Syncing printCount to SalesOrder: ${invoice.salesOrderId}`);
         const updateResult = await SalesOrder.findByIdAndUpdate(
-          invoice.salesOrderId, 
+          invoice.salesOrderId,
           { $inc: { printCount: 1 } },
           { new: true }
         );
@@ -1576,7 +1576,6 @@ router.post("/last-by-customers", async (req, res) => {
     if (!customerIds || !Array.isArray(customerIds) || customerIds.length === 0) {
       return res.status(400).json({ success: false, message: "customerIds array required" });
     }
-
     const objectIds = customerIds
       .filter(id => mongoose.Types.ObjectId.isValid(id))
       .map(id => new mongoose.Types.ObjectId(id));
@@ -2085,7 +2084,7 @@ router.patch("/bulk-delivery-update", auth, async (req, res) => {
     }
 
     const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
-    
+
     const updateData = {
       storageMan,
       storageManComment: `Bulk assigned at ${timestamp}`,
