@@ -20,6 +20,34 @@ import moment from "moment-timezone";
 import { cacheData } from "../middleware/cacheMiddleware.js";
 
 const router = express.Router();
+import auth from "../middleware/auth.js";
+
+// GET - Count of delayed unpicked orders (MUST be above /:id)
+router.get("/stats/delayed-pickups", auth, async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    
+    // Logic: deliveryStatus: "PENDING", status: NOT "CANCELLED", createdAt < (current date - 1 day)
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const query = {
+      deliveryStatus: "PENDING",
+      status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
+      createdAt: { $lt: yesterday }
+    };
+
+    if (branchId && branchId !== "null" && branchId !== "undefined") {
+      query.branchId = new mongoose.Types.ObjectId(branchId);
+    }
+
+    const count = await Invoice.countDocuments(query);
+    res.json({ success: true, count });
+  } catch (error) {
+    console.error("Error fetching delayed pickups count:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
 
 // GET invoice by number (for scanning)
 router.get("/by-number/:invoiceNumber", async (req, res) => {
@@ -577,7 +605,6 @@ router.post("/preview/:salesOrderId", async (req, res) => {
   }
 });
 
-import auth from "../middleware/auth.js";
 
 
 // POST - Finalize Invoice (save and generate)
@@ -2246,32 +2273,6 @@ router.patch("/:invoiceId/delivery-flow", async (req, res) => {
 });
 
 
-// GET - Count of delayed unpicked orders
-router.get("/stats/delayed-pickups", auth, async (req, res) => {
-  try {
-    const { branchId } = req.query;
-    
-    // Logic: deliveryStatus: "PENDING", status: NOT "CANCELLED", createdAt < (current date - 1 day)
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    const query = {
-      deliveryStatus: "PENDING",
-      status: { $in: ["FINALIZED", "PRINTED", "SENT"] }, // Only valid finalized invoices
-      createdAt: { $lt: yesterday }
-    };
-
-    if (branchId && branchId !== "null" && branchId !== "undefined") {
-      query.branchId = new mongoose.Types.ObjectId(branchId);
-    }
-
-    const count = await Invoice.countDocuments(query);
-    res.json({ success: true, count });
-  } catch (error) {
-    console.error("Error fetching delayed pickups count:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
 
 export default router;
 
