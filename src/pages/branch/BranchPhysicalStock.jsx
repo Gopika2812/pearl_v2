@@ -520,7 +520,8 @@ export default function BranchPhysicalStock() {
         noAction: isNoAction,
         checkedBy: row.checkedBy,
         userId: user?._id || user?.id,
-        username: user?.username || user?.fullName || "Staff"
+        username: user?.username || user?.fullName || "Staff",
+        entryDate: entryDate
       };
 
       let res, data;

@@ -1381,12 +1381,17 @@ router.get("/stock-group-summary", async (req, res) => {
       PhysicalStockEntry.aggregate([
         { $match: { branchId: branchOid, status: "APPROVED" } },
         {
+          $addFields: {
+            effectiveDate: { $ifNull: ["$entryDate", "$createdAt"] }
+          }
+        },
+        {
           $group: {
             _id: "$productId",
-            inBeforeReport: { $sum: { $cond: [{ $lt: ["$approvedBy.approvedAt", reportStart] }, "$inwardQty", 0] } },
-            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$approvedBy.approvedAt", reportStart] }, { $lte: ["$approvedBy.approvedAt", reportEnd] }] }, "$inwardQty", 0] } },
-            outBeforeReport: { $sum: { $cond: [{ $lt: ["$approvedBy.approvedAt", reportStart] }, "$outwardQty", 0] } },
-            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$approvedBy.approvedAt", reportStart] }, { $lte: ["$approvedBy.approvedAt", reportEnd] }] }, "$outwardQty", 0] } }
+            inBeforeReport: { $sum: { $cond: [{ $lt: ["$effectiveDate", reportStart] }, "$inwardQty", 0] } },
+            inDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$effectiveDate", reportStart] }, { $lte: ["$effectiveDate", reportEnd] }] }, "$inwardQty", 0] } },
+            outBeforeReport: { $sum: { $cond: [{ $lt: ["$effectiveDate", reportStart] }, "$outwardQty", 0] } },
+            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$effectiveDate", reportStart] }, { $lte: ["$effectiveDate", reportEnd] }] }, "$outwardQty", 0] } }
           }
         }
       ])
@@ -1528,12 +1533,17 @@ router.get("/stock-journal", async (req, res) => {
       PhysicalStockEntry.aggregate([
         { $match: { branchId: branchOid, status: "APPROVED", productId: { $in: products.map(p => p._id) } } },
         {
+          $addFields: {
+            effectiveDate: { $ifNull: ["$entryDate", "$createdAt"] }
+          }
+        },
+        {
           $group: {
             _id: "$productId",
-            inBefore: { $sum: { $cond: [{ $lt: ["$approvedBy.approvedAt", reportStart] }, "$inwardQty", 0] } },
-            inDuring: { $sum: { $cond: [{ $and: [{ $gte: ["$approvedBy.approvedAt", reportStart] }, { $lte: ["$approvedBy.approvedAt", reportEnd] }] }, "$inwardQty", 0] } },
-            outBefore: { $sum: { $cond: [{ $lt: ["$approvedBy.approvedAt", reportStart] }, "$outwardQty", 0] } },
-            outDuring: { $sum: { $cond: [{ $and: [{ $gte: ["$approvedBy.approvedAt", reportStart] }, { $lte: ["$approvedBy.approvedAt", reportEnd] }] }, "$outwardQty", 0] } }
+            inBefore: { $sum: { $cond: [{ $lt: ["$effectiveDate", reportStart] }, "$inwardQty", 0] } },
+            inDuring: { $sum: { $cond: [{ $and: [{ $gte: ["$effectiveDate", reportStart] }, { $lte: ["$effectiveDate", reportEnd] }] }, "$inwardQty", 0] } },
+            outBefore: { $sum: { $cond: [{ $lt: ["$effectiveDate", reportStart] }, "$outwardQty", 0] } },
+            outDuring: { $sum: { $cond: [{ $and: [{ $gte: ["$effectiveDate", reportStart] }, { $lte: ["$effectiveDate", reportEnd] }] }, "$outwardQty", 0] } }
           }
         }
       ])
@@ -1671,7 +1681,13 @@ router.get("/:id/ledger", auth, async (req, res) => {
         { $group: { _id: null, total: { $sum: "$items.qty" } } }
       ]),
       PhysicalStockEntry.aggregate([
-        { $match: { branchId: branchOid, status: "APPROVED", productId: productOid, "approvedBy.approvedAt": { $gt: HARD_ANCHOR_DATE, $lt: start } } },
+        { $match: { branchId: branchOid, status: "APPROVED", productId: productOid } },
+        {
+          $addFields: {
+            effectiveDate: { $ifNull: ["$entryDate", "$createdAt"] }
+          }
+        },
+        { $match: { effectiveDate: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
         { $group: { _id: null, inward: { $sum: "$inwardQty" }, outward: { $sum: "$outwardQty" } } }
       ])
     ]);
@@ -1729,12 +1745,20 @@ router.get("/:id/ledger", auth, async (req, res) => {
           }
         }
       ]),
-      PhysicalStockEntry.find({ branchId: branchOid, productId: productOid, status: "APPROVED", "approvedBy.approvedAt": { $gte: start, $lte: end } }).lean()
+      PhysicalStockEntry.aggregate([
+        { $match: { branchId: branchOid, productId: productOid, status: "APPROVED" } },
+        {
+          $addFields: {
+            effectiveDate: { $ifNull: ["$entryDate", "$createdAt"] }
+          }
+        },
+        { $match: { effectiveDate: { $gte: start, $lte: end } } }
+      ])
     ]);
 
     const psvTxns = psvs.map(p => ({
       type: p.inwardQty > 0 ? "INWARD" : "OUTWARD",
-      date: p.approvedBy?.approvedAt || p.entryDate,
+      date: p.effectiveDate || p.entryDate || p.createdAt,
       voucherType: "Stock Journal",
       invoiceId: p.sjId,
       particulars: `Stock Journal (${p.approvedBy?.username || 'Admin'})`,
