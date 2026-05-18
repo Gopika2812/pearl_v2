@@ -371,18 +371,44 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// DELETE PAYMENT
+// DELETE PAYMENT (with ledger rollback)
 router.delete("/:id", async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
-    const payment = await Payment.findByIdAndDelete(req.params.id);
+    const payment = await Payment.findById(req.params.id).session(session);
 
     if (!payment) {
-      return res.status(404).json({ message: "Payment not found" });
+      await session.abortTransaction();
+      return res.status(404).json({ success: false, message: "Payment not found" });
     }
 
-    res.json({ success: true, message: "Payment deleted successfully" });
+    // 🔄 RESTORE VENDOR CREDIT: If this was an active vendor payment (not already returned),
+    // add the amount back to the vendor's credit balance so the ledger stays correct.
+    if (payment.paymentType === "vendor_payment" && payment.vendor?.vendorId && !payment.isReturned) {
+      try {
+        const vendorRecord = await Vendor.findById(payment.vendor.vendorId).session(session);
+        if (vendorRecord) {
+          const paidAmount = payment.amount || 0;
+          vendorRecord.credit = (vendorRecord.credit || 0) + paidAmount;
+          await vendorRecord.save({ session });
+          console.log(`✅ Vendor "${vendorRecord.name}" credit restored on delete: +₹${paidAmount}`);
+        }
+      } catch (err) {
+        console.warn(`⚠️ Failed to restore vendor credit on delete:`, err.message);
+      }
+    }
+
+    await Payment.findByIdAndDelete(req.params.id).session(session);
+    await session.commitTransaction();
+
+    res.json({ success: true, message: "Payment deleted and ledger updated successfully" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    await session.abortTransaction();
+    console.error("Delete payment error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  } finally {
+    session.endSession();
   }
 });
 

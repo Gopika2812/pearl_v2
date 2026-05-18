@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaFileInvoiceDollar, FaSearch, FaArrowLeft, FaUndo, FaCheckCircle, FaTimes } from "react-icons/fa";
+import { FaFileInvoiceDollar, FaSearch, FaArrowLeft, FaUndo, FaCheckCircle, FaTimes, FaTrash, FaExclamationTriangle } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { useBranch } from "../../context/BranchContext";
 import { useNavigate } from "react-router-dom";
@@ -34,6 +34,11 @@ export default function BranchPaymentRecords() {
   const [returnNarration, setReturnNarration] = useState("");
   const [returnBank, setReturnBank] = useState("ICICI");
   const [returnLoading, setReturnLoading] = useState(false);
+
+  // Delete Modal State
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [paymentToDelete, setPaymentToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     if (currentBranch?._id) fetchPayments();
@@ -107,6 +112,31 @@ export default function BranchPaymentRecords() {
       toast.error(error.message || "Failed to return payment");
     } finally {
       setReturnLoading(false);
+    }
+  };
+
+  const handleDeletePayment = async () => {
+    if (!paymentToDelete) return;
+    setDeleteLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/payments/${paymentToDelete._id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success("Payment deleted and ledger updated!");
+        setDeleteModalOpen(false);
+        setPaymentToDelete(null);
+        fetchPayments();
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      toast.error(error.message || "Failed to delete payment");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -289,6 +319,19 @@ export default function BranchPaymentRecords() {
                              {p.isReturned && (
                                <FaCheckCircle className="text-emerald-500" size={14} title="Returned" />
                              )}
+
+                             {(user?.role === "SUPER_ADMIN" || user?.role === "ADMIN") && (
+                               <button
+                                 onClick={() => {
+                                   setPaymentToDelete(p);
+                                   setDeleteModalOpen(true);
+                                 }}
+                                 className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition"
+                                 title="Delete Payment"
+                               >
+                                 <FaTrash size={13} />
+                               </button>
+                             )}
                            </div>
                         </td>
                       )}
@@ -401,6 +444,71 @@ export default function BranchPaymentRecords() {
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-red-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {returnLoading ? "Processing..." : "Confirm Return"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* DELETE CONFIRMATION MODAL */}
+      {deleteModalOpen && paymentToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border-2 border-red-500">
+            <div className="bg-red-600 px-6 py-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center text-white">
+                  <FaExclamationTriangle size={18} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-white uppercase tracking-tighter">Delete Payment</h2>
+                  <p className="text-[9px] font-black text-red-200 uppercase tracking-widest">This action cannot be undone</p>
+                </div>
+              </div>
+              <button onClick={() => { setDeleteModalOpen(false); setPaymentToDelete(null); }} className="text-white/70 hover:text-white transition">
+                <FaTimes size={16} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div className="bg-red-50 border border-red-100 rounded-2xl p-4 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-black text-gray-400 uppercase">Payment ID</span>
+                  <span className="text-xs font-black text-red-600">{paymentToDelete.paymentId}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-black text-gray-400 uppercase">Recipient</span>
+                  <span className="text-xs font-bold text-gray-700">{paymentToDelete.vendor?.name || paymentToDelete.description || "N/A"}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-black text-gray-400 uppercase">Amount</span>
+                  <span className="text-sm font-black text-gray-900">₹{paymentToDelete.amount?.toLocaleString()}</span>
+                </div>
+                {paymentToDelete.paymentType === 'vendor_payment' && !paymentToDelete.isReturned && (
+                  <div className="mt-2 pt-2 border-t border-red-100">
+                    <p className="text-[9px] font-black text-orange-500 uppercase tracking-wider">
+                      ⚠️ Vendor credit of ₹{paymentToDelete.amount?.toLocaleString()} will be restored in the ledger.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-xs text-gray-500 text-center font-medium">
+                Are you sure you want to permanently delete this payment record? The vendor ledger will be updated automatically.
+              </p>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => { setDeleteModalOpen(false); setPaymentToDelete(null); }}
+                  className="flex-1 bg-gray-100 text-gray-500 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-gray-200 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeletePayment}
+                  disabled={deleteLoading}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-red-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {deleteLoading ? "Deleting..." : "Yes, Delete"}
                 </button>
               </div>
             </div>

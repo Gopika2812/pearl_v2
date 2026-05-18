@@ -28,6 +28,9 @@ const getUQC = (unit) => {
     "BAG": "BAG-BAGS",
     "BAGS": "BAG-BAGS",
     "BTL": "BTL-BOTTLES",
+    "BTLE": "BTL-BOTTLES",
+    "BTLES": "BTL-BOTTLES",
+    "BTLS": "BTL-BOTTLES",
     "BOTTLE": "BTL-BOTTLES",
     "BOTTLES": "BTL-BOTTLES",
     "CAN": "CAN-CANS",
@@ -47,7 +50,22 @@ const getUQC = (unit) => {
     "GRAM": "GMS-GRAMMES",
     "GRAMS": "GMS-GRAMMES",
     "SET": "SET-SETS",
-    "SETS": "SET-SETS"
+    "SETS": "SET-SETS",
+    "PKT": "PAC-PACKS",
+    "PKTS": "PAC-PACKS",
+    "PAC": "PAC-PACKS",
+    "PACK": "PAC-PACKS",
+    "PACKS": "PAC-PACKS",
+    "PACKET": "PAC-PACKS",
+    "PACKETS": "PAC-PACKS",
+    "TIN": "TIN-TINS",
+    "TINS": "TIN-TINS",
+    "ROL": "ROL-ROLLS",
+    "ROLL": "ROL-ROLLS",
+    "ROLLS": "ROL-ROLLS",
+    "TUB": "TUB-TUBES",
+    "TUBE": "TUB-TUBES",
+    "TUBES": "TUB-TUBES"
   };
   return mapping[u] || mapping[u.replace(/S$/, "")] || "OTH-OTHERS";
 };

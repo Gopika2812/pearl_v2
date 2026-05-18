@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaEdit, FaFileInvoice, FaSync, FaTrash, FaFilePdf, FaFileExcel, FaTruck, FaBan } from "react-icons/fa";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import React, { useEffect, useState } from "react";
+import { FaBan, FaChevronDown, FaFileExcel, FaFileInvoice, FaFilePdf, FaSync, FaTruck } from "react-icons/fa";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import * as XLSX from "xlsx";
 import { API_BASE, fetchWithAuth } from "../../api";
 import EditBillModal from "../../components/EditBillModal";
 import InvoiceGeneratorModal from "../../components/InvoiceGeneratorModal";
@@ -45,7 +45,7 @@ const BranchInvoicedOrders = () => {
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [cancelNarration, setCancelNarration] = useState("");
   const [cancelling, setCancelling] = useState(false);
-  
+
   // Spotted Customer Payment Modal State
   const [showSpottedPaymentModal, setShowSpottedPaymentModal] = useState(false);
   const [spottedPaymentData, setSpottedPaymentData] = useState({ cash: 0, upi: 0 });
@@ -54,12 +54,12 @@ const BranchInvoicedOrders = () => {
 
   const isSpottedCustomer = (customer) => {
     if (!customer) return false;
-    const groupName = customer.customerGroups?.[0]?.name || 
-                      customer.customerGroup?.name || 
-                      (typeof customer.customerGroup === 'string' ? customer.customerGroup : "");
-    
-    return groupName.toLowerCase().includes("spotted customer") || 
-           customer.name?.toLowerCase().includes("counter sales");
+    const groupName = customer.customerGroups?.[0]?.name ||
+      customer.customerGroup?.name ||
+      (typeof customer.customerGroup === 'string' ? customer.customerGroup : "");
+
+    return groupName.toLowerCase().includes("spotted customer") ||
+      customer.name?.toLowerCase().includes("counter sales");
   };
 
   // Filter states
@@ -152,7 +152,7 @@ const BranchInvoicedOrders = () => {
     const searchParam = searchParams.get("search");
     const invIdParam = searchParams.get("invoiceId");
     const term = searchParam || invIdParam;
-    
+
     if (term && term !== filterInvoiceId) {
       setFilterInvoiceId(term);
       // Only clear dates if they are still at "Today" (default state)
@@ -251,17 +251,17 @@ const BranchInvoicedOrders = () => {
 
         // 🎯 Update print count in backend
         if (finalizeData.invoice?._id) {
-            fetch(`${API_BASE}/invoices/${finalizeData.invoice._id}/print`, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${localStorage.getItem("token")}`
-                },
-                body: JSON.stringify({ 
-                    printedBy: user?.id || user?._id,
-                    printedByUsername: user?.username || user?.name || "System"
-                })
-            }).catch(err => console.error("Error updating direct print count:", err));
+          fetch(`${API_BASE}/invoices/${finalizeData.invoice._id}/print`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${localStorage.getItem("token")}`
+            },
+            body: JSON.stringify({
+              printedBy: user?.id || user?._id,
+              printedByUsername: user?.username || user?.name || "System"
+            })
+          }).catch(err => console.error("Error updating direct print count:", err));
         }
       }
 
@@ -431,20 +431,20 @@ const BranchInvoicedOrders = () => {
 
   const triggerSpottedPaymentFlow = async (order, invoice = null) => {
     if (!order || !isSpottedCustomer(order.customer)) {
-        setSelectedOrder(null);
-        return;
+      setSelectedOrder(null);
+      return;
     }
-    
+
     try {
       const res = await fetchWithAuth(`${API_BASE}/spotted-customer-ledger/check/${order._id}`);
       const data = await res.json();
-      
+
       if (data.success && data.isPaid) {
         console.log("Spotted payment already recorded for this order. Skipping modal.");
         setSelectedOrder(null);
         return;
       }
-      
+
       setCurrentSpottedOrder({
         ...order,
         grandTotal: invoice ? (invoice.grandTotal || invoice.total) : (order.grandTotal),
@@ -638,9 +638,9 @@ const BranchInvoicedOrders = () => {
             `🎁 (Sample) ${sample.name}`,
             sample.sellingPrice || 0,
             sample.qty || 0,
-            "0%", 
+            "0%",
             0,
-            0 
+            0
           ]);
         });
 
@@ -991,9 +991,9 @@ const BranchInvoicedOrders = () => {
                         )}
                         {isFieldAllowed("voucherType") && (
                           <td className="px-6 py-4 font-black">
-                             <span className="bg-slate-100 px-2 py-1 rounded text-[10px] text-slate-600 border border-slate-200 uppercase tracking-tighter">
-                               {order.voucherType || "GE"}
-                             </span>
+                            <span className="bg-slate-100 px-2 py-1 rounded text-[10px] text-slate-600 border border-slate-200 uppercase tracking-tighter">
+                              {order.voucherType || "GE"}
+                            </span>
                           </td>
                         )}
                         {isFieldAllowed("customer") && (
@@ -1055,19 +1055,19 @@ const BranchInvoicedOrders = () => {
                           </td>
                         )}
                         <td className="px-6 py-4">
-                           <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
-                                 <FaTruck size={14} />
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                              <FaTruck size={14} />
+                            </div>
+                            <div>
+                              <div className="font-black text-slate-800 text-[10px] uppercase tracking-tight">
+                                {order.deliveryMan?.name || "-"}
                               </div>
-                              <div>
-                                 <div className="font-black text-slate-800 text-[10px] uppercase tracking-tight">
-                                    {order.deliveryMan?.name || "-"}
-                                 </div>
-                                 <div className="text-[9px] text-slate-400 font-bold tracking-widest">
-                                    {order.deliveryMan?.phone || "N/A"}
-                                 </div>
+                              <div className="text-[9px] text-slate-400 font-bold tracking-widest">
+                                {order.deliveryMan?.phone || "N/A"}
                               </div>
-                           </div>
+                            </div>
+                          </div>
                         </td>
                         {(isFieldAllowed("action_si_bill") || isFieldAllowed("action_gen_invoice") || isFieldAllowed("action_cancel")) && (
                           <td className="px-6 py-4 text-center">
@@ -1075,27 +1075,27 @@ const BranchInvoicedOrders = () => {
                               {order.invoiceGenerated && isFieldAllowed("action_si_bill") && (
                                 <button
                                   onClick={() => {
-                                      const userRole = (user?.role || "").toUpperCase();
-                                      const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
+                                    const userRole = (user?.role || "").toUpperCase();
+                                    const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
 
-                                      // 📅 Date Check: Prevent printing if order date is in the future (unless Admin)
-                                      const today = new Date();
-                                      today.setHours(0, 0, 0, 0);
-                                      const orderDate = new Date(order.orderDate || order.createdAt);
-                                      orderDate.setHours(0, 0, 0, 0);
+                                    // 📅 Date Check: Prevent printing if order date is in the future (unless Admin)
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    const orderDate = new Date(order.orderDate || order.createdAt);
+                                    orderDate.setHours(0, 0, 0, 0);
 
-                                      if (orderDate > today) {
-                                        const dateStr = orderDate.toLocaleDateString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                        toast.warning(`📅 Print Blocked: This order is dated ${dateStr}. Nobody (including Admins) can take the SI Bill until that date.`);
-                                        return;
-                                      }
-                                      
-                                      console.log(`👤 Role: ${userRole}, isAdmin: ${isAdmin}, printCount: ${order.printCount}`);
+                                    if (orderDate > today) {
+                                      const dateStr = orderDate.toLocaleDateString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                      toast.warning(`📅 Print Blocked: This order is dated ${dateStr}. Nobody (including Admins) can take the SI Bill until that date.`);
+                                      return;
+                                    }
 
-                                      if (!isAdmin && order.printCount > 0) {
-                                        toast.error(`⚠️ Printing Restricted: This bill has already been printed ${order.printCount} time(s).`);
-                                        return;
-                                      }
+                                    console.log(`👤 Role: ${userRole}, isAdmin: ${isAdmin}, printCount: ${order.printCount}`);
+
+                                    if (!isAdmin && order.printCount > 0) {
+                                      toast.error(`⚠️ Printing Restricted: This bill has already been printed ${order.printCount} time(s).`);
+                                      return;
+                                    }
                                     if (!isAdmin && (order.printCount || 0) === 0) {
                                       if (window.confirm("🔔 IMPORTANT: You can only print this bill ONCE. Please ensure all items and details are correct before proceeding. Next time this button will be disabled. Do you want to print now?")) {
                                         // 🎯 Immediately increment print count in backend so it's "spent"
@@ -1150,23 +1150,23 @@ const BranchInvoicedOrders = () => {
                               )}
 
                               {/* Cancel Button — Admin & Super Admin only */}
-                               {isFieldAllowed("action_cancel") && (
-                                 <div className="flex gap-2">
-                                    {order.status === "CANCELLED" ? (
-                                       <span className="text-[10px] font-black text-red-400 uppercase tracking-widest italic">
-                                          Archived
-                                       </span>
-                                    ) : (
-                                      <button
-                                        onClick={() => handleOpenCancelModal(order)}
-                                        className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-red-50 text-red-700 hover:bg-red-600 hover:text-white border border-red-200"
-                                      >
-                                        <FaBan />
-                                        CANCEL
-                                      </button>
-                                    )}
-                                 </div>
-                               )}
+                              {isFieldAllowed("action_cancel") && (
+                                <div className="flex gap-2">
+                                  {order.status === "CANCELLED" ? (
+                                    <span className="text-[10px] font-black text-red-400 uppercase tracking-widest italic">
+                                      Archived
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleOpenCancelModal(order)}
+                                      className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-red-50 text-red-700 hover:bg-red-600 hover:text-white border border-red-200"
+                                    >
+                                      <FaBan />
+                                      CANCEL
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </td>
                         )}
@@ -1507,61 +1507,61 @@ const BranchInvoicedOrders = () => {
                                                   (originalItem?.qty || 0) -
                                                   invoiceItem.qty;
 
-                                              return (
-                                                <tr
-                                                  key={`${invoice._id}-${itemIdx}`}
-                                                  className="bg-white"
-                                                >
-                                                  <td className="py-2 px-3 font-semibold text-[#319bab]">
-                                                    {itemIdx === 0
-                                                      ? invoice.invoiceNumber
-                                                      : ""}
-                                                  </td>
-                                                  <td className="py-2 px-3 text-center text-gray-600">
-                                                    {itemIdx === 0
-                                                      ? new Date(
-                                                        invoice.invoiceDate
-                                                      ).toLocaleString("en-IN", {
-                                                        day: "2-digit",
-                                                        month: "2-digit",
-                                                        year: "numeric",
-                                                        hour: "2-digit",
-                                                        minute: "2-digit",
-                                                        hour12: true,
-                                                      })
-                                                      : ""}
-                                                  </td>
-                                                  <td className="py-2 px-3 font-semibold">
-                                                    {invoiceItem.name}
-                                                  </td>
-                                                   <td className="py-2 px-3 text-center text-gray-500 font-bold">
-                                                     {invoiceItem.hsn || "-"}
-                                                   </td>
-                                                  <td className={`py-2 px-3 text-center font-bold ${originalItem?.isNegativeStockBilled ? 'text-red-600 bg-red-50 rounded shadow-sm border border-red-100 flex items-center justify-center gap-1' : ''}`}>
-                                                    {originalItem?.qty ? `${originalItem.qty} ${originalItem.unit || "Units"} ${originalItem.altQty > 0 ? `(${originalItem.altQty} ${originalItem.altUnit})` : ""}` : "-"} {originalItem?.isNegativeStockBilled && <span title="Billed with negative stock">⚠️</span>}
-                                                  </td>
-                                                  <td className="py-2 px-3 text-center font-semibold text-green-600">
-                                                    {invoiceItem.qty} {invoiceItem.unit || "Units"} {invoiceItem.altQty > 0 && `(${invoiceItem.altQty} ${invoiceItem.altUnit})`}
-                                                  </td>
-                                                  <td className="py-2 px-3 text-center font-semibold text-red-600">
-                                                    {backOrderQty > 0
-                                                      ? backOrderQty
-                                                      : "0"}
-                                                  </td>
-                                                  <td className="py-2 px-3 text-right">
-                                                    <div className="text-[10px] font-bold text-gray-400">{invoiceItem.discountPercent || 0}%</div>
-                                                    <div className="text-[9px] text-red-500 font-bold">-₹{(invoiceItem.discountAmount || 0).toFixed(2)}</div>
-                                                  </td>
-                                                  <td className="py-2 px-3 text-right font-bold text-[#319bab]">
-                                                    ₹
-                                                    {(
-                                                      invoiceItem.total || 0
-                                                    ).toLocaleString()}
-                                                  </td>
-                                                </tr>
-                                              );
-                                            }
-                                          )
+                                                return (
+                                                  <tr
+                                                    key={`${invoice._id}-${itemIdx}`}
+                                                    className="bg-white"
+                                                  >
+                                                    <td className="py-2 px-3 font-semibold text-[#319bab]">
+                                                      {itemIdx === 0
+                                                        ? invoice.invoiceNumber
+                                                        : ""}
+                                                    </td>
+                                                    <td className="py-2 px-3 text-center text-gray-600">
+                                                      {itemIdx === 0
+                                                        ? new Date(
+                                                          invoice.invoiceDate
+                                                        ).toLocaleString("en-IN", {
+                                                          day: "2-digit",
+                                                          month: "2-digit",
+                                                          year: "numeric",
+                                                          hour: "2-digit",
+                                                          minute: "2-digit",
+                                                          hour12: true,
+                                                        })
+                                                        : ""}
+                                                    </td>
+                                                    <td className="py-2 px-3 font-semibold">
+                                                      {invoiceItem.name}
+                                                    </td>
+                                                    <td className="py-2 px-3 text-center text-gray-500 font-bold">
+                                                      {invoiceItem.hsn || "-"}
+                                                    </td>
+                                                    <td className={`py-2 px-3 text-center font-bold ${originalItem?.isNegativeStockBilled ? 'text-red-600 bg-red-50 rounded shadow-sm border border-red-100 flex items-center justify-center gap-1' : ''}`}>
+                                                      {originalItem?.qty ? `${originalItem.qty} ${originalItem.unit || "Units"} ${originalItem.altQty > 0 ? `(${originalItem.altQty} ${originalItem.altUnit})` : ""}` : "-"} {originalItem?.isNegativeStockBilled && <span title="Billed with negative stock">⚠️</span>}
+                                                    </td>
+                                                    <td className="py-2 px-3 text-center font-semibold text-green-600">
+                                                      {invoiceItem.qty} {invoiceItem.unit || "Units"} {invoiceItem.altQty > 0 && `(${invoiceItem.altQty} ${invoiceItem.altUnit})`}
+                                                    </td>
+                                                    <td className="py-2 px-3 text-center font-semibold text-red-600">
+                                                      {backOrderQty > 0
+                                                        ? backOrderQty
+                                                        : "0"}
+                                                    </td>
+                                                    <td className="py-2 px-3 text-right">
+                                                      <div className="text-[10px] font-bold text-gray-400">{invoiceItem.discountPercent || 0}%</div>
+                                                      <div className="text-[9px] text-red-500 font-bold">-₹{(invoiceItem.discountAmount || 0).toFixed(2)}</div>
+                                                    </td>
+                                                    <td className="py-2 px-3 text-right font-bold text-[#319bab]">
+                                                      ₹
+                                                      {(
+                                                        invoiceItem.total || 0
+                                                      ).toLocaleString()}
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              }
+                                            )
                                       )}
                                     </tbody>
                                   </table>
@@ -1679,7 +1679,7 @@ const BranchInvoicedOrders = () => {
 
             // 🎯 SPOTTED CUSTOMER TRIGGER - ONLY IF triggerSpottedOnSuccess IS TRUE
             if (triggerSpottedOnSuccess) {
-                triggerSpottedPaymentFlow(selectedOrder, invoice);
+              triggerSpottedPaymentFlow(selectedOrder, invoice);
             } else {
               setSelectedOrder(null);
             }
@@ -1857,7 +1857,7 @@ const BranchInvoicedOrders = () => {
               <p className="text-blue-100 font-bold opacity-80 uppercase tracking-widest text-[10px]">
                 {currentSpottedOrder.spottedCustomerName || "Counter Sales"} ({currentSpottedOrder.invoiceId})
               </p>
-              
+
               <div className="mt-6 bg-white/20 backdrop-blur-md rounded-2xl p-4 inline-block border border-white/30">
                 <span className="block text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">Grand Total</span>
                 <span className="text-4xl font-black">₹{currentSpottedOrder.grandTotal?.toLocaleString()}</span>
@@ -1897,12 +1897,12 @@ const BranchInvoicedOrders = () => {
 
               <div className="bg-gray-50 rounded-2xl p-4 flex justify-between items-center border border-gray-100">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Total Entered</span>
-                <span className={`text-2xl font-black ${ (Number(spottedPaymentData.cash) + Number(spottedPaymentData.upi)) === currentSpottedOrder.grandTotal ? 'text-emerald-500' : 'text-rose-500' }`}>
+                <span className={`text-2xl font-black ${(Number(spottedPaymentData.cash) + Number(spottedPaymentData.upi)) === currentSpottedOrder.grandTotal ? 'text-emerald-500' : 'text-rose-500'}`}>
                   ₹{(Number(spottedPaymentData.cash) + Number(spottedPaymentData.upi)).toLocaleString()}
                 </span>
               </div>
 
-              { (Number(spottedPaymentData.cash) + Number(spottedPaymentData.upi)) !== currentSpottedOrder.grandTotal && (
+              {(Number(spottedPaymentData.cash) + Number(spottedPaymentData.upi)) !== currentSpottedOrder.grandTotal && (
                 <p className="text-center text-xs font-bold text-rose-500 animate-pulse uppercase tracking-tight">
                   ⚠️ Entered amount must match the grand total exactly
                 </p>
