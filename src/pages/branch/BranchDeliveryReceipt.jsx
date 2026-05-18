@@ -388,13 +388,13 @@ const BranchDeliveryReceipt = () => {
 
               {/* DENOMINATIONS SECTION */}
               <div className="mt-8 pl-12 sm:pl-20 pr-2 sm:pr-8 py-6 relative z-20 border-t border-slate-200 bg-slate-50/30">
-                <h4 className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <h4 className="text-[9px] sm:text-[10px] font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
                    <FaCoins className="text-amber-500" /> Cash Breakdown
                 </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2 sm:gap-3">
                    {[500, 200, 100, 50, 20, 10, 5, 2, 1].map((val) => (
                      <div key={val} className="flex flex-col bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm group hover:border-amber-200 transition-colors">
-                        <span className="text-[9px] font-black text-slate-400 uppercase mb-1">₹{val} Notes</span>
+                        <span className="text-[9px] font-black text-slate-900 uppercase mb-1">₹{val} Notes</span>
                         <div className="flex items-center gap-2">
                            <span className="text-[10px] text-slate-300 font-bold italic">x</span>
                            <input 
@@ -688,7 +688,7 @@ const BranchDeliveryReceipt = () => {
                                </div>
                                 {r.denominations && (
                                   <div className="mt-8 pt-6 border-t border-slate-100">
-                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                    <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
                                       <FaCoins className="text-amber-500" /> Cash Breakdown
                                     </h4>
                                     <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-3">
@@ -824,7 +824,7 @@ const BranchDeliveryReceipt = () => {
                           </div>
                           {r.denominations && (
                             <div className="pt-4 border-t border-slate-100">
-                               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                               <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest mb-3 flex items-center gap-2">
                                  <FaCoins className="text-amber-500" /> Cash Breakdown
                                </h4>
                                <div className="grid grid-cols-3 gap-2">
