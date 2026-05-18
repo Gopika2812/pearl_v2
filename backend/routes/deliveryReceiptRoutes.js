@@ -260,26 +260,85 @@ router.patch("/bank-transfer", auth, async (req, res) => {
   }
 });
 
-// PATCH - Revert bank transfer for a single receipt
+// PATCH - Revert bank transfer (either a single receipt OR a whole BankTransfer batch)
 router.patch("/revert-transfer/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
+
+    // 1. Try to find a BankTransfer batch with this ID
+    const bankTransfer = await BankTransfer.findById(id);
+
+    if (bankTransfer) {
+      // Revert all receipts associated with this batch
+      await DeliveryReceipt.updateMany(
+        { _id: { $in: bankTransfer.receiptIds } },
+        {
+          $set: {
+            isBankTransferred: false,
+            transferId: "",
+            bankName: "",
+            transferredBy: null,
+            transferredAt: null
+          }
+        }
+      );
+
+      // Create audit log
+      await createAuditLog({
+        userId: req.user.id,
+        username: req.user.username,
+        branchId: bankTransfer.branchId,
+        action: "REVERT_BANK_TRANSFER",
+        description: `Reverted batch bank transfer ${bankTransfer.transferId} (amount: ₹${bankTransfer.totalTransferred}, ${bankTransfer.receiptIds.length} receipts)`,
+        targetId: id,
+        targetModel: "BankTransfer",
+      });
+
+      // Delete the BankTransfer record
+      await BankTransfer.findByIdAndDelete(id);
+
+      return res.json({ success: true, message: "Batch transfer reverted successfully" });
+    }
+
+    // 2. Fall back to reverting a single receipt if it wasn't a batch ID
     const receipt = await DeliveryReceipt.findById(id);
-    
     if (!receipt) {
-      return res.status(404).json({ success: false, message: "Receipt not found" });
+      return res.status(404).json({ success: false, message: "Receipt or Transfer batch not found" });
     }
 
     const oldBank = receipt.bankName;
-    
+    const oldTransferId = receipt.transferId;
+
     await DeliveryReceipt.findByIdAndUpdate(id, {
       $set: {
         isBankTransferred: false,
+        transferId: "",
         bankName: "",
         transferredBy: null,
         transferredAt: null
       }
     });
+
+    // If there was an associated batch transfer, we remove this receipt from it
+    if (oldTransferId) {
+      const associatedBatch = await BankTransfer.findOne({ transferId: oldTransferId });
+      if (associatedBatch) {
+        associatedBatch.receiptIds = associatedBatch.receiptIds.filter(rid => rid.toString() !== id.toString());
+        associatedBatch.receiptNumbers = associatedBatch.receiptNumbers.filter(rn => rn !== receipt.receiptId);
+        
+        if (associatedBatch.receiptIds.length === 0) {
+          // If no receipts left, delete the batch
+          await BankTransfer.findByIdAndDelete(associatedBatch._id);
+        } else {
+          // Re-calculate totals
+          const remainingReceipts = await DeliveryReceipt.find({ _id: { $in: associatedBatch.receiptIds } });
+          associatedBatch.totalCollected = remainingReceipts.reduce((sum, r) => sum + (r.totalCollected || 0), 0);
+          associatedBatch.totalExpense = remainingReceipts.reduce((sum, r) => sum + (r.totalExpense || 0), 0);
+          associatedBatch.netAmount = remainingReceipts.reduce((sum, r) => sum + (r.netAmount || 0), 0);
+          await associatedBatch.save();
+        }
+      }
+    }
 
     await createAuditLog({
       userId: req.user.id,
@@ -298,16 +357,20 @@ router.patch("/revert-transfer/:id", auth, async (req, res) => {
   }
 });
 
-// GET - Transferred receipts history
+// GET - Transferred receipts history (fetches BankTransfer batches)
 router.get("/transferred", auth, async (req, res) => {
   try {
     const { branchId } = req.query;
     const activeBranchId = branchId || req.user.branchId;
-    const query = { isBankTransferred: true };
-    if (activeBranchId) query.branchId = activeBranchId;
+    if (!activeBranchId) {
+      return res.status(400).json({ success: false, message: "Branch ID is required" });
+    }
 
-    const receipts = await DeliveryReceipt.find(query).sort({ transferredAt: -1 });
-    res.json({ success: true, data: receipts });
+    const transfers = await BankTransfer.find({ branchId: activeBranchId })
+      .populate("receiptIds")
+      .sort({ transferredAt: -1 });
+
+    res.json({ success: true, data: transfers });
   } catch (error) {
     console.error("Error fetching transferred receipts:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
