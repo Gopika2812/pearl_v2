@@ -144,7 +144,8 @@ const BranchDeliveryReceipt = () => {
   const totalExpense = validExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const netAmount = totalCollected - totalExpense;
 
-  const denominationsTotal = Object.entries(denominations).reduce((sum, [val, count]) => sum + (Number(val) * Number(count)), 0);
+  const denominationsTotal = Object.entries(denominations).reduce((sum, [val, count]) => sum + (Number(val) * (Number(count) || 0)), 0);
+  const cashMatches = Math.abs(denominationsTotal - netAmount) < 1;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -153,9 +154,8 @@ const BranchDeliveryReceipt = () => {
       return;
     }
     // Ensure cash denominations match net amount before submitting
-    if (Math.abs(denominationsTotal - netAmount) > 0) {
-      alert(`Denominations total (₹${denominationsTotal.toLocaleString()}) does not match Net Cash (₹${netAmount.toLocaleString()}). Please adjust.`);
-      setSubmitting(false);
+    if (!cashMatches) {
+      alert(`Cash Breakdown total (₹${denominationsTotal.toLocaleString()}) does not match Net Cash in Hand (₹${netAmount.toLocaleString()}).\n\nPlease fill in the correct denomination breakdown before submitting.`);
       return;
     }
     setSubmitting(true);
@@ -467,11 +467,11 @@ const BranchDeliveryReceipt = () => {
                 <div className="mt-6 sm:mt-8 flex justify-end">
                   <button 
                     onClick={handleSubmit}
-                    disabled={submitting}
-                    className="w-full sm:w-auto px-8 py-3 sm:py-4 bg-slate-900 rounded-xl text-white text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] shadow-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                    disabled={submitting || !cashMatches}
+                    className={`w-full sm:w-auto px-8 py-3 sm:py-4 rounded-xl text-white text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] shadow-xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${cashMatches ? 'bg-slate-900 hover:bg-slate-800' : 'bg-slate-400'}`}
                   >
                     {submitting ? <FaSync className="animate-spin" /> : <FaCheckCircle size={14} />}
-                    Submit Receipt
+                    {cashMatches ? 'Submit Receipt' : 'Cash Breakdown Required'}
                   </button>
                 </div>
               </div>
