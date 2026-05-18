@@ -16,7 +16,6 @@ const BranchDeliveryFlow = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState(searchParams.get("status") || "ALL"); // ALL, PENDING, PICKED, COMPLETED
-
   useEffect(() => {
     const statusParam = searchParams.get("status");
     if (statusParam) {
@@ -37,10 +36,10 @@ const BranchDeliveryFlow = () => {
   const [pickingAnim, setPickingAnim] = useState({}); // { invoiceId: 'packing' | 'done' }
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [showBulkModal, setShowBulkModal] = useState(false);
-  const [bulkData, setBulkData] = useState({ 
-    storageMan: [""], 
+  const [bulkData, setBulkData] = useState({
+    storageMan: [""],
     storageManComment: "",
-    stockChecker: [""], 
+    stockChecker: [""],
     stockCheckerComment: "",
     deliveryPerson: [""],
     deliveryPersonComment: ""
@@ -137,13 +136,13 @@ const BranchDeliveryFlow = () => {
       if (filterToDate) url += `&toDate=${filterToDate}`;
       if (filterVoucherPrefix) url += `&vPrefix=${encodeURIComponent(filterVoucherPrefix)}`;
       if (sortField) url += `&sortBy=${sortField}&sortOrder=${sortOrder}`;
-      
+
       const res = await fetchWithAuth(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to fetch invoices");
-      
+
       let filteredData = data.data || [];
-      
+
       // Client-side status filtering if backend doesn't support it yet
       if (filterStatus !== "ALL") {
         filteredData = filteredData.filter(inv => (inv.deliveryStatus || "PENDING") === filterStatus);
@@ -163,7 +162,7 @@ const BranchDeliveryFlow = () => {
     fetchBranchUsers();
     fetchVoucherTypes();
   }, [currentBranch?._id, filterFromDate, filterToDate, currentPage, filterStatus, filterVoucherPrefix, sortField, sortOrder]);
-  
+
   const fetchVoucherTypes = async () => {
     if (!currentBranch?._id) return;
     try {
@@ -206,8 +205,8 @@ const BranchDeliveryFlow = () => {
         try {
           const res = await fetchWithAuth(`${API_BASE}/invoices/${invoiceId}/delivery-flow`, {
             method: "PATCH",
-            body: JSON.stringify({ 
-              [field]: value, 
+            body: JSON.stringify({
+              [field]: value,
               updatedBy: user?.username || "System",
               updatedById: user?._id || user?.id || null
             })
@@ -231,8 +230,8 @@ const BranchDeliveryFlow = () => {
     try {
       const res = await fetchWithAuth(`${API_BASE}/invoices/${invoiceId}/delivery-flow`, {
         method: "PATCH",
-        body: JSON.stringify({ 
-          [field]: value, 
+        body: JSON.stringify({
+          [field]: value,
           updatedBy: user?.username || "System",
           updatedById: user?._id || user?.id || null
         })
@@ -257,24 +256,24 @@ const BranchDeliveryFlow = () => {
 
     const inv = invoices.find(i => i._id === invoiceId);
     if (status === "PICKED" || status === "COMPLETED") {
-        const missing = [];
-        if (!inv?.storageMan || inv.storageMan === "NONE") missing.push("Storage Man");
-        if (!inv?.stockChecker || inv.stockChecker === "NONE") missing.push("Stock Checker");
-        if (!inv?.deliveryPerson || inv.deliveryPerson === "NONE") {
-            // Check both string field and populated object
-            if (!inv.deliveryMan && !inv.deliveryPerson) missing.push("Delivery Person");
-        }
+      const missing = [];
+      if (!inv?.storageMan || inv.storageMan === "NONE") missing.push("Storage Man");
+      if (!inv?.stockChecker || inv.stockChecker === "NONE") missing.push("Stock Checker");
+      if (!inv?.deliveryPerson || inv.deliveryPerson === "NONE") {
+        // Check both string field and populated object
+        if (!inv.deliveryMan && !inv.deliveryPerson) missing.push("Delivery Person");
+      }
 
-        if (missing.length > 0) {
-            alert(`Mandatory Assignment Missing: ${missing.join(", ")}. Please assign everyone before marking status.`);
-            return;
-        }
+      if (missing.length > 0) {
+        alert(`Mandatory Assignment Missing: ${missing.join(", ")}. Please assign everyone before marking status.`);
+        return;
+      }
     }
 
-    const confirmMsg = status === "PICKED" ? "Mark this delivery as PICKED?" : 
-                       status === "COMPLETED" ? `Mark as Delivered with selected options?` : 
-                       "Revert this delivery to PENDING?";
-    
+    const confirmMsg = status === "PICKED" ? "Mark this delivery as PICKED?" :
+      status === "COMPLETED" ? `Mark as Delivered with selected options?` :
+        "Revert this delivery to PENDING?";
+
     if (!window.confirm(confirmMsg)) return;
 
     // Get payments for this row if completing
@@ -282,8 +281,8 @@ const BranchDeliveryFlow = () => {
 
     setUpdatingId(invoiceId);
     try {
-      const updatePayload = { 
-        deliveryStatus: status, 
+      const updatePayload = {
+        deliveryStatus: status,
         updatedBy: user?.username || "System",
         updatedById: user?._id || user?.id || null,
         deliveryPaymentType: paymentTypes,
@@ -325,7 +324,7 @@ const BranchDeliveryFlow = () => {
 
   const handleBulkUpdate = async () => {
     if (selectedInvoices.length === 0) return;
-    
+
     // Filter out empty selections and join with commas
     const finalData = {
       storageMan: bulkData.storageMan.filter(name => name && name !== "NONE").join(", "),
@@ -357,7 +356,7 @@ const BranchDeliveryFlow = () => {
         toast.success(data.message || "Bulk update successful");
         setShowBulkModal(false);
         setSelectedInvoices([]);
-        setBulkData({ 
+        setBulkData({
           storageMan: [""], storageManComment: "",
           stockChecker: [""], stockCheckerComment: "",
           deliveryPerson: [""], deliveryPersonComment: ""
@@ -379,10 +378,10 @@ const BranchDeliveryFlow = () => {
     if (!inputToUse.trim()) return;
 
     if (inputToUse.startsWith("BULK:")) {
-        const invNos = inputToUse.replace("BULK:", "").split(",");
-        setShowBulkScanModal(invNos);
-        setScanInput("");
-        return;
+      const invNos = inputToUse.replace("BULK:", "").split(",");
+      setShowBulkScanModal(invNos);
+      setScanInput("");
+      return;
     }
 
     const invNo = inputToUse.trim().toUpperCase();
@@ -390,20 +389,20 @@ const BranchDeliveryFlow = () => {
 
     // Find invoice in current list or fetch if not found
     let inv = invoices.find(i => i.invoiceNumber === invNo);
-    
+
     if (!inv) {
-        try {
-            setLoading(true);
-            const res = await fetchWithAuth(`${API_BASE}/invoices/by-number/${invNo}`);
-            const data = await res.json();
-            if (data.success) {
-                inv = data.data;
-            }
-        } catch (err) {
-            console.error("Fetch by number failed", err);
-        } finally {
-            setLoading(false);
+      try {
+        setLoading(true);
+        const res = await fetchWithAuth(`${API_BASE}/invoices/by-number/${invNo}`);
+        const data = await res.json();
+        if (data.success) {
+          inv = data.data;
         }
+      } catch (err) {
+        console.error("Fetch by number failed", err);
+      } finally {
+        setLoading(false);
+      }
     }
 
     if (!inv) {
@@ -414,75 +413,75 @@ const BranchDeliveryFlow = () => {
     const currentStatus = inv.deliveryStatus || "PENDING";
 
     if (currentStatus === "COMPLETED") {
-        toast.info(`Invoice ${invNo} is already COMPLETED`);
-        return;
+      toast.info(`Invoice ${invNo} is already COMPLETED`);
+      return;
     }
 
     if (selectedScanRole === "pick") {
-        // Progressive scan logic: Scan 3 times to assign storageMan, stockChecker, and deliveryPerson
-        const hasStorage = inv.storageMan && inv.storageMan !== "NONE" && inv.storageMan.trim();
-        const hasChecker = inv.stockChecker && inv.stockChecker !== "NONE" && inv.stockChecker.trim();
-        const hasDelivery = inv.deliveryPerson && inv.deliveryPerson !== "NONE" && inv.deliveryPerson.trim();
+      // Progressive scan logic: Scan 3 times to assign storageMan, stockChecker, and deliveryPerson
+      const hasStorage = inv.storageMan && inv.storageMan !== "NONE" && inv.storageMan.trim();
+      const hasChecker = inv.stockChecker && inv.stockChecker !== "NONE" && inv.stockChecker.trim();
+      const hasDelivery = inv.deliveryPerson && inv.deliveryPerson !== "NONE" && inv.deliveryPerson.trim();
 
-        let targetRole = "";
-        if (!hasStorage) {
-            targetRole = "storageMan";
-        } else if (!hasChecker) {
-            targetRole = "stockChecker";
-        } else if (!hasDelivery) {
-            targetRole = "deliveryPerson";
-        } else {
-            toast.info(`Invoice ${invNo} already has Storage, Checker, and Delivery Person assigned.`);
-            return;
-        }
+      let targetRole = "";
+      if (!hasStorage) {
+        targetRole = "storageMan";
+      } else if (!hasChecker) {
+        targetRole = "stockChecker";
+      } else if (!hasDelivery) {
+        targetRole = "deliveryPerson";
+      } else {
+        toast.info(`Invoice ${invNo} already has Storage, Checker, and Delivery Person assigned.`);
+        return;
+      }
 
-        // Always transition status to PICKED when scanning under 'pick'
-        await performScanUpdate(inv, "PICKED", [], targetRole);
+      // Always transition status to PICKED when scanning under 'pick'
+      await performScanUpdate(inv, "PICKED", [], targetRole);
 
     } else if (selectedScanRole === "deliveryCompleted") {
-        // Delivery completion scan logic
-        const hasStorage = inv.storageMan && inv.storageMan !== "NONE" && inv.storageMan.trim();
-        const hasChecker = inv.stockChecker && inv.stockChecker !== "NONE" && inv.stockChecker.trim();
-        const hasDelivery = inv.deliveryPerson && inv.deliveryPerson !== "NONE" && inv.deliveryPerson.trim();
-        const storageComment = inv.storageManComment && inv.storageManComment.trim();
-        const checkerComment = inv.stockCheckerComment && inv.stockCheckerComment.trim();
-        const deliveryComment = inv.deliveryPersonComment && inv.deliveryPersonComment.trim();
+      // Delivery completion scan logic
+      const hasStorage = inv.storageMan && inv.storageMan !== "NONE" && inv.storageMan.trim();
+      const hasChecker = inv.stockChecker && inv.stockChecker !== "NONE" && inv.stockChecker.trim();
+      const hasDelivery = inv.deliveryPerson && inv.deliveryPerson !== "NONE" && inv.deliveryPerson.trim();
+      const storageComment = inv.storageManComment && inv.storageManComment.trim();
+      const checkerComment = inv.stockCheckerComment && inv.stockCheckerComment.trim();
+      const deliveryComment = inv.deliveryPersonComment && inv.deliveryPersonComment.trim();
 
-        if (!hasStorage || !storageComment || !hasChecker || !checkerComment || !hasDelivery || !deliveryComment) {
-            toast.error(`Invoice ${invNo} cannot be completed. Please assign Storage Man, Stock Checker, and Delivery Person with all comments first.`);
-            return;
-        }
+      if (!hasStorage || !storageComment || !hasChecker || !checkerComment || !hasDelivery || !deliveryComment) {
+        toast.error(`Invoice ${invNo} cannot be completed. Please assign Storage Man, Stock Checker, and Delivery Person with all comments first.`);
+        return;
+      }
 
-        // All filled, open completion modal to select payment/dispatch options
-        setShowScanCompletionModal(inv);
+      // All filled, open completion modal to select payment/dispatch options
+      setShowScanCompletionModal(inv);
     }
   };
 
   const performScanUpdate = async (inv, status, paymentOptions = [], targetRole = null) => {
     const activeRole = targetRole || selectedScanRole;
-    
-    let payload = { 
+
+    let payload = {
       deliveryStatus: status,
       updatedBy: user?.username || "System",
       updatedById: user?._id || user?.id || null
     };
 
     if (activeRole !== "deliveryCompleted") {
-        const commentField = activeRole + "Comment";
-        const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
-        
-        let roleLabel = activeRole;
-        if (activeRole === "storageMan") roleLabel = "Storage Man";
-        else if (activeRole === "stockChecker") roleLabel = "Stock Checker";
-        else if (activeRole === "deliveryPerson") roleLabel = "Delivery Person";
+      const commentField = activeRole + "Comment";
+      const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
 
-        payload[activeRole] = user?.username || user?.fullName || "System";
-        payload[commentField] = `${roleLabel} confirmed by ${user?.username || 'System'} at ${timestamp}`;
+      let roleLabel = activeRole;
+      if (activeRole === "storageMan") roleLabel = "Storage Man";
+      else if (activeRole === "stockChecker") roleLabel = "Stock Checker";
+      else if (activeRole === "deliveryPerson") roleLabel = "Delivery Person";
+
+      payload[activeRole] = user?.username || user?.fullName || "System";
+      payload[commentField] = `${roleLabel} confirmed by ${user?.username || 'System'} at ${timestamp}`;
     }
 
     if (status === "COMPLETED") {
-        payload.deliveryPaymentType = paymentOptions.join(",");
-        payload.deliveryCompletedAt = new Date();
+      payload.deliveryPaymentType = paymentOptions.join(",");
+      payload.deliveryCompletedAt = new Date();
     }
 
     try {
@@ -494,9 +493,9 @@ const BranchDeliveryFlow = () => {
       if (data.success) {
         toast.success(`Saved successfully!`);
         if (invoices.some(i => i._id === inv._id)) {
-            setInvoices(prev => prev.map(i => i._id === inv._id ? data.data : i));
+          setInvoices(prev => prev.map(i => i._id === inv._id ? data.data : i));
         } else {
-            fetchInvoices();
+          fetchInvoices();
         }
         setShowScanCompletionModal(null);
         setScanPaymentOptions([]);
@@ -526,26 +525,26 @@ const BranchDeliveryFlow = () => {
 
   const handleViewInvoice = async (invoice) => {
     try {
-        // Fetch full details if items are missing
-        let fullInv = invoice;
-        if (!invoice.items || invoice.items.length === 0) {
-            const res = await fetchWithAuth(`${API_BASE}/invoices/${invoice._id}`);
-            const data = await res.json();
-            fullInv = data.success ? data.data : data;
-        }
+      // Fetch full details if items are missing
+      let fullInv = invoice;
+      if (!invoice.items || invoice.items.length === 0) {
+        const res = await fetchWithAuth(`${API_BASE}/invoices/${invoice._id}`);
+        const data = await res.json();
+        fullInv = data.success ? data.data : data;
+      }
 
-        const printWindow = window.open("", "_blank");
-        if (!printWindow) {
-            toast.warning("Pop-up blocked! Please allow pop-ups to view invoice.");
-            return;
-        }
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        toast.warning("Pop-up blocked! Please allow pop-ups to view invoice.");
+        return;
+      }
 
-        const html = getInvoiceHTML(fullInv, 1, fullInv, fullInv, 'INVOICE');
-        printWindow.document.write(html);
-        printWindow.document.close();
+      const html = getInvoiceHTML(fullInv, 1, fullInv, fullInv, 'INVOICE');
+      printWindow.document.write(html);
+      printWindow.document.close();
     } catch (err) {
-        console.error("View invoice failed:", err);
-        toast.error("Failed to load invoice details");
+      console.error("View invoice failed:", err);
+      toast.error("Failed to load invoice details");
     }
   };
 
@@ -697,76 +696,75 @@ const BranchDeliveryFlow = () => {
 
         {/* QUICK SCAN ASSIGNMENT */}
         <div className="bg-slate-800 p-6 rounded-[2rem] shadow-xl mb-6 border border-slate-700 overflow-hidden relative group">
-           <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-indigo-500/20 transition-all duration-700"></div>
-           <div className="relative flex flex-col md:flex-row items-center gap-6">
-              <div className="flex-1">
-                 <h2 className="text-white text-lg font-black uppercase tracking-tight flex items-center gap-2">
-                    <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
-                       <FaSearch className="text-white text-xs" />
-                    </div>
-                    Quick Scan Assignment
-                 </h2>
-                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1 ml-10">
-                    Select role and scan QR code to automatically assign yourself
-                 </p>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-indigo-500/20 transition-all duration-700"></div>
+          <div className="relative flex flex-col md:flex-row items-center gap-6">
+            <div className="flex-1">
+              <h2 className="text-white text-lg font-black uppercase tracking-tight flex items-center gap-2">
+                <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
+                  <FaSearch className="text-white text-xs" />
+                </div>
+                Quick Scan Assignment
+              </h2>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1 ml-10">
+                Select role and scan QR code to automatically assign yourself
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+              <div className="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50">
+                {[
+                  { id: 'pick', label: 'Pick' },
+                  { id: 'deliveryCompleted', label: 'Delivery Completed' }
+                ].map(role => (
+                  <button
+                    key={role.id}
+                    onClick={() => setSelectedScanRole(role.id)}
+                    className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedScanRole === role.id
+                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                        : "text-slate-500 hover:text-slate-300"
+                      }`}
+                  >
+                    {role.label}
+                  </button>
+                ))}
               </div>
 
-              <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
-                 <div className="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50">
-                     {[
-                        { id: 'pick', label: 'Pick' },
-                        { id: 'deliveryCompleted', label: 'Delivery Completed' }
-                     ].map(role => (
-                       <button
-                          key={role.id}
-                          onClick={() => setSelectedScanRole(role.id)}
-                          className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                             selectedScanRole === role.id 
-                             ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
-                             : "text-slate-500 hover:text-slate-300"
-                          }`}
-                       >
-                          {role.label}
-                       </button>
-                    ))}
-                 </div>
-
-                 <form onSubmit={handleScanSubmit} className="relative w-full sm:w-80 flex items-center gap-2">
-                    <div className="relative flex-1">
-                        <input 
-                           type="text"
-                           value={scanInput}
-                           onChange={(e) => setScanInput(e.target.value)}
-                           onKeyDown={(e) => e.key === 'Enter' && handleScanSubmit()}
-                           placeholder="Scan QR or Type SI No..."
-                           className="w-full bg-slate-900 border border-slate-700 text-white px-5 py-3 rounded-2xl text-sm font-bold focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none placeholder:text-slate-600"
-                        />
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                           <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
-                           <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Live</span>
-                        </div>
-                    </div>
-                    <button 
-                        type="button"
-                        onClick={() => scanInput.trim() ? handleScanSubmit() : setShowLiveScanner(true)}
-                        className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition shadow-lg shadow-indigo-500/20 active:scale-95 border-0 cursor-pointer"
-                    >
-                        {scanInput.trim() ? "Submit" : "Scan"}
-                    </button>
-                 </form>
-              </div>
-           </div>
+              <form onSubmit={handleScanSubmit} className="relative w-full sm:w-80 flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={scanInput}
+                    onChange={(e) => setScanInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleScanSubmit()}
+                    placeholder="Scan QR or Type SI No..."
+                    className="w-full bg-slate-900 border border-slate-700 text-white px-5 py-3 rounded-2xl text-sm font-bold focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all outline-none placeholder:text-slate-600"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
+                    <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Live</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => scanInput.trim() ? handleScanSubmit() : setShowLiveScanner(true)}
+                  className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition shadow-lg shadow-indigo-500/20 active:scale-95 border-0 cursor-pointer"
+                >
+                  {scanInput.trim() ? "Submit" : "Scan"}
+                </button>
+              </form>
+            </div>
+          </div>
         </div>
 
         {/* LIVE SCANNER MODAL */}
-        <LiveScannerModal 
+        <LiveScannerModal
           show={showLiveScanner}
           onClose={() => setShowLiveScanner(false)}
           onScanSuccess={(code) => {
             setScanInput(code);
             // Handle auto-submit after scan
             setTimeout(() => {
-                handleScanSubmit(null, code);
+              handleScanSubmit(null, code);
             }, 100);
           }}
         />
@@ -779,8 +777,8 @@ const BranchDeliveryFlow = () => {
               <thead>
                 <tr className="bg-slate-50/50 border-b border-slate-100">
                   <th className="px-6 py-4 text-center w-12">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                       checked={invoices.length > 0 && selectedInvoices.length === invoices.filter(i => i.deliveryStatus !== 'COMPLETED' && i.status !== 'CANCELLED' && !isOldRecord(i)).length}
                       onChange={(e) => {
@@ -793,7 +791,7 @@ const BranchDeliveryFlow = () => {
                     />
                   </th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">S.No</th>
-                  <th 
+                  <th
                     className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors group"
                     onClick={() => {
                       const newOrder = sortField === "invoiceNumber" && sortOrder === "desc" ? "asc" : "desc";
@@ -832,13 +830,13 @@ const BranchDeliveryFlow = () => {
                   invoices.map((inv, idx) => (
                     <tr key={inv._id} className={`transition-colors ${inv.status === "CANCELLED" || isOldRecord(inv) ? 'opacity-50 bg-slate-100/50 pointer-events-none' : inv.deliveryStatus === 'COMPLETED' ? 'bg-emerald-50/10 hover:bg-slate-50/50' : 'hover:bg-slate-50/50'}`}>
                       <td className="px-6 py-4 text-center">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-20"
                           checked={selectedInvoices.includes(inv._id)}
                           disabled={inv.deliveryStatus === 'COMPLETED' || inv.status === 'CANCELLED'}
                           onChange={() => {
-                            setSelectedInvoices(prev => 
+                            setSelectedInvoices(prev =>
                               prev.includes(inv._id) ? prev.filter(id => id !== inv._id) : [...prev, inv._id]
                             );
                           }}
@@ -849,7 +847,7 @@ const BranchDeliveryFlow = () => {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
-                          <button 
+                          <button
                             onClick={() => handleViewInvoice(inv)}
                             className="text-left text-xs font-black text-indigo-600 hover:text-indigo-800 transition-colors"
                           >
@@ -864,12 +862,12 @@ const BranchDeliveryFlow = () => {
                           <div className="flex items-center gap-1 mt-0.5 opacity-60">
                             <FaMapMarkerAlt className="text-[10px] text-indigo-400" />
                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-                               {inv.area || inv.customer?.address || "NO AREA"}
+                              {inv.area || inv.customer?.address || "NO AREA"}
                             </span>
                           </div>
                         </div>
                       </td>
-                      
+
                       {/* STORAGE MAN */}
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-1.5 p-2 bg-slate-50/50 rounded-xl border border-slate-100 hover:border-indigo-100 hover:bg-white transition-all group min-w-[160px]">
@@ -881,7 +879,7 @@ const BranchDeliveryFlow = () => {
                             disabled={isFieldLocked(inv, 'storageMan', 'storageManComment')}
                             className="!text-[10px] !font-black !uppercase"
                           />
-                          <input 
+                          <input
                             type="text"
                             value={localComments[`${inv._id}_storageManComment`] ?? inv.storageManComment ?? ""}
                             onChange={(e) => handleUpdateField(inv._id, 'storageManComment', e.target.value)}
@@ -903,7 +901,7 @@ const BranchDeliveryFlow = () => {
                             disabled={isFieldLocked(inv, 'stockChecker', 'stockCheckerComment')}
                             className="!text-[10px] !font-black !uppercase"
                           />
-                          <input 
+                          <input
                             type="text"
                             value={localComments[`${inv._id}_stockCheckerComment`] ?? inv.stockCheckerComment ?? ""}
                             onChange={(e) => handleUpdateField(inv._id, 'stockCheckerComment', e.target.value)}
@@ -929,7 +927,7 @@ const BranchDeliveryFlow = () => {
                             disabled={isFieldLocked(inv, 'deliveryPerson', 'deliveryPersonComment')}
                             className="!text-[10px] !font-black !uppercase"
                           />
-                          <input 
+                          <input
                             type="text"
                             value={localComments[`${inv._id}_deliveryPersonComment`] ?? inv.deliveryPersonComment ?? ""}
                             onChange={(e) => handleUpdateField(inv._id, 'deliveryPersonComment', e.target.value)}
@@ -1012,13 +1010,12 @@ const BranchDeliveryFlow = () => {
                                 <button
                                   onClick={() => !pickingAnim[inv._id] && handlePickWithAnimation(inv._id)}
                                   disabled={!!pickingAnim[inv._id]}
-                                  className={`group flex-1 flex items-center justify-center gap-1.5 py-2 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-md transition-all duration-500 ${
-                                    pickingAnim[inv._id] === 'done'
+                                  className={`group flex-1 flex items-center justify-center gap-1.5 py-2 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-md transition-all duration-500 ${pickingAnim[inv._id] === 'done'
                                       ? 'bg-emerald-500 shadow-emerald-200 scale-105'
                                       : pickingAnim[inv._id] === 'packing'
                                         ? 'bg-amber-600 shadow-amber-300'
                                         : 'bg-amber-500 shadow-amber-200 hover:bg-amber-600 hover:scale-105 active:scale-95'
-                                  }`}
+                                    }`}
                                   style={{ perspective: '400px' }}
                                 >
                                   {pickingAnim[inv._id] === 'done' ? (
@@ -1042,13 +1039,12 @@ const BranchDeliveryFlow = () => {
                               <button
                                 onClick={() => !completingAnim[inv._id] && verifiedInvoices[inv._id] && (rowPayments[inv._id] || []).length > 0 && areNotesFilled(inv) && handleCompleteWithAnimation(inv._id)}
                                 disabled={(rowPayments[inv._id] || []).length === 0 || !areNotesFilled(inv) || !verifiedInvoices[inv._id] || !!completingAnim[inv._id]}
-                                className={`group flex-[2] flex items-center justify-center gap-1.5 py-2 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-md transition-all duration-500 ${
-                                  completingAnim[inv._id] === 'done'
+                                className={`group flex-[2] flex items-center justify-center gap-1.5 py-2 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-md transition-all duration-500 ${completingAnim[inv._id] === 'done'
                                     ? 'bg-emerald-500 shadow-emerald-200 scale-105'
                                     : completingAnim[inv._id] === 'processing'
                                       ? 'bg-indigo-700 shadow-indigo-300'
                                       : 'bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700 hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100'
-                                }`}
+                                  }`}
                                 style={{ perspective: '400px' }}
                               >
                                 {completingAnim[inv._id] === 'done' ? (
@@ -1141,7 +1137,7 @@ const BranchDeliveryFlow = () => {
                           />
                         </div>
                         <div className="flex-1">
-                          <input 
+                          <input
                             type="text"
                             value={localComments[`${inv._id}_storageManComment`] ?? inv.storageManComment ?? ""}
                             onChange={(e) => handleUpdateField(inv._id, 'storageManComment', e.target.value)}
@@ -1166,7 +1162,7 @@ const BranchDeliveryFlow = () => {
                           />
                         </div>
                         <div className="flex-1">
-                          <input 
+                          <input
                             type="text"
                             value={localComments[`${inv._id}_stockCheckerComment`] ?? inv.stockCheckerComment ?? ""}
                             onChange={(e) => handleUpdateField(inv._id, 'stockCheckerComment', e.target.value)}
@@ -1195,7 +1191,7 @@ const BranchDeliveryFlow = () => {
                           />
                         </div>
                         <div className="flex-1">
-                          <input 
+                          <input
                             type="text"
                             value={localComments[`${inv._id}_deliveryPersonComment`] ?? inv.deliveryPersonComment ?? ""}
                             onChange={(e) => handleUpdateField(inv._id, 'deliveryPersonComment', e.target.value)}
@@ -1212,21 +1208,21 @@ const BranchDeliveryFlow = () => {
                     {inv.deliveryStatus !== 'COMPLETED' ? (
                       <div className="space-y-3">
                         <div className="flex flex-wrap gap-2">
-                           {['CHEQUE', 'OLD_PAYMENT', 'SPOT_CASH', 'SPOT_UPI', 'CASH_UPI', 'SIGNATURE'].map(opt => (
-                              <label key={opt} className="flex items-center gap-1 px-2 py-1.5 bg-slate-50 border border-slate-100 rounded-lg cursor-pointer">
-                                <input 
-                                  type="checkbox"
-                                  className="w-3 h-3 rounded text-indigo-600"
-                                  checked={(rowPayments[inv._id] || []).includes(opt)}
-                                  onChange={(e) => {
-                                    const current = rowPayments[inv._id] || [];
-                                    const next = e.target.checked ? [...current, opt] : current.filter(x => x !== opt);
-                                    setRowPayments({ ...rowPayments, [inv._id]: next });
-                                  }}
-                                />
-                                <span className="text-[9px] font-black text-slate-500 tracking-tighter uppercase">{{ CHEQUE: 'Cheque', OLD_PAYMENT: 'Old Payment', SPOT_CASH: 'Spot Payment Cash', SPOT_UPI: 'Spot Payment UPI', CASH_UPI: 'Cash & UPI', SIGNATURE: 'Signature' }[opt]}</span>
-                              </label>
-                           ))}
+                          {['CHEQUE', 'OLD_PAYMENT', 'SPOT_CASH', 'SPOT_UPI', 'CASH_UPI', 'SIGNATURE'].map(opt => (
+                            <label key={opt} className="flex items-center gap-1 px-2 py-1.5 bg-slate-50 border border-slate-100 rounded-lg cursor-pointer">
+                              <input
+                                type="checkbox"
+                                className="w-3 h-3 rounded text-indigo-600"
+                                checked={(rowPayments[inv._id] || []).includes(opt)}
+                                onChange={(e) => {
+                                  const current = rowPayments[inv._id] || [];
+                                  const next = e.target.checked ? [...current, opt] : current.filter(x => x !== opt);
+                                  setRowPayments({ ...rowPayments, [inv._id]: next });
+                                }}
+                              />
+                              <span className="text-[9px] font-black text-slate-500 tracking-tighter uppercase">{{ CHEQUE: 'Cheque', OLD_PAYMENT: 'Old Payment', SPOT_CASH: 'Spot Payment Cash', SPOT_UPI: 'Spot Payment UPI', CASH_UPI: 'Cash & UPI', SIGNATURE: 'Signature' }[opt]}</span>
+                            </label>
+                          ))}
                         </div>
                         {/* Mobile Verification Checkbox */}
                         {inv.deliveryStatus === 'PICKED' && (
@@ -1244,76 +1240,74 @@ const BranchDeliveryFlow = () => {
                           </label>
                         )}
                         <div className="flex gap-2">
-                             {inv.deliveryStatus === 'PENDING' && (
-                               <button
-                                 onClick={() => !pickingAnim[inv._id] && handlePickWithAnimation(inv._id)}
-                                 disabled={!!pickingAnim[inv._id]}
-                                 className={`group flex-1 flex items-center justify-center gap-2 py-3.5 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all duration-500 ${
-                                   pickingAnim[inv._id] === 'done'
-                                     ? 'bg-emerald-500 shadow-emerald-200 scale-[1.05]'
-                                     : pickingAnim[inv._id] === 'packing'
-                                       ? 'bg-amber-600 shadow-amber-300'
-                                       : 'bg-amber-500 shadow-amber-200 hover:bg-amber-600 hover:scale-[1.03] active:scale-95'
-                                 }`}
-                                 style={{ perspective: '600px' }}
-                               >
-                                 {pickingAnim[inv._id] === 'done' ? (
-                                   <>
-                                     <FaCheckCircle size={16} style={{ animation: 'pickBounceIn 0.4s ease-out forwards' }} />
-                                     <span style={{ animation: 'pickTextSlide 0.3s ease-out 0.1s both' }}>Picked!</span>
-                                   </>
-                                 ) : pickingAnim[inv._id] === 'packing' ? (
-                                   <>
-                                     <FaBoxOpen size={16} style={{ animation: 'pickSpin 0.8s ease-in-out forwards' }} />
-                                     <span style={{ animation: 'pickPulse 0.5s ease-in-out infinite' }}>Packing...</span>
-                                   </>
-                                 ) : (
-                                   <>
-                                     <span className="inline-block transition-transform duration-500 group-hover:[transform:rotateY(360deg)]">
-                                       <FaBoxOpen size={14} />
-                                     </span>
-                                     Mark Picked
-                                   </>
-                                 )}
-                               </button>
-                             )}
-                            <button 
-                               onClick={() => !completingAnim[inv._id] && verifiedInvoices[inv._id] && (rowPayments[inv._id] || []).length > 0 && areNotesFilled(inv) && handleCompleteWithAnimation(inv._id)} 
-                               disabled={(rowPayments[inv._id] || []).length === 0 || !areNotesFilled(inv) || !verifiedInvoices[inv._id] || !!completingAnim[inv._id]}
-                               className={`group flex-[2] flex items-center justify-center gap-2 py-3.5 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all duration-500 ${
-                                 completingAnim[inv._id] === 'done'
-                                   ? 'bg-emerald-500 shadow-emerald-200 scale-[1.05]'
-                                   : completingAnim[inv._id] === 'processing'
-                                     ? 'bg-indigo-700 shadow-indigo-300'
-                                     : 'bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700 hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:hover:scale-100'
-                               }`}
-                               style={{ perspective: '600px' }}
-                             >
-                               {completingAnim[inv._id] === 'done' ? (
-                                 <>
-                                   <FaCheckCircle size={16} style={{ animation: 'pickBounceIn 0.4s ease-out forwards' }} />
-                                   <span style={{ animation: 'pickTextSlide 0.3s ease-out 0.1s both' }}>Completed!</span>
-                                 </>
-                               ) : completingAnim[inv._id] === 'processing' ? (
-                                 <>
-                                   <FaClipboardCheck size={16} style={{ animation: 'completeSpin 0.8s ease-in-out forwards' }} />
-                                   <span style={{ animation: 'completePulse 0.5s ease-in-out infinite' }}>Delivering...</span>
-                                 </>
-                               ) : (
-                                 <>
-                                   <span className="inline-block transition-transform duration-500 group-hover:[transform:rotateY(360deg)]">
-                                     <FaClipboardCheck size={14} />
-                                   </span>
-                                   Mark Complete
-                                 </>
-                               )}
-                             </button>
-                         </div>
+                          {inv.deliveryStatus === 'PENDING' && (
+                            <button
+                              onClick={() => !pickingAnim[inv._id] && handlePickWithAnimation(inv._id)}
+                              disabled={!!pickingAnim[inv._id]}
+                              className={`group flex-1 flex items-center justify-center gap-2 py-3.5 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all duration-500 ${pickingAnim[inv._id] === 'done'
+                                  ? 'bg-emerald-500 shadow-emerald-200 scale-[1.05]'
+                                  : pickingAnim[inv._id] === 'packing'
+                                    ? 'bg-amber-600 shadow-amber-300'
+                                    : 'bg-amber-500 shadow-amber-200 hover:bg-amber-600 hover:scale-[1.03] active:scale-95'
+                                }`}
+                              style={{ perspective: '600px' }}
+                            >
+                              {pickingAnim[inv._id] === 'done' ? (
+                                <>
+                                  <FaCheckCircle size={16} style={{ animation: 'pickBounceIn 0.4s ease-out forwards' }} />
+                                  <span style={{ animation: 'pickTextSlide 0.3s ease-out 0.1s both' }}>Picked!</span>
+                                </>
+                              ) : pickingAnim[inv._id] === 'packing' ? (
+                                <>
+                                  <FaBoxOpen size={16} style={{ animation: 'pickSpin 0.8s ease-in-out forwards' }} />
+                                  <span style={{ animation: 'pickPulse 0.5s ease-in-out infinite' }}>Packing...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="inline-block transition-transform duration-500 group-hover:[transform:rotateY(360deg)]">
+                                    <FaBoxOpen size={14} />
+                                  </span>
+                                  Mark Picked
+                                </>
+                              )}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => !completingAnim[inv._id] && verifiedInvoices[inv._id] && (rowPayments[inv._id] || []).length > 0 && areNotesFilled(inv) && handleCompleteWithAnimation(inv._id)}
+                            disabled={(rowPayments[inv._id] || []).length === 0 || !areNotesFilled(inv) || !verifiedInvoices[inv._id] || !!completingAnim[inv._id]}
+                            className={`group flex-[2] flex items-center justify-center gap-2 py-3.5 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all duration-500 ${completingAnim[inv._id] === 'done'
+                                ? 'bg-emerald-500 shadow-emerald-200 scale-[1.05]'
+                                : completingAnim[inv._id] === 'processing'
+                                  ? 'bg-indigo-700 shadow-indigo-300'
+                                  : 'bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700 hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:hover:scale-100'
+                              }`}
+                            style={{ perspective: '600px' }}
+                          >
+                            {completingAnim[inv._id] === 'done' ? (
+                              <>
+                                <FaCheckCircle size={16} style={{ animation: 'pickBounceIn 0.4s ease-out forwards' }} />
+                                <span style={{ animation: 'pickTextSlide 0.3s ease-out 0.1s both' }}>Completed!</span>
+                              </>
+                            ) : completingAnim[inv._id] === 'processing' ? (
+                              <>
+                                <FaClipboardCheck size={16} style={{ animation: 'completeSpin 0.8s ease-in-out forwards' }} />
+                                <span style={{ animation: 'completePulse 0.5s ease-in-out infinite' }}>Delivering...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="inline-block transition-transform duration-500 group-hover:[transform:rotateY(360deg)]">
+                                  <FaClipboardCheck size={14} />
+                                </span>
+                                Mark Complete
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex items-center justify-between">
-                         <div className="text-[10px] font-bold text-slate-400 uppercase">Paid via: {inv.deliveryPaymentType}</div>
-                         {isAdmin && <button onClick={() => handleMarkStatus(inv._id, 'PENDING')} className="text-[10px] font-black text-indigo-500 underline uppercase tracking-widest">Revert</button>}
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">Paid via: {inv.deliveryPaymentType}</div>
+                        {isAdmin && <button onClick={() => handleMarkStatus(inv._id, 'PENDING')} className="text-[10px] font-black text-indigo-500 underline uppercase tracking-widest">Revert</button>}
                       </div>
                     )}
                   </div>
@@ -1324,25 +1318,25 @@ const BranchDeliveryFlow = () => {
 
           {/* PAGINATION */}
           <div className="bg-slate-50/50 p-4 border-t border-slate-100 flex items-center justify-between">
-             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-               Total: {pagination.total} Records | Page {currentPage} of {pagination.pages}
-             </p>
-             <div className="flex items-center gap-2">
-                <button 
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(prev => prev - 1)}
-                  className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Prev
-                </button>
-                <button 
-                  disabled={currentPage >= pagination.pages}
-                  onClick={() => setCurrentPage(prev => prev + 1)}
-                  className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Next
-                </button>
-             </div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Total: {pagination.total} Records | Page {currentPage} of {pagination.pages}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => prev - 1)}
+                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 disabled:opacity-50"
+              >
+                Prev
+              </button>
+              <button
+                disabled={currentPage >= pagination.pages}
+                onClick={() => setCurrentPage(prev => prev + 1)}
+                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1358,7 +1352,7 @@ const BranchDeliveryFlow = () => {
                 Assigning staff for {selectedInvoices.length} selected invoices
               </p>
             </div>
-            
+
             <div className="p-8 space-y-8 overflow-y-auto scrollbar-hide flex-1 pb-20">
               {/* Category Helper */}
               {['storageMan', 'stockChecker', 'deliveryPerson'].map((role) => (
@@ -1367,7 +1361,7 @@ const BranchDeliveryFlow = () => {
                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
                       {role.replace(/([A-Z])/g, ' $1')}s
                     </label>
-                    <button 
+                    <button
                       onClick={() => addStaffSlot(role)}
                       className="w-6 h-6 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center hover:bg-emerald-100 transition-colors"
                       title="Add more"
@@ -1375,7 +1369,7 @@ const BranchDeliveryFlow = () => {
                       <FaPlus size={10} />
                     </button>
                   </div>
-                  
+
                   <div className="space-y-3">
                     {bulkData[role].map((val, idx) => (
                       <div key={idx} className="flex gap-2 items-center animate-in slide-in-from-left-2 duration-200">
@@ -1388,7 +1382,7 @@ const BranchDeliveryFlow = () => {
                           />
                         </div>
                         {bulkData[role].length > 1 && (
-                          <button 
+                          <button
                             onClick={() => removeStaffSlot(role, idx)}
                             className="w-8 h-8 flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                           >
@@ -1398,7 +1392,7 @@ const BranchDeliveryFlow = () => {
                       </div>
                     ))}
                     <div className="pt-1">
-                      <input 
+                      <input
                         type="text"
                         value={bulkData[`${role}Comment`]}
                         onChange={(e) => setBulkData(prev => ({ ...prev, [`${role}Comment`]: e.target.value }))}
@@ -1432,11 +1426,11 @@ const BranchDeliveryFlow = () => {
       )}
 
       {showScanCompletionModal && (
-        <ScanCompletionModal 
+        <ScanCompletionModal
           invoice={showScanCompletionModal}
           onClose={() => {
-              setShowScanCompletionModal(null);
-              setScanPaymentOptions([]);
+            setShowScanCompletionModal(null);
+            setScanPaymentOptions([]);
           }}
           selectedOptions={scanPaymentOptions}
           setSelectedOptions={setScanPaymentOptions}
@@ -1445,7 +1439,7 @@ const BranchDeliveryFlow = () => {
       )}
 
       {showBulkScanModal && (
-        <BulkScanAssignmentModal 
+        <BulkScanAssignmentModal
           invNumbers={showBulkScanModal}
           branchUsers={branchUsers}
           onClose={() => setShowBulkScanModal(null)}
@@ -1482,208 +1476,208 @@ const BranchDeliveryFlow = () => {
 
 // 💳 SCAN COMPLETION MODAL
 const ScanCompletionModal = ({ invoice, onClose, onConfirm, selectedOptions, setSelectedOptions }) => {
-    const [verifyDispatch, setVerifyDispatch] = useState(false);
-    const options = ["CHEQUE", "OLD PAYMENT", "SPOTPAYMENTCASH", "SPOTPAYMENTUPI", "CASH & UPI", "SIGNATURE"];
-    
-    return (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-            <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
-                <div className="bg-slate-800 p-6 flex items-center justify-between text-white">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
-                            <FaClipboardCheck className="text-white" />
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-black uppercase tracking-tight">Complete Delivery</h2>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{invoice.invoiceNumber}</p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition border-0 bg-transparent text-white cursor-pointer">
-                        <FaTimes />
-                    </button>
-                </div>
-                <div className="p-8">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Select Delivery Options (Multiple Allowed)</p>
-                    <div className="grid grid-cols-2 gap-3 mb-6">
-                        {options.map(opt => (
-                            <label key={opt} className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${selectedOptions.includes(opt) ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}>
-                                <input 
-                                    type="checkbox" 
-                                    className="hidden" 
-                                    checked={selectedOptions.includes(opt)}
-                                    onChange={() => {
-                                        if (selectedOptions.includes(opt)) setSelectedOptions(selectedOptions.filter(o => o !== opt));
-                                        else setSelectedOptions([...selectedOptions, opt]);
-                                    }}
-                                />
-                                <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${selectedOptions.includes(opt) ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-200 group-hover:border-slate-300'}`}>
-                                    {selectedOptions.includes(opt) && <FaCheckCircle className="text-white text-xs" />}
-                                </div>
-                                <span className="text-[10px] font-black uppercase tracking-tight">{opt}</span>
-                            </label>
-                        ))}
-                    </div>
+  const [verifyDispatch, setVerifyDispatch] = useState(false);
+  const options = ["CHEQUE", "OLD PAYMENT", "SPOTPAYMENTCASH", "SPOTPAYMENTUPI", "CASH & UPI", "SIGNATURE"];
 
-                    <label className={`flex items-center gap-3 p-4 mb-6 rounded-2xl border-2 transition-all cursor-pointer group ${verifyDispatch ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}>
-                        <input 
-                            type="checkbox" 
-                            className="hidden" 
-                            checked={verifyDispatch}
-                            onChange={() => setVerifyDispatch(!verifyDispatch)}
-                        />
-                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${verifyDispatch ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-200 group-hover:border-slate-300'}`}>
-                            {verifyDispatch && <FaCheckCircle className="text-white text-xs" />}
-                        </div>
-                        <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase tracking-tight">VERIFY DISPATCH</span>
-                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">MANDATORY FOR COMPLETION</span>
-                        </div>
-                    </label>
-
-                    <div className="flex gap-3">
-                        <button 
-                            onClick={onClose}
-                            className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition"
-                        >
-                            Cancel
-                        </button>
-                        <button 
-                            disabled={!verifyDispatch}
-                            onClick={onConfirm}
-                            className={`flex-[2] py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all ${verifyDispatch ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
-                        >
-                            Mark as Completed
-                        </button>
-                    </div>
-                </div>
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
+      <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+        <div className="bg-slate-800 p-6 flex items-center justify-between text-white">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
+              <FaClipboardCheck className="text-white" />
             </div>
+            <div>
+              <h2 className="text-lg font-black uppercase tracking-tight">Complete Delivery</h2>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{invoice.invoiceNumber}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition border-0 bg-transparent text-white cursor-pointer">
+            <FaTimes />
+          </button>
         </div>
-    );
+        <div className="p-8">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Select Delivery Options (Multiple Allowed)</p>
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            {options.map(opt => (
+              <label key={opt} className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${selectedOptions.includes(opt) ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}>
+                <input
+                  type="checkbox"
+                  className="hidden"
+                  checked={selectedOptions.includes(opt)}
+                  onChange={() => {
+                    if (selectedOptions.includes(opt)) setSelectedOptions(selectedOptions.filter(o => o !== opt));
+                    else setSelectedOptions([...selectedOptions, opt]);
+                  }}
+                />
+                <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${selectedOptions.includes(opt) ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-200 group-hover:border-slate-300'}`}>
+                  {selectedOptions.includes(opt) && <FaCheckCircle className="text-white text-xs" />}
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-tight">{opt}</span>
+              </label>
+            ))}
+          </div>
+
+          <label className={`flex items-center gap-3 p-4 mb-6 rounded-2xl border-2 transition-all cursor-pointer group ${verifyDispatch ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}>
+            <input
+              type="checkbox"
+              className="hidden"
+              checked={verifyDispatch}
+              onChange={() => setVerifyDispatch(!verifyDispatch)}
+            />
+            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${verifyDispatch ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-200 group-hover:border-slate-300'}`}>
+              {verifyDispatch && <FaCheckCircle className="text-white text-xs" />}
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-black uppercase tracking-tight">VERIFY DISPATCH</span>
+              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">MANDATORY FOR COMPLETION</span>
+            </div>
+          </label>
+
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={!verifyDispatch}
+              onClick={onConfirm}
+              className={`flex-[2] py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all ${verifyDispatch ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
+            >
+              Mark as Completed
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }) => {
-    const [storageMan, setStorageMan] = useState("");
-    const [stockChecker, setStockChecker] = useState("");
-    const [deliveryPerson, setDeliveryPerson] = useState("");
-    const [storageManComment, setStorageManComment] = useState("");
-    const [stockCheckerComment, setStockCheckerComment] = useState("");
-    const [deliveryPersonComment, setDeliveryPersonComment] = useState("");
+  const [storageMan, setStorageMan] = useState("");
+  const [stockChecker, setStockChecker] = useState("");
+  const [deliveryPerson, setDeliveryPerson] = useState("");
+  const [storageManComment, setStorageManComment] = useState("");
+  const [stockCheckerComment, setStockCheckerComment] = useState("");
+  const [deliveryPersonComment, setDeliveryPersonComment] = useState("");
 
-    // Auto-update comments when staff is selected
-    useEffect(() => {
-        if (storageMan || stockChecker || deliveryPerson) {
-            const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
-            setStorageManComment(`Picked by ${storageMan || '...'} | Checked by ${stockChecker || '...'} at ${timestamp}`);
-            setStockCheckerComment(`Checked by ${stockChecker || '...'} | Picked by ${storageMan || '...'} at ${timestamp}`);
-            setDeliveryPersonComment(`Delivery Person confirmed by ${deliveryPerson || '...'} at ${timestamp}`);
-        }
-    }, [storageMan, stockChecker, deliveryPerson]);
+  // Auto-update comments when staff is selected
+  useEffect(() => {
+    if (storageMan || stockChecker || deliveryPerson) {
+      const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
+      setStorageManComment(`Picked by ${storageMan || '...'} | Checked by ${stockChecker || '...'} at ${timestamp}`);
+      setStockCheckerComment(`Checked by ${stockChecker || '...'} | Picked by ${storageMan || '...'} at ${timestamp}`);
+      setDeliveryPersonComment(`Delivery Person confirmed by ${deliveryPerson || '...'} at ${timestamp}`);
+    }
+  }, [storageMan, stockChecker, deliveryPerson]);
 
-    return (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-            <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
-                <div className="bg-indigo-600 p-6 flex items-center justify-between text-white">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                            <FaClipboardCheck className="text-white" />
-                        </div>
-                        <div>
-                            <h2 className="text-lg font-black uppercase tracking-tight">Bulk Scan Assignment</h2>
-                            <p className="text-[10px] text-indigo-100 font-bold uppercase tracking-widest">{invNumbers.length} Invoices Detected</p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition border-0 bg-transparent text-white cursor-pointer">
-                        <FaTimes />
-                    </button>
-                </div>
-                
-                <div className="p-8 space-y-6 overflow-y-auto max-h-[75vh]">
-                    <div className="grid grid-cols-1 gap-6">
-                        <div className="space-y-3">
-                            <div>
-                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Select Storage Man</label>
-                                <select 
-                                    value={storageMan} 
-                                    onChange={(e) => setStorageMan(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
-                                >
-                                    <option value="">Select Staff</option>
-                                    {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
-                                </select>
-                            </div>
-                            <input 
-                                type="text"
-                                value={storageManComment}
-                                onChange={(e) => setStorageManComment(e.target.value)}
-                                placeholder="Edit storage comment..."
-                                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
-                            />
-                        </div>
-
-                        <div className="space-y-3">
-                            <div>
-                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Select Stock Checker</label>
-                                <select 
-                                    value={stockChecker} 
-                                    onChange={(e) => setStockChecker(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
-                                >
-                                    <option value="">Select Staff</option>
-                                    {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
-                                </select>
-                            </div>
-                            <input 
-                                type="text"
-                                value={stockCheckerComment}
-                                onChange={(e) => setStockCheckerComment(e.target.value)}
-                                placeholder="Edit checker comment..."
-                                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
-                            />
-                        </div>
-
-                        <div className="space-y-3">
-                            <div>
-                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Select Delivery Person</label>
-                                <select 
-                                    value={deliveryPerson} 
-                                    onChange={(e) => setDeliveryPerson(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
-                                >
-                                    <option value="">Select Staff</option>
-                                    {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
-                                </select>
-                            </div>
-                            <input 
-                                type="text"
-                                value={deliveryPersonComment}
-                                onChange={(e) => setDeliveryPersonComment(e.target.value)}
-                                placeholder="Edit delivery comment..."
-                                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="pt-4 flex flex-col gap-4">
-                        <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center gap-3">
-                            <FaBoxOpen className="text-amber-500 text-xl" />
-                            <p className="text-[10px] font-black text-amber-800 uppercase tracking-tight leading-relaxed">
-                                Clicking update will automatically mark all {invNumbers.length} invoices as <span className="bg-amber-500 text-white px-1.5 py-0.5 rounded">PICKED</span> status.
-                            </p>
-                        </div>
-                        <div className="flex gap-3">
-                            <button onClick={onClose} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition">Cancel</button>
-                            <button 
-                                disabled={!storageMan || !stockChecker || !deliveryPerson}
-                                onClick={() => onConfirm({ storageMan, stockChecker, deliveryPerson, storageManComment, stockCheckerComment, deliveryPersonComment, deliveryStatus: 'PICKED' })}
-                                className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition disabled:opacity-50 shadow-xl shadow-indigo-100"
-                            >
-                                Mark All as Picked
-                            </button>
-                        </div>
-                    </div>
-                </div>
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
+      <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+        <div className="bg-indigo-600 p-6 flex items-center justify-between text-white">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+              <FaClipboardCheck className="text-white" />
             </div>
+            <div>
+              <h2 className="text-lg font-black uppercase tracking-tight">Bulk Scan Assignment</h2>
+              <p className="text-[10px] text-indigo-100 font-bold uppercase tracking-widest">{invNumbers.length} Invoices Detected</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition border-0 bg-transparent text-white cursor-pointer">
+            <FaTimes />
+          </button>
         </div>
-    );
+
+        <div className="p-8 space-y-6 overflow-y-auto max-h-[75vh]">
+          <div className="grid grid-cols-1 gap-6">
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Select Storage Man</label>
+                <select
+                  value={storageMan}
+                  onChange={(e) => setStorageMan(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+                >
+                  <option value="">Select Staff</option>
+                  {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
+                </select>
+              </div>
+              <input
+                type="text"
+                value={storageManComment}
+                onChange={(e) => setStorageManComment(e.target.value)}
+                placeholder="Edit storage comment..."
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Select Stock Checker</label>
+                <select
+                  value={stockChecker}
+                  onChange={(e) => setStockChecker(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+                >
+                  <option value="">Select Staff</option>
+                  {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
+                </select>
+              </div>
+              <input
+                type="text"
+                value={stockCheckerComment}
+                onChange={(e) => setStockCheckerComment(e.target.value)}
+                placeholder="Edit checker comment..."
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Select Delivery Person</label>
+                <select
+                  value={deliveryPerson}
+                  onChange={(e) => setDeliveryPerson(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+                >
+                  <option value="">Select Staff</option>
+                  {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
+                </select>
+              </div>
+              <input
+                type="text"
+                value={deliveryPersonComment}
+                onChange={(e) => setDeliveryPersonComment(e.target.value)}
+                placeholder="Edit delivery comment..."
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="pt-4 flex flex-col gap-4">
+            <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center gap-3">
+              <FaBoxOpen className="text-amber-500 text-xl" />
+              <p className="text-[10px] font-black text-amber-800 uppercase tracking-tight leading-relaxed">
+                Clicking update will automatically mark all {invNumbers.length} invoices as <span className="bg-amber-500 text-white px-1.5 py-0.5 rounded">PICKED</span> status.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={onClose} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition">Cancel</button>
+              <button
+                disabled={!storageMan || !stockChecker || !deliveryPerson}
+                onClick={() => onConfirm({ storageMan, stockChecker, deliveryPerson, storageManComment, stockCheckerComment, deliveryPersonComment, deliveryStatus: 'PICKED' })}
+                className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition disabled:opacity-50 shadow-xl shadow-indigo-100"
+              >
+                Mark All as Picked
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 export default BranchDeliveryFlow;
