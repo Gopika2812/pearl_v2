@@ -364,7 +364,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
         } else {
         // --- EXISTING INVOICE LAYOUT ---
           const trackingData = previewData.isBulk ? previewData.invoiceNumber : (previewData.invoiceNumber || previewData.creditNoteId || "N/A");
-          const trackingQr = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(trackingData)}`;
+          const trackingQr = `https://quickchart.io/qr?size=300&text=${encodeURIComponent(trackingData)}`;
 
           html += `
             <div class="page">
@@ -469,7 +469,7 @@ export const getInvoiceHTML = (previewData, numCopies = 2, order = {}, generated
                       </div>
                       ${previewData?.seller?.gpayNo || previewData?.seller?.upiId ? `
                         <div style="text-align: center; margin-left: 10px; border-left: 1px solid #e2e8f0; padding-left: 15px;">
-                           <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(`upi://pay?pa=${previewData.seller.gpayNo || previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" style="width: 15mm; height: 15mm; border: 1px solid #e2e8f0; padding: 1mm; border-radius: 4px;" alt="GPay QR" />
+                           <img src="https://quickchart.io/qr?size=150&text=${encodeURIComponent(`upi://pay?pa=${previewData.seller.gpayNo || previewData.seller.upiId}&pn=${previewData.seller.name || 'Pearl Agency'}&cu=INR`)}" style="width: 15mm; height: 15mm; border: 1px solid #e2e8f0; padding: 1mm; border-radius: 4px;" alt="GPay QR" />
                            <div style="font-size: 6px; font-weight: 800; color: #475569; margin-top: 1px;">SCAN TO PAY</div>
                         </div>
                       ` : ""}

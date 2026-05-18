@@ -113,7 +113,7 @@ export const PAGE_CONFIG = [
       },
       {
         id: "delivery-dropdown", name: "Delivery", icon: "truck", isDropdown: true, subItems: [
-          { id: "delivery-flow", name: "Delivery Flow", path: "/branch/delivery-flow", icon: "list" },
+          { id: "delivery-flow", name: "Pick & Delivery Completed", path: "/branch/delivery-flow", icon: "list" },
           { id: "delivery-records", name: "Delivery Records", path: "/branch/delivery-records", icon: "history" },
           { id: "delivery-receipt", name: "Delivery Receipt", path: "/branch/delivery-receipt", icon: "receipt" },
           { id: "transferred-receipts", name: "Receipts Transferred", path: "/branch/transferred-receipts", icon: "history" },

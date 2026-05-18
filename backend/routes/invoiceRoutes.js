@@ -2025,7 +2025,7 @@ const generateDeliveryLogId = async (branchId) => {
 // PATCH - Bulk update delivery flow fields for multiple invoices
 router.patch("/bulk-delivery-update", auth, async (req, res) => {
   try {
-    const { invoiceNumbers, storageMan, stockChecker, updatedBy } = req.body;
+    const { invoiceNumbers, storageMan, stockChecker, deliveryPerson, storageManComment, stockCheckerComment, deliveryPersonComment, updatedBy } = req.body;
 
     if (!invoiceNumbers || !Array.isArray(invoiceNumbers)) {
       return res.status(400).json({ success: false, message: "Invalid invoice numbers" });
@@ -2033,30 +2033,62 @@ router.patch("/bulk-delivery-update", auth, async (req, res) => {
 
     const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    const updateData = {
-      storageMan,
-      storageManComment: `Bulk assigned at ${timestamp}`,
-      stockChecker,
-      stockCheckerComment: `Bulk assigned at ${timestamp}`,
-      deliveryStatus: "PICKED",
-      updatedBy: updatedBy || req.user.username,
-      updatedById: req.user.id
-    };
+    // Fetch matching invoices
+    const invoicesToUpdate = await Invoice.find({ invoiceNumber: { $in: invoiceNumbers } });
 
-    const result = await Invoice.updateMany(
-      { invoiceNumber: { $in: invoiceNumbers } },
-      { $set: updateData }
-    );
+    // Resolve DeliveryMan ID if name is provided
+    let deliveryManId = null;
+    let foundDMan = false;
+    if (deliveryPerson && deliveryPerson !== "NONE") {
+      const firstInv = invoicesToUpdate[0];
+      const dMan = await DeliveryMan.findOne({
+        name: { $regex: new RegExp("^" + deliveryPerson + "$", "i") },
+        branchId: firstInv ? firstInv.branchId : { $exists: true }
+      });
+      if (dMan) {
+        deliveryManId = dMan._id;
+        foundDMan = true;
+      }
+    }
+
+    let modifiedCount = 0;
+    for (const inv of invoicesToUpdate) {
+      inv.storageMan = storageMan;
+      inv.storageManComment = storageManComment || `Bulk assigned at ${timestamp}`;
+      inv.stockChecker = stockChecker;
+      inv.stockCheckerComment = stockCheckerComment || `Bulk assigned at ${timestamp}`;
+      inv.deliveryPerson = deliveryPerson;
+      inv.deliveryPersonComment = deliveryPersonComment || `Bulk assigned at ${timestamp}`;
+      inv.deliveryStatus = "PICKED";
+      inv.updatedBy = updatedBy || req.user.username;
+      inv.updatedById = req.user.id;
+
+      if (deliveryPerson && deliveryPerson !== "NONE") {
+        if (foundDMan) {
+          inv.deliveryMan = deliveryManId;
+          await SalesOrder.findByIdAndUpdate(inv.salesOrderId, { deliveryMan: deliveryManId });
+        } else {
+          inv.deliveryMan = undefined;
+          await SalesOrder.findByIdAndUpdate(inv.salesOrderId, { $unset: { deliveryMan: 1 } });
+        }
+      } else if (deliveryPerson === "" || deliveryPerson === "NONE") {
+        inv.deliveryMan = undefined;
+        await SalesOrder.findByIdAndUpdate(inv.salesOrderId, { $unset: { deliveryMan: 1 } });
+      }
+
+      await inv.save();
+      modifiedCount++;
+    }
 
     await createAuditLog({
       userId: req.user.id,
       username: req.user.username,
       action: "BULK_SCAN_UPDATE",
-      description: `Bulk updated ${result.modifiedCount} invoices via QR scan.`,
+      description: `Bulk updated ${modifiedCount} invoices via QR scan.`,
       targetModel: "Invoice"
     });
 
-    res.json({ success: true, message: `${result.modifiedCount} invoices updated` });
+    res.json({ success: true, message: `${modifiedCount} invoices updated` });
   } catch (error) {
     console.error("Bulk update error:", error);
     res.status(500).json({ success: false, message: error.message });

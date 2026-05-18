@@ -899,7 +899,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                     </div>
                   </div>
                   <div style="text-align: center; flex-shrink: 0;">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(generatedInvoice?.invoiceNumber || previewData?.invoiceNumber || order?.invoiceId || 'N/A')}" style="width: 20mm; height: 20mm; border: 2px solid #000; padding: 1mm;" alt="Delivery QR" />
+                    <img src="https://quickchart.io/qr?size=300&text=${encodeURIComponent(generatedInvoice?.invoiceNumber || previewData?.invoiceNumber || order?.invoiceId || 'N/A')}" style="width: 20mm; height: 20mm; border: 2px solid #000; padding: 1mm;" alt="Delivery QR" />
                     <div style="font-size: 7px; font-weight: 900; text-transform: uppercase; margin-top: 2px;">Delivery QR</div>
                   </div>
                 </div>
@@ -1067,7 +1067,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                     </div>
                   </div>
                   <div style="text-align: center; flex-shrink: 0;">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(generatedInvoice?.invoiceNumber || previewData?.invoiceNumber || order?.invoiceId || 'N/A')}" style="width: 20mm; height: 20mm; border: 2px solid #000; padding: 1mm;" alt="Delivery QR" />
+                    <img src="https://quickchart.io/qr?size=300&text=${encodeURIComponent(generatedInvoice?.invoiceNumber || previewData?.invoiceNumber || order?.invoiceId || 'N/A')}" style="width: 20mm; height: 20mm; border: 2px solid #000; padding: 1mm;" alt="Delivery QR" />
                     <div style="font-size: 7px; font-weight: 900; text-transform: uppercase; margin-top: 2px;">Delivery QR</div>
                   </div>
                 </div>
@@ -1138,7 +1138,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                       </div>
                       ${(previewData?.seller?.gpayNo || previewData?.seller?.upiId || currentBranch?.gpayNo || currentBranch?.upiId) ? `
                         <div style="text-align: center;">
-                           <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(`upi://pay?pa=${previewData?.seller?.gpayNo || previewData?.seller?.upiId || currentBranch?.gpayNo || currentBranch?.upiId}&pn=${previewData?.seller?.name || 'Pearl Agency'}&cu=INR`)}" style="width: 15mm; height: 15mm; border: 1px solid #e2e8f0; padding: 1mm; border-radius: 4px;" alt="GPay QR" />
+                           <img src="https://quickchart.io/qr?size=150&text=${encodeURIComponent(`upi://pay?pa=${previewData?.seller?.gpayNo || previewData?.seller?.upiId || currentBranch?.gpayNo || currentBranch?.upiId}&pn=${previewData?.seller?.name || 'Pearl Agency'}&cu=INR`)}" style="width: 15mm; height: 15mm; border: 1px solid #e2e8f0; padding: 1mm; border-radius: 4px;" alt="GPay QR" />
                            <div style="font-size: 7px; font-weight: 800; margin-top: 1px;">SCAN TO PAY</div>
                         </div>
                       ` : ""}

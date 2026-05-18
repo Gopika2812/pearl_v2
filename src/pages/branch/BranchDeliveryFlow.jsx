@@ -46,7 +46,7 @@ const BranchDeliveryFlow = () => {
     deliveryPersonComment: ""
   });
   const [scanInput, setScanInput] = useState("");
-  const [selectedScanRole, setSelectedScanRole] = useState("storageMan"); // storageMan, stockChecker, deliveryPerson
+  const [selectedScanRole, setSelectedScanRole] = useState("pick"); // pick, deliveryCompleted
   const [showScanCompletionModal, setShowScanCompletionModal] = useState(null); // invoice
   const [scanPaymentOptions, setScanPaymentOptions] = useState([]);
   const [showLiveScanner, setShowLiveScanner] = useState(false);
@@ -411,39 +411,74 @@ const BranchDeliveryFlow = () => {
       return;
     }
 
-    // Status Toggle Logic
     const currentStatus = inv.deliveryStatus || "PENDING";
-    let nextStatus = currentStatus;
 
-    if (currentStatus === "PENDING") {
-        nextStatus = "PICKED";
-    } else if (currentStatus === "PICKED") {
-        if (selectedScanRole === "deliveryPerson") {
-            setShowScanCompletionModal(inv);
-            return; // Stop here and wait for modal (Step 3: Delivery)
-        } else {
-            // Step 1 or 2: Just update assignment/checker info
-            nextStatus = "PICKED";
-        }
-    } else if (currentStatus === "COMPLETED") {
+    if (currentStatus === "COMPLETED") {
         toast.info(`Invoice ${invNo} is already COMPLETED`);
         return;
     }
 
-    await performScanUpdate(inv, nextStatus);
+    if (selectedScanRole === "pick") {
+        // Progressive scan logic: Scan 3 times to assign storageMan, stockChecker, and deliveryPerson
+        const hasStorage = inv.storageMan && inv.storageMan !== "NONE" && inv.storageMan.trim();
+        const hasChecker = inv.stockChecker && inv.stockChecker !== "NONE" && inv.stockChecker.trim();
+        const hasDelivery = inv.deliveryPerson && inv.deliveryPerson !== "NONE" && inv.deliveryPerson.trim();
+
+        let targetRole = "";
+        if (!hasStorage) {
+            targetRole = "storageMan";
+        } else if (!hasChecker) {
+            targetRole = "stockChecker";
+        } else if (!hasDelivery) {
+            targetRole = "deliveryPerson";
+        } else {
+            toast.info(`Invoice ${invNo} already has Storage, Checker, and Delivery Person assigned.`);
+            return;
+        }
+
+        // Always transition status to PICKED when scanning under 'pick'
+        await performScanUpdate(inv, "PICKED", [], targetRole);
+
+    } else if (selectedScanRole === "deliveryCompleted") {
+        // Delivery completion scan logic
+        const hasStorage = inv.storageMan && inv.storageMan !== "NONE" && inv.storageMan.trim();
+        const hasChecker = inv.stockChecker && inv.stockChecker !== "NONE" && inv.stockChecker.trim();
+        const hasDelivery = inv.deliveryPerson && inv.deliveryPerson !== "NONE" && inv.deliveryPerson.trim();
+        const storageComment = inv.storageManComment && inv.storageManComment.trim();
+        const checkerComment = inv.stockCheckerComment && inv.stockCheckerComment.trim();
+        const deliveryComment = inv.deliveryPersonComment && inv.deliveryPersonComment.trim();
+
+        if (!hasStorage || !storageComment || !hasChecker || !checkerComment || !hasDelivery || !deliveryComment) {
+            toast.error(`Invoice ${invNo} cannot be completed. Please assign Storage Man, Stock Checker, and Delivery Person with all comments first.`);
+            return;
+        }
+
+        // All filled, open completion modal to select payment/dispatch options
+        setShowScanCompletionModal(inv);
+    }
   };
 
-  const performScanUpdate = async (inv, status, paymentOptions = []) => {
-    const commentField = selectedScanRole + "Comment";
-    const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
+  const performScanUpdate = async (inv, status, paymentOptions = [], targetRole = null) => {
+    const activeRole = targetRole || selectedScanRole;
     
-    const payload = { 
-      [selectedScanRole]: user?.username || user?.fullName || "System",
-      [commentField]: `${selectedScanRole.replace(/([A-Z])/g, ' $1')} confirmed by ${user?.username || 'System'} at ${timestamp}`,
+    let payload = { 
       deliveryStatus: status,
       updatedBy: user?.username || "System",
       updatedById: user?._id || user?.id || null
     };
+
+    if (activeRole !== "deliveryCompleted") {
+        const commentField = activeRole + "Comment";
+        const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
+        
+        let roleLabel = activeRole;
+        if (activeRole === "storageMan") roleLabel = "Storage Man";
+        else if (activeRole === "stockChecker") roleLabel = "Stock Checker";
+        else if (activeRole === "deliveryPerson") roleLabel = "Delivery Person";
+
+        payload[activeRole] = user?.username || user?.fullName || "System";
+        payload[commentField] = `${roleLabel} confirmed by ${user?.username || 'System'} at ${timestamp}`;
+    }
 
     if (status === "COMPLETED") {
         payload.deliveryPaymentType = paymentOptions.join(",");
@@ -457,7 +492,7 @@ const BranchDeliveryFlow = () => {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(`✅ ${inv.invoiceNumber} marked as ${status}`);
+        toast.success(`Saved successfully!`);
         if (invoices.some(i => i._id === inv._id)) {
             setInvoices(prev => prev.map(i => i._id === inv._id ? data.data : i));
         } else {
@@ -472,7 +507,6 @@ const BranchDeliveryFlow = () => {
       toast.error("Failed to update record");
     }
   };
-
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.role === "MANAGER";
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
   // Check if invoice is 2+ days old (not today or yesterday)
@@ -572,7 +606,7 @@ const BranchDeliveryFlow = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tight">
-                  Delivery <span className="text-indigo-600">Flow</span>
+                  Pick & <span className="text-indigo-600">Delivery Completed</span>
                 </h1>
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
                   Track and manage Sales Invoice processing stages
@@ -622,9 +656,9 @@ const BranchDeliveryFlow = () => {
                 onChange={(e) => setFilterStatus(e.target.value)}
               >
                 <option value="ALL">ALL STATUS</option>
-                <option value="PENDING">PENDING</option>
+                <option value="PENDING">PICK</option>
                 <option value="PICKED">PICKED</option>
-                <option value="COMPLETED">COMPLETED</option>
+                <option value="COMPLETED">DELIVERY COMPLETED</option>
               </select>
             </div>
             <div>
@@ -679,11 +713,10 @@ const BranchDeliveryFlow = () => {
 
               <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
                  <div className="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50">
-                    {[
-                       { id: 'storageMan', label: 'Storage' },
-                       { id: 'stockChecker', label: 'Checker' },
-                       { id: 'deliveryPerson', label: 'Delivery' }
-                    ].map(role => (
+                     {[
+                        { id: 'pick', label: 'Pick' },
+                        { id: 'deliveryCompleted', label: 'Delivery Completed' }
+                     ].map(role => (
                        <button
                           key={role.id}
                           onClick={() => setSelectedScanRole(role.id)}
@@ -1449,6 +1482,7 @@ const BranchDeliveryFlow = () => {
 
 // 💳 SCAN COMPLETION MODAL
 const ScanCompletionModal = ({ invoice, onClose, onConfirm, selectedOptions, setSelectedOptions }) => {
+    const [verifyDispatch, setVerifyDispatch] = useState(false);
     const options = ["CHEQUE", "OLD PAYMENT", "SPOTPAYMENTCASH", "SPOTPAYMENTUPI", "CASH & UPI", "SIGNATURE"];
     
     return (
@@ -1470,7 +1504,7 @@ const ScanCompletionModal = ({ invoice, onClose, onConfirm, selectedOptions, set
                 </div>
                 <div className="p-8">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Select Delivery Options (Multiple Allowed)</p>
-                    <div className="grid grid-cols-2 gap-3 mb-8">
+                    <div className="grid grid-cols-2 gap-3 mb-6">
                         {options.map(opt => (
                             <label key={opt} className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${selectedOptions.includes(opt) ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}>
                                 <input 
@@ -1489,6 +1523,23 @@ const ScanCompletionModal = ({ invoice, onClose, onConfirm, selectedOptions, set
                             </label>
                         ))}
                     </div>
+
+                    <label className={`flex items-center gap-3 p-4 mb-6 rounded-2xl border-2 transition-all cursor-pointer group ${verifyDispatch ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}>
+                        <input 
+                            type="checkbox" 
+                            className="hidden" 
+                            checked={verifyDispatch}
+                            onChange={() => setVerifyDispatch(!verifyDispatch)}
+                        />
+                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${verifyDispatch ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-200 group-hover:border-slate-300'}`}>
+                            {verifyDispatch && <FaCheckCircle className="text-white text-xs" />}
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-black uppercase tracking-tight">VERIFY DISPATCH</span>
+                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">MANDATORY FOR COMPLETION</span>
+                        </div>
+                    </label>
+
                     <div className="flex gap-3">
                         <button 
                             onClick={onClose}
@@ -1497,8 +1548,9 @@ const ScanCompletionModal = ({ invoice, onClose, onConfirm, selectedOptions, set
                             Cancel
                         </button>
                         <button 
+                            disabled={!verifyDispatch}
                             onClick={onConfirm}
-                            className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition shadow-xl shadow-indigo-100 active:scale-95"
+                            className={`flex-[2] py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all ${verifyDispatch ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
                         >
                             Mark as Completed
                         </button>
@@ -1509,21 +1561,23 @@ const ScanCompletionModal = ({ invoice, onClose, onConfirm, selectedOptions, set
     );
 };
 
-// 📦 BULK SCAN ASSIGNMENT MODAL
 const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }) => {
     const [storageMan, setStorageMan] = useState("");
     const [stockChecker, setStockChecker] = useState("");
+    const [deliveryPerson, setDeliveryPerson] = useState("");
     const [storageManComment, setStorageManComment] = useState("");
     const [stockCheckerComment, setStockCheckerComment] = useState("");
+    const [deliveryPersonComment, setDeliveryPersonComment] = useState("");
 
     // Auto-update comments when staff is selected
     useEffect(() => {
-        if (storageMan || stockChecker) {
+        if (storageMan || stockChecker || deliveryPerson) {
             const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
             setStorageManComment(`Picked by ${storageMan || '...'} | Checked by ${stockChecker || '...'} at ${timestamp}`);
             setStockCheckerComment(`Checked by ${stockChecker || '...'} | Picked by ${storageMan || '...'} at ${timestamp}`);
+            setDeliveryPersonComment(`Delivery Person confirmed by ${deliveryPerson || '...'} at ${timestamp}`);
         }
-    }, [storageMan, stockChecker]);
+    }, [storageMan, stockChecker, deliveryPerson]);
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
@@ -1543,7 +1597,7 @@ const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }
                     </button>
                 </div>
                 
-                <div className="p-8 space-y-6">
+                <div className="p-8 space-y-6 overflow-y-auto max-h-[75vh]">
                     <div className="grid grid-cols-1 gap-6">
                         <div className="space-y-3">
                             <div>
@@ -1586,6 +1640,27 @@ const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }
                                 className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
                             />
                         </div>
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Select Delivery Person</label>
+                                <select 
+                                    value={deliveryPerson} 
+                                    onChange={(e) => setDeliveryPerson(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+                                >
+                                    <option value="">Select Staff</option>
+                                    {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
+                                </select>
+                            </div>
+                            <input 
+                                type="text"
+                                value={deliveryPersonComment}
+                                onChange={(e) => setDeliveryPersonComment(e.target.value)}
+                                placeholder="Edit delivery comment..."
+                                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
+                            />
+                        </div>
                     </div>
 
                     <div className="pt-4 flex flex-col gap-4">
@@ -1598,8 +1673,8 @@ const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }
                         <div className="flex gap-3">
                             <button onClick={onClose} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition">Cancel</button>
                             <button 
-                                disabled={!storageMan || !stockChecker}
-                                onClick={() => onConfirm({ storageMan, stockChecker, storageManComment, stockCheckerComment, deliveryStatus: 'PICKED' })}
+                                disabled={!storageMan || !stockChecker || !deliveryPerson}
+                                onClick={() => onConfirm({ storageMan, stockChecker, deliveryPerson, storageManComment, stockCheckerComment, deliveryPersonComment, deliveryStatus: 'PICKED' })}
                                 className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition disabled:opacity-50 shadow-xl shadow-indigo-100"
                             >
                                 Mark All as Picked
@@ -1611,5 +1686,4 @@ const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }
         </div>
     );
 };
-
 export default BranchDeliveryFlow;

@@ -15,12 +15,12 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
       ? invoice.signedQrCodeImgUrl 
       : `data:image/png;base64,${invoice.signedQrCodeImgUrl}`;
   } else if (invoice.signedQrCode) {
-    qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(invoice.signedQrCode)}`;
+    qrImage = `https://quickchart.io/qr?size=300&text=${encodeURIComponent(invoice.signedQrCode)}`;
   }
 
   // 📦 INTERNAL TRACKING QR (For warehouse scanning)
   const trackingData = invoice.isBulk ? invoice.invoiceNumber : (invoice.invoiceNumber || invoice.creditNoteId || "N/A");
-  const trackingQr = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(trackingData)}`;
+  const trackingQr = `https://quickchart.io/qr?size=300&text=${encodeURIComponent(trackingData)}`;
 
   // 🏪 ROBUST SELLER DATA (Fallback to BranchId if Seller Snapshot is missing)
   const seller = {
@@ -249,7 +249,7 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
                  </div>
                  ${seller.gpayNo ? `
                    <div style="text-align: center; margin-left: 2mm;">
-                      <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(`upi://pay?pa=${seller.gpayNo}&pn=${seller.name}&cu=INR`)}" style="width: 15mm; height: 15mm; border: 1px solid #e2e8f0; padding: 1mm; border-radius: 4px;" alt="GPay QR" />
+                      <img src="https://quickchart.io/qr?size=150&text=${encodeURIComponent(`upi://pay?pa=${seller.gpayNo}&pn=${seller.name}&cu=INR`)}" style="width: 15mm; height: 15mm; border: 1px solid #e2e8f0; padding: 1mm; border-radius: 4px;" alt="GPay QR" />
                       <div style="font-size: 6px; font-weight: 800; color: #475569; margin-top: 1px;">GPAY: ${seller.gpayNo}</div>
                    </div>
                  ` : ""}
@@ -381,7 +381,7 @@ const EInvoicePrintModal = ({ invoice, onClose }) => {
                    {seller.gpayNo && (
                       <div className="flex flex-col items-center gap-1 pl-2">
                         <img 
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(`upi://pay?pa=${seller.gpayNo}&pn=${seller.name}&cu=INR`)}`} 
+                          src={`https://quickchart.io/qr?size=150&text=${encodeURIComponent(`upi://pay?pa=${seller.gpayNo}&pn=${seller.name}&cu=INR`)}`} 
                           className="w-10 h-10 border border-gray-100 p-1 rounded" 
                           alt="GPay QR" 
                         />
