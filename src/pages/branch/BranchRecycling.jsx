@@ -164,10 +164,19 @@ export default function BranchRecycling() {
       }
 
       console.log(`✅ FINAL: Fetched ${allProductsData.length} total products`);
-      console.log("📋 All products:", allProductsData);
+      
+      // Deduplicate by product ID to prevent React key collisions and unstable render states
+      const uniqueMap = new Map();
+      allProductsData.forEach(p => {
+        if (p && p._id) {
+          uniqueMap.set(p._id, p);
+        }
+      });
+      const uniqueProductsList = Array.from(uniqueMap.values());
+      console.log(`✨ DEDUPLICATED: Reduced from ${allProductsData.length} to ${uniqueProductsList.length} unique products`);
 
       // Store all products and extract unique groups
-      setAllProducts(allProductsData);
+      setAllProducts(uniqueProductsList);
 
       // Extract unique product groups
       const groups = new Set(
@@ -818,8 +827,9 @@ export default function BranchRecycling() {
         // Priority: Out of Stock (0) > Low (1) > Normal (2)
         const getStatusPriority = (p) => {
           const { reorderLevel } = getReorderParams(p);
-          if (p.totalQty === 0) return 0;
-          if (p.totalQty <= reorderLevel) return 1;
+          const qty = p.totalQty !== undefined && p.totalQty !== null ? Number(p.totalQty) : 0;
+          if (qty <= 0) return 0;
+          if (qty <= reorderLevel) return 1;
           return 2;
         };
         const priorityA = getStatusPriority(a);
@@ -828,8 +838,8 @@ export default function BranchRecycling() {
       }
       
       if (key === "name") {
-        const nameA = a.name.toLowerCase();
-        const nameB = b.name.toLowerCase();
+        const nameA = (a.name || "").toLowerCase();
+        const nameB = (b.name || "").toLowerCase();
         if (nameA < nameB) return direction === "asc" ? -1 : 1;
         if (nameA > nameB) return direction === "asc" ? 1 : -1;
         return 0;
@@ -844,54 +854,67 @@ export default function BranchRecycling() {
       }
 
       if (key === "totalQty") {
-        return direction === "asc" ? a.totalQty - b.totalQty : b.totalQty - a.totalQty;
+        let valA = a.totalQty !== undefined && a.totalQty !== null ? Number(a.totalQty) : 0;
+        let valB = b.totalQty !== undefined && b.totalQty !== null ? Number(b.totalQty) : 0;
+        if (isNaN(valA)) valA = 0;
+        if (isNaN(valB)) valB = 0;
+
+        if (a.name.toLowerCase().includes("amul strawberry") || b.name.toLowerCase().includes("amul strawberry")) {
+          console.log(`[SORT DEBUG] Comparing: "${a.name}" (${valA}) vs "${b.name}" (${valB}) | Dir: ${direction} | Result: ${direction === "asc" ? valA - valB : valB - valA}`);
+        }
+        
+        return direction === "asc" ? valA - valB : valB - valA;
       }
 
       if (key === "pendingSales") {
-        const pendingA = pendingSalesMap?.[a._id] || 0;
-        const pendingB = pendingSalesMap?.[b._id] || 0;
+        const pendingA = Number(pendingSalesMap?.[a._id]) || 0;
+        const pendingB = Number(pendingSalesMap?.[b._id]) || 0;
         return direction === "asc" ? pendingA - pendingB : pendingB - pendingA;
       }
 
       if (key === "pendingPO") {
-        const poA = pendingPOMap?.[a._id] || 0;
-        const poB = pendingPOMap?.[b._id] || 0;
+        const poA = Number(pendingPOMap?.[a._id]) || 0;
+        const poB = Number(pendingPOMap?.[b._id]) || 0;
         return direction === "asc" ? poA - poB : poB - poA;
       }
 
       if (key === "netAvailability") {
-        const soA = pendingSalesMap?.[a._id] || 0;
-        const poA = pendingPOMap?.[a._id] || 0;
-        const netA = a.totalQty + poA - soA;
+        const soA = Number(pendingSalesMap?.[a._id]) || 0;
+        const poA = Number(pendingPOMap?.[a._id]) || 0;
+        const qtyA = a.totalQty !== undefined && a.totalQty !== null ? Number(a.totalQty) : 0;
+        const netA = qtyA + poA - soA;
 
-        const soB = pendingSalesMap?.[b._id] || 0;
-        const poB = pendingPOMap?.[b._id] || 0;
-        const netB = b.totalQty + poB - soB;
+        const soB = Number(pendingSalesMap?.[b._id]) || 0;
+        const poB = Number(pendingPOMap?.[b._id]) || 0;
+        const qtyB = b.totalQty !== undefined && b.totalQty !== null ? Number(b.totalQty) : 0;
+        const netB = qtyB + poB - soB;
 
         return direction === "asc" ? netA - netB : netB - netA;
       }
 
       if (key === "available") {
-        const availA = Math.max(0, a.totalQty - (pendingSalesMap?.[a._id] || 0));
-        const availB = Math.max(0, b.totalQty - (pendingSalesMap?.[b._id] || 0));
+        const qtyA = a.totalQty !== undefined && a.totalQty !== null ? Number(a.totalQty) : 0;
+        const qtyB = b.totalQty !== undefined && b.totalQty !== null ? Number(b.totalQty) : 0;
+        const availA = Math.max(0, qtyA - (Number(pendingSalesMap?.[a._id]) || 0));
+        const availB = Math.max(0, qtyB - (Number(pendingSalesMap?.[b._id]) || 0));
         return direction === "asc" ? availA - availB : availB - availA;
       }
 
       if (key === "threshold") {
-        const threshA = getReorderParams(a).reorderLevel;
-        const threshB = getReorderParams(b).reorderLevel;
+        const threshA = Number(getReorderParams(a).reorderLevel) || 0;
+        const threshB = Number(getReorderParams(b).reorderLevel) || 0;
         return direction === "asc" ? threshA - threshB : threshB - threshA;
       }
 
       if (key === "restockingQty") {
-        const qtyA = getReorderParams(a).reorderQty;
-        const qtyB = getReorderParams(b).reorderQty;
+        const qtyA = Number(getReorderParams(a).reorderQty) || 0;
+        const qtyB = Number(getReorderParams(b).reorderQty) || 0;
         return direction === "asc" ? qtyA - qtyB : qtyB - qtyA;
       }
 
       if (key === "preferredVendor") {
-        const valA = (a.preferredVendor?.name || "").toLowerCase();
-        const valB = (b.preferredVendor?.name || "").toLowerCase();
+        const valA = (a.preferredVendor?.name || a.preferredVendor || "").toLowerCase();
+        const valB = (b.preferredVendor?.name || b.preferredVendor || "").toLowerCase();
         if (valA < valB) return direction === "asc" ? -1 : 1;
         if (valA > valB) return direction === "asc" ? 1 : -1;
         return 0;
@@ -1567,22 +1590,21 @@ export default function BranchRecycling() {
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20 px-4 md:px-6 pb-10">
       <FullPageStockAlert />
 
-
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full">
         {/* HEADER */}
-        <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-2xl shadow-lg p-8 mb-8">
+        <div className="bg-gradient-to-r from-blue-950 via-blue-900 to-indigo-900 text-white rounded-2xl shadow-lg p-8 mb-8">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
               <FaExclamationTriangle className="text-5xl opacity-80" />
               <div>
                 <h1 className="text-4xl font-bold">Smart Restocking</h1>
-                <p className="text-orange-100 mt-1">Automated Low Stock Alerts & Restocking</p>
+                <p className="text-blue-100 mt-1">Automated Low Stock Alerts & Restocking</p>
               </div>
             </div>
             <button
               onClick={() => fetchAllData(currentPage, searchTerm)}
               disabled={loading}
-              className="bg-white text-orange-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition disabled:opacity-50 flex items-center gap-2"
+              className="bg-white text-blue-900 px-4 py-2 rounded-lg font-semibold hover:bg-slate-50 transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
             >
               <FaSync className={loading ? "animate-spin" : ""} />
               {loading ? "Loading..." : "Refresh"}
@@ -1597,7 +1619,7 @@ export default function BranchRecycling() {
                 placeholder="🔍 Search products by name..."
                 value={searchTerm}
                 onChange={handleSearch}
-                className="w-full px-4 py-2 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                className="w-full px-4 py-2 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -1609,7 +1631,7 @@ export default function BranchRecycling() {
                 setSelectedProducts(new Set()); // Clear selection when changing group
                 setCurrentPage(1); // Reset to first page
               }}
-              className="px-4 py-2 rounded-lg text-gray-800 bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-300 font-semibold"
+              className="px-4 py-2 rounded-lg text-gray-800 bg-white border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
             >
               {allProductGroups.map((group) => (
                 <option key={String(group)} value={String(group)}>
@@ -1624,13 +1646,13 @@ export default function BranchRecycling() {
             </select>
 
             {/* View Toggle */}
-            <div className="flex gap-2 bg-white/30 p-1 rounded-lg">
+            <div className="flex gap-2 bg-white/20 p-1 rounded-lg">
               <button
                 onClick={() => setViewMode("table")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
                   viewMode === "table"
-                    ? "bg-white text-orange-600 shadow-md"
-                    : "text-white hover:bg-white/20"
+                    ? "bg-white text-blue-900 shadow-md"
+                    : "text-white hover:bg-white/10"
                 }`}
               >
                 <FaList size={16} /> Table
@@ -1639,8 +1661,8 @@ export default function BranchRecycling() {
                 onClick={() => setViewMode("card")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-md transition font-medium ${
                   viewMode === "card"
-                    ? "bg-white text-orange-600 shadow-md"
-                    : "text-white hover:bg-white/20"
+                    ? "bg-white text-blue-900 shadow-md"
+                    : "text-white hover:bg-white/10"
                 }`}
               >
                 <FaThLarge size={16} /> Card
@@ -1659,7 +1681,7 @@ export default function BranchRecycling() {
           </div>
 
           {/* Pagination Controls */}
-          <div className="flex items-center justify-between mt-4 px-4 py-3 bg-white rounded-lg">
+          <div className="flex items-center justify-between mt-4 px-4 py-3 bg-white rounded-lg shadow-sm">
             <div className="text-sm text-gray-600">
               <span className="font-semibold">Page {allProducts.length > 0 ? (totalFilteredPages > 0 ? currentPage : 0) : (pagination.pages > 0 ? currentPage : 0)} of {allProducts.length > 0 ? totalFilteredPages : (pagination.pages || 0)}</span>
               <span className="ml-3">Total: <strong>{allProducts.length > 0 ? filteredProducts.length : pagination.total}</strong> products</span>
@@ -1693,7 +1715,7 @@ export default function BranchRecycling() {
                       onClick={() => setCurrentPage(pageNum)}
                       className={`px-3 py-1 rounded-lg font-semibold transition ${
                         currentPage === pageNum
-                          ? "bg-orange-500 text-white"
+                          ? "bg-blue-900 text-white"
                           : "border border-gray-300 text-gray-700 hover:bg-gray-100"
                       }`}
                     >
@@ -2028,9 +2050,9 @@ export default function BranchRecycling() {
       {bulkRestockPreviewMode && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white p-6 rounded-t-xl sticky top-0">
-              <h2 className="text-2xl font-bold">🛒 Grouped Restocking Preview</h2>
-              <p className="text-orange-100 mt-1">Review and edit quantities before creating PO</p>
+            <div className="bg-gradient-to-r from-blue-950 via-blue-900 to-indigo-900 text-white p-6 rounded-t-xl sticky top-0">
+              <h2 className="text-2xl font-bold font-sans">🛒 Grouped Restocking Preview</h2>
+              <p className="text-blue-100 mt-1 text-sm">Review and edit quantities before creating PO</p>
             </div>
 
             <div className="p-6 space-y-4">
@@ -2082,7 +2104,7 @@ export default function BranchRecycling() {
                                   [product._id]: parseInt(e.target.value) || 0,
                                 }))
                               }
-                              className="w-20 px-2 py-1 border border-gray-300 rounded text-center font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500"
+                              className="w-20 px-2 py-1 border border-gray-300 rounded text-center font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                           </td>
                           <td className="px-3 py-3 text-sm text-right text-gray-800 font-bold border-b">
@@ -2096,11 +2118,11 @@ export default function BranchRecycling() {
               </div>
 
               {/* Summary */}
-              <div className="bg-gradient-to-r from-orange-50 to-orange-100 p-4 rounded-lg border-2 border-orange-300">
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50/70 p-4 rounded-lg border border-blue-200 shadow-sm">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
-                    <p className="text-xs text-gray-600">Subtotal</p>
-                    <p className="text-lg font-bold text-orange-700">
+                    <p className="text-xs text-gray-600 font-medium">Subtotal</p>
+                    <p className="text-lg font-extrabold text-blue-900">
                       ₹
                       {bulkRestockPreviewItems
                         .reduce(
@@ -2113,8 +2135,8 @@ export default function BranchRecycling() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-600">Tax (GST)</p>
-                    <p className="text-lg font-bold text-orange-700">
+                    <p className="text-xs text-gray-600 font-medium">Tax (GST)</p>
+                    <p className="text-lg font-extrabold text-blue-900">
                       ₹
                       {bulkRestockPreviewItems
                         .reduce(
@@ -2128,8 +2150,8 @@ export default function BranchRecycling() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-600">Grand Total</p>
-                    <p className="text-lg font-bold text-orange-700">
+                    <p className="text-xs text-gray-600 font-medium">Grand Total</p>
+                    <p className="text-lg font-extrabold text-blue-900">
                       ₹
                       {(
                         bulkRestockPreviewItems.reduce(
@@ -2167,7 +2189,7 @@ export default function BranchRecycling() {
               <button
                 onClick={confirmBulkRestock}
                 disabled={bulkRestockingInProgress}
-                className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-orange-600 to-orange-700 text-white font-semibold hover:from-orange-700 hover:to-orange-800 transition disabled:opacity-50"
+                className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-950 hover:to-indigo-950 text-white font-semibold transition disabled:opacity-50 shadow-sm"
               >
                 {bulkRestockingInProgress ? "⏳ Creating PO..." : "✅ Create PO"}
               </button>
