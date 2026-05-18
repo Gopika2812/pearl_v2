@@ -436,7 +436,19 @@ const BranchSalesInvoices = () => {
         setShowTransportModal(null);
         fetchInvoices();
       } else {
-        toast.error(`❌ Error: ${data.message || "Failed to generate E-Way Bill"}`);
+        const errorMsg = data.message || "Failed to generate E-Way Bill";
+        if (errorMsg.includes("distance between the pincodes given is too high")) {
+          toast.error(
+            <div className="flex flex-col gap-1 p-1">
+              <span className="font-extrabold text-[12px] text-white">❌ E-Way Bill Distance Error</span>
+              <span className="text-[11px] text-white/90">For already generated IRNs, the government portal locks the distance.</span>
+              <span className="text-[11px] font-black text-amber-300 mt-1">💡 Solution: Re-open the modal and enter "15" in the Distance field to generate successfully!</span>
+            </div>,
+            { autoClose: 12000 }
+          );
+        } else {
+          toast.error(`❌ Error: ${errorMsg}`);
+        }
       }
     } catch (err) {
       toast.error("Error: " + err.message);
@@ -1433,6 +1445,11 @@ const TransportDetailsModal = ({ invoice, onClose, onConfirm }) => {
                 onChange={(e) => setDetails({ ...details, transportDistance: e.target.value })}
                 className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-[#319bab]"
               />
+              {isEwbOnly && (
+                <p className="text-[9px] font-semibold text-amber-600 mt-1 leading-tight">
+                  💡 Hint: Enter <b>15</b> or the exact distance. Portal doesn't support "0" for standalone EWB.
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Vehicle Type</label>

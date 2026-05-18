@@ -124,6 +124,12 @@ export default function SuperAdminCreditRequests() {
   };
 
   const sortedHistory = [...history].sort((a, b) => {
+    if (sortConfig.key === "createdAt" || sortConfig.key === "updatedAt") {
+      const timeA = a[sortConfig.key] ? new Date(a[sortConfig.key]).getTime() : 0;
+      const timeB = b[sortConfig.key] ? new Date(b[sortConfig.key]).getTime() : 0;
+      return sortConfig.direction === "asc" ? timeA - timeB : timeB - timeA;
+    }
+
     let aVal = a[sortConfig.key];
     let bVal = b[sortConfig.key];
 
@@ -373,7 +379,12 @@ export default function SuperAdminCreditRequests() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50/80 text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em] border-b border-gray-100">
-                      <th className="px-6 py-5 cursor-pointer hover:text-secondary" onClick={() => handleSort("updatedAt")}>Date</th>
+                      <th className="px-6 py-5 cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("createdAt")}>
+                        Request Time {sortConfig.key === "createdAt" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th className="px-6 py-5 cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("updatedAt")}>
+                        Action Time {sortConfig.key === "updatedAt" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
                       <th className="px-6 py-5 cursor-pointer hover:text-secondary" onClick={() => handleSort("customer")}>Customer</th>
                       <th className="px-6 py-5 text-center">Reqs</th>
                       <th className="px-6 py-5 text-right">Requested</th>
@@ -385,8 +396,25 @@ export default function SuperAdminCreditRequests() {
                   <tbody className="divide-y divide-gray-50">
                     {sortedHistory.map((item) => (
                       <tr key={item._id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-6 py-4 text-[10px] font-bold text-secondary/50">
-                          {new Date(item.updatedAt).toLocaleString()}
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-[11px] font-black text-secondary/80">
+                              {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-GB') : "—"}
+                            </span>
+                            <span className="text-[9px] font-bold text-secondary/40">
+                              {item.createdAt ? new Date(item.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : ""}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-[11px] font-black text-secondary/80">
+                              {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString('en-GB') : "—"}
+                            </span>
+                            <span className="text-[9px] font-bold text-secondary/40">
+                              {item.updatedAt ? new Date(item.updatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : ""}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-sm font-black text-secondary">{item.customerId?.name || "N/A"}</span>

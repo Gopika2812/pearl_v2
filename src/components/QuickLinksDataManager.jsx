@@ -26,6 +26,16 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+
+  // Debounce search query
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 400); // 400ms debounce
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" }); // New sorting state
   const itemsPerPage = 10;
@@ -134,7 +144,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     if (branchId) {
       fetchData();
     }
-  }, [branchId, type, selectedGroup, selectedCategory]);
+  }, [branchId, type, selectedGroup, selectedCategory, debouncedSearchQuery]);
 
   // Initialize export columns ONLY when data type actually changes
   useEffect(() => {
@@ -177,6 +187,10 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     setLoading(true);
     try {
       const params = { branchId, limit: 1000 };
+      
+      if (debouncedSearchQuery.trim()) {
+        params.search = debouncedSearchQuery.trim();
+      }
       
       if (type === "product") {
         params.mini = true; // Use optimized fast-loading mode

@@ -1,6 +1,8 @@
 import express from "express";
+import moment from "moment-timezone";
 import mongoose from "mongoose";
 import auth from "../middleware/auth.js";
+import { cacheData, clearCachePrefix } from "../middleware/cacheMiddleware.js";
 import Commission from "../models/Commission.js";
 import Customer from "../models/Customer.js";
 import Invoice from "../models/Invoice.js";
@@ -10,8 +12,6 @@ import SalesOrder from "../models/SalesOrder.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
-import { cacheData, clearCachePrefix } from "../middleware/cacheMiddleware.js";
-import moment from "moment-timezone";
 
 const router = express.Router();
 
@@ -171,7 +171,7 @@ router.get("/", async (req, res) => {
 
     // 5. Date Filter logic:
     const hasSearch = search || voucherType || customerName || customerId;
-    
+
     // We apply date filter if:
     // a) fromDate or toDate are provided (non-empty)
     // b) NO other filters (search/voucher/customer) are provided (defaults to Today)
@@ -217,7 +217,7 @@ router.get("/", async (req, res) => {
             { orderDate: { $exists: false }, createdAt: dateCriteria }
           ]
         });
-        
+
         console.log(`📅 [DEBUG] Final Date Filter Applied: ${start ? moment(start).format() : 'ANY'} to ${end ? moment(end).format() : 'ANY'}`);
       }
     }
@@ -801,7 +801,7 @@ router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, r
     const Invoice = mongoose.model("Invoice");
     await Invoice.findOneAndUpdate(
       { salesOrderId: salesOrder._id },
-      { 
+      {
         status: "CANCELLED",
         deliveryStatus: "CANCELLED", // ✨ Reset delivery status
         cancelledAt: new Date(),
@@ -868,7 +868,7 @@ router.patch("/:id/request-reedit", auth, clearCachePrefix("/api/sales-orders"),
         note: `Direct re-edit initiated by ${requestedBy || "Staff"}.`
       });
 
-      order.status = "PLACED"; 
+      order.status = "PLACED";
       order.isReEdited = true;
     }
 
@@ -991,7 +991,7 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
       // 2. Financial Deltas (Customer Balance + Customer Swap)
       const oldTotal = salesOrder.lastInvoicedGrandTotal || 0;
       const newTotal = Math.round(Number(invoiceGrandTotal) || salesOrder.grandTotal || 0);
-      
+
       // Determine if customer has changed since last invoice
       const oldCustomerId = salesOrder.lastInvoicedCustomerId || salesOrder.customer?.customerId;
       const currentCustomerId = salesOrder.customer?.customerId;
@@ -999,7 +999,7 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
 
       if (isCustomerSwapped) {
         console.log(`🔄 Customer Swap detected: ${oldCustomerId} -> ${currentCustomerId}`);
-        
+
         // A. Revert entire old total from old customer
         const oldCustomer = await Customer.findById(oldCustomerId);
         if (oldCustomer) {
@@ -1334,7 +1334,7 @@ router.get("/:id", async (req, res) => {
 router.get("/unpaid/:customerId", async (req, res) => {
   try {
     const { customerId } = req.params;
-    
+
     if (!mongoose.Types.ObjectId.isValid(customerId)) {
       return res.status(400).json({ success: false, message: "Invalid Customer ID" });
     }
@@ -1360,8 +1360,8 @@ router.get("/unpaid/:customerId", async (req, res) => {
     };
 
     const unpaidInvoices = await Invoice.find(query)
-    .sort({ invoiceDate: -1 })
-    .lean();
+      .sort({ invoiceDate: -1 })
+      .lean();
 
     console.log(`[DEBUG] Unpaid search for ${customerName} (${customerId}): Found ${unpaidInvoices.length} total.`);
 
@@ -1372,8 +1372,8 @@ router.get("/unpaid/:customerId", async (req, res) => {
       // Use Invoice Number as the primary display ID
       const displayKey = inv.invoiceNumber || inv._id;
       const orderId = inv.salesOrderId?._id || inv.salesOrderId || inv._id;
-      
-      const receipts = await Receipt.find({ 
+
+      const receipts = await Receipt.find({
         $or: [
           { originalSalesOrderId: orderId },
           { originalInvoiceId: inv.invoiceNumber },
@@ -1381,14 +1381,14 @@ router.get("/unpaid/:customerId", async (req, res) => {
         ],
         status: { $in: ["confirmed", "bounced"] }
       });
-      
+
       const totalReceived = (receipts || []).reduce((sum, r) => {
         const isBounced = r.status === "bounced" || r.paymentMethod === "BOUNCED";
-        
+
         // Handle bulk receipts: find the specific amount allocated to this order
         let amt = 0;
         if (r.relatedOrders && r.relatedOrders.length > 0) {
-          const match = r.relatedOrders.find(ro => 
+          const match = r.relatedOrders.find(ro =>
             (ro.salesOrderId?._id || ro.salesOrderId)?.toString() === orderId.toString()
           );
           amt = match ? (match.amount || 0) : 0;
@@ -1401,14 +1401,14 @@ router.get("/unpaid/:customerId", async (req, res) => {
 
       const invoiceTotal = parseFloat(inv.grandTotal || 0);
       const pendingBalance = Math.max(0, invoiceTotal - totalReceived);
-      
+
       const invObj = inv.toObject ? inv.toObject() : inv;
-      return { 
+      return {
         ...invObj,
         _id: orderId, // Use Order ID for backend compatibility
         originalInvoiceId: inv._id,
         invoiceId: inv.invoiceNumber, // Map Invoice Number to the ID field
-        totalReceived, 
+        totalReceived,
         invoiceTotal,
         pendingBalance: Number(pendingBalance.toFixed(2))
       };
@@ -1457,7 +1457,7 @@ router.put("/:id", auth, async (req, res) => {
       oldCustomerId = salesOrder.customer.customerId;
       oldCustomerObj = await Customer.findById(oldCustomerId);
       const dbCustomer = await Customer.findById(customer.id);
-      
+
       if (dbCustomer) {
         salesOrder.customer = {
           customerId: dbCustomer._id,
@@ -1470,7 +1470,7 @@ router.put("/:id", auth, async (req, res) => {
           gstin: dbCustomer.gstin,
           stateCode: dbCustomer.stateCode || "33",
         };
-        
+
         // ✨ DRAFT MODE: We DO NOT update openingBalance or closingBalance yet.
         // These will be updated only when "Generate Invoice" is clicked.
       }
@@ -1938,7 +1938,7 @@ router.delete("/:id/cancel", auth, async (req, res) => {
 
     // Manually trigger the reversal logic since we didn't delete the doc
     const SalesOrderModel = mongoose.model("SalesOrder");
-    
+
     // 1. Revert Customer Balance
     const Customer = mongoose.model("Customer");
     const Product = mongoose.model("Product");
@@ -2008,7 +2008,7 @@ router.put("/:id/increment-print-count", async (req, res) => {
       { new: true }
     );
     if (!order) return res.status(404).json({ message: "Order not found" });
-    
+
     console.log(`✅ [DEBUG] Print count incremented for SO ${order.invoiceId}. New count: ${order.printCount}`);
     res.json({ success: true, printCount: order.printCount });
   } catch (error) {
@@ -2071,7 +2071,7 @@ router.put("/:id/revoke", auth, async (req, res) => {
     }
 
     // 3. UPDATE STATUS
-    salesOrder.status = "PLACED"; 
+    salesOrder.status = "PLACED";
     salesOrder.invoiceGenerated = false;
     salesOrder.salesInvoiceId = undefined;
     salesOrder.editHistory.push({

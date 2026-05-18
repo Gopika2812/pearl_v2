@@ -89,98 +89,79 @@ export default function BranchRecycling() {
   const [bulkRestockPreviewItems, setBulkRestockPreviewItems] = useState([]);
   const [bulkRestockEditQty, setBulkRestockEditQty] = useState({});
 
-  // Fetch all products to get all product groups available
+  // Fetch product groups directly from `/api/product-groups` immediately
+  const fetchProductGroupsDirectly = async () => {
+    if (!currentBranch?._id) return;
+
+    try {
+      const branchId = currentBranch._id;
+      const url = `${API_BASE}/product-groups?branchId=${branchId}`;
+      console.log("🔄 Fetching product groups directly from:", url);
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`API Error: ${res.status}`);
+      }
+
+      const data = await res.json();
+      console.log("📦 Direct product groups response:", data);
+
+      if (Array.isArray(data)) {
+        const groupNames = data.map((g) => g.name).filter(Boolean);
+        const finalGroups = ["All", ...Array.from(new Set(groupNames)).sort()];
+        console.log("🏷️ Instantly loaded product groups:", finalGroups);
+        setAllProductGroups(finalGroups);
+      }
+    } catch (err) {
+      console.error("❌ Error fetching product groups directly:", err);
+    }
+  };
+
+  // Fetch all products in one fast optimized single call to get all product groups available
   const fetchAllProductsForGroups = async () => {
     if (!currentBranch?._id) return;
 
     try {
       const branchId = currentBranch._id;
-      let allProductsData = [];
-      let page = 1;
-      let hasMore = true;
+      console.log("🔄 Starting to fetch all products for group caching...");
 
-      console.log("🔄 Starting to fetch all products for groups...");
+      const url = `${API_BASE}/products?branchId=${branchId}&limit=10000&mini=true`;
+      console.log(`📄 Fetching all products in single optimized call: ${url}`);
 
-      // Fetch all pages until we get all products
-      while (hasMore) {
-        const url = `${API_BASE}/products?branchId=${branchId}&page=${page}&limit=500`; // Increased limit
-        
-        console.log(`📄 Fetching page ${page} from: ${url}`);
-        
-        const res = await fetch(url);
-        if (!res.ok) {
-          console.warn(`⚠️ API returned status ${res.status}, stopping fetch`);
-          break;
-        }
-        
-        const data = await res.json();
-        console.log(`📦 Page ${page} response:`, data);
-        
-        let productList = [];
-        let pagination = null;
-
-        if (data?.data && Array.isArray(data.data)) {
-          productList = data.data;
-          pagination = data.pagination;
-          console.log(`✨ Extracted ${productList.length} products from data.data`);
-        } else if (Array.isArray(data)) {
-          productList = data;
-          console.log(`✨ Response is direct array with ${productList.length} products`);
-          hasMore = false;
-        } else if (data?.products && Array.isArray(data.products)) {
-          productList = data.products;
-          pagination = data.pagination;
-          console.log(`✨ Extracted ${productList.length} products from data.products`);
-        } else {
-          console.warn("⚠️ No products array found in response");
-          hasMore = false;
-        }
-
-        if (productList.length === 0) {
-          console.log("📭 Empty product list, stopping fetch");
-          hasMore = false;
-        } else {
-          allProductsData = [...allProductsData, ...productList];
-          console.log(`📊 Total products so far: ${allProductsData.length}`);
-
-          // Check if there are more pages
-          if (pagination) {
-            console.log(`📄 Pagination info:`, pagination);
-            if (page >= (pagination.pages || 1)) {
-              hasMore = false;
-            }
-          } else {
-            hasMore = false;
-          }
-        }
-
-        page++;
-
-        // Safety limit to prevent infinite loops
-        if (page > 100) {
-          console.warn("⚠️ Reached max pages (100), stopping");
-          hasMore = false;
-        }
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`API Error: ${res.status}`);
       }
 
-      console.log(`✅ FINAL: Fetched ${allProductsData.length} total products`);
+      const data = await res.json();
+      let productList = [];
+
+      if (data?.data && Array.isArray(data.data)) {
+        productList = data.data;
+      } else if (Array.isArray(data)) {
+        productList = data;
+      } else if (data?.products && Array.isArray(data.products)) {
+        productList = data.products;
+      }
+
+      console.log(`✅ FINAL: Fetched ${productList.length} total products`);
       
       // Deduplicate by product ID to prevent React key collisions and unstable render states
       const uniqueMap = new Map();
-      allProductsData.forEach(p => {
+      productList.forEach(p => {
         if (p && p._id) {
           uniqueMap.set(p._id, p);
         }
       });
       const uniqueProductsList = Array.from(uniqueMap.values());
-      console.log(`✨ DEDUPLICATED: Reduced from ${allProductsData.length} to ${uniqueProductsList.length} unique products`);
+      console.log(`✨ DEDUPLICATED: Reduced from ${productList.length} to ${uniqueProductsList.length} unique products`);
 
-      // Store all products and extract unique groups
+      // Store all products
       setAllProducts(uniqueProductsList);
 
-      // Extract unique product groups
-      const groups = new Set(
-        allProductsData
+      // Extract unique product groups from products as well, merging with any existing groups
+      const groupsFromProducts = new Set(
+        uniqueProductsList
           .map((p) => {
             if (p.productGroup && typeof p.productGroup === 'object') {
               return p.productGroup.name || p.productGroup._id;
@@ -189,12 +170,15 @@ export default function BranchRecycling() {
           })
           .filter(Boolean)
       );
-      
-      const finalGroups = ["All", ...Array.from(groups).sort()];
-      console.log("🏷️ Unique product groups:", finalGroups);
-      setAllProductGroups(finalGroups);
+
+      // Merge with what we already have or update groups
+      setAllProductGroups((prev) => {
+        const merged = new Set([...prev, ...groupsFromProducts]);
+        return ["All", ...Array.from(merged).filter(g => g !== "All").sort()];
+      });
+
     } catch (err) {
-      console.error("❌ Error fetching all product groups:", err);
+      console.error("❌ Error fetching all products for groups:", err);
     }
   };
 
@@ -362,7 +346,8 @@ export default function BranchRecycling() {
       console.log("✅ Branch loaded:", currentBranch.name);
       setBranchLoaded(true);
       fetchAllData(currentPage, searchTerm);
-      fetchAllProductsForGroups(); // Fetch all groups on load
+      fetchProductGroupsDirectly(); // Load product groups INSTANTLY
+      fetchAllProductsForGroups(); // Fetch all products for dynamic counts and global search caching
     } else {
       setBranchLoaded(false);
     }
@@ -418,6 +403,23 @@ export default function BranchRecycling() {
     const fyear = parts[2] || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
     
     return `${prefix}/${String(currentNum + 1).padStart(3, "0")}/${fyear}`;
+  };
+
+  const getPurchaseAgeString = (dateString) => {
+    if (!dateString) return "-";
+    const lastDate = new Date(dateString);
+    const today = new Date();
+    lastDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    const diffTime = today - lastDate;
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const daysVal = diffDays < 0 ? 0 : diffDays;
+    return `${daysVal} day${daysVal !== 1 ? "s" : ""}`;
+  };
+
+  const getPurchaseDateString = (dateString) => {
+    if (!dateString) return "-";
+    return new Date(dateString).toLocaleDateString('en-GB'); // DD/MM/YYYY
   };
 
   const handleSort = (key) => {
@@ -918,6 +920,12 @@ export default function BranchRecycling() {
         if (valA < valB) return direction === "asc" ? -1 : 1;
         if (valA > valB) return direction === "asc" ? 1 : -1;
         return 0;
+      }
+
+      if (key === "lastPurchaseDate" || key === "purchaseAge") {
+        const valA = a.lastPurchaseDate ? new Date(a.lastPurchaseDate).getTime() : 0;
+        const valB = b.lastPurchaseDate ? new Date(b.lastPurchaseDate).getTime() : 0;
+        return direction === "asc" ? valA - valB : valB - valA;
       }
     });
   };
@@ -1635,12 +1643,12 @@ export default function BranchRecycling() {
             >
               {allProductGroups.map((group) => (
                 <option key={String(group)} value={String(group)}>
-                  {String(group)} {group !== "All" ? `(${allProducts.filter((p) => {
+                  {String(group)} {allProducts.length > 0 ? (group !== "All" ? `(${allProducts.filter((p) => {
                     const groupName = p.productGroup && typeof p.productGroup === 'object' 
                       ? (p.productGroup.name || p.productGroup._id)
                       : p.productGroup;
                     return groupName === group;
-                  }).length})` : `(${allProducts.length})`}
+                  }).length})` : `(${allProducts.length})`) : ""}
                 </option>
               ))}
             </select>
@@ -1809,7 +1817,7 @@ export default function BranchRecycling() {
                   {isFieldAllowed("productName") && (
                     <th 
                       onClick={() => handleSort("name")}
-                      className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-3 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
                     >
                       Product Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
@@ -1817,7 +1825,7 @@ export default function BranchRecycling() {
                   {isFieldAllowed("units") && (
                     <th 
                       onClick={() => handleSort("units")}
-                      className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1.5 py-3 text-left text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
                     >
                       Units {sortConfig.key === "units" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
@@ -1825,39 +1833,51 @@ export default function BranchRecycling() {
                   {isFieldAllowed("currentStock") && (
                     <th 
                       onClick={() => handleSort("totalQty")}
-                      className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1.5 py-3 text-right text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
                     >
-                      System Qty (Closing) {sortConfig.key === "totalQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      System Qty {sortConfig.key === "totalQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
                   {isFieldAllowed("currentStock") && (
                     <th 
                       onClick={() => handleSort("pendingPO")}
-                      className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1.5 py-3 text-right text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
                     >
-                      Purchase Order Qty {sortConfig.key === "pendingPO" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      PO Qty {sortConfig.key === "pendingPO" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
+                  <th 
+                    onClick={() => handleSort("lastPurchaseDate")}
+                    className="px-1.5 py-3 text-left text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                  >
+                    Purchase Date {sortConfig.key === "lastPurchaseDate" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  </th>
+                  <th 
+                    onClick={() => handleSort("purchaseAge")}
+                    className="px-1.5 py-3 text-left text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                  >
+                    Purchase Age {sortConfig.key === "purchaseAge" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  </th>
                   {isFieldAllowed("pendingSales") && (
                     <th 
                       onClick={() => handleSort("pendingSales")}
-                      className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1.5 py-3 text-right text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
                     >
-                      Sales Order Qty {sortConfig.key === "pendingSales" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      SO Qty {sortConfig.key === "pendingSales" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
                   {isFieldAllowed("available") && (
                     <th 
                       onClick={() => handleSort("netAvailability")}
-                      className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap font-extrabold"
+                      className="px-1.5 py-3 text-right text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap font-extrabold"
                     >
-                      Net Availability {sortConfig.key === "netAvailability" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      Net Available {sortConfig.key === "netAvailability" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
                   {isFieldAllowed("threshold") && (
                     <th 
                       onClick={() => handleSort("threshold")}
-                      className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1.5 py-3 text-right text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
                     >
                       Reorder Level {sortConfig.key === "threshold" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
@@ -1865,7 +1885,7 @@ export default function BranchRecycling() {
                   {isFieldAllowed("restockQty") && (
                     <th 
                       onClick={() => handleSort("restockingQty")}
-                      className="px-4 py-3 text-right text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1.5 py-3 text-right text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
                     >
                       Reorder Qty {sortConfig.key === "restockingQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
@@ -1873,7 +1893,7 @@ export default function BranchRecycling() {
                   {isFieldAllowed("preferredVendor") && (
                     <th 
                       onClick={() => handleSort("preferredVendor")}
-                      className="px-4 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1.5 py-3 text-left text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
                     >
                       Preferred Vendor {sortConfig.key === "preferredVendor" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
@@ -1881,13 +1901,13 @@ export default function BranchRecycling() {
                   {isFieldAllowed("status") && (
                     <th 
                       onClick={() => handleSort("status")}
-                      className="px-4 py-3 text-center text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1.5 py-3 text-center text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
                     >
                       Status {sortConfig.key === "status" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
                   {(isFieldAllowed("action_config") || isFieldAllowed("action_restock")) && (
-                    <th className="px-4 py-3 text-center text-sm font-bold whitespace-nowrap">Actions</th>
+                    <th className="px-3 py-3 text-center text-xs font-bold whitespace-nowrap">Actions</th>
                   )}
                 </tr>
               </thead>
@@ -1913,31 +1933,31 @@ export default function BranchRecycling() {
                     >
                       <td className="px-4 py-3">
                         <input
-                          type="checkbox"
-                          checked={selectedProducts.has(product._id)}
-                          onChange={() => toggleProductSelection(product._id)}
-                          className="w-5 h-5 cursor-pointer"
+                           type="checkbox"
+                           checked={selectedProducts.has(product._id)}
+                           onChange={() => toggleProductSelection(product._id)}
+                           className="w-5 h-5 cursor-pointer"
                         />
                       </td>
                       {isFieldAllowed("productName") && (
-                        <td className="px-4 py-3 font-semibold text-gray-800 text-sm whitespace-nowrap">
+                        <td className="px-3 py-3 font-semibold text-gray-800 text-sm whitespace-nowrap" title={product.name}>
                           {product.name}
                         </td>
                       )}
                       {isFieldAllowed("units") && (
-                        <td className="px-4 py-3 text-gray-700 text-sm whitespace-nowrap">
+                        <td className="px-1.5 py-3 text-gray-700 text-xs whitespace-nowrap">
                           {product.units}
                         </td>
                       )}
                       {isFieldAllowed("currentStock") && (
-                        <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
+                        <td className="px-1.5 py-3 text-right font-semibold text-gray-800 text-xs">
                           {product.totalQty}
                         </td>
                       )}
                       {isFieldAllowed("currentStock") && (
-                        <td className="px-4 py-3 text-right text-sm">
+                        <td className="px-1.5 py-3 text-right text-xs">
                           {poQty > 0 ? (
-                            <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full font-bold">
+                            <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">
                               {poQty}
                             </span>
                           ) : (
@@ -1945,10 +1965,18 @@ export default function BranchRecycling() {
                           )}
                         </td>
                       )}
+                      {/* Last Purchase Date */}
+                      <td className="px-1.5 py-3 text-left text-xs text-gray-700 whitespace-nowrap">
+                        {getPurchaseDateString(product.lastPurchaseDate)}
+                      </td>
+                      {/* Purchase Age (Days) */}
+                      <td className="px-1.5 py-3 text-left text-xs text-gray-700 whitespace-nowrap">
+                        {getPurchaseAgeString(product.lastPurchaseDate)}
+                      </td>
                       {isFieldAllowed("pendingSales") && (
-                        <td className="px-4 py-3 text-right text-sm">
+                        <td className="px-1.5 py-3 text-right text-xs">
                           {soQty > 0 ? (
-                            <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold">
+                            <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">
                               {soQty}
                             </span>
                           ) : (
@@ -1957,8 +1985,8 @@ export default function BranchRecycling() {
                         </td>
                       )}
                       {isFieldAllowed("available") && (
-                        <td className="px-4 py-3 text-right text-sm">
-                          <span className={`px-3 py-1 rounded-full font-extrabold ${
+                        <td className="px-1.5 py-3 text-right text-xs">
+                          <span className={`px-2 py-0.5 rounded-full font-extrabold ${
                             netAvailability <= reorderLevel
                               ? "bg-red-100 text-red-800 border border-red-200 animate-pulse"
                               : "bg-blue-100 text-blue-800"
@@ -1968,15 +1996,15 @@ export default function BranchRecycling() {
                         </td>
                       )}
                       {isFieldAllowed("threshold") && (
-                        <td className="px-4 py-3 text-right text-gray-800 text-sm font-bold">
+                        <td className="px-1.5 py-3 text-right text-gray-800 text-xs font-bold">
                           {reorderLevel}
                         </td>
                       )}
                       {isFieldAllowed("restockQty") && (
-                        <td className="px-4 py-3 text-right text-sm font-semibold whitespace-nowrap">
+                        <td className="px-1.5 py-3 text-right text-xs font-semibold whitespace-nowrap">
                           <div className="flex flex-col items-end">
                             <span className="text-gray-800 font-extrabold">{reorderQty}</span>
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold mt-0.5 ${
+                            <span className={`text-[8px] px-1 py-0.2 rounded font-bold mt-0.5 ${
                               isAuto ? "bg-purple-100 text-purple-700" : "bg-teal-100 text-teal-700"
                             }`}>
                               {isAuto ? "🤖 AUTO" : "✍️ MANUAL"}

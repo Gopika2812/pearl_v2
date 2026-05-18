@@ -190,9 +190,42 @@ router.get("/", async (req, res) => {
       .lean();
 
     if (mini === "true" || mini === true) {
+        // Fetch last purchase dates for all products in this branch
+        const [poDates, piDates] = await Promise.all([
+          PurchaseOrder.aggregate([
+            { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+            { $unwind: "$items" },
+            { $group: { _id: "$items.productId", lastDate: { $max: "$date" } } }
+          ]),
+          PurchaseInvoice.aggregate([
+            { $match: { branchId: branchObjectId } },
+            { $unwind: "$items" },
+            { $group: { _id: "$items.productId", lastDate: { $max: "$invoiceDate" } } }
+          ])
+        ]);
+
+        const purchaseDateMap = new Map();
+        poDates.forEach(d => {
+          if (d._id) purchaseDateMap.set(d._id.toString(), d.lastDate);
+        });
+        piDates.forEach(d => {
+          if (d._id) {
+            const idStr = d._id.toString();
+            const existing = purchaseDateMap.get(idStr);
+            if (!existing || new Date(d.lastDate) > new Date(existing)) {
+              purchaseDateMap.set(idStr, d.lastDate);
+            }
+          }
+        });
+
+        const enhanced = products.map(product => ({
+          ...product,
+          lastPurchaseDate: purchaseDateMap.get(product._id.toString()) || null
+        }));
+
         return res.json({
             success: true,
-            data: products,
+            data: enhanced,
             pagination: {
                 page: pageNum,
                 limit: pageSize,
@@ -205,7 +238,7 @@ router.get("/", async (req, res) => {
     // ⚡ SYNC: Fetch financial totals for the returned products to calculate "Tally Stock"
     const productIds = products.map(p => p._id);
     
-    const [salesTotals, purchaseTotals, cnTotals, dnTotals, psvTotals] = await Promise.all([
+    const [salesTotals, purchaseTotals, cnTotals, dnTotals, psvTotals, poDates, piDates] = await Promise.all([
       Invoice.aggregate([
         { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
@@ -236,6 +269,18 @@ router.get("/", async (req, res) => {
       PhysicalStockEntry.aggregate([
         { $match: { branchId: branchObjectId, status: "APPROVED", productId: { $in: productIds } } },
         { $group: { _id: "$productId", inward: { $sum: "$inwardQty" }, outward: { $sum: "$outwardQty" } } }
+      ]),
+      PurchaseOrder.aggregate([
+        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, "items.productId": { $in: productIds } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": { $in: productIds } } },
+        { $group: { _id: "$items.productId", lastDate: { $max: "$date" } } }
+      ]),
+      PurchaseInvoice.aggregate([
+        { $match: { branchId: branchObjectId, "items.productId": { $in: productIds } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": { $in: productIds } } },
+        { $group: { _id: "$items.productId", lastDate: { $max: "$invoiceDate" } } }
       ])
     ]);
 
@@ -244,6 +289,20 @@ router.get("/", async (req, res) => {
     const cnMap       = new Map(cnTotals.map(t => [t._id.toString(), t.total]));
     const dnMap       = new Map(dnTotals.map(t => [t._id.toString(), t.total]));
     const psvMap      = new Map(psvTotals.map(t => [t._id.toString(), { inward: t.inward, outward: t.outward }]));
+
+    const purchaseDateMap = new Map();
+    poDates.forEach(d => {
+      if (d._id) purchaseDateMap.set(d._id.toString(), d.lastDate);
+    });
+    piDates.forEach(d => {
+      if (d._id) {
+        const idStr = d._id.toString();
+        const existing = purchaseDateMap.get(idStr);
+        if (!existing || new Date(d.lastDate) > new Date(existing)) {
+          purchaseDateMap.set(idStr, d.lastDate);
+        }
+      }
+    });
 
     // ⚡ Return product with current ground-truth "Tally Stock" (includes PSV adjustments)
     const enhancedProducts = products.map((product) => {
@@ -260,7 +319,8 @@ router.get("/", async (req, res) => {
 
       return {
         ...product,
-        availableQty: Math.round(closingStock * 100) / 100
+        availableQty: Math.round(closingStock * 100) / 100,
+        lastPurchaseDate: purchaseDateMap.get(pId) || null
       };
     });
 

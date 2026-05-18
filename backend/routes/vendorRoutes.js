@@ -361,7 +361,7 @@ router.get("/:id/ledger", async (req, res) => {
         vendorName: vendor.name,
         openingBalance,
         closingBalance: currentRunning,
-        transactions: txnsWithBalance.reverse()
+        transactions: txnsWithBalance
       }
     });
   } catch (error) {
