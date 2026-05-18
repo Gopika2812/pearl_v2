@@ -407,7 +407,7 @@ const BranchDeliveryReceipt = () => {
                                  .reduce((sum, [k, v]) => Number(k) === val ? sum : sum + (Number(k) * Number(v)), 0);
                                
                                if (currentTotalWithoutThis + (newVal * val) > netAmount) {
-                                 toast.warning(`Total cannot exceed Net Cash (₹${netAmount.toLocaleString()})`);
+                                 alert(`Total cannot exceed Net Cash (₹${netAmount.toLocaleString()})`);
                                  return;
                                }
                                setDenominations({...denominations, [val]: e.target.value});
