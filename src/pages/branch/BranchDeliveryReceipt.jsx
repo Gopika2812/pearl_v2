@@ -152,6 +152,12 @@ const BranchDeliveryReceipt = () => {
       toast.error("Please add at least one valid collection or expense");
       return;
     }
+    // Ensure cash denominations match net amount before submitting
+    if (Math.abs(denominationsTotal - netAmount) > 0) {
+      alert(`Denominations total (₹${denominationsTotal.toLocaleString()}) does not match Net Cash (₹${netAmount.toLocaleString()}). Please adjust.`);
+      setSubmitting(false);
+      return;
+    }
     setSubmitting(true);
     try {
       const finalBranchId = currentBranch?._id || user?.branchId;
