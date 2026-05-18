@@ -46,10 +46,17 @@ const generateTransferId = async (branchId) => {
   const branchCode = branch?.code || "BR";
   const prefix = `BT-${branchCode}-`;
 
-  const lastTransfer = await BankTransfer.findOne({
-    branchId: new mongoose.Types.ObjectId(branchId),
-    transferId: { $regex: `^${prefix}` }
-  }).sort({ transferId: -1 });
+  // Safely convert to ObjectId - handle both string and ObjectId inputs
+  const branchObjectId = mongoose.Types.ObjectId.isValid(branchId)
+    ? new mongoose.Types.ObjectId(branchId.toString())
+    : null;
+
+  const lastTransfer = branchObjectId
+    ? await BankTransfer.findOne({
+        branchId: branchObjectId,
+        transferId: { $regex: `^${prefix}` }
+      }).sort({ transferId: -1 })
+    : null;
 
   let nextNum = 1;
   if (lastTransfer && lastTransfer.transferId) {
