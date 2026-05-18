@@ -25,6 +25,7 @@ const BranchDeliveryReceipt = () => {
   const [showBankModal, setShowBankModal] = useState(false);
   const [targetBank, setTargetBank] = useState("ICICI Bank");
   const [transferring, setTransferring] = useState(false);
+  const [totalTransferAmount, setTotalTransferAmount] = useState("");
 
   // Batch Form State
   const [entries, setEntries] = useState([
@@ -90,20 +91,27 @@ const BranchDeliveryReceipt = () => {
 
   const handleBankTransfer = async () => {
     if (selectedReceipts.length === 0) return;
+    if (!totalTransferAmount || Number(totalTransferAmount) <= 0) {
+      alert("Please enter the actual amount transferred to bank.");
+      return;
+    }
     setTransferring(true);
     try {
       const res = await fetchWithAuth(`${API_BASE}/delivery-receipts/bank-transfer`, {
         method: "PATCH",
         body: JSON.stringify({ 
           receiptIds: selectedReceipts, 
-          bankName: targetBank 
+          bankName: targetBank,
+          totalTransferred: Number(totalTransferAmount),
         })
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(data.message || "Transferred to " + targetBank);
+        const { transferId, totalCollected, totalExpense, netAmount, totalTransferred } = data.data;
+        toast.success(`✅ Transfer ${transferId} saved! ₹${totalTransferred.toLocaleString()} → ${targetBank}`);
         setShowBankModal(false);
         setSelectedReceipts([]);
+        setTotalTransferAmount("");
         fetchReceipts();
       } else {
         toast.error(data.message || "Failed to transfer");
@@ -853,46 +861,105 @@ const BranchDeliveryReceipt = () => {
         </div>
       </div>
 
-      {/* BANK SELECTION MODAL */}
-      {showBankModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      {/* BANK TRANSFER MODAL */}
+      {showBankModal && (() => {
+        const selectedData = receipts.filter(r => selectedReceipts.includes(r._id));
+        const modalTotalCollected = selectedData.reduce((s, r) => s + (r.totalCollected || 0), 0);
+        const modalTotalExpense = selectedData.reduce((s, r) => s + (r.totalExpense || 0), 0);
+        const modalNetAmount = selectedData.reduce((s, r) => s + (r.netAmount || 0), 0);
+        return (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !transferring && setShowBankModal(false)}></div>
-            <div className="bg-white rounded-[2.5rem] w-full max-w-md p-8 relative z-10 shadow-2xl animate-in zoom-in fade-in duration-300">
-              <div className="flex items-center gap-4 mb-8">
-                  <div className="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600">
-                    <FaFileInvoiceDollar size={24} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Bank Transfer</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Select Destination Bank</p>
-                  </div>
+            <div className="bg-white rounded-[2.5rem] w-full max-w-lg p-8 relative z-10 shadow-2xl animate-in zoom-in fade-in duration-300 max-h-[90vh] overflow-y-auto">
+              
+              {/* Header */}
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600">
+                  <FaFileInvoiceDollar size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Bank Transfer</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{selectedData.length} Receipt{selectedData.length > 1 ? 's' : ''} Selected</p>
+                </div>
               </div>
 
-              <div className="space-y-4 mb-8">
-                  <label className={`flex items-center justify-between p-5 rounded-2xl border-2 transition-all cursor-pointer ${targetBank === 'ICICI Bank' ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'}`}>
-                    <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${targetBank === 'ICICI Bank' ? 'border-indigo-500' : 'border-slate-300'}`}>
-                          {targetBank === 'ICICI Bank' && <div className="w-2.5 h-2.5 rounded-full bg-indigo-500"></div>}
-                        </div>
-                        <span className="text-sm font-black text-slate-700">ICICI Bank</span>
+              {/* Receipt List */}
+              <div className="bg-slate-50 rounded-2xl p-4 mb-5">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Included Receipts</p>
+                <div className="space-y-1.5 max-h-[120px] overflow-y-auto">
+                  {selectedData.map(r => (
+                    <div key={r._id} className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-100">
+                      <span className="text-[11px] font-black text-slate-700">{r.receiptId}</span>
+                      <span className="text-[11px] font-black text-emerald-600">₹{r.netAmount?.toLocaleString()}</span>
                     </div>
-                    <input type="radio" name="bank" className="hidden" checked={targetBank === 'ICICI Bank'} onChange={() => setTargetBank('ICICI Bank')} />
-                  </label>
-
-                  <label className={`flex items-center justify-between p-5 rounded-2xl border-2 transition-all cursor-pointer ${targetBank === 'State Bank' ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'}`}>
-                    <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${targetBank === 'State Bank' ? 'border-indigo-500' : 'border-slate-300'}`}>
-                          {targetBank === 'State Bank' && <div className="w-2.5 h-2.5 rounded-full bg-indigo-500"></div>}
-                        </div>
-                        <span className="text-sm font-black text-slate-700">State Bank</span>
-                    </div>
-                    <input type="radio" name="bank" className="hidden" checked={targetBank === 'State Bank'} onChange={() => setTargetBank('State Bank')} />
-                  </label>
+                  ))}
+                </div>
               </div>
 
+              {/* Auto-computed Summary */}
+              <div className="grid grid-cols-3 gap-3 mb-5">
+                <div className="bg-emerald-50 rounded-2xl p-3 text-center">
+                  <div className="text-[8px] font-black text-emerald-600 uppercase tracking-widest mb-1">Total Collected</div>
+                  <div className="text-sm font-black text-emerald-700">₹{modalTotalCollected.toLocaleString()}</div>
+                </div>
+                <div className="bg-rose-50 rounded-2xl p-3 text-center">
+                  <div className="text-[8px] font-black text-rose-500 uppercase tracking-widest mb-1">Total Expenses</div>
+                  <div className="text-sm font-black text-rose-600">₹{modalTotalExpense.toLocaleString()}</div>
+                </div>
+                <div className="bg-slate-900 rounded-2xl p-3 text-center">
+                  <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Net Amount</div>
+                  <div className="text-sm font-black text-white">₹{modalNetAmount.toLocaleString()}</div>
+                </div>
+              </div>
+
+              {/* Bank Selection */}
+              <div className="space-y-3 mb-5">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Destination Bank</p>
+                <label className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer ${targetBank === 'ICICI Bank' ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${targetBank === 'ICICI Bank' ? 'border-indigo-500' : 'border-slate-300'}`}>
+                      {targetBank === 'ICICI Bank' && <div className="w-2.5 h-2.5 rounded-full bg-indigo-500"></div>}
+                    </div>
+                    <span className="text-sm font-black text-slate-700">ICICI Bank</span>
+                  </div>
+                  <input type="radio" name="bank" className="hidden" checked={targetBank === 'ICICI Bank'} onChange={() => setTargetBank('ICICI Bank')} />
+                </label>
+                <label className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer ${targetBank === 'State Bank' ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${targetBank === 'State Bank' ? 'border-indigo-500' : 'border-slate-300'}`}>
+                      {targetBank === 'State Bank' && <div className="w-2.5 h-2.5 rounded-full bg-indigo-500"></div>}
+                    </div>
+                    <span className="text-sm font-black text-slate-700">State Bank</span>
+                  </div>
+                  <input type="radio" name="bank" className="hidden" checked={targetBank === 'State Bank'} onChange={() => setTargetBank('State Bank')} />
+                </label>
+              </div>
+
+              {/* User-entered Transfer Amount */}
+              <div className="mb-6">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Actual Amount Transferred to Bank <span className="text-rose-500">*</span></p>
+                <div className="flex items-center gap-3 bg-slate-50 border-2 border-slate-200 focus-within:border-indigo-500 rounded-2xl px-4 py-3 transition-colors">
+                  <span className="text-lg font-black text-slate-400">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={totalTransferAmount}
+                    onChange={e => setTotalTransferAmount(e.target.value)}
+                    placeholder="Enter amount..."
+                    className="flex-1 bg-transparent outline-none font-black text-slate-800 text-lg placeholder:text-slate-300 placeholder:font-normal"
+                  />
+                </div>
+                {totalTransferAmount && Number(totalTransferAmount) !== modalNetAmount && (
+                  <p className="text-[10px] font-bold text-amber-500 mt-1.5 ml-1">
+                    ⚠ Net amount is ₹{modalNetAmount.toLocaleString()} — entered amount differs
+                  </p>
+                )}
+              </div>
+
+              {/* Actions */}
               <div className="flex gap-3">
                 <button 
-                  onClick={() => setShowBankModal(false)}
+                  onClick={() => { setShowBankModal(false); setTotalTransferAmount(""); }}
                   disabled={transferring}
                   className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase hover:bg-slate-200 transition-all disabled:opacity-50"
                 >
@@ -900,16 +967,18 @@ const BranchDeliveryReceipt = () => {
                 </button>
                 <button 
                   onClick={handleBankTransfer}
-                  disabled={transferring}
-                  className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  disabled={transferring || !totalTransferAmount || Number(totalTransferAmount) <= 0}
+                  className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {transferring ? <FaSync className="animate-spin" /> : <FaCheckCircle />}
                   Confirm Transfer
                 </button>
               </div>
             </div>
-        </div>
-      )}
+          </div>
+        );
+      })()}
+
     </div>
   );
 };

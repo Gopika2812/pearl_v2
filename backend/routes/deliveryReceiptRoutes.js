@@ -1,6 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import DeliveryReceipt from "../models/DeliveryReceipt.js";
+import BankTransfer from "../models/BankTransfer.js";
 import Branch from "../models/Branch.js";
 import auth from "../middleware/auth.js";
 import { createAuditLog } from "../utils/logUtil.js";
@@ -22,7 +23,6 @@ const generateReceiptId = async (branchId) => {
   const branchCode = branch?.code || "BR";
   const prefix = `DR-${branchCode}-`;
   
-  // Find the last receipt for this branch to get the highest number
   const lastReceipt = await DeliveryReceipt.findOne({
     branchId: new mongoose.Types.ObjectId(branchId),
     receiptId: { $regex: `^${prefix}` }
@@ -39,6 +39,30 @@ const generateReceiptId = async (branchId) => {
   
   return `${prefix}${nextNum.toString().padStart(4, "0")}`;
 };
+
+// Helper to generate Bank Transfer batch ID (e.g., BT-TS-001-0001)
+const generateTransferId = async (branchId) => {
+  const branch = await Branch.findById(branchId);
+  const branchCode = branch?.code || "BR";
+  const prefix = `BT-${branchCode}-`;
+
+  const lastTransfer = await BankTransfer.findOne({
+    branchId: new mongoose.Types.ObjectId(branchId),
+    transferId: { $regex: `^${prefix}` }
+  }).sort({ transferId: -1 });
+
+  let nextNum = 1;
+  if (lastTransfer && lastTransfer.transferId) {
+    const parts = lastTransfer.transferId.split("-");
+    const lastNum = parseInt(parts[parts.length - 1]);
+    if (!isNaN(lastNum)) {
+      nextNum = lastNum + 1;
+    }
+  }
+
+  return `${prefix}${nextNum.toString().padStart(4, "0")}`;
+};
+
 
 // GET all delivery receipts for a branch
 router.get("/", auth, async (req, res) => {
@@ -140,24 +164,61 @@ router.post("/", auth, async (req, res) => {
   }
 });
 
-// PATCH - Bulk transfer to bank
+// PATCH - Bulk transfer to bank (creates batch transfer record)
 router.patch("/bank-transfer", auth, async (req, res) => {
   try {
-    const { receiptIds, bankName } = req.body;
+    const { receiptIds, bankName, totalTransferred } = req.body;
     if (!receiptIds || !Array.isArray(receiptIds) || receiptIds.length === 0) {
       return res.status(400).json({ success: false, message: "Receipt IDs are required" });
     }
     if (!bankName) {
       return res.status(400).json({ success: false, message: "Bank name is required" });
     }
+    if (totalTransferred === undefined || totalTransferred === null || Number(totalTransferred) <= 0) {
+      return res.status(400).json({ success: false, message: "Transfer amount is required" });
+    }
 
-    const result = await DeliveryReceipt.updateMany(
+    // Fetch all selected receipts to compute totals automatically
+    const selectedReceipts = await DeliveryReceipt.find({ _id: { $in: receiptIds } });
+    if (selectedReceipts.length === 0) {
+      return res.status(404).json({ success: false, message: "No receipts found" });
+    }
+
+    const totalCollected = selectedReceipts.reduce((sum, r) => sum + (r.totalCollected || 0), 0);
+    const totalExpense = selectedReceipts.reduce((sum, r) => sum + (r.totalExpense || 0), 0);
+    const netAmount = selectedReceipts.reduce((sum, r) => sum + (r.netAmount || 0), 0);
+    const receiptNumbers = selectedReceipts.map(r => r.receiptId);
+    const branchId = selectedReceipts[0].branchId;
+
+    // Generate unique transfer batch ID
+    const transferId = await generateTransferId(branchId);
+
+    // Create the BankTransfer batch record
+    const bankTransfer = new BankTransfer({
+      transferId,
+      branchId,
+      receiptIds,
+      receiptNumbers,
+      bankName,
+      totalCollected,
+      totalExpense,
+      netAmount,
+      totalTransferred: Number(totalTransferred),
+      transferredBy: req.user.username || req.user.name || "System",
+      transferredAt: new Date(),
+    });
+
+    await bankTransfer.save();
+
+    // Mark all selected receipts as bank transferred
+    await DeliveryReceipt.updateMany(
       { _id: { $in: receiptIds } },
       { 
         $set: { 
           isBankTransferred: true, 
+          transferId,
           bankName, 
-          transferredBy: req.user.username,
+          transferredBy: req.user.username || req.user.name,
           transferredAt: new Date()
         } 
       }
@@ -166,15 +227,29 @@ router.patch("/bank-transfer", auth, async (req, res) => {
     await createAuditLog({
       userId: req.user.id,
       username: req.user.username,
+      branchId,
       action: "BANK_TRANSFER_RECEIPTS",
-      description: `Transferred ${result.modifiedCount} receipts to ${bankName}`,
-      targetModel: "DeliveryReceipt",
+      description: `Batch ${transferId}: Transferred ₹${Number(totalTransferred).toLocaleString()} to ${bankName} (${selectedReceipts.length} receipts, Net: ₹${netAmount.toLocaleString()})`,
+      targetId: bankTransfer._id,
+      targetModel: "BankTransfer",
     });
 
-    res.json({ success: true, message: `${result.modifiedCount} receipts transferred to ${bankName}` });
+    res.json({ 
+      success: true, 
+      message: `${selectedReceipts.length} receipts transferred to ${bankName}`,
+      data: {
+        transferId,
+        totalCollected,
+        totalExpense,
+        netAmount,
+        totalTransferred: Number(totalTransferred),
+        receiptCount: selectedReceipts.length,
+        bankName,
+      }
+    });
   } catch (error) {
     console.error("Error in bank transfer:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({ success: false, message: error.message || "Internal server error" });
   }
 });
 

@@ -61,6 +61,7 @@ const deliveryReceiptSchema = new mongoose.Schema(
       total: { type: Number, default: 0 }
     },
     isBankTransferred: { type: Boolean, default: false },
+    transferId: { type: String, default: "" }, // links to BankTransfer batch ID
     bankName: { type: String, enum: ["ICICI Bank", "State Bank", ""] },
     transferredBy: { type: String },
     transferredAt: { type: Date },
