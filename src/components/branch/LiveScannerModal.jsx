@@ -94,6 +94,9 @@ const LiveScannerModal = ({ show, onClose, onScanSuccess }) => {
                 #reader__scan_region {
                     background: #f8fafc !important;
                 }
+                #reader__header_message {
+                    display: none !important;
+                }
                 #reader__dashboard_section_csr button {
                     background: #6366f1 !important;
                     color: white !important;
