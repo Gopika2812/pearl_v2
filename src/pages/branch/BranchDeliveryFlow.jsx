@@ -496,12 +496,7 @@ const BranchDeliveryFlow = () => {
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
   // Check if invoice is 2+ days old (not today or yesterday)
   const isOldRecord = (inv) => {
-    const invDate = new Date(inv.createdAt || inv.invoiceDate);
-    invDate.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diffDays = Math.floor((today - invDate) / (1000 * 60 * 60 * 24));
-    return diffDays >= 2;
+    return false;
   };
 
   const isFieldLocked = (inv, personField, commentField) => {
