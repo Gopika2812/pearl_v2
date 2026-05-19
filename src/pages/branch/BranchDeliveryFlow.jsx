@@ -46,6 +46,7 @@ const BranchDeliveryFlow = () => {
   });
   const [scanInput, setScanInput] = useState("");
   const [selectedScanRole, setSelectedScanRole] = useState("pick"); // pick, deliveryCompleted
+  const [showPickRoleSelector, setShowPickRoleSelector] = useState(false);
   const [showScanCompletionModal, setShowScanCompletionModal] = useState(null); // invoice
   const [scanPaymentOptions, setScanPaymentOptions] = useState([]);
   const [showLiveScanner, setShowLiveScanner] = useState(false);
@@ -417,7 +418,10 @@ const BranchDeliveryFlow = () => {
       return;
     }
 
-    if (selectedScanRole === "pick") {
+    if (["storageMan", "stockChecker", "deliveryPerson"].includes(selectedScanRole)) {
+      // Direct scan logic: Assign the selected role to the active user's username
+      await performScanUpdate(inv, "PICKED", [], selectedScanRole);
+    } else if (selectedScanRole === "pick") {
       // Progressive scan logic: Scan 3 times to assign storageMan, stockChecker, and deliveryPerson
       const hasStorage = inv.storageMan && inv.storageMan !== "NONE" && inv.storageMan.trim();
       const hasChecker = inv.stockChecker && inv.stockChecker !== "NONE" && inv.stockChecker.trim();
@@ -437,6 +441,7 @@ const BranchDeliveryFlow = () => {
 
       // Always transition status to PICKED when scanning under 'pick'
       await performScanUpdate(inv, "PICKED", [], targetRole);
+    }
 
     } else if (selectedScanRole === "deliveryCompleted") {
       // Delivery completion scan logic
@@ -712,21 +717,28 @@ const BranchDeliveryFlow = () => {
 
             <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
               <div className="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700/50">
-                {[
-                  { id: 'pick', label: 'Pick' },
-                  { id: 'deliveryCompleted', label: 'Delivery Completed' }
-                ].map(role => (
-                  <button
-                    key={role.id}
-                    onClick={() => setSelectedScanRole(role.id)}
-                    className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedScanRole === role.id
-                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                        : "text-slate-500 hover:text-slate-300"
-                      }`}
-                  >
-                    {role.label}
-                  </button>
-                ))}
+                <button
+                  onClick={() => setShowPickRoleSelector(true)}
+                  className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    ["pick", "storageMan", "stockChecker", "deliveryPerson"].includes(selectedScanRole)
+                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                      : "text-slate-500 hover:text-slate-300"
+                  }`}
+                >
+                  {selectedScanRole === "storageMan" ? "Pick: Storage Man" :
+                   selectedScanRole === "stockChecker" ? "Pick: Checker" :
+                   selectedScanRole === "deliveryPerson" ? "Pick: Delivery Man" : "Pick"}
+                </button>
+                <button
+                  onClick={() => setSelectedScanRole("deliveryCompleted")}
+                  className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    selectedScanRole === "deliveryCompleted"
+                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                      : "text-slate-500 hover:text-slate-300"
+                  }`}
+                >
+                  Delivery Completed
+                </button>
               </div>
 
               <form onSubmit={handleScanSubmit} className="relative w-full sm:w-80 flex items-center gap-2">
@@ -1419,6 +1431,86 @@ const BranchDeliveryFlow = () => {
                 >
                   Confirm Assignment
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPickRoleSelector && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100 relative">
+            <button
+              onClick={() => setShowPickRoleSelector(false)}
+              className="absolute right-6 top-6 w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 transition border-0 bg-transparent text-slate-400 cursor-pointer z-10 animate-pulse"
+            >
+              <FaTimes size={16} />
+            </button>
+
+            <div className="p-8 md:p-10">
+              <div className="text-center mb-8">
+                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+                  <FaUser size={20} />
+                </div>
+                <h2 className="text-2xl font-black uppercase text-slate-800 tracking-tight">Select Who is Scanning</h2>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                  Choose your role to configure the quick scan mode
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[
+                  {
+                    id: "storageMan",
+                    label: "Storage Man",
+                    description: "Assign picker role & comments to invoice",
+                    icon: FaBoxOpen,
+                    color: "bg-amber-500",
+                    hoverColor: "hover:border-amber-500 hover:bg-amber-50/10",
+                    textColor: "text-amber-600"
+                  },
+                  {
+                    id: "stockChecker",
+                    label: "Checker",
+                    description: "Verify stock and assign stock checker role",
+                    icon: FaClipboardCheck,
+                    color: "bg-indigo-500",
+                    hoverColor: "hover:border-indigo-500 hover:bg-indigo-50/10",
+                    textColor: "text-indigo-600"
+                  },
+                  {
+                    id: "deliveryPerson",
+                    label: "Delivery Man",
+                    description: "Ready for transit & assign delivery person",
+                    icon: FaTruck,
+                    color: "bg-teal-500",
+                    hoverColor: "hover:border-teal-500 hover:bg-teal-50/10",
+                    textColor: "text-teal-600"
+                  }
+                ].map((role) => {
+                  const Icon = role.icon;
+                  return (
+                    <button
+                      key={role.id}
+                      onClick={() => {
+                        setSelectedScanRole(role.id);
+                        setShowPickRoleSelector(false);
+                        toast.success(`Active mode: ${role.label}`, { autoClose: 1500 });
+                      }}
+                      className={`flex flex-col items-center p-6 bg-white border-2 border-slate-100 rounded-3xl cursor-pointer text-center transition-all duration-300 hover:scale-[1.03] hover:shadow-xl ${role.hoverColor} group`}
+                    >
+                      <div className={`w-12 h-12 ${role.color} rounded-2xl flex items-center justify-center text-white mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                        <Icon size={18} />
+                      </div>
+                      <span className="text-xs font-black uppercase text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors">
+                        {role.label}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-2 leading-relaxed">
+                        {role.description}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
