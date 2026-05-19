@@ -13,6 +13,7 @@ import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
 import VoucherType from "../models/VoucherType.js";
 import Vendor from "../models/Vendor.js";
+import BranchUser from "../models/BranchUser.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
 
@@ -24,18 +25,22 @@ const router = express.Router();
 import auth from "../middleware/auth.js";
 
 // GET - Count of delayed unpicked orders (MUST be above /:id)
+// Counting starts from 2026-05-20 (go-live date for Pick & Delivery)
 router.get("/stats/delayed-pickups", auth, async (req, res) => {
   try {
     const { branchId } = req.query;
 
     // Logic: deliveryStatus: "PENDING", status: NOT "CANCELLED", createdAt < (current date - 1 day)
+    // Only count records created from go-live date (2026-05-20) onwards
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
+
+    const goLiveDate = new Date("2026-05-20T00:00:00+05:30");
 
     const query = {
       deliveryStatus: "PENDING",
       status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
-      createdAt: { $lt: yesterday }
+      createdAt: { $lt: yesterday, $gte: goLiveDate }
     };
 
     if (branchId && branchId !== "null" && branchId !== "undefined") {
@@ -46,6 +51,54 @@ router.get("/stats/delayed-pickups", auth, async (req, res) => {
     res.json({ success: true, count });
   } catch (error) {
     console.error("Error fetching delayed pickups count:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// GET - Check if Sales Order menu is locked due to pending deliveries > 2 days
+// Returns { locked: true/false, count: number } - pure read, no existing code modified
+router.get("/stats/delivery-lock", auth, async (req, res) => {
+  try {
+    const { branchId } = req.query;
+
+    // SUPER_ADMIN is never locked
+    if (req.user.role === "SUPER_ADMIN" || req.user.role === "SUPERADMIN") {
+      return res.json({ success: true, locked: false, count: 0 });
+    }
+
+    // Fetch live user permissions from database to reflect real-time Control System toggles
+    const dbUser = await BranchUser.findById(req.user.id || req.user._id);
+    if (dbUser) {
+      const actionPerms = dbUser.actionPermissions;
+      const hasBypass = actionPerms && (actionPerms.get("bypassSalesOrderLock") === true || actionPerms.bypassSalesOrderLock === true);
+      if (hasBypass) {
+        return res.json({ success: true, locked: false, count: 0 });
+      }
+    }
+
+    // 48 hours ago
+    const cutoff = new Date();
+    cutoff.setHours(cutoff.getHours() - 48);
+
+    // Only check records from go-live date onwards
+    const goLiveDate = new Date("2026-05-20T00:00:00+05:30");
+
+    const query = {
+      status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
+      deliveryStatus: { $in: ["PENDING", "PICKED"] },
+      createdAt: { $lt: cutoff, $gte: goLiveDate }
+    };
+
+    if (branchId && branchId !== "null" && branchId !== "undefined") {
+      query.branchId = new mongoose.Types.ObjectId(branchId);
+    }
+
+    const count = await Invoice.countDocuments(query);
+    const locked = count > 0;
+
+    res.json({ success: true, locked, count });
+  } catch (error) {
+    console.error("Error checking delivery lock:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });

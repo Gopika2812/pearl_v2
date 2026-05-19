@@ -133,10 +133,39 @@ export default function SuperAdminControlSystem() {
   };
 
   const toggleActionPermission = (action) => {
-    setActionPermissions(prev => ({
-      ...prev,
-      [action]: !prev[action]
-    }));
+    setActionPermissions(prev => {
+      const newVal = !prev[action];
+
+      // Automatically sync Sales Order menu and sub-menu checkboxes when toggling Bypass SO Lock
+      if (action === "bypassSalesOrderLock") {
+        const salesOrderPageIds = [
+          "sales-dropdown",
+          "create-so",
+          "sales-order-list",
+          "sales-invoice-list",
+          "claims",
+          "credit-note",
+          "receipt",
+          "receipt-records"
+        ];
+
+        setUserPermissions(currentPerms => {
+          if (newVal) {
+            // Add all Sales Order menus
+            const uniquePerms = new Set([...currentPerms, ...salesOrderPageIds]);
+            return Array.from(uniquePerms);
+          } else {
+            // Remove all Sales Order menus
+            return currentPerms.filter(id => !salesOrderPageIds.includes(id));
+          }
+        });
+      }
+
+      return {
+        ...prev,
+        [action]: newVal
+      };
+    });
   };
 
   const toggleVoucherType = (vtId) => {
@@ -581,29 +610,35 @@ export default function SuperAdminControlSystem() {
                         { id: "action_return", name: "Sales Return", icon: <FaUndo /> },
                         { id: "editInvoiceItems", name: "Edit Workbench Items", icon: <FaEdit /> },
                         { id: "create_shortcuts", name: "Shortcuts", icon: <FaLink /> },
-                        { id: "editSellingPrice", name: "Edit Selling Price", icon: <FaDollarSign /> }
-                      ].map(action => (
-                        <div
-                          key={action.id}
-                          onClick={() => toggleActionPermission(action.id)}
-                          className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${actionPermissions[action.id] !== false
-                              ? "border-primary/20 bg-white shadow-sm"
-                              : "border-gray-50 bg-gray-100/50 opacity-60"
-                            }`}
-                        >
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${actionPermissions[action.id] !== false ? "bg-primary text-white" : "bg-gray-200 text-gray-400"
-                            }`}>
-                            <span className="text-xs">{action.icon}</span>
+                        { id: "editSellingPrice", name: "Edit Selling Price", icon: <FaDollarSign /> },
+                        { id: "bypassSalesOrderLock", name: "Bypass SO Lock", icon: <FaLock /> }
+                      ].map(action => {
+                        const isEnabled = action.id === "bypassSalesOrderLock"
+                          ? actionPermissions[action.id] === true
+                          : actionPermissions[action.id] !== false;
+                        return (
+                          <div
+                            key={action.id}
+                            onClick={() => toggleActionPermission(action.id)}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${isEnabled
+                                ? "border-primary/20 bg-white shadow-sm"
+                                : "border-gray-50 bg-gray-100/50 opacity-60"
+                              }`}
+                          >
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${isEnabled ? "bg-primary text-white" : "bg-gray-200 text-gray-400"
+                              }`}>
+                              <span className="text-xs">{action.icon}</span>
+                            </div>
+                            <span className={`text-[10px] font-bold ${isEnabled ? "text-gray-900" : "text-gray-400"}`}>
+                              {action.name}
+                            </span>
+                            <div className={`ml-auto w-4 h-4 rounded-md border flex items-center justify-center transition-all ${isEnabled ? "bg-primary border-primary text-white" : "border-gray-200 bg-white"
+                              }`}>
+                              {isEnabled && <FaCheck size={6} />}
+                            </div>
                           </div>
-                          <span className={`text-[10px] font-bold ${actionPermissions[action.id] !== false ? "text-gray-900" : "text-gray-400"}`}>
-                            {action.name}
-                          </span>
-                          <div className={`ml-auto w-4 h-4 rounded-md border flex items-center justify-center transition-all ${actionPermissions[action.id] !== false ? "bg-primary border-primary text-white" : "border-gray-200 bg-white"
-                            }`}>
-                            {actionPermissions[action.id] !== false && <FaCheck size={6} />}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -855,7 +890,7 @@ export default function SuperAdminControlSystem() {
         </div>
       </div>
 
-      <style jsx>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar {
           width: 4px;
         }
@@ -869,7 +904,7 @@ export default function SuperAdminControlSystem() {
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: #cbd5e1;
         }
-      `}</style>
+      ` }} />
     </div>
   );
 }

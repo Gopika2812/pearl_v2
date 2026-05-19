@@ -5,7 +5,7 @@ import { API_BASE, fetchWithAuth } from "../api";
 import { useBranch } from "../context/BranchContext";
 
 export default function BranchTopbar({ onMenuClick }) {
-  const { currentBranch, user, logout } = useBranch();
+  const { currentBranch, user, logout, isSalesOrderLocked } = useBranch();
   const navigate = useNavigate();
   const [upcomingOrders, setUpcomingOrders] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -64,7 +64,14 @@ export default function BranchTopbar({ onMenuClick }) {
   };
 
   return (
-    <div className="fixed top-0 right-0 left-0 md:left-20 z-40 transition-all duration-300 h-16 md:h-[80px] p-2 md:p-4 flex items-center justify-center pointer-events-none">
+    <div className="fixed top-0 right-0 left-0 md:left-20 z-40 transition-all duration-300 p-2 md:p-4 flex flex-col items-center pointer-events-none gap-1.5">
+      {/* SO Lock Warning Banner — shows only when deliveries are overdue */}
+      {isSalesOrderLocked && user?.role !== "SUPER_ADMIN" && user?.role !== "SUPERADMIN" && (
+        <div className="w-full max-w-[1600px] bg-rose-500 text-white px-5 py-2 rounded-2xl text-[11px] font-black shadow-lg flex items-center justify-center gap-2 pointer-events-auto animate-pulse-slow border border-rose-400/50">
+          <FaExclamationTriangle className="shrink-0" />
+          <span>⚠️ Sales Order menu is disabled — pending deliveries older than 2 days exist. Ask <strong>Saravan Sir</strong> to enable.</span>
+        </div>
+      )}
       <div className="bg-white/90 backdrop-blur-md shadow-xl px-4 md:px-8 py-3 rounded-3xl w-full max-w-[1600px] relative pointer-events-auto border border-gray-100/50 flex items-center justify-between">
         
         {/* Mobile Menu Button */}

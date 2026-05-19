@@ -121,7 +121,8 @@ function AppContent() {
     blockingTokens, 
     reminderTokens,
     isCheckingTokens, 
-    refreshBlockingTokens 
+    refreshBlockingTokens,
+    isSalesOrderLocked
   } = useBranch();
 
   // Security: Prevent Copy/Select on Branch Routes
@@ -588,7 +589,7 @@ function AppContent() {
                 </>
               )}
 
-              <div className={`flex-1 transition-all duration-300 overflow-y-auto ${isInsightsRoute || isSuperAdminRoute ? "p-0" : "p-6"} ${!hideLayout ? "pt-16" : ""}`}>
+              <div className={`flex-1 transition-all duration-300 overflow-y-auto ${isInsightsRoute || isSuperAdminRoute ? "p-0" : "p-6"} ${!hideLayout ? (isSalesOrderLocked && user?.role !== "SUPER_ADMIN" && user?.role !== "SUPERADMIN" ? "pt-24" : "pt-16") : ""}`}>
                 <Routes>
                   <Route path="/" element={<BranchLoginPage />} />
                   <Route path="/branch/other-payment" element={<BranchOtherPayment />} />

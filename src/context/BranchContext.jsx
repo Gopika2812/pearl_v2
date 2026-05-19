@@ -12,6 +12,7 @@ export function BranchProvider({ children }) {
   const [blockingTokens, setBlockingTokens] = useState([]);
   const [reminderTokens, setReminderTokens] = useState([]);
   const [isCheckingTokens, setIsCheckingTokens] = useState(false);
+  const [isSalesOrderLocked, setIsSalesOrderLocked] = useState(false);
 
   // currentBranch: superAdminViewBranch > adminViewBranch > real login branch
   const currentBranch = superAdminViewBranch || adminViewBranch || loginBranch;
@@ -123,6 +124,37 @@ export function BranchProvider({ children }) {
     return () => clearInterval(interval);
   }, [user?.id, user?._id, currentBranch?._id, currentBranch?.id]);
 
+  // Check if Sales Order menu should be locked due to pending deliveries > 2 days
+  const refreshSalesOrderLockStatus = async () => {
+    const branchId = currentBranch?._id || currentBranch?.id;
+    const userRole = user?.role;
+    if (!branchId || !user) {
+      setIsSalesOrderLocked(false);
+      return;
+    }
+    // Super admin is never locked on the frontend either
+    if (userRole === "SUPER_ADMIN" || userRole === "SUPERADMIN") {
+      setIsSalesOrderLocked(false);
+      return;
+    }
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/invoices/stats/delivery-lock?branchId=${branchId}`);
+      const data = await res.json();
+      if (data.success) {
+        setIsSalesOrderLocked(data.locked === true);
+      }
+    } catch (err) {
+      console.error("Sales order lock check failed:", err);
+    }
+  };
+
+  // Poll lock status every 5 minutes
+  useEffect(() => {
+    refreshSalesOrderLockStatus();
+    const interval = setInterval(refreshSalesOrderLockStatus, 300000);
+    return () => clearInterval(interval);
+  }, [user?.id, user?._id, currentBranch?._id, currentBranch?.id]);
+
   const refreshUser = async (userId, role) => {
     if (!userId) return;
     const endpoint = role === "SUPER_ADMIN" ? "super-admin" : "branch-users";
@@ -185,7 +217,9 @@ export function BranchProvider({ children }) {
         blockingTokens,
         reminderTokens,
         isCheckingTokens,
-        refreshBlockingTokens
+        refreshBlockingTokens,
+        isSalesOrderLocked,
+        refreshSalesOrderLockStatus
       }}
     >
       {children}

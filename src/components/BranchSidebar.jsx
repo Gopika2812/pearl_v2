@@ -34,7 +34,7 @@ import { PAGE_CONFIG, ICON_MAP, getFlattenedPages } from "../utils/pageConfig";
 const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { branch, logout, superAdminViewBranch, setSuperAdminViewBranch, user } = useBranch();
+  const { branch, logout, superAdminViewBranch, setSuperAdminViewBranch, user, isSalesOrderLocked } = useBranch();
   
   // Dropdown states managed dynamically by ID
   const [openDropdowns, setOpenDropdowns] = useState({});
@@ -123,17 +123,25 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
     if (allowedSubItems.length === 0) return null;
 
     const isOpen = !!openDropdowns[item.id];
-    const isDisabled = isBlocked;
+    let isDisabled = isBlocked;
+    
+    // Check for specific sales order lock
+    const isSalesLocked = item.id === "sales-dropdown" && isSalesOrderLocked;
+    
+    // If sales is locked but block isn't global
+    if (isSalesLocked) {
+        isDisabled = true;
+    }
 
     return (
-      <div key={item.id} className={`mx-3 mb-1 ${isDisabled ? "opacity-30 pointer-events-none grayscale" : ""}`}>
+      <div key={item.id} className={`mx-3 mb-1 ${isDisabled ? "opacity-30 pointer-events-none grayscale relative group/locked" : ""}`}>
         <button
           onClick={() => !isDisabled && toggleDropdown(item.id)}
           className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/10 text-white/90 transition-colors"
-          title={isDisabled ? "Navigation Locked" : item.name}
+          title={isBlocked ? "Navigation Locked" : (isSalesLocked ? "Sales Order menu is disabled. Contact Saravan Sir to enable." : item.name)}
         >
           <div className="w-8 flex justify-center flex-shrink-0">
-            <span className="text-lg">{ICON_MAP[item.icon]}</span>
+            <span className="text-lg">{isSalesLocked ? <FaLock className="text-rose-400" /> : ICON_MAP[item.icon]}</span>
           </div>
           <span className={`text-sm flex-1 text-left whitespace-nowrap transition-opacity duration-300 ${!isMobile ? "opacity-0 group-hover:opacity-100 w-0 group-hover:w-auto overflow-hidden" : ""}`}>
             {item.name}
@@ -142,6 +150,11 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
             <FaChevronDown className={`text-xs transition-transform ${isOpen ? "rotate-180" : ""}`} />
           </div>
         </button>
+        {isSalesLocked && (
+            <div className="hidden group-hover/locked:block absolute top-0 left-full ml-4 z-50 w-64 p-3 bg-rose-500 rounded-xl text-white text-xs font-bold shadow-2xl">
+                ⚠️ Sales Order menu is disabled due to pending deliveries older than 2 days. Contact Saravan Sir to enable.
+            </div>
+        )}
         {isOpen && (
           <div className={`mt-1 ml-4 space-y-1 pl-3 border-l-2 border-white/20 overflow-hidden transition-opacity duration-300 ${!isMobile ? "opacity-0 group-hover:opacity-100" : ""}`}>
             {allowedSubItems.map((sub) => {
