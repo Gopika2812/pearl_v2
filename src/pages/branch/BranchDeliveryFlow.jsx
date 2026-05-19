@@ -441,8 +441,6 @@ const BranchDeliveryFlow = () => {
 
       // Always transition status to PICKED when scanning under 'pick'
       await performScanUpdate(inv, "PICKED", [], targetRole);
-    }
-
     } else if (selectedScanRole === "deliveryCompleted") {
       // Delivery completion scan logic
       const hasStorage = inv.storageMan && inv.storageMan !== "NONE" && inv.storageMan.trim();
