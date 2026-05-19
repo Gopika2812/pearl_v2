@@ -1556,27 +1556,55 @@ const ScanCompletionModal = ({ invoice, onClose, onConfirm, selectedOptions, set
 };
 
 const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }) => {
-  const [storageMan, setStorageMan] = useState("");
-  const [stockChecker, setStockChecker] = useState("");
-  const [deliveryPerson, setDeliveryPerson] = useState("");
+  const [storageMan, setStorageMan] = useState([""]);
+  const [stockChecker, setStockChecker] = useState([""]);
+  const [deliveryPerson, setDeliveryPerson] = useState([""]);
   const [storageManComment, setStorageManComment] = useState("");
   const [stockCheckerComment, setStockCheckerComment] = useState("");
   const [deliveryPersonComment, setDeliveryPersonComment] = useState("");
 
+  const addStaffSlot = (role, setRoleState, roleState) => {
+    if (roleState.length >= 5) {
+      toast.warning(`Maximum 5 staff members allowed`);
+      return;
+    }
+    setRoleState([...roleState, ""]);
+  };
+
+  const updateStaffSlot = (idx, value, setRoleState, roleState) => {
+    const newArr = [...roleState];
+    newArr[idx] = value;
+    setRoleState(newArr);
+  };
+
+  const removeStaffSlot = (idx, setRoleState, roleState) => {
+    if (roleState.length <= 1) return;
+    const newArr = roleState.filter((_, i) => i !== idx);
+    setRoleState(newArr);
+  };
+
   // Auto-update comments when staff is selected
   useEffect(() => {
-    if (storageMan || stockChecker || deliveryPerson) {
+    const storageManJoined = storageMan.filter(name => name && name !== "NONE").join(", ");
+    const stockCheckerJoined = stockChecker.filter(name => name && name !== "NONE").join(", ");
+    const deliveryPersonJoined = deliveryPerson.filter(name => name && name !== "NONE").join(", ");
+
+    if (storageManJoined || stockCheckerJoined || deliveryPersonJoined) {
       const timestamp = new Date().toLocaleString("en-IN", { hour: '2-digit', minute: '2-digit', hour12: true });
-      setStorageManComment(`Picked by ${storageMan || '...'} | Checked by ${stockChecker || '...'} at ${timestamp}`);
-      setStockCheckerComment(`Checked by ${stockChecker || '...'} | Picked by ${storageMan || '...'} at ${timestamp}`);
-      setDeliveryPersonComment(`Delivery Person confirmed by ${deliveryPerson || '...'} at ${timestamp}`);
+      setStorageManComment(`Picked by ${storageManJoined || '...'} | Checked by ${stockCheckerJoined || '...'} at ${timestamp}`);
+      setStockCheckerComment(`Checked by ${stockCheckerJoined || '...'} | Picked by ${storageManJoined || '...'} at ${timestamp}`);
+      setDeliveryPersonComment(`Delivery Person confirmed by ${deliveryPersonJoined || '...'} at ${timestamp}`);
     }
   }, [storageMan, stockChecker, deliveryPerson]);
 
+  const hasStorage = storageMan.some(name => name && name !== "NONE");
+  const hasChecker = stockChecker.some(name => name && name !== "NONE");
+  const hasDelivery = deliveryPerson.some(name => name && name !== "NONE");
+
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-      <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
-        <div className="bg-indigo-600 p-6 flex items-center justify-between text-white">
+      <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100 flex flex-col max-h-[90vh]">
+        <div className="bg-indigo-600 p-6 flex items-center justify-between text-white shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
               <FaClipboardCheck className="text-white" />
@@ -1591,68 +1619,134 @@ const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }
           </button>
         </div>
 
-        <div className="p-8 space-y-6 overflow-y-auto max-h-[75vh]">
+        <div className="p-8 space-y-6 overflow-y-auto flex-1 pb-24">
           <div className="grid grid-cols-1 gap-6">
+            {/* Storage Man */}
             <div className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Select Storage Man</label>
-                <select
-                  value={storageMan}
-                  onChange={(e) => setStorageMan(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest">Select Storage Man</label>
+                <button
+                  onClick={() => addStaffSlot('storageMan', setStorageMan, storageMan)}
+                  className="w-5 h-5 bg-emerald-50 text-emerald-600 rounded flex items-center justify-center hover:bg-emerald-100 transition-colors border-0 cursor-pointer"
+                  title="Add more Storage Man"
                 >
-                  <option value="">Select Staff</option>
-                  {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
-                </select>
+                  <FaPlus size={8} />
+                </button>
+              </div>
+              <div className="space-y-2">
+                {storageMan.map((val, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <select
+                      value={val}
+                      onChange={(e) => updateStaffSlot(idx, e.target.value, setStorageMan, storageMan)}
+                      className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3.5 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+                    >
+                      <option value="">Select Staff</option>
+                      {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
+                    </select>
+                    {storageMan.length > 1 && (
+                      <button
+                        onClick={() => removeStaffSlot(idx, setStorageMan, storageMan)}
+                        className="w-8 h-8 flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border-0 bg-transparent cursor-pointer"
+                      >
+                        <FaTrash size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
               <input
                 type="text"
                 value={storageManComment}
                 onChange={(e) => setStorageManComment(e.target.value)}
                 placeholder="Edit storage comment..."
-                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none shadow-sm"
               />
             </div>
 
+            {/* Stock Checker */}
             <div className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Select Stock Checker</label>
-                <select
-                  value={stockChecker}
-                  onChange={(e) => setStockChecker(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest">Select Stock Checker</label>
+                <button
+                  onClick={() => addStaffSlot('stockChecker', setStockChecker, stockChecker)}
+                  className="w-5 h-5 bg-emerald-50 text-emerald-600 rounded flex items-center justify-center hover:bg-emerald-100 transition-colors border-0 cursor-pointer"
+                  title="Add more Stock Checker"
                 >
-                  <option value="">Select Staff</option>
-                  {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
-                </select>
+                  <FaPlus size={8} />
+                </button>
+              </div>
+              <div className="space-y-2">
+                {stockChecker.map((val, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <select
+                      value={val}
+                      onChange={(e) => updateStaffSlot(idx, e.target.value, setStockChecker, stockChecker)}
+                      className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3.5 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+                    >
+                      <option value="">Select Staff</option>
+                      {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
+                    </select>
+                    {stockChecker.length > 1 && (
+                      <button
+                        onClick={() => removeStaffSlot(idx, setStockChecker, stockChecker)}
+                        className="w-8 h-8 flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border-0 bg-transparent cursor-pointer"
+                      >
+                        <FaTrash size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
               <input
                 type="text"
                 value={stockCheckerComment}
                 onChange={(e) => setStockCheckerComment(e.target.value)}
                 placeholder="Edit checker comment..."
-                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none shadow-sm"
               />
             </div>
 
+            {/* Delivery Person */}
             <div className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Select Delivery Person</label>
-                <select
-                  value={deliveryPerson}
-                  onChange={(e) => setDeliveryPerson(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-4 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+              <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest">Select Delivery Person</label>
+                <button
+                  onClick={() => addStaffSlot('deliveryPerson', setDeliveryPerson, deliveryPerson)}
+                  className="w-5 h-5 bg-emerald-50 text-emerald-600 rounded flex items-center justify-center hover:bg-emerald-100 transition-colors border-0 cursor-pointer"
+                  title="Add more Delivery Person"
                 >
-                  <option value="">Select Staff</option>
-                  {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
-                </select>
+                  <FaPlus size={8} />
+                </button>
+              </div>
+              <div className="space-y-2">
+                {deliveryPerson.map((val, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <select
+                      value={val}
+                      onChange={(e) => updateStaffSlot(idx, e.target.value, setDeliveryPerson, deliveryPerson)}
+                      className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3.5 text-sm font-bold focus:outline-none focus:border-indigo-500 transition-all"
+                    >
+                      <option value="">Select Staff</option>
+                      {branchUsers.map(u => <option key={u._id} value={u.username || u.fullName}>{u.username || u.fullName}</option>)}
+                    </select>
+                    {deliveryPerson.length > 1 && (
+                      <button
+                        onClick={() => removeStaffSlot(idx, setDeliveryPerson, deliveryPerson)}
+                        className="w-8 h-8 flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border-0 bg-transparent cursor-pointer"
+                      >
+                        <FaTrash size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
               <input
                 type="text"
                 value={deliveryPersonComment}
                 onChange={(e) => setDeliveryPersonComment(e.target.value)}
                 placeholder="Edit delivery comment..."
-                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none"
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-600 focus:bg-white focus:border-indigo-300 outline-none shadow-sm"
               />
             </div>
           </div>
@@ -1667,8 +1761,16 @@ const BulkScanAssignmentModal = ({ invNumbers, branchUsers, onClose, onConfirm }
             <div className="flex gap-3">
               <button onClick={onClose} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition">Cancel</button>
               <button
-                disabled={!storageMan || !stockChecker || !deliveryPerson}
-                onClick={() => onConfirm({ storageMan, stockChecker, deliveryPerson, storageManComment, stockCheckerComment, deliveryPersonComment, deliveryStatus: 'PICKED' })}
+                disabled={!hasStorage || !hasChecker || !hasDelivery}
+                onClick={() => onConfirm({
+                  storageMan: storageMan.filter(name => name && name !== "NONE").join(", "),
+                  stockChecker: stockChecker.filter(name => name && name !== "NONE").join(", "),
+                  deliveryPerson: deliveryPerson.filter(name => name && name !== "NONE").join(", "),
+                  storageManComment,
+                  stockCheckerComment,
+                  deliveryPersonComment,
+                  deliveryStatus: 'PICKED'
+                })}
                 className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-indigo-700 transition disabled:opacity-50 shadow-xl shadow-indigo-100"
               >
                 Mark All as Picked
