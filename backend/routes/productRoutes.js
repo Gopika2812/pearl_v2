@@ -238,7 +238,7 @@ router.get("/", async (req, res) => {
     // ⚡ SYNC: Fetch financial totals for the returned products to calculate "Tally Stock"
     const productIds = products.map(p => p._id);
     
-    const [salesTotals, purchaseTotals, cnTotals, dnTotals, psvTotals, poDates, piDates] = await Promise.all([
+    const [salesTotals, purchaseTotals, cnTotals, dnTotals, psvTotals, poDates, piDates, siDates] = await Promise.all([
       Invoice.aggregate([
         { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE } } },
         { $unwind: "$items" },
@@ -281,6 +281,12 @@ router.get("/", async (req, res) => {
         { $unwind: "$items" },
         { $match: { "items.productId": { $in: productIds } } },
         { $group: { _id: "$items.productId", lastDate: { $max: "$invoiceDate" } } }
+      ]),
+      Invoice.aggregate([
+        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, "items.productId": { $in: productIds } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": { $in: productIds } } },
+        { $group: { _id: "$items.productId", lastDate: { $max: "$invoiceDate" } } }
       ])
     ]);
 
@@ -304,6 +310,89 @@ router.get("/", async (req, res) => {
       }
     });
 
+    const salesDateMap = new Map();
+    if (siDates) {
+      siDates.forEach(d => {
+        if (d._id) salesDateMap.set(d._id.toString(), d.lastDate);
+      });
+    }
+
+    // ⚡ Dynamically calculate Restocking variables (sales period qty) if requested
+    let restockingMap = new Map();
+    if (req.query.includeRestocking === "true") {
+      let maxDays = 7;
+      products.forEach(p => {
+        const days = p.restockingConfig?.salesPeriodDays || 7;
+        if (days > maxDays) maxDays = days;
+      });
+
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - maxDays);
+
+      const salesInvoices = await Invoice.aggregate([
+        {
+          $match: {
+            branchId: branchObjectId,
+            invoiceDate: { $gte: startDate },
+            status: { $ne: "CANCELLED" },
+            "items.productId": { $in: productIds }
+          }
+        },
+        { $unwind: "$items" },
+        { $match: { "items.productId": { $in: productIds } } },
+        {
+          $group: {
+            _id: {
+              productId: "$items.productId",
+              dateStr: { $dateToString: { format: "%Y-%m-%d", date: "$invoiceDate" } }
+            },
+            totalQty: { $sum: "$items.qty" }
+          }
+        }
+      ]);
+
+      // Organize by productId for O(1) retrieval
+      const salesByProduct = new Map();
+      salesInvoices.forEach(s => {
+        if (s._id && s._id.productId) {
+          const pid = s._id.productId.toString();
+          if (!salesByProduct.has(pid)) {
+            salesByProduct.set(pid, []);
+          }
+          salesByProduct.get(pid).push({
+            date: new Date(s._id.dateStr),
+            qty: s.totalQty || 0
+          });
+        }
+      });
+
+      // Calculate for each product
+      products.forEach(p => {
+        const pId = p._id.toString();
+        const days = p.restockingConfig?.salesPeriodDays || 7;
+        
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - days);
+
+        let sellingQty = 0;
+        const txns = salesByProduct.get(pId) || [];
+        txns.forEach(t => {
+          if (t.date >= cutoffDate) {
+            sellingQty += t.qty;
+          }
+        });
+
+        restockingMap.set(pId, {
+          salesPeriodDays: days,
+          sellingQtyInPeriod: sellingQty,
+          threshold: p.restockingConfig?.threshold !== undefined && p.restockingConfig?.threshold !== null 
+            ? p.restockingConfig.threshold 
+            : sellingQty,
+          restockingQty: p.restockingConfig?.restockingQty || null
+        });
+      });
+    }
+
     // ⚡ Return product with current ground-truth "Tally Stock" (includes PSV adjustments)
     const enhancedProducts = products.map((product) => {
       const pId = product._id.toString();
@@ -317,10 +406,20 @@ router.get("/", async (req, res) => {
       const closingStock = (opening + inwardPurchases + inwardCreditNotes + psv.inward)
                          - (outwardSales + outwardDebitNotes + psv.outward);
 
+      const dynamicRestocking = restockingMap.get(pId);
+      const restockingConfig = dynamicRestocking || product.restockingConfig || {
+        salesPeriodDays: 7,
+        sellingQtyInPeriod: 0,
+        threshold: 10,
+        restockingQty: null
+      };
+
       return {
         ...product,
+        restockingConfig,
         availableQty: Math.round(closingStock * 100) / 100,
-        lastPurchaseDate: purchaseDateMap.get(pId) || null
+        lastPurchaseDate: purchaseDateMap.get(pId) || null,
+        lastSalesDate: salesDateMap.get(pId) || null
       };
     });
 

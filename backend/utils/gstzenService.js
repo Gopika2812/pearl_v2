@@ -357,6 +357,12 @@ class GSTZenService {
         finalMsg = d.message || d.error || finalMsg;
         if (d.ErrorDetails) finalMsg += " - " + JSON.stringify(d.ErrorDetails);
       }
+      
+      // Humanize government portal timeouts (GSTZen Python backend leaks this)
+      if (finalMsg && typeof finalMsg === 'string' && finalMsg.includes("api.einvoice1.gst.gov.in") && (finalMsg.includes("Timeout") || finalMsg.includes("Max retries exceeded"))) {
+          finalMsg = "The Government E-Invoice Portal (NIC) is currently down or very slow. Please wait a few minutes and try again.";
+      }
+
       console.error("❌ E-Invoice Fail:", finalMsg);
       throw new Error(finalMsg);
     }

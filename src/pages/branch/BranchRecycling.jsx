@@ -59,6 +59,7 @@ export default function BranchRecycling() {
   const [selectedProducts, setSelectedProducts] = useState(new Set());
   const [bulkRestockingInProgress, setBulkRestockingInProgress] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
   const [pagination, setPagination] = useState({ total: 0, pages: 0, limit: 50 });
   const [viewMode, setViewMode] = useState("table"); // \"table\" or \"card\"
   const [selectedProductGroup, setSelectedProductGroup] = useState("All"); // Filter by group
@@ -125,7 +126,7 @@ export default function BranchRecycling() {
       const branchId = currentBranch._id;
       console.log("🔄 Starting to fetch all products for group caching...");
 
-      const url = `${API_BASE}/products?branchId=${branchId}&limit=10000&mini=true`;
+      const url = `${API_BASE}/products?branchId=${branchId}&limit=10000&includeRestocking=true`;
       console.log(`📄 Fetching all products in single optimized call: ${url}`);
 
       const res = await fetch(url);
@@ -192,7 +193,7 @@ export default function BranchRecycling() {
     setLoading(true);
     try {
       const branchId = currentBranch._id;
-      let url = `${API_BASE}/products?branchId=${branchId}&page=${page}&limit=50`;
+      let url = `${API_BASE}/products?branchId=${branchId}&page=${page}&limit=50&includeRestocking=true`;
       
       // Add search parameter if search term exists
       if (search) {
@@ -414,12 +415,12 @@ export default function BranchRecycling() {
     const diffTime = today - lastDate;
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     const daysVal = diffDays < 0 ? 0 : diffDays;
-    return `${daysVal} day${daysVal !== 1 ? "s" : ""}`;
+    return `${daysVal}d`;
   };
 
   const getPurchaseDateString = (dateString) => {
     if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString('en-GB'); // DD/MM/YYYY
+    return new Date(dateString).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' });
   };
 
   const handleSort = (key) => {
@@ -593,8 +594,8 @@ export default function BranchRecycling() {
         setRestockingFormValues((prev) => ({
           ...prev,
           sellingQtyInPeriod: calculatedQty,
-          // Set as the default threshold if it hasn't been modified yet
-          threshold: prev.threshold ?? calculatedQty,
+          // In AUTO mode, alert trigger matches the sales period quantity
+          threshold: calculatedQty,
         }));
         
         toast.success(`✅ Calculated last ${days} days sales: ${calculatedQty} units!`);
@@ -608,6 +609,43 @@ export default function BranchRecycling() {
       setCalculatingSellingQty(false);
     }
   };
+
+  // Auto-calculate sales period qty when days change (debounced)
+  useEffect(() => {
+    if (!restockingEditingProduct || restockingFormValues.reorderMode !== "AUTO" || !restockingFormValues.salesPeriodDays) return;
+    
+    const delayDebounce = setTimeout(() => {
+      const fetchQty = async () => {
+        setCalculatingSellingQty(true);
+        try {
+          const productId = restockingEditingProduct._id;
+          const days = restockingFormValues.salesPeriodDays;
+          const res = await fetch(
+            `${API_BASE}/products/${productId}/selling-qty/${days}?branchId=${currentBranch._id}`
+          );
+          if (!res.ok) throw new Error("Failed to calculate");
+          const data = await res.json();
+          if (data.success) {
+            const calculatedQty = data.sellingQtyInPeriod || 0;
+            setRestockingFormValues((prev) => ({
+              ...prev,
+              sellingQtyInPeriod: calculatedQty,
+              // AUTO MODE REQUIREMENT: Reorder Threshold matches sales period quantity
+              threshold: calculatedQty,
+            }));
+          }
+        } catch (err) {
+          console.error("Error auto-calculating:", err);
+        } finally {
+          setCalculatingSellingQty(false);
+        }
+      };
+      fetchQty();
+    }, 500); // 500ms debounce
+    
+    return () => clearTimeout(delayDebounce);
+  }, [restockingFormValues.salesPeriodDays, restockingFormValues.reorderMode, restockingEditingProduct?._id]);
+
 
   // Save restocking configuration
   const saveRestockingConfig = async () => {
@@ -927,6 +965,12 @@ export default function BranchRecycling() {
         const valB = b.lastPurchaseDate ? new Date(b.lastPurchaseDate).getTime() : 0;
         return direction === "asc" ? valA - valB : valB - valA;
       }
+
+      if (key === "lastSalesDate" || key === "salesAge") {
+        const valA = a.lastSalesDate ? new Date(a.lastSalesDate).getTime() : 0;
+        const valB = b.lastSalesDate ? new Date(b.lastSalesDate).getTime() : 0;
+        return direction === "asc" ? valA - valB : valB - valA;
+      }
     });
   };
 
@@ -961,7 +1005,6 @@ export default function BranchRecycling() {
   const filteredProducts = getFilteredAndSorted(baseProducts);
 
   // Client-side pagination for the filtered/sorted list
-  const itemsPerPage = 50;
   const totalFilteredPages = Math.ceil(filteredProducts.length / itemsPerPage);
   const paginatedProducts = filteredProducts.slice(
     (currentPage - 1) * itemsPerPage,
@@ -993,7 +1036,7 @@ export default function BranchRecycling() {
             const { reorderQty, reorderLevel, isAuto } = getReorderParams(product);
             const poQty = pendingPOMap?.[product._id] || 0;
             const soQty = pendingSalesMap?.[product._id] || 0;
-            const netAvailability = product.totalQty + poQty - soQty;
+            const netAvailability = Number(((product.totalQty || 0) + poQty - soQty).toFixed(2));
 
             return (
               <div
@@ -1023,9 +1066,9 @@ export default function BranchRecycling() {
                   {fieldPermissions.totalQty !== false && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">System Qty (Closing):</span>
-                      <span className="font-semibold text-gray-800">
-                        {product.totalQty} {product.units}
-                      </span>
+                      <div className="text-sm font-semibold text-gray-800">
+                        {Number((product.totalQty || 0).toFixed(2))} {product.units}
+                      </div>
                     </div>
                   )}
 
@@ -1203,7 +1246,7 @@ export default function BranchRecycling() {
             {/* Current Stats */}
             <div className="bg-gray-50 p-3 rounded-lg">
               <p className="text-xs text-gray-600">
-                <strong>Current Stock:</strong> {product.totalQty} {product.units}
+                <strong>Current Stock:</strong> {Number((product.totalQty || 0).toFixed(2))} {product.units}
               </p>
               <p className="text-xs text-gray-600 mt-1">
                 <strong>Purchasing Price:</strong> ₹{product.purchasingPrice}
@@ -1237,191 +1280,174 @@ export default function BranchRecycling() {
     if (!restockingEditingProduct) return null;
 
     const isAuto = restockingFormValues.reorderMode === "AUTO";
+    const poQty = pendingPOMap?.[restockingEditingProduct._id] || 0;
+    const soQty = pendingSalesMap?.[restockingEditingProduct._id] || 0;
+    const netAvailability = Number(((restockingEditingProduct.totalQty || 0) + poQty - soQty).toFixed(2));
 
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-100 transform scale-100 transition-all duration-300">
-          <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 text-white p-6 rounded-t-2xl sticky top-0 z-10 shadow-md">
+        <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-gray-100 transform scale-100 transition-all duration-300">
+          <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 text-white p-6 rounded-t-3xl sticky top-0 z-10 shadow-md">
             <div className="flex items-center gap-3">
               <span className="p-2 bg-white/20 rounded-lg text-xl">📊</span>
               <div>
-                <h2 className="text-2xl font-bold">Smart Restocking Configuration</h2>
-                <p className="text-purple-100 text-sm mt-0.5">{restockingEditingProduct.name}</p>
+                <h2 className="text-2xl font-black uppercase tracking-wider">Smart Restocking Configuration</h2>
+                <p className="text-purple-100 text-xs mt-1 font-bold">{restockingEditingProduct.name}</p>
               </div>
             </div>
           </div>
 
-          <div className="p-6 space-y-6">
-            {/* Mode Switcher Tabs */}
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                Reorder Quantity Mode
+          <div className="p-8 space-y-6">
+            {/* Live Stock & Pending Quantities Summary Card */}
+            <div className="bg-gradient-to-r from-gray-50 to-blue-50/30 p-5 rounded-2xl border border-blue-100/70 shadow-sm grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white rounded border border-gray-200 p-2 text-center">
+                <div className="text-sm font-extrabold text-gray-800">
+                  {Number((restockingEditingProduct.totalQty || 0).toFixed(2))} <span className="text-xs text-gray-500 font-medium">{restockingEditingProduct.units}</span>
+                </div>
+              </div>
+              <div className="text-center md:border-r border-blue-100 last:border-0 p-2">
+                <span className="text-[10px] text-indigo-500 block uppercase font-black tracking-wider">Pending PO Qty</span>
+                <span className="text-xl font-extrabold text-indigo-700 block mt-1">
+                  {poQty} <span className="text-xs text-indigo-500 font-medium">{restockingEditingProduct.units}</span>
+                </span>
+              </div>
+              <div className="text-center md:border-r border-blue-100 last:border-0 p-2">
+                <span className="text-[10px] text-rose-500 block uppercase font-black tracking-wider">Pending SO Qty</span>
+                <span className="text-xl font-extrabold text-rose-700 block mt-1">
+                  {soQty} <span className="text-xs text-rose-500 font-medium">{restockingEditingProduct.units}</span>
+                </span>
+              </div>
+              <div className="text-center p-2">
+                <span className="text-[10px] text-emerald-600 block uppercase font-black tracking-wider">Net Available</span>
+                <span className="text-xl font-extrabold text-emerald-700 block mt-1">
+                  {netAvailability} <span className="text-xs text-emerald-600 font-medium">{restockingEditingProduct.units}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Automatic Restocking Block */}
+            <div className={`p-5 rounded-2xl border transition-all duration-200 ${isAuto ? 'bg-indigo-50/50 border-indigo-200 shadow-sm' : 'bg-gray-50/40 border-gray-100 opacity-60'}`}>
+              <label className="flex items-center gap-3 cursor-pointer mb-4">
+                <input
+                  type="radio"
+                  name="reorderMode"
+                  value="AUTO"
+                  checked={isAuto}
+                  onChange={() => setRestockingFormValues(prev => ({ ...prev, reorderMode: "AUTO" }))}
+                  className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                />
+                <span className="text-sm font-black text-indigo-950 flex items-center gap-1.5">
+                  🤖 Auto Mode (Sales-Based)
+                </span>
               </label>
-              <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1.5 rounded-xl border border-gray-200">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setRestockingFormValues((prev) => ({ ...prev, reorderMode: "AUTO" }))
-                  }
-                  className={`py-3 rounded-lg text-sm font-bold transition-all duration-200 flex items-center justify-center gap-2 ${
-                    isAuto
-                      ? "bg-white text-indigo-700 shadow-md"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-white/50"
-                  }`}
-                >
-                  <span>🤖</span> Auto Mode (Condition Days)
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setRestockingFormValues((prev) => ({ ...prev, reorderMode: "MANUAL" }))
-                  }
-                  className={`py-3 rounded-lg text-sm font-bold transition-all duration-200 flex items-center justify-center gap-2 ${
-                    !isAuto
-                      ? "bg-white text-indigo-700 shadow-md"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-white/50"
-                  }`}
-                >
-                  <span>✍️</span> Manual Override Qty
-                </button>
+              
+              <div className={`space-y-4 transition-all duration-200 ${isAuto ? 'block' : 'hidden'}`}>
+                <div className="ml-7">
+                  <label className="block text-xs font-bold text-indigo-700 mb-1.5">
+                    Condition Period (Days)
+                  </label>
+                  <input
+                    type="number"
+                    value={restockingFormValues.salesPeriodDays}
+                    onChange={(e) =>
+                      setRestockingFormValues((prev) => ({
+                        ...prev,
+                        salesPeriodDays: e.target.value === "" ? "" : parseInt(e.target.value),
+                      }))
+                    }
+                    className="w-full px-4 py-2.5 border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white font-bold"
+                    placeholder="e.g. 7, 14, 30"
+                  />
+                  <p className="text-[10px] text-indigo-600/80 mt-1 font-semibold">
+                    Past X days of sales invoices sets both the reorder qty and trigger threshold automatically.
+                  </p>
+                </div>
+
+                <div className="ml-7 bg-white p-4 rounded-xl border border-indigo-100 flex items-center justify-between shadow-sm">
+                  <div>
+                    <span className="text-[10px] text-gray-500 block uppercase font-bold tracking-wider">Sales Period Qty (Auto Order Qty)</span>
+                    <span className="text-2xl font-black text-indigo-700">
+                      {calculatingSellingQty ? "🔄 Calculating..." : `${restockingFormValues.sellingQtyInPeriod || 0} ${restockingEditingProduct.units}`}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-gray-500 block uppercase font-bold tracking-wider">Auto Trigger Threshold</span>
+                    <span className="text-2xl font-black text-indigo-700">
+                      {calculatingSellingQty ? "🔄..." : `${restockingFormValues.threshold || 0} ${restockingEditingProduct.units}`}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Mode Specific Sections */}
-            {isAuto ? (
-              <div className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 p-5 rounded-xl border border-indigo-100 space-y-4">
-                <h3 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
-                  <span>📅</span> Auto-Calculate Quantity from Sales
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+            {/* Manual Restocking Block */}
+            <div className={`p-5 rounded-2xl border transition-all duration-200 ${!isAuto ? 'bg-amber-50/50 border-amber-200 shadow-sm' : 'bg-gray-50/40 border-gray-100 opacity-60'}`}>
+              <label className="flex items-center gap-3 cursor-pointer mb-4">
+                <input
+                  type="radio"
+                  name="reorderMode"
+                  value="MANUAL"
+                  checked={!isAuto}
+                  onChange={() => setRestockingFormValues(prev => ({ ...prev, reorderMode: "MANUAL" }))}
+                  className="w-4 h-4 text-amber-600 focus:ring-amber-500 border-gray-300"
+                />
+                <span className="text-sm font-black text-amber-950 flex items-center gap-1.5">
+                  ✍️ Manual Override Qty
+                </span>
+              </label>
+              
+              <div className={`space-y-4 transition-all duration-200 ${!isAuto ? 'block' : 'hidden'}`}>
+                <div className="ml-7 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-indigo-700 mb-1.5">
-                      Condition Period (Days)
+                    <label className="block text-xs font-bold text-amber-700 mb-1.5">
+                      Manual Reorder Quantity
                     </label>
-                    <input
-                      type="number"
-                      value={restockingFormValues.salesPeriodDays}
-                      onChange={(e) =>
-                        setRestockingFormValues((prev) => ({
-                          ...prev,
-                          salesPeriodDays: e.target.value === "" ? "" : parseInt(e.target.value),
-                        }))
-                      }
-                      className="w-full px-4 py-2.5 border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                      placeholder="e.g. 7, 14, 30"
-                    />
-                    <p className="text-[11px] text-indigo-600/80 mt-1">
-                      Past X days of sales invoice quantities set the reorder qty automatically.
-                    </p>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={restockingFormValues.restockingQty}
+                        onChange={(e) =>
+                          setRestockingFormValues((prev) => ({
+                            ...prev,
+                            restockingQty: e.target.value === "" ? "" : parseInt(e.target.value),
+                          }))
+                        }
+                        className="w-full px-4 py-2.5 border border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white font-bold pr-16"
+                        placeholder="Enter fixed qty"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs text-amber-600 font-black">
+                        {restockingEditingProduct.units}
+                      </span>
+                    </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={calculateSellingQty}
-                    disabled={calculatingSellingQty || !restockingFormValues.salesPeriodDays}
-                    className="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
-                  >
-                    {calculatingSellingQty ? (
-                      <>🔄 Calculating...</>
-                    ) : (
-                      <>🔍 Analyze Sales Period</>
-                    )}
-                  </button>
-                </div>
-
-                <div className="bg-white/80 backdrop-blur-sm p-4 rounded-lg border border-indigo-100 flex items-center justify-between">
                   <div>
-                    <span className="text-xs text-gray-500 block">Sales Period Qty (Auto Reorder Qty)</span>
-                    <span className="text-3xl font-extrabold text-indigo-700">
-                      {restockingFormValues.sellingQtyInPeriod || 0}
-                    </span>
-                    <span className="text-xs font-semibold text-gray-600 ml-1">
-                      {restockingEditingProduct.units}
-                    </span>
-                  </div>
-                  <div className="text-right max-w-xs">
-                    <p className="text-[11px] text-gray-500 italic">
-                      Based on last <span className="font-bold">{restockingFormValues.salesPeriodDays}</span> days sales invoices. Updates dynamically when sales period is analyzed.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-gradient-to-br from-amber-50/50 to-orange-50/50 p-5 rounded-xl border border-amber-100 space-y-4">
-                <h3 className="text-sm font-bold text-amber-900 flex items-center gap-2">
-                  <span>✍️</span> Define Static Manual Reorder Qty
-                </h3>
-                <div>
-                  <label className="block text-xs font-semibold text-amber-700 mb-1.5">
-                    Manual Reorder Quantity
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={restockingFormValues.restockingQty}
-                      onChange={(e) =>
-                        setRestockingFormValues((prev) => ({
-                          ...prev,
-                          restockingQty: e.target.value === "" ? "" : parseInt(e.target.value),
-                        }))
-                      }
-                      className="w-full px-4 py-2.5 border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white pr-16"
-                      placeholder="Enter fixed qty"
-                    />
-                    <span className="absolute right-3 top-2.5 text-xs text-amber-600 font-bold">
-                      {restockingEditingProduct.units}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-amber-600/80 mt-1">
-                    This overrides the sales period auto calculation and locks reorder qty to this static value.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Threshold (Common Settings) */}
-            <div className="border-t border-gray-100 pt-6">
-              <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-                <span>🚨</span> Reorder Alert Trigger Threshold
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                    Reorder Threshold (Level)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={restockingFormValues.threshold}
-                      onChange={(e) =>
-                        setRestockingFormValues((prev) => ({
-                          ...prev,
-                          threshold: e.target.value === "" ? "" : parseInt(e.target.value),
-                        }))
-                      }
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-16"
-                      placeholder="e.g. 10"
-                    />
-                    <span className="absolute right-3 top-2.5 text-xs text-gray-500 font-bold">
-                      {restockingEditingProduct.units}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-gray-500 mt-1">
-                    When system stock reaches this quantity or lower, full-page alarms and low stock states are activated.
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex items-center gap-3">
-                  <span className="text-2xl">💡</span>
-                  <div className="text-xs text-gray-600">
-                    <p className="font-bold mb-0.5">Tip for Reorder Trigger</p>
-                    <p>Setting the threshold equal to your sales cycle volume (like the calculated {restockingFormValues.sellingQtyInPeriod} units) guarantees stock replenishment before running dry.</p>
+                    <label className="block text-xs font-bold text-amber-700 mb-1.5">
+                      Manual Reorder Threshold (Level)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={restockingFormValues.threshold}
+                        onChange={(e) =>
+                          setRestockingFormValues((prev) => ({
+                            ...prev,
+                            threshold: e.target.value === "" ? "" : parseInt(e.target.value),
+                          }))
+                        }
+                        className="w-full px-4 py-2.5 border border-amber-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white font-bold pr-16"
+                        placeholder="e.g. 10"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs text-amber-600 font-black">
+                        {restockingEditingProduct.units}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Final Settings Summary Card */}
+            {/* Preview Summary */}
             <div className="bg-gray-900 text-gray-200 p-5 rounded-2xl shadow-inner border border-gray-800">
               <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
                 🔍 Resolved Levels (Result Preview)
@@ -1452,14 +1478,14 @@ export default function BranchRecycling() {
           </div>
 
           {/* Footer sticky buttons */}
-          <div className="bg-gray-50 px-6 py-4 rounded-b-2xl flex gap-3 border-t border-gray-100 sticky bottom-0 z-10">
+          <div className="bg-gray-50 px-8 py-4 rounded-b-3xl flex gap-3 border-t border-gray-100 sticky bottom-0 z-10">
             <button
               type="button"
               onClick={() => {
                 setRestockingConfigMode(false);
                 setRestockingEditingProduct(null);
               }}
-              className="flex-1 px-4 py-3 rounded-xl border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 transition shadow-sm"
+              className="flex-1 px-4 py-3 rounded-xl border border-gray-300 text-gray-700 font-bold hover:bg-gray-200 transition shadow-sm active:scale-95"
             >
               Cancel
             </button>
@@ -1467,7 +1493,7 @@ export default function BranchRecycling() {
               type="button"
               onClick={saveRestockingConfig}
               disabled={savingRestockingConfig}
-              className="flex-1 px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition shadow-md disabled:opacity-50 flex items-center justify-center gap-2 active:scale-95"
             >
               {savingRestockingConfig ? (
                 <>💾 Saving Settings...</>
@@ -1543,10 +1569,10 @@ export default function BranchRecycling() {
                       <p className="text-xs text-gray-500">Preferred Vendor: <span className="font-semibold text-gray-700">{p.preferredVendor || "-"}</span></p>
                     </div>
                   </div>
-                  <div className="flex gap-8 items-center text-sm md:text-base font-bold">
-                    <span className="w-24 text-right text-gray-800 font-extrabold">
-                      {p.totalQty} <span className="text-[10px] text-gray-500 font-normal">{p.units}</span>
-                    </span>
+                  <div className="flex items-center justify-between">
+                    <div className="text-lg font-bold text-gray-900 leading-none">
+                      {Number((p.totalQty || 0).toFixed(2))} <span className="text-[10px] text-gray-500 font-normal">{p.units}</span>
+                    </div>
                     <span className="w-24 text-right text-red-600 font-extrabold">
                       {reorderLevel} <span className="text-[10px] text-red-500 font-normal">{p.units}</span>
                     </span>
@@ -1689,12 +1715,30 @@ export default function BranchRecycling() {
           </div>
 
           {/* Pagination Controls */}
-          <div className="flex items-center justify-between mt-4 px-4 py-3 bg-white rounded-lg shadow-sm">
-            <div className="text-sm text-gray-600">
-              <span className="font-semibold">Page {allProducts.length > 0 ? (totalFilteredPages > 0 ? currentPage : 0) : (pagination.pages > 0 ? currentPage : 0)} of {allProducts.length > 0 ? totalFilteredPages : (pagination.pages || 0)}</span>
-              <span className="ml-3">Total: <strong>{allProducts.length > 0 ? filteredProducts.length : pagination.total}</strong> products</span>
+          <div className="flex items-center justify-between mt-4 px-4 py-3 bg-white rounded-lg shadow-sm overflow-x-auto">
+            <div className="text-sm text-gray-600 flex items-center gap-4 whitespace-nowrap">
+              <div>
+                <span className="font-semibold">Page {allProducts.length > 0 ? (totalFilteredPages > 0 ? currentPage : 0) : (pagination.pages > 0 ? currentPage : 0)} of {allProducts.length > 0 ? totalFilteredPages : (pagination.pages || 0)}</span>
+                <span className="ml-3">Total: <strong>{allProducts.length > 0 ? filteredProducts.length : pagination.total}</strong> products</span>
+              </div>
+              <div className="flex items-center gap-2 border-l pl-4 border-gray-300">
+                <label className="font-medium text-gray-700">Per page:</label>
+                <select 
+                  value={itemsPerPage} 
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="border border-gray-300 rounded px-2 py-1 text-sm bg-white cursor-pointer focus:ring-2 focus:ring-orange-500 outline-none"
+                >
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={150}>150</option>
+                  <option value={200}>200</option>
+                </select>
+              </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               <button
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1 || loading}
@@ -1798,9 +1842,9 @@ export default function BranchRecycling() {
           /* TABLE VIEW */
           <div className="bg-white rounded-2xl shadow overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-gradient-to-r from-orange-500 to-red-500 text-white">
+              <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-3 text-left text-sm font-bold">
+                  <th className="px-2 py-2 text-left text-[11px] font-bold sticky left-0 z-20 bg-slate-50 border-r border-slate-200">
                     <input
                       type="checkbox"
                       checked={selectedProducts.size === paginatedProducts.length && paginatedProducts.length > 0}
@@ -1811,57 +1855,69 @@ export default function BranchRecycling() {
                           setSelectedProducts(new Set(paginatedProducts.map(p => p._id)));
                         }
                       }}
-                      className="w-5 h-5 cursor-pointer"
+                      className="w-4 h-4 cursor-pointer"
                     />
                   </th>
                   {isFieldAllowed("productName") && (
                     <th 
                       onClick={() => handleSort("name")}
-                      className="px-3 py-3 text-left text-sm font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-2 py-2 text-left text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap sticky left-[36px] z-20 bg-slate-50 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]"
                     >
-                      Product Name {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      Product {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
                   {isFieldAllowed("units") && (
                     <th 
                       onClick={() => handleSort("units")}
-                      className="px-1.5 py-3 text-left text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1 py-2 text-left text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
                     >
-                      Units {sortConfig.key === "units" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      Unit {sortConfig.key === "units" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
                   {isFieldAllowed("currentStock") && (
                     <th 
                       onClick={() => handleSort("totalQty")}
-                      className="px-1.5 py-3 text-right text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1 py-2 text-right text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
                     >
-                      System Qty {sortConfig.key === "totalQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      Sys Qty {sortConfig.key === "totalQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
                   {isFieldAllowed("currentStock") && (
                     <th 
                       onClick={() => handleSort("pendingPO")}
-                      className="px-1.5 py-3 text-right text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1 py-2 text-right text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
                     >
                       PO Qty {sortConfig.key === "pendingPO" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
                   <th 
                     onClick={() => handleSort("lastPurchaseDate")}
-                    className="px-1.5 py-3 text-left text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                    className="px-1 py-2 text-left text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
                   >
-                    Purchase Date {sortConfig.key === "lastPurchaseDate" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    Pur. Date {sortConfig.key === "lastPurchaseDate" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
                   <th 
                     onClick={() => handleSort("purchaseAge")}
-                    className="px-1.5 py-3 text-left text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                    className="px-1 py-2 text-left text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
                   >
-                    Purchase Age {sortConfig.key === "purchaseAge" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    Pur. Age {sortConfig.key === "purchaseAge" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  </th>
+                  <th 
+                    onClick={() => handleSort("lastSalesDate")}
+                    className="px-1 py-2 text-left text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap text-indigo-600"
+                  >
+                    Sal. Date {sortConfig.key === "lastSalesDate" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                  </th>
+                  <th 
+                    onClick={() => handleSort("salesAge")}
+                    className="px-1 py-2 text-left text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap text-indigo-600"
+                  >
+                    Sal. Age {sortConfig.key === "salesAge" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
                   {isFieldAllowed("pendingSales") && (
                     <th 
                       onClick={() => handleSort("pendingSales")}
-                      className="px-1.5 py-3 text-right text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1 py-2 text-right text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
                     >
                       SO Qty {sortConfig.key === "pendingSales" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
@@ -1869,45 +1925,38 @@ export default function BranchRecycling() {
                   {isFieldAllowed("available") && (
                     <th 
                       onClick={() => handleSort("netAvailability")}
-                      className="px-1.5 py-3 text-right text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap font-extrabold"
+                      className="px-1 py-2 text-right text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
                     >
-                      Net Available {sortConfig.key === "netAvailability" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      Net Qty {sortConfig.key === "netAvailability" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
                   {isFieldAllowed("threshold") && (
                     <th 
                       onClick={() => handleSort("threshold")}
-                      className="px-1.5 py-3 text-right text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1 py-2 text-right text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
                     >
-                      Reorder Level {sortConfig.key === "threshold" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      Min Lvl {sortConfig.key === "threshold" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
                   {isFieldAllowed("restockQty") && (
                     <th 
                       onClick={() => handleSort("restockingQty")}
-                      className="px-1.5 py-3 text-right text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-1 py-2 text-right text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
                     >
-                      Reorder Qty {sortConfig.key === "restockingQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      Re. {sortConfig.key === "restockingQty" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
-                  {isFieldAllowed("preferredVendor") && (
-                    <th 
-                      onClick={() => handleSort("preferredVendor")}
-                      className="px-1.5 py-3 text-left text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
-                    >
-                      Preferred Vendor {sortConfig.key === "preferredVendor" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                    </th>
-                  )}
+
                   {isFieldAllowed("status") && (
                     <th 
                       onClick={() => handleSort("status")}
-                      className="px-1.5 py-3 text-center text-xs font-bold cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap"
+                      className="px-2 py-2 text-center text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
                     >
                       Status {sortConfig.key === "status" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
-                  {(isFieldAllowed("action_config") || isFieldAllowed("action_restock")) && (
-                    <th className="px-3 py-3 text-center text-xs font-bold whitespace-nowrap">Actions</th>
+                  {isFieldAllowed("action_config") && (
+                    <th className="px-2 py-2 text-center text-[11px] font-bold">Cfg</th>
                   )}
                 </tr>
               </thead>
@@ -1922,7 +1971,7 @@ export default function BranchRecycling() {
                   
                   const poQty = pendingPOMap?.[product._id] || 0;
                   const soQty = pendingSalesMap?.[product._id] || 0;
-                  const netAvailability = product.totalQty + poQty - soQty;
+                  const netAvailability = Number(((product.totalQty || 0) + poQty - soQty).toFixed(2));
                   
                   return (
                     <tr
@@ -1931,132 +1980,120 @@ export default function BranchRecycling() {
                         index % 2 === 0 ? "bg-white" : "bg-gray-50"
                       } border-b border-gray-200 hover:bg-orange-50/30 transition`}
                     >
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-2 sticky left-0 z-10 bg-inherit border-b border-gray-100 border-r">
                         <input
                            type="checkbox"
                            checked={selectedProducts.has(product._id)}
                            onChange={() => toggleProductSelection(product._id)}
-                           className="w-5 h-5 cursor-pointer"
+                           className="w-4 h-4 cursor-pointer"
                         />
                       </td>
                       {isFieldAllowed("productName") && (
-                        <td className="px-3 py-3 font-semibold text-gray-800 text-sm whitespace-nowrap" title={product.name}>
+                        <td className="px-2 py-2 font-semibold text-gray-800 text-[11px] whitespace-normal min-w-[200px] sticky left-[36px] z-10 bg-inherit border-b border-r border-gray-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]" title={product.name}>
                           {product.name}
                         </td>
                       )}
                       {isFieldAllowed("units") && (
-                        <td className="px-1.5 py-3 text-gray-700 text-xs whitespace-nowrap">
+                        <td className="px-1 py-2 text-gray-600 text-[10px] whitespace-nowrap">
                           {product.units}
                         </td>
                       )}
                       {isFieldAllowed("currentStock") && (
-                        <td className="px-1.5 py-3 text-right font-semibold text-gray-800 text-xs">
-                          {product.totalQty}
+                        <td className="px-1 py-2 text-right font-bold text-gray-800 text-[11px]">
+                          {Number((product.totalQty || 0).toFixed(2))}
                         </td>
                       )}
                       {isFieldAllowed("currentStock") && (
-                        <td className="px-1.5 py-3 text-right text-xs">
+                        <td className="px-1 py-2 text-right text-[11px]">
                           {poQty > 0 ? (
-                            <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">
+                            <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold">
                               {poQty}
                             </span>
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-300">-</span>
                           )}
                         </td>
                       )}
                       {/* Last Purchase Date */}
-                      <td className="px-1.5 py-3 text-left text-xs text-gray-700 whitespace-nowrap">
+                      <td className="px-1 py-2 text-left text-[11px] text-gray-600 whitespace-nowrap">
                         {getPurchaseDateString(product.lastPurchaseDate)}
                       </td>
                       {/* Purchase Age (Days) */}
-                      <td className="px-1.5 py-3 text-left text-xs text-gray-700 whitespace-nowrap">
+                      <td className="px-1 py-2 text-left text-[11px] text-gray-600 whitespace-nowrap">
                         {getPurchaseAgeString(product.lastPurchaseDate)}
                       </td>
+                      {/* Last Sales Date */}
+                      <td className="px-1 py-2 text-left text-[11px] text-indigo-600 font-medium whitespace-nowrap">
+                        {getPurchaseDateString(product.lastSalesDate)}
+                      </td>
+                      {/* Sales Age (Days) */}
+                      <td className="px-1 py-2 text-left text-[11px] text-indigo-600 font-medium whitespace-nowrap">
+                        {getPurchaseAgeString(product.lastSalesDate)}
+                      </td>
                       {isFieldAllowed("pendingSales") && (
-                        <td className="px-1.5 py-3 text-right text-xs">
+                        <td className="px-1 py-2 text-right text-[11px]">
                           {soQty > 0 ? (
-                            <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">
+                            <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold">
                               {soQty}
                             </span>
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-300">-</span>
                           )}
                         </td>
                       )}
                       {isFieldAllowed("available") && (
-                        <td className="px-1.5 py-3 text-right text-xs">
-                          <span className={`px-2 py-0.5 rounded-full font-extrabold ${
+                        <td className="px-1 py-2 text-right text-[11px]">
+                          <span className={`px-1.5 py-0.5 rounded font-extrabold ${
                             netAvailability <= reorderLevel
-                              ? "bg-red-100 text-red-800 border border-red-200 animate-pulse"
-                              : "bg-blue-100 text-blue-800"
+                              ? "bg-red-50 text-red-700 border border-red-200"
+                              : "text-gray-800"
                           }`}>
                             {netAvailability}
                           </span>
                         </td>
                       )}
                       {isFieldAllowed("threshold") && (
-                        <td className="px-1.5 py-3 text-right text-gray-800 text-xs font-bold">
+                        <td className="px-1 py-2 text-right text-gray-800 text-[11px] font-bold">
                           {reorderLevel}
                         </td>
                       )}
                       {isFieldAllowed("restockQty") && (
-                        <td className="px-1.5 py-3 text-right text-xs font-semibold whitespace-nowrap">
+                        <td className="px-1 py-2 text-right text-[11px] font-semibold whitespace-nowrap">
                           <div className="flex flex-col items-end">
                             <span className="text-gray-800 font-extrabold">{reorderQty}</span>
-                            <span className={`text-[8px] px-1 py-0.2 rounded font-bold mt-0.5 ${
-                              isAuto ? "bg-purple-100 text-purple-700" : "bg-teal-100 text-teal-700"
+                            <span className={`text-[9px] px-1 rounded font-bold mt-0.5 leading-tight ${
+                              isAuto ? "bg-purple-50 text-purple-600" : "bg-teal-50 text-teal-600"
                             }`}>
-                              {isAuto ? "🤖 AUTO" : "✍️ MANUAL"}
+                              {isAuto ? "AUTO" : "MANUAL"}
                             </span>
                           </div>
                         </td>
                       )}
-                      {isFieldAllowed("preferredVendor") && (
-                        <td className="px-4 py-3 text-gray-700 text-sm whitespace-nowrap">
-                          {product.preferredVendor || "-"}
-                        </td>
-                      )}
+
                       {isFieldAllowed("status") && (
-                        <td className="px-4 py-3 text-sm text-center whitespace-nowrap">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                        <td className="px-2 py-2 text-[11px] text-center whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             product.totalQty === 0
-                              ? "bg-red-100 text-red-800"
+                              ? "bg-red-50 text-red-700"
                               : product.totalQty <= reorderLevel
-                              ? "bg-yellow-100 text-yellow-800"
-                              : "bg-green-100 text-green-800"
+                              ? "bg-yellow-50 text-yellow-700"
+                              : "bg-green-50 text-green-700"
                           }`}>
                             {stockStatus}
                           </span>
                         </td>
                       )}
                       {(isFieldAllowed("action_config") || isFieldAllowed("action_restock")) && (
-                        <td className="px-4 py-3 text-center whitespace-nowrap">
-                          <div className="flex gap-2 justify-center">
-                            {isFieldAllowed("action_config") && (
-                              <button
-                                onClick={() => openRestockingConfigModal(product)}
-                                className="px-3 py-1 bg-purple-500 text-white rounded font-semibold text-xs hover:bg-purple-600 transition shadow-sm"
-                              >
-                                📊 Config
-                              </button>
-                            )}
-                            {isFieldAllowed("action_restock") && (
-                              <button
-                                onClick={() => handleRestock(product)}
-                                disabled={restockingInProgress[product._id] || !reorderQty}
-                                className={`px-3 py-1 rounded font-semibold text-xs transition shadow-sm ${
-                                  restockingInProgress[product._id]
-                                    ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                                    : reorderQty
-                                    ? "bg-green-500 text-white hover:bg-green-600"
-                                    : "bg-gray-300 text-gray-600 cursor-not-allowed"
-                                }`}
-                              >
-                                {restockingInProgress[product._id] ? "..." : "Restock"}
-                              </button>
-                            )}
-                          </div>
+                        <td className="px-2 py-2 text-center whitespace-nowrap">
+                          {isFieldAllowed("action_config") && (
+                            <button
+                              onClick={() => openRestockingConfigModal(product)}
+                              className="p-1 text-gray-400 hover:text-purple-600 transition"
+                              title="Configure Restocking"
+                            >
+                              ⚙️
+                            </button>
+                          )}
                         </td>
                       )}
                     </tr>
