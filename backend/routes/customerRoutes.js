@@ -809,6 +809,28 @@ router.get("/", async (req, res) => {
         );
     }
 
+    // 4.5 Lookup Last Receipt Date (Always, for showing in the column)
+    pipeline.push(
+        {
+            $lookup: {
+                from: "receipts",
+                let: { cId: "$_id" },
+                pipeline: [
+                    { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: "confirmed" } },
+                    { $sort: { createdAt: -1 } },
+                    { $limit: 1 }
+                ],
+                as: "lastRec"
+            }
+        },
+        { $unwind: { path: "$lastRec", preserveNullAndEmptyArrays: true } },
+        {
+            $addFields: {
+                lastReceiptDate: "$lastRec.createdAt"
+            }
+        }
+    );
+
     // 5. Lookups (Population)
     pipeline.push(
       {
@@ -887,7 +909,8 @@ router.get("/", async (req, res) => {
           closingBalance: 1,
           netBalance: 1,
           lastInvoiceDate: 1,
-          lastInvoiceNumber: 1
+          lastInvoiceNumber: 1,
+          lastReceiptDate: 1
         }
       });
     }

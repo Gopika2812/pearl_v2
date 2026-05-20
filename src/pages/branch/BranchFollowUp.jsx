@@ -915,38 +915,54 @@ const BranchFollowUp = () => {
                                                             </button>
                                                         </td>
                                                     )}
-                                                    {/* Last Invoice Column */}
-                                                    <td className="px-4 py-3">
-                                                        {customer.lastInvoiceNumber ? (
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[11px] font-black text-indigo-700">{customer.lastInvoiceNumber}</span>
-                                                                <span className="text-[10px] text-gray-400 font-bold">
-                                                                    {new Date(customer.lastInvoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                                                                </span>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-[10px] text-gray-300 italic">—</span>
-                                                        )}
-                                                    </td>
-                                                    {/* Invoice Age Column */}
-                                                    <td className="px-4 py-3 text-center">
-                                                        {customer.lastInvoiceDate ? (
-                                                            (() => {
-                                                                const days = Math.floor((new Date() - new Date(customer.lastInvoiceDate)) / (1000 * 60 * 60 * 24));
-                                                                return (
-                                                                    <span className={`text-[10px] font-black px-2 py-1 rounded uppercase tracking-tighter shadow-sm border ${
-                                                                        days > 30 ? "bg-rose-50 text-rose-600 border-rose-100" : 
-                                                                        days > 7 ? "bg-amber-50 text-amber-600 border-amber-100" : 
-                                                                        "bg-indigo-50 text-indigo-600 border-indigo-100"
-                                                                    }`}>
-                                                                        {days === 0 ? "Today" : days}
-                                                                    </span>
-                                                                );
-                                                            })()
-                                                        ) : (
-                                                            <span className="text-[10px] text-gray-300 italic">—</span>
-                                                        )}
-                                                    </td>
+                                                     {/* Last Bill Column */}
+                                                     <td className="px-4 py-3">
+                                                         {customer.lastInvoiceDate ? (
+                                                             (() => {
+                                                                 const days = Math.floor((new Date() - new Date(customer.lastInvoiceDate)) / (1000 * 60 * 60 * 24));
+                                                                 return (
+                                                                     <div className="flex flex-col">
+                                                                         <span className="text-[11px] font-black text-gray-800">
+                                                                             {new Date(customer.lastInvoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                                                                         </span>
+                                                                         <span className={`text-[9px] font-bold ${
+                                                                             days > 30 ? "text-rose-600" : 
+                                                                             days > 7 ? "text-amber-600" : 
+                                                                             "text-indigo-600"
+                                                                         }`}>
+                                                                             {days === 0 ? "Today" : `${days} Days ago`}
+                                                                         </span>
+                                                                     </div>
+                                                                 );
+                                                             })()
+                                                         ) : (
+                                                             <span className="text-[10px] text-gray-300 italic">—</span>
+                                                         )}
+                                                     </td>
+                                                     {/* Last Receipt Column */}
+                                                     <td className="px-4 py-3">
+                                                         {customer.lastReceiptDate ? (
+                                                             (() => {
+                                                                 const days = Math.floor((new Date() - new Date(customer.lastReceiptDate)) / (1000 * 60 * 60 * 24));
+                                                                 return (
+                                                                     <div className="flex flex-col">
+                                                                         <span className="text-[11px] font-black text-gray-800">
+                                                                             {new Date(customer.lastReceiptDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                                                                         </span>
+                                                                         <span className={`text-[9px] font-bold ${
+                                                                             days > 30 ? "text-rose-600" : 
+                                                                             days > 7 ? "text-amber-600" : 
+                                                                             "text-emerald-600"
+                                                                         }`}>
+                                                                             {days === 0 ? "Today" : `${days} Days ago`}
+                                                                         </span>
+                                                                     </div>
+                                                                 );
+                                                             })()
+                                                         ) : (
+                                                             <span className="text-[10px] text-gray-300 italic">—</span>
+                                                         )}
+                                                     </td>
                                                     {(isFieldAllowed("action_followup") || isFieldAllowed("action_log") || isFieldAllowed("action_ledger") || isFieldAllowed("action_edit")) && (
                                                         <td className="px-4 py-3 text-center">
                                                             <div className="flex items-center justify-center gap-2">

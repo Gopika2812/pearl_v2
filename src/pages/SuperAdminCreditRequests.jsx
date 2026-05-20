@@ -14,6 +14,8 @@ export default function SuperAdminCreditRequests() {
   const [expandedId, setExpandedId] = useState(null);
   const [branches, setBranches] = useState([]);
   const [branchFilter, setBranchFilter] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: "updatedAt", direction: "desc" });
 
   // Check if user is super admin
@@ -123,7 +125,41 @@ export default function SuperAdminCreditRequests() {
     setSortConfig({ key, direction });
   };
 
-  const sortedHistory = [...history].sort((a, b) => {
+  const filteredHistory = history.filter(item => {
+    if (branchFilter !== "all" && item.branchId?._id !== branchFilter && item.branchId !== branchFilter) {
+      return false;
+    }
+    if (fromDate) {
+      const itemDate = new Date(item.createdAt).setHours(0, 0, 0, 0);
+      const filterFrom = new Date(fromDate).setHours(0, 0, 0, 0);
+      if (itemDate < filterFrom) return false;
+    }
+    if (toDate) {
+      const itemDate = new Date(item.createdAt).setHours(23, 59, 59, 999);
+      const filterTo = new Date(toDate).setHours(23, 59, 59, 999);
+      if (itemDate > filterTo) return false;
+    }
+    return true;
+  });
+
+  const filteredPending = creditRequests.filter(req => {
+    if (branchFilter !== "all" && req.branchId?._id !== branchFilter && req.branchId !== branchFilter) {
+      return false;
+    }
+    if (fromDate) {
+      const reqDate = new Date(req.creditLimitRequestAt).setHours(0, 0, 0, 0);
+      const filterFrom = new Date(fromDate).setHours(0, 0, 0, 0);
+      if (reqDate < filterFrom) return false;
+    }
+    if (toDate) {
+      const reqDate = new Date(req.creditLimitRequestAt).setHours(23, 59, 59, 999);
+      const filterTo = new Date(toDate).setHours(23, 59, 59, 999);
+      if (reqDate > filterTo) return false;
+    }
+    return true;
+  });
+
+  const sortedHistory = [...filteredHistory].sort((a, b) => {
     if (sortConfig.key === "createdAt" || sortConfig.key === "updatedAt") {
       const timeA = a[sortConfig.key] ? new Date(a[sortConfig.key]).getTime() : 0;
       const timeB = b[sortConfig.key] ? new Date(b[sortConfig.key]).getTime() : 0;
@@ -133,23 +169,55 @@ export default function SuperAdminCreditRequests() {
     let aVal = a[sortConfig.key];
     let bVal = b[sortConfig.key];
 
-    // Handle nested objects
-    if (sortConfig.key === "customer") aVal = a.customerId?.name || "";
-    if (sortConfig.key === "branch") aVal = a.branchId?.name || "";
-    if (sortConfig.key === "actionBy") aVal = a.approvedBy?.name || a.approvedBy?.username || "Admin";
+    // Handle nested objects and custom keys
+    if (sortConfig.key === "customer") {
+      aVal = (a.customerId?.name || "").trim().toLowerCase();
+      bVal = (b.customerId?.name || "").trim().toLowerCase();
+    } else if (sortConfig.key === "branch") {
+      aVal = (a.branchId?.name || "").trim().toLowerCase();
+      bVal = (b.branchId?.name || "").trim().toLowerCase();
+    } else if (sortConfig.key === "actionBy") {
+      aVal = (a.approvedBy?.name || a.approvedBy?.username || "Admin").trim().toLowerCase();
+      bVal = (b.approvedBy?.name || b.approvedBy?.username || "Admin").trim().toLowerCase();
+    } else if (sortConfig.key === "reqs") {
+      aVal = a.customerRequestCount || 0;
+      bVal = b.customerRequestCount || 0;
+    } else if (sortConfig.key === "requested") {
+      aVal = a.requestedValue || 0;
+      bVal = b.requestedValue || 0;
+    } else if (sortConfig.key === "status") {
+      aVal = (a.status || "").trim().toLowerCase();
+      bVal = (b.status || "").trim().toLowerCase();
+    }
 
     if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
     if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
     return 0;
   });
 
-  const sortedPending = [...creditRequests].sort((a, b) => {
+  const sortedPending = [...filteredPending].sort((a, b) => {
+    if (sortConfig.key === "creditLimitRequestAt") {
+      const timeA = a.creditLimitRequestAt ? new Date(a.creditLimitRequestAt).getTime() : 0;
+      const timeB = b.creditLimitRequestAt ? new Date(b.creditLimitRequestAt).getTime() : 0;
+      return sortConfig.direction === "asc" ? timeA - timeB : timeB - timeA;
+    }
+
     let aVal = a[sortConfig.key];
     let bVal = b[sortConfig.key];
 
-    if (sortConfig.key === "customer") aVal = a.name || "";
-    if (sortConfig.key === "branch") aVal = a.branchId?.name || "";
-    if (sortConfig.key === "debit") aVal = a.debit || 0;
+    if (sortConfig.key === "customer") {
+      aVal = (a.name || "").trim().toLowerCase();
+      bVal = (b.name || "").trim().toLowerCase();
+    } else if (sortConfig.key === "branch") {
+      aVal = (a.branchId?.name || "").trim().toLowerCase();
+      bVal = (b.branchId?.name || "").trim().toLowerCase();
+    } else if (sortConfig.key === "debit") {
+      aVal = a.debit || 0;
+      bVal = b.debit || 0;
+    } else if (sortConfig.key === "historyCount") {
+      aVal = a.historyCount || 0;
+      bVal = b.historyCount || 0;
+    }
 
     if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
     if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
@@ -190,28 +258,15 @@ export default function SuperAdminCreditRequests() {
                   onClick={() => setActiveTab("pending")}
                   className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "pending" ? "bg-secondary text-white shadow-lg shadow-secondary/20" : "text-secondary/40 hover:text-secondary"}`}
                 >
-                  Active Requests ({creditRequests.length})
+                  Active Requests ({filteredPending.length})
                 </button>
                 <button 
                   onClick={() => setActiveTab("history")}
                   className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "history" ? "bg-secondary text-white shadow-lg shadow-secondary/20" : "text-secondary/40 hover:text-secondary"}`}
                 >
-                  Audit History
+                  Audit History ({filteredHistory.length})
                 </button>
             </div>
-
-            {activeTab === "history" && (
-              <select 
-                value={branchFilter}
-                onChange={(e) => setBranchFilter(e.target.value)}
-                className="bg-white border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest shadow-sm outline-none focus:ring-2 focus:ring-secondary/10"
-              >
-                <option value="all">All Branches</option>
-                {branches.map(b => (
-                  <option key={b._id} value={b._id}>{b.name}</option>
-                ))}
-              </select>
-            )}
 
             <button 
               onClick={() => { fetchCreditRequests(); fetchHistory(); }}
@@ -222,10 +277,119 @@ export default function SuperAdminCreditRequests() {
           </div>
         </div>
 
+        {/* Premium Date & Branch Filter Bar */}
+        <div className="bg-white rounded-[2rem] border border-gray-100 p-6 mb-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all">
+          <div className="flex flex-wrap items-center gap-6">
+            
+            {/* Branch Dropdown */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[9px] font-black uppercase text-secondary/40 tracking-wider">Filter by Branch</label>
+              <select 
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+                className="bg-[#f8fafc] border border-gray-100 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest shadow-sm outline-none focus:ring-2 focus:ring-secondary/10 min-w-[200px]"
+              >
+                <option value="all">All Branches</option>
+                {branches.map(b => (
+                  <option key={b._id} value={b._id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Custom From & To Date Pickers */}
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[9px] font-black uppercase text-secondary/40 tracking-wider">From Date</label>
+                <input 
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="bg-[#f8fafc] border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest shadow-sm outline-none focus:ring-2 focus:ring-secondary/10"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[9px] font-black uppercase text-secondary/40 tracking-wider">To Date</label>
+                <input 
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="bg-[#f8fafc] border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest shadow-sm outline-none focus:ring-2 focus:ring-secondary/10"
+                />
+              </div>
+            </div>
+
+            {/* Premium Preset Shortcuts */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[9px] font-black uppercase text-secondary/40 tracking-wider">Quick Presets</label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const today = new Date().toISOString().split("T")[0];
+                    setFromDate(today);
+                    setToDate(today);
+                  }}
+                  className="px-4 py-2 bg-[#f8fafc] hover:bg-gray-100 text-secondary text-[9px] font-black uppercase tracking-wider rounded-xl transition shadow-sm border border-gray-50"
+                >
+                  Today
+                </button>
+                <button
+                  onClick={() => {
+                    const yesterday = new Date();
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    const yDate = yesterday.toISOString().split("T")[0];
+                    setFromDate(yDate);
+                    setToDate(yDate);
+                  }}
+                  className="px-4 py-2 bg-[#f8fafc] hover:bg-gray-100 text-secondary text-[9px] font-black uppercase tracking-wider rounded-xl transition shadow-sm border border-gray-50"
+                >
+                  Yesterday
+                </button>
+                <button
+                  onClick={() => {
+                    const sevenDaysAgo = new Date();
+                    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                    setFromDate(sevenDaysAgo.toISOString().split("T")[0]);
+                    setToDate(new Date().toISOString().split("T")[0]);
+                  }}
+                  className="px-4 py-2 bg-[#f8fafc] hover:bg-gray-100 text-secondary text-[9px] font-black uppercase tracking-wider rounded-xl transition shadow-sm border border-gray-50"
+                >
+                  Last 7 Days
+                </button>
+                {(fromDate || toDate) && (
+                  <button
+                    onClick={() => {
+                      setFromDate("");
+                      setToDate("");
+                    }}
+                    className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 text-[9px] font-black uppercase tracking-wider rounded-xl transition shadow-sm"
+                  >
+                    Clear Dates
+                  </button>
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Reset All Filters Button */}
+          {(branchFilter !== "all" || fromDate || toDate) && (
+            <button
+              onClick={() => {
+                setBranchFilter("all");
+                setFromDate("");
+                setToDate("");
+              }}
+              className="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-rose-500/20 active:scale-95 self-end md:self-auto"
+            >
+              Reset Filters
+            </button>
+          )}
+        </div>
+
         {/* Content View */}
         <div className="bg-white rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden">
           {activeTab === "pending" ? (
-            creditRequests.length === 0 ? (
+            filteredPending.length === 0 ? (
               <div className="py-20 text-center">
                 <div className="w-16 h-16 bg-emerald-50 rounded-3xl flex items-center justify-center text-emerald-500 mx-auto mb-4">
                   <FaCheck size={32} />
@@ -238,11 +402,22 @@ export default function SuperAdminCreditRequests() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50/80 text-[10px] font-black text-secondary/40 uppercase tracking-[0.2em] border-b border-gray-100">
-                      <th className="px-6 py-5 cursor-pointer hover:text-secondary" onClick={() => handleSort("customer")}>Customer Name</th>
-                      <th className="px-6 py-5 cursor-pointer hover:text-secondary" onClick={() => handleSort("branch")}>Branch</th>
-                      <th className="px-6 py-5 text-right cursor-pointer hover:text-secondary" onClick={() => handleSort("debit")}>Debit / Limit</th>
-                      <th className="px-6 py-5 text-center">History</th>
-                      <th className="px-6 py-5 text-center">Actions</th>
+                      <th className="px-6 py-5 cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("creditLimitRequestAt")}>
+                        Request Time {sortConfig.key === "creditLimitRequestAt" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th className="px-6 py-5 cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("customer")}>
+                        Customer Name {sortConfig.key === "customer" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th className="px-6 py-5 cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("branch")}>
+                        Branch {sortConfig.key === "branch" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th className="px-6 py-5 text-right cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("debit")}>
+                        Debit / Limit {sortConfig.key === "debit" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th className="px-6 py-5 text-center cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("historyCount")}>
+                        History {sortConfig.key === "historyCount" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th className="px-6 py-5 text-center whitespace-nowrap">Actions</th>
                       <th className="px-6 py-5 w-10"></th>
                     </tr>
                   </thead>
@@ -253,6 +428,16 @@ export default function SuperAdminCreditRequests() {
                           className={`group transition-all cursor-pointer ${expandedId === req._id ? "bg-secondary/5" : "hover:bg-gray-50/50"}`}
                           onClick={() => toggleExpand(req._id)}
                         >
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="text-[11px] font-black text-secondary/80">
+                                {req.creditLimitRequestAt ? new Date(req.creditLimitRequestAt).toLocaleDateString('en-GB') : "—"}
+                              </span>
+                              <span className="text-[9px] font-bold text-secondary/40">
+                                {req.creditLimitRequestAt ? new Date(req.creditLimitRequestAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : ""}
+                              </span>
+                            </div>
+                          </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-xl bg-secondary text-white flex items-center justify-center text-[12px] font-black shadow-sm">
@@ -311,7 +496,7 @@ export default function SuperAdminCreditRequests() {
                         {/* Expandable Section */}
                         {expandedId === req._id && (
                           <tr className="bg-white border-x-4 border-secondary/10">
-                            <td colSpan="6" className="px-12 py-6">
+                            <td colSpan="7" className="px-12 py-6">
                                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                                   <div className="space-y-4">
                                      <p className="text-[10px] font-black text-secondary/30 uppercase tracking-[0.2em] border-b pb-2">Requester Details</p>
@@ -371,7 +556,7 @@ export default function SuperAdminCreditRequests() {
           ) : (
             /* History View */
             <div className="overflow-x-auto">
-              {history.length === 0 ? (
+              {filteredHistory.length === 0 ? (
                 <div className="py-20 text-center">
                   <p className="text-secondary/40 text-[10px] font-bold uppercase tracking-widest">No history recorded yet</p>
                 </div>
@@ -385,12 +570,24 @@ export default function SuperAdminCreditRequests() {
                       <th className="px-6 py-5 cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("updatedAt")}>
                         Action Time {sortConfig.key === "updatedAt" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                       </th>
-                      <th className="px-6 py-5 cursor-pointer hover:text-secondary" onClick={() => handleSort("customer")}>Customer</th>
-                      <th className="px-6 py-5 text-center">Reqs</th>
-                      <th className="px-6 py-5 text-right">Requested</th>
-                      <th className="px-6 py-5 cursor-pointer hover:text-secondary" onClick={() => handleSort("branch")}>Branch</th>
-                      <th className="px-6 py-5 cursor-pointer hover:text-secondary" onClick={() => handleSort("actionBy")}>Action By</th>
-                      <th className="px-6 py-5 text-center">Status</th>
+                      <th className="px-6 py-5 cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("customer")}>
+                        Customer {sortConfig.key === "customer" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th className="px-6 py-5 text-center cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("reqs")}>
+                        Reqs {sortConfig.key === "reqs" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th className="px-6 py-5 text-right cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("requested")}>
+                        Requested {sortConfig.key === "requested" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th className="px-6 py-5 cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("branch")}>
+                        Branch {sortConfig.key === "branch" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th className="px-6 py-5 cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("actionBy")}>
+                        Action By {sortConfig.key === "actionBy" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th className="px-6 py-5 text-center cursor-pointer hover:text-secondary whitespace-nowrap" onClick={() => handleSort("status")}>
+                        Status {sortConfig.key === "status" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">

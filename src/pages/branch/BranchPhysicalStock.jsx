@@ -122,7 +122,7 @@ export default function BranchPhysicalStock() {
   const [branchUsers, setBranchUsers] = useState([]);
   const [nextId, setNextId] = useState("SJ001");
   const [rows, setRows] = useState([]);
-  const [groupFilter, setGroupFilter] = useState("");
+  const [groupFilter, setGroupFilter] = useState("ALL");
   const [productSearch, setProductSearch] = useState("");
   const [showProductDrop, setShowProductDrop] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
@@ -132,6 +132,27 @@ export default function BranchPhysicalStock() {
   const [mobileViewMode, setMobileViewMode] = useState("CARD"); // "CARD" or "TABLE"
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const dropRef = useRef(null);
+
+  // Group search & dropdown refs
+  const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState(false);
+  const [groupSearchTerm, setGroupSearchTerm] = useState("");
+  const groupDropRef = useRef(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (groupDropRef.current && !groupDropRef.current.contains(event.target)) {
+        setIsGroupDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredProductGroups = productGroups.filter(g => 
+    g.name && g.name.toLowerCase().includes(groupSearchTerm.toLowerCase())
+  );
+
 
   const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
 
@@ -164,11 +185,60 @@ export default function BranchPhysicalStock() {
     }
   }, [currentBranch?._id]);
   
-  // Clear rows when date changes to avoid confusion
+  const fetchSavedRecordsForDate = async (dateStr) => {
+    if (!currentBranch?._id) return;
+    try {
+      const recUrl = `${API_BASE}/physical-stock?branchId=${currentBranch._id}&fromDate=${dateStr}&toDate=${dateStr}&limit=500`;
+      const recRes = await fetchWithAuth(recUrl);
+      const recData = await recRes.json();
+      
+      if (recData.success && recData.data) {
+        const savedRows = recData.data.map(record => {
+          const product = record.productId || {};
+          return {
+            rowId: record._id,
+            productId: product._id || record.productId,
+            productName: record.productName,
+            productGroupId: record.productGroupId?._id || record.productGroupId,
+            productGroupName: typeof record.productGroupId === 'object' ? record.productGroupId?.name : (record.productGroupName || ""),
+            systemQty: record.systemQty || 0,
+            damagedQty: record.damagedQty || 0,
+            expiredQty: record.expiredQty || 0,
+            physicalQty: record.noAction ? "NO_ACTION" : record.physicalQty,
+            mrp: record.mrp || 0,
+            batch: record.batch || "",
+            expiryDate: record.expiryDate ? new Date(record.expiryDate).toISOString().split('T')[0] : "",
+            checkedBy: record.checkedBy || [],
+            status: record.status || "PENDING",
+            savedId: record._id,
+            saving: false
+          };
+        });
+        setRows(savedRows);
+      }
+    } catch (err) {
+      console.error("Failed to load saved records", err);
+    }
+  };
+
+  // Reset group filter to ALL when date changes to avoid confusion
   useEffect(() => {
-    setRows([]);
     setGroupFilter("ALL");
   }, [entryDate]);
+
+  // Fetch saved records when date or branch changes, or when group filter changes
+  useEffect(() => {
+    if (currentBranch?._id) {
+      if (groupFilter === "ALL") {
+        fetchSavedRecordsForDate(entryDate);
+      } else {
+        addAllFromGroup(groupFilter);
+      }
+    } else {
+      setRows([]);
+    }
+  }, [entryDate, groupFilter, currentBranch?._id]);
+
 
   // Nuclear Deduplication: Ensure no duplicate productIds ever exist in the rows state
   useEffect(() => {
@@ -414,7 +484,7 @@ export default function BranchPhysicalStock() {
           const pid = String(p._id);
           if (uniqueRowsMap.has(pid)) return;
 
-          const record = existingRecords.find(r => String(r.productId) === pid);
+          const record = existingRecords.find(r => String(r.productId?._id || r.productId) === pid);
           if (record) {
             uniqueRowsMap.set(pid, {
               rowId: record._id,
@@ -736,20 +806,55 @@ export default function BranchPhysicalStock() {
 
         {/* COMPACT SEARCH */}
         <div className="bg-white border border-gray-300 p-3 mb-4 flex flex-col md:flex-row gap-3 items-center rounded-xl shadow-sm relative" ref={dropRef}>
-          <div className="w-full md:w-64 relative">
-            <select className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[11px] font-black text-gray-700 outline-none w-full appearance-none pr-8"
-              value={groupFilter} onChange={e => { 
-                const val = e.target.value;
-                setGroupFilter(val); 
-                setProductSearch("");
-                if (val && val !== "ALL") addAllFromGroup(val);
-              }}>
-              <option value="ALL">ALL GROUPS {products.length > 0 && `(${products.length})`}</option>
-              {productGroups.map(g => <option key={g._id} value={g._id}>{g.name.toUpperCase()}</option>)}
-            </select>
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-              <FaBoxes size={10} />
-            </div>
+          <div className="w-full md:w-64 relative" ref={groupDropRef}>
+            <button type="button" onClick={() => setIsGroupDropdownOpen(!isGroupDropdownOpen)}
+              className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-[11px] font-black text-gray-700 outline-none w-full flex items-center justify-between gap-2 uppercase tracking-wider shadow-sm hover:bg-gray-100 transition-colors">
+              <span className="flex items-center gap-2">
+                <FaBoxes size={10} className="text-gray-400" />
+                {groupFilter === "ALL" 
+                  ? `ALL GROUPS ${products.length > 0 ? `(${products.length})` : ""}`
+                  : (productGroups.find(g => g._id === groupFilter)?.name || "UNKNOWN GROUP").toUpperCase()
+                }
+              </span>
+              <FaChevronDown size={8} className={`text-gray-400 transition-transform ${isGroupDropdownOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {isGroupDropdownOpen && (
+              <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-2 min-w-[240px]">
+                <div className="relative mb-2">
+                  <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={10} />
+                  <input type="text" placeholder="Search group..."
+                    value={groupSearchTerm} onChange={e => setGroupSearchTerm(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-7 pr-2.5 py-1.5 text-[11px] font-bold text-gray-700 outline-none focus:border-blue-400 focus:bg-white transition" />
+                </div>
+                <div className="max-h-60 overflow-y-auto space-y-0.5">
+                  <button type="button" onClick={() => {
+                    setGroupFilter("ALL");
+                    setIsGroupDropdownOpen(false);
+                    setGroupSearchTerm("");
+                    setProductSearch("");
+                  }}
+                    className={`w-full text-left px-2.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-colors ${groupFilter === "ALL" ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-50"}`}>
+                    ALL GROUPS {products.length > 0 && `(${products.length})`}
+                  </button>
+                  {filteredProductGroups.length > 0 ? (
+                    filteredProductGroups.map(g => (
+                      <button key={g._id} type="button" onClick={() => {
+                        setGroupFilter(g._id);
+                        setIsGroupDropdownOpen(false);
+                        setGroupSearchTerm("");
+                        setProductSearch("");
+                      }}
+                        className={`w-full text-left px-2.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-colors ${groupFilter === g._id ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-50"}`}>
+                        {g.name}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="text-[10px] font-bold text-gray-400 text-center py-2">No groups found</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex-1 relative w-full">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={12} />

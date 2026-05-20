@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { FaHistory, FaSort, FaSortUp, FaSortDown, FaFilter, FaSearch, FaCalendarAlt, FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
@@ -26,6 +26,27 @@ export default function BranchPhysicalStockRecords() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [adjFilter, setAdjFilter] = useState("ALL"); // ALL | INWARD | OUTWARD
   const [viewMode, setViewMode] = useState("LIST"); // LIST | VOUCHER
+
+  // Group search & dropdown refs
+  const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState(false);
+  const [groupSearchTerm, setGroupSearchTerm] = useState("");
+  const groupDropRef = useRef(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (groupDropRef.current && !groupDropRef.current.contains(event.target)) {
+        setIsGroupDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredProductGroups = productGroups.filter(g => 
+    g.name && g.name.toLowerCase().includes(groupSearchTerm.toLowerCase())
+  );
+
 
   // Sort
   const [sortConfig, setSortConfig] = useState({ key: "entryDate", direction: "desc" });
@@ -318,11 +339,53 @@ export default function BranchPhysicalStockRecords() {
               className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-8 pr-3 py-2.5 text-sm font-semibold text-gray-800 outline-none focus:border-violet-400 transition" />
           </div>
           <div className="grid grid-cols-2 md:flex gap-2 w-full md:w-auto">
-            <select className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[10px] font-black text-gray-700 outline-none w-full"
-              value={groupFilter} onChange={e => setGroupFilter(e.target.value)}>
-              <option value="ALL">ALL GROUPS</option>
-              {productGroups.map(g => <option key={g._id} value={g._id}>{g.name.toUpperCase()}</option>)}
-            </select>
+            <div className="relative w-full md:w-56" ref={groupDropRef}>
+              <button type="button" onClick={() => setIsGroupDropdownOpen(!isGroupDropdownOpen)}
+                className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[10px] font-black text-gray-700 outline-none w-full flex items-center justify-between gap-2 uppercase tracking-wider shadow-sm hover:bg-gray-100 transition-colors">
+                <span>
+                  {groupFilter === "ALL" 
+                    ? "ALL GROUPS" 
+                    : (productGroups.find(g => g._id === groupFilter)?.name || "UNKNOWN GROUP").toUpperCase()
+                  }
+                </span>
+                <FaChevronDown size={8} className={`text-gray-400 transition-transform ${isGroupDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {isGroupDropdownOpen && (
+                <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-2 min-w-[220px]">
+                  <div className="relative mb-2">
+                    <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={10} />
+                    <input type="text" placeholder="Search group..."
+                      value={groupSearchTerm} onChange={e => setGroupSearchTerm(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-7 pr-2.5 py-1.5 text-[11px] font-bold text-gray-700 outline-none focus:border-violet-400 focus:bg-white transition" />
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-0.5">
+                    <button type="button" onClick={() => {
+                      setGroupFilter("ALL");
+                      setIsGroupDropdownOpen(false);
+                      setGroupSearchTerm("");
+                    }}
+                      className={`w-full text-left px-2.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-colors ${groupFilter === "ALL" ? "bg-violet-50 text-violet-700" : "text-gray-600 hover:bg-gray-50"}`}>
+                      ALL GROUPS
+                    </button>
+                    {filteredProductGroups.length > 0 ? (
+                      filteredProductGroups.map(g => (
+                        <button key={g._id} type="button" onClick={() => {
+                          setGroupFilter(g._id);
+                          setIsGroupDropdownOpen(false);
+                          setGroupSearchTerm("");
+                        }}
+                          className={`w-full text-left px-2.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-colors ${groupFilter === g._id ? "bg-violet-50 text-violet-700" : "text-gray-600 hover:bg-gray-50"}`}>
+                          {g.name}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="text-[10px] font-bold text-gray-400 text-center py-2">No groups found</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <select className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[10px] font-black text-gray-700 outline-none w-full"
               value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="ALL">ALL STATUS</option>
@@ -389,7 +452,7 @@ export default function BranchPhysicalStockRecords() {
                               <p className="text-[9px] text-gray-400 font-bold">{new Date(r.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}</p>
                             </td>
                             <td className="px-4 py-4 text-[10px] font-black text-gray-600">{r.productGroupName || "-"}</td>
-                            <td className="px-4 py-4 font-black text-gray-800 text-[11px] max-w-[150px] truncate">{r.productName}</td>
+                            <td className="px-4 py-4 font-black text-gray-800 text-[11px] min-w-[200px]">{r.productName}</td>
                             <td className="px-4 py-4 text-right font-black text-blue-600">{r.systemQty}</td>
                             <td className="px-4 py-4 text-right font-black text-rose-500">{r.damagedQty || 0}</td>
                             <td className="px-4 py-4 text-right font-black text-orange-500">{r.expiredQty || 0}</td>
