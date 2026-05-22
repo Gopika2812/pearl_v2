@@ -63,6 +63,109 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+// GET: Fetch branch dashboard statistics
+router.get("/:id/dashboard-stats", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid branch ID" });
+    }
+    const branchObjectId = new mongoose.Types.ObjectId(id);
+
+    // Date filtering logic
+    let dateFilter = {};
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      dateFilter = { $gte: start, $lte: end };
+    }
+
+    // Dynamic Imports to avoid circular dependencies
+    const PurchaseOrder = (await import("../models/PurchaseOrder.js")).default;
+    const PurchaseInvoice = (await import("../models/PurchaseInvoice.js")).default;
+    const SalesOrder = (await import("../models/SalesOrder.js")).default;
+    const Invoice = (await import("../models/Invoice.js")).default;
+    const Receipt = (await import("../models/Receipt.js")).default;
+    const Payment = (await import("../models/Payment.js")).default;
+    const Customer = (await import("../models/Customer.js")).default;
+
+    // Build aggregations
+    // 1. Purchase Orders
+    const poMatch = { branchId: branchObjectId, status: { $ne: "CANCELLED" } };
+    if (dateFilter.$gte) poMatch.date = dateFilter;
+    
+    // 2. Purchase Invoices
+    const piMatch = { branchId: branchObjectId };
+    if (dateFilter.$gte) piMatch.invoiceDate = dateFilter;
+
+    // 3. Sales Orders
+    const soMatch = { branchId: branchObjectId, status: { $ne: "CANCELLED" } };
+    if (dateFilter.$gte) soMatch.date = dateFilter;
+
+    // 4. Sales Invoices
+    const siMatch = { branchId: branchObjectId, status: { $ne: "CANCELLED" } };
+    if (dateFilter.$gte) siMatch.invoiceDate = dateFilter;
+
+    // 5. Canceled Sales Orders
+    const soCancelMatch = { branchId: branchObjectId, status: "CANCELLED" };
+    if (dateFilter.$gte) soCancelMatch.date = dateFilter;
+
+    // 6 & 7. Pending Invoices (Orders not completed)
+    const poPendingMatch = { branchId: branchObjectId, status: { $nin: ["COMPLETED", "CANCELLED"] } };
+    const soPendingMatch = { branchId: branchObjectId, status: { $nin: ["COMPLETED", "CANCELLED"] } };
+
+    // 8. Receipts
+    const receiptMatch = { branchId: branchObjectId, status: { $ne: "CANCELLED" } };
+    if (dateFilter.$gte) receiptMatch.date = dateFilter;
+
+    // 9. Payments
+    const paymentMatch = { branchId: branchObjectId, status: { $ne: "CANCELLED" } };
+    if (dateFilter.$gte) paymentMatch.date = dateFilter;
+
+    const [
+      poStats, piStats, soStats, siStats, cancelStats,
+      poPendingCount, soPendingCount, receiptStats, paymentStats,
+      customerStats
+    ] = await Promise.all([
+      PurchaseOrder.aggregate([{ $match: poMatch }, { $group: { _id: null, total: { $sum: "$grandTotal" } } }]),
+      PurchaseInvoice.aggregate([{ $match: piMatch }, { $group: { _id: null, total: { $sum: "$grandTotal" } } }]),
+      SalesOrder.aggregate([{ $match: soMatch }, { $group: { _id: null, total: { $sum: "$grandTotal" } } }]),
+      Invoice.aggregate([{ $match: siMatch }, { $group: { _id: null, total: { $sum: "$grandTotal" } } }]),
+      SalesOrder.aggregate([{ $match: soCancelMatch }, { $group: { _id: null, total: { $sum: "$grandTotal" } } }]),
+      PurchaseOrder.countDocuments(poPendingMatch),
+      SalesOrder.countDocuments(soPendingMatch),
+      Receipt.aggregate([{ $match: receiptMatch }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+      Payment.aggregate([{ $match: paymentMatch }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+      Customer.aggregate([{ $match: { branchId: branchObjectId } }, { $group: { _id: null, totalDebit: { $sum: "$debit" }, totalCredit: { $sum: "$credit" } } }])
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        totalPurchaseOrderValue: poStats[0]?.total || 0,
+        purchaseInvoiceValues: piStats[0]?.total || 0,
+        totalSalesValue: soStats[0]?.total || 0,
+        totalSalesInvoiceValue: siStats[0]?.total || 0,
+        cancelOrdersValue: cancelStats[0]?.total || 0,
+        notGeneratedPurchaseInvoiceCount: poPendingCount || 0,
+        notGeneratedSalesInvoiceCount: soPendingCount || 0,
+        receiptValue: receiptStats[0]?.total || 0,
+        paymentValue: paymentStats[0]?.total || 0,
+        totalCustomerDebit: customerStats[0]?.totalDebit || 0,
+        totalCustomerCredit: customerStats[0]?.totalCredit || 0,
+      }
+    });
+
+  } catch (error) {
+    console.error("Dashboard Stats Error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch dashboard stats", error: error.message });
+  }
+});
+
 // POST: Create new branch (SUPER_ADMIN only)
 router.post("/", auth, rbac(["SUPER_ADMIN"]), async (req, res) => {
   try {

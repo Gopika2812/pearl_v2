@@ -21,6 +21,11 @@ const BranchGstReports = () => {
   const [isFixing, setIsFixing] = useState(false);
   const [filterRate, setFilterRate] = useState(null);
 
+  // Force Include Specific Invoices
+  const [includeInvoices, setIncludeInvoices] = useState("");
+  const [includeCreditNotes, setIncludeCreditNotes] = useState("");
+  const [includePurchases, setIncludePurchases] = useState("");
+
   const months = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
@@ -36,7 +41,10 @@ const BranchGstReports = () => {
     setGstr3bData(null);
     setLoading(true);
 
-    const query = `branchId=${branch._id}&month=${selectedMonth}&year=${selectedYear}`;
+    let query = `branchId=${branch._id}&month=${selectedMonth}&year=${selectedYear}`;
+    if (includeInvoices) query += `&includeInvoices=${encodeURIComponent(includeInvoices)}`;
+    if (includeCreditNotes) query += `&includeCreditNotes=${encodeURIComponent(includeCreditNotes)}`;
+    if (includePurchases) query += `&includePurchases=${encodeURIComponent(includePurchases)}`;
 
     // 🚀 Load GSTR-1 Independently
     fetchWithAuth(`${API_BASE}/gst-reports/gstr1?${query}`)
@@ -240,13 +248,14 @@ const BranchGstReports = () => {
     });
   };
 
-  const downloadGstr1Excel = () => {
-    if (!gstr1Data) return;
+  const downloadGstr1Excel = (customData = null, customName = null) => {
+    const dataToUse = customData || gstr1Data;
+    if (!dataToUse) return;
 
-    const displayGstin = gstr1Data.branchGstin || branch?.gstin || "NO_GSTIN";
-    const displayName = gstr1Data.branchName || branch?.name || "N/A";
+    const displayGstin = dataToUse.branchGstin || branch?.gstin || "NO_GSTIN";
+    const displayName = dataToUse.branchName || branch?.name || "N/A";
 
-    const fileName = `${displayGstin}_GSTR1_${months[selectedMonth - 1]}_${selectedYear}`;
+    const fileName = customName || `${displayGstin}_GSTR1_${months[selectedMonth - 1]}_${selectedYear}`;
     
     const workbook = new ExcelJS.Workbook();
     
@@ -291,7 +300,7 @@ const BranchGstReports = () => {
 
     // 1. B2B
     const b2bCols = ["GSTIN/UIN of Recipient", "Receiver Name", "Invoice Number", "Invoice date", "Invoice Value", "Place Of Supply", "Reverse Charge", "Applicable % of Tax Rate", "Invoice Type", "E-Commerce GSTIN", "Rate", "Taxable Value", "Cess Amount"];
-    const b2bData = gstr1Data.b2b.map(row => ({
+    const b2bData = dataToUse.b2b.map(row => ({
       "GSTIN/UIN of Recipient": row.gstin,
       "Receiver Name": row.customerName,
       "Invoice Number": row.invoiceNo,
@@ -313,55 +322,55 @@ const BranchGstReports = () => {
 
     // 3. B2CL
     const b2clCols = ["Invoice Number", "Invoice date", "Invoice Value", "Place Of Supply", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount", "E-Commerce GSTIN"];
-    const b2clData = (gstr1Data.b2cl || []).map(row => ({
+    const b2clData = (dataToUse.b2cl || []).map(row => ({
       "Invoice Number": row.invoiceNo, "Invoice date": row.date, "Invoice Value": row.value, "Place Of Supply": row.placeOfSupply, "Applicable % of Tax Rate": row.applicablePercent, "Rate": row.rate, "Taxable Value": row.taxableValue, "Cess Amount": row.cess, "E-Commerce GSTIN": row.ecommerceGstin
     }));
     addStyledSheet("b2cl", b2clData, b2clCols);
 
     // 4. B2CS
     const b2csCols = ["Type", "Place Of Supply", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount", "E-Commerce GSTIN"];
-    const b2csData = (gstr1Data.b2cs || []).map(row => ({
+    const b2csData = (dataToUse.b2cs || []).map(row => ({
       "Type": row.type, "Place Of Supply": row.placeOfSupply, "Applicable % of Tax Rate": "", "Rate": row.rate, "Taxable Value": row.taxableValue, "Cess Amount": row.cess, "E-Commerce GSTIN": row.ecommerceGstin || ""
     }));
     addStyledSheet("b2cs", b2csData, b2csCols);
 
     // 5. CDNR
     const cdnrCols = ["GSTIN/UIN of Recipient", "Receiver Name", "Note Number", "Note Date", "Note Type", "Place Of Supply", "Reverse Charge", "Note Supply Type", "Note Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount"];
-    const cdnrData = (gstr1Data.cdnr || []).map(row => ({
+    const cdnrData = (dataToUse.cdnr || []).map(row => ({
       "GSTIN/UIN of Recipient": row.gstin, "Receiver Name": row.customerName, "Note Number": row.noteNo, "Note Date": row.noteDate, "Note Type": row.noteType, "Place Of Supply": row.placeOfSupply, "Reverse Charge": row.reverseCharge, "Note Supply Type": row.noteSupplyType, "Note Value": row.noteValue, "Applicable % of Tax Rate": row.applicablePercent, "Rate": row.rate, "Taxable Value": row.taxableValue, "Cess Amount": row.cess
     }));
     addStyledSheet("cdnr", cdnrData, cdnrCols);
 
     // 6. CDNUR
     const cdnurCols = ["UR Type", "Note Number", "Note Date", "Note Type", "Place Of Supply", "Note Value", "Applicable % of Tax Rate", "Rate", "Taxable Value", "Cess Amount"];
-    const cdnurData = (gstr1Data.cdnur || []).map(row => ({
+    const cdnurData = (dataToUse.cdnur || []).map(row => ({
       "UR Type": row.type, "Note Number": row.noteNo, "Note Date": row.noteDate, "Note Type": row.noteType, "Place Of Supply": row.placeOfSupply, "Note Value": row.noteValue, "Applicable % of Tax Rate": row.applicablePercent, "Rate": row.rate, "Taxable Value": row.taxableValue, "Cess Amount": row.cess
     }));
     addStyledSheet("cdnur", cdnurData, cdnurCols);
 
     // 7. EXEMP
     const exempCols = ["Description", "Nil Rated", "Exempted", "Non GST supplies"];
-    const exempData = (gstr1Data.nilRated || []).map(row => ({
+    const exempData = (dataToUse.nilRated || []).map(row => ({
       "Description": row.description, "Nil Rated": row.nilRated, "Exempted": row.exempt, "Non GST supplies": row.nonGst
     }));
     addStyledSheet("exemp", exempData, exempCols);
 
     // 8. HSN
     const hsnCols = ["HSN", "Description", "UQC", "Total Quantity", "Total Value", "Rate", "Taxable Value", "Integrated Tax Amount", "Central Tax Amount", "State/UT Tax Amount", "Cess Amount"];
-    const hsnB2B = (gstr1Data.hsnSummaryB2B || []).map(row => ({
+    const hsnB2B = (dataToUse.hsnSummaryB2B || []).map(row => ({
       "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Quantity": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "Integrated Tax Amount": row.igst, "Central Tax Amount": row.cgst, "State/UT Tax Amount": row.sgst, "Cess Amount": row.cess
     }));
     addStyledSheet("hsn(b2b)", hsnB2B, hsnCols);
     
     // 8.1 HSN B2C
-    const hsnB2C = (gstr1Data.hsnSummaryB2C || []).map(row => ({
+    const hsnB2C = (dataToUse.hsnSummaryB2C || []).map(row => ({
       "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Quantity": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "Integrated Tax Amount": row.igst, "Central Tax Amount": row.cgst, "State/UT Tax Amount": row.sgst, "Cess Amount": row.cess
     }));
     addStyledSheet("hsn(b2c)", hsnB2C, hsnCols);
 
     // 9. DOCS
     const docCols = ["Nature of Document", "Sr. No. From", "Sr. No. To", "Total Number", "Cancelled"];
-    const docData = (gstr1Data.docSummary || []).map(row => ({
+    const docData = (dataToUse.docSummary || []).map(row => ({
       "Nature of Document": row.nature, "Sr. No. From": row.from, "Sr. No. To": row.to, "Total Number": row.total, "Cancelled": row.cancelled
     }));
     addStyledSheet("docs", docData, docCols);
@@ -378,13 +387,14 @@ const BranchGstReports = () => {
     });
   };
   
-  const downloadGstr1SummaryExcel = () => {
-    if (!gstr1Data) return;
+  const downloadGstr1SummaryExcel = (customData = null, customName = null) => {
+    const dataToUse = customData || gstr1Data;
+    if (!dataToUse) return;
 
-    const displayGstin = gstr1Data.branchGstin || branch?.gstin || "NO_GSTIN";
-    const displayName = gstr1Data.branchName || branch?.name || "N/A";
+    const displayGstin = dataToUse.branchGstin || branch?.gstin || "NO_GSTIN";
+    const displayName = dataToUse.branchName || branch?.name || "N/A";
 
-    const fileName = `${displayGstin}_GSTR1_SUMMARY_${months[selectedMonth - 1]}_${selectedYear}`;
+    const fileName = customName || `${displayGstin}_GSTR1_SUMMARY_${months[selectedMonth - 1]}_${selectedYear}`;
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Filing_Summary");
 
@@ -414,21 +424,21 @@ const BranchGstReports = () => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
     });
 
-    const b2bTaxable = gstr1Data.b2b.reduce((s, r) => s + (r.taxableValue || 0), 0);
-    const b2bTax = gstr1Data.b2b.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+    const b2bTaxable = dataToUse.b2b.reduce((s, r) => s + (r.taxableValue || 0), 0);
+    const b2bTax = dataToUse.b2b.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
 
-    const b2cTaxable = (gstr1Data.b2cl || []).reduce((s, r) => s + (r.taxableValue || 0), 0) + (gstr1Data.b2cs || []).reduce((s, r) => s + (r.taxableValue || 0), 0);
-    const b2cTax = (gstr1Data.b2cl || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + (gstr1Data.b2cs || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+    const b2cTaxable = (dataToUse.b2cl || []).reduce((s, r) => s + (r.taxableValue || 0), 0) + (dataToUse.b2cs || []).reduce((s, r) => s + (r.taxableValue || 0), 0);
+    const b2cTax = (dataToUse.b2cl || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + (dataToUse.b2cs || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
 
-    const cnTaxable = (gstr1Data.cdnr || []).reduce((s, r) => s + (r.taxableValue || 0), 0) + (gstr1Data.cdnur || []).reduce((s, r) => s + (r.taxableValue || 0), 0);
-    const cnTax = (gstr1Data.cdnr || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + (gstr1Data.cdnur || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
+    const cnTaxable = (dataToUse.cdnr || []).reduce((s, r) => s + (r.taxableValue || 0), 0) + (dataToUse.cdnur || []).reduce((s, r) => s + (r.taxableValue || 0), 0);
+    const cnTax = (dataToUse.cdnr || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + (dataToUse.cdnur || []).reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
 
-    const nilTaxable = (gstr1Data.nilRated || []).reduce((s, r) => s + (r.nilRated || 0) + (r.exempt || 0) + (r.nonGst || 0), 0);
+    const nilTaxable = (dataToUse.nilRated || []).reduce((s, r) => s + (r.nilRated || 0) + (r.exempt || 0) + (r.nonGst || 0), 0);
 
-    sheet.addRow(["B2B", "Business to Business Supplies", gstr1Data.b2b.length, b2bTaxable, b2bTax]);
-    sheet.addRow(["B2C", "Business to Consumer Supplies", gstr1Data.b2cRaw?.length || 0, b2cTaxable, b2cTax]);
-    sheet.addRow(["Credit Note", "Registered & Unregistered Returns", (gstr1Data.cdnr?.length || 0) + (gstr1Data.cdnur?.length || 0), cnTaxable, cnTax]);
-    sheet.addRow(["Nil Rated", "Exempted / Non-GST Supplies", gstr1Data.nilRated?.length || 0, nilTaxable, 0]);
+    sheet.addRow(["B2B", "Business to Business Supplies", dataToUse.b2b.length, b2bTaxable, b2bTax]);
+    sheet.addRow(["B2C", "Business to Consumer Supplies", dataToUse.b2cRaw?.length || 0, b2cTaxable, b2cTax]);
+    sheet.addRow(["Credit Note", "Registered & Unregistered Returns", (dataToUse.cdnr?.length || 0) + (dataToUse.cdnur?.length || 0), cnTaxable, cnTax]);
+    sheet.addRow(["Nil Rated", "Exempted / Non-GST Supplies", dataToUse.nilRated?.length || 0, nilTaxable, 0]);
     
     // 3. Rate-wise Breakdown
     sheet.addRow([]);
@@ -442,7 +452,7 @@ const BranchGstReports = () => {
     
     // B2B Rates
     gstRates.forEach(rate => {
-      const filtered = gstr1Data.b2b.filter(r => Math.round(r.rate) === rate);
+      const filtered = dataToUse.b2b.filter(r => Math.round(r.rate) === rate);
       if (filtered.length > 0) {
         const taxable = filtered.reduce((s, r) => s + (r.taxableValue || 0), 0);
         const tax = filtered.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
@@ -452,14 +462,14 @@ const BranchGstReports = () => {
 
     // B2C Rates
     gstRates.forEach(rate => {
-      const filteredS = (gstr1Data.b2cs || []).filter(r => Math.round(r.rate) === rate);
-      const filteredL = (gstr1Data.b2cl || []).filter(r => Math.round(r.rate) === rate);
+      const filteredS = (dataToUse.b2cs || []).filter(r => Math.round(r.rate) === rate);
+      const filteredL = (dataToUse.b2cl || []).filter(r => Math.round(r.rate) === rate);
       if (filteredS.length > 0 || filteredL.length > 0) {
         const taxable = filteredS.reduce((s, r) => s + (r.taxableValue || 0), 0) + filteredL.reduce((s, r) => s + (r.taxableValue || 0), 0);
         const tax = filteredS.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + filteredL.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
         
         // Count unique invoices from b2cRaw that contain this specific rate
-        const invCount = gstr1Data.b2cRaw?.filter(inv => inv.rates?.includes(rate)).length || 0;
+        const invCount = dataToUse.b2cRaw?.filter(inv => inv.rates?.includes(rate)).length || 0;
         
         sheet.addRow(["B2C", `${rate}%`, invCount, taxable, tax]);
       }
@@ -467,8 +477,8 @@ const BranchGstReports = () => {
 
     // CDNR Rates
     gstRates.forEach(rate => {
-      const filteredR = (gstr1Data.cdnr || []).filter(r => Math.round(r.rate) === rate);
-      const filteredUR = (gstr1Data.cdnur || []).filter(r => Math.round(r.rate) === rate);
+      const filteredR = (dataToUse.cdnr || []).filter(r => Math.round(r.rate) === rate);
+      const filteredUR = (dataToUse.cdnur || []).filter(r => Math.round(r.rate) === rate);
       if (filteredR.length > 0 || filteredUR.length > 0) {
         const taxable = filteredR.reduce((s, r) => s + (r.taxableValue || 0), 0) + filteredUR.reduce((s, r) => s + (r.taxableValue || 0), 0);
         const tax = filteredR.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0) + filteredUR.reduce((s, r) => s + (r.igst || 0) + (r.cgst || 0) + (r.sgst || 0), 0);
@@ -484,7 +494,7 @@ const BranchGstReports = () => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }; 
     });
 
-    (gstr1Data.docSummary || []).forEach(doc => {
+    (dataToUse.docSummary || []).forEach(doc => {
       sheet.addRow([doc.nature, doc.from, doc.to, doc.total, doc.cancelled]);
     });
 
@@ -520,21 +530,21 @@ const BranchGstReports = () => {
 
     // 1. B2B Details
     const b2bCols = ["GSTIN", "Customer Name", "Invoice No", "Date", "Value", "POS", "Rate", "Taxable Value", "IGST", "CGST", "SGST"];
-    const b2bData = gstr1Data.b2b.map(row => ({
+    const b2bData = dataToUse.b2b.map(row => ({
       "GSTIN": row.gstin, "Customer Name": row.customerName, "Invoice No": row.invoiceNo, "Date": row.date, "Value": row.value, "POS": row.placeOfSupply, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
     }));
     addStyledSheet("B2B_Details", b2bData, b2bCols);
 
     // 2. B2C Details (Raw)
     const b2cCols = ["Invoice No", "Date", "Customer Name", "POS", "Value", "Taxable Value", "IGST", "CGST", "SGST", "Rates"];
-    const b2cData = (gstr1Data.b2cRaw || []).map(row => ({
+    const b2cData = (dataToUse.b2cRaw || []).map(row => ({
       "Invoice No": row.invoiceNo, "Date": row.date, "Customer Name": row.customerName, "POS": row.placeOfSupply, "Value": row.value, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst, "Rates": (row.rates || []).join(", ")
     }));
     addStyledSheet("B2C_Retail_Details", b2cData, b2cCols);
 
     // 3. Credit Notes
     const cnCols = ["GSTIN", "Customer Name", "Note No", "Date", "Type", "POS", "Value", "Rate", "Taxable Value", "IGST", "CGST", "SGST"];
-    const cnData = [...(gstr1Data.cdnr || []), ...(gstr1Data.cdnur || [])].map(row => ({
+    const cnData = [...(dataToUse.cdnr || []), ...(dataToUse.cdnur || [])].map(row => ({
       "GSTIN": row.gstin, "Customer Name": row.customerName, "Note No": row.noteNo, "Date": row.noteDate, "Type": row.noteType, "POS": row.placeOfSupply, "Value": row.noteValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
     }));
     addStyledSheet("Credit_Notes", cnData, cnCols);
@@ -543,19 +553,19 @@ const BranchGstReports = () => {
     const hsnCols = ["HSN", "Description", "UQC", "Total Qty", "Total Value", "Rate", "Taxable Value", "IGST", "CGST", "SGST"];
     
     // Combined (Official Filing)
-    const hsnCombined = [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].map(row => ({
+    const hsnCombined = [...(dataToUse.hsnSummaryB2B || []), ...(dataToUse.hsnSummaryB2C || [])].map(row => ({
       "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Qty": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
     }));
     addStyledSheet("HSN_Combined", hsnCombined, hsnCols);
 
     // B2B Only
-    const hsnB2B = (gstr1Data.hsnSummaryB2B || []).map(row => ({
+    const hsnB2B = (dataToUse.hsnSummaryB2B || []).map(row => ({
       "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Qty": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
     }));
     addStyledSheet("HSN_B2B", hsnB2B, hsnCols);
 
     // B2C Only
-    const hsnB2C = (gstr1Data.hsnSummaryB2C || []).map(row => ({
+    const hsnB2C = (dataToUse.hsnSummaryB2C || []).map(row => ({
       "HSN": row.hsn, "Description": row.description, "UQC": row.uqc, "Total Qty": row.totalQty, "Total Value": row.totalValue, "Rate": row.rate, "Taxable Value": row.taxableValue, "IGST": row.igst, "CGST": row.cgst, "SGST": row.sgst
     }));
     addStyledSheet("HSN_B2C", hsnB2C, hsnCols);
@@ -681,8 +691,9 @@ const BranchGstReports = () => {
   };
 
 
-  const downloadGstr1DirectPortalJson = () => {
-    if (!gstr1Data) return;
+  const downloadGstr1DirectPortalJson = (customData = null, customName = null) => {
+    const dataToUse = customData || gstr1Data;
+    if (!dataToUse) return;
 
     const formatPortalDate = (d) => {
       if (!d) return "";
@@ -695,7 +706,7 @@ const BranchGstReports = () => {
     };
 
     const b2bGroups = {};
-    gstr1Data.b2b.forEach(row => {
+    dataToUse.b2b.forEach(row => {
       const gstin = row.gstin.trim().toUpperCase();
       const invNo = row.invoiceNo;
       if (!b2bGroups[gstin]) b2bGroups[gstin] = { ctin: gstin, inv: [] };
@@ -714,7 +725,7 @@ const BranchGstReports = () => {
     });
 
     const cdnrGroups = {};
-    gstr1Data.cdnr.forEach(row => {
+    dataToUse.cdnr.forEach(row => {
       const gstin = row.gstin.trim().toUpperCase();
       const ntNo = row.noteNo;
       if (!cdnrGroups[gstin]) cdnrGroups[gstin] = { ctin: gstin, nt: [] };
@@ -733,7 +744,7 @@ const BranchGstReports = () => {
     });
 
     const hsnMap = {};
-    [...(gstr1Data.hsnSummaryB2B || []), ...(gstr1Data.hsnSummaryB2C || [])].forEach(row => {
+    [...(dataToUse.hsnSummaryB2B || []), ...(dataToUse.hsnSummaryB2C || [])].forEach(row => {
       const key = `${row.hsn}_${row.rate}_${row.uqc}`;
       if (!hsnMap[key]) {
         hsnMap[key] = { ...row };
@@ -768,7 +779,7 @@ const BranchGstReports = () => {
       cur_gt: 0,
       gt: 0,
       b2b: Object.values(b2bGroups),
-      b2cs: gstr1Data.b2cs.map(row => ({
+      b2cs: dataToUse.b2cs.map(row => ({
         typ: "OE", sply_ty: row.placeOfSupply.startsWith(branch?.stateCode || "33") ? "INTRA" : "INTER",
         rt: parseFloat(row.rate.toFixed(2)), pos: row.placeOfSupply.substring(0, 2),
         txval: parseFloat(row.taxableValue.toFixed(2)), iamt: parseFloat((row.igst || 0).toFixed(2)),
@@ -777,13 +788,13 @@ const BranchGstReports = () => {
       cdnr: Object.values(cdnrGroups),
       hsn: { data: hsnData },
       nil: {
-        inv: gstr1Data.nilRated.map(row => ({
+        inv: dataToUse.nilRated.map(row => ({
           sply_ty: (row.description.includes("Inter-State") ? "INTER" : "INTRA") + (row.description.includes("registered") ? "B2B" : "B2C"),
           nil_amt: parseFloat(row.nilRated.toFixed(2)), expt_amt: parseFloat(row.exempt.toFixed(2)), ngsup_amt: parseFloat(row.nonGst.toFixed(2))
         }))
       },
       doc_issue: {
-        doc_det: gstr1Data.docSummary.map((doc) => {
+        doc_det: dataToUse.docSummary.map((doc) => {
           let docNum = 1; // Default for Invoices
           if (doc.nature.includes("Credit Note")) docNum = 5;
           else if (doc.nature.includes("Debit Note")) docNum = 4;
@@ -799,11 +810,74 @@ const BranchGstReports = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${gstr1Data.branchGstin || branch?.gstin || "33DULPS2600Q4Z3"}_GSTR1_DIRECT_${months[selectedMonth - 1]}_${selectedYear}.json`;
+    link.download = customName ? `${customName}.json` : `${dataToUse.branchGstin || branch?.gstin || "33DULPS2600Q4Z3"}_GSTR1_DIRECT_${months[selectedMonth - 1]}_${selectedYear}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const downloadOnlyMissingRecords = async (format) => {
+    if (!includeInvoices && !includeCreditNotes) {
+      toast.warning("Please enter at least one Sales Invoice or Credit Note number in the Recovery Control Center first!");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let query = `branchId=${branch._id}&month=${selectedMonth}&year=${selectedYear}&onlyExplicit=true`;
+      if (includeInvoices) query += `&includeInvoices=${encodeURIComponent(includeInvoices)}`;
+      if (includeCreditNotes) query += `&includeCreditNotes=${encodeURIComponent(includeCreditNotes)}`;
+
+      const res = await fetchWithAuth(`${API_BASE}/gst-reports/gstr1?${query}`);
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.message || "Failed to fetch missing records");
+      }
+
+      const reportData = data.data;
+      if (!reportData.b2b.length && !reportData.b2cRaw.length && !reportData.cdnr.length && !reportData.cdnur.length) {
+        toast.info("No matching records found for the specified invoice/credit note numbers.");
+        return;
+      }
+
+      // Merge HSN summaries
+      const mergedHsn = {};
+      [...(reportData.hsnSummaryB2B || []), ...(reportData.hsnSummaryB2C || [])].forEach(row => {
+        const key = `${row.hsn}_${row.rate}`;
+        if (!mergedHsn[key]) {
+          mergedHsn[key] = { ...row, invoiceNumbers: [...(row.invoiceNumbers || [])] };
+        } else {
+          mergedHsn[key].totalQty += row.totalQty;
+          mergedHsn[key].totalValue += row.totalValue;
+          mergedHsn[key].taxableValue += row.taxableValue;
+          mergedHsn[key].igst += row.igst || 0;
+          mergedHsn[key].cgst += row.cgst || 0;
+          mergedHsn[key].sgst += row.sgst || 0;
+          mergedHsn[key].cess += row.cess || 0;
+          const existingInvoices = new Set(mergedHsn[key].invoiceNumbers);
+          (row.invoiceNumbers || []).forEach(num => existingInvoices.add(num));
+          mergedHsn[key].invoiceNumbers = Array.from(existingInvoices);
+        }
+      });
+      reportData.hsnSummary = Object.values(mergedHsn);
+
+      const displayGstin = reportData.branchGstin || branch?.gstin || "NO_GSTIN";
+      const customName = `${displayGstin}_GSTR1_MISSING_ONLY_${months[selectedMonth - 1]}_${selectedYear}`;
+
+      if (format === 'excel') {
+        downloadGstr1Excel(reportData, customName);
+      } else if (format === 'summary-excel') {
+        downloadGstr1SummaryExcel(reportData, customName);
+      } else if (format === 'json') {
+        downloadGstr1DirectPortalJson(reportData, customName);
+      }
+      toast.success("✅ Standalone export of missing records downloaded successfully!");
+    } catch (err) {
+      toast.error(err.message || "Error exporting missing records");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const downloadSectionJson = (sectionKey) => {
@@ -1207,6 +1281,100 @@ const BranchGstReports = () => {
               <p className="text-2xl font-black text-rose-600">
                 {gstr1Data?.hsnSummary?.filter(h => ![4, 6, 8].includes(h.hsn.toString().length)).length || 0}
               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Force-Include Recovery Center */}
+        <div className="mb-10 bg-white rounded-[2.5rem] p-8 border border-indigo-100 shadow-xl shadow-indigo-100/5 bg-gradient-to-r from-white to-slate-50">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
+              <FaFileInvoice size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Filing Recovery Control Center</h3>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Include missing invoices directly in this period's summary and exports</p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Force-Include Invoices (Sales / GSTR-1)</label>
+              <input
+                type="text"
+                placeholder="e.g. GEK/2026-27/04/005, GEK/2026-27/04/010"
+                value={includeInvoices}
+                onChange={(e) => setIncludeInvoices(e.target.value)}
+                className="w-full bg-white border border-slate-200 px-4 py-3 rounded-2xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+              <span className="text-[8px] text-slate-400 font-bold uppercase mt-1 block">Comma-separated invoice numbers</span>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Force-Include Purchases (ITC / GSTR-3B)</label>
+              <input
+                type="text"
+                placeholder="e.g. PUR/2026-27/04/012, PUR/2849"
+                value={includePurchases}
+                onChange={(e) => setIncludePurchases(e.target.value)}
+                className="w-full bg-white border border-slate-200 px-4 py-3 rounded-2xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+              <span className="text-[8px] text-slate-400 font-bold uppercase mt-1 block">Comma-separated purchase invoice numbers</span>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Force-Include Credit Notes (Returns / GSTR-1)</label>
+              <input
+                type="text"
+                placeholder="e.g. CN/2026-27/04/002"
+                value={includeCreditNotes}
+                onChange={(e) => setIncludeCreditNotes(e.target.value)}
+                className="w-full bg-white border border-slate-200 px-4 py-3 rounded-2xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+              <span className="text-[8px] text-slate-400 font-bold uppercase mt-1 block">Comma-separated credit note numbers</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap justify-between items-center gap-4 mt-8 pt-6 border-t border-slate-100">
+            {/* Standalone Missing-Only Exports */}
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mr-2">Export Missing Only:</span>
+              <button
+                onClick={() => downloadOnlyMissingRecords('summary-excel')}
+                className="px-4 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-100 transition flex items-center gap-1.5 shadow-sm"
+              >
+                <FaDownload size={10} /> Summary Excel format
+              </button>
+              <button
+                onClick={() => downloadOnlyMissingRecords('json')}
+                className="px-4 py-2.5 bg-amber-50 text-amber-700 border border-amber-100 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-amber-100 transition flex items-center gap-1.5 shadow-sm"
+              >
+                <FaDownload size={10} /> Standalone Portal JSON
+              </button>
+            </div>
+
+            {/* Standard Period Controls */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setIncludeInvoices("");
+                  setIncludeCreditNotes("");
+                  setIncludePurchases("");
+                  toast.info("Cleared force-inclusions");
+                }}
+                className="px-6 py-3 bg-slate-100 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition"
+              >
+                Reset Filters
+              </button>
+              <button
+                onClick={() => {
+                  fetchReports();
+                  toast.success("Applied force-inclusions to summary filing!");
+                }}
+                className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg shadow-indigo-100"
+              >
+                Apply Force-Inclusions
+              </button>
             </div>
           </div>
         </div>

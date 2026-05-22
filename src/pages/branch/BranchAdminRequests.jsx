@@ -54,7 +54,10 @@ export default function BranchAdminRequests() {
     try {
       const res = await fetch(`${API_BASE}/sales-orders/${id}/${action}-re-edit`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" }
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        }
       });
       const data = await res.json();
       if (data.success) {
@@ -72,7 +75,10 @@ export default function BranchAdminRequests() {
     try {
       const res = await fetch(`${API_BASE}/purchase-orders/${id}/${action}-${type}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" }
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        }
       });
       const data = await res.json();
       if (data.success) {
@@ -90,7 +96,10 @@ export default function BranchAdminRequests() {
     try {
       const res = await fetch(`${API_BASE}/customers/${customerId}/${action}-credit-bypass`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" }
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        }
       });
       const data = await res.json();
       if (data.success) {

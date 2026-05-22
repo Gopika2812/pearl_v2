@@ -78,33 +78,85 @@ const router = express.Router();
  */
 router.get("/gstr1", auth, async (req, res) => {
   try {
-    const { branchId, month, year } = req.query;
+    const { branchId, month, year, includeInvoices, includeCreditNotes } = req.query;
     if (!branchId || !month || !year) {
       return res.status(400).json({ message: "branchId, month, and year are required" });
     }
 
     const IST = "Asia/Kolkata";
-    const startDate = moment.tz(`${year}-${month}-01`, "YYYY-MM-DD", IST).startOf("month").toDate();
-    const endDate = moment.tz(`${year}-${month}-01`, "YYYY-MM-DD", IST).endOf("month").toDate();
+    const paddedMonth = String(month).padStart(2, "0");
+    const startDate = moment.tz(`${year}-${paddedMonth}-01`, "YYYY-MM-DD", IST).startOf("month").toDate();
+    const endDate = moment.tz(`${year}-${paddedMonth}-01`, "YYYY-MM-DD", IST).endOf("month").toDate();
+
+    console.log(`📊 [GSTR1] Branch: ${branchId}, Period: ${paddedMonth}/${year}, Range: ${startDate.toISOString()} → ${endDate.toISOString()}`);
 
     const branchObjectId = new mongoose.Types.ObjectId(branchId);
 
+    let explicitInvoiceNumbers = [];
+    if (includeInvoices) {
+      explicitInvoiceNumbers = includeInvoices.split(",").map(s => s.trim()).filter(Boolean);
+    }
+
+    let explicitCreditNoteNumbers = [];
+    if (includeCreditNotes) {
+      explicitCreditNoteNumbers = includeCreditNotes.split(",").map(s => s.trim()).filter(Boolean);
+    }
+
+    const isOnlyExplicit = req.query.onlyExplicit === "true";
+
+    let invoiceQuery = {};
+    if (isOnlyExplicit) {
+      invoiceQuery = {
+        invoiceNumber: { $in: explicitInvoiceNumbers }
+      };
+    } else {
+      invoiceQuery = {
+        $or: [
+          {
+            branchId: branchObjectId,
+            invoiceDate: { $gte: startDate, $lte: endDate }
+          }
+        ]
+      };
+      if (explicitInvoiceNumbers.length > 0) {
+        invoiceQuery.$or.push({
+          invoiceNumber: { $in: explicitInvoiceNumbers }
+        });
+      }
+    }
+
+    let creditNoteQuery = {};
+    if (isOnlyExplicit) {
+      creditNoteQuery = {
+        creditNoteId: { $in: explicitCreditNoteNumbers }
+      };
+    } else {
+      creditNoteQuery = {
+        $or: [
+          {
+            branchId: branchObjectId,
+            date: { $gte: startDate, $lte: endDate }
+          }
+        ]
+      };
+      if (explicitCreditNoteNumbers.length > 0) {
+        creditNoteQuery.$or.push({
+          creditNoteId: { $in: explicitCreditNoteNumbers }
+        });
+      }
+    }
+
     // 1. Fetch Invoices and Credit Notes - Optimized with field selection
     const [invoices, creditNotes] = await Promise.all([
-      Invoice.find({
-        branchId: branchObjectId,
-        invoiceDate: { $gte: startDate, $lte: endDate }
-        // Removed status: { $ne: "CANCELLED" } to include ALL invoices
-      })
+      Invoice.find(invoiceQuery)
       .select("invoiceNumber invoiceDate grandTotal subtotal totalTax items.hsn items.name items.sellingPrice items.qty items.discountAmount items.total items.gst items.igst items.cgst items.sgst items.unit customer.gstin customer.name customer.state customer.stateCode status")
       .lean(),
-      CreditNote.find({
-        branchId: branchObjectId,
-        date: { $gte: startDate, $lte: endDate }
-      })
+      CreditNote.find(creditNoteQuery)
       .select("creditNoteId date grandTotal subtotal totalTax items customer.gstin customer.name customer.state customer.stateCode status")
       .lean()
     ]);
+
+    console.log(`📊 [GSTR1] Found ${invoices.length} invoices, ${creditNotes.length} credit notes for ${paddedMonth}/${year}`);
 
     const b2b = [];
     const cdnr = []; // Credit Notes Registered
@@ -528,7 +580,7 @@ router.get("/gstr1", auth, async (req, res) => {
  */
 router.get("/gstr3b", auth, async (req, res) => {
   try {
-    const { branchId, month, year } = req.query;
+    const { branchId, month, year, includeInvoices, includePurchases, includeCreditNotes } = req.query;
     if (!branchId || !month || !year) {
       return res.status(400).json({ message: "branchId, month, and year are required" });
     }
@@ -538,11 +590,97 @@ router.get("/gstr3b", auth, async (req, res) => {
     const endDate = moment.tz(`${year}-${month}-01`, "YYYY-MM-DD", IST).endOf("month").toDate();
     const branchObjectId = new mongoose.Types.ObjectId(branchId);
 
+    let explicitInvoiceNumbers = [];
+    if (includeInvoices) {
+      explicitInvoiceNumbers = includeInvoices.split(",").map(s => s.trim()).filter(Boolean);
+    }
+
+    let explicitCreditNoteNumbers = [];
+    if (includeCreditNotes) {
+      explicitCreditNoteNumbers = includeCreditNotes.split(",").map(s => s.trim()).filter(Boolean);
+    }
+
+    let explicitPurchaseNumbers = [];
+    if (includePurchases) {
+      explicitPurchaseNumbers = includePurchases.split(",").map(s => s.trim()).filter(Boolean);
+    }
+
+    const isOnlyExplicit = req.query.onlyExplicit === "true";
+
+    let salesQuery = {};
+    if (isOnlyExplicit) {
+      salesQuery = {
+        invoiceNumber: { $in: explicitInvoiceNumbers },
+        status: { $ne: "CANCELLED" }
+      };
+    } else {
+      salesQuery = {
+        $or: [
+          {
+            branchId: branchObjectId,
+            invoiceDate: { $gte: startDate, $lte: endDate },
+            status: { $ne: "CANCELLED" }
+          }
+        ]
+      };
+      if (explicitInvoiceNumbers.length > 0) {
+        salesQuery.$or.push({
+          invoiceNumber: { $in: explicitInvoiceNumbers }
+        });
+      }
+    }
+
+    let creditNoteQuery = {};
+    if (isOnlyExplicit) {
+      creditNoteQuery = {
+        creditNoteId: { $in: explicitCreditNoteNumbers },
+        status: { $ne: "Cancelled" }
+      };
+    } else {
+      creditNoteQuery = {
+        $or: [
+          {
+            branchId: branchObjectId,
+            date: { $gte: startDate, $lte: endDate },
+            status: { $ne: "Cancelled" }
+          }
+        ]
+      };
+      if (explicitCreditNoteNumbers.length > 0) {
+        creditNoteQuery.$or.push({
+          creditNoteId: { $in: explicitCreditNoteNumbers }
+        });
+      }
+    }
+
+    let purchaseQuery = {};
+    if (isOnlyExplicit) {
+      purchaseQuery = {
+        invoiceNumber: { $in: explicitPurchaseNumbers },
+        status: { $ne: "CANCELLED" }
+      };
+    } else {
+      purchaseQuery = {
+        $or: [
+          {
+            branchId: branchObjectId,
+            invoiceDate: { $gte: startDate, $lte: endDate },
+            status: { $ne: "CANCELLED" }
+          }
+        ]
+      };
+      if (explicitPurchaseNumbers.length > 0) {
+        purchaseQuery.$or.push({
+          invoiceNumber: { $in: explicitPurchaseNumbers }
+        });
+      }
+    }
+
     // Fetch Sales, Returns, and Purchases - Optimized
     const [sales, returns, purchases] = await Promise.all([
-      Invoice.find({ branchId: branchObjectId, invoiceDate: { $gte: startDate, $lte: endDate }, status: { $ne: "CANCELLED" } }).select("subtotal totalTax").lean(),
-      CreditNote.find({ branchId: branchObjectId, date: { $gte: startDate, $lte: endDate }, status: { $ne: "Cancelled" } }).select("subtotal totalTax").lean(),
-      PurchaseInvoice.find({ branchId: branchObjectId, invoiceDate: { $gte: startDate, $lte: endDate }, status: { $ne: "CANCELLED" } }).select("subtotal totalTax items extraExpenses").lean()
+      Invoice.find(salesQuery).select("subtotal totalTax").lean(),
+      CreditNote.find(creditNoteQuery).select("subtotal totalTax").lean(),
+      PurchaseInvoice.find(purchaseQuery).select("subtotal totalTax items extraExpenses").lean()
     ]);
 
     const outwardSupplies = { taxable: 0, igst: 0, cgst: 0, sgst: 0, nilRated: 0 };

@@ -1566,6 +1566,12 @@ router.get("/:id/check-credit", async (req, res) => {
       }
     }
 
+    const approvedCount = await OverrideRequest.countDocuments({
+      customerId: id,
+      requestType: "CREDIT_LIMIT",
+      status: "APPROVED"
+    });
+
     res.json({
       success: true,
       data: {
@@ -1578,7 +1584,9 @@ router.get("/:id/check-credit", async (req, res) => {
         oldestUnpaidInvoiceDate,
         isBlocked: (isLimitExceeded || isDaysExceeded) && !customer.isCreditBypassed,
         isBypassed: customer.isCreditBypassed,
-        requestStatus: customer.creditLimitRequestStatus
+        requestStatus: customer.creditLimitRequestStatus,
+        requiresSuperAdmin: customer.creditLimitRequiresSuperAdmin || approvedCount >= 3,
+        approvedCount
       }
     });
   } catch (error) {

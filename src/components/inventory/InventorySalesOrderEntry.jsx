@@ -1315,11 +1315,12 @@ export default function InventorySalesOrderEntry({
       });
       const data = await res.json();
       if (data.success) {
-        toast.success("Credit limit bypass requested from admin");
+        toast.success(data.message || "Credit limit bypass requested");
         // Update local state to reflect pending status
         setCreditStatus(prev => ({
           ...prev,
-          requestStatus: "PENDING"
+          requestStatus: "PENDING",
+          requiresSuperAdmin: data.requiresSuperAdmin
         }));
       } else {
         toast.error(data.message || "Failed to request bypass");
@@ -1644,6 +1645,11 @@ export default function InventorySalesOrderEntry({
                                 {creditStatus.isLimitExceeded && creditStatus.isDaysExceeded && " & "}
                                 {creditStatus.isDaysExceeded && `Bills Overdue by ${creditStatus.overdueDays} Days`}
                             </p>
+                            {creditStatus.requiresSuperAdmin && (
+                              <p className="text-[10px] font-bold text-rose-600 mt-1 uppercase tracking-tighter animate-pulse bg-rose-100/50 px-2 py-0.5 rounded border border-rose-200/50 w-fit">
+                                ⚠️ Admin limit reached (3 approvals). Requires Super Admin.
+                              </p>
+                            )}
                         </div>
                     </div>
                     
@@ -1653,7 +1659,7 @@ export default function InventorySalesOrderEntry({
                                 creditStatus.requestStatus === "PENDING" ? "bg-blue-600 text-white animate-pulse" :
                                 creditStatus.requestStatus === "REJECTED" ? "bg-rose-600 text-white" :
                                 "bg-gray-200 text-gray-600"
-                            }`}>
+                             }`}>
                                 {creditStatus.requestStatus === "PENDING" ? "Request Sent" : 
                                  creditStatus.requestStatus === "REJECTED" ? "Rejected" : 
                                  "Blocked"}
@@ -1668,15 +1674,17 @@ export default function InventorySalesOrderEntry({
                         onClick={requestCreditLimitBypass}
                         className="w-full bg-[#319bab] text-white py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-[#287d8a] transition shadow-md active:scale-95"
                     >
-                        Send Approval Request to Super Admin
+                        Send Approval Request to {creditStatus.requiresSuperAdmin ? "Super Admin" : "Admin"}
                     </button>
                 )}
                 
                 {creditStatus.requestStatus === "PENDING" && (
-                    <div className="flex items-center justify-center gap-2 py-2 text-blue-600 bg-blue-50 rounded-lg">
+                    <div className="flex items-center justify-center gap-2 py-2 text-blue-600 bg-blue-50 rounded-lg border border-blue-100">
                         <div className="w-2 h-2 bg-blue-600 rounded-full animate-ping"></div>
-                        <p className="text-[10px] font-black uppercase tracking-widest italic">
-                            Waiting for Super Admin to review this request...
+                        <p className="text-[10px] font-black uppercase tracking-widest italic text-center px-2">
+                            {creditStatus.requiresSuperAdmin 
+                              ? "This customer reached 3 limits, waiting for Super Admin approval..." 
+                              : "Waiting for Admin to review this request..."}
                         </p>
                     </div>
                 )}
