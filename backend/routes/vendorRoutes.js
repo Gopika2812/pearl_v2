@@ -262,7 +262,15 @@ router.get("/:id/ledger", async (req, res) => {
       mjAfterBy.reduce((sum, mj) => sum + (mj.amount || 0), 0) +
       salesInvoicesAfterStart.reduce((sum, si) => sum + (si.grandTotal || 0), 0);
 
-    const openingBalance = currentBalance - totalCreditsAfterStart + totalDebitsAfterStart;
+    let openingBalance = currentBalance - totalCreditsAfterStart + totalDebitsAfterStart;
+
+    // 🔒 STRICTOR RULE: If querying from the start of the financial year (April 1st, 2026) or earlier,
+    // the opening balance is strictly bound to the imported/static opening balance field in the database.
+    // This prevents subsequent backdated entries or calculations from altering the historical 31st March balance.
+    const financialYearStart = new Date("2026-04-01T00:00:00.000Z");
+    if (start <= financialYearStart) {
+      openingBalance = vendor.openingBalance || 0;
+    }
 
     const inRangePIs = pisAfterStart.filter(pi => new Date(pi.createdAt) <= end);
     const inRangePayments = paymentsAfterStart.filter(p => new Date(p.paymentDate) >= start && new Date(p.paymentDate) <= end);

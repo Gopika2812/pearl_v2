@@ -33,6 +33,111 @@ const BranchFollowUp = () => {
     const [groupFilter, setGroupFilter] = useState("");
     const [categoryFilter, setCategoryFilter] = useState("");
     const [zoneFilter, setZoneFilter] = useState("");
+
+    // Date Range Filters (Indian FY Presets)
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const fyStartYear = currentMonth < 3 ? currentYear - 1 : currentYear;
+    const defaultStartDate = `${fyStartYear}-04-01`;
+    const defaultEndDate = now.toISOString().split("T")[0];
+
+    const [startDate, setStartDate] = useState(defaultStartDate);
+    const [endDate, setEndDate] = useState(defaultEndDate);
+    const [datePreset, setDatePreset] = useState("Cur FY");
+    const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
+
+    const getPresetDates = (preset) => {
+        const today = new Date();
+        let start = new Date();
+        let end = new Date();
+
+        switch (preset) {
+            case "Today":
+                break;
+            case "Yesterday":
+                start.setDate(today.getDate() - 1);
+                end.setDate(today.getDate() - 1);
+                break;
+            case "This Week": {
+                const day = today.getDay();
+                const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+                start.setDate(diff);
+                break;
+            }
+            case "Last Week": {
+                const lastWeekDay = today.getDay();
+                const lastWeekDiff = today.getDate() - lastWeekDay + (lastWeekDay === 0 ? -6 : 1) - 7;
+                start.setDate(lastWeekDiff);
+                end = new Date(start);
+                end.setDate(start.getDate() + 6);
+                break;
+            }
+            case "This Month":
+                start = new Date(today.getFullYear(), today.getMonth(), 1);
+                end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                break;
+            case "Last Month":
+                start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                end = new Date(today.getFullYear(), today.getMonth(), 0);
+                break;
+            case "This Quarter": {
+                const currentMonth = today.getMonth();
+                const fyStartYear = currentMonth < 3 ? today.getFullYear() - 1 : today.getFullYear();
+                let qStartMonth, qEndMonth, qYear;
+                if (currentMonth >= 3 && currentMonth <= 5) {
+                    qStartMonth = 3; qEndMonth = 5; qYear = fyStartYear;
+                } else if (currentMonth >= 6 && currentMonth <= 8) {
+                    qStartMonth = 6; qEndMonth = 8; qYear = fyStartYear;
+                } else if (currentMonth >= 9 && currentMonth <= 11) {
+                    qStartMonth = 9; qEndMonth = 11; qYear = fyStartYear;
+                } else {
+                    qStartMonth = 0; qEndMonth = 2; qYear = fyStartYear + 1;
+                }
+                start = new Date(qYear, qStartMonth, 1);
+                end = new Date(qYear, qEndMonth + 1, 0);
+                break;
+            }
+            case "Last Quarter": {
+                const currentMonth = today.getMonth();
+                const fyStartYear = currentMonth < 3 ? today.getFullYear() - 1 : today.getFullYear();
+                let qStartMonth, qEndMonth, qYear;
+                if (currentMonth >= 3 && currentMonth <= 5) {
+                    qStartMonth = 0; qEndMonth = 2; qYear = fyStartYear;
+                } else if (currentMonth >= 6 && currentMonth <= 8) {
+                    qStartMonth = 3; qEndMonth = 5; qYear = fyStartYear;
+                } else if (currentMonth >= 9 && currentMonth <= 11) {
+                    qStartMonth = 6; qEndMonth = 8; qYear = fyStartYear;
+                } else {
+                    qStartMonth = 9; qEndMonth = 11; qYear = fyStartYear;
+                }
+                start = new Date(qYear, qStartMonth, 1);
+                end = new Date(qYear, qEndMonth + 1, 0);
+                break;
+            }
+            case "Cur FY": {
+                const currentMonth = today.getMonth();
+                const fyStartYear = currentMonth < 3 ? today.getFullYear() - 1 : today.getFullYear();
+                start = new Date(fyStartYear, 3, 1);
+                end = new Date(fyStartYear + 1, 3, 0);
+                break;
+            }
+            case "Pre FY": {
+                const currentMonth = today.getMonth();
+                const fyStartYear = currentMonth < 3 ? today.getFullYear() - 1 : today.getFullYear();
+                start = new Date(fyStartYear - 1, 3, 1);
+                end = new Date(fyStartYear, 3, 0);
+                break;
+            }
+            default:
+                return null;
+        }
+
+        return {
+            start: start.toISOString().split("T")[0],
+            end: end.toISOString().split("T")[0]
+        };
+    };
     
     // Permission helper
     const isFieldAllowed = (fieldId) => {
@@ -83,7 +188,7 @@ const BranchFollowUp = () => {
             // STAGE 1: Fetch light customer data (No expensive balance calculations)
             // We also fetch groups/categories/owners as usual
             const [custRes, groupRes, categoryRes, salesOwnerRes] = await Promise.all([
-                fetchWithAuth(`${API_BASE}/customers?branchId=${currentBranch._id}&mini=true&limit=${rowsPerPage}&page=${currentPage}&search=${searchTerm}&customerGroupId=${groupFilter}&customerCategoryId=${categoryFilter}&riskStatus=${zoneFilter}&sortBy=${sortConfig.key}&sortOrder=${sortConfig.direction}`),
+                fetchWithAuth(`${API_BASE}/customers?branchId=${currentBranch._id}&mini=true&limit=${rowsPerPage}&page=${currentPage}&search=${searchTerm}&customerGroupId=${groupFilter}&customerCategoryId=${categoryFilter}&riskStatus=${zoneFilter}&sortBy=${sortConfig.key}&sortOrder=${sortConfig.direction}&fromDate=${startDate}&toDate=${endDate}`),
                 fetchWithAuth(`${API_BASE}/customer-groups?branchId=${currentBranch._id}`),
                 fetchWithAuth(`${API_BASE}/customer-categories?branchId=${currentBranch._id}`),
                 fetchWithAuth(`${API_BASE}/sales-owners?branchId=${currentBranch._id}`)
@@ -120,12 +225,12 @@ const BranchFollowUp = () => {
                 const balRes = await fetchWithAuth(`${API_BASE}/customers/balances`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ customerIds, branchId: currentBranch._id })
+                    body: JSON.stringify({ customerIds, branchId: currentBranch._id, fromDate: startDate, toDate: endDate })
                 });
                 const balData = await balRes.json();
                 
                 if (balData.success) {
-                    const balMap = new Map(balData.data.map(b => [b._id, { debit: b.debit, credit: b.credit }]));
+                    const balMap = new Map(balData.data.map(b => [b._id, b]));
                     setCustomers(prev => prev.map(c => {
                         if (balMap.has(c._id)) {
                             return { ...c, ...balMap.get(c._id) };
@@ -157,7 +262,7 @@ const BranchFollowUp = () => {
     // Reset and trigger fetch when filters or pagination change
     useEffect(() => {
         fetchData();
-    }, [searchTerm, groupFilter, categoryFilter, zoneFilter, rowsPerPage, currentPage, sortConfig]);
+    }, [searchTerm, groupFilter, categoryFilter, zoneFilter, rowsPerPage, currentPage, sortConfig, startDate, endDate]);
 
     const SortIcon = ({ column }) => {
         if (sortConfig.key !== column) return <FaSort className="opacity-20 ml-1" />;
@@ -276,8 +381,8 @@ const BranchFollowUp = () => {
     };
 
     return (
-        <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 md:pl-20 pb-10">
-            <div className="w-full max-w-full mx-auto px-2 sm:px-4 py-4">
+        <div className="min-h-screen bg-[#f8fafc] pt-20 md:pt-4 px-4 sm:px-6 pb-10">
+            <div className="w-full max-w-full mx-auto py-2">
                 
                 {/* HEADER & FILTERS */}
                 <div className="flex flex-col gap-4 mb-4">
@@ -354,6 +459,86 @@ const BranchFollowUp = () => {
                                 <FaClock className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
                             </div>
 
+                            {/* Date Range Selector */}
+                            <div className="relative min-w-[200px]">
+                                <button
+                                    onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
+                                    className="w-full flex items-center justify-between bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg px-3 py-2.5 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all shadow-sm hover:bg-gray-100"
+                                >
+                                    <div className="flex items-center gap-1.5">
+                                        <FaCalendarAlt className="text-indigo-500" size={12} />
+                                        <span className="normal-case font-bold tracking-tight">
+                                            {new Date(startDate).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })} - {new Date(endDate).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                        </span>
+                                    </div>
+                                    <FaChevronDown size={10} className="text-gray-400 ml-1.5" />
+                                </button>
+
+                                {isDateDropdownOpen && (
+                                    <div className="absolute right-0 lg:left-0 mt-2 w-[340px] bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 flex gap-3 animate-fade-in">
+                                        {/* Presets Column */}
+                                        <div className="flex flex-col gap-1 border-r border-gray-100 pr-3 w-[120px] shrink-0">
+                                            {["Today", "Yesterday", "This Week", "Last Week", "This Month", "Last Month", "This Quarter", "Last Quarter", "Cur FY", "Pre FY"].map(preset => (
+                                                <button
+                                                    key={preset}
+                                                    onClick={() => {
+                                                        setDatePreset(preset);
+                                                        const dates = getPresetDates(preset);
+                                                        if (dates) {
+                                                            setStartDate(dates.start);
+                                                            setEndDate(dates.end);
+                                                        }
+                                                    }}
+                                                    className={`text-left px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                                                        datePreset === preset 
+                                                            ? "bg-indigo-50 text-indigo-700 font-extrabold" 
+                                                            : "text-gray-500 hover:bg-gray-50"
+                                                    }`}
+                                                >
+                                                    {preset}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {/* Custom Picker Column */}
+                                        <div className="flex-1 flex flex-col gap-3.5 justify-between">
+                                            <div className="flex flex-col gap-2.5">
+                                                <div>
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">Start Date</label>
+                                                    <input
+                                                        type="date"
+                                                        value={startDate}
+                                                        onChange={(e) => {
+                                                            setDatePreset("Custom");
+                                                            setStartDate(e.target.value);
+                                                        }}
+                                                        className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">End Date</label>
+                                                    <input
+                                                        type="date"
+                                                        value={endDate}
+                                                        onChange={(e) => {
+                                                            setDatePreset("Custom");
+                                                            setEndDate(e.target.value);
+                                                        }}
+                                                        className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => setIsDateDropdownOpen(false)}
+                                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase tracking-widest py-2 rounded-lg transition-colors shadow-md shadow-indigo-100 mt-2"
+                                            >
+                                                Apply Filter
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             {user?.role === "SUPER_ADMIN" && (
                                 <div className="flex items-center gap-2">
                                     <input 
@@ -407,7 +592,8 @@ const BranchFollowUp = () => {
                                     >
                                         <option value="name">Name</option>
                                         <option value="balance">Balance</option>
-                                        <option value="age">Age (Last Bill)</option>
+                                        <option value="invoiceAge">Invoice Age</option>
+                                        <option value="receiptAge">Receipt Age</option>
                                         <option value="margin">Margin</option>
                                         <option value="limit">Credit Limit</option>
                                         <option value="createdAt">Date Created</option>
@@ -484,30 +670,59 @@ const BranchFollowUp = () => {
                                                         </div>
 
                                                         {/* Financials */}
-                                                        <div className="grid grid-cols-2 gap-3">
-                                                            <div>
-                                                                <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Limit (₹)</label>
-                                                                <input type="number" className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-sm font-bold" value={editForm.creditLimit} onChange={(e) => setEditForm({ ...editForm, creditLimit: e.target.value })} />
+                                                        {user?.role === "SUPER_ADMIN" ? (
+                                                            <div className="grid grid-cols-2 gap-3">
+                                                                <div>
+                                                                    <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Limit (₹)</label>
+                                                                    <input type="number" className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-sm font-bold" value={editForm.creditLimit} onChange={(e) => setEditForm({ ...editForm, creditLimit: e.target.value })} />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">CR Days</label>
+                                                                    <input type="number" className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-sm font-bold" value={editForm.creditLimitDays} onChange={(e) => setEditForm({ ...editForm, creditLimitDays: e.target.value })} />
+                                                                </div>
                                                             </div>
-                                                            <div>
-                                                                <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">CR Days</label>
-                                                                <input type="number" className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-sm font-bold" value={editForm.creditLimitDays} onChange={(e) => setEditForm({ ...editForm, creditLimitDays: e.target.value })} />
+                                                        ) : (
+                                                            <div className="grid grid-cols-2 gap-3">
+                                                                <div>
+                                                                    <span className="text-[9px] font-black uppercase text-gray-400 block mb-1">Limit (₹)</span>
+                                                                    <span className="text-sm font-bold text-gray-500 py-2 block">₹{(editForm.creditLimit ?? 0).toLocaleString()}</span>
+                                                                </div>
+                                                                <div>
+                                                                    <span className="text-[9px] font-black uppercase text-gray-400 block mb-1">CR Days</span>
+                                                                    <span className="text-sm font-bold text-gray-500 py-2 block">{editForm.creditLimitDays || 0} Days</span>
+                                                                </div>
                                                             </div>
-                                                        </div>
+                                                        )}
 
-                                                        <div className="grid grid-cols-2 gap-3">
-                                                            <div>
-                                                                <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Margin (%)</label>
-                                                                <input type="number" step="0.01" className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-sm font-bold" value={editForm.margin} onChange={(e) => setEditForm({ ...editForm, margin: e.target.value })} />
+                                                        {user?.role === "SUPER_ADMIN" ? (
+                                                            <div className="grid grid-cols-2 gap-3">
+                                                                <div>
+                                                                    <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Margin (%)</label>
+                                                                    <input type="number" step="0.01" className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-sm font-bold" value={editForm.margin} onChange={(e) => setEditForm({ ...editForm, margin: e.target.value })} />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Sales Manager</label>
+                                                                    <select className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-[10px] font-bold" value={editForm.salesOwner || ""} onChange={(e) => setEditForm({ ...editForm, salesOwner: e.target.value })}>
+                                                                        <option value="">Select Owner</option>
+                                                                        {salesOwners.map(owner => <option key={owner._id} value={owner._id}>{owner.name}</option>)}
+                                                                    </select>
+                                                                </div>
                                                             </div>
-                                                            <div>
-                                                                <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Sales Manager</label>
-                                                                <select className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-[10px] font-bold" value={editForm.salesOwner || ""} onChange={(e) => setEditForm({ ...editForm, salesOwner: e.target.value })}>
-                                                                    <option value="">Select Owner</option>
-                                                                    {salesOwners.map(owner => <option key={owner._id} value={owner._id}>{owner.name}</option>)}
-                                                                </select>
+                                                        ) : (
+                                                            <div className="grid grid-cols-2 gap-3">
+                                                                <div>
+                                                                    <span className="text-[9px] font-black uppercase text-gray-400 block mb-1">Margin (%)</span>
+                                                                    <span className="text-sm font-bold text-gray-500 py-2 block">{editForm.margin || 0}%</span>
+                                                                </div>
+                                                                <div>
+                                                                    <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Sales Manager</label>
+                                                                    <select className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-sm font-bold" value={editForm.salesOwner || ""} onChange={(e) => setEditForm({ ...editForm, salesOwner: e.target.value })}>
+                                                                        <option value="">Select Owner</option>
+                                                                        {salesOwners.map(owner => <option key={owner._id} value={owner._id}>{owner.name}</option>)}
+                                                                    </select>
+                                                                </div>
                                                             </div>
-                                                        </div>
+                                                        )}
 
                                                         {/* Address Info */}
                                                         <div>
@@ -573,7 +788,7 @@ const BranchFollowUp = () => {
                                                             </p>
                                                         </div>
                                                         <div className="text-right">
-                                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Age / Days</p>
+                                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Receipt Age / Days</p>
                                                             {days !== null ? (
                                                                 <span className={`text-[10px] font-black px-2 py-1 rounded uppercase tracking-tighter shadow-sm border ${
                                                                     days > 30 ? "bg-rose-50 text-rose-600 border-rose-100" : 
@@ -583,6 +798,14 @@ const BranchFollowUp = () => {
                                                                     {days === 0 ? "Today" : `${days} Days`}
                                                                 </span>
                                                             ) : <span className="text-[10px] text-gray-300 italic">—</span>}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Sales Invoice</p>
+                                                            <p className="text-[11px] font-bold text-gray-700">₹{Math.round(customer.totalSalesInvoice || 0).toLocaleString()}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Receipt Value</p>
+                                                            <p className="text-[11px] font-bold text-gray-700">₹{Math.round(customer.totalReceiptValue || 0).toLocaleString()}</p>
                                                         </div>
                                                         <div>
                                                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Credit Limit</p>
@@ -652,13 +875,23 @@ const BranchFollowUp = () => {
                                                 </th>
                                             )}
                                             {isFieldAllowed("zone") && (
-                                                <th onClick={() => handleSort("riskStatus")} className="px-4 py-3 text-left border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
-                                                    <div className="flex items-center">Zone <SortIcon column="riskStatus" /></div>
+                                                <th onClick={() => handleSort("riskStatus")} className="px-2 py-3 text-center border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all w-[60px] min-w-[60px] max-w-[60px]">
+                                                    <div className="flex items-center justify-center">Zone <SortIcon column="riskStatus" /></div>
                                                 </th>
                                             )}
                                             {isFieldAllowed("balance") && (
                                                 <th onClick={() => handleSort("balance")} className="px-4 py-3 text-right border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
                                                     <div className="flex items-center justify-end">Balance <SortIcon column="balance" /></div>
+                                                </th>
+                                            )}
+                                            {isFieldAllowed("balance") && (
+                                                <th onClick={() => handleSort("debit")} className="px-4 py-3 text-right border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
+                                                    <div className="flex items-center justify-end">Sales Invoice <SortIcon column="debit" /></div>
+                                                </th>
+                                            )}
+                                            {isFieldAllowed("balance") && (
+                                                <th onClick={() => handleSort("credit")} className="px-4 py-3 text-right border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
+                                                    <div className="flex items-center justify-end">Receipt <SortIcon column="credit" /></div>
                                                 </th>
                                             )}
                                             {isFieldAllowed("limit") && (
@@ -667,8 +900,8 @@ const BranchFollowUp = () => {
                                                 </th>
                                             )}
                                             {isFieldAllowed("days") && (
-                                                <th onClick={() => handleSort("days")} className="px-4 py-3 text-right border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
-                                                    <div className="flex items-center justify-end">CR DAYS <SortIcon column="days" /></div>
+                                                <th onClick={() => handleSort("days")} className="px-2 py-3 text-center border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all w-[55px] min-w-[55px] max-w-[55px]">
+                                                    <div className="flex items-center justify-center">CR DAYS <SortIcon column="days" /></div>
                                                 </th>
                                             )}
                                             {isFieldAllowed("token") && (
@@ -676,13 +909,13 @@ const BranchFollowUp = () => {
                                                     <div className="flex items-center justify-center">Token</div>
                                                 </th>
                                             )}
-                                            <th className="px-4 py-3 text-left border-b border-gray-200">
-                                                <div className="flex items-center gap-1"><FaFileInvoice size={10} /> Last Invoice</div>
+                                            <th onClick={() => handleSort("invoiceAge")} className="px-2 py-3 text-center border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all w-[75px] min-w-[75px] max-w-[75px]">
+                                                <div className="flex items-center justify-center gap-1"><FaFileInvoice size={10} /> Inv Age <SortIcon column="invoiceAge" /></div>
                                             </th>
-                                            <th onClick={() => handleSort("age")} className="px-4 py-3 text-center border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
-                                                <div className="flex items-center justify-center"><FaClock size={10} className="mr-1" /> Age <SortIcon column="age" /></div>
+                                            <th onClick={() => handleSort("receiptAge")} className="px-2 py-3 text-center border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all w-[75px] min-w-[75px] max-w-[75px]">
+                                                <div className="flex items-center justify-center"><FaClock size={10} className="mr-1" /> Rec Age <SortIcon column="receiptAge" /></div>
                                             </th>
-                                            <th onClick={() => handleSort("margin")} className="px-4 py-3 text-center border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all">
+                                            <th onClick={() => handleSort("margin")} className="px-2 py-3 text-center border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all w-[55px] min-w-[55px] max-w-[55px]">
                                                 <div className="flex items-center justify-center">Margin <SortIcon column="margin" /></div>
                                             </th>
                                             {(isFieldAllowed("action_followup") || isFieldAllowed("action_log") || isFieldAllowed("action_ledger") || isFieldAllowed("action_edit")) && (
@@ -730,7 +963,7 @@ const BranchFollowUp = () => {
                                                                     {customerCategories.map(cat => <option key={cat._id} value={cat._id}>{cat.name}</option>)}
                                                                 </select>
                                                             </td>
-                                                            <td colSpan={4} className="px-4 py-4">
+                                                            <td colSpan={8} className="px-4 py-4">
                                                                 <div className="flex items-center gap-4">
                                                                     <div className="flex-1">
                                                                         <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">WhatsApp</label>
@@ -770,7 +1003,7 @@ const BranchFollowUp = () => {
                                                             </td>
                                                         </tr>
                                                         <tr className="bg-indigo-50/30 border-x-4 border-indigo-500 border-b-2 border-indigo-100">
-                                                            <td colSpan={5} className="px-4 py-3">
+                                                            <td colSpan={7} className="px-4 py-3">
                                                                 <div className="flex items-center gap-6">
                                                                     <div className="w-1/3">
                                                                         <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1">Full Address</label>
@@ -792,24 +1025,42 @@ const BranchFollowUp = () => {
                                                                 </div>
                                                             </td>
                                                             <td className="px-4 py-3 text-right">
-                                                                <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1 text-right">Limit (₹)</label>
-                                                                <input 
-                                                                    type="number" 
-                                                                    className="w-24 bg-white border border-indigo-100 rounded px-2 py-1 text-right text-[11px] font-bold"
-                                                                    value={editForm.creditLimit}
-                                                                    onChange={(e) => setEditForm({ ...editForm, creditLimit: e.target.value })}
-                                                                />
+                                                                {user?.role === "SUPER_ADMIN" ? (
+                                                                    <>
+                                                                        <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1 text-right">Limit (₹)</label>
+                                                                        <input 
+                                                                            type="number" 
+                                                                            className="w-24 bg-white border border-indigo-100 rounded px-2 py-1 text-right text-[11px] font-bold"
+                                                                            value={editForm.creditLimit}
+                                                                            onChange={(e) => setEditForm({ ...editForm, creditLimit: e.target.value })}
+                                                                        />
+                                                                    </>
+                                                                ) : (
+                                                                    <div className="flex flex-col items-end">
+                                                                        <span className="text-[9px] font-black uppercase text-gray-400 block mb-1 text-right">Limit (₹)</span>
+                                                                        <span className="text-[11px] font-bold text-gray-500 py-1">₹{(editForm.creditLimit ?? 0).toLocaleString()}</span>
+                                                                    </div>
+                                                                )}
                                                             </td>
                                                             <td className="px-4 py-3 text-right">
-                                                                <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1 text-right">CR Days</label>
-                                                                <input 
-                                                                    type="number" 
-                                                                    className="w-16 bg-white border border-indigo-100 rounded px-2 py-1 text-right text-[11px] font-bold"
-                                                                    value={editForm.creditLimitDays}
-                                                                    onChange={(e) => setEditForm({ ...editForm, creditLimitDays: e.target.value })}
-                                                                />
+                                                                {user?.role === "SUPER_ADMIN" ? (
+                                                                    <>
+                                                                        <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1 text-right">CR Days</label>
+                                                                        <input 
+                                                                            type="number" 
+                                                                            className="w-16 bg-white border border-indigo-100 rounded px-2 py-1 text-right text-[11px] font-bold"
+                                                                            value={editForm.creditLimitDays}
+                                                                            onChange={(e) => setEditForm({ ...editForm, creditLimitDays: e.target.value })}
+                                                                        />
+                                                                    </>
+                                                                ) : (
+                                                                    <div className="flex flex-col items-end">
+                                                                        <span className="text-[9px] font-black uppercase text-gray-400 block mb-1 text-right">CR Days</span>
+                                                                        <span className="text-[11px] font-bold text-gray-500 py-1">{editForm.creditLimitDays || 0}</span>
+                                                                    </div>
+                                                                )}
                                                             </td>
-                                                            <td colSpan={3} className="px-4 py-3">
+                                                            <td colSpan={5} className="px-4 py-3">
                                                                 <div className="flex items-center gap-4">
                                                                     <div className="flex-1">
                                                                         <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1">Zone</label>
@@ -823,16 +1074,23 @@ const BranchFollowUp = () => {
                                                                             <option value="risk_zone">Risk Zone</option>
                                                                         </select>
                                                                     </div>
-                                                                    <div className="w-20">
-                                                                        <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1">Margin (%)</label>
-                                                                        <input 
-                                                                            type="number" 
-                                                                            step="0.01"
-                                                                            className="w-full bg-white border border-indigo-100 rounded px-2 py-1 text-right text-[11px] font-bold outline-none focus:border-indigo-500 transition-all"
-                                                                            value={editForm.margin || 0}
-                                                                            onChange={(e) => setEditForm({ ...editForm, margin: e.target.value })}
-                                                                        />
-                                                                    </div>
+                                                                    {user?.role === "SUPER_ADMIN" ? (
+                                                                        <div className="w-20">
+                                                                            <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1">Margin (%)</label>
+                                                                            <input 
+                                                                                type="number" 
+                                                                                step="0.01"
+                                                                                className="w-full bg-white border border-indigo-100 rounded px-2 py-1 text-right text-[11px] font-bold outline-none focus:border-indigo-500 transition-all"
+                                                                                value={editForm.margin || 0}
+                                                                                onChange={(e) => setEditForm({ ...editForm, margin: e.target.value })}
+                                                                            />
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex flex-col items-center shrink-0">
+                                                                            <span className="text-[9px] font-black uppercase text-gray-400 block mb-1">Margin (%)</span>
+                                                                            <span className="text-[11px] font-bold text-gray-500 py-1">{editForm.margin || 0}%</span>
+                                                                        </div>
+                                                                    )}
                                                                     <div className="flex-1">
                                                                         <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1 text-center">Sales Manager</label>
                                                                         <select 
@@ -872,13 +1130,13 @@ const BranchFollowUp = () => {
                                                         </td>
                                                     )}
                                                     {isFieldAllowed("zone") && (
-                                                        <td className="px-4 py-3">
+                                                        <td className="px-2 py-3 text-center w-[60px] min-w-[60px] max-w-[60px]">
                                                             {customer.riskStatus === "risk_zone" ? (
-                                                                <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold">Risk</span>
+                                                                <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-[10px] font-bold">Risk</span>
                                                             ) : customer.riskStatus === "medium_zone" ? (
-                                                                <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-[10px] font-bold">Medium</span>
+                                                                <span className="bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded text-[10px] font-bold">Medium</span>
                                                             ) : (
-                                                                <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold">Safe</span>
+                                                                <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-[10px] font-bold">Safe</span>
                                                             )}
                                                         </td>
                                                     )}
@@ -887,7 +1145,31 @@ const BranchFollowUp = () => {
                                                             {customer.debit !== undefined ? (
                                                                 <>
                                                                     <span className="text-[10px] mr-1">{balance > 0 ? "DR" : "CR"}</span>
-                                                                    ₹{Math.abs(balance).toLocaleString()}
+                                                                    <span className="font-sans text-xs mr-0.5 font-medium opacity-85">₹</span>{Math.abs(balance).toLocaleString()}
+                                                                </>
+                                                            ) : (
+                                                                <span className="text-xs text-gray-400 italic">Calculating...</span>
+                                                            )}
+                                                        </td>
+                                                    )}
+                                                    {isFieldAllowed("balance") && (
+                                                        <td className="px-4 py-3 text-right text-sm text-gray-600 font-semibold">
+                                                            {customer.totalSalesInvoice !== undefined ? (
+                                                                <>
+                                                                    <span className="font-sans text-xs mr-0.5 font-medium text-gray-400">₹</span>
+                                                                    {Math.round(customer.totalSalesInvoice).toLocaleString()}
+                                                                </>
+                                                            ) : (
+                                                                <span className="text-xs text-gray-400 italic">Calculating...</span>
+                                                            )}
+                                                        </td>
+                                                    )}
+                                                    {isFieldAllowed("balance") && (
+                                                        <td className="px-4 py-3 text-right text-sm text-gray-600 font-semibold">
+                                                            {customer.totalReceiptValue !== undefined ? (
+                                                                <>
+                                                                    <span className="font-sans text-xs mr-0.5 font-medium text-gray-400">₹</span>
+                                                                    {Math.round(customer.totalReceiptValue).toLocaleString()}
                                                                 </>
                                                             ) : (
                                                                 <span className="text-xs text-gray-400 italic">Calculating...</span>
@@ -896,11 +1178,11 @@ const BranchFollowUp = () => {
                                                     )}
                                                     {isFieldAllowed("limit") && (
                                                         <td className="px-4 py-3 text-right text-gray-700 text-sm">
-                                                            ₹{(customer.creditLimit ?? 0).toLocaleString()}
+                                                            <span className="font-sans text-xs mr-0.5 font-medium text-gray-400">₹</span>{(customer.creditLimit ?? 0).toLocaleString()}
                                                         </td>
                                                     )}
                                                     {isFieldAllowed("days") && (
-                                                        <td className="px-4 py-3 text-right text-sm text-gray-700">
+                                                        <td className="px-2 py-3 text-center text-sm text-gray-700 w-[55px] min-w-[55px] max-w-[55px]">
                                                             {customer.creditLimitDays || 0}
                                                         </td>
                                                     )}
@@ -916,21 +1198,21 @@ const BranchFollowUp = () => {
                                                         </td>
                                                     )}
                                                      {/* Last Bill Column */}
-                                                     <td className="px-4 py-3">
+                                                     <td className="px-2 py-3 text-center w-[75px] min-w-[75px] max-w-[75px]">
                                                          {customer.lastInvoiceDate ? (
                                                              (() => {
                                                                  const days = Math.floor((new Date() - new Date(customer.lastInvoiceDate)) / (1000 * 60 * 60 * 24));
                                                                  return (
-                                                                     <div className="flex flex-col">
-                                                                         <span className="text-[11px] font-black text-gray-800">
-                                                                             {new Date(customer.lastInvoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                                                                         </span>
-                                                                         <span className={`text-[9px] font-bold ${
+                                                                     <div className="flex flex-col items-center">
+                                                                         <span className={`text-[11px] font-black ${
                                                                              days > 30 ? "text-rose-600" : 
                                                                              days > 7 ? "text-amber-600" : 
                                                                              "text-indigo-600"
                                                                          }`}>
-                                                                             {days === 0 ? "Today" : `${days} Days ago`}
+                                                                             {days === 0 ? "Today" : `${days} Days`}
+                                                                         </span>
+                                                                         <span className="text-[9px] font-bold text-gray-400">
+                                                                             {new Date(customer.lastInvoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
                                                                          </span>
                                                                      </div>
                                                                  );
@@ -940,21 +1222,21 @@ const BranchFollowUp = () => {
                                                          )}
                                                      </td>
                                                      {/* Last Receipt Column */}
-                                                     <td className="px-4 py-3">
+                                                     <td className="px-2 py-3 text-center w-[75px] min-w-[75px] max-w-[75px]">
                                                          {customer.lastReceiptDate ? (
                                                              (() => {
                                                                  const days = Math.floor((new Date() - new Date(customer.lastReceiptDate)) / (1000 * 60 * 60 * 24));
                                                                  return (
-                                                                     <div className="flex flex-col">
-                                                                         <span className="text-[11px] font-black text-gray-800">
-                                                                             {new Date(customer.lastReceiptDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                                                                         </span>
-                                                                         <span className={`text-[9px] font-bold ${
+                                                                     <div className="flex flex-col items-center">
+                                                                         <span className={`text-[11px] font-black ${
                                                                              days > 30 ? "text-rose-600" : 
                                                                              days > 7 ? "text-amber-600" : 
                                                                              "text-emerald-600"
                                                                          }`}>
-                                                                             {days === 0 ? "Today" : `${days} Days ago`}
+                                                                             {days === 0 ? "Today" : `${days} Days`}
+                                                                         </span>
+                                                                         <span className="text-[9px] font-bold text-gray-400">
+                                                                             {new Date(customer.lastReceiptDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
                                                                          </span>
                                                                      </div>
                                                                  );
@@ -963,7 +1245,11 @@ const BranchFollowUp = () => {
                                                              <span className="text-[10px] text-gray-300 italic">—</span>
                                                          )}
                                                      </td>
-                                                    {(isFieldAllowed("action_followup") || isFieldAllowed("action_log") || isFieldAllowed("action_ledger") || isFieldAllowed("action_edit")) && (
+                                                     {/* Margin Column */}
+                                                     <td className="px-2 py-3 text-center text-sm font-semibold text-gray-700 w-[55px] min-w-[55px] max-w-[55px]">
+                                                         {customer.margin || 0}%
+                                                     </td>
+                                                     {(isFieldAllowed("action_followup") || isFieldAllowed("action_log") || isFieldAllowed("action_ledger") || isFieldAllowed("action_edit")) && (
                                                         <td className="px-4 py-3 text-center">
                                                             <div className="flex items-center justify-center gap-2">
                                                                 {isFieldAllowed("action_followup") && (

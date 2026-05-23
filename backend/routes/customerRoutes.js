@@ -595,7 +595,7 @@ router.get("/export/snapshot-mar31", async (req, res) => {
  */
 router.get("/", async (req, res) => {
   try {
-    const { page = 1, limit = 10000, search = "", branchId, mini = false } = req.query;
+    const { page = 1, limit = 10000, search = "", branchId, mini = false, fromDate, toDate } = req.query;
     const isMini = mini === "true" || mini === true;
 
     console.log("🔍 GET /customers endpoint hit");
@@ -722,10 +722,13 @@ router.get("/", async (req, res) => {
       }
     });
 
-    const isAgeSort = sortBy === "age";
+    const isInvoiceAgeSort = sortBy === "invoiceAge";
+    const isReceiptAgeSort = sortBy === "age" || sortBy === "receiptAge";
+    const isSalesInvoiceSort = sortBy === "debit";
+    const isReceiptValueSort = sortBy === "credit";
 
-    // 2.5 Lookup Last Invoice for "Age" Sorting (ONLY if sorting by age)
-    if (isAgeSort) {
+    // 2.5 Lookup Last Invoice early if sorting by it
+    if (isInvoiceAgeSort) {
         pipeline.push(
             {
                 $lookup: {
@@ -743,7 +746,105 @@ router.get("/", async (req, res) => {
             {
                 $addFields: {
                     lastInvoiceDate: "$lastInv.invoiceDate",
-                    lastInvoiceNumber: "$lastInv.invoiceNumber"
+                    lastInvoiceNumber: "$lastInv.invoiceNumber",
+                    hasInvoiceDate: {
+                        $cond: {
+                            if: { $eq: [{ $ifNull: ["$lastInv.invoiceDate", null] }, null] },
+                            then: 0,
+                            else: 1
+                        }
+                    }
+                }
+            }
+        );
+    }
+
+    // 2.55 Lookup Last Receipt early if sorting by it
+    if (isReceiptAgeSort) {
+        pipeline.push(
+            {
+                $lookup: {
+                    from: "receipts",
+                    let: { cId: "$_id" },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: "confirmed" } },
+                        { $sort: { createdAt: -1 } },
+                        { $limit: 1 }
+                    ],
+                    as: "lastRec"
+                }
+            },
+            { $unwind: { path: "$lastRec", preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    lastReceiptDate: "$lastRec.createdAt",
+                    hasReceiptDate: {
+                        $cond: {
+                            if: { $eq: [{ $ifNull: ["$lastRec.createdAt", null] }, null] },
+                            then: 0,
+                            else: 1
+                        }
+                    }
+                }
+            }
+        );
+    }
+
+    // 2.56 Lookup Total Sales Invoice early if sorting by it
+    if (isSalesInvoiceSort) {
+        pipeline.push(
+            {
+                $lookup: {
+                    from: "invoices",
+                    let: { cId: "$_id" },
+                    pipeline: [
+                        { 
+                          $match: { 
+                            $expr: { $eq: ["$customer.customerId", "$$cId"] }, 
+                            status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
+                            ...(fromDate && toDate ? {
+                              invoiceDate: { $gte: new Date(fromDate), $lte: new Date(toDate) }
+                            } : {})
+                          } 
+                        },
+                        { $group: { _id: null, total: { $sum: "$grandTotal" } } }
+                    ],
+                    as: "invoiceSum"
+                }
+            },
+            {
+                $addFields: {
+                    totalSalesInvoice: { $ifNull: [{ $arrayElemAt: ["$invoiceSum.total", 0] }, 0] }
+                }
+            }
+        );
+    }
+
+    // 2.57 Lookup Total Receipt early if sorting by it
+    if (isReceiptValueSort) {
+        pipeline.push(
+            {
+                $lookup: {
+                    from: "receipts",
+                    let: { cId: "$_id" },
+                    pipeline: [
+                        { 
+                          $match: { 
+                            $expr: { $eq: ["$customer.customerId", "$$cId"] }, 
+                            status: "confirmed",
+                            ...(fromDate && toDate ? {
+                              createdAt: { $gte: new Date(fromDate), $lte: new Date(toDate) }
+                            } : {})
+                          } 
+                        },
+                        { $group: { _id: null, total: { $sum: "$amount" } } }
+                    ],
+                    as: "receiptSum"
+                }
+            },
+            {
+                $addFields: {
+                    totalReceiptValue: { $ifNull: [{ $arrayElemAt: ["$receiptSum.total", 0] }, 0] }
                 }
             }
         );
@@ -768,8 +869,20 @@ router.get("/", async (req, res) => {
       case "margin":
         sort.margin = order;
         break;
+      case "invoiceAge":
+        sort.hasInvoiceDate = -1;
+        sort.lastInvoiceDate = -order;
+        break;
       case "age":
-        sort.lastInvoiceDate = order;
+      case "receiptAge":
+        sort.hasReceiptDate = -1;
+        sort.lastReceiptDate = -order;
+        break;
+      case "debit":
+        sort.totalSalesInvoice = order;
+        break;
+      case "credit":
+        sort.totalReceiptValue = order;
         break;
       case "createdAt":
         sort.createdAt = order;
@@ -784,8 +897,8 @@ router.get("/", async (req, res) => {
     pipeline.push({ $skip: skip });
     pipeline.push({ $limit: pageSize });
 
-    // 2.6 Deferred Lookup (If NOT sorting by age, we do it after limit to save 1000s of joins)
-    if (!isAgeSort) {
+    // 2.6 Deferred Lookup for Last Invoice (If not already looked up early)
+    if (!isInvoiceAgeSort) {
         pipeline.push(
             {
                 $lookup: {
@@ -803,33 +916,49 @@ router.get("/", async (req, res) => {
             {
                 $addFields: {
                     lastInvoiceDate: "$lastInv.invoiceDate",
-                    lastInvoiceNumber: "$lastInv.invoiceNumber"
+                    lastInvoiceNumber: "$lastInv.invoiceNumber",
+                    hasInvoiceDate: {
+                        $cond: {
+                            if: { $eq: [{ $ifNull: ["$lastInv.invoiceDate", null] }, null] },
+                            then: 0,
+                            else: 1
+                        }
+                    }
                 }
             }
         );
     }
 
-    // 4.5 Lookup Last Receipt Date (Always, for showing in the column)
-    pipeline.push(
-        {
-            $lookup: {
-                from: "receipts",
-                let: { cId: "$_id" },
-                pipeline: [
-                    { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: "confirmed" } },
-                    { $sort: { createdAt: -1 } },
-                    { $limit: 1 }
-                ],
-                as: "lastRec"
+    // 2.65 Deferred Lookup for Last Receipt (If not already looked up early)
+    if (!isReceiptAgeSort) {
+        pipeline.push(
+            {
+                $lookup: {
+                    from: "receipts",
+                    let: { cId: "$_id" },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ["$customer.customerId", "$$cId"] }, status: "confirmed" } },
+                        { $sort: { createdAt: -1 } },
+                        { $limit: 1 }
+                    ],
+                    as: "lastRec"
+                }
+            },
+            { $unwind: { path: "$lastRec", preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    lastReceiptDate: "$lastRec.createdAt",
+                    hasReceiptDate: {
+                        $cond: {
+                            if: { $eq: [{ $ifNull: ["$lastRec.createdAt", null] }, null] },
+                            then: 0,
+                            else: 1
+                        }
+                    }
+                }
             }
-        },
-        { $unwind: { path: "$lastRec", preserveNullAndEmptyArrays: true } },
-        {
-            $addFields: {
-                lastReceiptDate: "$lastRec.createdAt"
-            }
-        }
-    );
+        );
+    }
 
     // 5. Lookups (Population)
     pipeline.push(
@@ -979,7 +1108,7 @@ router.get("/", async (req, res) => {
  */
 router.post("/balances", async (req, res) => {
   try {
-    const { customerIds, branchId } = req.body;
+    const { customerIds, branchId, fromDate, toDate } = req.body;
     if (!branchId || !customerIds || !Array.isArray(customerIds)) {
       return res.status(400).json({ success: false, message: "branchId and customerIds array required" });
     }
@@ -990,11 +1119,61 @@ router.post("/balances", async (req, res) => {
     const balances = await Customer.aggregate([
       { $match: { _id: { $in: objectIds }, branchId: branchObjectId } },
       {
+        $lookup: {
+          from: "invoices",
+          let: { cId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$customer.customerId", "$$cId"] },
+                status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
+                ...(fromDate && toDate ? {
+                  invoiceDate: { $gte: new Date(fromDate), $lte: new Date(toDate) }
+                } : {})
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: "$grandTotal" }
+              }
+            }
+          ],
+          as: "invoiceSum"
+        }
+      },
+      {
+        $lookup: {
+          from: "receipts",
+          let: { cId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$customer.customerId", "$$cId"] },
+                status: "confirmed",
+                ...(fromDate && toDate ? {
+                  createdAt: { $gte: new Date(fromDate), $lte: new Date(toDate) }
+                } : {})
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: "$amount" }
+              }
+            }
+          ],
+          as: "receiptSum"
+        }
+      },
+      {
         $project: {
           _id: 1,
           debit: { $ifNull: ["$debit", 0] },
           credit: { $ifNull: ["$credit", 0] },
-          netBalance: { $subtract: [{ $ifNull: ["$debit", 0] }, { $ifNull: ["$credit", 0] }] }
+          netBalance: { $subtract: [{ $ifNull: ["$debit", 0] }, { $ifNull: ["$credit", 0] }] },
+          totalSalesInvoice: { $ifNull: [{ $arrayElemAt: ["$invoiceSum.total", 0] }, 0] },
+          totalReceiptValue: { $ifNull: [{ $arrayElemAt: ["$receiptSum.total", 0] }, 0] }
         }
       }
     ]);
@@ -1776,7 +1955,15 @@ router.get("/:id/ledger", async (req, res) => {
                              mjAfterTo.reduce((sum, mj) => sum + (mj.amount || 0), 0) +
                              vendorCreditsAfter;
 
-    const openingBalance = currentBalance - totalDebitsAfter + totalCreditsAfter;
+    let openingBalance = currentBalance - totalDebitsAfter + totalCreditsAfter;
+
+    // 🔒 STRICTOR RULE: If querying from the start of the financial year (April 1st, 2026) or earlier,
+    // the opening balance is strictly bound to the imported/static opening balance field in the database.
+    // This prevents subsequent backdated entries or calculations from altering the historical 31st March balance.
+    const financialYearStart = new Date("2026-04-01T00:00:00.000Z");
+    if (start <= financialYearStart) {
+      openingBalance = customer.openingBalance || 0;
+    }
 
     // 3. Fetch Transactions for the requested range (STRICTLY BRANCH FILTERED)
     const invoicesInRange = await Invoice.find({

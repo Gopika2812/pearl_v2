@@ -40,7 +40,13 @@ router.get("/stats/delayed-pickups", auth, async (req, res) => {
     const query = {
       deliveryStatus: "PENDING",
       status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
-      createdAt: { $lt: yesterday, $gte: goLiveDate }
+      $or: [
+        // Case 2: If invoiceDate exists, it must be older than 24 hours ago
+        { invoiceDate: { $exists: true, $lt: yesterday } },
+        // If invoiceDate does not exist, fall back to createdAt being older than 24 hours ago
+        { invoiceDate: { $exists: false }, createdAt: { $lt: yesterday } }
+      ],
+      createdAt: { $gte: goLiveDate } // Keep the go-live cutoff safeguard
     };
 
     if (branchId && branchId !== "null" && branchId !== "undefined") {
@@ -86,7 +92,13 @@ router.get("/stats/delivery-lock", auth, async (req, res) => {
     const query = {
       status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
       deliveryStatus: { $in: ["PENDING", "PICKED"] },
-      createdAt: { $lt: cutoff, $gte: goLiveDate }
+      $or: [
+        // Case 2: If invoiceDate exists, it must be older than 48 hours ago
+        { invoiceDate: { $exists: true, $lt: cutoff } },
+        // If invoiceDate does not exist, fall back to createdAt being older than 48 hours ago
+        { invoiceDate: { $exists: false }, createdAt: { $lt: cutoff } }
+      ],
+      createdAt: { $gte: goLiveDate } // Keep the go-live cutoff safeguard
     };
 
     if (branchId && branchId !== "null" && branchId !== "undefined") {
