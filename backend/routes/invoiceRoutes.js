@@ -24,27 +24,27 @@ import { cacheData } from "../middleware/cacheMiddleware.js";
 const router = express.Router();
 import auth from "../middleware/auth.js";
 
-// GET - Count of delayed unpicked orders (MUST be above /:id)
+// GET - Count of delayed unpicked/uncompleted orders (MUST be above /:id)
 // Counting starts from 2026-05-20 (go-live date for Pick & Delivery)
 router.get("/stats/delayed-pickups", auth, async (req, res) => {
   try {
     const { branchId } = req.query;
 
-    // Logic: deliveryStatus: "PENDING", status: NOT "CANCELLED", createdAt < (current date - 1 day)
+    // Logic: deliveryStatus: "PENDING" or "PICKED", status: NOT "CANCELLED", effectiveDate < (current date - 50 hours)
     // Only count records created from go-live date (2026-05-20) onwards
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
+    const cutoff = new Date();
+    cutoff.setHours(cutoff.getHours() - 50);
 
     const goLiveDate = new Date("2026-05-20T00:00:00+05:30");
 
     const query = {
-      deliveryStatus: "PENDING",
+      deliveryStatus: { $in: ["PENDING", "PICKED"] },
       status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
       $or: [
-        // Case 2: If invoiceDate exists, it must be older than 24 hours ago
-        { invoiceDate: { $exists: true, $lt: yesterday } },
-        // If invoiceDate does not exist, fall back to createdAt being older than 24 hours ago
-        { invoiceDate: { $exists: false }, createdAt: { $lt: yesterday } }
+        // Case 1: If invoiceDate exists, it must be older than 50 hours ago
+        { invoiceDate: { $exists: true, $lt: cutoff } },
+        // If invoiceDate does not exist, fall back to createdAt being older than 50 hours ago
+        { invoiceDate: { $exists: false }, createdAt: { $lt: cutoff } }
       ],
       createdAt: { $gte: goLiveDate } // Keep the go-live cutoff safeguard
     };
@@ -61,7 +61,7 @@ router.get("/stats/delayed-pickups", auth, async (req, res) => {
   }
 });
 
-// GET - Check if Sales Order menu is locked due to pending deliveries > 2 days
+// GET - Check if Sales Order menu is locked due to pending deliveries > 50 hours
 // Returns { locked: true/false, count: number } - pure read, no existing code modified
 router.get("/stats/delivery-lock", auth, async (req, res) => {
   try {
@@ -82,9 +82,9 @@ router.get("/stats/delivery-lock", auth, async (req, res) => {
       }
     }
 
-    // 48 hours ago
+    // 50 hours ago
     const cutoff = new Date();
-    cutoff.setHours(cutoff.getHours() - 48);
+    cutoff.setHours(cutoff.getHours() - 50);
 
     // Only check records from go-live date onwards
     const goLiveDate = new Date("2026-05-20T00:00:00+05:30");
@@ -93,9 +93,9 @@ router.get("/stats/delivery-lock", auth, async (req, res) => {
       status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
       deliveryStatus: { $in: ["PENDING", "PICKED"] },
       $or: [
-        // Case 2: If invoiceDate exists, it must be older than 48 hours ago
+        // Case 1: If invoiceDate exists, it must be older than 50 hours ago
         { invoiceDate: { $exists: true, $lt: cutoff } },
-        // If invoiceDate does not exist, fall back to createdAt being older than 48 hours ago
+        // If invoiceDate does not exist, fall back to createdAt being older than 50 hours ago
         { invoiceDate: { $exists: false }, createdAt: { $lt: cutoff } }
       ],
       createdAt: { $gte: goLiveDate } // Keep the go-live cutoff safeguard

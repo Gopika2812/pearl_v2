@@ -124,7 +124,7 @@ export function BranchProvider({ children }) {
     return () => clearInterval(interval);
   }, [user?.id, user?._id, currentBranch?._id, currentBranch?.id]);
 
-  // Check if Sales Order menu should be locked due to pending deliveries > 2 days
+  // Check if Sales Order menu should be locked due to pending deliveries > 50 hours
   const refreshSalesOrderLockStatus = async () => {
     const branchId = currentBranch?._id || currentBranch?.id;
     const userRole = user?.role;
