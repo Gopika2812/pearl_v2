@@ -290,7 +290,7 @@ const SuperAdminTopbar = ({ onMenuClick }) => {
                   }
                 }}
                 className="flex items-center gap-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-amber-500/20 relative shadow-lg shadow-amber-500/5"
-                title={`${delayedPickups} Orders not picked for more than 24 hours`}
+                title={`${delayedPickups} Orders not completed/picked for more than 50 hours`}
               >
                 <div className="relative">
                   <FaTruck className="text-amber-500" />

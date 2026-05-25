@@ -69,7 +69,7 @@ export default function BranchTopbar({ onMenuClick }) {
       {isSalesOrderLocked && user?.role !== "SUPER_ADMIN" && user?.role !== "SUPERADMIN" && (
         <div className="w-full max-w-[1600px] bg-rose-500 text-white px-5 py-2 rounded-2xl text-[11px] font-black shadow-lg flex items-center justify-center gap-2 pointer-events-auto animate-pulse-slow border border-rose-400/50">
           <FaExclamationTriangle className="shrink-0" />
-          <span>⚠️ Sales Order menu is disabled — pending deliveries older than 2 days exist. Ask <strong>Saravan Sir</strong> to enable.</span>
+          <span>⚠️ Sales Order menu is disabled — pending deliveries older than 50 hours exist. Ask <strong>Saravan Sir</strong> to enable.</span>
         </div>
       )}
       <div className="bg-white/90 backdrop-blur-md shadow-xl px-4 md:px-8 py-3 rounded-3xl w-full max-w-[1600px] relative pointer-events-auto border border-gray-100/50 flex items-center justify-between">
@@ -81,7 +81,7 @@ export default function BranchTopbar({ onMenuClick }) {
         >
           <FaBars size={18} className="text-slate-700" />
         </button>
-
+ 
         {/* Left Side: Branch Info */}
         <div className="hidden md:flex items-center gap-6">
           <div className="flex flex-col">
@@ -117,7 +117,7 @@ export default function BranchTopbar({ onMenuClick }) {
              </div>
           </div>
         </div>
-
+ 
         {/* Right Side: User & Actions */}
         <div className="flex items-center gap-5">
           {/* Delayed Pickups Notification */}
@@ -125,7 +125,7 @@ export default function BranchTopbar({ onMenuClick }) {
             <button
               onClick={() => navigate("/branch/delivery-flow?status=PENDING")}
               className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 transition-all relative group text-amber-600 border border-amber-100 shadow-sm"
-              title={`${delayedPickups} Orders not picked for more than 24 hours`}
+              title={`${delayedPickups} Orders not completed/picked for more than 50 hours`}
             >
               <div className="relative">
                 <FaTruck size={18} />

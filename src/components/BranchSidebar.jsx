@@ -152,7 +152,7 @@ const BranchSidebar = ({ isOpen, onClose, isBlocked }) => {
         </button>
         {isSalesLocked && (
             <div className="hidden group-hover/locked:block absolute top-0 left-full ml-4 z-50 w-64 p-3 bg-rose-500 rounded-xl text-white text-xs font-bold shadow-2xl">
-                ⚠️ Sales Order menu is disabled due to pending deliveries older than 2 days. Contact Saravan Sir to enable.
+                ⚠️ Sales Order menu is disabled due to pending deliveries older than 50 hours. Contact Saravan Sir to enable.
             </div>
         )}
         {isOpen && (
