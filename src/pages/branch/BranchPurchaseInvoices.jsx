@@ -32,6 +32,24 @@ const BranchPurchaseInvoices = () => {
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
+  // Automatically clear default today's dates when user types a search term, and restore them when search is cleared
+  useEffect(() => {
+    const term = (searchTerm || "").trim();
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    if (term) {
+      if (filterFromDate === todayStr && filterToDate === todayStr) {
+        setFilterFromDate("");
+        setFilterToDate("");
+      }
+    } else {
+      if (filterFromDate === "" && filterToDate === "") {
+        setFilterFromDate(todayStr);
+        setFilterToDate(todayStr);
+      }
+    }
+  }, [searchTerm]);
+
   const fetchInvoices = async () => {
     if (!currentBranch?._id) return;
     setLoading(true);

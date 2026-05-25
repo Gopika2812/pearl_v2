@@ -82,6 +82,24 @@ const BranchInvoicedOrders = () => {
     return () => clearTimeout(handler);
   }, [filterInvoiceId, filterCustomerName]);
 
+  // Automatically clear default today's dates when user types a search term, and restore them when search is cleared
+  useEffect(() => {
+    const term = (filterInvoiceId || filterCustomerName || "").trim();
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    
+    if (term) {
+      if (filterFromDate === todayStr && filterToDate === todayStr) {
+        setFilterFromDate("");
+        setFilterToDate("");
+      }
+    } else {
+      if (filterFromDate === "" && filterToDate === "") {
+        setFilterFromDate(todayStr);
+        setFilterToDate(todayStr);
+      }
+    }
+  }, [filterInvoiceId, filterCustomerName]);
+
   // Selection state for multi-select loading slip
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const selectedOrders = salesOrders.filter(so => selectedOrderIds.includes(so._id));
