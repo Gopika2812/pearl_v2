@@ -27,7 +27,7 @@ export const getAPIEndpoint = (path) => {
   return `${API_BASE}${path}`;
 };
 
-// Utility to create axios instance with proper error handling
+
 export const createApiClient = (axiosInstance) => {
   const instance = axiosInstance.create({
     baseURL: API_BASE,
