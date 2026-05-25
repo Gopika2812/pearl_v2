@@ -28,6 +28,15 @@ const branchUserSchema = new mongoose.Schema(
       ref: "Branch",
       required: true,
     },
+    allowedBranches: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Branch",
+        },
+      ],
+      default: [],
+    },
     branchName: {
       type: String,
       default: "",

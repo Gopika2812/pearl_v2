@@ -388,7 +388,8 @@ router.get("/", async (req, res) => {
           threshold: p.restockingConfig?.threshold !== undefined && p.restockingConfig?.threshold !== null 
             ? p.restockingConfig.threshold 
             : sellingQty,
-          restockingQty: p.restockingConfig?.restockingQty || null
+          restockingQty: p.restockingConfig?.restockingQty || null,
+          reorderMode: p.restockingConfig?.reorderMode || "HIGH",
         });
       });
     }
@@ -407,11 +408,12 @@ router.get("/", async (req, res) => {
                          - (outwardSales + outwardDebitNotes + psv.outward);
 
       const dynamicRestocking = restockingMap.get(pId);
-      const restockingConfig = dynamicRestocking || product.restockingConfig || {
-        salesPeriodDays: 7,
-        sellingQtyInPeriod: 0,
-        threshold: 10,
-        restockingQty: null
+      const restockingConfig = {
+        salesPeriodDays: dynamicRestocking?.salesPeriodDays ?? product.restockingConfig?.salesPeriodDays ?? 7,
+        sellingQtyInPeriod: dynamicRestocking?.sellingQtyInPeriod ?? product.restockingConfig?.sellingQtyInPeriod ?? 0,
+        threshold: dynamicRestocking?.threshold ?? product.restockingConfig?.threshold ?? null,
+        restockingQty: dynamicRestocking?.restockingQty ?? product.restockingConfig?.restockingQty ?? null,
+        reorderMode: dynamicRestocking?.reorderMode ?? product.restockingConfig?.reorderMode ?? "HIGH",
       };
 
       return {
@@ -2064,7 +2066,7 @@ router.get("/:productId/selling-qty/:days", async (req, res) => {
 router.put("/:productId/restocking-config", async (req, res) => {
   try {
     const { productId } = req.params;
-    const { salesPeriodDays, threshold, restockingQty, sellingQtyInPeriod } = req.body;
+    const { salesPeriodDays, threshold, restockingQty, sellingQtyInPeriod, reorderMode } = req.body;
 
     console.log("📥 Backend received:", {
       productId,
@@ -2072,6 +2074,7 @@ router.put("/:productId/restocking-config", async (req, res) => {
       threshold,
       restockingQty,
       sellingQtyInPeriod,
+      reorderMode,
     });
 
     if (!mongoose.Types.ObjectId.isValid(productId)) {
@@ -2094,10 +2097,12 @@ router.put("/:productId/restocking-config", async (req, res) => {
       sellingQtyInPeriod: sellingQtyInPeriod !== undefined ? sellingQtyInPeriod : product.restockingConfig?.sellingQtyInPeriod || 0,
       threshold: threshold !== undefined && threshold !== null ? parseInt(threshold) : (product.restockingConfig?.threshold || null),
       restockingQty: restockingQty !== undefined && restockingQty !== null ? parseInt(restockingQty) : (product.restockingConfig?.restockingQty || null),
+      reorderMode: reorderMode || product.restockingConfig?.reorderMode || "HIGH",
     };
 
     console.log("💾 Saving to DB:", product.restockingConfig);
 
+    product.markModified("restockingConfig");
     await product.save();
 
     console.log("✅ Saved successfully!");

@@ -138,8 +138,8 @@ router.post("/:id/record-payment", clearCachePrefix("/api/sales-orders"), async 
 // GET all sales orders with filtering and date ranges
 router.get("/", async (req, res) => {
   try {
-    const { branchId, customerName, status, isClaim, fromDate, toDate, customerId, search, voucherType, generated } = req.query;
-    console.log("🔍 [DEBUG] Sales Order Fetch Query:", { branchId, isClaim, fromDate, toDate, search, voucherType });
+    const { branchId, customerName, status, isClaim, fromDate, toDate, customerId, search, voucherType, generated, isDummy } = req.query;
+    console.log("🔍 [DEBUG] Sales Order Fetch Query:", { branchId, isClaim, fromDate, toDate, search, voucherType, isDummy });
     const query = {};
 
     // 1. Branch Filter (Always required)
@@ -155,6 +155,13 @@ router.get("/", async (req, res) => {
     // 3. Invoice Generation Filter
     if (generated !== undefined && generated !== "") {
       query.invoiceGenerated = generated === "true";
+    }
+
+    // 3.5. Dummy Filter
+    if (isDummy !== undefined && isDummy !== "") {
+      query.isDummy = isDummy === "true";
+    } else {
+      query.isDummy = { $ne: true };
     }
 
     // 4. Global Search (Overrides strict date filter if provided)
@@ -499,11 +506,13 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
       orderDate,
       spottedCustomerName,
       spottedPhoneNumber,
+      isDummy,
+      customInvoiceId,
     } = req.body;
 
     console.log("📤 POST /sales-orders received");
 
-    if (!voucherType || (!items?.length && !sampleItems?.length) || !branchId) {
+    if ((!isDummy && !voucherType) || (!items?.length && !sampleItems?.length) || !branchId) {
       console.error("❌ Missing required fields:", { voucherType, itemsLength: items?.length, sampleItemsLength: sampleItems?.length, branchId });
       return res.status(400).json({ message: "Invalid sales order data - voucherType, branchId, and at least one item (Regular or Sample) are required" });
     }
@@ -511,74 +520,97 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
     const currentFY = getFinancialYear();
     console.log("📅 Financial year:", currentFY);
 
-    // 🔑 Fetch voucher
-    const voucher = await VoucherType.findOne({
-      branchId,
-      name: voucherType.toLowerCase(),
-      orderType: "SO",
-    });
+    let invoiceId = req.body.invoiceId || req.body.customInvoiceId;
+    let nextNum;
+    let voucher;
 
-    if (!voucher) {
-      return res.status(404).json({ message: "Sales voucher not found" });
-    }
-
-    // 🔁 Reset counter if FY changed
-    if (voucher.financialYear !== currentFY) {
-      voucher.counter = 1;
-      voucher.financialYear = currentFY;
-    }
-
-    // 🛡️ SYNC COUNTER WITH DATABASE (Collision Protection)
-    const existingOrders = await SalesOrder.find({
-      branchId,
-      invoiceId: new RegExp(`^${voucher.prefix}/`),
-      financialYear: currentFY
-    }).select('invoiceId').lean();
-
-    let highestNumInDB = 0;
-    existingOrders.forEach(order => {
-      const parts = order.invoiceId.split('/');
-      if (parts.length >= 2) {
-        const num = parseInt(parts[1]);
-        if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+    if (isDummy) {
+      if (!invoiceId) {
+        invoiceId = "D1/001/" + currentFY;
       }
-    });
+      console.log("📝 Dummy invoiceId to use:", invoiceId);
+    } else {
+      // 🔑 Fetch voucher
+      voucher = await VoucherType.findOne({
+        branchId,
+        name: voucherType.toLowerCase(),
+        orderType: "SO",
+      });
 
-    const nextNum = Math.max(voucher.counter, highestNumInDB + 1);
-    const invoiceId = `${voucher.prefix}/${String(nextNum).padStart(3, "0")}/${currentFY}`;
+      if (!voucher) {
+        return res.status(404).json({ message: "Sales voucher not found" });
+      }
 
-    console.log("📝 Generated invoiceId:", invoiceId, `(Highest in DB: ${highestNumInDB})`);
+      // 🔁 Reset counter if FY changed
+      if (voucher.financialYear !== currentFY) {
+        voucher.counter = 1;
+        voucher.financialYear = currentFY;
+      }
 
-    // ✅ FETCH CUSTOMER INSIDE ROUTE
-    const dbCustomer = await Customer.findById(customer.id);
+      // 🛡️ SYNC COUNTER WITH DATABASE (Collision Protection)
+      const existingOrders = await SalesOrder.find({
+        branchId,
+        invoiceId: new RegExp(`^${voucher.prefix}/`),
+        financialYear: currentFY
+      }).select('invoiceId').lean();
 
-    if (!dbCustomer) {
-      console.error("❌ Customer not found:", customer.id);
-      return res.status(404).json({ message: "Customer not found" });
+      let highestNumInDB = 0;
+      existingOrders.forEach(order => {
+        const parts = order.invoiceId.split('/');
+        if (parts.length >= 2) {
+          const num = parseInt(parts[1]);
+          if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+        }
+      });
+
+      nextNum = Math.max(voucher.counter, highestNumInDB + 1);
+      invoiceId = `${voucher.prefix}/${String(nextNum).padStart(3, "0")}/${currentFY}`;
+
+      console.log("📝 Generated invoiceId:", invoiceId, `(Highest in DB: ${highestNumInDB})`);
     }
 
-    console.log("✅ Customer found:", dbCustomer.name);
+    let openingBalance = 0;
+    let closingBalance = 0;
+    let customerIdToUse = customer?.id || customer?.customerId;
 
-    const openingBalance = (dbCustomer.debit || 0) - (dbCustomer.credit || 0);
-    const closingBalance = Math.round(openingBalance + grandTotal);
+    if (isDummy) {
+      openingBalance = 0;
+      closingBalance = grandTotal || 0;
+      if (!customerIdToUse || !mongoose.Types.ObjectId.isValid(customerIdToUse)) {
+        customerIdToUse = new mongoose.Types.ObjectId("000000000000000000000000");
+      }
+    } else {
+      // ✅ FETCH CUSTOMER INSIDE ROUTE
+      const dbCustomer = await Customer.findById(customerIdToUse);
+
+      if (!dbCustomer) {
+        console.error("❌ Customer not found:", customerIdToUse);
+        return res.status(404).json({ message: "Customer not found" });
+      }
+
+      console.log("✅ Customer found:", dbCustomer.name);
+
+      openingBalance = (dbCustomer.debit || 0) - (dbCustomer.credit || 0);
+      closingBalance = Math.round(openingBalance + grandTotal);
+    }
 
     // 🧾 Save Sales Order
     const salesOrder = new SalesOrder({
       invoiceId,
-      voucherType,
+      voucherType: isDummy ? "dummy" : voucherType,
       orderType: "SO",
       branchId,
       customer: {
-        customerId: customer.id,
-        name: customer.name,
-        whatsapp: customer.whatsapp,
-        address: customer.address,
-        district: customer.district,
-        state: customer.state,
-        stateCode: customer.stateCode || "33",
-        pincode: customer.pincode,
-        gstin: customer.gstin,
-        customerGroup: customer.customerGroup,
+        customerId: customerIdToUse,
+        name: customer?.name || spottedCustomerName || "Dummy Customer",
+        whatsapp: customer?.whatsapp || spottedPhoneNumber || "",
+        address: customer?.address || "",
+        district: customer?.district || "",
+        state: customer?.state || "Tamil Nadu",
+        stateCode: customer?.stateCode || "33",
+        pincode: customer?.pincode || "",
+        gstin: customer?.gstin || "",
+        customerGroup: customer?.customerGroup || "",
       },
       openingBalance: Math.round(openingBalance),
       closingBalance,
@@ -614,14 +646,18 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
       orderDate: orderDate ? new Date(orderDate) : new Date(),
       spottedCustomerName,
       spottedPhoneNumber,
+      isDummy: isDummy === true,
     });
 
     await salesOrder.save();
     console.log("✅ SalesOrder saved successfully");
 
-    // ✅ Sync and Increment voucher counter
-    voucher.counter = nextNum + 1;
-    await voucher.save();
+    if (!isDummy && voucher) {
+      // ✅ Sync and Increment voucher counter
+      voucher.counter = nextNum + 1;
+      await voucher.save();
+      console.log(`✅ Voucher counter incremented to ${voucher.counter}`);
+    }
 
     // Log Sales Order creation
     await createAuditLog({
@@ -629,13 +665,11 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
       userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
       username: req.user.username,
       branchId: salesOrder.branchId,
-      action: "CREATE_SO",
-      description: `Created Sales Order: ${salesOrder.invoiceId} for ${salesOrder.customer.name}. Total: ₹${salesOrder.grandTotal}`,
+      action: isDummy ? "CREATE_DUMMY_SO" : "CREATE_SO",
+      description: `${isDummy ? 'Created Dummy Bill' : 'Created Sales Order'}: ${salesOrder.invoiceId} for ${salesOrder.customer.name}. Total: ₹${salesOrder.grandTotal}`,
       targetId: salesOrder._id,
       targetModel: "SalesOrder",
     });
-
-    console.log(`✅ Voucher counter incremented to ${voucher.counter}`);
 
     res.status(201).json({
       message: "Sales order created successfully",
@@ -1428,11 +1462,15 @@ router.get("/unpaid/:customerId", async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, commonDiscount, extraExpenses, extraExpenseAmount, customer, transportCharge, transportGstPercent, transportGstAmount, roundOff, orderDate } = req.body;
+    const { items, sampleItems, grandTotal, subtotal, totalTax, totalDiscount, commonDiscount, extraExpenses, extraExpenseAmount, customer, transportCharge, transportGstPercent, transportGstAmount, roundOff, orderDate, invoiceId } = req.body;
 
     const salesOrder = await SalesOrder.findById(id);
     if (!salesOrder) {
       return res.status(404).json({ message: "Sales order not found" });
+    }
+
+    if (salesOrder.isDummy && invoiceId) {
+      salesOrder.invoiceId = invoiceId;
     }
 
     if (orderDate) {

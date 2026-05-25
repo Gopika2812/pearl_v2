@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaFileExcel, FaTimes, FaTruck, FaFilePdf, FaQrcode } from "react-icons/fa";
+import { FaChevronDown, FaFileAlt, FaFileContract, FaHistory, FaSearch, FaSync, FaTrash, FaFileExcel, FaTimes, FaTruck, FaFilePdf, FaQrcode, FaFileInvoice } from "react-icons/fa";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
@@ -115,6 +115,7 @@ const BranchSalesInvoices = () => {
   const [sortField, setSortField] = useState("invoiceDate");
   const [sortOrder, setSortOrder] = useState("desc");
   const [selectedInvoices, setSelectedInvoices] = useState([]);
+  const [showDummyBills, setShowDummyBills] = useState(false);
   
   // Permission helper
   const isFieldAllowed = (fieldId) => {
@@ -180,22 +181,67 @@ const BranchSalesInvoices = () => {
     if (!currentBranch?._id) return;
     setLoading(true);
     try {
-      // Build query string
-      let url = `${API_BASE}/invoices?branchId=${currentBranch._id}&page=${currentPage}&limit=100`;
-      
-      if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
-      if (filterFromDate) url += `&fromDate=${filterFromDate}`;
-      if (filterToDate) url += `&toDate=${filterToDate}`;
-      if (filterVoucherPrefix) url += `&vPrefix=${encodeURIComponent(filterVoucherPrefix)}`;
-      if (filterEinvoiceStatus) url += `&einvoiceStatus=${filterEinvoiceStatus}`;
-      if (sortField) url += `&sortBy=${sortField}&sortOrder=${sortOrder}`;
+      if (showDummyBills) {
+        let url = `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isDummy=true`;
+        if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
+        if (filterFromDate) url += `&fromDate=${filterFromDate}`;
+        if (filterToDate) url += `&toDate=${filterToDate}`;
 
-      const res = await fetchWithAuth(url);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to fetch invoices");
-      setInvoices(data.data || []);
-      if (data.pagination) {
-        setPagination(data.pagination);
+        const res = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Failed to fetch dummy bills");
+
+        // Map sales orders to match invoice structure for rendering
+        const mappedDummyBills = (data || []).map(order => ({
+          _id: order._id,
+          createdAt: order.createdAt,
+          invoiceDate: order.orderDate || order.createdAt,
+          invoiceNumber: order.invoiceId,
+          salesOrderId: {
+            _id: order._id,
+            invoiceId: order.invoiceId,
+            billingPerson: order.billingPerson
+          },
+          customer: order.customer,
+          billingPerson: order.billingPerson,
+          grandTotal: order.grandTotal,
+          deliveryMan: order.deliveryMan,
+          einvoiceStatus: "DUMMY_BILL",
+          status: order.status,
+          items: order.items,
+          sampleItems: order.sampleItems,
+          subtotal: order.subtotal,
+          totalDiscount: order.totalDiscount,
+          commonDiscount: order.commonDiscount,
+          totalTax: order.totalTax,
+          transportCharge: order.transportCharge,
+          isDummy: true
+        }));
+
+        setInvoices(mappedDummyBills);
+        setPagination({ total: mappedDummyBills.length, pages: 1 });
+      } else {
+        // Build query string
+        let url = `${API_BASE}/invoices?branchId=${currentBranch._id}&page=${currentPage}&limit=100`;
+        
+        if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
+        if (filterFromDate) url += `&fromDate=${filterFromDate}`;
+        if (filterToDate) url += `&toDate=${filterToDate}`;
+        if (filterVoucherPrefix) url += `&vPrefix=${encodeURIComponent(filterVoucherPrefix)}`;
+        if (filterEinvoiceStatus) url += `&einvoiceStatus=${filterEinvoiceStatus}`;
+        if (sortField) url += `&sortBy=${sortField}&sortOrder=${sortOrder}`;
+
+        const res = await fetchWithAuth(url);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Failed to fetch invoices");
+        setInvoices(data.data || []);
+        if (data.pagination) {
+          setPagination(data.pagination);
+        }
       }
     } catch (err) {
       toast.error(err.message);
@@ -206,7 +252,7 @@ const BranchSalesInvoices = () => {
 
   useEffect(() => {
     fetchInvoices();
-  }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate, filterVoucherPrefix, filterEinvoiceStatus, currentPage, sortField, sortOrder]);
+  }, [currentBranch?._id, debouncedSearch, filterFromDate, filterToDate, filterVoucherPrefix, filterEinvoiceStatus, currentPage, sortField, sortOrder, showDummyBills]);
 
   const fetchVoucherTypes = async () => {
     if (!currentBranch?._id) return;
@@ -289,8 +335,10 @@ const BranchSalesInvoices = () => {
       [invoiceId]: isExpanding,
     }));
 
-    // If expanding, always try to fetch full details to ensure items/QR/EWB links are fresh
-    if (isExpanding) {
+    const invoice = invoices.find(i => i._id === invoiceId);
+
+    // If expanding, always try to fetch full details to ensure items/QR/EWB links are fresh (skip for dummy bills)
+    if (isExpanding && !invoice?.isDummy) {
         setFetchingDetails(prev => ({ ...prev, [invoiceId]: true }));
         try {
             const res = await fetchWithAuth(`${API_BASE}/invoices/${invoiceId}`);
@@ -642,6 +690,49 @@ const BranchSalesInvoices = () => {
     }
   };
 
+  const handlePrintDummyBill = (order) => {
+    const previewData = {
+      seller: {
+        name: currentBranch?.name || "PEARL AGENCY",
+        address: currentBranch?.address || "12/13 Price car care compound, South byepass road, Tirunelveli, vannerpettai...",
+        phone: currentBranch?.phone || "91 95850 23300",
+        gstin: currentBranch?.gstin || "33DULPS2600Q1Z6",
+        logo: currentBranch?.logo || "/logo.jpeg",
+      },
+      customer: {
+        name: order.customer?.name || "Dummy Customer",
+        whatsapp: order.customer?.whatsapp || "",
+        address: order.customer?.address || "",
+        gstin: order.customer?.gstin || "",
+      },
+      items: order.items || [],
+      sampleItems: order.sampleItems || [],
+      subtotal: order.subtotal || 0,
+      totalDiscount: order.totalDiscount || 0,
+      commonDiscount: order.commonDiscount || 0,
+      totalTax: {
+        cgst: (order.totalTax || 0) / 2,
+        sgst: (order.totalTax || 0) / 2,
+        igst: 0,
+        total: order.totalTax || 0,
+      },
+      grandTotal: order.grandTotal || 0,
+      openingBalance: 0,
+      closingBalance: order.grandTotal || 0,
+    };
+
+    const html = getInvoiceHTML(previewData, 1, order, order);
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+        setTimeout(() => printWindow.close(), 1000);
+      }, 500);
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-gray-50 pt-20 md:pt-4 md:pl-20">
@@ -721,11 +812,11 @@ const BranchSalesInvoices = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-black text-slate-800">
-                  Sales Invoices
-                  <span className="text-indigo-600 ml-1">History</span>
+                  {showDummyBills ? "Dummy Bill Records" : "Sales Invoices"}
+                  <span className="text-indigo-600 ml-1">{showDummyBills ? "" : "History"}</span>
                 </h1>
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                  Manage & Monitor branch-level realizations
+                  {showDummyBills ? "Manage and print dummy sales records (No Stock/Balance effects)" : "Manage & Monitor branch-level realizations"}
                 </p>
               </div>
             </div>
@@ -776,6 +867,21 @@ const BranchSalesInvoices = () => {
                     REG REPORT
                   </button>
                 </>
+              )}
+               {(user?.role === "SUPER_ADMIN" || user?.actionPermissions?.allowDummyBills === true) && (
+                <div className="relative">
+                  <select
+                    value={showDummyBills ? "dummy" : "regular"}
+                    onChange={(e) => {
+                      setShowDummyBills(e.target.value === "dummy");
+                      setCurrentPage(1);
+                    }}
+                    className="bg-white border-2 border-indigo-600/20 focus:border-indigo-600 text-indigo-600 font-black text-[10px] px-4 py-2.5 rounded-xl outline-none shadow-sm transition-all cursor-pointer uppercase tracking-widest hover:bg-gray-50 h-10"
+                  >
+                    <option value="regular">Regular Invoices</option>
+                    <option value="dummy">Dummy Bills</option>
+                  </select>
+                </div>
               )}
               <button
                 onClick={fetchInvoices}
@@ -980,18 +1086,29 @@ const BranchSalesInvoices = () => {
                         {isFieldAllowed("createdBy") && (
                           <td className="px-6 py-5">
                             <div className="flex flex-col gap-1.5">
-                              {inv.salesOrderId?.billingPerson && (inv.generatedBy || inv.billingPerson) !== inv.salesOrderId?.billingPerson && (
-                                 <div className="flex items-center gap-1.5 opacity-60">
-                                    <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase tracking-widest border border-slate-200">SO</span>
-                                    <span className="text-[10px] font-bold text-slate-500 truncate max-w-[100px]">{inv.salesOrderId.billingPerson}</span>
-                                 </div>
+                              {inv.isDummy ? (
+                                <div className="flex items-center gap-1.5">
+                                   <span className="text-[8px] font-black bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded uppercase tracking-widest border border-purple-200">DUMMY</span>
+                                   <span className="text-[10px] font-black text-purple-700 uppercase tracking-tight">
+                                      {inv.billingPerson || "SYSTEM"}
+                                   </span>
+                                </div>
+                              ) : (
+                                <>
+                                  {inv.salesOrderId?.billingPerson && (inv.generatedBy || inv.billingPerson) !== inv.salesOrderId?.billingPerson && (
+                                     <div className="flex items-center gap-1.5 opacity-60">
+                                        <span className="text-[8px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase tracking-widest border border-slate-200">SO</span>
+                                        <span className="text-[10px] font-bold text-slate-500 truncate max-w-[100px]">{inv.salesOrderId.billingPerson}</span>
+                                     </div>
+                                  )}
+                                  <div className="flex items-center gap-1.5">
+                                     <span className="text-[8px] font-black bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase tracking-widest border border-indigo-200">INV</span>
+                                     <span className="text-[10px] font-black text-indigo-700 uppercase tracking-tight">
+                                        {inv.generatedBy || inv.billingPerson || inv.salesOrderId?.billingPerson || "SYSTEM"}
+                                     </span>
+                                  </div>
+                                </>
                               )}
-                              <div className="flex items-center gap-1.5">
-                                 <span className="text-[8px] font-black bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded uppercase tracking-widest border border-indigo-200">INV</span>
-                                 <span className="text-[10px] font-black text-indigo-700 uppercase tracking-tight">
-                                    {inv.generatedBy || inv.billingPerson || inv.salesOrderId?.billingPerson || "SYSTEM"}
-                                 </span>
-                              </div>
                             </div>
                           </td>
                         )}
@@ -1020,7 +1137,11 @@ const BranchSalesInvoices = () => {
                         {isFieldAllowed("einvoiceStatus") && (
                           <td className="px-6 py-5 text-center">
                             <div className="flex flex-col gap-2 scale-90">
-                              {inv.einvoiceStatus === "GENERATED" ? (
+                              {inv.isDummy ? (
+                                <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-purple-200">
+                                  📋 DUMMY BILL
+                                </span>
+                              ) : inv.einvoiceStatus === "GENERATED" ? (
                                 <div className="flex flex-col items-center gap-1">
                                   <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-green-200">
                                     ✅ IRN READY
@@ -1041,14 +1162,14 @@ const BranchSalesInvoices = () => {
                                   📄 SI PENDING
                                 </span>
                               )}
-                              {inv.ewayBillNo ? (
+                              {!inv.isDummy && inv.ewayBillNo ? (
                                 <div className="flex flex-col items-center gap-1">
                                   <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-blue-200">
                                     🚚 EWB READY
                                   </span>
                                   <code className="text-[8px] bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-bold">{inv.ewayBillNo}</code>
                                 </div>
-                              ) : inv.grandTotal > 10000 ? (
+                              ) : (!inv.isDummy && inv.grandTotal > 10000) ? (
                                 <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-orange-200">
                                   📦 EWB REQD
                                 </span>
@@ -1061,6 +1182,10 @@ const BranchSalesInvoices = () => {
                             {inv.status === "CANCELLED" ? (
                               <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-red-200">
                                 Cancelled
+                              </span>
+                            ) : inv.isDummy ? (
+                              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-200">
+                                Active Dummy
                               </span>
                             ) : inv.salesOrderId?.reEditRequestStatus === "PENDING" ? (
                               <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">
@@ -1080,115 +1205,125 @@ const BranchSalesInvoices = () => {
                         {(isFieldAllowed("action_return") || isFieldAllowed("action_ewb") || isFieldAllowed("action_cancel") || isFieldAllowed("action_pdf")) && (
                           <td className="px-6 py-4 text-center">
                             <div className="flex items-center gap-2 justify-center flex-wrap">
-                              {isFieldAllowed("action_ewb") && inv.einvoiceStatus === "GENERATED" && !inv.ewayBillNo && inv.grandTotal > 10000 && (
+                              {inv.isDummy ? (
                                 <button
-                                  onClick={() => handleGenerateEWayBillOnly(inv)}
-                                  disabled={requestingAction === inv._id}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-600 hover:text-white text-[10px] font-black transition-all"
+                                  onClick={() => handlePrintDummyBill(inv)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 text-[10px] font-black transition-all shadow-sm border border-indigo-700 hover:scale-105 transform duration-150"
+                                  title="Print Dummy Bill"
                                 >
-                                  {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <><FaSync size={12} /> GEN EWB</>}
+                                  <FaFileInvoice className="text-sm mr-1" />
+                                  <span>Print</span>
                                 </button>
-                              )}
-                              {/* RETURN (FULL) BUTTON REMOVED PER USER REQUEST */}
-                              {isFieldAllowed("action_ewb") && (
-                                <button
-                                  onClick={() => handleGenerateEInvoice(inv)}
-                                  disabled={requestingAction === inv._id}
-                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo
-                                    ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
-                                    : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
-                                    }`}
-                                >
-                                  {requestingAction === inv._id ? <FaSync className="animate-spin" /> : (
-                                    <>
-                                      {(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? <FaSync size={12} /> : <FaFileContract size={12} />}
-                                      {inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo ? "RE-GENERATE" : ((!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "GEN E-WAY BILL" : "GENERATE E-INV")}
-                                    </>
+                              ) : (
+                                <>
+                                  {isFieldAllowed("action_ewb") && inv.einvoiceStatus === "GENERATED" && !inv.ewayBillNo && inv.grandTotal > 10000 && (
+                                    <button
+                                      onClick={() => handleGenerateEWayBillOnly(inv)}
+                                      disabled={requestingAction === inv._id}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-600 hover:text-white text-[10px] font-black transition-all"
+                                    >
+                                      {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <><FaSync size={12} /> GEN EWB</>}
+                                    </button>
                                   )}
-                                </button>
-                              )}
-                               {isFieldAllowed("action_pdf") && (inv.einvoiceStatus === "GENERATED" || inv.irn || inv.ewayBillNo) && (
-                                 <div className="flex gap-1">
-                                   {(inv.einvoiceStatus === "GENERATED" || inv.irn) && (
-                                     <>
-                                       <button
-                                         onClick={async (e) => {
-                                           e.stopPropagation();
-                                           let fullInv = inv;
-                                           // ALWAYS fetch fresh details for PDF/QR to ensure links are valid
-                                           try {
-                                             setFetchingDetails(prev => ({ ...prev, [inv._id]: true }));
-                                             const res = await fetchWithAuth(`${API_BASE}/invoices/${inv._id}`);
-                                             const data = await res.json();
-                                             fullInv = data.success ? data.data : data;
-                                             setInvoices(prev => prev.map(i => i._id === inv._id ? { ...i, ...fullInv } : i));
-                                           } catch (err) {
-                                             console.warn("Failed to refresh PDF details, using local data");
-                                           } finally {
-                                             setFetchingDetails(prev => ({ ...prev, [inv._id]: false }));
-                                           }
-                                           setShowEInvoiceModal(fullInv);
-                                         }}
-                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white border border-indigo-600 hover:bg-indigo-700 text-[10px] font-black transition-all shadow-sm"
-                                         disabled={fetchingDetails[inv._id]}
-                                       >
-                                         {fetchingDetails[inv._id] ? <FaSync className="animate-spin" size={12} /> : <FaFileAlt size={12} />}
-                                         PDF
-                                       </button>
-                                       {inv.invoicePdfUrl && (
+                                  {isFieldAllowed("action_ewb") && (
+                                    <button
+                                      onClick={() => handleGenerateEInvoice(inv)}
+                                      disabled={requestingAction === inv._id}
+                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border ${inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo
+                                        ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-600 hover:text-white"
+                                        : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
+                                        }`}
+                                    >
+                                      {requestingAction === inv._id ? <FaSync className="animate-spin" /> : (
+                                        <>
+                                          {(!inv.customer?.gstin || inv.customer?.gstin === "URP") ? <FaSync size={12} /> : <FaFileContract size={12} />}
+                                          {inv.einvoiceStatus === "GENERATED" || inv.ewayBillNo ? "RE-GENERATE" : ((!inv.customer?.gstin || inv.customer?.gstin === "URP") ? "GEN E-WAY BILL" : "GENERATE E-INV")}
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
+                                   {isFieldAllowed("action_pdf") && (inv.einvoiceStatus === "GENERATED" || inv.irn || inv.ewayBillNo) && (
+                                     <div className="flex gap-1">
+                                       {(inv.einvoiceStatus === "GENERATED" || inv.irn) && (
+                                         <>
+                                           <button
+                                             onClick={async (e) => {
+                                               e.stopPropagation();
+                                               let fullInv = inv;
+                                               try {
+                                                 setFetchingDetails(prev => ({ ...prev, [inv._id]: true }));
+                                                 const res = await fetchWithAuth(`${API_BASE}/invoices/${inv._id}`);
+                                                 const data = await res.json();
+                                                 fullInv = data.success ? data.data : data;
+                                                 setInvoices(prev => prev.map(i => i._id === inv._id ? { ...i, ...fullInv } : i));
+                                               } catch (err) {
+                                                 console.warn("Failed to refresh PDF details, using local data");
+                                               } finally {
+                                                 setFetchingDetails(prev => ({ ...prev, [inv._id]: false }));
+                                               }
+                                               setShowEInvoiceModal(fullInv);
+                                             }}
+                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white border border-indigo-600 hover:bg-indigo-700 text-[10px] font-black transition-all shadow-sm"
+                                             disabled={fetchingDetails[inv._id]}
+                                           >
+                                             {fetchingDetails[inv._id] ? <FaSync className="animate-spin" size={12} /> : <FaFileAlt size={12} />}
+                                             PDF
+                                           </button>
+                                           {inv.invoicePdfUrl && (
+                                             <button
+                                               onClick={(e) => {
+                                                 e.stopPropagation();
+                                                 window.open(`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.invoicePdfUrl}`, "_blank");
+                                               }}
+                                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-600 hover:text-white text-[10px] font-black transition-all shadow-sm"
+                                             >
+                                               <FaFilePdf size={12} /> E-INV PDF
+                                             </button>
+                                           )}
+                                         </>
+                                       )}
+                                       {(inv.ewayBillPdfUrl || inv.ewayBillNo) && (
                                          <button
                                            onClick={(e) => {
                                              e.stopPropagation();
-                                             window.open(`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.invoicePdfUrl}`, "_blank");
+                                             if (inv.ewayBillPdfUrl) {
+                                               window.open(`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`, "_blank");
+                                             } else {
+                                               toast.info("E-Way Bill ready but PDF link pending. Please try again in 5 seconds.");
+                                               fetchInvoices();
+                                             }
                                            }}
-                                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-600 hover:text-white text-[10px] font-black transition-all shadow-sm"
+                                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all shadow-sm"
                                          >
-                                           <FaFilePdf size={12} /> E-INV PDF
+                                           🚚 EWB
                                          </button>
                                        )}
-                                     </>
+                                     </div>
                                    )}
-                                   {(inv.ewayBillPdfUrl || inv.ewayBillNo) && (
-                                     <button
-                                       onClick={(e) => {
-                                         e.stopPropagation();
-                                         if (inv.ewayBillPdfUrl) {
-                                           window.open(`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`, "_blank");
-                                         } else {
-                                           toast.info("E-Way Bill ready but PDF link pending. Please try again in 5 seconds.");
-                                           fetchInvoices();
-                                         }
-                                       }}
-                                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-[10px] font-black transition-all shadow-sm"
-                                     >
-                                       🚚 EWB
-                                     </button>
+                                   {isFieldAllowed("action_cancel") && (
+                                     <div className="flex gap-1">
+                                        {inv.status === "CANCELLED" ? (
+                                           <span className="text-[10px] font-black text-red-400 uppercase tracking-widest italic">
+                                              Archived
+                                           </span>
+                                        ) : (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setCancelReason("");
+                                              setShowCancelModal(inv);
+                                            }}
+                                            disabled={requestingAction === inv._id}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white"
+                                          >
+                                            {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash size={12} />}
+                                            CANCEL
+                                          </button>
+                                        )}
+                                     </div>
                                    )}
-                                 </div>
-                               )}
-                               {/* Individual QR button removed per user request - Bulk QR should be used instead */}
-                               {isFieldAllowed("action_cancel") && (
-                                 <div className="flex gap-1">
-                                    {inv.status === "CANCELLED" ? (
-                                       <span className="text-[10px] font-black text-red-400 uppercase tracking-widest italic">
-                                          Archived
-                                       </span>
-                                    ) : (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setCancelReason("");
-                                          setShowCancelModal(inv);
-                                        }}
-                                        disabled={requestingAction === inv._id}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[10px] font-black border bg-red-50 text-red-600 border-red-100 hover:bg-red-600 hover:text-white"
-                                      >
-                                        {requestingAction === inv._id ? <FaSync className="animate-spin" /> : <FaTrash size={12} />}
-                                        CANCEL
-                                      </button>
-                                    )}
-                                 </div>
-                               )}
+                                </>
+                              )}
                             </div>
                           </td>
                         )}

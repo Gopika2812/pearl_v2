@@ -63,12 +63,26 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // Find branch
-    const branch = await Branch.findOne({ code: branchCode.toUpperCase() });
-    if (!branch) {
+    // Parse multiple branch codes (comma-separated)
+    const codes = branchCode.split(",").map(c => c.trim().toUpperCase()).filter(Boolean);
+    if (codes.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one branch code is required",
+      });
+    }
+
+    // Find branches matching any of the specified codes
+    const branches = await Branch.find({ code: { $in: codes } });
+    
+    // Check which codes were not found
+    const foundCodes = branches.map(b => b.code);
+    const missingCodes = codes.filter(c => !foundCodes.includes(c));
+
+    if (missingCodes.length > 0) {
       return res.status(404).json({
         success: false,
-        message: `Branch code "${branchCode}" not found`,
+        message: `The following branch code(s) were not found: ${missingCodes.join(", ")}`,
       });
     }
 
@@ -78,7 +92,7 @@ router.post("/register", async (req, res) => {
       username,
       email,
       password, // Password will be hashed by pre-save hook on BranchUser later, or we can hash it here
-      branchCode: branchCode.toUpperCase(),
+      branchCode: codes.join(", "),
       role: role,
       status: "PENDING",
       otp: generateOTP(), // Required by schema
@@ -185,7 +199,7 @@ router.post("/login", async (req, res) => {
     }
 
     // Find user
-    const user = await BranchUser.findOne({ username }).populate("branch");
+    const user = await BranchUser.findOne({ username }).populate("branch").populate("allowedBranches");
 
     if (!user) {
       return res.status(401).json({
@@ -235,6 +249,7 @@ router.post("/login", async (req, res) => {
         fieldPermissions: user.fieldPermissions || {},
         actionPermissions: user.actionPermissions || {},
         allowedVoucherTypes: user.allowedVoucherTypes || [],
+        allowedBranches: user.allowedBranches || [],
       },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
@@ -264,6 +279,7 @@ router.post("/login", async (req, res) => {
           code: user.branch.code,
           location: user.branch.location,
         },
+        allowedBranches: user.allowedBranches || [],
         role: user.role,
         allowedPages: user.allowedPages || [],
         fieldPermissions: user.fieldPermissions || {},
@@ -320,9 +336,15 @@ router.get("/branch/:branchId", async (req, res) => {
       });
     }
 
-    const users = await BranchUser.find({ branch: branchId })
+    const users = await BranchUser.find({
+      $or: [
+        { branch: branchId },
+        { allowedBranches: branchId }
+      ]
+    })
       .select("-password")
-      .populate("branch", "name code location");
+      .populate("branch", "name code location")
+      .populate("allowedBranches");
 
     res.json({
       success: true,
@@ -352,7 +374,8 @@ router.get("/:id", async (req, res) => {
 
     const user = await BranchUser.findById(id)
       .select("-password")
-      .populate("branch");
+      .populate("branch")
+      .populate("allowedBranches");
 
     if (!user) {
       return res.status(404).json({
@@ -400,6 +423,8 @@ router.put("/:id", auth, async (req, res) => {
     if (email !== undefined) updateData.email = email;
     if (role !== undefined) updateData.role = role;
     if (status !== undefined) updateData.status = status;
+    if (req.body.branch !== undefined) updateData.branch = req.body.branch;
+    if (req.body.allowedBranches !== undefined) updateData.allowedBranches = req.body.allowedBranches;
     if (req.body.allowedPages !== undefined) updateData.allowedPages = req.body.allowedPages;
     if (req.body.fieldPermissions !== undefined) updateData.fieldPermissions = req.body.fieldPermissions;
     if (req.body.actionPermissions !== undefined) updateData.actionPermissions = req.body.actionPermissions;
@@ -408,7 +433,10 @@ router.put("/:id", auth, async (req, res) => {
 
     const user = await BranchUser.findByIdAndUpdate(id, updateData, {
       new: true,
-    }).select("-password");
+    })
+      .select("-password")
+      .populate("branch")
+      .populate("allowedBranches");
 
     // Log the update
     await createAuditLog({
@@ -499,6 +527,125 @@ router.delete("/:id", auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to delete user",
+      error: error.message,
+    });
+  }
+});
+
+// POST: Switch active branch for multi-branch user
+router.post("/switch-branch", auth, async (req, res) => {
+  try {
+    const { branchId } = req.body;
+
+    if (!branchId) {
+      return res.status(400).json({
+        success: false,
+        message: "Branch ID is required",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(branchId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid branch ID format",
+      });
+    }
+
+    // Find the user by token id
+    const user = await BranchUser.findById(req.user.id)
+      .populate("branch")
+      .populate("allowedBranches");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Verify user actually has permission for this branch
+    // (Either it's their primary branch, or it's one of their allowedBranches)
+    const isPrimary = user.branch?._id?.toString() === branchId.toString();
+    const isAllowed = user.allowedBranches?.some(b => b._id?.toString() === branchId.toString());
+
+    if (!isPrimary && !isAllowed) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: You do not have permission to switch to this branch",
+      });
+    }
+
+    // Find the target branch details to verify it exists and is active
+    const targetBranch = await Branch.findById(branchId);
+    if (!targetBranch) {
+      return res.status(404).json({
+        success: false,
+        message: "Target branch not found",
+      });
+    }
+
+    if (targetBranch.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message: "Access Denied: Target branch is inactive",
+      });
+    }
+
+    // Generate new JWT token with the new branch ID
+    const token = jwt.sign(
+      {
+        id: user._id,
+        username: user.username,
+        role: user.role,
+        branch: targetBranch._id, // Set the switched branch ID here!
+        allowedPages: user.allowedPages || [],
+        fieldPermissions: user.fieldPermissions || {},
+        actionPermissions: user.actionPermissions || {},
+        allowedVoucherTypes: user.allowedVoucherTypes || [],
+        allowedBranches: user.allowedBranches || [],
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    // Log successful branch switch
+    await createAuditLog({
+      userId: user._id,
+      username: user.username,
+      branchId: targetBranch._id,
+      action: "SWITCH_BRANCH",
+      description: `User ${user.username} switched active workspace to branch ${targetBranch.name || targetBranch.location || "Branch"}`,
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully switched workspace to ${targetBranch.name}`,
+      token,
+      data: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        branchId: targetBranch._id,
+        branch: {
+          _id: targetBranch._id,
+          name: targetBranch.name,
+          code: targetBranch.code,
+          location: targetBranch.location,
+        },
+        allowedBranches: user.allowedBranches || [],
+        role: user.role,
+        allowedPages: user.allowedPages || [],
+        fieldPermissions: user.fieldPermissions || {},
+        actionPermissions: user.actionPermissions || {},
+        allowedVoucherTypes: user.allowedVoucherTypes || [],
+      },
+    });
+
+  } catch (error) {
+    console.error("Switch Branch Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to switch active branch",
       error: error.message,
     });
   }

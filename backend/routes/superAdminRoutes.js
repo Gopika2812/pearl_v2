@@ -288,15 +288,19 @@ router.post("/approve-registration/:registrationId", auth, rbac(["SUPER_ADMIN"])
       });
     }
 
-    // Find branch by code
-    const branch = await Branch.findOne({ code: pendingReg.branchCode });
+    // Find matching branches by code (comma-separated support)
+    const codes = pendingReg.branchCode.split(",").map(c => c.trim().toUpperCase()).filter(Boolean);
+    const branches = await Branch.find({ code: { $in: codes } });
 
-    if (!branch) {
+    if (branches.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Branch not found",
+        message: `Branch(es) with code(s) "${pendingReg.branchCode}" not found`,
       });
     }
+
+    const primaryBranch = branches[0];
+    const allowedBranchIds = branches.map(b => b._id);
 
     // Determine the final role (use override if provided, else use requested role)
     const finalRole = roleOverride || pendingReg.role;
@@ -307,8 +311,9 @@ router.post("/approve-registration/:registrationId", auth, rbac(["SUPER_ADMIN"])
       username: pendingReg.username,
       password: pendingReg.password,
       email: pendingReg.email,
-      branch: branch._id,
-      branchName: branch.name,
+      branch: primaryBranch._id,
+      branchName: primaryBranch.name,
+      allowedBranches: allowedBranchIds,
       role: finalRole,
       status: "ACTIVE",
     });
@@ -335,7 +340,7 @@ router.post("/approve-registration/:registrationId", auth, rbac(["SUPER_ADMIN"])
         username: newUser.username,
         email: newUser.email,
         role: newUser.role,
-        branch: branch.name,
+        branch: branches.map(b => b.name).join(", "),
       },
     });
   } catch (error) {

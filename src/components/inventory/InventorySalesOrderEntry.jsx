@@ -3,6 +3,7 @@ import { FaPlus, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import { getInvoiceHTML } from "../../utils/invoiceUtils";
 import InventoryAddCustomerModal from "./InventoryAddCustomerModal";
 import InventoryAddDeliveryManModal from "./InventoryAddDeliveryManModal";
 import InventoryAddProductGroupModal from "./InventoryAddProductGroupModal";
@@ -30,9 +31,10 @@ export default function InventorySalesOrderEntry({
   salesOwners = [],
   customerGroups = [],
   customerCategories = [],
-  branchId = ""
+  branchId = "",
+  isDummyMode = false
 }) {
-  const { user } = useBranch();
+  const { currentBranch, user } = useBranch();
   // Check if the user has this new feature explicitly disabled by Super Admin. (Defaults to true)
   const canUseQuickLinks = user?.role === "SUPER_ADMIN" || user?.actionPermissions?.create_shortcuts !== false;
   const canEditSellingPrice = user?.role === "SUPER_ADMIN" || user?.actionPermissions?.editSellingPrice !== false;
@@ -212,6 +214,18 @@ export default function InventorySalesOrderEntry({
   }, [branchId]);
 
   useEffect(() => {
+    if (isDummyMode) {
+      const today = new Date();
+      const month = today.getMonth() + 1;
+      const year = today.getFullYear();
+      const currentYear = year.toString().slice(-2);
+      const nextYear = (year + 1).toString().slice(-2);
+      const prevYear = (year - 1).toString().slice(-2);
+      const currentFY = month >= 4 ? `${currentYear}-${nextYear}` : `${prevYear}-${currentYear}`;
+      setInvoiceId(`D1/001/${currentFY}`);
+      return;
+    }
+
     if (!voucherType) {
       setInvoiceId("");
       // Reset product selection when voucher type changes
@@ -240,17 +254,8 @@ export default function InventorySalesOrderEntry({
       }
     };
 
-    // Reset product selection when voucher type changes
-    // Replaced: No longer clearing items/selection on voucher type change to prevent data loss.
-    // setProductGroup("");
-    // setProductGroupSearch("");
-    // setSelectedItem("");
-    // setItemSearch("");
-    // setQty("");
-    // setItems([]);
-
     fetchPreview();
-  }, [voucherType]);
+  }, [voucherType, isDummyMode]);
 
   // Keep local voucher types updated if props change
   useEffect(() => {
@@ -1073,7 +1078,7 @@ export default function InventorySalesOrderEntry({
     branchId,
     createdBy: user?.id || user?._id,
     createdByUsername: user?.username || user?.fullName || user?.name || "System",
-    voucherType,
+    voucherType: isDummyMode ? "dummy" : voucherType,
     customer: selectedCustomer
       ? {
         id: selectedCustomer._id,
@@ -1091,7 +1096,19 @@ export default function InventorySalesOrderEntry({
         openingBalance: selectedCustomer.totalBalance,
         balanceType: selectedCustomer.balanceType,
       }
-      : null,
+      : (isDummyMode ? {
+        id: "000000000000000000000000",
+        name: customerSearch || "Dummy Customer",
+        whatsapp: "",
+        address: "",
+        district: "",
+        state: "Tamil Nadu",
+        pincode: "",
+        gstin: "",
+        customerGroup: "Dummy",
+        openingBalance: 0,
+        balanceType: "Dr",
+      } : null),
 
 
     warehouse,
@@ -1122,6 +1139,8 @@ export default function InventorySalesOrderEntry({
     orderDate,
     spottedCustomerName,
     spottedPhoneNumber,
+    isDummy: isDummyMode,
+    customInvoiceId: invoiceId,
   };
 
   const handleAddExtraExpense = async () => {
@@ -1228,31 +1247,33 @@ export default function InventorySalesOrderEntry({
   };
 
   const handleFinalAction = async () => {
-    if (!voucherType || !warehouse || (items.length === 0 && sampleItems.length === 0)) {
-      return toast.error("Select a voucher, warehouse, and add at least one item (Regular or Sample)");
+    if ((!isDummyMode && !voucherType) || !warehouse || (items.length === 0 && sampleItems.length === 0)) {
+      return toast.error(isDummyMode ? "Select warehouse, and add at least one item (Regular or Sample)" : "Select a voucher, warehouse, and add at least one item (Regular or Sample)");
     }
 
-    if (!customerId) {
+    if (!isDummyMode && !customerId) {
       return toast.error("Please select a customer");
     }
 
-    if (creditStatus.isBlocked) {
+    if (!isDummyMode && creditStatus.isBlocked) {
         return toast.error("🚫 BILLING BLOCKED: This customer has exceeded their credit limit or has overdue payments. Please request approval from Super Admin.");
     }
 
     // 🛡️ VALIDATE SPOTTED CUSTOMER DETAILS
-    const customerGroupName = selectedCustomer?.customerGroups?.[0]?.name || 
-                              selectedCustomer?.customerGroup?.name || 
-                              (typeof selectedCustomer?.customerGroup === 'string' ? selectedCustomer.customerGroup : "");
-    const isSpotted = customerGroupName.toLowerCase().includes("spotted customer") || 
-                      selectedCustomer?.name?.toLowerCase().includes("counter sales");
+    if (!isDummyMode) {
+      const customerGroupName = selectedCustomer?.customerGroups?.[0]?.name || 
+                                selectedCustomer?.customerGroup?.name || 
+                                (typeof selectedCustomer?.customerGroup === 'string' ? selectedCustomer.customerGroup : "");
+      const isSpotted = customerGroupName.toLowerCase().includes("spotted customer") || 
+                        selectedCustomer?.name?.toLowerCase().includes("counter sales");
 
-    if (isSpotted) {
-      if (!spottedCustomerName.trim()) {
-        return toast.error("⚠️ Mandatory Field: Please enter Customer Name for Spotted Customer");
-      }
-      if (!spottedPhoneNumber.trim() || spottedPhoneNumber === "0000000000") {
-        return toast.error("⚠️ Mandatory Field: Please enter a valid Phone Number for Spotted Customer");
+      if (isSpotted) {
+        if (!spottedCustomerName.trim()) {
+          return toast.error("⚠️ Mandatory Field: Please enter Customer Name for Spotted Customer");
+        }
+        if (!spottedPhoneNumber.trim() || spottedPhoneNumber === "0000000000") {
+          return toast.error("⚠️ Mandatory Field: Please enter a valid Phone Number for Spotted Customer");
+        }
       }
     }
 
@@ -1291,11 +1312,57 @@ export default function InventorySalesOrderEntry({
       }
 
       console.log("✅ Sales Order Created:", data.invoiceId);
-      toast.success(`Sales Order Created: ${data.invoiceId}`);
+      toast.success(isDummyMode ? `Dummy Bill Saved: ${data.invoiceId}` : `Sales Order Created: ${data.invoiceId}`);
       
+      // ⚡ IMMEDIATE PRINT FOR DUMMY BILLS
+      if (isDummyMode && data.data) {
+        toast.info("Opening print dialog for dummy bill...");
+        const salesOrder = data.data;
+        const previewData = {
+          seller: {
+            name: currentBranch?.name || "PEARL AGENCY",
+            address: currentBranch?.address || "12/13 Price car care compound, South byepass road, Tirunelveli, vannerpettai...",
+            phone: currentBranch?.phone || "91 95850 23300",
+            gstin: currentBranch?.gstin || "33DULPS2600Q1Z6",
+            logo: currentBranch?.logo || "/logo.jpeg",
+          },
+          customer: {
+            name: salesOrder.customer.name,
+            whatsapp: salesOrder.customer.whatsapp,
+            address: salesOrder.customer.address,
+            gstin: salesOrder.customer.gstin,
+          },
+          items: salesOrder.items,
+          sampleItems: salesOrder.sampleItems || [],
+          subtotal: salesOrder.subtotal,
+          totalDiscount: salesOrder.totalDiscount,
+          commonDiscount: salesOrder.commonDiscount,
+          totalTax: {
+            cgst: salesOrder.totalTax / 2,
+            sgst: salesOrder.totalTax / 2,
+            igst: 0,
+            total: salesOrder.totalTax,
+          },
+          grandTotal: salesOrder.grandTotal,
+          openingBalance: 0,
+          closingBalance: salesOrder.grandTotal,
+        };
+
+        const html = getInvoiceHTML(previewData, 1, salesOrder, salesOrder);
+        const printWindow = window.open("", "_blank");
+        if (printWindow) {
+          printWindow.document.write(html);
+          printWindow.document.close();
+          setTimeout(() => {
+            printWindow.print();
+            setTimeout(() => printWindow.close(), 1000);
+          }, 500);
+        }
+      }
+
       setTimeout(() => {
         window.location.reload();
-      }, 1500);
+      }, 2000);
     } catch (err) {
       console.error("❌ Error saving Sales Order:", err);
       toast.error(err.message || "Failed to save Sales Order");
@@ -1377,25 +1444,32 @@ export default function InventorySalesOrderEntry({
 
         {/* LEFT: VOUCHER, INVOICE, WAREHOUSE */}
         <div className="lg:col-span-3 bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-3 h-fit">
-          <div>
-            <div className="flex justify-between items-center mb-1">
-                {canUseQuickLinks && user?.allowedQuickLinks?.includes("voucher_type") && (
-                  <button
-                    onClick={() => setShowVoucherModal(true)}
-                    className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
-                    title="Create New Voucher Type"
-                  >
-                    <FaPlus size={12} />
-                  </button>
-                )}
+          {!isDummyMode ? (
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                  {canUseQuickLinks && user?.allowedQuickLinks?.includes("voucher_type") && (
+                    <button
+                      onClick={() => setShowVoucherModal(true)}
+                      className="text-[#319bab] hover:bg-[#319bab]/10 p-1 rounded transition"
+                      title="Create New Voucher Type"
+                    >
+                      <FaPlus size={12} />
+                    </button>
+                  )}
+              </div>
+              <select className={selectClass} value={voucherType} onChange={(e) => setVoucherType(e.target.value)}>
+                <option value="">-- Select --</option>
+                {localVoucherTypes.map((v) => (
+                  <option key={v._id} value={v.name}>{v.name}</option>
+                ))}
+              </select>
             </div>
-            <select className={selectClass} value={voucherType} onChange={(e) => setVoucherType(e.target.value)}>
-              <option value="">-- Select --</option>
-              {localVoucherTypes.map((v) => (
-                <option key={v._id} value={v.name}>{v.name}</option>
-              ))}
-            </select>
-          </div>
+          ) : (
+            <div>
+              <label className={labelClass}>Voucher Type</label>
+              <input className={`${inputClass} bg-gray-100 text-gray-500 font-bold uppercase`} value="Dummy Voucher" readOnly />
+            </div>
+          )}
 
           <div>
             <label className={labelClass}>Order Date</label>
@@ -1408,8 +1482,20 @@ export default function InventorySalesOrderEntry({
           </div>
 
           <div>
-            <label className={labelClass}>Sales Order ID</label>
-            <input className={`${inputClass} bg-gray-50 font-bold text-[#319bab]`} value={invoiceId} readOnly />
+            <label className={labelClass}>{isDummyMode ? "Dummy Bill ID" : "Sales Order ID"}</label>
+            {isDummyMode ? (
+              <input
+                className={`${inputClass} font-bold text-[#319bab] bg-white`}
+                value={invoiceId}
+                onChange={(e) => setInvoiceId(e.target.value)}
+              />
+            ) : (
+              <input
+                className={`${inputClass} bg-gray-50 font-bold text-[#319bab]`}
+                value={invoiceId}
+                readOnly
+              />
+            )}
           </div>
 
           <div>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FaTimes, FaHistory, FaClock, FaSave, FaExclamationTriangle } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE } from "../../api";
@@ -10,6 +10,16 @@ const FollowUpFormModal = ({ isOpen, onClose, customer, user, branch, onSave }) 
     const [riskStatus, setRiskStatus] = useState(customer?.riskStatus || "safe_zone");
     const [nextFollowUpDate, setNextFollowUpDate] = useState("");
     const [nextFollowUpTime, setNextFollowUpTime] = useState("10:00");
+
+    useEffect(() => {
+        if (isOpen && customer) {
+            setResult("Promised");
+            setRemarks("");
+            setRiskStatus(customer?.riskStatus || "safe_zone");
+            setNextFollowUpDate("");
+            setNextFollowUpTime("10:00");
+        }
+    }, [customer?._id, isOpen]);
 
     const RESULT_OPTIONS = [
         "Paid", "Promised", "Part Payment Promised", "Already Paid – Entry Pending",

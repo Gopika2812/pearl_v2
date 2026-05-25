@@ -30,6 +30,7 @@ const BranchInvoicedOrders = () => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showEditBillModal, setShowEditBillModal] = useState(false);
+  const [showDummyBills, setShowDummyBills] = useState(false);
   const [showSlipModal, setShowSlipModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
   const [expandedOrders, setExpandedOrders] = useState({});
@@ -98,9 +99,10 @@ const BranchInvoicedOrders = () => {
       const searchParam = debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : "";
       const voucherParam = filterVoucherType ? `&voucherType=${encodeURIComponent(filterVoucherType)}` : "";
       const generatedParam = filterGenerated ? `&generated=${filterGenerated === "GENERATED"}` : "";
+      const dummyParam = `&isDummy=${showDummyBills}`;
 
       const res = await fetch(
-        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&fromDate=${filterFromDate}&toDate=${filterToDate}${searchParam}${voucherParam}${generatedParam}`,
+        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&fromDate=${filterFromDate}&toDate=${filterToDate}${searchParam}${voucherParam}${generatedParam}${dummyParam}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -140,7 +142,7 @@ const BranchInvoicedOrders = () => {
 
   useEffect(() => {
     fetchSalesOrders();
-  }, [currentBranch?._id, filterFromDate, filterToDate, debouncedSearch, filterVoucherType, filterGenerated]);
+  }, [currentBranch?._id, filterFromDate, filterToDate, debouncedSearch, filterVoucherType, filterGenerated, showDummyBills]);
 
   useEffect(() => {
     fetchVoucherTypes();
@@ -287,6 +289,51 @@ const BranchInvoicedOrders = () => {
     setShowEditBillModal(true);
   };
 
+  const handlePrintDummyBill = (order) => {
+    const previewData = {
+      seller: {
+        name: currentBranch?.name || "PEARL AGENCY",
+        address: currentBranch?.address || "12/13 Price car care compound, South byepass road, Tirunelveli, vannerpettai...",
+        phone: currentBranch?.phone || "91 95850 23300",
+        gstin: currentBranch?.gstin || "33DULPS2600Q1Z6",
+        logo: currentBranch?.logo || "/logo.jpeg",
+      },
+      customer: {
+        name: order.customer?.name || "Dummy Customer",
+        whatsapp: order.customer?.whatsapp || "",
+        address: order.customer?.address || "",
+        gstin: order.customer?.gstin || "",
+      },
+      items: order.items || [],
+      sampleItems: order.sampleItems || [],
+      subtotal: order.subtotal || 0,
+      totalDiscount: order.totalDiscount || 0,
+      commonDiscount: order.commonDiscount || 0,
+      totalTax: {
+        cgst: (order.totalTax || 0) / 2,
+        sgst: (order.totalTax || 0) / 2,
+        igst: 0,
+        total: order.totalTax || 0,
+      },
+      grandTotal: order.grandTotal || 0,
+      openingBalance: 0,
+      closingBalance: order.grandTotal || 0,
+    };
+
+    const html = getInvoiceHTML(previewData, 1, order, order);
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+        setTimeout(() => printWindow.close(), 1000);
+      }, 500);
+    } else {
+      toast.warning("🔔 Pop-up blocked! Please allow pop-ups to print.");
+    }
+  };
+
   const handleSaveEditedBill = async (updatedOrder) => {
     try {
       const res = await fetch(`${API_BASE}/sales-orders/${updatedOrder._id}`, {
@@ -296,6 +343,7 @@ const BranchInvoicedOrders = () => {
           "Authorization": `Bearer ${localStorage.getItem("token")}`
         },
         body: JSON.stringify({
+          invoiceId: updatedOrder.invoiceId,
           items: updatedOrder.items,
           sampleItems: updatedOrder.sampleItems,
           customer: updatedOrder.customer,
@@ -714,15 +762,27 @@ const BranchInvoicedOrders = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-black text-gray-800">
-                  Sales Order List
+                  {showDummyBills ? "Dummy Bill Records" : "Sales Order List"}
                 </h1>
                 <p className="text-xs text-gray-500 uppercase tracking-wide">
-                  Pending Orders (SO)
+                  {showDummyBills ? "Manage and print dummy sales records (No Stock/Balance effects)" : "Pending Orders (SO)"}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
+              {(user?.role === "SUPER_ADMIN" || user?.actionPermissions?.allowDummyBills === true) && (
+                <div className="relative mr-2">
+                  <select
+                    value={showDummyBills ? "dummy" : "regular"}
+                    onChange={(e) => setShowDummyBills(e.target.value === "dummy")}
+                    className="bg-white border-2 border-[#319bab]/20 focus:border-[#319bab] text-[#319bab] font-black text-[10px] px-4 py-2.5 rounded-xl outline-none shadow-sm transition-all cursor-pointer uppercase tracking-widest hover:bg-gray-50"
+                  >
+                    <option value="regular">Regular Bills</option>
+                    <option value="dummy">Dummy Bills</option>
+                  </select>
+                </div>
+              )}
               {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
                 <>
                   <button
@@ -749,22 +809,24 @@ const BranchInvoicedOrders = () => {
                   </button>
                 </>
               )}
-              <button
-                onClick={() => {
-                  if (selectedOrderIds.length > 0) {
-                    setShowSlipModal(true);
-                  } else {
-                    toast.warn("Please select at least one order to generate a consolidated slip");
-                  }
-                }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-sm text-sm font-bold ${selectedOrderIds.length > 0
-                  ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  }`}
-              >
-                <FaTruck />
-                Generate Consolidated Slip ({selectedOrderIds.length})
-              </button>
+              {!showDummyBills && (
+                <button
+                  onClick={() => {
+                    if (selectedOrderIds.length > 0) {
+                      setShowSlipModal(true);
+                    } else {
+                      toast.warn("Please select at least one order to generate a consolidated slip");
+                    }
+                  }}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-sm text-sm font-bold ${selectedOrderIds.length > 0
+                    ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                    : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    }`}
+                >
+                  <FaTruck />
+                  Generate Consolidated Slip ({selectedOrderIds.length})
+                </button>
+              )}
               <button
                 onClick={fetchSalesOrders}
                 disabled={loading}
@@ -1072,86 +1134,26 @@ const BranchInvoicedOrders = () => {
                         {(isFieldAllowed("action_si_bill") || isFieldAllowed("action_gen_invoice") || isFieldAllowed("action_cancel")) && (
                           <td className="px-6 py-4 text-center">
                             <div className="flex items-center gap-2 justify-center flex-wrap">
-                              {order.invoiceGenerated && isFieldAllowed("action_si_bill") && (
-                                <button
-                                  onClick={() => {
-                                    const userRole = (user?.role || "").toUpperCase();
-                                    const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
+                              {showDummyBills ? (
+                                <>
+                                  <button
+                                    onClick={() => handlePrintDummyBill(order)}
+                                    className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-black shadow-md border bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 border-blue-700"
+                                    title="Print Dummy Bill"
+                                  >
+                                    <FaFileInvoice className="text-sm" />
+                                    <span>Print</span>
+                                  </button>
 
-                                    // 📅 Date Check: Prevent printing if order date is in the future (unless Admin)
-                                    const today = new Date();
-                                    today.setHours(0, 0, 0, 0);
-                                    const orderDate = new Date(order.orderDate || order.createdAt);
-                                    orderDate.setHours(0, 0, 0, 0);
+                                  <button
+                                    onClick={() => handleEditBill(order)}
+                                    className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white shadow-sm"
+                                    title="Edit Dummy Bill"
+                                  >
+                                    <FaFileInvoice />
+                                    <span>Edit</span>
+                                  </button>
 
-                                    if (orderDate > today) {
-                                      const dateStr = orderDate.toLocaleDateString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                      toast.warning(`📅 Print Blocked: This order is dated ${dateStr}. Nobody (including Admins) can take the SI Bill until that date.`);
-                                      return;
-                                    }
-
-                                    console.log(`👤 Role: ${userRole}, isAdmin: ${isAdmin}, printCount: ${order.printCount}`);
-
-                                    if (!isAdmin && order.printCount > 0) {
-                                      toast.error(`⚠️ Printing Restricted: This bill has already been printed ${order.printCount} time(s).`);
-                                      return;
-                                    }
-                                    if (!isAdmin && (order.printCount || 0) === 0) {
-                                      if (window.confirm("🔔 IMPORTANT: You can only print this bill ONCE. Please ensure all items and details are correct before proceeding. Next time this button will be disabled. Do you want to print now?")) {
-                                        // 🎯 Immediately increment print count in backend so it's "spent"
-                                        fetchWithAuth(`${API_BASE}/sales-orders/${order._id}/increment-print-count`, {
-                                          method: "PUT",
-                                        })
-                                          .then(async (res) => {
-                                            if (res.ok) {
-                                              const data = await res.json();
-                                              // 🚀 Update local state immediately so button turns grey
-                                              setSalesOrders(prev => prev.map(o => o._id === order._id ? { ...o, printCount: data.printCount || 1 } : o));
-                                              toast.success("📝 Print attempt recorded.");
-                                            }
-                                          })
-                                          .catch(err => {
-                                            console.error("Error incrementing print count:", err);
-                                            toast.error("Failed to record print attempt.");
-                                          });
-
-                                        handleGenerateInvoice(order, false, true);
-                                      }
-                                      return;
-                                    }
-                                    handleGenerateInvoice(order, false, true);
-                                  }}
-                                  disabled={!(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.printCount > 0}
-                                  className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-black shadow-md border 
-                                    ${(!(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.printCount > 0)
-                                      ? "bg-gray-200 text-gray-400 cursor-not-allowed border-gray-300"
-                                      : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 border-blue-700"}`}
-                                  title={(user?.role !== "ADMIN" && user?.role !== "SUPER_ADMIN" && order.printCount > 0) ? "Already Printed - Restricted to Admin" : "Print Sales Invoice Bill"}
-                                >
-                                  <FaFileInvoice className="text-sm" />
-                                  <span>SI Bill</span>
-                                  {order.printCount > 0 && (
-                                    <span className="ml-1 bg-white/20 px-1.5 py-0.5 rounded text-[9px] border border-white/30">
-                                      P-{order.printCount}
-                                    </span>
-                                  )}
-                                </button>
-                              )}
-
-                              {isFieldAllowed("action_gen_invoice") && (
-                                <button
-                                  onClick={() => handleGenerateInvoice(order, true, false)}
-                                  className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-sm shadow-[#319bab]/20"
-                                  disabled={order.status === "CANCELLED"}
-                                >
-                                  <FaFileInvoice />
-                                  {order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
-                                </button>
-                              )}
-
-                              {/* Cancel Button — Admin & Super Admin only */}
-                              {isFieldAllowed("action_cancel") && (
-                                <div className="flex gap-2">
                                   {order.status === "CANCELLED" ? (
                                     <span className="text-[10px] font-black text-red-400 uppercase tracking-widest italic">
                                       Archived
@@ -1165,7 +1167,105 @@ const BranchInvoicedOrders = () => {
                                       CANCEL
                                     </button>
                                   )}
-                                </div>
+                                </>
+                              ) : (
+                                <>
+                                  {order.invoiceGenerated && isFieldAllowed("action_si_bill") && (
+                                    <button
+                                      onClick={() => {
+                                        const userRole = (user?.role || "").toUpperCase();
+                                        const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
+
+                                        // 📅 Date Check: Prevent printing if order date is in the future (unless Admin)
+                                        const today = new Date();
+                                        today.setHours(0, 0, 0, 0);
+                                        const orderDate = new Date(order.orderDate || order.createdAt);
+                                        orderDate.setHours(0, 0, 0, 0);
+
+                                        if (orderDate > today) {
+                                          const dateStr = orderDate.toLocaleDateString("en-IN", { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                          toast.warning(`📅 Print Blocked: This order is dated ${dateStr}. Nobody (including Admins) can take the SI Bill until that date.`);
+                                          return;
+                                        }
+
+                                        console.log(`👤 Role: ${userRole}, isAdmin: ${isAdmin}, printCount: ${order.printCount}`);
+
+                                        if (!isAdmin && order.printCount > 0) {
+                                          toast.error(`⚠️ Printing Restricted: This bill has already been printed ${order.printCount} time(s).`);
+                                          return;
+                                        }
+                                        if (!isAdmin && (order.printCount || 0) === 0) {
+                                          if (window.confirm("🔔 IMPORTANT: You can only print this bill ONCE. Please ensure all items and details are correct before proceeding. Next time this button will be disabled. Do you want to print now?")) {
+                                            // 🎯 Immediately increment print count in backend so it's "spent"
+                                            fetchWithAuth(`${API_BASE}/sales-orders/${order._id}/increment-print-count`, {
+                                              method: "PUT",
+                                            })
+                                              .then(async (res) => {
+                                                if (res.ok) {
+                                                  const data = await res.json();
+                                                  // 🚀 Update local state immediately so button turns grey
+                                                  setSalesOrders(prev => prev.map(o => o._id === order._id ? { ...o, printCount: data.printCount || 1 } : o));
+                                                  toast.success("📝 Print attempt recorded.");
+                                                }
+                                              })
+                                              .catch(err => {
+                                                console.error("Error incrementing print count:", err);
+                                                toast.error("Failed to record print attempt.");
+                                              });
+
+                                            handleGenerateInvoice(order, false, true);
+                                          }
+                                          return;
+                                        }
+                                        handleGenerateInvoice(order, false, true);
+                                      }}
+                                      disabled={!(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.printCount > 0}
+                                      className={`flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-black shadow-md border 
+                                        ${(!(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN") && order.printCount > 0)
+                                          ? "bg-gray-200 text-gray-400 cursor-not-allowed border-gray-300"
+                                          : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200 border-blue-700"}`}
+                                      title={(user?.role !== "ADMIN" && user?.role !== "SUPER_ADMIN" && order.printCount > 0) ? "Already Printed - Restricted to Admin" : "Print Sales Invoice Bill"}
+                                    >
+                                      <FaFileInvoice className="text-sm" />
+                                      <span>SI Bill</span>
+                                      {order.printCount > 0 && (
+                                        <span className="ml-1 bg-white/20 px-1.5 py-0.5 rounded text-[9px] border border-white/30">
+                                          P-{order.printCount}
+                                        </span>
+                                      )}
+                                    </button>
+                                  )}
+
+                                  {isFieldAllowed("action_gen_invoice") && (
+                                    <button
+                                      onClick={() => handleGenerateInvoice(order, true, false)}
+                                      className="flex items-center gap-2 justify-center px-3 py-2 rounded-lg transition text-xs font-semibold bg-[#319bab] text-white hover:bg-[#257f87] shadow-sm shadow-[#319bab]/20"
+                                      disabled={order.status === "CANCELLED"}
+                                    >
+                                      <FaFileInvoice />
+                                      {order.invoiceGenerated ? "Re-generate Invoice" : "Generate Invoice"}
+                                    </button>
+                                  )}
+
+                                  {/* Cancel Button — Admin & Super Admin only */}
+                                  {isFieldAllowed("action_cancel") && (
+                                    <div className="flex gap-2">
+                                      {order.status === "CANCELLED" ? (
+                                        <span className="text-[10px] font-black text-red-400 uppercase tracking-widest italic">
+                                          Archived
+                                        </span>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleOpenCancelModal(order)}
+                                          className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-red-50 text-red-700 hover:bg-red-600 hover:text-white border border-red-200"
+                                        >
+                                          <FaBan />
+                                          CANCEL
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </div>
                           </td>
@@ -1777,8 +1877,14 @@ const BranchInvoicedOrders = () => {
                 <FaBan className="text-white text-lg" />
               </div>
               <div>
-                <h2 className="text-white font-black text-lg">Cancel Sales Order</h2>
-                <p className="text-red-100 text-xs mt-0.5">This action will revert stock and customer balance</p>
+                <h2 className="text-white font-black text-lg">
+                  {cancellingOrder.isDummy ? "Cancel Dummy Bill" : "Cancel Sales Order"}
+                </h2>
+                <p className="text-red-100 text-xs mt-0.5">
+                  {cancellingOrder.isDummy 
+                    ? "This action will cancel the dummy bill record" 
+                    : "This action will revert stock and customer balance"}
+                </p>
               </div>
             </div>
 

@@ -1,4 +1,4 @@
-const InventorySalesOrderHeader = ({ title }) => {
+const InventorySalesOrderHeader = ({ title, description, children }) => {
   return (
     <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between border-b pb-4">
       <div>
@@ -6,10 +6,10 @@ const InventorySalesOrderHeader = ({ title }) => {
           {title}
         </h2>
         <p className="text-gray-500 text-sm mt-1 font-sans">
-          Create and manage customer sales orders and invoices.
+          {description || "Create and manage customer sales orders and invoices."}
         </p>
       </div>
-      
+      {children && <div className="mt-4 md:mt-0 flex items-center gap-3">{children}</div>}
     </div>
   );
 };

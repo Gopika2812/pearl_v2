@@ -42,6 +42,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
   const [transportGstPercent, setTransportGstPercent] = useState(0);
   const [commonDiscount, setCommonDiscount] = useState(0);
   const [orderDate, setOrderDate] = useState("");
+  const [invoiceId, setInvoiceId] = useState("");
 
 
   // Initialize items from order
@@ -70,6 +71,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       setCommonDiscount(order.commonDiscount || order.invoiceCommonDiscount || 0);
       setSelectedCustomer(order.customer);
       setCustomerSearch(order.customer?.name || "");
+      setInvoiceId(order.invoiceId || "");
       
       // Initialize orderDate from order
       if (order.orderDate) {
@@ -399,6 +401,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
       const newItemsTotal = calculateGrandTotal();
       const updatedOrder = {
         ...order,
+        invoiceId: invoiceId,
         items: items.map(item => {
           const qty = parseFloat(item.qty) || 0;
           const price = parseFloat(item.sellingPrice) || 0;
@@ -433,7 +436,16 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
         transportGstAmount: Math.round((Number(transportCharge) || 0) * (Number(transportGstPercent) || 0) / 100),
         grandTotal: Math.round(newItemsTotal),
         updatedByUsername: localStorage.getItem("username") || "System",
-        customer: selectedCustomer ? {
+        customer: order.isDummy ? {
+          customerId: selectedCustomer?.customerId || selectedCustomer?._id || "000000000000000000000000",
+          name: customerSearch,
+          whatsapp: selectedCustomer?.whatsapp || "",
+          address: selectedCustomer?.address || "",
+          district: selectedCustomer?.district || "",
+          state: selectedCustomer?.state || "Tamil Nadu",
+          stateCode: selectedCustomer?.stateCode || "33",
+          pincode: selectedCustomer?.pincode || "",
+        } : (selectedCustomer ? {
           id: selectedCustomer.customerId || selectedCustomer._id,
           name: selectedCustomer.name,
           whatsapp: selectedCustomer.whatsapp,
@@ -442,7 +454,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
           state: selectedCustomer.state,
           stateCode: selectedCustomer.stateCode,
           pincode: selectedCustomer.pincode,
-        } : order.customer,
+        } : order.customer),
         orderDate: orderDate
       };
 
@@ -481,7 +493,7 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
           {/* CUSTOMER SELECTION */}
           <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
             <h3 className="text-sm font-bold text-gray-500 uppercase tracking-tight mb-3">👤 Customer Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={`grid grid-cols-1 ${order?.isDummy ? "md:grid-cols-3" : "md:grid-cols-2"} gap-4`}>
               <div className="relative">
                 <label className="block text-xs font-bold text-gray-600 mb-1">Select Customer</label>
                 <input
@@ -533,6 +545,18 @@ const EditBillModal = ({ order, branchId, onClose, onSave }) => {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#319bab] outline-none font-semibold text-gray-800"
                 />
               </div>
+
+              {order?.isDummy && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Bill ID / Invoice ID</label>
+                  <input
+                    type="text"
+                    value={invoiceId}
+                    onChange={(e) => setInvoiceId(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#319bab] outline-none font-bold text-[#319bab]"
+                  />
+                </div>
+              )}
             </div>
             {selectedCustomer && (
               <div className="mt-3 flex gap-4 text-xs text-gray-600 italic">

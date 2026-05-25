@@ -320,6 +320,7 @@ const salesOrderSchema = new mongoose.Schema(
 
     spottedCustomerName: String,
     spottedPhoneNumber: String,
+    isDummy: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
@@ -337,6 +338,10 @@ salesOrderSchema.index({ invoiceId: 1, branchId: 1 });
 async function revertOrderEffects(doc) {
   try {
     if (!doc) return;
+    if (doc.isDummy) {
+      console.log(`🗑️ Skipping revert effects for dummy order: ${doc.invoiceId}`);
+      return;
+    }
     
     // Lazy load models to avoid circular dependencies
     const Customer = mongoose.model("Customer");
