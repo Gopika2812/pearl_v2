@@ -158,9 +158,10 @@ router.get("/", async (req, res) => {
     }
 
     // 3.5. Dummy Filter
-    if (isDummy !== undefined && isDummy !== "") {
-      query.isDummy = isDummy === "true";
+    if (isDummy === "true") {
+      query.isDummy = true;
     } else {
+      // Match both isDummy: false AND records where isDummy doesn't exist (older records)
       query.isDummy = { $ne: true };
     }
 
