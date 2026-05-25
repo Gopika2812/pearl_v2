@@ -22,7 +22,7 @@ if (typeof window !== "undefined") {
   }
 }
 
-// Utility function to get the API endpoint
+
 export const getAPIEndpoint = (path) => {
   return `${API_BASE}${path}`;
 };
