@@ -594,7 +594,7 @@ const BranchFollowUp = () => {
                                         <option value="balance">Balance</option>
                                         <option value="invoiceAge">Invoice Age</option>
                                         <option value="receiptAge">Receipt Age</option>
-                                        <option value="margin">Margin</option>
+                                        {(user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN") && <option value="margin">Margin</option>}
                                         <option value="limit">Credit Limit</option>
                                         <option value="createdAt">Date Created</option>
                                     </select>
@@ -694,7 +694,7 @@ const BranchFollowUp = () => {
                                                             </div>
                                                         )}
 
-                                                        {user?.role === "SUPER_ADMIN" ? (
+                                                        {(user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN") ? (
                                                             <div className="grid grid-cols-2 gap-3">
                                                                 <div>
                                                                     <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Margin (%)</label>
@@ -709,18 +709,12 @@ const BranchFollowUp = () => {
                                                                 </div>
                                                             </div>
                                                         ) : (
-                                                            <div className="grid grid-cols-2 gap-3">
-                                                                <div>
-                                                                    <span className="text-[9px] font-black uppercase text-gray-400 block mb-1">Margin (%)</span>
-                                                                    <span className="text-sm font-bold text-gray-500 py-2 block">{editForm.margin || 0}%</span>
-                                                                </div>
-                                                                <div>
-                                                                    <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Sales Manager</label>
-                                                                    <select className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-sm font-bold" value={editForm.salesOwner || ""} onChange={(e) => setEditForm({ ...editForm, salesOwner: e.target.value })}>
-                                                                        <option value="">Select Owner</option>
-                                                                        {salesOwners.map(owner => <option key={owner._id} value={owner._id}>{owner.name}</option>)}
-                                                                    </select>
-                                                                </div>
+                                                            <div>
+                                                                <label className="text-[9px] font-black uppercase text-gray-400 block mb-1">Sales Manager</label>
+                                                                <select className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm font-bold" value={editForm.salesOwner || ""} onChange={(e) => setEditForm({ ...editForm, salesOwner: e.target.value })}>
+                                                                    <option value="">Select Owner</option>
+                                                                    {salesOwners.map(owner => <option key={owner._id} value={owner._id}>{owner.name}</option>)}
+                                                                </select>
                                                             </div>
                                                         )}
 
@@ -811,10 +805,12 @@ const BranchFollowUp = () => {
                                                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Credit Limit</p>
                                                             <p className="text-[11px] font-bold text-gray-700">₹{(customer.creditLimit ?? 0).toLocaleString()} / {customer.creditLimitDays || 0}D</p>
                                                         </div>
-                                                        <div className="text-right">
-                                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Margin (%)</p>
-                                                            <p className="text-[11px] font-bold text-gray-700">{customer.margin || 0}%</p>
-                                                        </div>
+                                                        {(user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN") && (
+                                                            <div className="text-right">
+                                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1">Margin (%)</p>
+                                                                <p className="text-[11px] font-bold text-gray-700">{customer.margin || 0}%</p>
+                                                            </div>
+                                                        )}
                                                     </div>
 
                                                     <div className="flex items-center gap-2">
@@ -915,9 +911,11 @@ const BranchFollowUp = () => {
                                             <th onClick={() => handleSort("receiptAge")} className="px-2 py-3 text-center border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all w-[75px] min-w-[75px] max-w-[75px]">
                                                 <div className="flex items-center justify-center"><FaClock size={10} className="mr-1" /> Rec Age <SortIcon column="receiptAge" /></div>
                                             </th>
-                                            <th onClick={() => handleSort("margin")} className="px-2 py-3 text-center border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all w-[55px] min-w-[55px] max-w-[55px]">
-                                                <div className="flex items-center justify-center">Margin <SortIcon column="margin" /></div>
-                                            </th>
+                                            {(user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN") && (
+                                                <th onClick={() => handleSort("margin")} className="px-2 py-3 text-center border-b border-gray-200 cursor-pointer hover:bg-gray-200 transition-all w-[55px] min-w-[55px] max-w-[55px]">
+                                                    <div className="flex items-center justify-center">Margin <SortIcon column="margin" /></div>
+                                                </th>
+                                            )}
                                             {(isFieldAllowed("action_followup") || isFieldAllowed("action_log") || isFieldAllowed("action_ledger") || isFieldAllowed("action_edit")) && (
                                                 <th className="px-4 py-3 text-center border-b border-gray-200">Actions</th>
                                             )}
@@ -1074,7 +1072,7 @@ const BranchFollowUp = () => {
                                                                             <option value="risk_zone">Risk Zone</option>
                                                                         </select>
                                                                     </div>
-                                                                    {user?.role === "SUPER_ADMIN" ? (
+                                                                    {(user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN") && (
                                                                         <div className="w-20">
                                                                             <label className="text-[9px] font-black uppercase text-indigo-400 block mb-1">Margin (%)</label>
                                                                             <input 
@@ -1084,11 +1082,6 @@ const BranchFollowUp = () => {
                                                                                 value={editForm.margin || 0}
                                                                                 onChange={(e) => setEditForm({ ...editForm, margin: e.target.value })}
                                                                             />
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="flex flex-col items-center shrink-0">
-                                                                            <span className="text-[9px] font-black uppercase text-gray-400 block mb-1">Margin (%)</span>
-                                                                            <span className="text-[11px] font-bold text-gray-500 py-1">{editForm.margin || 0}%</span>
                                                                         </div>
                                                                     )}
                                                                     <div className="flex-1">
@@ -1246,9 +1239,11 @@ const BranchFollowUp = () => {
                                                          )}
                                                      </td>
                                                      {/* Margin Column */}
-                                                     <td className="px-2 py-3 text-center text-sm font-semibold text-gray-700 w-[55px] min-w-[55px] max-w-[55px]">
-                                                         {customer.margin || 0}%
-                                                     </td>
+                                                     {(user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN") && (
+                                                         <td className="px-2 py-3 text-center text-sm font-semibold text-gray-700 w-[55px] min-w-[55px] max-w-[55px]">
+                                                             {customer.margin || 0}%
+                                                         </td>
+                                                     )}
                                                      {(isFieldAllowed("action_followup") || isFieldAllowed("action_log") || isFieldAllowed("action_ledger") || isFieldAllowed("action_edit")) && (
                                                         <td className="px-4 py-3 text-center">
                                                             <div className="flex items-center justify-center gap-2">
