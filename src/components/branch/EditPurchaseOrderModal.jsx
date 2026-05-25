@@ -43,7 +43,7 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
       if (!branch) return;
 
       const url = `${API_BASE}/products?branchId=${branch}&limit=10000`;
-      const res = await fetch(url);
+      const res = await fetchWithAuth(url);
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       
       const data = await res.json();

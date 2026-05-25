@@ -43,13 +43,32 @@ router.get("/next-invoice/:voucherType", async (req, res) => {
       return res.status(400).json({ message: "branchId is required" });
     }
 
-    const voucher = await VoucherType.findOne({
+    let voucher = await VoucherType.findOne({
       branchId,
       name: voucherType.toLowerCase(),
       orderType: "PO",
     });
 
-    if (!voucher) return res.status(404).json({ message: "Voucher not found" });
+    if (!voucher) {
+      // 1. Fallback: Try to find any PO voucher type in this branch
+      voucher = await VoucherType.findOne({ branchId, orderType: "PO" });
+    }
+
+    if (!voucher) {
+      // 2. Fallback: Automatically create a default PO voucher type for this branch
+      const currentFY = getFinancialYear();
+      const prefix = "PO";
+      voucher = new VoucherType({
+        branchId,
+        name: voucherType.toLowerCase() || "purchase order",
+        orderType: "PO",
+        prefix,
+        counter: 1,
+        financialYear: currentFY,
+      });
+      await voucher.save();
+      console.log(`[SELF-HEALING] Dynamically created default PO voucher type for branch: ${branchId}`);
+    }
 
     const currentFY = getFinancialYear();
 
@@ -512,11 +531,28 @@ router.post("/", auth, async (req, res) => {
     if (rest.totalDiscount !== undefined) rest.totalDiscount = Math.round(Number(rest.totalDiscount));
     if (rest.transportCharge !== undefined) rest.transportCharge = Math.round(Number(rest.transportCharge));
 
-    const voucher = await VoucherType.findOne({ branchId, name: voucherType.toLowerCase(), orderType: "PO" })
+    let voucher = await VoucherType.findOne({ branchId, name: voucherType.toLowerCase(), orderType: "PO" })
       || await VoucherType.findOne({ branchId, name: voucherType });
 
     if (!voucher) {
-      return res.status(404).json({ message: "Voucher not found" });
+      // 1. Fallback: Try to find any PO voucher type in this branch
+      voucher = await VoucherType.findOne({ branchId, orderType: "PO" });
+    }
+
+    if (!voucher) {
+      // 2. Fallback: Automatically create a default PO voucher type for this branch
+      const currentFY = getGlobalFinancialYear();
+      const prefix = "PO";
+      voucher = new VoucherType({
+        branchId,
+        name: voucherType.toLowerCase() || "purchase order",
+        orderType: "PO",
+        prefix,
+        counter: 1,
+        financialYear: currentFY,
+      });
+      await voucher.save();
+      console.log(`[SELF-HEALING] Dynamically created default PO voucher type for branch: ${branchId}`);
     }
 
     const currentFY = getGlobalFinancialYear();
