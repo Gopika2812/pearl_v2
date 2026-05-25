@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "git-status": "git status",
+    "check-facheck": "node check_all_facheck.js",
+    "search-dist": "node search_dist.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -282,6 +282,22 @@ function AppContent() {
         "/branch/spotted-customer-ledger": "spotted-ledger",
       };
 
+      // 3. SALES ORDER LOCK ENFORCEMENT
+      const salesPaths = [
+        "/branch/sales-order",
+        "/branch/sales-orders",
+        "/branch/sales-invoices",
+        "/branch/claims",
+        "/branch/credit-note",
+        "/branch/receipt",
+        "/branch/receipt-records"
+      ];
+      if (salesPaths.includes(location.pathname) && isSalesOrderLocked) {
+        toast.error("Access Denied: Sales features are disabled due to pending deliveries. Contact Saravan Sir.");
+        navigate("/branch-home");
+        return;
+      }
+
       const requiredPermission = pathPermissionMap[location.pathname];
       const allowedPages = user.allowedPages || [];
 
@@ -309,7 +325,7 @@ function AppContent() {
     };
 
     verifyAccess();
-  }, [location.pathname, isBranchRoute, superAdminViewBranch, navigate, user]);
+  }, [location.pathname, isBranchRoute, superAdminViewBranch, navigate, user, isSalesOrderLocked]);
 
   const [securityOverlay, setSecurityOverlay] = useState(false);
 

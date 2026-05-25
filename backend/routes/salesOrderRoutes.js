@@ -508,6 +508,38 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
       return res.status(400).json({ message: "Invalid sales order data - voucherType, branchId, and at least one item (Regular or Sample) are required" });
     }
 
+    // 🔒 SALES ORDER LOCK CHECK (Non-Super Admins)
+    const isSuperAdmin = req.user.role === "SUPER_ADMIN" || req.user.role === "SUPERADMIN";
+    if (!isSuperAdmin) {
+      const BranchUser = mongoose.model("BranchUser");
+      const dbUser = await BranchUser.findById(req.user.id || req.user._id);
+      const hasBypass = dbUser && (dbUser.actionPermissions?.get("bypassSalesOrderLock") === true || dbUser.actionPermissions?.bypassSalesOrderLock === true);
+      
+      if (!hasBypass) {
+        const cutoff = new Date();
+        cutoff.setHours(cutoff.getHours() - 50);
+        const goLiveDate = new Date("2026-05-20T00:00:00+05:30");
+
+        const lockQuery = {
+          branchId: new mongoose.Types.ObjectId(branchId),
+          status: { $in: ["FINALIZED", "PRINTED", "SENT"] },
+          deliveryStatus: { $in: ["PENDING", "PICKED"] },
+          $or: [
+            { invoiceDate: { $exists: true, $lt: cutoff } },
+            { invoiceDate: { $exists: false }, createdAt: { $lt: cutoff } }
+          ],
+          createdAt: { $gte: goLiveDate }
+        };
+
+        const delayedCount = await Invoice.countDocuments(lockQuery);
+        if (delayedCount > 0) {
+          return res.status(403).json({
+            message: "Creation Blocked: Sales Order features are disabled due to pending deliveries older than 50 hours. Contact Saravan Sir to enable."
+          });
+        }
+      }
+    }
+
     const currentFY = getFinancialYear();
     console.log("📅 Financial year:", currentFY);
 
