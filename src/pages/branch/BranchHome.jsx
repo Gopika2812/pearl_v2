@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { 
-  FaHome, FaPhone, FaCalendarCheck, FaClock, FaTicketAlt, FaCheckCircle, 
+  FaHome, FaPhone, FaCalendarCheck, FaClock, FaTicketAlt, FaCheckCircle, FaCheck,
   FaInbox, FaChartLine, FaFileInvoiceDollar, FaMoneyBillWave, FaUsers, 
   FaBan, FaFileSignature, FaUser, FaTimes, FaRunning, FaMapMarkerAlt, 
   FaComment, FaLock, FaEnvelope, FaBuilding, FaChevronRight, FaAddressCard, FaIdCard, FaShieldAlt 
