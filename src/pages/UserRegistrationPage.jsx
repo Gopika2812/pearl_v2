@@ -29,6 +29,26 @@ export default function UserRegistrationPage() {
   const [registrationId, setRegistrationId] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  // Dynamic multi-branch inputs
+  const [branchCodes, setBranchCodes] = useState([""]);
+
+  const addBranchCodeField = () => {
+    setBranchCodes([...branchCodes, ""]);
+  };
+
+  const removeBranchCodeField = (index) => {
+    if (branchCodes.length === 1) return;
+    const updated = [...branchCodes];
+    updated.splice(index, 1);
+    setBranchCodes(updated);
+  };
+
+  const handleBranchCodeChange = (index, value) => {
+    const updated = [...branchCodes];
+    updated[index] = value;
+    setBranchCodes(updated);
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -72,10 +92,12 @@ export default function UserRegistrationPage() {
       return;
     }
 
-    if (!formData.branchCode.trim()) {
-      toast.error("Branch code is required");
+    const activeCodes = branchCodes.map(c => c.trim()).filter(Boolean);
+    if (activeCodes.length === 0) {
+      toast.error("At least one deployment code is required");
       return;
     }
+    const combinedBranchCodes = activeCodes.join(", ");
 
     setLoading(true);
 
@@ -89,7 +111,7 @@ export default function UserRegistrationPage() {
           email: formData.email,
           password: formData.password,
           confirmPassword: formData.confirmPassword,
-          branchCode: formData.branchCode,
+          branchCode: combinedBranchCodes,
           role: formData.role,
         }),
       });
@@ -264,25 +286,52 @@ export default function UserRegistrationPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Deployment Code</label>
-                <div className="relative group">
-                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-sky-500 transition-colors">
-                    <FaBarcode size={14} />
-                  </div>
-                  <input
-                    type="text"
-                    name="branchCode"
-                    value={formData.branchCode}
-                    onChange={handleChange}
-                    placeholder="e.g. PFC001"
-                    className="w-full pl-14 pr-4 py-4 bg-gray-50 border-2 border-transparent rounded-[20px] focus:border-sky-500 focus:bg-white transition-all outline-none font-bold text-sm text-secondary uppercase"
-                    required
-                  />
+              <div className="space-y-2 sm:col-span-2 bg-gray-50/50 p-6 rounded-[25px] border border-gray-100">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Deployment Code(s)</label>
+                  <button
+                    type="button"
+                    onClick={addBranchCodeField}
+                    className="text-[9px] font-black text-sky-500 hover:text-sky-600 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-xl uppercase tracking-wider transition-all"
+                  >
+                    + Add Branch Code
+                  </button>
                 </div>
+                <div className="space-y-3">
+                  {branchCodes.map((code, index) => (
+                    <div key={index} className="flex items-center gap-3 animate-in slide-in-from-top-2 duration-200">
+                      <div className="relative flex-1 group">
+                        <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-sky-500 transition-colors pointer-events-none">
+                          <FaBarcode size={14} />
+                        </div>
+                        <input
+                          type="text"
+                          value={code}
+                          onChange={(e) => handleBranchCodeChange(index, e.target.value)}
+                          placeholder={`e.g. PFC00${index + 1}`}
+                          className="w-full pl-14 pr-4 py-3.5 bg-white border-2 border-gray-100 focus:border-sky-500 rounded-[20px] transition-all outline-none font-bold text-sm text-secondary uppercase"
+                          required
+                        />
+                      </div>
+                      {branchCodes.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeBranchCodeField(index)}
+                          className="p-3.5 rounded-[20px] bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-600 transition-all shadow-sm"
+                          title="Remove Code"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[9px] text-secondary/40 font-bold uppercase tracking-wider mt-2 ml-1">
+                  Specify all branch codes you require access to (e.g. PFC001). Access must be authorized by Super Admin.
+                </p>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 sm:col-span-2">
                 <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-1">Protocol Level</label>
                 <div className="relative group">
                   <div className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/20 group-focus-within:text-sky-500 transition-colors pointer-events-none">

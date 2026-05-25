@@ -17,23 +17,52 @@ export default function BranchRecycling() {
         isAuto: true,
         conditionDays: 7,
         sellingQty: 0,
-        hasManual: false
+        hasManual: false,
+        reorderMode: "HIGH"
       };
     }
+
+    const reorderMode = product.restockingConfig?.reorderMode || "HIGH";
+    
+    // Auto values
+    const autoQty = product.restockingConfig?.sellingQtyInPeriod || product.reorderQty || 20;
+    const autoThreshold = product.restockingConfig?.sellingQtyInPeriod || product.reorderLevel || 10;
+    
+    // Manual values
+    const manualQty = product.restockingConfig?.restockingQty !== undefined && product.restockingConfig?.restockingQty !== null
+      ? product.restockingConfig.restockingQty
+      : (product.reorderQty || 20);
+    const manualThreshold = product.restockingConfig?.threshold !== undefined && product.restockingConfig?.threshold !== null
+      ? product.restockingConfig.threshold
+      : (product.reorderLevel || 10);
+
+    let resolvedQty, resolvedThreshold;
+    if (reorderMode === "LOW") {
+      resolvedQty = Math.min(autoQty, manualQty);
+      resolvedThreshold = Math.min(autoThreshold, manualThreshold);
+    } else {
+      // HIGH is default
+      resolvedQty = Math.max(autoQty, manualQty);
+      resolvedThreshold = Math.max(autoThreshold, manualThreshold);
+    }
+
     const hasManual = product.restockingConfig?.restockingQty !== undefined && product.restockingConfig?.restockingQty !== null;
-    const reorderQty = hasManual ? product.restockingConfig.restockingQty : (product.restockingConfig?.sellingQtyInPeriod || product.reorderQty || 20);
-    const reorderLevel = product.restockingConfig?.threshold ?? product.reorderLevel ?? 10;
-    const isAuto = !hasManual;
+    const isAuto = reorderMode === "HIGH";
     const conditionDays = product.restockingConfig?.salesPeriodDays || 7;
     const sellingQty = product.restockingConfig?.sellingQtyInPeriod || 0;
     
     return {
-      reorderQty,
-      reorderLevel,
+      reorderQty: resolvedQty,
+      reorderLevel: resolvedThreshold,
       isAuto,
       conditionDays,
       sellingQty,
-      hasManual
+      hasManual,
+      reorderMode,
+      autoQty,
+      autoThreshold,
+      manualQty,
+      manualThreshold
     };
   };
 
@@ -252,7 +281,7 @@ export default function BranchRecycling() {
     if (!currentBranch?._id) return null;
 
     try {
-      const res = await fetch(`${API_BASE}/sales-orders?branchId=${currentBranch._id}`);
+      const res = await fetch(`${API_BASE}/sales-orders?branchId=${currentBranch._id}&generated=false&fromDate=2020-01-01&toDate=2030-12-31&limit=5000`);
       if (!res.ok) return null;
 
       const data = await res.json();
@@ -269,17 +298,33 @@ export default function BranchRecycling() {
 
       // Create a map of productId -> total pending qty
       const pendingMap = {};
+      const detailsMap = {};
       pendingOrders.forEach((order) => {
         if (Array.isArray(order.items)) {
           order.items.forEach((item) => {
             const prodId = item.productId?._id || item.productId;
-            pendingMap[prodId] = (pendingMap[prodId] || 0) + (item.qty || 0);
+            if (prodId) {
+              pendingMap[prodId] = (pendingMap[prodId] || 0) + (item.qty || 0);
+              
+              if (!detailsMap[prodId]) {
+                detailsMap[prodId] = [];
+              }
+              const dateVal = order.orderDate || order.createdAt;
+              const daysPending = Math.max(0, Math.floor((new Date() - new Date(dateVal)) / (1000 * 60 * 60 * 24)));
+              detailsMap[prodId].push({
+                invoiceId: order.invoiceId,
+                customerName: order.customer?.name || "Unknown",
+                qty: item.qty,
+                date: dateVal,
+                daysPending
+              });
+            }
           });
         }
       });
 
       console.log("📊 Pending Sales Map:", pendingMap);
-      return pendingMap;
+      return { pendingMap, detailsMap };
     } catch (err) {
       console.error("❌ Error fetching pending sales:", err);
       return null;
@@ -325,13 +370,21 @@ export default function BranchRecycling() {
   };
 
   const [pendingSalesMap, setPendingSalesMap] = useState(null);
+  const [pendingSalesDetailsMap, setPendingSalesDetailsMap] = useState({});
+  const [showPendingSalesPopup, setShowPendingSalesPopup] = useState(false);
   const [pendingPOMap, setPendingPOMap] = useState({});
 
   // Fetch both products, pending sales, and pending purchase orders
   const fetchAllData = async (page = 1, search = "") => {
     await fetchProducts(page, search);
-    const pendingMap = await fetchPendingSales();
-    setPendingSalesMap(pendingMap || {});
+    const pendingSalesData = await fetchPendingSales();
+    if (pendingSalesData) {
+      setPendingSalesMap(pendingSalesData.pendingMap || {});
+      setPendingSalesDetailsMap(pendingSalesData.detailsMap || {});
+    } else {
+      setPendingSalesMap({});
+      setPendingSalesDetailsMap({});
+    }
     const pendingPO = await fetchPendingPurchaseOrders();
     setPendingPOMap(pendingPO || {});
   };
@@ -561,14 +614,12 @@ export default function BranchRecycling() {
     setRestockingEditingProduct(product);
     setRestockingConfigMode(true);
     
-    const hasManual = product.restockingConfig?.restockingQty !== undefined && product.restockingConfig?.restockingQty !== null;
-    
     setRestockingFormValues({
-      reorderMode: hasManual ? "MANUAL" : "AUTO",
+      reorderMode: product.restockingConfig?.reorderMode || "HIGH",
       salesPeriodDays: product.restockingConfig?.salesPeriodDays || 7,
       sellingQtyInPeriod: product.restockingConfig?.sellingQtyInPeriod || 0,
-      threshold: product.restockingConfig?.threshold ?? product.reorderLevel ?? 10,
-      restockingQty: product.restockingConfig?.restockingQty || product.reorderQty || 20,
+      threshold: product.restockingConfig?.threshold !== undefined && product.restockingConfig?.threshold !== null ? product.restockingConfig.threshold : (product.reorderLevel || 10),
+      restockingQty: product.restockingConfig?.restockingQty !== undefined && product.restockingConfig?.restockingQty !== null ? product.restockingConfig.restockingQty : (product.reorderQty || 20),
     });
   };
 
@@ -594,8 +645,6 @@ export default function BranchRecycling() {
         setRestockingFormValues((prev) => ({
           ...prev,
           sellingQtyInPeriod: calculatedQty,
-          // In AUTO mode, alert trigger matches the sales period quantity
-          threshold: calculatedQty,
         }));
         
         toast.success(`✅ Calculated last ${days} days sales: ${calculatedQty} units!`);
@@ -612,7 +661,7 @@ export default function BranchRecycling() {
 
   // Auto-calculate sales period qty when days change (debounced)
   useEffect(() => {
-    if (!restockingEditingProduct || restockingFormValues.reorderMode !== "AUTO" || !restockingFormValues.salesPeriodDays) return;
+    if (!restockingEditingProduct || !restockingFormValues.salesPeriodDays) return;
     
     const delayDebounce = setTimeout(() => {
       const fetchQty = async () => {
@@ -628,10 +677,8 @@ export default function BranchRecycling() {
           if (data.success) {
             const calculatedQty = data.sellingQtyInPeriod || 0;
             setRestockingFormValues((prev) => ({
-              ...prev,
-              sellingQtyInPeriod: calculatedQty,
-              // AUTO MODE REQUIREMENT: Reorder Threshold matches sales period quantity
-              threshold: calculatedQty,
+               ...prev,
+               sellingQtyInPeriod: calculatedQty,
             }));
           }
         } catch (err) {
@@ -644,7 +691,7 @@ export default function BranchRecycling() {
     }, 500); // 500ms debounce
     
     return () => clearTimeout(delayDebounce);
-  }, [restockingFormValues.salesPeriodDays, restockingFormValues.reorderMode, restockingEditingProduct?._id]);
+  }, [restockingFormValues.salesPeriodDays, restockingEditingProduct?._id]);
 
 
   // Save restocking configuration
@@ -653,15 +700,12 @@ export default function BranchRecycling() {
 
     setSavingRestockingConfig(true);
     try {
-      // Build payload based on AUTO vs MANUAL mode
-      const isAuto = restockingFormValues.reorderMode === "AUTO";
       const payload = {
         salesPeriodDays: restockingFormValues.salesPeriodDays,
         sellingQtyInPeriod: restockingFormValues.sellingQtyInPeriod,
         threshold: restockingFormValues.threshold,
-        // In AUTO mode, set restockingQty to null so we use sellingQtyInPeriod as fallback.
-        // In MANUAL mode, use the manually defined restockingQty.
-        restockingQty: isAuto ? null : restockingFormValues.restockingQty,
+        restockingQty: restockingFormValues.restockingQty,
+        reorderMode: restockingFormValues.reorderMode,
       };
 
       const res = await fetch(
@@ -1279,10 +1323,30 @@ export default function BranchRecycling() {
   const RestockingConfigModal = () => {
     if (!restockingEditingProduct) return null;
 
-    const isAuto = restockingFormValues.reorderMode === "AUTO";
+    const reorderMode = restockingFormValues.reorderMode || "HIGH";
+    const isHigh = reorderMode === "HIGH";
     const poQty = pendingPOMap?.[restockingEditingProduct._id] || 0;
     const soQty = pendingSalesMap?.[restockingEditingProduct._id] || 0;
     const netAvailability = Number(((restockingEditingProduct.totalQty || 0) + poQty - soQty).toFixed(2));
+
+    const autoQty = restockingFormValues.sellingQtyInPeriod || restockingEditingProduct.reorderQty || 20;
+    const autoThreshold = restockingFormValues.sellingQtyInPeriod || restockingEditingProduct.reorderLevel || 10;
+
+    const manualQty = restockingFormValues.restockingQty !== undefined && restockingFormValues.restockingQty !== null
+      ? restockingFormValues.restockingQty
+      : (restockingEditingProduct.reorderQty || 20);
+    const manualThreshold = restockingFormValues.threshold !== undefined && restockingFormValues.threshold !== null
+      ? restockingFormValues.threshold
+      : (restockingEditingProduct.reorderLevel || 10);
+
+    let resolvedQty, resolvedThreshold;
+    if (reorderMode === "LOW") {
+      resolvedQty = Math.min(autoQty, manualQty);
+      resolvedThreshold = Math.min(autoThreshold, manualThreshold);
+    } else {
+      resolvedQty = Math.max(autoQty, manualQty);
+      resolvedThreshold = Math.max(autoThreshold, manualThreshold);
+    }
 
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
@@ -1300,10 +1364,11 @@ export default function BranchRecycling() {
           <div className="p-8 space-y-6">
             {/* Live Stock & Pending Quantities Summary Card */}
             <div className="bg-gradient-to-r from-gray-50 to-blue-50/30 p-5 rounded-2xl border border-blue-100/70 shadow-sm grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded border border-gray-200 p-2 text-center">
-                <div className="text-sm font-extrabold text-gray-800">
+              <div className="bg-white rounded border border-gray-200 p-2 text-center flex flex-col justify-center">
+                <span className="text-[10px] text-gray-500 block uppercase font-black tracking-wider">Current Stock</span>
+                <span className="text-xl font-extrabold text-gray-800 mt-1">
                   {Number((restockingEditingProduct.totalQty || 0).toFixed(2))} <span className="text-xs text-gray-500 font-medium">{restockingEditingProduct.units}</span>
-                </div>
+                </span>
               </div>
               <div className="text-center md:border-r border-blue-100 last:border-0 p-2">
                 <span className="text-[10px] text-indigo-500 block uppercase font-black tracking-wider">Pending PO Qty</span>
@@ -1311,11 +1376,25 @@ export default function BranchRecycling() {
                   {poQty} <span className="text-xs text-indigo-500 font-medium">{restockingEditingProduct.units}</span>
                 </span>
               </div>
-              <div className="text-center md:border-r border-blue-100 last:border-0 p-2">
+              <div 
+                onClick={() => {
+                  if (soQty > 0) {
+                    setShowPendingSalesPopup(true);
+                  }
+                }}
+                className={`text-center md:border-r border-blue-100 last:border-0 p-2 select-none ${
+                  soQty > 0 ? "cursor-pointer hover:bg-rose-50/50 hover:scale-105 active:scale-95 transition-all duration-300 rounded-xl" : ""
+                }`}
+              >
                 <span className="text-[10px] text-rose-500 block uppercase font-black tracking-wider">Pending SO Qty</span>
                 <span className="text-xl font-extrabold text-rose-700 block mt-1">
                   {soQty} <span className="text-xs text-rose-500 font-medium">{restockingEditingProduct.units}</span>
                 </span>
+                {soQty > 0 && (
+                  <span className="text-[8px] text-rose-400 font-bold block mt-0.5 animate-pulse">
+                    (Click to View Details)
+                  </span>
+                )}
               </div>
               <div className="text-center p-2">
                 <span className="text-[10px] text-emerald-600 block uppercase font-black tracking-wider">Net Available</span>
@@ -1325,23 +1404,60 @@ export default function BranchRecycling() {
               </div>
             </div>
 
-            {/* Automatic Restocking Block */}
-            <div className={`p-5 rounded-2xl border transition-all duration-200 ${isAuto ? 'bg-indigo-50/50 border-indigo-200 shadow-sm' : 'bg-gray-50/40 border-gray-100 opacity-60'}`}>
-              <label className="flex items-center gap-3 cursor-pointer mb-4">
-                <input
-                  type="radio"
-                  name="reorderMode"
-                  value="AUTO"
-                  checked={isAuto}
-                  onChange={() => setRestockingFormValues(prev => ({ ...prev, reorderMode: "AUTO" }))}
-                  className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                />
-                <span className="text-sm font-black text-indigo-950 flex items-center gap-1.5">
-                  🤖 Auto Mode (Sales-Based)
+            {/* 🎛️ High/Low Mode Segmented Toggle */}
+            <div className="bg-gray-50/70 backdrop-blur-sm p-4 rounded-2xl border border-gray-200/50 shadow-sm space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  Restocking Mode Selector
                 </span>
-              </label>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold uppercase transition-all duration-300 ${
+                  isHigh ? "bg-purple-100 text-purple-700" : "bg-amber-100 text-amber-700"
+                }`}>
+                  {isHigh ? "⚡ Active: High Mode (Max)" : "🛠️ Active: Low Mode (Min)"}
+                </span>
+              </div>
               
-              <div className={`space-y-4 transition-all duration-200 ${isAuto ? 'block' : 'hidden'}`}>
+              <div className="bg-gray-200/50 p-1.5 rounded-2xl flex gap-2 border border-gray-300/30">
+                <button
+                  type="button"
+                  onClick={() => setRestockingFormValues(prev => ({ ...prev, reorderMode: "HIGH" }))}
+                  className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
+                    isHigh 
+                      ? "bg-purple-600 text-white shadow-md transform scale-[1.01]" 
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                  }`}
+                >
+                  <span className="text-base">🚀</span> High (Max Mode)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRestockingFormValues(prev => ({ ...prev, reorderMode: "LOW" }))}
+                  className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
+                    !isHigh 
+                      ? "bg-amber-500 text-white shadow-md transform scale-[1.01]" 
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                  }`}
+                >
+                  <span className="text-base">✍️</span> Low (Min Mode)
+                </button>
+              </div>
+              
+              <p className="text-[10px] text-gray-500 italic text-center">
+                {isHigh 
+                  ? "High Mode selects the HIGHEST values by comparing Auto calculated values and Manual override levels." 
+                  : "Low Mode selects the LOWEST values by comparing Auto calculated values and Manual override levels."}
+              </p>
+            </div>
+
+            {/* Automatic Restocking Block */}
+            <div className="p-5 rounded-2xl border bg-indigo-50/50 border-indigo-200 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="text-sm font-black text-indigo-950 flex items-center gap-1.5">
+                  🤖 Auto Settings (Sales-Based)
+                </span>
+              </div>
+              
+              <div className="space-y-4">
                 <div className="ml-7">
                   <label className="block text-xs font-bold text-indigo-700 mb-1.5">
                     Condition Period (Days)
@@ -1359,21 +1475,21 @@ export default function BranchRecycling() {
                     placeholder="e.g. 7, 14, 30"
                   />
                   <p className="text-[10px] text-indigo-600/80 mt-1 font-semibold">
-                    Past X days of sales invoices sets both the reorder qty and trigger threshold automatically.
+                    Past X days of sales invoices calculates the dynamic reorder quantity and threshold automatically.
                   </p>
                 </div>
 
                 <div className="ml-7 bg-white p-4 rounded-xl border border-indigo-100 flex items-center justify-between shadow-sm">
                   <div>
-                    <span className="text-[10px] text-gray-500 block uppercase font-bold tracking-wider">Sales Period Qty (Auto Order Qty)</span>
+                    <span className="text-[10px] text-gray-500 block uppercase font-bold tracking-wider">Auto Order Qty (Sales)</span>
                     <span className="text-2xl font-black text-indigo-700">
                       {calculatingSellingQty ? "🔄 Calculating..." : `${restockingFormValues.sellingQtyInPeriod || 0} ${restockingEditingProduct.units}`}
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] text-gray-500 block uppercase font-bold tracking-wider">Auto Trigger Threshold</span>
+                    <span className="text-[10px] text-gray-500 block uppercase font-bold tracking-wider">Auto Threshold</span>
                     <span className="text-2xl font-black text-indigo-700">
-                      {calculatingSellingQty ? "🔄..." : `${restockingFormValues.threshold || 0} ${restockingEditingProduct.units}`}
+                      {calculatingSellingQty ? "🔄..." : `${restockingFormValues.sellingQtyInPeriod || 0} ${restockingEditingProduct.units}`}
                     </span>
                   </div>
                 </div>
@@ -1381,22 +1497,14 @@ export default function BranchRecycling() {
             </div>
 
             {/* Manual Restocking Block */}
-            <div className={`p-5 rounded-2xl border transition-all duration-200 ${!isAuto ? 'bg-amber-50/50 border-amber-200 shadow-sm' : 'bg-gray-50/40 border-gray-100 opacity-60'}`}>
-              <label className="flex items-center gap-3 cursor-pointer mb-4">
-                <input
-                  type="radio"
-                  name="reorderMode"
-                  value="MANUAL"
-                  checked={!isAuto}
-                  onChange={() => setRestockingFormValues(prev => ({ ...prev, reorderMode: "MANUAL" }))}
-                  className="w-4 h-4 text-amber-600 focus:ring-amber-500 border-gray-300"
-                />
+            <div className="p-5 rounded-2xl border bg-amber-50/50 border-amber-200 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
                 <span className="text-sm font-black text-amber-950 flex items-center gap-1.5">
-                  ✍️ Manual Override Qty
+                  ✍️ Manual Override Configuration
                 </span>
-              </label>
+              </div>
               
-              <div className={`space-y-4 transition-all duration-200 ${!isAuto ? 'block' : 'hidden'}`}>
+              <div className="space-y-4">
                 <div className="ml-7 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-amber-700 mb-1.5">
@@ -1456,21 +1564,25 @@ export default function BranchRecycling() {
                 <div className="bg-gray-800/50 p-3 rounded-lg border border-gray-700/50 text-center">
                   <span className="text-[10px] text-gray-400 block uppercase font-semibold">Active Mode</span>
                   <span className="text-xs font-extrabold text-indigo-400 block mt-1">
-                    {isAuto ? "🤖 AUTO" : "✍️ MANUAL"}
+                    {reorderMode === "HIGH" ? "🚀 HIGH (MAX)" : "🛠️ LOW (MIN)"}
                   </span>
                 </div>
                 <div className="bg-gray-800/50 p-3 rounded-lg border border-gray-700/50 text-center">
                   <span className="text-[10px] text-gray-400 block uppercase font-semibold">Trigger Threshold</span>
                   <span className="text-sm font-extrabold text-red-400 block mt-1">
-                    {restockingFormValues.threshold ?? 0} {restockingEditingProduct.units}
+                    {resolvedThreshold} {restockingEditingProduct.units}
+                  </span>
+                  <span className="text-[9px] text-gray-500 block mt-0.5">
+                    {reorderMode === "HIGH" ? "Max" : "Min"}(Auto: {autoThreshold}, Manual: {manualThreshold})
                   </span>
                 </div>
                 <div className="bg-gray-800/50 p-3 rounded-lg border border-gray-700/50 text-center">
                   <span className="text-[10px] text-gray-400 block uppercase font-semibold">Order Quantity</span>
                   <span className="text-sm font-extrabold text-green-400 block mt-1">
-                    {isAuto
-                      ? `${restockingFormValues.sellingQtyInPeriod || 0} ${restockingEditingProduct.units}`
-                      : `${restockingFormValues.restockingQty || 0} ${restockingEditingProduct.units}`}
+                    {resolvedQty} {restockingEditingProduct.units}
+                  </span>
+                  <span className="text-[9px] text-gray-500 block mt-0.5">
+                    {reorderMode === "HIGH" ? "Max" : "Min"}(Auto: {autoQty}, Manual: {manualQty})
                   </span>
                 </div>
               </div>
@@ -1503,6 +1615,83 @@ export default function BranchRecycling() {
             </button>
           </div>
         </div>
+
+        {/* Detailed Pending SO Dialog */}
+        {showPendingSalesPopup && (
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-[100] p-4 animate-fadeIn">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full border border-gray-100 transform scale-100 transition-all duration-300">
+              <div className="bg-gradient-to-r from-rose-600 via-pink-600 to-rose-700 text-white p-5 rounded-t-3xl shadow-md flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold">🛒</span>
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-wider">Pending Sales Orders</h3>
+                    <p className="text-rose-100 text-xs font-semibold">{restockingEditingProduct.name}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowPendingSalesPopup(false)}
+                  className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white font-bold flex items-center justify-center transition active:scale-90"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="p-6 max-h-[50vh] overflow-y-auto">
+                {(() => {
+                  const details = pendingSalesDetailsMap[restockingEditingProduct._id] || [];
+                  if (details.length === 0) {
+                    return (
+                      <div className="text-center py-8">
+                        <span className="text-4xl block mb-2">🎉</span>
+                        <p className="text-xs text-gray-500 font-bold">No pending sales orders found for this product.</p>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div className="space-y-3">
+                      <div className="text-[10px] text-gray-500 font-black uppercase tracking-wider mb-2">
+                        Total Orders: {details.length}
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {details.map((d, index) => (
+                          <div key={index} className="py-3 flex items-center justify-between hover:bg-gray-50/50 transition-colors px-2 rounded-xl">
+                            <div className="space-y-0.5">
+                              <span className="text-xs font-black text-rose-600 uppercase block">{d.invoiceId}</span>
+                              <span className="text-[11px] font-bold text-gray-700 block">{d.customerName}</span>
+                              <span className="text-[9px] text-gray-400 block font-semibold">
+                                Date: {new Date(d.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-sm font-black text-gray-800 block">
+                                {d.qty} <span className="text-xs text-gray-500 font-medium">{restockingEditingProduct.units}</span>
+                              </span>
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full inline-block mt-1 ${
+                                d.daysPending > 7 ? 'bg-rose-100 text-rose-700 animate-pulse' : 'bg-amber-100 text-amber-700'
+                              }`}>
+                                ⏳ {d.daysPending} day{d.daysPending !== 1 ? 's' : ''} pending
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+              
+              <div className="bg-gray-50 px-6 py-4 rounded-b-3xl flex justify-end border-t border-gray-100">
+                <button
+                  onClick={() => setShowPendingSalesPopup(false)}
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs uppercase tracking-widest rounded-xl transition shadow-md active:scale-95"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };

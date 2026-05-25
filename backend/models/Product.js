@@ -67,6 +67,7 @@ const productSchema = new mongoose.Schema(
       sellingQtyInPeriod: { type: Number, default: 0 }, // Auto-calculated: qty sold in period
       threshold: { type: Number, default: null }, // Manual override for reorder threshold
       restockingQty: { type: Number, default: null }, // Manual override for restocking quantity
+      reorderMode: { type: String, enum: ["HIGH", "LOW"], default: "HIGH" }, // Dynamic comparator mode (HIGH = Math.max, LOW = Math.min)
     },
     // Unit Conversion Configuration
     unitConversion: {

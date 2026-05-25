@@ -5,7 +5,7 @@ import { API_BASE, fetchWithAuth } from "../api";
 import { useBranch } from "../context/BranchContext";
 
 export default function BranchTopbar({ onMenuClick }) {
-  const { currentBranch, user, logout, isSalesOrderLocked } = useBranch();
+  const { currentBranch, user, logout, isSalesOrderLocked, changeActiveBranch } = useBranch();
   const navigate = useNavigate();
   const [upcomingOrders, setUpcomingOrders] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -86,7 +86,27 @@ export default function BranchTopbar({ onMenuClick }) {
         <div className="hidden md:flex items-center gap-6">
           <div className="flex flex-col">
             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1">Branch</span>
-            <span className="font-black text-slate-800 tracking-tight leading-none">{currentBranch?.name}</span>
+            {user?.allowedBranches && user.allowedBranches.length > 1 ? (
+              <select
+                value={currentBranch?._id || currentBranch?.id || ""}
+                onChange={(e) => {
+                  const targetId = e.target.value;
+                  const targetBranch = user.allowedBranches.find(b => (b._id || b.id) === targetId);
+                  if (targetBranch) {
+                    changeActiveBranch(targetBranch);
+                  }
+                }}
+                className="font-black text-slate-800 tracking-tight leading-none bg-transparent hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 py-1.5 px-3 -ml-3 outline-none cursor-pointer transition-all duration-200 text-sm"
+              >
+                {user.allowedBranches.map((br) => (
+                  <option key={br._id || br.id} value={br._id || br.id} className="font-bold text-slate-800 bg-white">
+                    {br.name} ({br.code})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="font-black text-slate-800 tracking-tight leading-none">{currentBranch?.name}</span>
+            )}
           </div>
           <div className="h-6 w-px bg-slate-200"></div>
           <div className="flex flex-col text-slate-500">

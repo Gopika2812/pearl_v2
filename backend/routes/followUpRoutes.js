@@ -115,4 +115,26 @@ router.get("/reminders", async (req, res) => {
   }
 });
 
+// PATCH to mark a follow-up reminder as COMPLETED
+router.patch("/:id/complete", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid follow-up ID format" });
+    }
+    const record = await FollowUp.findByIdAndUpdate(
+      id,
+      { $set: { status: "COMPLETED" } },
+      { new: true }
+    );
+    if (!record) {
+      return res.status(404).json({ success: false, message: "Follow-up record not found" });
+    }
+    res.json({ success: true, data: record });
+  } catch (error) {
+    console.error("FollowUp Complete Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 export default router;

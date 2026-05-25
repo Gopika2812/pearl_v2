@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../api";
 
 const BranchContext = createContext();
@@ -187,6 +188,52 @@ export function BranchProvider({ children }) {
     }
   };
 
+  const changeActiveBranch = async (newBranch) => {
+    try {
+      const response = await fetchWithAuth(`${API_BASE}/branch-users/switch-branch`, {
+        method: "POST",
+        body: JSON.stringify({ branchId: newBranch._id }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        // Update local storage
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("currentBranch", JSON.stringify(data.data.branch));
+        
+        const updatedUser = {
+          ...user,
+          ...data.data,
+          branchId: data.data.branchId,
+          branch: data.data.branch,
+          branchName: data.data.branch.name,
+          branchCode: data.data.branch.code,
+        };
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+
+        // Update states
+        setLoginBranch(data.data.branch);
+        setUser(updatedUser);
+
+        // Reset overlays if any
+        setAdminViewBranch(null);
+        
+        // Success feedback
+        toast.success(`✅ Active branch switched to ${data.data.branch.name}`);
+        
+        // Refresh token checks and lock stats
+        setTimeout(() => {
+          refreshBlockingTokens();
+          refreshSalesOrderLockStatus();
+        }, 100);
+      } else {
+        toast.error(data.message || "Failed to switch active branch");
+      }
+    } catch (error) {
+      console.error("Error switching active branch:", error);
+      toast.error("Failed to switch active branch");
+    }
+  };
+
   const logout = () => {
     setLoginBranch(null);
     setAdminViewBranch(null);
@@ -212,6 +259,7 @@ export function BranchProvider({ children }) {
         user,
         branchLoaded,
         switchBranch,
+        changeActiveBranch,
         logout,
         refreshUser,
         blockingTokens,

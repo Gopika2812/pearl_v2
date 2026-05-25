@@ -11,6 +11,7 @@ import {
   FaLink,
   FaLock,
   FaShieldAlt,
+  FaSearch,
   FaTrash,
   FaTruck,
   FaUndo,
@@ -33,7 +34,8 @@ export default function SuperAdminControlSystem() {
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [branchUsers, setBranchUsers] = useState([]);
-  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
+  const [personnelSearchQuery, setPersonnelSearchQuery] = useState("");
   const [expandedFieldsPageId, setExpandedFieldsPageId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -43,6 +45,7 @@ export default function SuperAdminControlSystem() {
   const [voucherTypes, setVoucherTypes] = useState([]);
   const [allowedVoucherTypes, setAllowedVoucherTypes] = useState([]);
   const [allowedQuickLinks, setAllowedQuickLinks] = useState([]);
+  const [allowedBranchesState, setAllowedBranchesState] = useState([]);
 
   // Check Super Admin auth
   useEffect(() => {
@@ -68,21 +71,16 @@ export default function SuperAdminControlSystem() {
     if (selectedBranch) {
       fetchBranchUsers(selectedBranch._id);
       fetchVoucherTypes(selectedBranch._id);
-      setSelectedUser(null);
+      setSelectedUserIds([]);
+      setPersonnelSearchQuery("");
       setUserPermissions([]);
+      setFieldPermissions({});
+      setActionPermissions({});
+      setAllowedVoucherTypes([]);
+      setAllowedQuickLinks([]);
+      setAllowedBranchesState([selectedBranch._id]);
     }
   }, [selectedBranch]);
-
-  // Set permissions when user selected
-  useEffect(() => {
-    if (selectedUser) {
-      setUserPermissions(selectedUser.allowedPages || []);
-      setFieldPermissions(selectedUser.fieldPermissions || {});
-      setActionPermissions(selectedUser.actionPermissions || {});
-      setAllowedVoucherTypes(selectedUser.allowedVoucherTypes || []);
-      setAllowedQuickLinks(selectedUser.allowedQuickLinks || []);
-    }
-  }, [selectedUser]);
 
   const fetchBranches = async () => {
     try {
@@ -180,44 +178,107 @@ export default function SuperAdminControlSystem() {
     );
   };
 
+  const toggleAllowedBranchState = (branchId) => {
+    setAllowedBranchesState(prev =>
+      prev.includes(branchId)
+        ? prev.filter(id => id !== branchId)
+        : [...prev, branchId]
+    );
+  };
+
+  const toggleSelectUser = (userId) => {
+    setSelectedUserIds(prev =>
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const toggleSelectAllUsers = (checked) => {
+    if (checked) {
+      // Select only currently filtered users
+      const filteredIds = filteredUsers.map(u => u._id);
+      setSelectedUserIds(prev => {
+        const unique = new Set([...prev, ...filteredIds]);
+        return Array.from(unique);
+      });
+    } else {
+      // Deselect only currently filtered users
+      const filteredIds = filteredUsers.map(u => u._id);
+      setSelectedUserIds(prev => prev.filter(id => !filteredIds.includes(id)));
+    }
+  };
+
+  const handleUserClick = (user) => {
+    // Select this user if not selected
+    if (!selectedUserIds.includes(user._id)) {
+      setSelectedUserIds([...selectedUserIds, user._id]);
+    }
+
+    // Load their permissions into the active configuration
+    setUserPermissions(user.allowedPages || []);
+    setFieldPermissions(user.fieldPermissions || {});
+    setActionPermissions(user.actionPermissions || {});
+    setAllowedVoucherTypes(user.allowedVoucherTypes || []);
+    setAllowedQuickLinks(user.allowedQuickLinks || []);
+    const branchIds = (user.allowedBranches || []).map(b => b._id || b);
+    setAllowedBranchesState(branchIds);
+
+    toast.info(`Loaded permissions from ${user.username}`);
+  };
+
+  // Compute filtered users list
+  const filteredUsers = branchUsers.filter(user =>
+    user.username.toLowerCase().includes(personnelSearchQuery.toLowerCase()) ||
+    user.role.toLowerCase().includes(personnelSearchQuery.toLowerCase())
+  );
+
+  const isAllFilteredUsersSelected =
+    filteredUsers.length > 0 &&
+    filteredUsers.every(u => selectedUserIds.includes(u._id));
+
   const handleSavePermissions = async () => {
-    if (!selectedUser) return;
+    if (selectedUserIds.length === 0) {
+      toast.error("Please select at least one personnel profile on the right");
+      return;
+    }
     setSaving(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/branch-users/${selectedUser._id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          allowedPages: userPermissions,
-          fieldPermissions: fieldPermissions,
-          actionPermissions: actionPermissions,
-          allowedVoucherTypes: allowedVoucherTypes,
-          allowedQuickLinks: allowedQuickLinks
-        })
+      
+      // Parallel commits to all selected users
+      const promises = selectedUserIds.map(async (userId) => {
+        const res = await fetch(`${API_BASE}/branch-users/${userId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            allowedPages: userPermissions,
+            fieldPermissions: fieldPermissions,
+            actionPermissions: actionPermissions,
+            allowedVoucherTypes: allowedVoucherTypes,
+            allowedQuickLinks: allowedQuickLinks,
+            allowedBranches: allowedBranchesState,
+            branch: allowedBranchesState.includes(selectedBranch._id)
+              ? selectedBranch._id
+              : (allowedBranchesState[0] || selectedBranch._id)
+          })
+        });
+        return res.json();
       });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`Permissions updated for ${selectedUser.username}`);
-        // Update local state
-        const updatedUser = {
-          ...selectedUser,
-          allowedPages: userPermissions,
-          fieldPermissions: fieldPermissions,
-          actionPermissions: actionPermissions,
-          allowedVoucherTypes: allowedVoucherTypes,
-          allowedQuickLinks: allowedQuickLinks
-        };
-        setBranchUsers(branchUsers.map(u => u._id === selectedUser._id ? updatedUser : u));
-        setSelectedUser(updatedUser);
+
+      const results = await Promise.all(promises);
+      const failures = results.filter(r => !r.success);
+
+      if (failures.length === 0) {
+        toast.success(`✅ Access committed for ${selectedUserIds.length} user(s) successfully!`);
+        // Refresh users list to reflect saved states in background
+        await fetchBranchUsers(selectedBranch._id);
       } else {
-        toast.error(data.message || "Failed to update permissions");
+        toast.error(`Failed to commit for some users: ${failures.map(f => f.message).join(", ")}`);
       }
     } catch (err) {
-      toast.error("Error saving permissions");
+      toast.error("Error committing access");
     } finally {
       setSaving(false);
     }
@@ -234,7 +295,7 @@ export default function SuperAdminControlSystem() {
 
       // 2. Actions
       const newActionPerms = {};
-      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice"].forEach(a => newActionPerms[a] = true);
+      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice", "allowDummyBills"].forEach(a => newActionPerms[a] = true);
       setActionPermissions(newActionPerms);
 
       // 3. Field Visibility
@@ -255,7 +316,7 @@ export default function SuperAdminControlSystem() {
       setUserPermissions([]);
 
       const newActionPerms = {};
-      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice"].forEach(a => newActionPerms[a] = false);
+      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice", "allowDummyBills"].forEach(a => newActionPerms[a] = false);
       setActionPermissions(newActionPerms);
 
       const newFieldPerms = {};
@@ -274,7 +335,7 @@ export default function SuperAdminControlSystem() {
   };
 
   const isAllSelected =
-    selectedUser &&
+    selectedBranch &&
     userPermissions.length === allPages.length &&
     allowedQuickLinks.length === Object.keys(QUICK_LINKS_CONFIG).length &&
     (voucherTypes.length === 0 || allowedVoucherTypes.length === voucherTypes.length);
@@ -475,9 +536,9 @@ export default function SuperAdminControlSystem() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Step 1: Select Branch */}
-          <div className="lg:col-span-1 space-y-6">
+          <div className="lg:col-span-2 space-y-6 sticky top-[100px] self-start">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="bg-gray-50/50 p-4 border-b border-gray-100">
                 <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
@@ -485,7 +546,7 @@ export default function SuperAdminControlSystem() {
                   01. Origin Node
                 </h3>
               </div>
-              <div className="p-3 space-y-1.5 max-h-[400px] overflow-y-auto no-scrollbar">
+              <div className="p-3 space-y-1.5 max-h-[600px] overflow-y-auto no-scrollbar">
                 {branches.map(branch => (
                   <button
                     key={branch._id}
@@ -496,7 +557,7 @@ export default function SuperAdminControlSystem() {
                       }`}
                   >
                     <div className="flex flex-col">
-                      <span className={`font-bold text-xs truncate max-w-[150px] ${selectedBranch?._id === branch._id ? "text-primary" : "text-gray-700"}`}>{branch.name}</span>
+                      <span className={`font-bold text-xs truncate max-w-[120px] ${selectedBranch?._id === branch._id ? "text-primary" : "text-gray-700"}`}>{branch.name}</span>
                       <span className={`text-[8px] uppercase tracking-widest font-black ${selectedBranch?._id === branch._id ? "text-primary/60" : "text-gray-400"}`}>
                         {branch.code}
                       </span>
@@ -506,49 +567,13 @@ export default function SuperAdminControlSystem() {
                 ))}
               </div>
             </div>
-
-            {/* Step 2: Select User */}
-            {selectedBranch && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-in slide-in-from-left duration-500">
-                <div className="bg-primary/5 p-4 border-b border-primary/10 flex items-center gap-3">
-                  <FaUsers className="text-primary text-sm" />
-                  <h3 className="text-[10px] font-black text-primary uppercase tracking-widest">02. Personnel</h3>
-                </div>
-                <div className="p-3 space-y-1.5 max-h-[500px] overflow-y-auto custom-scrollbar">
-                  {loading ? (
-                    <div className="py-8 text-center text-gray-400 text-xs font-bold uppercase tracking-widest">Accessing...</div>
-                  ) : branchUsers.length === 0 ? (
-                    <div className="py-8 text-center text-gray-400 text-[10px] font-bold uppercase tracking-widest">No nodes found</div>
-                  ) : (
-                    branchUsers.map(user => (
-                      <button
-                        key={user._id}
-                        onClick={() => setSelectedUser(user)}
-                        className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-300 flex items-center justify-between group ${selectedUser?._id === user._id
-                            ? "bg-primary text-white shadow-md shadow-primary/20"
-                            : "hover:bg-gray-50 text-gray-600"
-                          }`}
-                      >
-                        <div className="flex flex-col min-w-0">
-                          <span className={`font-bold text-xs truncate ${selectedUser?._id === user._id ? "text-white" : "text-gray-700"}`}>{user.username}</span>
-                          <span className={`text-[9px] font-black uppercase tracking-widest ${selectedUser?._id === user._id ? "text-white/60" : "text-primary/60"}`}>
-                            {user.role}
-                          </span>
-                        </div>
-                        <FaChevronRight className={`text-[10px] transition-transform duration-300 ${selectedUser?._id === user._id ? "translate-x-1" : "text-gray-300 opacity-0 group-hover:opacity-100"}`} />
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* Step 3: Permissions Grid */}
-          <div className="lg:col-span-3">
-            {selectedUser ? (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-in fade-in duration-500">
-                <div className="bg-gray-800 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Step 2: Access Configuration */}
+          <div className="lg:col-span-7">
+            {selectedBranch ? (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 animate-in fade-in duration-500 overflow-visible">
+                <div className="bg-gray-800 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-[100px] z-30 shadow-lg rounded-t-2xl border-b border-gray-700">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-white shadow-inner">
                       <FaLock size={16} />
@@ -556,7 +581,7 @@ export default function SuperAdminControlSystem() {
                     <div>
                       <h3 className="font-black text-white text-sm uppercase tracking-widest">3. Access Configuration</h3>
                       <p className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mt-0.5">
-                        Authorizing user: <span className="text-primary italic">{selectedUser.username}</span>
+                        Configuring access for <span className="text-sky-400 font-extrabold">{selectedUserIds.length}</span> user(s)
                       </p>
                     </div>
                   </div>
@@ -592,6 +617,46 @@ export default function SuperAdminControlSystem() {
                 </div>
 
                 <div className="p-6 space-y-8">
+                  {/* Branch Node Access Control */}
+                  <div className="bg-sky-50/30 p-6 rounded-2xl border border-sky-100 shadow-sm">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-sky-600 mb-6 flex items-center gap-2">
+                      <FaBuilding className="text-xs" />
+                      AUTHORIZED WORKSPACES (BRANCHES)
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {branches.map(br => {
+                        const isChecked = allowedBranchesState.includes(br._id);
+                        return (
+                          <div
+                            key={br._id}
+                            onClick={() => toggleAllowedBranchState(br._id)}
+                            className={`flex items-center gap-4 px-5 py-4 rounded-xl border-2 cursor-pointer transition-all duration-300 ${isChecked
+                                ? "border-sky-500/20 bg-white shadow-md shadow-sky-500/5"
+                                : "border-gray-50 bg-gray-100/50 opacity-60 hover:opacity-100"
+                              }`}
+                          >
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${isChecked ? "bg-sky-500 text-white" : "bg-gray-200 text-gray-400"
+                              }`}>
+                              <FaBuilding size={16} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-[10px] font-black uppercase tracking-wide truncate ${isChecked ? "text-gray-900" : "text-gray-400"}`}>
+                                {br.name}
+                              </p>
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">
+                                {br.code} • {br.location || "Origin"}
+                              </p>
+                            </div>
+                            <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${isChecked ? "bg-sky-500 border-sky-500 text-white" : "border-gray-200 bg-white"
+                              }`}>
+                              {isChecked && <FaCheck size={6} />}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Global Action Permissions */}
                   <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
                     <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-6 flex items-center gap-2">
@@ -611,9 +676,10 @@ export default function SuperAdminControlSystem() {
                         { id: "editInvoiceItems", name: "Edit Workbench Items", icon: <FaEdit /> },
                         { id: "create_shortcuts", name: "Shortcuts", icon: <FaLink /> },
                         { id: "editSellingPrice", name: "Edit Selling Price", icon: <FaDollarSign /> },
-                        { id: "bypassSalesOrderLock", name: "Bypass SO Lock", icon: <FaLock /> }
+                        { id: "bypassSalesOrderLock", name: "Bypass SO Lock", icon: <FaLock /> },
+                        { id: "allowDummyBills", name: "Allow Dummy Bills", icon: <FaFileInvoice /> }
                       ].map(action => {
-                        const isEnabled = action.id === "bypassSalesOrderLock"
+                        const isEnabled = (action.id === "bypassSalesOrderLock" || action.id === "allowDummyBills")
                           ? actionPermissions[action.id] === true
                           : actionPermissions[action.id] !== false;
                         return (
@@ -882,13 +948,136 @@ export default function SuperAdminControlSystem() {
                 </div>
                 <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">Protocol Configuration</h3>
                 <p className="text-gray-400 text-[10px] font-bold uppercase mt-2 max-w-xs leading-relaxed">
-                  Select an origin node and a personnel profile to initiate access configuration
+                  Select an origin node branch to initiate access configuration
                 </p>
+              </div>
+            )}
+          </div>
+
+          {/* Step 3: Personnel Target Selection */}
+          <div className="lg:col-span-3 sticky top-[100px] self-start">
+            {selectedBranch && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-in slide-in-from-right duration-500">
+                <div className="bg-primary/5 p-4 border-b border-primary/10 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <FaUsers className="text-primary text-sm" />
+                    <h3 className="text-[10px] font-black text-primary uppercase tracking-widest">02. Personnel</h3>
+                  </div>
+                  {branchUsers.length > 0 && (
+                    <label className="flex items-center gap-1.5 text-primary/60 hover:text-primary transition font-black tracking-widest text-[9px] cursor-pointer select-none">
+                      <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-all ${
+                        isAllFilteredUsersSelected
+                          ? "bg-primary border-primary text-white"
+                          : "border-primary/20 bg-white"
+                      }`}>
+                        {isAllFilteredUsersSelected && <FaCheck size={6} />}
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="hidden"
+                        checked={isAllFilteredUsersSelected}
+                        onChange={(e) => toggleSelectAllUsers(e.target.checked)}
+                      />
+                      ALL
+                    </label>
+                  )}
+                </div>
+
+                {/* Interactive Search Console */}
+                {branchUsers.length > 0 && (
+                  <div className="p-3 border-b border-gray-100 bg-gray-50/50">
+                    <div className="relative group">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary transition-colors pointer-events-none">
+                        <FaSearch size={10} />
+                      </div>
+                      <input
+                        type="text"
+                        value={personnelSearchQuery}
+                        onChange={(e) => setPersonnelSearchQuery(e.target.value)}
+                        placeholder="Search personnel..."
+                        className="w-full pl-9 pr-3 py-2 bg-white border-2 border-gray-100 focus:border-primary focus:ring-2 focus:ring-primary/10 rounded-xl transition-all outline-none font-bold text-[10px] text-secondary shadow-inner"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-3 space-y-1.5 max-h-[550px] overflow-y-auto custom-scrollbar">
+                  {loading ? (
+                    <div className="py-8 text-center text-gray-400 text-xs font-bold uppercase tracking-widest animate-pulse">Accessing...</div>
+                  ) : filteredUsers.length === 0 ? (
+                    <div className="py-8 text-center text-gray-400 text-[10px] font-bold uppercase tracking-widest">
+                      {personnelSearchQuery ? "No matches found" : "No nodes found"}
+                    </div>
+                  ) : (
+                    filteredUsers.map(user => {
+                      const isChecked = selectedUserIds.includes(user._id);
+                      return (
+                        <div
+                          key={user._id}
+                          className={`w-full text-left px-3 py-2.5 rounded-xl transition-all duration-300 flex items-center gap-3 border ${
+                            isChecked
+                              ? "bg-primary/5 border-primary/20 shadow-sm"
+                              : "hover:bg-gray-50 border-transparent text-gray-600"
+                          }`}
+                        >
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleSelectUser(user._id);
+                            }}
+                            className={`w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer ${
+                              isChecked
+                                ? "bg-primary border-primary text-white shadow-inner"
+                                : "border-gray-300 bg-white hover:border-primary/40"
+                            }`}
+                          >
+                            {isChecked && <FaCheck size={8} />}
+                          </div>
+                          <div
+                            className="flex-1 min-w-0 cursor-pointer"
+                            onClick={() => handleUserClick(user)}
+                          >
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-bold text-xs truncate text-gray-700 hover:text-primary transition-colors">{user.username}</span>
+                              <span className={`text-[8px] font-black uppercase tracking-widest text-primary/60 mt-0.5`}>
+                                {user.role}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Floating Viewport Commit Access Button (Always visible from top to bottom) */}
+      {selectedBranch && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in fade-in zoom-in duration-300">
+          <button
+            onClick={handleSavePermissions}
+            disabled={saving || selectedUserIds.length === 0}
+            className={`bg-primary text-white font-black px-6 py-4 rounded-2xl shadow-2xl shadow-primary/30 flex items-center gap-3 text-xs uppercase tracking-widest transition-all duration-300 border border-primary/20 backdrop-blur-md ${
+              selectedUserIds.length === 0
+                ? "opacity-50 cursor-not-allowed scale-95 hover:bg-primary"
+                : "hover:bg-primary/95 hover:scale-105 active:scale-95"
+            }`}
+          >
+            {saving ? (
+              <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+            ) : (
+              <>
+                <FaCheck size={12} />
+                Commit Access ({selectedUserIds.length})
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar {

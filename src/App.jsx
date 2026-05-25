@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -15,7 +15,7 @@ import { BranchProvider } from "./context/BranchContext";
 import { InventoryProvider } from "./context/InventoryContext";
 import { useBranch } from "./context/BranchContext";
 import { fetchWithAuth } from "./api"; // Updated import
-import { FaTicketAlt, FaExclamationTriangle, FaArrowRight } from "react-icons/fa"; // Added icons
+import { FaTicketAlt, FaExclamationTriangle, FaArrowRight, FaClock } from "react-icons/fa"; // Added icons
 import AdminBranchManagement from "./pages/AdminBranchManagement";
 import APAgingPage from "./pages/APAgingPage";
 import ARAgingPage from "./pages/ARAgingPage";
@@ -150,6 +150,183 @@ function AppContent() {
       });
     }
   }, [reminderTokens]);
+
+  // --- Follow-Up Reminders Alert Logic ---
+  const [followUpReminders, setFollowUpReminders] = useState([]);
+  const [snoozedFollowUps, setSnoozedFollowUps] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem("snoozed_followups");
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const fetchFollowUpReminders = async () => {
+    const branchId = currentBranch?._id || currentBranch?.id;
+    if (!branchId || !user) {
+      setFollowUpReminders([]);
+      return;
+    }
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/follow-ups/reminders?branchId=${branchId}`);
+      const data = await res.json();
+      if (data.success) {
+        // Filter: creator and superadmin only
+        const targetName = user?.name || user?.username;
+        const isSuperAdmin = user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN";
+
+        const filtered = (data.data || []).filter(r => {
+          const isCreator = r.followUpBy === targetName;
+          return isSuperAdmin || isCreator;
+        });
+
+        setFollowUpReminders(filtered);
+      }
+    } catch (err) {
+      console.error("Error checking follow-up reminders:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchFollowUpReminders();
+    const interval = setInterval(fetchFollowUpReminders, 60000);
+    return () => clearInterval(interval);
+  }, [currentBranch?._id, currentBranch?.id, user?.id, user?._id]);
+
+  const activeReminders = useMemo(() => {
+    const now = Date.now();
+    return followUpReminders.filter(r => {
+      // 1. Check if snooze timeout is active
+      const snoozeExpiry = snoozedFollowUps[r._id];
+      if (snoozeExpiry && now < snoozeExpiry) {
+        return false;
+      }
+      // 2. Check if the scheduled date and time has been reached/passed
+      if (r.nextFollowUpDate && new Date(r.nextFollowUpDate).getTime() > now) {
+        return false; // Scheduled in the future (e.g. later today) -> do not alert yet
+      }
+      return true;
+    });
+  }, [followUpReminders, snoozedFollowUps]);
+
+  const FollowUpReminderModal = () => {
+    if (activeReminders.length === 0) return null;
+
+    const handleSnooze = (reminderId) => {
+      const snoozeDuration = 15 * 60 * 1000; // Snooze for 15 minutes
+      const expiry = Date.now() + snoozeDuration;
+      const updated = { ...snoozedFollowUps, [reminderId]: expiry };
+      setSnoozedFollowUps(updated);
+      try {
+        sessionStorage.setItem("snoozed_followups", JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+      toast.info("Reminder snoozed for 15 minutes.", { autoClose: 2000 });
+    };
+
+    const handleComplete = async (reminderId) => {
+      try {
+        const res = await fetchWithAuth(`${API_BASE}/follow-ups/${reminderId}/complete`, {
+          method: "PATCH"
+        });
+        const data = await res.json();
+        if (data.success) {
+          toast.success("Follow-up marked completed!");
+          setFollowUpReminders(prev => prev.filter(r => r._id !== reminderId));
+        } else {
+          toast.error(data.message || "Failed to complete follow-up");
+        }
+      } catch (err) {
+        toast.error("Error completing follow-up");
+      }
+    };
+
+    const currentReminder = activeReminders[0];
+
+    return (
+      <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+        <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100 flex flex-col">
+          
+          <div className="bg-gradient-to-br from-rose-500 to-amber-600 px-8 py-10 text-white text-center relative overflow-hidden">
+            <div className="absolute top-0 right-0 -translate-y-1/4 translate-x-1/4 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+            <div className="relative z-10">
+              <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm border border-white/30 shadow-lg">
+                <FaClock className="text-3xl text-white animate-pulse" />
+              </div>
+              <h2 className="text-2xl font-black uppercase tracking-tight">Follow-Up Alert!</h2>
+              <p className="text-rose-100 font-bold text-[10px] uppercase tracking-widest mt-1">Overdue customer contact action required</p>
+            </div>
+          </div>
+
+          <div className="p-8 space-y-6 flex-1 bg-slate-50/50">
+            <div className="space-y-4">
+              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Customer</p>
+                <h3 className="text-lg font-black text-slate-800 uppercase">{currentReminder.customerId?.name || "Unknown Customer"}</h3>
+                {currentReminder.customerId?.whatsapp && (
+                  <p className="text-xs font-semibold text-slate-400 mt-0.5">WhatsApp: {currentReminder.customerId.whatsapp}</p>
+                )}
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Scheduled Date</p>
+                  <p className="text-xs font-black text-slate-700">
+                    {new Date(currentReminder.nextFollowUpDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Scheduled Time</p>
+                  <p className="text-xs font-black text-slate-700 font-mono">
+                    {new Date(currentReminder.nextFollowUpDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+
+              {currentReminder.remarks && (
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Follow-Up Remarks</p>
+                  <p className="text-xs font-bold text-slate-600 leading-relaxed italic">"{currentReminder.remarks}"</p>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center text-[9px] font-bold text-slate-400 px-2">
+                <span className="uppercase">Scheduled By:</span>
+                <span className="text-slate-600 uppercase font-black">{currentReminder.followUpBy}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-8 bg-white border-t border-slate-100 flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={() => handleSnooze(currentReminder._id)}
+              className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest transition shadow-sm animate-in zoom-in-95 duration-200"
+            >
+              Ask Me Later
+            </button>
+            <button
+              onClick={() => handleComplete(currentReminder._id)}
+              className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition shadow-lg shadow-emerald-100 animate-in zoom-in-95 duration-200"
+            >
+              Mark Completed
+            </button>
+            <button
+              onClick={() => {
+                navigate(`/branch/follow-up`);
+                handleSnooze(currentReminder._id);
+              }}
+              className="py-4 px-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-100 animate-in zoom-in-95 duration-200"
+            >
+              Fulfill Now <FaArrowRight size={10} />
+            </button>
+          </div>
+
+        </div>
+      </div>
+    );
+  };
 
   // Check if we're on a branch-specific page
   const isBranchRoute = location.pathname.startsWith("/branch/") || location.pathname === "/branch-home";
@@ -555,6 +732,7 @@ function AppContent() {
       <AIAssistantBot />
 
       <SecurityOverlay />
+      <FollowUpReminderModal />
       
           <div className="flex">
             {/* Sidebar logic:

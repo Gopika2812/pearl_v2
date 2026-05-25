@@ -107,14 +107,23 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
     const allCustomerGroups = await CustomerGroup.find({});
     const customerGroupMap = new Map(allCustomerGroups.map(group => [group.name.toLowerCase(), group._id]));
 
-    // Fetch existing customers to match by Name or WhatsApp
-    const existingCustomers = await Customer.find({ branchId }, { name: 1, whatsapp: 1 });
+    // Fetch existing customers to match by Name or WhatsApp, including financial fields for audit logging
+    const existingCustomers = await Customer.find({ branchId }, { name: 1, whatsapp: 1, openingBalance: 1, debit: 1, credit: 1 });
     // Normalize DB names: lowercase and collapse multiple spaces into one
     const nameMap = new Map(existingCustomers.map(c => [
       c.name.toLowerCase().replace(/\s+/g, " ").trim(),
       c._id
     ]));
     const whatsappMap = new Map(existingCustomers.filter(c => c.whatsapp).map(c => [c.whatsapp.replace(/\D/g, ""), c._id]));
+    const existingDetailsMap = new Map(existingCustomers.map(c => [
+      c._id.toString(),
+      {
+        name: c.name,
+        openingBalance: c.openingBalance || 0,
+        debit: c.debit || 0,
+        credit: c.credit || 0
+      }
+    ]));
 
     let customersToBulkInsert = [];
     let customersToBulkUpdate = [];
@@ -129,7 +138,7 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
         ])
       );
 
-      const name = normalizedRow.customername || normalizedRow.name;
+      const name = normalizedRow.customername || normalizedRow.name || normalizedRow.debtorname || normalizedRow.debtor;
       const whatsapp = normalizedRow.whatsapp ? normalizedRow.whatsapp.replace(/\D/g, "") : "";
 
       if (!name) {
@@ -181,13 +190,64 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
 
       // 💰 FINANCIAL CALCULATIONS (ONLY in opening_balance mode)
       if (updateMode === "opening_balance") {
-        const rawDebit = normalizedRow.debit || normalizedRow.debitbalance || normalizedRow.dr;
-        const rawCredit = normalizedRow.credit || normalizedRow.creditbalance || normalizedRow.cr;
+        // Define aliases for Debit
+        const debitAliases = [
+          "debit", "debitbalance", "dr", "drbalance", "openingdebit", "openingdr", 
+          "openingdrbalance", "amountdr", "debitamount", "de", "deb", "debt"
+        ];
+        
+        // Define aliases for Credit
+        const creditAliases = [
+          "credit", "creditbalance", "cr", "crbalance", "openingcredit", "openingcr", 
+          "openingcrbalance", "amountcr", "creditamount", "cre", "cred"
+        ];
+        
+        // Define aliases for general single balance columns (like 'Opening Balance' or 'Balance')
+        const generalBalanceAliases = [
+          "openingbalance", "balance", "outstanding", "amount", "netbalance", "closingbalance",
+          "outstandingamount", "bal"
+        ];
+        
+        // Helper to find the first matching value in normalizedRow
+        const findVal = (aliases) => {
+          for (const alias of aliases) {
+            if (normalizedRow[alias] !== undefined && normalizedRow[alias] !== "") {
+              return normalizedRow[alias];
+            }
+          }
+          return undefined;
+        };
 
-        if (rawDebit !== undefined || rawCredit !== undefined) {
-          const excelDebit = parseFloat(String(rawDebit || 0).replace(/[^0-9.-]+/g, "")) || 0;
-          const excelCredit = parseFloat(String(rawCredit || 0).replace(/[^0-9.-]+/g, "")) || 0;
+        const rawDebitVal = findVal(debitAliases);
+        const rawCreditVal = findVal(creditAliases);
+        const rawGeneralVal = findVal(generalBalanceAliases);
+        const rawTypeVal = normalizedRow.type || normalizedRow.balancetype || normalizedRow.drcr || normalizedRow.drdecr || "";
 
+        let excelDebit = 0;
+        let excelCredit = 0;
+        let hasFinancialData = false;
+
+        if (rawDebitVal !== undefined || rawCreditVal !== undefined) {
+          excelDebit = parseFloat(String(rawDebitVal || 0).replace(/[^0-9.-]+/g, "")) || 0;
+          excelCredit = parseFloat(String(rawCreditVal || 0).replace(/[^0-9.-]+/g, "")) || 0;
+          hasFinancialData = true;
+        } else if (rawGeneralVal !== undefined) {
+          const rawStr = String(rawGeneralVal).trim();
+          const numericVal = parseFloat(rawStr.replace(/[^0-9.-]+/g, "")) || 0;
+          const isCrType = /cr|credit/i.test(rawStr) || /cr|credit/i.test(rawTypeVal) || numericVal < 0;
+
+          if (isCrType) {
+            excelCredit = Math.abs(numericVal);
+            excelDebit = 0;
+          } else {
+            // Default: Debtors / Customers are positive debit unless explicitly credit
+            excelDebit = Math.abs(numericVal);
+            excelCredit = 0;
+          }
+          hasFinancialData = true;
+        }
+
+        if (hasFinancialData) {
           // Calculate movements for this specific customer
           const cIdStr = existingCustomerId?.toString();
           const aprSales = salesMap[cIdStr] || 0;
@@ -239,6 +299,43 @@ router.post("/bulk-upload", upload.single("file"), async (req, res) => {
       }
 
       if (existingCustomerId) {
+        // Individual audit logging for opening balance changes in opening_balance mode
+        if (updateMode === "opening_balance" && customerData.openingBalance !== undefined) {
+          const existingDetails = existingDetailsMap.get(existingCustomerId.toString());
+          const oldOpening = existingDetails ? existingDetails.openingBalance : 0;
+          const newOpening = customerData.openingBalance;
+
+          if (oldOpening !== newOpening) {
+            const oldDebit = existingDetails ? existingDetails.debit : 0;
+            const oldCredit = existingDetails ? existingDetails.credit : 0;
+
+            const logEntry = new AuditLog({
+              user: req.user?._id || branchId,
+              userModel: req.user?.role ? "BranchUser" : "SuperAdmin",
+              username: "System", // System auto-upload
+              branchId,
+              action: "CUSTOMER_FINANCIAL_UPDATE",
+              targetId: existingCustomerId,
+              targetModel: "Customer",
+              description: `Financial details updated automatically via bulk upload for ${name}. Opening Bal: ${oldOpening} -> ${newOpening}.`,
+              changes: {
+                before: {
+                  openingBalance: oldOpening,
+                  debit: oldDebit,
+                  credit: oldCredit
+                },
+                after: {
+                  openingBalance: newOpening,
+                  debit: customerData.debit !== undefined ? customerData.debit : oldDebit,
+                  credit: customerData.credit !== undefined ? customerData.credit : oldCredit
+                }
+              }
+            });
+            await logEntry.save();
+            console.log(`🔒 Security Audit Log created for automatic financial change on customer ${name}`);
+          }
+        }
+
         customersToBulkUpdate.push({
           updateOne: {
             filter: { _id: existingCustomerId },
