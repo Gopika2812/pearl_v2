@@ -1,11 +1,14 @@
 import express from "express";
 import mongoose from "mongoose";
+import multer from "multer";
+import XLSX from "xlsx";
 import Vendor from "../models/Vendor.js";
 import PurchaseInvoice from "../models/PurchaseInvoice.js";
 import Payment from "../models/Payment.js";
 import DebitNote from "../models/DebitNote.js";
 import ManualJournal from "../models/ManualJournal.js";
 import VoucherType from "../models/VoucherType.js";
+import AuditLog from "../models/AuditLog.js";
 
 const router = express.Router();
 
@@ -375,6 +378,345 @@ router.get("/:id/ledger", async (req, res) => {
   } catch (error) {
     console.error("Fetch Vendor Ledger Error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch ledger", error: error.message });
+  }
+});
+
+// Configure multer with 50MB limit for bulk uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
+
+// Escape special regex characters
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * POST: Bulk Upload Vendors (Opening Balances / Info Update)
+ */
+router.post("/bulk-upload", upload.single("file"), async (req, res) => {
+  const { branchId, updateMode = "opening_balance" } = req.body;
+  console.log(`🔥 VENDOR BULK UPLOAD HIT (Mode: ${updateMode})`);
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Excel file required" });
+    }
+    if (!branchId) {
+      return res.status(400).json({ message: "branchId is required" });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: "" });
+
+    console.log("📄 TOTAL ROWS:", rows.length);
+
+    // 📅 DEFINE CUTOFF: Everything after March 31, 2026
+    const startOfApril = new Date("2026-04-01T00:00:00.000Z");
+
+    // 🚀 STEP 1: CALCULATE APRIL MOVEMENTS (Only if balancing mode)
+    let piMap = {};
+    let paymentMap = { debit: {}, credit: {} };
+    let dnMap = {};
+    let mjMap = { debit: {}, credit: {} };
+
+    if (updateMode === "opening_balance") {
+      const aprilPIs = await PurchaseInvoice.find({
+        branchId,
+        createdAt: { $gte: startOfApril }
+      }).select("vendor grandTotal").lean();
+
+      aprilPIs.forEach(pi => {
+        if (pi.vendor) {
+          const key = pi.vendor.toLowerCase().trim();
+          piMap[key] = (piMap[key] || 0) + (pi.grandTotal || 0);
+        }
+      });
+
+      const aprilPayments = await Payment.find({
+        branchId,
+        status: { $in: ["completed", "returned"] },
+        $or: [
+          { paymentDate: { $gte: startOfApril } },
+          { returnDate: { $gte: startOfApril } }
+        ]
+      }).select("vendor amount paymentDate isReturned returnDate").lean();
+
+      aprilPayments.forEach(p => {
+        const vId = p.vendor?.vendorId?.toString();
+        const vName = p.vendor?.name?.toLowerCase().trim();
+        
+        if (p.isReturned && p.returnDate && new Date(p.returnDate) >= startOfApril) {
+          if (vId) paymentMap.credit[vId] = (paymentMap.credit[vId] || 0) + (p.amount || 0);
+          if (vName) paymentMap.credit[vName] = (paymentMap.credit[vName] || 0) + (p.amount || 0);
+        }
+        if (p.paymentDate && new Date(p.paymentDate) >= startOfApril) {
+          if (vId) paymentMap.debit[vId] = (paymentMap.debit[vId] || 0) + (p.amount || 0);
+          if (vName) paymentMap.debit[vName] = (paymentMap.debit[vName] || 0) + (p.amount || 0);
+        }
+      });
+
+      const aprilDNs = await DebitNote.find({
+        branchId,
+        status: "Created",
+        createdAt: { $gte: startOfApril }
+      }).select("vendor grandTotal").lean();
+
+      aprilDNs.forEach(dn => {
+        const vId = dn.vendor?.vendorId?.toString();
+        const vName = dn.vendor?.name?.toLowerCase().trim();
+        if (vId) dnMap[vId] = (dnMap[vId] || 0) + (dn.grandTotal || 0);
+        if (vName) dnMap[vName] = (dnMap[vName] || 0) + (dn.grandTotal || 0);
+      });
+
+      const aprilMJsBy = await ManualJournal.find({
+        "by.partyType": "VENDOR",
+        journalDate: { $gte: startOfApril }
+      }).select("by.partyId amount").lean();
+
+      const aprilMJsTo = await ManualJournal.find({
+        "to.partyType": "VENDOR",
+        journalDate: { $gte: startOfApril }
+      }).select("to.partyId amount").lean();
+
+      aprilMJsBy.forEach(mj => {
+        const vId = mj.by?.partyId?.toString();
+        if (vId) mjMap.debit[vId] = (mjMap.debit[vId] || 0) + (mj.amount || 0);
+      });
+      aprilMJsTo.forEach(mj => {
+        const vId = mj.to?.partyId?.toString();
+        if (vId) mjMap.credit[vId] = (mjMap.credit[vId] || 0) + (mj.amount || 0);
+      });
+    }
+
+    // Fetch existing vendors to match by Name, Phone or Email
+    const existingVendors = await Vendor.find({ branchId }, { name: 1, phone: 1, email: 1, openingBalance: 1, debit: 1, credit: 1 });
+    const nameMap = new Map(existingVendors.map(v => [
+      v.name.toLowerCase().replace(/\s+/g, " ").trim(),
+      v._id
+    ]));
+    const phoneMap = new Map(existingVendors.filter(v => v.phone).map(v => [v.phone.replace(/\D/g, ""), v._id]));
+    const emailMap = new Map(existingVendors.filter(v => v.email).map(v => [v.email.toLowerCase().trim(), v._id]));
+    const existingDetailsMap = new Map(existingVendors.map(v => [
+      v._id.toString(),
+      {
+        name: v.name,
+        openingBalance: v.openingBalance || 0,
+        debit: v.debit || 0,
+        credit: v.credit || 0
+      }
+    ]));
+
+    let vendorsToBulkInsert = [];
+    let vendorsToBulkUpdate = [];
+    let skipped = [];
+
+    for (const row of rows) {
+      const normalizedRow = Object.fromEntries(
+        Object.entries(row).map(([k, v]) => [
+          k.replace(/[\s"\n\r]+/g, "").toLowerCase(),
+          String(v || "").trim(),
+        ])
+      );
+
+      const name = normalizedRow.vendorname || normalizedRow.name || normalizedRow.suppliername || 
+                   normalizedRow.supplier || normalizedRow.suppliers || normalizedRow.vendors || 
+                   normalizedRow.creditorname || normalizedRow.creditor || normalizedRow.creditors;
+      const phone = normalizedRow.phone ? normalizedRow.phone.replace(/\D/g, "") : "";
+      const email = normalizedRow.email ? normalizedRow.email.toLowerCase().trim() : "";
+
+      if (!name) {
+        skipped.push({ row, reason: "Missing vendor name" });
+        continue;
+      }
+
+      const normalizedNameKey = name.toLowerCase().replace(/\s+/g, " ").trim();
+      let existingVendorId = nameMap.get(normalizedNameKey) || 
+                             (phone && phoneMap.get(phone)) || 
+                             (email && emailMap.get(email));
+
+      if (updateMode === "info_only" && !existingVendorId) {
+        skipped.push({ row, name, reason: "Vendor not found in database (Skip in Safe Mode)" });
+        continue;
+      }
+
+      let vendorData = { branchId };
+
+      if (!existingVendorId) {
+        vendorData.name = name;
+      }
+
+      if (normalizedRow.phone !== undefined) vendorData.phone = normalizedRow.phone;
+      if (normalizedRow.email !== undefined) vendorData.email = normalizedRow.email;
+      if (normalizedRow.address !== undefined) vendorData.address = normalizedRow.address;
+      if (normalizedRow.state !== undefined || normalizedRow.statename !== undefined) {
+        vendorData.stateName = normalizedRow.state || normalizedRow.statename;
+      }
+      if (normalizedRow.gstin !== undefined) vendorData.gstin = normalizedRow.gstin;
+      if (normalizedRow.gstregistrationtype !== undefined) {
+        vendorData.gstRegistrationType = normalizedRow.gstregistrationtype || "Regular";
+      }
+
+      // 💰 FINANCIAL CALCULATIONS (ONLY in opening_balance mode)
+      if (updateMode === "opening_balance") {
+        const debitAliases = [
+          "debit", "debitbalance", "dr", "drbalance", "openingdebit", "openingdr", 
+          "openingdrbalance", "amountdr", "debitamount", "de", "deb", "debt"
+        ];
+        const creditAliases = [
+          "credit", "creditbalance", "cr", "crbalance", "openingcredit", "openingcr", 
+          "openingcrbalance", "amountcr", "creditamount", "cre", "cred"
+        ];
+        const generalBalanceAliases = [
+          "openingbalance", "balance", "outstanding", "amount", "netbalance", "closingbalance",
+          "outstandingamount", "bal"
+        ];
+
+        const findVal = (aliases) => {
+          for (const alias of aliases) {
+            if (normalizedRow[alias] !== undefined && normalizedRow[alias] !== "") {
+              return normalizedRow[alias];
+            }
+          }
+          return undefined;
+        };
+
+        const rawDebitVal = findVal(debitAliases);
+        const rawCreditVal = findVal(creditAliases);
+        const rawGeneralVal = findVal(generalBalanceAliases);
+        const rawTypeVal = normalizedRow.type || normalizedRow.balancetype || normalizedRow.drcr || normalizedRow.drdecr || "";
+
+        let excelDebit = 0;
+        let excelCredit = 0;
+        let hasFinancialData = false;
+
+        if (rawDebitVal !== undefined || rawCreditVal !== undefined) {
+          excelDebit = parseFloat(String(rawDebitVal || 0).replace(/[^0-9.-]+/g, "")) || 0;
+          excelCredit = parseFloat(String(rawCreditVal || 0).replace(/[^0-9.-]+/g, "")) || 0;
+          hasFinancialData = true;
+        } else if (rawGeneralVal !== undefined) {
+          const rawStr = String(rawGeneralVal).trim();
+          const numericVal = parseFloat(rawStr.replace(/[^0-9.-]+/g, "")) || 0;
+          const isDrType = /dr|debit/i.test(rawStr) || /dr|debit/i.test(rawTypeVal);
+
+          if (isDrType) {
+            excelDebit = Math.abs(numericVal);
+            excelCredit = 0;
+          } else {
+            // Default: Creditors / Vendors are positive credit unless explicitly debit
+            excelCredit = Math.abs(numericVal);
+            excelDebit = 0;
+          }
+          hasFinancialData = true;
+        }
+
+        if (hasFinancialData) {
+          const vIdStr = existingVendorId?.toString();
+          const vNameKey = name.toLowerCase().trim();
+
+          const aprPIs = piMap[vNameKey] || 0;
+          const aprReturns = (vIdStr && paymentMap.credit[vIdStr]) || paymentMap.credit[vNameKey] || 0;
+          const aprPayments = (vIdStr && paymentMap.debit[vIdStr]) || paymentMap.debit[vNameKey] || 0;
+          const aprMJsBy = (vIdStr && mjMap.debit[vIdStr]) || 0;
+          const aprMJsTo = (vIdStr && mjMap.credit[vIdStr]) || 0;
+          const aprDNs = (vIdStr && dnMap[vIdStr]) || dnMap[vNameKey] || 0;
+
+          // Vendor credit normal: credit = excelCredit + April credits
+          vendorData.credit = excelCredit + aprPIs + aprReturns + aprMJsTo;
+          // Vendor debit: debit = excelDebit + April debits
+          vendorData.debit = excelDebit + aprPayments + aprDNs + aprMJsBy;
+
+          // Fix opening balance: credit - debit
+          vendorData.openingBalance = excelCredit - excelDebit;
+          vendorData.manualOpeningDate = new Date("2026-03-31T23:59:59.999Z");
+        }
+      }
+
+      if (existingVendorId) {
+        if (updateMode === "opening_balance" && vendorData.openingBalance !== undefined) {
+          const existingDetails = existingDetailsMap.get(existingVendorId.toString());
+          const oldOpening = existingDetails ? existingDetails.openingBalance : 0;
+          const newOpening = vendorData.openingBalance;
+
+          if (oldOpening !== newOpening) {
+            const oldDebit = existingDetails ? existingDetails.debit : 0;
+            const oldCredit = existingDetails ? existingDetails.credit : 0;
+
+            await new AuditLog({
+              user: req.user?._id || branchId,
+              userModel: req.user?.role ? "BranchUser" : "SuperAdmin",
+              username: "System",
+              branchId,
+              action: "VENDOR_FINANCIAL_UPDATE",
+              targetId: existingVendorId,
+              targetModel: "Vendor",
+              description: `Financial details updated automatically via bulk upload for ${name}. Opening Bal: ${oldOpening} -> ${newOpening}.`,
+              changes: {
+                before: { openingBalance: oldOpening, debit: oldDebit, credit: oldCredit },
+                after: {
+                  openingBalance: newOpening,
+                  debit: vendorData.debit !== undefined ? vendorData.debit : oldDebit,
+                  credit: vendorData.credit !== undefined ? vendorData.credit : oldCredit
+                }
+              }
+            }).save();
+            console.log(`🔒 Security Audit Log created for automatic financial change on vendor ${name}`);
+          }
+        }
+
+        vendorsToBulkUpdate.push({
+          updateOne: {
+            filter: { _id: existingVendorId },
+            update: { $set: vendorData }
+          }
+        });
+      } else {
+        vendorsToBulkInsert.push(vendorData);
+        nameMap.set(normalizedNameKey, "pending_insert");
+      }
+    }
+
+    let insertedCount = 0;
+    if (vendorsToBulkInsert.length > 0) {
+      const inserted = await Vendor.insertMany(vendorsToBulkInsert, { ordered: false });
+      insertedCount = inserted.length;
+    }
+
+    let updatedCount = 0;
+    if (vendorsToBulkUpdate.length > 0) {
+      const result = await Vendor.bulkWrite(vendorsToBulkUpdate, { ordered: false });
+      updatedCount = result.modifiedCount;
+    }
+
+    if (insertedCount > 0 || updatedCount > 0) {
+      await new AuditLog({
+        user: req.user?._id || branchId,
+        userModel: req.user?.role ? "BranchUser" : "SuperAdmin",
+        username: req.user?.username || "Unknown",
+        branchId,
+        action: "VENDOR_BULK_UPLOAD",
+        description: `Bulk vendor upload completed in ${updateMode} mode. Inserted: ${insertedCount}, Updated: ${updatedCount}.`,
+      }).save();
+    }
+
+    return res.json({
+      success: true,
+      message: `Bulk upload (${updateMode}) completed successfully`,
+      insertedCount,
+      updatedCount,
+      skippedCount: skipped.length,
+      skipped,
+      info: updateMode === "info_only"
+        ? "Only vendor information was updated. Financial balances were NOT touched."
+        : "Balances adjusted as of March 31st cutoff. April transactions were preserved."
+    });
+  } catch (err) {
+    console.error("Vendor bulk upload error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Bulk upload failed",
+      error: err.message,
+    });
   }
 });
 

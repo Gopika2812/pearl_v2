@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { FaList, FaSpinner, FaThLarge, FaPlus, FaFileExport, FaChevronDown, FaChevronUp, FaMapMarkerAlt, FaPhone, FaEnvelope, FaMoneyBillWave, FaExchangeAlt, FaUndoAlt, FaBook, FaEdit, FaUserPlus } from "react-icons/fa";
+import React, { useEffect, useState, useRef } from "react";
+import { FaList, FaSpinner, FaThLarge, FaPlus, FaUpload, FaFileExport, FaChevronDown, FaChevronUp, FaMapMarkerAlt, FaPhone, FaEnvelope, FaMoneyBillWave, FaExchangeAlt, FaUndoAlt, FaBook, FaEdit, FaUserPlus } from "react-icons/fa";
 import * as XLSX from 'xlsx';
 import { toast } from "react-toastify";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -45,6 +45,8 @@ const BranchSuppliers = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const limit = 50;
+  const [isSafeMode, setIsSafeMode] = useState(false);
+  const fileInputRef = useRef(null);
 
 
   useEffect(() => {
@@ -288,6 +290,41 @@ const BranchSuppliers = () => {
     }
   };
 
+  const handleBulkUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("branchId", branchId);
+    formData.append("updateMode", isSafeMode ? "info_only" : "opening_balance");
+
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/vendors/bulk-upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: formData,
+      });
+
+      const result = await res.json();
+      if (res.ok) {
+        toast.success(`Upload Result: ${result.insertedCount} New, ${result.updatedCount} Updated, ${result.skippedCount || 0} Skipped.`);
+        fetchSuppliers(debouncedSearchTerm, 1);
+      } else {
+        throw new Error(result.message || "Bulk upload failed");
+      }
+    } catch (err) {
+      console.error("Bulk upload error:", err);
+      toast.error(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = ""; // Reset input
+    }
+  };
+
   const totalCredit = filteredSuppliers.reduce(
     (sum, supplier) => sum + (supplier.credit || 0),
     0
@@ -340,6 +377,39 @@ const BranchSuppliers = () => {
               className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95"
             >
               <FaPlus /> Add Supplier
+            </button>
+
+            <div className="flex items-center gap-3 bg-white p-2 px-4 rounded-xl border border-gray-200 shadow-sm">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-gray-400 uppercase leading-none">Safe Mode</span>
+                <span className="text-[8px] font-bold text-gray-500 uppercase leading-tight">Info Only</span>
+              </div>
+              <button
+                onClick={() => setIsSafeMode(!isSafeMode)}
+                className={`w-10 h-5 rounded-full transition-all relative ${isSafeMode ? 'bg-emerald-500' : 'bg-gray-300'}`}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all`} style={{ left: isSafeMode ? '1.35rem' : '0.125rem' }}></div>
+              </button>
+            </div>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleBulkUpload}
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+            />
+            <button
+              onClick={() => {
+                if (!isSafeMode) {
+                  const confirmBal = window.confirm("⚠️ You are uploading in BALANCING MODE. This will adjust Credit/Debit balances. For info-only updates, enable SAFE MODE. Proceed?");
+                  if (!confirmBal) return;
+                }
+                fileInputRef.current?.click();
+              }}
+              className={`${isSafeMode ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-purple-600 hover:bg-purple-700'} text-white px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 text-sm shadow-md active:scale-95`}
+            >
+              <FaUpload /> {isSafeMode ? "Safe Update" : "Bulk Upload"}
             </button>
 
             {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (

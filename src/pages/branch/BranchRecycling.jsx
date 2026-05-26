@@ -136,6 +136,7 @@ export default function BranchRecycling() {
   });
   const [calculatingSellingQty, setCalculatingSellingQty] = useState(false);
   const [savingRestockingConfig, setSavingRestockingConfig] = useState(false);
+  const [savingBulkConfig, setSavingBulkConfig] = useState(false);
 
   // Bulk Restock Preview Modal State
   const [bulkRestockPreviewMode, setBulkRestockPreviewMode] = useState(false);
@@ -778,6 +779,78 @@ export default function BranchRecycling() {
     }
   };
 
+  // Apply sales period to all selected products in bulk (recalculate & save)
+  const applyBulkSalesPeriod = async (days) => {
+    if (selectedProducts.size === 0) return;
+    setSavingBulkConfig(true);
+    try {
+      const selectedIds = Array.from(selectedProducts);
+      
+      const promises = selectedIds.map(async (productId) => {
+        // 1. Fetch calculated sales qty for this product
+        const qtyRes = await fetch(
+          `${API_BASE}/products/${productId}/selling-qty/${days}?branchId=${currentBranch._id}`
+        );
+        if (!qtyRes.ok) throw new Error(`Failed to calculate sales for product ID: ${productId}`);
+        const qtyData = await qtyRes.json();
+        const calculatedQty = qtyData.sellingQtyInPeriod || 0;
+
+        // 2. Find product in allProducts or products to preserve existing configs
+        const product = allProducts.find((p) => p._id === productId) || products.find((p) => p._id === productId);
+        const currentConfig = product?.restockingConfig || {};
+
+        const payload = {
+          salesPeriodDays: days,
+          sellingQtyInPeriod: calculatedQty,
+          threshold: currentConfig.threshold !== undefined && currentConfig.threshold !== null ? currentConfig.threshold : (product?.reorderLevel || 10),
+          restockingQty: currentConfig.restockingQty !== undefined && currentConfig.restockingQty !== null ? currentConfig.restockingQty : (product?.reorderQty || 20),
+          reorderMode: currentConfig.reorderQtyMode || currentConfig.reorderMode || "HIGH",
+          reorderQtyMode: currentConfig.reorderQtyMode || currentConfig.reorderMode || "HIGH",
+          thresholdMode: currentConfig.thresholdMode || currentConfig.reorderMode || "HIGH",
+        };
+
+        // 3. Put request to save
+        const saveRes = await fetch(
+          `${API_BASE}/products/${productId}/restocking-config`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          }
+        );
+        if (!saveRes.ok) throw new Error(`Failed to save config for product ID: ${productId}`);
+        const saveData = await saveRes.json();
+        return { productId, restockingConfig: saveData.restockingConfig || payload };
+      });
+
+      const results = await Promise.all(promises);
+
+      // Update state for all products in scope
+      setProducts((prevProducts) =>
+        prevProducts.map((p) => {
+          const match = results.find((r) => r.productId === p._id);
+          return match ? { ...p, restockingConfig: match.restockingConfig } : p;
+        })
+      );
+      setAllProducts((prevAllProducts) =>
+        prevAllProducts.map((p) => {
+          const match = results.find((r) => r.productId === p._id);
+          return match ? { ...p, restockingConfig: match.restockingConfig } : p;
+        })
+      );
+
+      toast.success(
+        `✅ Recalculated and updated sales period to ${days} days for ${selectedIds.length} products!`
+      );
+      setSelectedProducts(new Set()); // Clear checkboxes
+      fetchAllData(currentPage, searchTerm); // Refresh list
+    } catch (err) {
+      console.error("Bulk sales period update error:", err);
+      toast.error(`Error saving bulk settings: ${err.message}`);
+    } finally {
+      setSavingBulkConfig(false);
+    }
+  };
 
   // Toggle product selection for bulk restocking
   const toggleProductSelection = (productId) => {
@@ -1209,6 +1282,13 @@ export default function BranchRecycling() {
                       </span>
                     </div>
                   )}
+
+                  {netAvailability < reorderLevel && (
+                    <div className="bg-amber-50 border border-amber-200/60 p-2 rounded-lg flex items-center justify-between text-xs text-amber-800 font-bold mt-1.5 shadow-sm">
+                      <span>💡 Suggest Restock:</span>
+                      <span className="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded font-extrabold">{reorderLevel - netAvailability} {product.units}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -1610,6 +1690,12 @@ export default function BranchRecycling() {
               <span className="text-gray-400 block font-semibold text-green-300">Order Quantity</span>
               <span className="font-bold text-green-400">{resolvedQty} {product.units}</span>
             </div>
+            {netAvailability < resolvedThreshold && (
+              <div className="text-[10px] bg-amber-500/10 border border-amber-500/30 px-2 py-1 rounded">
+                <span className="text-amber-300 block font-bold">💡 Suggest Restock</span>
+                <span className="font-bold text-amber-400">{resolvedThreshold - netAvailability} {product.units}</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 self-end md:self-auto">
@@ -1832,16 +1918,6 @@ export default function BranchRecycling() {
                 <FaThLarge size={16} /> Card
               </button>
             </div>
-
-            {selectedProducts.size > 0 && actionPermissions.restock !== false && (
-              <button
-                onClick={handleBulkRestock}
-                disabled={bulkRestockingInProgress}
-                className="bg-green-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-700 transition disabled:opacity-50 whitespace-nowrap"
-              >
-                ✓ Restock {selectedProducts.size} Product{selectedProducts.size !== 1 ? "s" : ""} (1 PO)
-              </button>
-            )}
           </div>
 
           {/* Pagination Controls */}
@@ -1917,6 +1993,62 @@ export default function BranchRecycling() {
             </div>
           </div>
         </div>
+
+        {/* BULK SETTINGS BAR FOR AUTO DAYS RECALCULATION */}
+        {selectedProducts.size > 0 && (
+          <div className="bg-slate-900 text-white rounded-2xl shadow-lg p-5 mb-6 flex flex-wrap items-center justify-between gap-4 border border-purple-500/30 animate-fadeIn font-sans text-left">
+            <div className="flex items-center gap-3">
+              <div className="bg-purple-600/25 p-2 rounded-xl text-purple-400 text-xl border border-purple-500/30">
+                ⚙️
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-purple-100">Bulk Restocking Rules for {selectedProducts.size} Selected Product{selectedProducts.size !== 1 ? "s" : ""}</h3>
+                <p className="text-[10px] text-slate-400 font-normal mt-0.5">Recalculate sales-based auto levels or create PO in bulk</p>
+              </div>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Sales Period Days Input */}
+              <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-1.5 shadow-inner">
+                <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">Auto Days:</span>
+                <input
+                  type="number"
+                  placeholder="Days"
+                  id="bulkSalesDaysInput"
+                  defaultValue="7"
+                  className="w-14 px-2 py-0.5 rounded bg-slate-950 text-white font-extrabold text-xs text-center focus:outline-none border border-slate-700"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const val = document.getElementById("bulkSalesDaysInput")?.value;
+                    const days = parseInt(val);
+                    if (isNaN(days) || days <= 0) {
+                      toast.error("Please enter a valid number of days (> 0)");
+                      return;
+                    }
+                    applyBulkSalesPeriod(days);
+                  }}
+                  disabled={savingBulkConfig}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all duration-200 cursor-pointer disabled:opacity-50"
+                >
+                  {savingBulkConfig ? "Recalculating..." : "Apply & Save"}
+                </button>
+              </div>
+
+              {actionPermissions.restock !== false && (
+                <button
+                  type="button"
+                  onClick={handleBulkRestock}
+                  disabled={bulkRestockingInProgress}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 shadow cursor-pointer"
+                >
+                  ✓ Create Bulk PO ({selectedProducts.size} Products)
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* CONTENT */}
         {!branchLoaded ? (
@@ -2216,6 +2348,11 @@ export default function BranchRecycling() {
                             }`}>
                               {stockStatus}
                             </span>
+                            {netAvailability < reorderLevel && (
+                              <span className="text-[9px] text-amber-700 bg-amber-50 border border-amber-200/50 px-1 py-0.5 rounded font-black block mt-1 text-center whitespace-nowrap">
+                                💡 Restock {reorderLevel - netAvailability} {product.units}
+                              </span>
+                            )}
                           </td>
                         )}
                         {(isFieldAllowed("action_config") || isFieldAllowed("action_restock")) && (
