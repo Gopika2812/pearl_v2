@@ -390,6 +390,8 @@ router.get("/", async (req, res) => {
             : sellingQty,
           restockingQty: p.restockingConfig?.restockingQty || null,
           reorderMode: p.restockingConfig?.reorderMode || "HIGH",
+          reorderQtyMode: p.restockingConfig?.reorderQtyMode || p.restockingConfig?.reorderMode || "HIGH",
+          thresholdMode: p.restockingConfig?.thresholdMode || p.restockingConfig?.reorderMode || "HIGH",
         });
       });
     }
@@ -414,6 +416,8 @@ router.get("/", async (req, res) => {
         threshold: dynamicRestocking?.threshold ?? product.restockingConfig?.threshold ?? null,
         restockingQty: dynamicRestocking?.restockingQty ?? product.restockingConfig?.restockingQty ?? null,
         reorderMode: dynamicRestocking?.reorderMode ?? product.restockingConfig?.reorderMode ?? "HIGH",
+        reorderQtyMode: dynamicRestocking?.reorderQtyMode ?? product.restockingConfig?.reorderQtyMode ?? product.restockingConfig?.reorderMode ?? "HIGH",
+        thresholdMode: dynamicRestocking?.thresholdMode ?? product.restockingConfig?.thresholdMode ?? product.restockingConfig?.reorderMode ?? "HIGH",
       };
 
       return {
@@ -2066,7 +2070,7 @@ router.get("/:productId/selling-qty/:days", async (req, res) => {
 router.put("/:productId/restocking-config", async (req, res) => {
   try {
     const { productId } = req.params;
-    const { salesPeriodDays, threshold, restockingQty, sellingQtyInPeriod, reorderMode } = req.body;
+    const { salesPeriodDays, threshold, restockingQty, sellingQtyInPeriod, reorderMode, reorderQtyMode, thresholdMode } = req.body;
 
     console.log("📥 Backend received:", {
       productId,
@@ -2075,6 +2079,8 @@ router.put("/:productId/restocking-config", async (req, res) => {
       restockingQty,
       sellingQtyInPeriod,
       reorderMode,
+      reorderQtyMode,
+      thresholdMode,
     });
 
     if (!mongoose.Types.ObjectId.isValid(productId)) {
@@ -2098,6 +2104,8 @@ router.put("/:productId/restocking-config", async (req, res) => {
       threshold: threshold !== undefined && threshold !== null ? parseInt(threshold) : (product.restockingConfig?.threshold || null),
       restockingQty: restockingQty !== undefined && restockingQty !== null ? parseInt(restockingQty) : (product.restockingConfig?.restockingQty || null),
       reorderMode: reorderMode || product.restockingConfig?.reorderMode || "HIGH",
+      reorderQtyMode: reorderQtyMode || product.restockingConfig?.reorderQtyMode || reorderMode || "HIGH",
+      thresholdMode: thresholdMode || product.restockingConfig?.thresholdMode || reorderMode || "HIGH",
     };
 
     console.log("💾 Saving to DB:", product.restockingConfig);

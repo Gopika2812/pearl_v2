@@ -44,7 +44,10 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     restockingConfig: {
       salesPeriodDays: 7,
       threshold: 30,
-      restockingQty: 150
+      restockingQty: 150,
+      reorderMode: "HIGH",
+      reorderQtyMode: "HIGH",
+      thresholdMode: "HIGH"
     },
     unitConversion: {
       value: 1,
@@ -156,7 +159,10 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         restockingConfig: {
           salesPeriodDays: 7,
           threshold: 30,
-          restockingQty: 150
+          restockingQty: 150,
+          reorderMode: "HIGH",
+          reorderQtyMode: "HIGH",
+          thresholdMode: "HIGH"
         },
         unitConversion: {
           value: 1,

@@ -68,6 +68,8 @@ const productSchema = new mongoose.Schema(
       threshold: { type: Number, default: null }, // Manual override for reorder threshold
       restockingQty: { type: Number, default: null }, // Manual override for restocking quantity
       reorderMode: { type: String, enum: ["HIGH", "LOW"], default: "HIGH" }, // Dynamic comparator mode (HIGH = Math.max, LOW = Math.min)
+      reorderQtyMode: { type: String, enum: ["HIGH", "LOW"], default: "HIGH" },
+      thresholdMode: { type: String, enum: ["HIGH", "LOW"], default: "HIGH" },
     },
     // Unit Conversion Configuration
     unitConversion: {
