@@ -218,7 +218,8 @@ const BranchStockSummary = () => {
       });
     }
 
-    return aggregates;
+    // Sort alphabetically by name
+    return aggregates.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
   }, [stockData, productGroups, viewLevel]);
 
   // Filtered Group Aggregates (Search)
@@ -232,10 +233,12 @@ const BranchStockSummary = () => {
   // Filtered Stock Items (Search)
   const filteredStockItems = React.useMemo(() => {
     if (!Array.isArray(stockData)) return [];
-    if (!searchQuery) return stockData;
-    return stockData.filter(item =>
-      item.productName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const items = !searchQuery 
+      ? [...stockData] 
+      : stockData.filter(item =>
+          item.productName.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    return items.sort((a, b) => a.productName.localeCompare(b.productName, undefined, { sensitivity: 'base', numeric: true }));
   }, [stockData, searchQuery]);
 
   // Filtered Ledger Data (Search)
@@ -398,7 +401,10 @@ const BranchStockSummary = () => {
                         );
                         const result = await res.json();
                         if (result.success) {
-                          setExportItemsData(result.data || []);
+                          const sortedItems = (result.data || []).sort((a, b) => 
+                            a.productName.localeCompare(b.productName, undefined, { sensitivity: 'base', numeric: true })
+                          );
+                          setExportItemsData(sortedItems);
                           setIsAllItemsExport(true);
                           setShowExportModal(true);
                         } else {
