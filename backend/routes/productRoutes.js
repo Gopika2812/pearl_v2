@@ -1819,18 +1819,17 @@ router.get("/:id/ledger", auth, async (req, res) => {
 
     // 🧮 1. Calculate Movements BEFORE Report Start (Post-Anchor)
     const [pBefore, sBefore, dnBefore, cnBefore, psvBefore] = await Promise.all([
-      PurchaseOrder.aggregate([
-        { $match: { branchId: branchOid, status: { $in: ["RECEIVED", "PARTIALLY_RETURNED", "FULLY_RETURNED", "INVOICED"] }, date: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
+      PurchaseInvoice.aggregate([
+        { $match: { branchId: branchOid, invoiceDate: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
         { $unwind: "$items" },
         { $match: { "items.productId": productOid } },
         { $group: { _id: null, total: { $sum: "$items.qty" } } }
       ]),
-      SalesOrder.aggregate([
-        { $match: { branchId: branchOid, invoiceGenerated: true, status: { $ne: "CANCELLED" }, orderDate: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
-        { $addFields: { effectiveItems: { $cond: [{ $gt: [{ $size: { $ifNull: ["$invoiceItems", []] } }, 0] }, "$invoiceItems", "$items"] } } },
-        { $unwind: "$effectiveItems" },
-        { $match: { "effectiveItems.productId": productOid } },
-        { $group: { _id: null, total: { $sum: "$effectiveItems.qty" } } }
+      Invoice.aggregate([
+        { $match: { branchId: branchOid, status: { $ne: "CANCELLED" }, invoiceDate: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
+        { $unwind: "$items" },
+        { $match: { "items.productId": productOid } },
+        { $group: { _id: null, total: { $sum: "$items.qty" } } }
       ]),
       DebitNote.aggregate([
         { $match: { branchId: branchOid, status: "Created", date: { $gt: HARD_ANCHOR_DATE, $lt: start } } },
