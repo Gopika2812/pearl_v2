@@ -41,7 +41,9 @@ export default function BranchRecycling() {
     const thresholdMode = config?.thresholdMode || reorderMode;
     
     // Auto values
-    const autoQty = config?.sellingQtyInPeriod || product.reorderQty || 20;
+    const autoQty = (config?.sellingQtyInPeriod !== undefined && config?.sellingQtyInPeriod !== null)
+      ? config.sellingQtyInPeriod
+      : (product.reorderQty || 20);
     const autoThreshold = config?.sellingQtyInPeriod || product.reorderLevel || 10;
     
     // Manual values
@@ -898,7 +900,7 @@ export default function BranchRecycling() {
       const { reorderQty } = getReorderParams(p);
       return {
         ...p,
-        previewQty: reorderQty || 20,
+        previewQty: reorderQty,
       };
     });
 
@@ -908,7 +910,7 @@ export default function BranchRecycling() {
     const qtyMap = {};
     previewItems.forEach((item) => {
       const { reorderQty } = getReorderParams(item);
-      qtyMap[item._id] = reorderQty || 20;
+      qtyMap[item._id] = reorderQty;
     });
     setBulkRestockEditQty(qtyMap);
 
@@ -938,33 +940,44 @@ export default function BranchRecycling() {
       let subtotal = 0;
       let totalTax = 0;
 
-      const items = bulkRestockPreviewItems.map((product) => {
-        const { reorderQty } = getReorderParams(product);
-        const qty = bulkRestockEditQty[product._id] || reorderQty || 20;
-        const itemSubtotal = qty * product.purchasingPrice;
-        const itemTax = (itemSubtotal * (product.gst || 0)) / 100;
-        const itemTotal = itemSubtotal + itemTax;
+      const items = bulkRestockPreviewItems
+        .map((product) => {
+          const { reorderQty } = getReorderParams(product);
+          const qty = bulkRestockEditQty[product._id] !== undefined ? bulkRestockEditQty[product._id] : reorderQty;
+          return { product, qty };
+        })
+        .filter(({ qty }) => qty > 0)
+        .map(({ product, qty }) => {
+          const itemSubtotal = qty * product.purchasingPrice;
+          const itemTax = (itemSubtotal * (product.gst || 0)) / 100;
+          const itemTotal = itemSubtotal + itemTax;
 
-        subtotal += itemSubtotal;
-        totalTax += itemTax;
+          subtotal += itemSubtotal;
+          totalTax += itemTax;
 
-        return {
-          productId: product._id,
-          name: product.name,
-          productGroup: product.productGroup,
-          qty, // Use edited qty
-          purchasePrice: product.purchasingPrice,
-          sellingPrice: product.sellingPrice,
-          hsn: product.hsn || product.hsnCode,
-          gst: product.gst || 0,
-          cgst: (product.gst || 0) / 2,
-          sgst: (product.gst || 0) / 2,
-          igst: false,
-          subtotal: itemSubtotal,
-          tax: itemTax,
-          total: itemTotal,
-        };
-      });
+          return {
+            productId: product._id,
+            name: product.name,
+            productGroup: product.productGroup,
+            qty, // Use edited qty
+            purchasePrice: product.purchasingPrice,
+            sellingPrice: product.sellingPrice,
+            hsn: product.hsn || product.hsnCode,
+            gst: product.gst || 0,
+            cgst: (product.gst || 0) / 2,
+            sgst: (product.gst || 0) / 2,
+            igst: false,
+            subtotal: itemSubtotal,
+            tax: itemTax,
+            total: itemTotal,
+          };
+        });
+
+      if (items.length === 0) {
+        toast.error("Please specify a quantity greater than 0 for at least one item.");
+        setBulkRestockingInProgress(false);
+        return;
+      }
 
       const grandTotal = subtotal + totalTax;
 
@@ -1286,7 +1299,7 @@ export default function BranchRecycling() {
                   {netAvailability < reorderLevel && (
                     <div className="bg-amber-50 border border-amber-200/60 p-2 rounded-lg flex items-center justify-between text-xs text-amber-800 font-bold mt-1.5 shadow-sm">
                       <span>💡 Suggest Restock:</span>
-                      <span className="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded font-extrabold">{reorderLevel - netAvailability} {product.units}</span>
+                      <span className="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded font-extrabold">{reorderQty - netAvailability} {product.units}</span>
                     </div>
                   )}
                 </div>
@@ -1460,7 +1473,9 @@ export default function BranchRecycling() {
     const soQty = pendingSalesMap?.[product._id] || 0;
     const netAvailability = Number(((product.totalQty || 0) + poQty - soQty).toFixed(2));
 
-    const autoQty = restockingFormValues.sellingQtyInPeriod || product.reorderQty || 20;
+    const autoQty = (restockingFormValues.sellingQtyInPeriod !== undefined && restockingFormValues.sellingQtyInPeriod !== null)
+      ? restockingFormValues.sellingQtyInPeriod
+      : (product.reorderQty || 20);
     const autoThreshold = restockingFormValues.sellingQtyInPeriod || product.reorderLevel || 10;
 
     const manualQty = restockingFormValues.restockingQty !== undefined && restockingFormValues.restockingQty !== null
@@ -1693,7 +1708,7 @@ export default function BranchRecycling() {
             {netAvailability < resolvedThreshold && (
               <div className="text-[10px] bg-amber-500/10 border border-amber-500/30 px-2 py-1 rounded">
                 <span className="text-amber-300 block font-bold">💡 Suggest Restock</span>
-                <span className="font-bold text-amber-400">{resolvedThreshold - netAvailability} {product.units}</span>
+                <span className="font-bold text-amber-400">{resolvedQty - netAvailability} {product.units}</span>
               </div>
             )}
           </div>
@@ -2350,7 +2365,7 @@ export default function BranchRecycling() {
                             </span>
                             {netAvailability < reorderLevel && (
                               <span className="text-[9px] text-amber-700 bg-amber-50 border border-amber-200/50 px-1 py-0.5 rounded font-black block mt-1 text-center whitespace-nowrap">
-                                💡 Restock {reorderLevel - netAvailability} {product.units}
+                                💡 Restock {reorderQty - netAvailability} {product.units}
                               </span>
                             )}
                           </td>
@@ -2428,7 +2443,7 @@ export default function BranchRecycling() {
                   </thead>
                   <tbody>
                     {bulkRestockPreviewItems.map((product, idx) => {
-                      const qty = bulkRestockEditQty[product._id] || product.restockingConfig?.sellingQtyInPeriod || product.reorderQty || 20;
+                      const qty = bulkRestockEditQty[product._id] !== undefined ? bulkRestockEditQty[product._id] : getReorderParams(product).reorderQty;
                       const subtotal = qty * product.purchasingPrice;
 
                       return (
@@ -2474,9 +2489,10 @@ export default function BranchRecycling() {
                       ₹
                       {bulkRestockPreviewItems
                         .reduce(
-                          (sum, p) =>
-                            sum +
-                            (bulkRestockEditQty[p._id] || p.restockingConfig?.sellingQtyInPeriod || p.reorderQty || 20) * p.purchasingPrice,
+                          (sum, p) => {
+                            const qty = bulkRestockEditQty[p._id] !== undefined ? bulkRestockEditQty[p._id] : getReorderParams(p).reorderQty;
+                            return sum + qty * p.purchasingPrice;
+                          },
                           0
                         )
                         .toFixed(2)}
@@ -2488,10 +2504,10 @@ export default function BranchRecycling() {
                       ₹
                       {bulkRestockPreviewItems
                         .reduce(
-                          (sum, p) =>
-                            sum +
-                            ((bulkRestockEditQty[p._id] || p.restockingConfig?.sellingQtyInPeriod || p.reorderQty || 20) * p.purchasingPrice * (p.gst || 0)) /
-                              100,
+                          (sum, p) => {
+                            const qty = bulkRestockEditQty[p._id] !== undefined ? bulkRestockEditQty[p._id] : getReorderParams(p).reorderQty;
+                            return sum + (qty * p.purchasingPrice * (p.gst || 0)) / 100;
+                          },
                           0
                         )
                         .toFixed(2)}
@@ -2501,21 +2517,17 @@ export default function BranchRecycling() {
                     <p className="text-xs text-gray-600 font-medium">Grand Total</p>
                     <p className="text-lg font-extrabold text-blue-900">
                       ₹
-                      {(
-                        bulkRestockPreviewItems.reduce(
-                          (sum, p) =>
-                            sum +
-                            (bulkRestockEditQty[p._id] || p.restockingConfig?.sellingQtyInPeriod || p.reorderQty || 20) * p.purchasingPrice,
-                          0
-                        ) +
-                        bulkRestockPreviewItems.reduce(
-                          (sum, p) =>
-                            sum +
-                            ((bulkRestockEditQty[p._id] || p.restockingConfig?.sellingQtyInPeriod || p.reorderQty || 20) * p.purchasingPrice * (p.gst || 0)) /
-                              100,
+                      {bulkRestockPreviewItems
+                        .reduce(
+                          (sum, p) => {
+                            const qty = bulkRestockEditQty[p._id] !== undefined ? bulkRestockEditQty[p._id] : getReorderParams(p).reorderQty;
+                            const itemSubtotal = qty * p.purchasingPrice;
+                            const itemTax = (itemSubtotal * (p.gst || 0)) / 100;
+                            return sum + itemSubtotal + itemTax;
+                          },
                           0
                         )
-                      ).toFixed(2)}
+                        .toFixed(2)}
                     </p>
                   </div>
                 </div>
