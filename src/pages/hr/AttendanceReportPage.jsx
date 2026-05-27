@@ -239,9 +239,9 @@ const AttendanceReportPage = () => {
 
   // Calculate stats
   const stats = {
-    present: attendance.filter(a => a.status === "Present").length,
-    absent: attendance.filter(a => a.status === "Absent").length,
-    leave: attendance.filter(a => a.status === "Leave").length,
+    present: attendance.filter(a => a.status === "Present" || a.presentTime).length,
+    absent: attendance.filter(a => a.status === "Absent" && !a.presentTime).length,
+    leave: attendance.filter(a => a.status === "Leave" && !a.presentTime).length,
     totalOT: attendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0)
   };
 
@@ -446,11 +446,11 @@ const AttendanceReportPage = () => {
                       </td>
                       <td className="px-8 py-6">
                         <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
-                          log.status === "Present" ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
+                          (log.status === "Present" || log.presentTime) ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
                           log.status === "Absent" ? "bg-rose-50 text-rose-600 border-rose-100" :
                           "bg-amber-50 text-amber-600 border-amber-100"
                         }`}>
-                          {log.status}
+                          {(log.status === "Present" || log.presentTime) ? "Present" : log.status}
                         </span>
                       </td>
                       <td className="px-8 py-6">
