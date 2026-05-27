@@ -16,6 +16,7 @@ import {
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
+
 const SuperAdminSidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -85,11 +86,10 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
                 key={index}
                 to={item.path}
                 onClick={() => onClose()}
-                className={`mx-3 mb-1 flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
-                  active
+                className={`mx-3 mb-1 flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${active
                     ? "bg-primary text-white shadow-lg shadow-primary/20 font-semibold"
                     : "hover:bg-white/10 text-white/90"
-                }`}
+                  }`}
                 title={item.name}
               >
                 <div className="w-8 flex justify-center flex-shrink-0">
@@ -118,16 +118,14 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
 
       {/* ================= MOBILE SIDEBAR ================= */}
       <div
-        className={`fixed inset-0 bg-black/50 md:hidden transition-opacity z-40 ${
-          isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`}
+        className={`fixed inset-0 bg-black/50 md:hidden transition-opacity z-40 ${isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
         onClick={onClose}
       />
 
       <aside
-        className={`fixed left-0 top-0 h-screen w-64 bg-secondary text-white shadow-xl md:hidden z-50 transform transition-transform ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed left-0 top-0 h-screen w-64 bg-secondary text-white shadow-xl md:hidden z-50 transform transition-transform ${isOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         <div className="px-6 py-6 border-b border-white/10 flex items-center justify-between">
           <img
@@ -160,11 +158,10 @@ const SuperAdminSidebar = ({ isOpen, onClose }) => {
                 key={index}
                 to={item.path}
                 onClick={() => onClose()}
-                className={`mx-3 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${
-                  active
+                className={`mx-3 mb-1 flex items-center gap-3 px-4 py-3 rounded-xl transition ${active
                     ? "bg-primary text-white shadow-lg shadow-primary/20 font-semibold"
                     : "hover:bg-white/10 text-white/90"
-                }`}
+                  }`}
               >
                 <span className="text-lg">{item.icon}</span>
                 <span className="text-sm font-bold uppercase tracking-wide">{item.name}</span>
