@@ -897,10 +897,16 @@ export default function BranchRecycling() {
           ? (product.productGroup.name || product.productGroup._id)
           : (product.productGroup || "-");
 
+        const uc = product.unitConversion;
+        const unitConversionStr = uc && uc.value && uc.unit && uc.altUnit
+          ? `${uc.value} ${uc.unit} = ${uc.altValue || 1} ${uc.altUnit}`
+          : "-";
+
         return {
           "Product Name": product.name || "-",
           "Product Group": groupName,
           "Unit": product.units || "-",
+          "Unit Conversion": unitConversionStr,
           "System Qty": Number((product.totalQty || 0).toFixed(2)),
           "PO Qty": poQty,
           "Last Purchase Date": purDate,
@@ -927,6 +933,7 @@ export default function BranchRecycling() {
         { wch: 35 }, // Product Name
         { wch: 20 }, // Product Group
         { wch: 10 }, // Unit
+        { wch: 20 }, // Unit Conversion
         { wch: 12 }, // System Qty
         { wch: 10 }, // PO Qty
         { wch: 18 }, // Last Purchase Date
@@ -2276,6 +2283,9 @@ export default function BranchRecycling() {
                       Unit {sortConfig.key === "units" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                     </th>
                   )}
+                  <th className="px-1 py-2 text-left text-[11px] font-bold whitespace-nowrap text-teal-700">
+                    Unit Conv.
+                  </th>
                   {isFieldAllowed("currentStock") && (
                     <th 
                       onClick={() => handleSort("totalQty")}
@@ -2413,6 +2423,18 @@ export default function BranchRecycling() {
                             {product.units}
                           </td>
                         )}
+                        {/* Unit Conversion */}
+                        <td className="px-1 py-2 text-[10px] whitespace-nowrap">
+                          {product.unitConversion && product.unitConversion.value && product.unitConversion.unit ? (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">{product.unitConversion.value} {product.unitConversion.unit}</span>
+                              <span className="text-slate-300 font-black">=</span>
+                              <span className="bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded font-black">{product.unitConversion.altValue || 1} {product.unitConversion.altUnit}</span>
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
                         {isFieldAllowed("currentStock") && (
                           <td className="px-1 py-2 text-right font-bold text-gray-800 text-[11px]">
                             {Number((product.totalQty || 0).toFixed(2))}

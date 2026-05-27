@@ -6,6 +6,7 @@ import Product from "../models/Product.js";
 import PurchaseInvoice from "../models/PurchaseInvoice.js";
 import PurchaseOrder from "../models/PurchaseOrder.js";
 import Vendor from "../models/Vendor.js";
+import Customer from "../models/Customer.js";
 import VoucherType from "../models/VoucherType.js";
 import { getFinancialYear as getGlobalFinancialYear } from "../utils/financialYear.js";
 import { updateProductCostsFromInvoice } from "../utils/priceUtil.js";
@@ -340,6 +341,11 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       // Update the EXISTING PI directly using its _id (most reliable — no field matching)
       const piToUpdate = existingPI;
       if (piToUpdate) {
+        let vId = order.vendorId;
+        if (!vId && order.vendor) {
+          const vendorRecord = await Vendor.findOne({ branchId: order.branchId, name: order.vendor });
+          if (vendorRecord) vId = vendorRecord._id;
+        }
         await PurchaseInvoice.findByIdAndUpdate(piToUpdate._id, {
           $set: {
             items: newItems,
@@ -349,6 +355,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
             grandTotal: order.grandTotal,
             vendorBillNo: order.vendorBillNo,
             vendorDate: order.vendorDate,
+            vendorId: vId,
           }
         });
         console.log(`[INVOICE] ✅ PI Updated: ${piToUpdate.purchaseInvoiceId} (same PI, no duplicate)`);
@@ -403,6 +410,12 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
     const calculatedGrandTotal = Math.round(subtotal - totalDiscount + totalTax + (order.extraExpenseAmount || 0));
     console.log(`[STABILITY CHECK] Recalculated GrandTotal: ${calculatedGrandTotal} (Sub: ${subtotal}, Tax: ${totalTax}, Disc: ${totalDiscount})`);
 
+    let vId = order.vendorId;
+    if (!vId && order.vendor) {
+      const vendorRecord = await Vendor.findOne({ branchId: order.branchId, name: order.vendor });
+      if (vendorRecord) vId = vendorRecord._id;
+    }
+
     const purchaseInvoice = new PurchaseInvoice({
       purchaseInvoiceId: piNumber,
       purchaseOrderId: order._id,
@@ -410,6 +423,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       branchId: order.branchId,
       warehouse: order.warehouse,
       vendor: order.vendor || "Unknown",
+      vendorId: vId,
       items: invoiceItems,
       subtotal: Math.round(subtotal),
       totalDiscount: Math.round(totalDiscount),
@@ -531,6 +545,57 @@ router.post("/", auth, async (req, res) => {
     if (rest.totalDiscount !== undefined) rest.totalDiscount = Math.round(Number(rest.totalDiscount));
     if (rest.transportCharge !== undefined) rest.transportCharge = Math.round(Number(rest.transportCharge));
 
+    // Handle Customer-PO Flow / Auto Vendor Creation
+    let resolvedVendorId = undefined;
+    let resolvedCustomerId = req.body.customerId || undefined;
+
+    if (resolvedCustomerId) {
+      const customer = await Customer.findById(resolvedCustomerId);
+      if (customer) {
+        let vendorId = customer.linkedVendorId;
+        if (!vendorId) {
+          // Check if a vendor with the same name already exists in this branch
+          const escapedName = customer.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          let vendorRecord = await Vendor.findOne({
+            branchId,
+            name: { $regex: new RegExp(`^${escapedName}$`, "i") }
+          });
+
+          if (!vendorRecord) {
+            // Create a new vendor profile
+            vendorRecord = new Vendor({
+              name: customer.name,
+              phone: customer.whatsapp || customer.phone || "",
+              email: customer.email || "",
+              address: customer.address || "",
+              gstin: customer.gstin || "",
+              branchId,
+              openingBalance: 0
+            });
+            await vendorRecord.save();
+          }
+
+          // Link customer to this vendor
+          customer.linkedVendorId = vendorRecord._id;
+          await customer.save();
+          vendorId = vendorRecord._id;
+        }
+
+        // Find the linked vendor to get their exact name and set vendorId
+        const vendorRecord = await Vendor.findById(vendorId);
+        if (vendorRecord) {
+          rest.vendor = vendorRecord.name;
+          resolvedVendorId = vendorRecord._id;
+        }
+      }
+    } else if (rest.vendor) {
+      // Find vendor by name to get vendorId
+      const vendorRecord = await Vendor.findOne({ branchId, name: rest.vendor });
+      if (vendorRecord) {
+        resolvedVendorId = vendorRecord._id;
+      }
+    }
+
     let voucher = await VoucherType.findOne({ branchId, name: voucherType.toLowerCase(), orderType: "PO" })
       || await VoucherType.findOne({ branchId, name: voucherType });
 
@@ -581,6 +646,8 @@ router.post("/", auth, async (req, res) => {
       branchId,
       financialYear: currentFY,
       ...rest,
+      vendorId: resolvedVendorId,
+      customerId: resolvedCustomerId,
       status: status || "PLACED",
     });
 

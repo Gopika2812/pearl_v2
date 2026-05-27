@@ -1999,26 +1999,42 @@ router.get("/:id/ledger", async (req, res) => {
     if (vendor) {
       const vid = vendor._id;
       const vInvoicesAfter = await mongoose.model("PurchaseInvoice").find({
-        "vendor.vendorId": vid,
         branchId: customer.branchId,
-        $or: [
-          { invoiceDate: { $gte: start } },
-          { invoiceDate: { $exists: false }, createdAt: { $gte: start } }
+        $and: [
+          {
+            $or: [
+              { "vendor.vendorId": vid },
+              { vendorId: vid },
+              { vendor: vendor.name }
+            ]
+          },
+          {
+            $or: [
+              { invoiceDate: { $gte: start } },
+              { invoiceDate: { $exists: false }, createdAt: { $gte: start } }
+            ]
+          }
         ]
       }).select("grandTotal");
 
       const vPaymentsAfter = await mongoose.model("Payment").find({
-        "vendor.vendorId": vid,
         branchId: customer.branchId,
         status: { $ne: "cancelled" },
-        createdAt: { $gte: start }
+        createdAt: { $gte: start },
+        $or: [
+          { "vendor.vendorId": vid },
+          { "vendor.name": vendor.name }
+        ]
       }).select("amount");
 
       const vDebitNotesAfter = await mongoose.model("DebitNote").find({
-        "vendor.vendorId": vid,
         branchId: customer.branchId,
         status: "Created",
-        createdAt: { $gte: start }
+        createdAt: { $gte: start },
+        $or: [
+          { "vendor.vendorId": vid },
+          { "vendor.name": vendor.name }
+        ]
       }).select("grandTotal");
 
       const vMjAfterBy = await ManualJournal.find({
@@ -2135,26 +2151,42 @@ router.get("/:id/ledger", async (req, res) => {
     if (vendor) {
       const vid = vendor._id;
       vendorInvoicesInRange = await mongoose.model("PurchaseInvoice").find({
-        "vendor.vendorId": vid,
         branchId: customer.branchId,
-        $or: [
-          { invoiceDate: { $gte: start, $lte: end } },
-          { invoiceDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+        $and: [
+          {
+            $or: [
+              { "vendor.vendorId": vid },
+              { vendorId: vid },
+              { vendor: vendor.name }
+            ]
+          },
+          {
+            $or: [
+              { invoiceDate: { $gte: start, $lte: end } },
+              { invoiceDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+            ]
+          }
         ]
       }).select("grandTotal invoiceDate purchaseInvoiceId vendorInvoiceNumber voucherType createdAt");
 
       vendorPaymentsInRange = await mongoose.model("Payment").find({
-        "vendor.vendorId": vid,
         branchId: customer.branchId,
         status: { $ne: "cancelled" },
-        createdAt: { $gte: start, $lte: end }
+        createdAt: { $gte: start, $lte: end },
+        $or: [
+          { "vendor.vendorId": vid },
+          { "vendor.name": vendor.name }
+        ]
       }).select("amount createdAt paymentId paymentMode");
 
       vendorDNInRange = await mongoose.model("DebitNote").find({
-        "vendor.vendorId": vid,
         branchId: customer.branchId,
         status: "Created",
-        createdAt: { $gte: start, $lte: end }
+        createdAt: { $gte: start, $lte: end },
+        $or: [
+          { "vendor.vendorId": vid },
+          { "vendor.name": vendor.name }
+        ]
       }).select("grandTotal createdAt debitNoteId reason");
 
       vendorMjInRangeBy = await ManualJournal.find({

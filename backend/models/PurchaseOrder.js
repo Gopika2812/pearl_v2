@@ -51,6 +51,14 @@ const PurchaseOrderSchema = new mongoose.Schema(
     financialYear: String,
 
     vendor: String,
+    vendorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Vendor",
+    },
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Customer",
+    },
     warehouse: String,
 
     items: [PurchaseItemSchema],

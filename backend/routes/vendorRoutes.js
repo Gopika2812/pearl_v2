@@ -46,7 +46,7 @@ router.post("/", async (req, res) => {
 // ✅ GET all vendors (with pagination and branch filtering)
 router.get("/", async (req, res) => {
   try {
-    const { branchId, page = 1, limit = 50, search = "" } = req.query;
+    const { branchId, page = 1, limit = 50, search = "", includeLinked = "false" } = req.query;
 
     if (!branchId) {
       return res.status(400).json({ success: false, message: "branchId is required" });
@@ -57,6 +57,19 @@ router.get("/", async (req, res) => {
     const pageSize = parseInt(limit);
 
     const query = { branchId: branchObjectId };
+
+    if (includeLinked !== "true") {
+      const linkedCustomers = await mongoose.model("Customer").find({
+        branchId: branchObjectId,
+        linkedVendorId: { $exists: true, $ne: null, $nin: [undefined, ""] }
+      }).select("linkedVendorId").lean();
+      const linkedVendorIds = linkedCustomers
+        .map(c => c.linkedVendorId)
+        .filter(id => id && mongoose.Types.ObjectId.isValid(id));
+      if (linkedVendorIds.length > 0) {
+        query._id = { $nin: linkedVendorIds };
+      }
+    }
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: "i" } },

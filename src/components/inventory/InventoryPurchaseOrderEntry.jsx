@@ -32,6 +32,7 @@ const InventoryPurchaseOrderEntry = ({
   // Header State
   const [voucherType, setVoucherType] = useState("");
   const [vendor, setVendor] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   const [warehouse, setWarehouse] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [productGroup, setProductGroup] = useState("");
@@ -259,38 +260,48 @@ const InventoryPurchaseOrderEntry = ({
     }
   };
 
-  // 🔍 ASYNC VENDOR SEARCH
+  // 🔍 ASYNC VENDOR & CUSTOMER SEARCH
   useEffect(() => {
-    if (!vendorSearch.trim()) {
-      setFetchedVendors(vendors || []);
-      return;
-    }
-
-    const fetchVendorsFromBackend = async () => {
+    const fetchVendorsAndCustomers = async () => {
       setSearchingVendors(true);
       try {
         const branchId = currentBranch?._id || currentBranch?.id;
-        const res = await fetchWithAuth(
-          `${API_BASE}/vendors?search=${encodeURIComponent(vendorSearch)}&branchId=${branchId}&limit=50`
-        );
-        const data = await res.json();
+        if (!branchId) return;
 
-        if (data.success) {
-          setFetchedVendors(data.data || []);
-        } else {
-          setFetchedVendors([]);
-        }
+        // Fetch vendors (linked ones will be excluded by backend by default)
+        const vendorUrl = `${API_BASE}/vendors?search=${encodeURIComponent(vendorSearch)}&branchId=${branchId}&limit=50`;
+        // Fetch customers
+        const customerUrl = `${API_BASE}/customers?search=${encodeURIComponent(vendorSearch)}&branchId=${branchId}&limit=50`;
+
+        const [vendorRes, customerRes] = await Promise.all([
+          fetchWithAuth(vendorUrl),
+          fetchWithAuth(customerUrl)
+        ]);
+
+        const vendorData = await vendorRes.json();
+        const customerData = await customerRes.json();
+
+        const vendorList = vendorData.success ? (vendorData.data || []) : [];
+        const customerList = customerData.success ? (customerData.data || []) : [];
+
+        // Merge them, tagging customer records
+        const taggedCustomers = customerList.map(c => ({
+          ...c,
+          isCustomerParty: true
+        }));
+
+        setFetchedVendors([...vendorList, ...taggedCustomers]);
       } catch (err) {
-        console.error("❌ Vendor search failed:", err);
+        console.error("❌ Vendor/Customer search failed:", err);
         setFetchedVendors([]);
       } finally {
         setSearchingVendors(false);
       }
     };
 
-    const timer = setTimeout(fetchVendorsFromBackend, 300);
+    const timer = setTimeout(fetchVendorsAndCustomers, 300);
     return () => clearTimeout(timer);
-  }, [vendorSearch, currentBranch, vendors]);
+  }, [vendorSearch, currentBranch]);
 
   // 🔍 ASYNC PRODUCT SEARCH
   useEffect(() => {
@@ -548,6 +559,8 @@ const InventoryPurchaseOrderEntry = ({
   const resetForm = () => {
     // Header
     setVendor("");
+    setSelectedCustomerId(null);
+    setVendorSearch("");
     setWarehouse("");
     setProductGroup("");
     setBillingPerson("");
@@ -586,6 +599,7 @@ const InventoryPurchaseOrderEntry = ({
       branchId: currentBranch?._id || currentBranch?.id,
       voucherType,
       vendor,
+      customerId: selectedCustomerId || undefined,
       warehouse,
       items: items.map(item => ({
         ...item,
@@ -709,10 +723,11 @@ const InventoryPurchaseOrderEntry = ({
           <input
             type="text"
             className={inputClass}
-            placeholder="Type to search vendor..."
+            placeholder="Type to search vendor/customer..."
             value={vendorSearch}
             onChange={(e) => {
               setVendorSearch(e.target.value);
+              setSelectedCustomerId(null);
               setShowVendorDropdown(true);
             }}
             onFocus={() => setShowVendorDropdown(true)}
@@ -720,7 +735,7 @@ const InventoryPurchaseOrderEntry = ({
           {showVendorDropdown && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto w-full md:w-80">
               {searchingVendors && (
-                <div className="px-3 py-2 text-gray-500 text-sm text-center italic">🔍 Searching vendors...</div>
+                <div className="px-3 py-2 text-gray-500 text-sm text-center italic">🔍 Searching...</div>
               )}
               {!searchingVendors && fetchedVendors.map((v) => (
                 <div
@@ -728,12 +743,20 @@ const InventoryPurchaseOrderEntry = ({
                   onClick={() => {
                     setVendor(v.name);
                     setVendorSearch(v.name);
+                    setSelectedCustomerId(v.isCustomerParty ? v._id : null);
                     setShowVendorDropdown(false);
                   }}
                   className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm"
                 >
-                  <div className="font-semibold">{v.name}</div>
-                  {v.phone && <div className="text-xs text-gray-400">{v.phone}</div>}
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-gray-800">{v.name}</span>
+                    {v.isCustomerParty && (
+                      <span className="bg-blue-100 text-blue-700 text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">
+                        Customer
+                      </span>
+                    )}
+                  </div>
+                  {(v.phone || v.whatsapp) && <div className="text-xs text-gray-400">{v.phone || v.whatsapp}</div>}
                 </div>
               ))}
               {!searchingVendors && fetchedVendors.length === 0 && (
