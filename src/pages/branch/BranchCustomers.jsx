@@ -1034,7 +1034,7 @@ const BranchCustomers = () => {
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setSelectedLedgerCustomer(customer);
+                                        navigate(`/branch/customer-ledger/${customer._id}`);
                                       }}
                                       className="text-secondary hover:underline text-xs font-bold"
                                     >

@@ -61,7 +61,7 @@ router.get("/", async (req, res) => {
     if (includeLinked !== "true") {
       const linkedCustomers = await mongoose.model("Customer").find({
         branchId: branchObjectId,
-        linkedVendorId: { $exists: true, $ne: null, $nin: [undefined, ""] }
+        linkedVendorId: { $exists: true, $ne: null }
       }).select("linkedVendorId").lean();
       const linkedVendorIds = linkedCustomers
         .map(c => c.linkedVendorId)

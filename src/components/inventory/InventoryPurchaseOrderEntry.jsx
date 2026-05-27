@@ -270,8 +270,8 @@ const InventoryPurchaseOrderEntry = ({
 
         // Fetch vendors (linked ones will be excluded by backend by default)
         const vendorUrl = `${API_BASE}/vendors?search=${encodeURIComponent(vendorSearch)}&branchId=${branchId}&limit=50`;
-        // Fetch customers
-        const customerUrl = `${API_BASE}/customers?search=${encodeURIComponent(vendorSearch)}&branchId=${branchId}&limit=50`;
+        // Fetch customers (only linked ones)
+        const customerUrl = `${API_BASE}/customers?search=${encodeURIComponent(vendorSearch)}&branchId=${branchId}&limit=50&onlyLinked=true`;
 
         const [vendorRes, customerRes] = await Promise.all([
           fetchWithAuth(vendorUrl),
@@ -284,11 +284,13 @@ const InventoryPurchaseOrderEntry = ({
         const vendorList = vendorData.success ? (vendorData.data || []) : [];
         const customerList = customerData.success ? (customerData.data || []) : [];
 
-        // Merge them, tagging customer records
-        const taggedCustomers = customerList.map(c => ({
-          ...c,
-          isCustomerParty: true
-        }));
+        // Merge them, filtering to double-check that customer records are linked to a vendor profile
+        const taggedCustomers = customerList
+          .filter(c => c.linkedVendorId && c.linkedVendorId !== "")
+          .map(c => ({
+            ...c,
+            isCustomerParty: true
+          }));
 
         setFetchedVendors([...vendorList, ...taggedCustomers]);
       } catch (err) {
