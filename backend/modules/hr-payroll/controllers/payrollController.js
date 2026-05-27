@@ -33,7 +33,7 @@ export const generatePayroll = async (req, res) => {
     let totalAbsent = 0;
 
     attendanceRecords.forEach(record => {
-      if (record.status === "Present") {
+      if (record.status === "Present" || record.presentTime) {
         presentDays++;
         overtimeHours += (record.overtimeHours || 0);
         

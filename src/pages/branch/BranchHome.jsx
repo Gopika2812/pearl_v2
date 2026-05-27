@@ -292,9 +292,9 @@ export default function BranchHome() {
   // RENDER STANDARD USER DASHBOARD
   // ----------------------------------------------------
   if (!isSuperAdmin) {
-    const isPresent = todayAttendance?.status === "Present";
-    const isLeft = todayAttendance?.status === "Leave";
-    const isFinished = todayAttendance?.status === "Leave" || todayAttendance?.status === "Absent";
+    const isPresent = (todayAttendance?.status === "Present" || !!todayAttendance?.presentTime) && !todayAttendance?.leaveTime;
+    const isLeft = !!todayAttendance?.leaveTime;
+    const isFinished = !!todayAttendance?.leaveTime || todayAttendance?.status === "Absent" || todayAttendance?.status === "Leave";
     const userInitials = (user?.name || user?.username || "BU").split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 
     return (
@@ -588,9 +588,9 @@ export default function BranchHome() {
                       <tbody className="divide-y divide-slate-50 text-[11px] font-bold text-slate-700">
                         {attendanceLogs.slice(0, 5).map((log) => {
                           const dateObj = new Date(log.date);
-                          const isLogPresent = log.status === "Present";
-                          const isLogLeave = log.status === "Leave";
-                          const isLogAbsent = log.status === "Absent";
+                          const isLogPresent = log.status === "Present" || !!log.presentTime;
+                          const isLogLeave = log.status === "Leave" && !log.presentTime;
+                          const isLogAbsent = log.status === "Absent" && !log.presentTime;
                           
                           return (
                             <tr key={log._id} className="hover:bg-slate-50/50 transition">
@@ -603,7 +603,7 @@ export default function BranchHome() {
                                   isLogLeave ? "bg-amber-50 text-amber-700" :
                                   "bg-rose-50 text-rose-700"
                                 }`}>
-                                  {log.status}
+                                  {isLogPresent ? "Present" : log.status}
                                 </span>
                               </td>
                               <td className="py-3 px-4 text-slate-500 font-mono text-[10px]">
