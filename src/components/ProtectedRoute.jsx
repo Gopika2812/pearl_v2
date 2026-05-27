@@ -20,8 +20,8 @@ const ProtectedRoute = ({ element, role = null, redirectTo = '/branch-login' }) 
     return <Navigate to="/unauthorized" replace />;
   }
 
-  // ENFORCE GRANULAR PERMISSIONS (For non-Super Admins)
-  if (user && user.role !== "SUPER_ADMIN") {
+  // ENFORCE GRANULAR PERMISSIONS (For non-Super Admins and non-Admins)
+  if (user && user.role !== "SUPER_ADMIN" && user.role !== "ADMIN") {
     const allPages = getFlattenedPages();
     // Find the page config for the current path
     const currentPage = allPages.find(p => p.path === location.pathname);
