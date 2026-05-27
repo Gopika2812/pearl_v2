@@ -721,7 +721,8 @@ router.get("/", async (req, res) => {
       riskStatus,
       sortBy = "createdAt",
       sortOrder = "desc",
-      excludeLinked = "false"
+      excludeLinked = "false",
+      onlyLinked = "false"
     } = req.query;
 
     const andConditions = [{ branchId: branchObjectId }];
@@ -733,6 +734,12 @@ router.get("/", async (req, res) => {
           { linkedVendorId: { $exists: false } },
           { linkedVendorId: null }
         ]
+      });
+    }
+
+    if (onlyLinked === "true") {
+      andConditions.push({
+        linkedVendorId: { $ne: null }
       });
     }
 
@@ -1137,7 +1144,8 @@ router.get("/", async (req, res) => {
           netBalance: 1,
           lastInvoiceDate: 1,
           lastInvoiceNumber: 1,
-          lastReceiptDate: 1
+          lastReceiptDate: 1,
+          linkedVendorId: 1
         }
       });
     }
