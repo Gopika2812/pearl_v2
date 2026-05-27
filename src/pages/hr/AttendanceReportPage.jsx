@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { 
   FaCalendarAlt, FaUser, FaFilter, FaDownload, 
   FaSearch, FaClock, FaCheckCircle, FaTimesCircle, FaMinusCircle,
-  FaBuilding
+  FaBuilding, FaArrowLeft
 } from "react-icons/fa";
 import { useBranch } from "../../context/BranchContext";
 import { fetchWithAuth, API_BASE } from "../../api";
@@ -10,6 +11,7 @@ import { toast } from "react-toastify";
 
 const AttendanceReportPage = () => {
   const { currentBranch, user } = useBranch();
+  const navigate = useNavigate();
   const isSuperAdmin = ["SUPERADMIN", "SUPER_ADMIN"].includes(user?.role?.toUpperCase());
   
   const [employees, setEmployees] = useState([]);
@@ -35,8 +37,9 @@ const AttendanceReportPage = () => {
     }
   };
 
-  const fetchEmployees = async () => {
-    const targetBranchId = filters.branchId || currentBranch?._id;
+  // Accepts an explicit branchId to avoid stale closure bugs
+  const fetchEmployees = async (explicitBranchId) => {
+    const targetBranchId = explicitBranchId || currentBranch?._id;
     if (!targetBranchId) {
       setEmployees([]);
       return;
@@ -110,22 +113,39 @@ const AttendanceReportPage = () => {
   useEffect(() => {
     if (isSuperAdmin) {
       fetchBranches();
-      fetchAttendance();
-    } else if (currentBranch?._id) {
-      fetchEmployees();
-      fetchAttendance();
+    }
+    if (currentBranch?._id) {
+      fetchEmployees(currentBranch._id);
+    }
+    // Build initial filters with the real branchId and fetch
+    const initialFilters = {
+      startDate: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
+      endDate: new Date().toISOString().split('T')[0],
+      employeeId: "",
+      branchId: currentBranch?._id || "",
+      status: ""
+    };
+    setFilters(initialFilters);
+    if (isSuperAdmin || currentBranch?._id) {
+      fetchAttendance(initialFilters);
     } else {
       setLoading(false);
     }
   }, []);
 
-  // When top-bar branch changes, update filters AND fetch with new values immediately
+  // When top-bar branch changes, rebuild filters with new branchId and refetch
   useEffect(() => {
-    if (!currentBranch) return;
-    const newFilters = { ...filters, branchId: currentBranch._id, employeeId: "" };
+    if (!currentBranch?._id) return;
+    const newFilters = {
+      startDate: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
+      endDate: new Date().toISOString().split('T')[0],
+      employeeId: "",
+      branchId: currentBranch._id,
+      status: ""
+    };
     setFilters(newFilters);
-    fetchEmployees();
-    fetchAttendance(newFilters); // pass explicit values — no stale state
+    fetchEmployees(currentBranch._id); // explicit branchId — no stale closure
+    fetchAttendance(newFilters);        // explicit filters — no stale closure
   }, [currentBranch?._id]);
 
   const handleFilterChange = (e) => {
@@ -133,8 +153,16 @@ const AttendanceReportPage = () => {
     setFilters(prev => ({ ...prev, [name]: value }));
   };
 
+  // When super admin changes branch in filter panel, reload employees for that branch
+  const handleBranchFilterChange = (e) => {
+    const newBranchId = e.target.value;
+    setFilters(prev => ({ ...prev, branchId: newBranchId, employeeId: "" }));
+    fetchEmployees(newBranchId); // reload employees for newly selected branch
+  };
+
   const applyFilters = () => {
-    fetchAttendance(); // button click — state is already settled by now
+    // Always pass filters explicitly to avoid stale closure issues
+    fetchAttendance(filters);
   };
 
   const exportToCSV = () => {
@@ -221,9 +249,18 @@ const AttendanceReportPage = () => {
     <div className="space-y-8 pt-6 px-4 md:px-0 max-w-7xl mx-auto font-poppins">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-        <div>
-          <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tight">Attendance Intelligence</h1>
-          <p className="text-slate-500 text-sm font-medium uppercase tracking-widest mt-1">Comprehensive branch attendance analysis</p>
+        <div className="flex items-center gap-5">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex-shrink-0 w-11 h-11 flex items-center justify-center bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-500 rounded-2xl transition-all duration-200 shadow-sm active:scale-95"
+            title="Go Back"
+          >
+            <FaArrowLeft className="text-sm" />
+          </button>
+          <div>
+            <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tight">Attendance Intelligence</h1>
+            <p className="text-slate-500 text-sm font-medium uppercase tracking-widest mt-1">Comprehensive branch attendance analysis</p>
+          </div>
         </div>
         <button 
           onClick={exportToCSV}
@@ -245,11 +282,7 @@ const AttendanceReportPage = () => {
                 <select 
                   name="branchId"
                   value={filters.branchId}
-                  onChange={(e) => {
-                    handleFilterChange(e);
-                    // Clear employee filter when branch changes
-                    setFilters(prev => ({ ...prev, employeeId: "" }));
-                  }}
+                  onChange={handleBranchFilterChange}
                   className="bg-transparent border-none focus:ring-0 text-xs font-bold text-slate-700 outline-none w-full appearance-none cursor-pointer"
                 >
                   <option value="">All Branches</option>
