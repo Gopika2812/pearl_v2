@@ -237,6 +237,8 @@ router.get("/", async (req, res) => {
 
     if (status) {
       query.status = status.toUpperCase();
+    } else {
+      query.status = { $ne: "ONLINE_PENDING" };
     }
 
     if (customerId) {
@@ -947,6 +949,72 @@ router.patch("/:id/request-reedit", auth, clearCachePrefix("/api/sales-orders"),
     res.json({ success: true, message: "Re-edit enabled. You can now modify the Sales Order." });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// ✅ APPROVE ONLINE ORDER
+router.patch("/:id/approve-online", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await SalesOrder.findById(id);
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+
+    if (order.status !== "ONLINE_PENDING") {
+      return res.status(400).json({ success: false, message: "Only ONLINE_PENDING orders can be approved." });
+    }
+
+    order.status = "PLACED";
+    await order.save();
+
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: order.branchId,
+      action: "APPROVE_ONLINE_SO",
+      description: `Approved Online Order: ${order.invoiceId} for ${order.customer.name}`,
+      targetId: order._id,
+      targetModel: "SalesOrder",
+    });
+
+    res.json({ success: true, message: "Online order approved successfully and converted to SO." });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ✅ REVERT ONLINE ORDER
+router.patch("/:id/revert-online", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await SalesOrder.findById(id);
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+
+    if (order.status !== "PLACED") {
+      return res.status(400).json({ success: false, message: "Only approved PLACED orders can be reverted." });
+    }
+
+    if (order.invoiceGenerated || order.status === "INVOICED") {
+      return res.status(400).json({ success: false, message: "Invoiced orders cannot be reverted." });
+    }
+
+    order.status = "ONLINE_PENDING";
+    await order.save();
+
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: order.branchId,
+      action: "REVERT_ONLINE_SO",
+      description: `Reverted approved Sales Order back to Online Pending: ${order.invoiceId} for ${order.customer.name}`,
+      targetId: order._id,
+      targetModel: "SalesOrder",
+    });
+
+    res.json({ success: true, message: "Order reverted back to Online Pending." });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 

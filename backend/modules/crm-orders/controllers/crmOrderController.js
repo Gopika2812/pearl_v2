@@ -15,8 +15,40 @@ import Invoice from "../../../models/Invoice.js";
 
 export const getFrequentCustomers = async (req, res) => {
   try {
-    const { branchId } = req.query;
+    const { branchId, all } = req.query;
     if (!branchId) return res.status(400).json({ message: "branchId is required" });
+
+    if (all === "true") {
+      const customersWithOrderCount = await Customer.aggregate([
+        { $match: { branchId: new mongoose.Types.ObjectId(branchId) } },
+        {
+          $lookup: {
+            from: "salesorders",
+            let: { custId: "$_id" },
+            pipeline: [
+              { $match: { $expr: { $eq: ["$customer.customerId", "$$custId"] } } },
+              { $count: "count" }
+            ],
+            as: "orders"
+          }
+        },
+        {
+          $project: {
+            name: 1,
+            whatsapp: 1,
+            email: 1,
+            district: 1,
+            state: 1,
+            debit: 1,
+            credit: 1,
+            closingBalance: 1,
+            orderCount: { $ifNull: [{ $arrayElemAt: ["$orders.count", 0] }, 0] }
+          }
+        },
+        { $sort: { orderCount: -1, name: 1 } }
+      ]);
+      return res.json(customersWithOrderCount);
+    }
 
     const frequent = await SalesOrder.aggregate([
       { $match: { branchId: new mongoose.Types.ObjectId(branchId) } },
@@ -147,10 +179,48 @@ export const getPublicOrder = async (req, res) => {
 
     const notes = await CRMNote.find({ sessionId: session._id, showToCustomer: true });
 
+    // Fetch repeatedly bought products for this customer
+    const customerId = session.customerId?._id;
+    let recommendations = [];
+    if (customerId) {
+        const recommended = await SalesOrder.aggregate([
+          { $match: { "customer.customerId": new mongoose.Types.ObjectId(customerId) } },
+          { $unwind: "$items" },
+          { $group: { 
+              _id: "$items.productId", 
+              frequency: { $sum: 1 },
+              totalQty: { $sum: "$items.qty" },
+              name: { $first: "$items.name" }
+          } },
+          { $sort: { frequency: -1, totalQty: -1 } },
+          { $limit: 12 }
+        ]);
+
+        const productIds = recommended.map(p => p._id);
+        const fullProducts = await Product.find({ _id: { $in: productIds } }).lean();
+
+        // Fetch locked prices for this customer and these products
+        const CustomerLockedPrice = mongoose.models.CustomerLockedPrice || mongoose.model("CustomerLockedPrice");
+        const lockedPrices = await CustomerLockedPrice.find({ customerId, productId: { $in: productIds } }).lean();
+
+        recommendations = recommended.map(rec => {
+          const full = fullProducts.find(p => p._id.toString() === rec._id.toString());
+          if (!full) return null;
+          const lp = lockedPrices.find(l => l.productId.toString() === rec._id.toString());
+          return { 
+            ...full, 
+            frequency: rec.frequency,
+            totalQty: rec.totalQty,
+            sellingPrice: lp ? lp.lockedPrice : full.sellingPrice,
+            isLockedPrice: !!lp
+          };
+        }).filter(Boolean);
+    }
+
     sharedLink.viewCount += 1;
     await sharedLink.save();
 
-    res.json({ session, notes });
+    res.json({ session, notes, recommendations });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -158,7 +228,7 @@ export const getPublicOrder = async (req, res) => {
 
 export const getBranchProducts = async (req, res) => {
   try {
-    const { branchId, search } = req.query;
+    const { branchId, search, customerId } = req.query;
     if (!branchId) return res.status(400).json({ message: "branchId is required" });
 
     const query = { branchId };
@@ -170,6 +240,22 @@ export const getBranchProducts = async (req, res) => {
       .select("name sellingPrice image gst hsnCode units")
       .limit(50)
       .lean();
+
+    if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+      const CustomerLockedPrice = mongoose.models.CustomerLockedPrice || mongoose.model("CustomerLockedPrice");
+      const productIds = products.map(p => p._id);
+      const lockedPrices = await CustomerLockedPrice.find({ customerId, productId: { $in: productIds } }).lean();
+      
+      const productsWithPrices = products.map(p => {
+        const lp = lockedPrices.find(l => l.productId.toString() === p._id.toString());
+        return {
+          ...p,
+          sellingPrice: lp ? lp.lockedPrice : p.sellingPrice,
+          isLockedPrice: !!lp
+        };
+      });
+      return res.json(productsWithPrices);
+    }
 
     res.json(products);
   } catch (error) {
@@ -260,7 +346,8 @@ export const confirmPublicOrder = async (req, res) => {
         billingPerson: "Smart CRM Order",
         agent: "Smart CRM Order",
         financialYear: currentFY,
-        status: "PLACED"
+        status: "ONLINE_PENDING",
+        isOnlineOrder: true
     });
 
     await salesOrder.save();

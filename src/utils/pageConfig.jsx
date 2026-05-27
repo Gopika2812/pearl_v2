@@ -77,6 +77,7 @@ export const PAGE_CONFIG = [
       {
         id: "sales-dropdown", name: "Sales Order", icon: "sales", isDropdown: true, subItems: [
           { id: "create-so", name: "Create SO", path: "/branch/sales-order", icon: "add" },
+          { id: "online-orders", name: "Online Orders", path: "/branch/online-orders", icon: "sync", permissionFields: ["soId", "customer", "items", "grandTotal", "status", "date", "action_approve", "action_revert"] },
           { id: "sales-order-list", name: "Sales Order List", path: "/branch/sales-orders", icon: "list", permissionFields: ["soId", "siId", "voucherType", "customer", "items", "grandTotal", "status", "date", "action_si_bill", "action_gen_invoice", "action_cancel", "action_wb_add", "action_wb_price", "action_wb_qty", "action_wb_discount", "action_wb_delete"] },
           { id: "sales-invoice-list", name: "Sales Invoice List", path: "/branch/sales-invoices", icon: "invoice", permissionFields: ["dateTime", "siId", "soRef", "customer", "createdBy", "grandTotal", "einvoiceStatus", "status", "action_return", "action_ewb", "action_cancel", "action_pdf"] },
           { id: "claims", name: "Claims", path: "/branch/claims", icon: "claims", permissionFields: ["claimId", "date", "customer", "items", "amount", "status", "action"] },

@@ -63,6 +63,7 @@ import BranchSpottedCustomerLedger from "./pages/branch/BranchSpottedCustomerLed
 import SmartOrdersDashboard from "./pages/crm/SmartOrdersDashboard";
 import TaskBoardPage from "./pages/crm/TaskBoardPage";
 import SharedLinkCustomerPage from "./pages/crm/SharedLinkCustomerPage";
+import OnlineOrdersPage from "./pages/branch/OnlineOrdersPage";
 
 import BranchProductConfig from "./pages/branch/BranchProductConfig";
 import BranchCustomerLedger from "./pages/branch/BranchCustomerLedger";
@@ -459,6 +460,7 @@ function AppContent() {
         "/branch/smart-orders": "smart-orders",
         "/branch/tasks": "task-board",
         "/branch/spotted-customer-ledger": "spotted-ledger",
+        "/branch/online-orders": "online-orders",
       };
 
       // 3. SALES ORDER LOCK ENFORCEMENT
@@ -483,7 +485,7 @@ function AppContent() {
       let hasAccess = false;
       if (!requiredPermission) {
         hasAccess = true; // No permission required for this route
-      } else if (allowedPages.includes(requiredPermission) || requiredPermission === "smart-orders" || requiredPermission === "task-board") {
+      } else if (allowedPages.includes(requiredPermission) || requiredPermission === "smart-orders" || requiredPermission === "task-board" || requiredPermission === "online-orders") {
         hasAccess = true;
       } else if (requiredPermission === "quick-links") {
         // Special case for Quick Links: Allow if ANY master data module is allowed
@@ -857,6 +859,7 @@ function AppContent() {
                   <Route path="/branch/hr/reports" element={<ProtectedRoute element={<HRReportsPage />} />} />
                   <Route path="/branch/smart-orders" element={<ProtectedRoute element={<SmartOrdersDashboard />} />} />
                   <Route path="/branch/tasks" element={<ProtectedRoute element={<TaskBoardPage />} />} />
+                  <Route path="/branch/online-orders" element={<ProtectedRoute element={<OnlineOrdersPage />} />} />
                   <Route path="/shared-order/:token" element={<SharedLinkCustomerPage />} />
 
                   {/* LEGACY ROUTES */}

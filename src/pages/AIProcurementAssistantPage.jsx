@@ -124,26 +124,13 @@ export default function AIProcurementAssistantPage() {
         toast.error(sugData.message || "Failed to load reorder suggestions");
       }
 
-      // 3. Fetch chat history
-      const chatRes = await fetchWithAuth(`${API_BASE}/super-admin/ai-procurement/chat-history?branchId=${branchId}`);
-      const chatData = await chatRes.json();
-      if (chatData.success && chatData.data?.length > 0) {
-        // Map history to chat messages format
-        const historyMsgs = [];
-        chatData.data.reverse().forEach(h => {
-          historyMsgs.push({ role: "user", text: h.query });
-          historyMsgs.push({ role: "bot", text: h.response });
-        });
-        setChatMessages(historyMsgs);
-      } else {
-        // Default greeting
-        setChatMessages([
-          { 
-            role: "bot", 
-            text: "👋 **Hello! I'm your AI Procurement Assistant.**\n\nI analyze sales velocity, lead times, and current stock level vectors to automate Purchase Order planning. Feel free to ask me anything about your inventory!" 
-          }
-        ]);
-      }
+      // Reset chat to default greeting
+      setChatMessages([
+        { 
+          role: "bot", 
+          text: "👋 **Hello! I'm your AI Procurement Assistant.**\n\nI analyze sales velocity, lead times, and current stock level vectors to automate Purchase Order planning. Feel free to ask me anything about your inventory!" 
+        }
+      ]);
 
     } catch (err) {
       console.error("Error fetching branch data:", err);
@@ -463,14 +450,31 @@ export default function AIProcurementAssistantPage() {
             <div className="bg-white border border-gray-100 shadow-sm rounded-[32px] overflow-hidden flex flex-col h-[520px] relative">
               
               {/* Chat Title */}
-              <div className="bg-gradient-to-br from-indigo-900 to-indigo-950 px-6 py-5 flex items-center gap-3 text-white border-b border-indigo-800">
-                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <FaRobot className="text-white text-lg" />
+              <div className="bg-gradient-to-br from-indigo-900 to-indigo-950 px-6 py-5 flex items-center justify-between text-white border-b border-indigo-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <FaRobot className="text-white text-lg" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm tracking-wide uppercase">Procurement Copilot</h3>
+                    <span className="text-[10px] text-indigo-400 font-bold tracking-widest uppercase">HIG AI Automation LLP engine</span>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-black text-sm tracking-wide uppercase">Procurement Copilot</h3>
-                  <span className="text-[10px] text-indigo-400 font-bold tracking-widest uppercase">HIG AI Automation LLP engine</span>
-                </div>
+                <button
+                  onClick={() => {
+                    setChatMessages([
+                      { 
+                        role: "bot", 
+                        text: "👋 **Hello! I'm your AI Procurement Assistant.**\n\nI analyze sales velocity, lead times, and current stock level vectors to automate Purchase Order planning. Feel free to ask me anything about your inventory!" 
+                      }
+                    ]);
+                    toast.info("Chat cleared");
+                  }}
+                  className="p-2 hover:bg-white/10 rounded-xl transition-colors text-white/70 hover:text-white"
+                  title="Clear Chat"
+                >
+                  <FaTrash size={14} />
+                </button>
               </div>
 
               {/* Chat Messages */}

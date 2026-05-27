@@ -21,6 +21,8 @@ const SharedLinkCustomerPage = () => {
     const [allProducts, setAllProducts] = useState([]);
     const [searchTerm, setSearchTerm] = useState("");
     const [isBrowsing, setIsBrowsing] = useState(false);
+    const [viewMode, setViewMode] = useState("grid"); // "grid" or "table"
+    const [recommendations, setRecommendations] = useState([]);
 
     useEffect(() => {
         fetchOrderData();
@@ -35,13 +37,11 @@ const SharedLinkCustomerPage = () => {
             }
             const data = await res.json();
             setOrderData(data);
-            setCart(data.session.items.map(item => ({
-                ...item,
-                productId: item.productId._id || item.productId
-            })));
+            setRecommendations(data.recommendations || []);
+            setCart([]);
             
-            // Also fetch all products for browsing
-            fetchProducts(data.session.branchId);
+            // Also fetch all products for browsing with customerId for locked pricing
+            fetchProducts(data.session.branchId, "", data.session.customerId?._id || data.session.customerId);
         } catch (err) {
             setError(err.message);
             toast.error(err.message);
@@ -50,9 +50,10 @@ const SharedLinkCustomerPage = () => {
         }
     };
 
-    const fetchProducts = async (branchId, search = "") => {
+    const fetchProducts = async (branchId, search = "", customerId = "") => {
         try {
-            const res = await fetch(`${API_BASE}/crm-orders/public/products?branchId=${branchId}&search=${search}`);
+            const customerParam = customerId ? `&customerId=${customerId}` : "";
+            const res = await fetch(`${API_BASE}/crm-orders/public/products?branchId=${branchId}&search=${search}${customerParam}`);
             if (res.ok) {
                 const data = await res.json();
                 setAllProducts(data);
@@ -228,9 +229,26 @@ const SharedLinkCustomerPage = () => {
 
                     {/* Catalog Header */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <h2 className="text-3xl font-black text-slate-900 tracking-tighter">
-                            Our <span className="text-indigo-600">Picks</span> for You
-                        </h2>
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-3xl font-black text-slate-900 tracking-tighter">
+                                Our <span className="text-indigo-600">Picks</span> for You
+                            </h2>
+                            {/* Grid / Table Toggle */}
+                            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                                <button 
+                                    onClick={() => setViewMode("grid")}
+                                    className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === "grid" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                                >
+                                    Grid
+                                </button>
+                                <button 
+                                    onClick={() => setViewMode("table")}
+                                    className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === "table" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                                >
+                                    Table
+                                </button>
+                            </div>
+                        </div>
                         <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm">
                             <button 
                                 onClick={() => setIsBrowsing(false)}
@@ -248,31 +266,111 @@ const SharedLinkCustomerPage = () => {
                     </div>
 
                     {!isBrowsing ? (
-                        /* Selected Recommendations Grid */
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            {orderData.session.items.map(item => (
-                                <div key={item.productId._id} className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-100/50 transition-all duration-500 group flex flex-col">
-                                    <div className="w-full aspect-square bg-slate-50 rounded-[2rem] mb-6 flex items-center justify-center text-slate-200 overflow-hidden border border-slate-100 group-hover:scale-[1.02] transition-transform duration-500">
-                                        {item.productId.image ? (
-                                            <img src={item.productId.image} alt={item.name} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <FaBoxOpen size={60} />
-                                        )}
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">Recommended</p>
-                                        <h3 className="text-lg font-black text-slate-800 uppercase leading-tight mb-2">{item.name}</h3>
-                                        <p className="text-2xl font-black text-slate-900">₹{item.sellingPrice.toLocaleString()}</p>
-                                    </div>
-                                    <button 
-                                        onClick={() => addToCart(item.productId)}
-                                        className="mt-6 w-full py-4 bg-slate-50 hover:bg-indigo-600 hover:text-white text-slate-900 rounded-2xl font-black uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2"
-                                    >
-                                        <FaPlus /> Add to Bag
-                                    </button>
+                        /* Selected Recommendations (Repeatedly Bought Products) */
+                        recommendations.length === 0 ? (
+                            <div className="bg-white rounded-[2.5rem] p-12 text-center border border-slate-100 shadow-sm">
+                                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
+                                    <FaBoxOpen size={24} />
                                 </div>
-                            ))}
-                        </div>
+                                <p className="text-slate-400 text-xs font-black uppercase tracking-widest">No past purchase history available.</p>
+                            </div>
+                        ) : viewMode === "table" ? (
+                            /* Recommendations Table View */
+                            <div className="overflow-x-auto rounded-[2.5rem] bg-white border border-slate-100 shadow-sm">
+                                <table className="w-full text-left text-xs font-semibold text-slate-700">
+                                    <thead>
+                                        <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 uppercase tracking-widest text-[9px]">
+                                            <th className="py-4 px-6 font-black">Product Details</th>
+                                            <th className="py-4 px-6 font-black text-center">Times Bought</th>
+                                            <th className="py-4 px-6 font-black text-right">Price</th>
+                                            <th className="py-4 px-6 font-black text-center w-40">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {recommendations.map(item => {
+                                            const cartItem = cart.find(c => c.productId === (item._id || item.id));
+                                            return (
+                                                <tr key={item._id} className="hover:bg-slate-50/50 transition-colors">
+                                                    <td className="py-4 px-6">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-12 h-12 bg-slate-50 rounded-xl overflow-hidden shrink-0 border border-slate-100 flex items-center justify-center text-slate-200">
+                                                                {item.image ? (
+                                                                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                                                                ) : (
+                                                                    <FaBoxOpen size={20} />
+                                                                )}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-black text-slate-800 uppercase text-xs">{item.name}</p>
+                                                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{item.units || "Units"}</p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-4 px-6 text-center font-bold text-slate-600">
+                                                        <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase">
+                                                            {item.frequency || 1}x Bought
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-4 px-6 text-right font-black text-slate-800">
+                                                        <div className="flex flex-col items-end justify-center">
+                                                            <span className="text-sm font-black flex items-center gap-1">
+                                                                {item.isLockedPrice && <span className="text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">LOCKED PRICE</span>}
+                                                                ₹{item.sellingPrice?.toLocaleString()}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-4 px-6 text-center">
+                                                        {cartItem ? (
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                <button onClick={() => updateQty(cartItem.productId, -1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 text-slate-600 rounded hover:bg-slate-200"><FaMinus size={8} /></button>
+                                                                <span className="text-xs font-black w-4 text-center">{cartItem.qty}</span>
+                                                                <button onClick={() => updateQty(cartItem.productId, 1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 text-slate-600 rounded hover:bg-slate-200"><FaPlus size={8} /></button>
+                                                            </div>
+                                                        ) : (
+                                                            <button 
+                                                                onClick={() => addToCart(item)}
+                                                                className="px-4 py-2 bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1 justify-center mx-auto"
+                                                            >
+                                                                <FaPlus size={8} /> Add to Bag
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            /* Recommendations Grid View */
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                {recommendations.map(item => (
+                                    <div key={item._id} className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-100/50 transition-all duration-500 group flex flex-col">
+                                        <div className="w-full aspect-square bg-slate-50 rounded-[2rem] mb-6 flex items-center justify-center text-slate-200 overflow-hidden border border-slate-100 group-hover:scale-[1.02] transition-transform duration-500">
+                                            {item.image ? (
+                                                <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <FaBoxOpen size={60} />
+                                            )}
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center justify-between gap-2 mb-1">
+                                                <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded-full">{item.frequency || 1}x BOUGHT</span>
+                                                {item.isLockedPrice && <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-2 py-0.5 rounded-full">LOCKED PRICE</span>}
+                                            </div>
+                                            <h3 className="text-lg font-black text-slate-800 uppercase leading-tight mb-2">{item.name}</h3>
+                                            <p className="text-2xl font-black text-slate-900">₹{item.sellingPrice.toLocaleString()}</p>
+                                        </div>
+                                        <button 
+                                            onClick={() => addToCart(item)}
+                                            className="mt-6 w-full py-4 bg-slate-50 hover:bg-indigo-600 hover:text-white text-slate-900 rounded-2xl font-black uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2"
+                                        >
+                                            <FaPlus /> Add to Bag
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )
                     ) : (
                         /* Full Product Browser */
                         <div className="space-y-6">
@@ -285,31 +383,99 @@ const SharedLinkCustomerPage = () => {
                                     value={searchTerm}
                                     onChange={(e) => {
                                         setSearchTerm(e.target.value);
-                                        fetchProducts(orderData.session.branchId, e.target.value);
+                                        fetchProducts(orderData.session.branchId, e.target.value, orderData.session.customerId?._id || orderData.session.customerId);
                                     }}
                                 />
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                {allProducts.map(p => (
-                                    <div key={p._id} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-lg transition-all group">
-                                        <div className="w-full aspect-square bg-slate-50 rounded-2xl mb-3 flex items-center justify-center text-slate-200 overflow-hidden">
-                                            {p.image ? (
-                                                <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <FaBoxOpen size={30} />
-                                            )}
+                            
+                            {viewMode === "table" ? (
+                                /* Browse All Table View */
+                                <div className="overflow-x-auto rounded-[2.5rem] bg-white border border-slate-100 shadow-sm">
+                                    <table className="w-full text-left text-xs font-semibold text-slate-700">
+                                        <thead>
+                                            <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 uppercase tracking-widest text-[9px]">
+                                                <th className="py-4 px-6 font-black">Product Details</th>
+                                                <th className="py-4 px-6 font-black text-right">Price</th>
+                                                <th className="py-4 px-6 font-black text-center w-40">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {allProducts.map(item => {
+                                                const cartItem = cart.find(c => c.productId === (item._id || item.id));
+                                                return (
+                                                    <tr key={item._id} className="hover:bg-slate-50/50 transition-colors">
+                                                        <td className="py-4 px-6">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-12 h-12 bg-slate-50 rounded-xl overflow-hidden shrink-0 border border-slate-100 flex items-center justify-center text-slate-200">
+                                                                    {item.image ? (
+                                                                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                                                                    ) : (
+                                                                        <FaBoxOpen size={20} />
+                                                                    )}
+                                                                </div>
+                                                                <div>
+                                                                    <p className="font-black text-slate-800 uppercase text-xs">{item.name}</p>
+                                                                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{item.units || "Units"}</p>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="py-4 px-6 text-right font-black text-slate-800">
+                                                            <div className="flex flex-col items-end justify-center">
+                                                                <span className="text-sm font-black flex items-center gap-1">
+                                                                    {item.isLockedPrice && <span className="text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">LOCKED PRICE</span>}
+                                                                    ₹{item.sellingPrice?.toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="py-4 px-6 text-center">
+                                                            {cartItem ? (
+                                                                <div className="flex items-center justify-center gap-2">
+                                                                    <button onClick={() => updateQty(cartItem.productId, -1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 text-slate-600 rounded hover:bg-slate-200"><FaMinus size={8} /></button>
+                                                                    <span className="text-xs font-black w-4 text-center">{cartItem.qty}</span>
+                                                                    <button onClick={() => updateQty(cartItem.productId, 1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 text-slate-600 rounded hover:bg-slate-200"><FaPlus size={8} /></button>
+                                                                </div>
+                                                            ) : (
+                                                                <button 
+                                                                    onClick={() => addToCart(item)}
+                                                                    className="px-4 py-2 bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1 justify-center mx-auto"
+                                                                >
+                                                                    <FaPlus size={8} /> Add to Bag
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                /* Browse All Grid View */
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                    {allProducts.map(p => (
+                                        <div key={p._id} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-lg transition-all group">
+                                            <div className="w-full aspect-square bg-slate-50 rounded-2xl mb-3 flex items-center justify-center text-slate-200 overflow-hidden">
+                                                {p.image ? (
+                                                    <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <FaBoxOpen size={30} />
+                                                )}
+                                            </div>
+                                            <div className="flex items-center justify-between mb-1 h-4">
+                                                {p.isLockedPrice && <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-1.5 py-0.5 rounded-full">LOCKED</span>}
+                                            </div>
+                                            <p className="text-[10px] font-black text-slate-800 uppercase line-clamp-2 leading-tight mb-1 h-8">{p.name}</p>
+                                            <p className="text-sm font-black text-indigo-600 mb-3">₹{p.sellingPrice.toLocaleString()}</p>
+                                            <button 
+                                                onClick={() => addToCart(p)}
+                                                className="w-full py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-600 hover:text-white transition-all"
+                                            >
+                                                Add
+                                            </button>
                                         </div>
-                                        <p className="text-[10px] font-black text-slate-800 uppercase line-clamp-2 leading-tight mb-1 h-8">{p.name}</p>
-                                        <p className="text-sm font-black text-indigo-600 mb-3">₹{p.sellingPrice.toLocaleString()}</p>
-                                        <button 
-                                            onClick={() => addToCart(p)}
-                                            className="w-full py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-600 hover:text-white transition-all"
-                                        >
-                                            Add
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

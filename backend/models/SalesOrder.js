@@ -232,8 +232,12 @@ const salesOrderSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["DRAFT", "PLACED", "INVOICED", "CANCELLED"],
+      enum: ["DRAFT", "PLACED", "INVOICED", "CANCELLED", "ONLINE_PENDING"],
       default: "PLACED",
+    },
+    isOnlineOrder: {
+      type: Boolean,
+      default: false,
     },
 
     // DELTA & HISTORY TRACKING
