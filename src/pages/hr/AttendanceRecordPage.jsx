@@ -169,8 +169,8 @@ const AttendanceRecordPage = () => {
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                      <span className={`px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest ${getStatusColor(log.presentTime ? "Present" : log.status)}`}>
-                        {log.presentTime ? "Present" : log.status}
+                      <span className={`px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest ${getStatusColor(log.status)}`}>
+                        {log.status}
                       </span>
                     </td>
                     <td className="px-8 py-6">
