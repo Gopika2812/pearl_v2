@@ -450,6 +450,7 @@ function AppContent() {
         "/branch/delivery-records": "delivery-records",
         "/branch/delivery-receipt": "delivery-receipt",
         "/branch/transferred-receipts": "delivery-receipt",
+        "/admin/attendance-report": "attendance-report",
         "/branch/hr/attendance": "attendance",
         "/branch/hr/payroll": "payroll-processing",
         "/branch/hr/salary-structure": "salary-structure",
