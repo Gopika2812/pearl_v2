@@ -17,6 +17,7 @@ import ManualJournal from "../models/ManualJournal.js";
 import Receipt from "../models/Receipt.js";
 import SalesOrder from "../models/SalesOrder.js";
 import SalesOwner from "../models/SalesOwner.js";
+import moment from "moment-timezone";
 
 const router = express.Router();
 
@@ -1931,9 +1932,13 @@ router.get("/:id/ledger", async (req, res) => {
       [startStr, endStr] = [endStr, startStr];
     }
 
-    const start = startStr ? new Date(startStr) : firstDay;
-    const end = endStr ? new Date(endStr) : new Date();
-    end.setHours(23, 59, 59, 999);
+    const IST = "Asia/Kolkata";
+    const start = startStr
+      ? moment.tz(startStr, IST).startOf("day").toDate()
+      : moment.tz(firstDay, IST).startOf("day").toDate();
+    const end = endStr
+      ? moment.tz(endStr, IST).endOf("day").toDate()
+      : moment.tz(IST).endOf("day").toDate();
 
     // Start from the current live balances of BOTH sides if linked
     const customerBal = (customer.debit || 0) - (customer.credit || 0);
@@ -2057,7 +2062,7 @@ router.get("/:id/ledger", async (req, res) => {
     // 🔒 STRICTOR RULE: If querying from the start of the financial year (April 1st, 2026) or earlier,
     // the opening balance is strictly bound to the imported/static opening balance field in the database.
     // This prevents subsequent backdated entries or calculations from altering the historical 31st March balance.
-    const financialYearStart = new Date("2026-04-01T00:00:00.000Z");
+    const financialYearStart = moment.tz("2026-04-01", "Asia/Kolkata").startOf("day").toDate();
     if (start <= financialYearStart) {
       openingBalance = customer.openingBalance || 0;
     }

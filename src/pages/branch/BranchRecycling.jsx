@@ -1,6 +1,7 @@
 import { useEffect, useState, Fragment } from "react";
-import { FaArrowUp, FaBox, FaChevronDown, FaChevronUp, FaEdit, FaExclamationCircle, FaExclamationTriangle, FaList, FaSync, FaThLarge } from "react-icons/fa";
+import { FaArrowUp, FaBox, FaChevronDown, FaChevronUp, FaEdit, FaExclamationCircle, FaExclamationTriangle, FaList, FaSync, FaThLarge, FaFileExport } from "react-icons/fa";
 import { toast } from "react-toastify";
+import * as XLSX from "xlsx";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 
@@ -117,7 +118,7 @@ export default function BranchRecycling() {
   const [selectedProductGroup, setSelectedProductGroup] = useState("All"); // Filter by group
   const [allProducts, setAllProducts] = useState([]); // Store all products for group filtering
   const [allProductGroups, setAllProductGroups] = useState([]); // Store all unique product groups
-  const [sortConfig, setSortConfig] = useState({ key: "status", direction: "asc" }); // Default: Out of Stock first
+  const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" }); // Default: Alphabetical order
 
   // Full Page Stock Alert states
   const [showFullPageAlert, setShowFullPageAlert] = useState(false);
@@ -851,6 +852,104 @@ export default function BranchRecycling() {
       toast.error(`Error saving bulk settings: ${err.message}`);
     } finally {
       setSavingBulkConfig(false);
+    }
+  };
+
+  // Export filtered products to Excel
+  const handleExportExcel = () => {
+    try {
+      const exportList = filteredProducts;
+      if (exportList.length === 0) {
+        toast.info("No products to export.");
+        return;
+      }
+
+      toast.info("Preparing Excel export...");
+
+      const exportData = exportList.map((product) => {
+        const { reorderQty, reorderLevel, isAuto } = getReorderParams(product);
+        const poQty = pendingPOMap?.[product._id] || 0;
+        const soQty = pendingSalesMap?.[product._id] || 0;
+        const netAvailability = Number(((product.totalQty || 0) + poQty - soQty).toFixed(2));
+        
+        const stockStatus = 
+          product.totalQty === 0 ? "Out of Stock" :
+          product.totalQty <= reorderLevel ? "Low Stock" :
+          "Normal";
+
+        const purDate = product.lastPurchaseDate ? new Date(product.lastPurchaseDate).toLocaleDateString('en-GB') : "-";
+        const salDate = product.lastSalesDate ? new Date(product.lastSalesDate).toLocaleDateString('en-GB') : "-";
+
+        const getAgeInDays = (dateStr) => {
+          if (!dateStr) return "-";
+          const lastDate = new Date(dateStr);
+          const today = new Date();
+          lastDate.setHours(0, 0, 0, 0);
+          today.setHours(0, 0, 0, 0);
+          const diffDays = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
+          return diffDays < 0 ? "0 days" : `${diffDays} days`;
+        };
+
+        const purAge = getAgeInDays(product.lastPurchaseDate);
+        const salAge = getAgeInDays(product.lastSalesDate);
+
+        const groupName = product.productGroup && typeof product.productGroup === 'object' 
+          ? (product.productGroup.name || product.productGroup._id)
+          : (product.productGroup || "-");
+
+        return {
+          "Product Name": product.name || "-",
+          "Product Group": groupName,
+          "Unit": product.units || "-",
+          "System Qty": Number((product.totalQty || 0).toFixed(2)),
+          "PO Qty": poQty,
+          "Last Purchase Date": purDate,
+          "Purchase Age": purAge,
+          "Last Sales Date": salDate,
+          "Sales Age": salAge,
+          "SO Qty": soQty,
+          "Net Available Qty": netAvailability,
+          "Min Level (Threshold)": reorderLevel,
+          "Reorder Qty": reorderQty,
+          "Reorder Mode": isAuto ? "AUTO" : "MANUAL",
+          "Status": stockStatus,
+          "Preferred Vendor": product.preferredVendor || "-",
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Restocking Report");
+
+      // Auto-width adjustment for columns
+      const wscols = [
+        { wch: 35 }, // Product Name
+        { wch: 20 }, // Product Group
+        { wch: 10 }, // Unit
+        { wch: 12 }, // System Qty
+        { wch: 10 }, // PO Qty
+        { wch: 18 }, // Last Purchase Date
+        { wch: 15 }, // Purchase Age
+        { wch: 18 }, // Last Sales Date
+        { wch: 15 }, // Sales Age
+        { wch: 10 }, // SO Qty
+        { wch: 18 }, // Net Available Qty
+        { wch: 22 }, // Min Level (Threshold)
+        { wch: 15 }, // Reorder Qty
+        { wch: 15 }, // Reorder Mode
+        { wch: 15 }, // Status
+        { wch: 25 }, // Preferred Vendor
+      ];
+      worksheet['!cols'] = wscols;
+
+      const groupLabel = selectedProductGroup === "All" ? "AllGroups" : selectedProductGroup;
+      const fileName = `RestockingReport_${groupLabel}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+      XLSX.writeFile(workbook, fileName);
+      toast.success("Excel report exported successfully!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export Excel report");
     }
   };
 
@@ -1866,14 +1965,25 @@ export default function BranchRecycling() {
                 <p className="text-blue-100 mt-1">Automated Low Stock Alerts & Restocking</p>
               </div>
             </div>
-            <button
-              onClick={() => fetchAllData(currentPage, searchTerm)}
-              disabled={loading}
-              className="bg-white text-blue-900 px-4 py-2 rounded-lg font-semibold hover:bg-slate-50 transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
-            >
-              <FaSync className={loading ? "animate-spin" : ""} />
-              {loading ? "Loading..." : "Refresh"}
-            </button>
+            <div className="flex items-center gap-3">
+              {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
+                <button
+                  onClick={handleExportExcel}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition flex items-center gap-2 shadow-sm cursor-pointer hover:scale-105 transform active:scale-95 duration-150"
+                  title="Export current restocking records to Excel"
+                >
+                  <FaFileExport /> Export Excel
+                </button>
+              )}
+              <button
+                onClick={() => fetchAllData(currentPage, searchTerm)}
+                disabled={loading}
+                className="bg-white text-blue-900 px-4 py-2 rounded-lg font-semibold hover:bg-slate-50 transition disabled:opacity-50 flex items-center gap-2 shadow-sm cursor-pointer"
+              >
+                <FaSync className={loading ? "animate-spin" : ""} />
+                {loading ? "Loading..." : "Refresh"}
+              </button>
+            </div>
           </div>
 
           {/* Search and Bulk Restock Bar */}
