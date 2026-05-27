@@ -1646,11 +1646,22 @@ router.get("", async (req, res) => {
     // 5. Date Filtering (Cumulative – applies unless dates are explicitly cleared or searching all-time)
     // In this dashboard, if fromDate/toDate are passed, we stick to them.
     if (fromDate || toDate) {
-      const start = fromDate ? new Date(fromDate) : new Date();
-      if (!fromDate) start.setHours(0, 0, 0, 0);
+      const IST = "Asia/Kolkata";
+      let startStr = fromDate;
+      let endStr = toDate;
 
-      const end = toDate ? new Date(toDate) : new Date(start);
-      end.setHours(23, 59, 59, 999); // Always set to end of day
+      // 🛡️ Safeguard: If dates are inverted (Start > End), swap them
+      if (startStr && endStr && startStr > endStr) {
+        [startStr, endStr] = [endStr, startStr];
+      }
+
+      const start = startStr
+        ? moment.tz(startStr, IST).startOf("day").toDate()
+        : moment.tz(IST).startOf("day").toDate();
+
+      const end = endStr
+        ? moment.tz(endStr, IST).endOf("day").toDate()
+        : moment.tz(startStr || undefined, IST).endOf("day").toDate();
 
       let dateFilter = {};
       if (deliveryStatus === "COMPLETED") {
@@ -1683,6 +1694,10 @@ router.get("", async (req, res) => {
         }
       }
     }
+
+    // 🔍 DEBUG: Log the final query to diagnose date filter issues
+    console.log("📋 [INVOICE-GET] Query params:", { branchId, fromDate, toDate, search, page, limit });
+    console.log("📋 [INVOICE-GET] Final MongoDB query:", JSON.stringify(query, null, 2));
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const { sortBy = "invoiceDate", sortOrder = "desc" } = req.query;
