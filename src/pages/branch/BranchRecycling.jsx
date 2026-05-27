@@ -913,6 +913,7 @@ export default function BranchRecycling() {
           "Reorder Qty": reorderQty,
           "Reorder Mode": isAuto ? "AUTO" : "MANUAL",
           "Status": stockStatus,
+          "Suggested Restock": netAvailability < reorderLevel ? `Restock ${reorderQty - netAvailability} ${product.units || ""}` : "-",
           "Preferred Vendor": product.preferredVendor || "-",
         };
       });
@@ -938,6 +939,7 @@ export default function BranchRecycling() {
         { wch: 15 }, // Reorder Qty
         { wch: 15 }, // Reorder Mode
         { wch: 15 }, // Status
+        { wch: 20 }, // Suggested Restock
         { wch: 25 }, // Preferred Vendor
       ];
       worksheet['!cols'] = wscols;
@@ -1142,6 +1144,19 @@ export default function BranchRecycling() {
         const priorityA = getStatusPriority(a);
         const priorityB = getStatusPriority(b);
         return direction === "asc" ? priorityA - priorityB : priorityB - priorityA;
+      }
+      
+      if (key === "suggestedRestock") {
+        const getRestockVal = (p) => {
+          const { reorderQty, reorderLevel } = getReorderParams(p);
+          const poQty = pendingPOMap?.[p._id] || 0;
+          const soQty = pendingSalesMap?.[p._id] || 0;
+          const net = (p.totalQty || 0) + poQty - soQty;
+          return net < reorderLevel ? (reorderQty - net) : 0;
+        };
+        const valA = getRestockVal(a);
+        const valB = getRestockVal(b);
+        return direction === "asc" ? valA - valB : valB - valA;
       }
       
       if (key === "name") {
@@ -2335,12 +2350,20 @@ export default function BranchRecycling() {
                   )}
 
                   {isFieldAllowed("status") && (
-                    <th 
-                      onClick={() => handleSort("status")}
-                      className="px-2 py-2 text-center text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
-                    >
-                      Status {sortConfig.key === "status" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
-                    </th>
+                    <>
+                      <th 
+                        onClick={() => handleSort("status")}
+                        className="px-2 py-2 text-center text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
+                      >
+                        Status {sortConfig.key === "status" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                      <th 
+                        onClick={() => handleSort("suggestedRestock")}
+                        className="px-2 py-2 text-center text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap"
+                      >
+                        Restock {sortConfig.key === "suggestedRestock" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                      </th>
+                    </>
                   )}
                   {isFieldAllowed("action_config") && (
                     <th className="px-2 py-2 text-center text-[11px] font-bold">Cfg</th>
@@ -2463,22 +2486,28 @@ export default function BranchRecycling() {
                         )}
   
                         {isFieldAllowed("status") && (
-                          <td className="px-2 py-2 text-[11px] text-center whitespace-nowrap">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              product.totalQty === 0
-                                ? "bg-red-50 text-red-700"
-                                : product.totalQty <= reorderLevel
-                                ? "bg-yellow-50 text-yellow-700"
-                                : "bg-green-50 text-green-700"
-                            }`}>
-                              {stockStatus}
-                            </span>
-                            {netAvailability < reorderLevel && (
-                              <span className="text-[9px] text-amber-700 bg-amber-50 border border-amber-200/50 px-1 py-0.5 rounded font-black block mt-1 text-center whitespace-nowrap">
-                                💡 Restock {reorderQty - netAvailability} {product.units}
+                          <>
+                            <td className="px-2 py-2 text-[11px] text-center whitespace-nowrap">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                product.totalQty === 0
+                                  ? "bg-red-50 text-red-700"
+                                  : product.totalQty <= reorderLevel
+                                  ? "bg-yellow-50 text-yellow-700"
+                                  : "bg-green-50 text-green-700"
+                              }`}>
+                                {stockStatus}
                               </span>
-                            )}
-                          </td>
+                            </td>
+                            <td className="px-2 py-2 text-[11px] text-center whitespace-nowrap">
+                              {netAvailability < reorderLevel ? (
+                                <span className="inline-block text-[9px] text-amber-700 bg-amber-50 border border-amber-200/50 px-2 py-0.5 rounded font-black text-center whitespace-nowrap">
+                                  💡 Restock {reorderQty - netAvailability} {product.units}
+                                </span>
+                              ) : (
+                                <span className="text-gray-300">-</span>
+                              )}
+                            </td>
+                          </>
                         )}
                         {(isFieldAllowed("action_config") || isFieldAllowed("action_restock")) && (
                           <td className="px-2 py-2 text-center whitespace-nowrap">
