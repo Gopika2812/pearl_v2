@@ -64,6 +64,7 @@ import manualJournalRoutes from "./routes/manualJournalRoutes.js";
 import aiBotRoutes from "./modules/ai-bot/index.js";
 import gstReportRoutes from "./routes/gstReportRoutes.js";
 import spottedCustomerLedgerRoutes from "./routes/spottedCustomerLedgerRoutes.js";
+import aiProcurementRoutes from "./modules/ai-procurement/index.js";
 
 
 
@@ -111,6 +112,7 @@ app.use((req, res, next) => {
 app.use("/api/ai-bot", aiBotRoutes);
 app.use("/api/crm-orders", crmOrderRoutes);
 app.use("/api/hr", hrPayrollRoutes);
+app.use("/api/super-admin/ai-procurement", aiProcurementRoutes);
 app.use("/api/super-admin", superAdminRoutes);
 app.use("/api/branches", branchRoutes);
 app.use("/api/branch-users", branchUserRoutes);

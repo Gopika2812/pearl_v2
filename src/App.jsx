@@ -89,6 +89,7 @@ import SuperAdminControlSystem from "./pages/SuperAdminControlSystem";
 import SuperAdminAuditLogs from "./pages/SuperAdminAuditLogs";
 import SuperAdminUserManagement from "./pages/SuperAdminUserManagement";
 import SuperAdminCreditRequests from "./pages/SuperAdminCreditRequests";
+import AIProcurementAssistantPage from "./pages/AIProcurementAssistantPage";
 import CRMPage from "./pages/CRMPage";
 import CustomerLogin from "./pages/CustomerLogin";
 import CustomerSummary from "./pages/CustomerSummary";
@@ -939,6 +940,10 @@ function AppContent() {
                   <Route 
                     path="/super-admin/credit-requests" 
                     element={<ProtectedRoute element={<SuperAdminCreditRequests />} role={["SUPER_ADMIN"]} />} 
+                  />
+                  <Route 
+                    path="/super-admin/ai-procurement-assistant" 
+                    element={<ProtectedRoute element={<AIProcurementAssistantPage />} role={["SUPER_ADMIN"]} />} 
                   />
                 </Routes>
             </div>

@@ -103,7 +103,6 @@ export const markAttendance = async (req, res) => {
       updateData.overtimeHours = 0;
     } else if (status === "Leave" || status === "Absent") {
       if (attendance && (attendance.status === "Present" || attendance.presentTime)) {
-        updateData.status = "Present";
         updateData.leaveTime = new Date();
         updateData.leaveLocation = {
           lat: safeLat,
@@ -203,46 +202,13 @@ export const getMonthlySummary = async (req, res) => {
         $group: {
           _id: "$employeeId",
           presentDays: {
-            $sum: {
-              $cond: [
-                {
-                  $or: [
-                    { $eq: ["$status", "Present"] },
-                    { $ne: [{ $ifNull: ["$presentTime", null] }, null] }
-                  ]
-                },
-                1,
-                0
-              ]
-            },
+            $sum: { $cond: [{ $eq: ["$status", "Present"] }, 1, 0] },
           },
           absentDays: {
-            $sum: {
-              $cond: [
-                {
-                  $and: [
-                    { $eq: ["$status", "Absent"] },
-                    { $eq: [{ $ifNull: ["$presentTime", null] }, null] }
-                  ]
-                },
-                1,
-                0
-              ]
-            },
+            $sum: { $cond: [{ $eq: ["$status", "Absent"] }, 1, 0] },
           },
           leaveDays: {
-            $sum: {
-              $cond: [
-                {
-                  $and: [
-                    { $eq: ["$status", "Leave"] },
-                    { $eq: [{ $ifNull: ["$presentTime", null] }, null] }
-                  ]
-                },
-                1,
-                0
-              ]
-            },
+            $sum: { $cond: [{ $eq: ["$status", "Leave"] }, 1, 0] },
           },
           totalOvertime: { $sum: "$overtimeHours" },
         },

@@ -310,9 +310,9 @@ const AttendancePage = () => {
           })
           .map((emp) => {
           const record = attendanceRecords[emp._id];
-          const isPresent = record?.status === "Present" || !!record?.presentTime;
-          const isLeft = !!record?.leaveTime;
-          const isFinished = !!record?.leaveTime || record?.status === "Absent" || record?.status === "Leave";
+          const isPresent = record?.status === "Present";
+          const isLeft = record?.status === "Leave";
+          const isFinished = record?.status === "Leave" || record?.status === "Absent";
           
           return (
             <div key={emp._id} className="bg-white rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-200 p-5 md:p-8 shadow-sm hover:shadow-md transition-all duration-500 group">
