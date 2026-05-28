@@ -27,14 +27,43 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
   const [productSearch, setProductSearch] = useState("");
   const [showProductDropdown, setShowProductDropdown] = useState(false);
 
+  const [vendors, setVendors] = useState([]);
+  const [vendorSearch, setVendorSearch] = useState("");
+  const [selectedVendor, setSelectedVendor] = useState("");
+  const [showVendorDropdown, setShowVendorDropdown] = useState(false);
+
+  const [customDiscount, setCustomDiscount] = useState("");
+  const [customDiscountType, setCustomDiscountType] = useState("amount");
+
   // Initialize items from order
   useEffect(() => {
     if (order) {
       setItems(order.items || []);
       setWarehouse(order.warehouse || "");
+      setSelectedVendor(order.vendor || "");
+      setVendorSearch(order.vendor || "");
+      setCustomDiscount(order.totalDiscount !== undefined && order.totalDiscount !== null ? String(order.totalDiscount) : "");
+      setCustomDiscountType("amount");
       fetchProducts();
+      fetchVendors();
     }
   }, [order, branchId]);
+
+  const fetchVendors = async () => {
+    try {
+      const branch = order?.branchId || branchId;
+      if (!branch) return;
+
+      const url = `${API_BASE}/vendors?branchId=${branch}&limit=1000`;
+      const res = await fetchWithAuth(url);
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      
+      const data = await res.json();
+      setVendors(data.data || []);
+    } catch (err) {
+      console.error("Error fetching vendors:", err);
+    }
+  };
 
   // Fetch available products
   const fetchProducts = async () => {
@@ -73,7 +102,7 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
   const calculateTotals = () => {
     let subtotal = 0;
     let totalTax = 0;
-    let totalDiscount = 0;
+    let calculatedDiscount = 0;
 
     items.forEach(item => {
       const qty = parseFloat(item.qty) || 0;
@@ -86,8 +115,18 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
 
       subtotal += sub;
       totalTax += tax;
-      totalDiscount += dAmount;
+      calculatedDiscount += dAmount;
     });
+
+    let totalDiscount = calculatedDiscount;
+    if (customDiscount !== "") {
+      const val = parseFloat(customDiscount) || 0;
+      if (customDiscountType === "percentage") {
+        totalDiscount = (subtotal * val) / 100;
+      } else {
+        totalDiscount = val;
+      }
+    }
 
     const extra = order?.extraExpenseAmount || 0;
     const grandTotal = subtotal - totalDiscount + totalTax + extra;
@@ -192,6 +231,7 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
       const payload = {
         items,
         warehouse,
+        vendor: selectedVendor,
         ...totals,
         transportCharge: order?.transportCharge || 0,
       };
@@ -242,14 +282,39 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
         {/* CONTENT */}
         <div className="p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-             <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Vendor (Read Only)</label>
+             <div className="relative">
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Vendor</label>
                 <input 
                   type="text" 
-                  value={order?.vendor || ""} 
-                  readOnly 
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-sm text-gray-600 outline-none"
+                  value={vendorSearch} 
+                  onChange={(e) => {
+                    setVendorSearch(e.target.value);
+                    setShowVendorDropdown(true);
+                  }}
+                  onFocus={() => setShowVendorDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowVendorDropdown(false), 200)}
+                  className="w-full border border-gray-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-[#319bab] outline-none font-semibold text-gray-800"
+                  placeholder="Type to search vendor..."
                 />
+                {showVendorDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-[99] max-h-48 overflow-y-auto w-full">
+                    {vendors
+                      .filter(v => v.name.toLowerCase().includes(vendorSearch.toLowerCase()))
+                      .map((v) => (
+                        <div
+                          key={v._id}
+                          onMouseDown={() => {
+                            setSelectedVendor(v.name);
+                            setVendorSearch(v.name);
+                            setShowVendorDropdown(false);
+                          }}
+                          className="px-3 py-2 hover:bg-[#319bab]/10 cursor-pointer border-b text-sm font-semibold text-gray-800"
+                        >
+                          {v.name}
+                        </div>
+                      ))}
+                  </div>
+                )}
              </div>
              <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Warehouse</label>
@@ -506,6 +571,79 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
                     <span>Subtotal</span>
                     <span className="text-gray-800 text-sm">₹{currentTotals.subtotal.toLocaleString()}</span>
                 </div>
+                {(() => {
+                  const calculatedDiscount = items.reduce((sum, item) => {
+                    const qty = parseFloat(item.qty) || 0;
+                    const price = parseFloat(item.purchasePrice) || 0;
+                    const dPercent = parseFloat(item.discountPercent) || 0;
+                    return sum + (qty * price * (dPercent / 100));
+                  }, 0);
+
+                  return (
+                    <div className="flex justify-between items-center text-xs font-bold text-red-500 uppercase">
+                      <span>Total Discount</span>
+                      <div className="flex items-center gap-1 bg-white p-1 rounded border border-gray-200">
+                        <div className="flex rounded bg-gray-100 p-0.5 border border-gray-200">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomDiscountType("amount");
+                              if (customDiscount !== "") {
+                                const val = parseFloat(customDiscount) || 0;
+                                const converted = ((currentTotals.subtotal * val) / 100).toFixed(2);
+                                setCustomDiscount(converted);
+                              }
+                            }}
+                            className={`px-1.5 py-0.5 text-[8px] font-black rounded transition-all ${
+                              customDiscountType === "amount" ? "bg-[#319bab] text-white shadow-sm" : "text-gray-500 hover:bg-gray-200"
+                            }`}
+                          >
+                            ₹
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomDiscountType("percentage");
+                              if (customDiscount !== "" && currentTotals.subtotal > 0) {
+                                const val = parseFloat(customDiscount) || 0;
+                                const converted = ((val / currentTotals.subtotal) * 100).toFixed(2);
+                                setCustomDiscount(converted);
+                              }
+                            }}
+                            className={`px-1.5 py-0.5 text-[8px] font-black rounded transition-all ${
+                              customDiscountType === "percentage" ? "bg-[#319bab] text-white shadow-sm" : "text-gray-500 hover:bg-gray-200"
+                            }`}
+                          >
+                            %
+                          </button>
+                        </div>
+                        <input
+                          type="number"
+                          step="any"
+                          value={customDiscount}
+                          onChange={(e) => setCustomDiscount(e.target.value)}
+                          placeholder={
+                            customDiscountType === "amount"
+                              ? calculatedDiscount.toFixed(2)
+                              : ((calculatedDiscount / (currentTotals.subtotal || 1)) * 100).toFixed(2)
+                          }
+                          className="w-20 px-1 py-0.5 text-right font-bold text-xs text-red-600 focus:outline-none focus:ring-1 focus:ring-[#319bab] placeholder-red-300"
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+                {customDiscount !== "" && (
+                  <div className="text-[9px] text-right text-gray-400 -mt-2">
+                    {customDiscountType === "percentage" ? (
+                      <span>Equivalent to -₹{((currentTotals.subtotal * (parseFloat(customDiscount) || 0)) / 100).toFixed(2)}</span>
+                    ) : (
+                      currentTotals.subtotal > 0 && (
+                        <span>Equivalent to -{(((parseFloat(customDiscount) || 0) / currentTotals.subtotal) * 100).toFixed(2)}%</span>
+                      )
+                    )}
+                  </div>
+                )}
                 <div className="flex justify-between items-center text-xs font-bold text-gray-500 uppercase">
                     <span>Tax</span>
                     <span className="text-gray-800 text-sm">₹{currentTotals.totalTax.toLocaleString()}</span>
