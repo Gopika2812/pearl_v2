@@ -1,7 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import React, { useEffect, useState } from "react";
-import { FaBan, FaChevronDown, FaFileExcel, FaFileInvoice, FaFilePdf, FaSync, FaTruck } from "react-icons/fa";
+import { FaBan, FaChevronDown, FaFileExcel, FaFileInvoice, FaFilePdf, FaSync, FaTruck, FaCalendarAlt } from "react-icons/fa";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import * as XLSX from "xlsx";
@@ -46,6 +46,12 @@ const BranchInvoicedOrders = () => {
   const [cancellingOrder, setCancellingOrder] = useState(null);
   const [cancelNarration, setCancelNarration] = useState("");
   const [cancelling, setCancelling] = useState(false);
+
+  // Date Change state
+  const [showChangeDateModal, setShowChangeDateModal] = useState(false);
+  const [dateChangingOrder, setDateChangingOrder] = useState(null);
+  const [newOrderDate, setNewOrderDate] = useState("");
+  const [movingDate, setMovingDate] = useState(false);
 
   // Spotted Customer Payment Modal State
   const [showSpottedPaymentModal, setShowSpottedPaymentModal] = useState(false);
@@ -458,6 +464,41 @@ const BranchInvoicedOrders = () => {
       toast.error(err.message || "Failed to cancel order");
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleOpenChangeDateModal = (order) => {
+    setDateChangingOrder(order);
+    const orderD = order.orderDate ? new Date(order.orderDate) : new Date(order.createdAt);
+    setNewOrderDate(orderD.toISOString().split('T')[0]);
+    setShowChangeDateModal(true);
+  };
+
+  const handleChangeDateSubmit = async () => {
+    if (!newOrderDate) {
+      toast.warning("Please select a date!");
+      return;
+    }
+    setMovingDate(true);
+    try {
+      const res = await fetch(`${API_BASE}/sales-orders/${dateChangingOrder._id}/change-date`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({ newDate: newOrderDate }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to change date");
+      toast.success(data.message || "Order date updated and sequence regenerated!");
+      setShowChangeDateModal(false);
+      setDateChangingOrder(null);
+      fetchSalesOrders();
+    } catch (err) {
+      toast.error(err.message || "Failed to update date");
+    } finally {
+      setMovingDate(false);
     }
   };
 
@@ -1177,13 +1218,23 @@ const BranchInvoicedOrders = () => {
                                       Archived
                                     </span>
                                   ) : (
-                                    <button
-                                      onClick={() => handleOpenCancelModal(order)}
-                                      className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-red-50 text-red-700 hover:bg-red-600 hover:text-white border border-red-200"
-                                    >
-                                      <FaBan />
-                                      CANCEL
-                                    </button>
+                                    <>
+                                      <button
+                                        onClick={() => handleOpenCancelModal(order)}
+                                        className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-red-50 text-red-700 hover:bg-red-600 hover:text-white border border-red-200"
+                                      >
+                                        <FaBan />
+                                        CANCEL
+                                      </button>
+                                      <button
+                                        onClick={() => handleOpenChangeDateModal(order)}
+                                        className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white border border-purple-200"
+                                        title="Cancel and Recreate on New Date"
+                                      >
+                                        <FaCalendarAlt />
+                                        <span>Move Date</span>
+                                      </button>
+                                    </>
                                   )}
                                 </>
                               ) : (
@@ -1273,13 +1324,23 @@ const BranchInvoicedOrders = () => {
                                           Archived
                                         </span>
                                       ) : (
-                                        <button
-                                          onClick={() => handleOpenCancelModal(order)}
-                                          className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-red-50 text-red-700 hover:bg-red-600 hover:text-white border border-red-200"
-                                        >
-                                          <FaBan />
-                                          CANCEL
-                                        </button>
+                                        <>
+                                          <button
+                                            onClick={() => handleOpenCancelModal(order)}
+                                            className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-red-50 text-red-700 hover:bg-red-600 hover:text-white border border-red-200"
+                                          >
+                                            <FaBan />
+                                            CANCEL
+                                          </button>
+                                          <button
+                                            onClick={() => handleOpenChangeDateModal(order)}
+                                            className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white border border-purple-200"
+                                            title="Cancel and Recreate on New Date"
+                                          >
+                                            <FaCalendarAlt />
+                                            <span>Move Date</span>
+                                          </button>
+                                        </>
                                       )}
                                     </div>
                                   )}
@@ -2039,6 +2100,67 @@ const BranchInvoicedOrders = () => {
               >
                 Complete Payment & Save Record
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ CHANGE DATE MODAL ══ */}
+      {showChangeDateModal && dateChangingOrder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[10000] p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in duration-200">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-6 text-white text-center">
+              <div className="mb-2 flex justify-center">
+                <div className="rounded-full bg-white/20 p-2">
+                  <FaCalendarAlt className="h-6 w-6" />
+                </div>
+              </div>
+              <h3 className="text-xl font-black uppercase tracking-tight">Move Order Date</h3>
+              <p className="mt-1 text-xs text-purple-100 font-medium">
+                Order: {dateChangingOrder.invoiceId} (Customer: {dateChangingOrder.customer?.name})
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-gray-500 leading-relaxed text-center uppercase font-bold tracking-tighter">
+                ⚠️ This will cancel the current order, revert its stock/ledger entries, and create a new order on the selected date with the next sequential code.
+              </p>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Select New Date</label>
+                <input
+                  type="date"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 focus:ring-1 focus:ring-purple-500 outline-none text-sm font-semibold"
+                  value={newOrderDate}
+                  onChange={(e) => setNewOrderDate(e.target.value)}
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setShowChangeDateModal(false);
+                    setDateChangingOrder(null);
+                  }}
+                  className="flex-1 py-3 border-2 border-gray-200 text-gray-600 rounded-xl font-bold hover:bg-gray-50 transition text-sm"
+                  disabled={movingDate}
+                >
+                  Close
+                </button>
+                <button
+                  onClick={handleChangeDateSubmit}
+                  disabled={movingDate || !newOrderDate}
+                  className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-black hover:bg-purple-700 transition text-sm disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-purple-200"
+                >
+                  {movingDate ? (
+                    <><FaSync className="animate-spin text-xs" /> Moving...</>
+                  ) : (
+                    <><FaCalendarAlt className="text-xs" /> Confirm & Move</>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
