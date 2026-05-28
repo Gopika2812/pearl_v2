@@ -538,12 +538,13 @@ router.post("/", auth, async (req, res) => {
       return res.status(400).json({ message: "branchId is required" });
     }
 
-    // Round numeric fields if provided
-    if (rest.grandTotal !== undefined) rest.grandTotal = Math.round(Number(rest.grandTotal));
-    if (rest.subtotal !== undefined) rest.subtotal = Math.round(Number(rest.subtotal));
-    if (rest.totalTax !== undefined) rest.totalTax = Math.round(Number(rest.totalTax));
-    if (rest.totalDiscount !== undefined) rest.totalDiscount = Math.round(Number(rest.totalDiscount));
-    if (rest.transportCharge !== undefined) rest.transportCharge = Math.round(Number(rest.transportCharge));
+    // Round numeric fields if provided (preserve decimals if enableRoundOff is explicitly false)
+    const preserveDecimals = req.body.enableRoundOff === false;
+    if (rest.grandTotal !== undefined) rest.grandTotal = preserveDecimals ? Math.round(Number(rest.grandTotal) * 100) / 100 : Math.round(Number(rest.grandTotal));
+    if (rest.subtotal !== undefined) rest.subtotal = preserveDecimals ? Math.round(Number(rest.subtotal) * 100) / 100 : Math.round(Number(rest.subtotal));
+    if (rest.totalTax !== undefined) rest.totalTax = Math.round(Number(rest.totalTax) * 100) / 100;
+    if (rest.totalDiscount !== undefined) rest.totalDiscount = Math.round(Number(rest.totalDiscount) * 100) / 100;
+    if (rest.transportCharge !== undefined) rest.transportCharge = Math.round(Number(rest.transportCharge) * 100) / 100;
 
     // Handle Customer-PO Flow / Auto Vendor Creation
     let resolvedVendorId = undefined;

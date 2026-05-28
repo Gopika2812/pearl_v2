@@ -776,6 +776,16 @@ router.post("/:id/change-date", auth, clearCachePrefix("/api/sales-orders"), asy
       return res.status(400).json({ success: false, message: "New date is required" });
     }
 
+    // 🛡️ CHECK: Move Date Permission
+    if (req.user.role !== "SUPER_ADMIN" && req.user.role !== "ADMIN") {
+      const BranchUser = mongoose.model("BranchUser");
+      const dbUser = await BranchUser.findById(req.user.id || req.user._id);
+      const isAllowed = dbUser && (dbUser.actionPermissions?.get("action_move_date") === true || dbUser.actionPermissions?.action_move_date === true);
+      if (!isAllowed) {
+        return res.status(403).json({ success: false, message: "Permission Denied: You do not have permission to Move Date." });
+      }
+    }
+
     const originalOrder = await SalesOrder.findById(id)
       .populate("items.productId")
       .populate("invoiceItems.productId")

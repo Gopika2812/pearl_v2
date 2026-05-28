@@ -1237,14 +1237,16 @@ const BranchInvoicedOrders = () => {
                                         <FaBan />
                                         CANCEL
                                       </button>
-                                      <button
-                                        onClick={() => handleOpenChangeDateModal(order)}
-                                        className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white border border-purple-200"
-                                        title="Cancel and Recreate on New Date"
-                                      >
-                                        <FaCalendarAlt />
-                                        <span>Move Date</span>
-                                      </button>
+                                      {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.action_move_date === true) && (
+                                        <button
+                                          onClick={() => handleOpenChangeDateModal(order)}
+                                          className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white border border-purple-200"
+                                          title="Cancel and Recreate on New Date"
+                                        >
+                                          <FaCalendarAlt />
+                                          <span>Move Date</span>
+                                        </button>
+                                      )}
                                     </>
                                   )}
                                 </>
@@ -1343,14 +1345,16 @@ const BranchInvoicedOrders = () => {
                                             <FaBan />
                                             CANCEL
                                           </button>
-                                          <button
-                                            onClick={() => handleOpenChangeDateModal(order)}
-                                            className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white border border-purple-200"
-                                            title="Cancel and Recreate on New Date"
-                                          >
-                                            <FaCalendarAlt />
-                                            <span>Move Date</span>
-                                          </button>
+                                          {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.action_move_date === true) && (
+                                            <button
+                                              onClick={() => handleOpenChangeDateModal(order)}
+                                              className="flex items-center gap-2 justify-center px-4 py-2 rounded-lg transition text-xs font-black bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white border border-purple-200"
+                                              title="Cancel and Recreate on New Date"
+                                            >
+                                              <FaCalendarAlt />
+                                              <span>Move Date</span>
+                                            </button>
+                                          )}
                                         </>
                                       )}
                                     </div>

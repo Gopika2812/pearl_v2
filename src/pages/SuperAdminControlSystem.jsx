@@ -316,7 +316,7 @@ export default function SuperAdminControlSystem() {
 
       // 2. Actions
       const newActionPerms = {};
-      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice", "allowDummyBills"].forEach(a => newActionPerms[a] = true);
+      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice", "allowDummyBills", "action_move_date"].forEach(a => newActionPerms[a] = true);
       setActionPermissions(newActionPerms);
 
       // 3. Field Visibility
@@ -337,7 +337,7 @@ export default function SuperAdminControlSystem() {
       setUserPermissions([]);
 
       const newActionPerms = {};
-      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice", "allowDummyBills"].forEach(a => newActionPerms[a] = false);
+      ["edit", "delete", "restock", "editPreviousDay", "action_pdf", "action_ewb", "action_cancel", "action_return", "create_shortcuts", "export", "editInvoiceItems", "editSellingPrice", "allowDummyBills", "action_move_date"].forEach(a => newActionPerms[a] = false);
       setActionPermissions(newActionPerms);
 
       const newFieldPerms = {};
@@ -664,9 +664,10 @@ export default function SuperAdminControlSystem() {
                         { id: "create_shortcuts", name: "Shortcuts", icon: <FaLink /> },
                         { id: "editSellingPrice", name: "Edit Selling Price", icon: <FaDollarSign /> },
                         { id: "bypassSalesOrderLock", name: "Bypass SO Lock", icon: <FaLock /> },
-                        { id: "allowDummyBills", name: "Allow Dummy Bills", icon: <FaFileInvoice /> }
+                        { id: "allowDummyBills", name: "Allow Dummy Bills", icon: <FaFileInvoice /> },
+                        { id: "action_move_date", name: "Move Date (SO)", icon: <FaCalendar /> }
                       ].map(action => {
-                        const isEnabled = (action.id === "bypassSalesOrderLock" || action.id === "allowDummyBills")
+                        const isEnabled = (action.id === "bypassSalesOrderLock" || action.id === "allowDummyBills" || action.id === "action_move_date")
                           ? actionPermissions[action.id] === true
                           : actionPermissions[action.id] !== false;
                         return (
