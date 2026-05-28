@@ -80,31 +80,38 @@ const BranchInvoicedOrders = () => {
   const [filterToTime, setFilterToTime] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  // Search debounce logic
+  // Search debounce logic — Invoice ID and Customer Name debounced separately
+  const [debouncedInvoiceId, setDebouncedInvoiceId] = useState("");
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearch((filterInvoiceId || filterCustomerName || "").trim());
+      setDebouncedInvoiceId(filterInvoiceId.trim());
     }, 500);
     return () => clearTimeout(handler);
   }, [filterInvoiceId, filterCustomerName]);
 
-  // Automatically clear default today's dates when user types a search term, and restore them when search is cleared
+  // Automatically clear default today's dates ONLY when user types an Invoice ID search
+  // (Invoice ID is a unique global lookup — no date needed)
+  // Customer name search keeps the date filter active.
   useEffect(() => {
-    const term = (filterInvoiceId || filterCustomerName || "").trim();
+    const term = (filterInvoiceId || "").trim();
     const todayStr = new Date().toLocaleDateString('en-CA');
     
     if (term) {
+      // Invoice ID typed → clear dates so we search all dates
       if (filterFromDate === todayStr && filterToDate === todayStr) {
         setFilterFromDate("");
         setFilterToDate("");
       }
     } else {
+      // Invoice ID cleared → restore today's dates (only if they were cleared by this logic)
       if (filterFromDate === "" && filterToDate === "") {
         setFilterFromDate(todayStr);
         setFilterToDate(todayStr);
       }
     }
-  }, [filterInvoiceId, filterCustomerName]);
+  }, [filterInvoiceId]);
+
 
   // Selection state for multi-select loading slip
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
@@ -120,19 +127,23 @@ const BranchInvoicedOrders = () => {
 
     setLoading(true);
     try {
-      const searchParam = debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : "";
+      // Invoice ID → send as `search` (global, no date filter on backend)
+      // Customer Name → send as `customerName` (backend applies date filter too)
+      const invoiceIdParam = filterInvoiceId.trim() ? `&search=${encodeURIComponent(filterInvoiceId.trim())}` : "";
+      const customerNameParam = filterCustomerName.trim() ? `&customerName=${encodeURIComponent(filterCustomerName.trim())}` : "";
       const voucherParam = filterVoucherType ? `&voucherType=${encodeURIComponent(filterVoucherType)}` : "";
       const generatedParam = filterGenerated ? `&generated=${filterGenerated === "GENERATED"}` : "";
       const dummyParam = `&isDummy=${showDummyBills}`;
 
       const res = await fetch(
-        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&fromDate=${filterFromDate}&toDate=${filterToDate}${searchParam}${voucherParam}${generatedParam}${dummyParam}`,
+        `${API_BASE}/sales-orders?branchId=${currentBranch._id}&fromDate=${filterFromDate}&toDate=${filterToDate}${invoiceIdParam}${customerNameParam}${voucherParam}${generatedParam}${dummyParam}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
         }
       );
+
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.message || "Failed to fetch orders");
@@ -900,12 +911,12 @@ const BranchInvoicedOrders = () => {
 
         {/* FILTERS */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6 relative overflow-hidden">
-          {debouncedSearch && (
+          {debouncedInvoiceId && (
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#319bab] via-indigo-500 to-[#319bab] animate-pulse"></div>
           )}
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-gray-800">Filters</h3>
-            {debouncedSearch && (
+            {debouncedInvoiceId && (
               <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full uppercase tracking-widest animate-bounce">
                 🌍 Searching Globally (All Dates)
               </span>

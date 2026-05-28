@@ -885,67 +885,8 @@ router.post("/:id/change-date", auth, clearCachePrefix("/api/sales-orders"), asy
     // --- STEP 2: CREATE NEW SALES ORDER ON THE SELECTED DATE ---
     const currentFY = getFinancialYear();
     const isDummy = originalOrder.isDummy === true;
-    let newInvoiceId;
 
-    if (isDummy) {
-      // Find highest dummy ID in DB and increment
-      const existingDummyOrders = await SalesOrder.find({
-        branchId: originalOrder.branchId,
-        invoiceId: /^D\d+\//,
-        financialYear: currentFY
-      }).select('invoiceId').lean();
-
-      let highestNumInDB = 0;
-      existingDummyOrders.forEach(order => {
-        const parts = order.invoiceId.split('/');
-        if (parts.length >= 2) {
-          const num = parseInt(parts[0].replace('D', ''));
-          if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
-        }
-      });
-      newInvoiceId = `D${highestNumInDB + 1}/001/${currentFY}`;
-    } else {
-      // Fetch voucher type
-      const voucher = await VoucherType.findOne({
-        branchId: originalOrder.branchId,
-        name: originalOrder.voucherType.toLowerCase(),
-        orderType: "SO",
-      });
-
-      if (!voucher) {
-        return res.status(404).json({ success: false, message: `Voucher Type '${originalOrder.voucherType}' not found` });
-      }
-
-      // Sync counter
-      if (voucher.financialYear !== currentFY) {
-        voucher.counter = 1;
-        voucher.financialYear = currentFY;
-      }
-
-      const existingOrders = await SalesOrder.find({
-        branchId: originalOrder.branchId,
-        invoiceId: new RegExp(`^${voucher.prefix}/`),
-        financialYear: currentFY
-      }).select('invoiceId').lean();
-
-      let highestNumInDB = 0;
-      existingOrders.forEach(order => {
-        const parts = order.invoiceId.split('/');
-        if (parts.length >= 2) {
-          const num = parseInt(parts[1]);
-          if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
-        }
-      });
-
-      const nextNum = Math.max(voucher.counter, highestNumInDB + 1);
-      newInvoiceId = `${voucher.prefix}/${String(nextNum).padStart(3, "0")}/${currentFY}`;
-
-      // Increment voucher counter
-      voucher.counter = nextNum + 1;
-      await voucher.save();
-    }
-
-    // Fetch opening balance for the new sales order
+    // Fetch opening balance once (outside the retry loop)
     let openingBalance = 0;
     if (!isDummy && originalOrder.customer?.customerId) {
       const dbCustomer = await Customer.findById(originalOrder.customer.customerId);
@@ -954,73 +895,162 @@ router.post("/:id/change-date", auth, clearCachePrefix("/api/sales-orders"), asy
       }
     }
 
-    // Create the new Sales Order document in PLACED status
-    const newSalesOrder = new SalesOrder({
-      invoiceId: newInvoiceId,
-      voucherType: originalOrder.voucherType,
-      orderType: "SO",
-      branchId: originalOrder.branchId,
-      customer: originalOrder.customer,
-      openingBalance: Math.round(openingBalance),
-      closingBalance: Math.round(openingBalance + originalOrder.grandTotal),
-      warehouse: originalOrder.warehouse,
-      billingPerson: originalOrder.billingPerson,
-      agent: originalOrder.agent,
-      items: originalOrder.items.map(item => ({
-        productId: item.productId._id || item.productId,
-        name: item.name,
-        qty: item.qty,
-        unit: item.unit,
-        sellingPrice: item.sellingPrice,
-        baseAmount: item.baseAmount,
-        discountType: item.discountType,
-        discountPercent: item.discountPercent,
-        discountAmount: item.discountAmount,
-        taxableAmount: item.taxableAmount,
-        gst: item.gst,
-        cgst: item.cgst,
-        sgst: item.sgst,
-        igst: item.igst,
-        taxAmount: item.taxAmount,
-        total: item.total,
-        lockedPrice: item.lockedPrice,
-        altQty: item.altQty,
-        altUnit: item.altUnit
-      })),
-      sampleItems: originalOrder.sampleItems.map(item => ({
-        productId: item.productId._id || item.productId,
-        name: item.name,
-        qty: item.qty,
-        sellingPrice: item.sellingPrice,
-        isSample: item.isSample,
-      })),
-      transportCharge: originalOrder.transportCharge,
-      subtotal: originalOrder.subtotal,
-      totalDiscount: originalOrder.totalDiscount,
-      totalTax: originalOrder.totalTax,
-      grandTotal: originalOrder.grandTotal,
-      customerMargin: originalOrder.customerMargin,
-      marginAmount: originalOrder.marginAmount,
-      grandTotalWithMargin: originalOrder.grandTotalWithMargin,
-      extraExpenses: originalOrder.extraExpenses,
-      extraExpenseAmount: originalOrder.extraExpenseAmount,
-      commonDiscount: originalOrder.commonDiscount,
-      ewayEnabled: originalOrder.ewayEnabled,
-      ewayDetails: originalOrder.ewayDetails,
-      salesOwner: originalOrder.salesOwner,
-      salesMan: originalOrder.salesMan,
-      deliveryMan: originalOrder.deliveryMan,
-      financialYear: currentFY,
-      isClaim: originalOrder.isClaim || false,
-      orderDate: new Date(newDate),
-      spottedCustomerName: originalOrder.spottedCustomerName,
-      spottedPhoneNumber: originalOrder.spottedPhoneNumber,
-      isDummy: originalOrder.isDummy,
-      status: "PLACED",
-      invoiceGenerated: false
-    });
+    // 🔁 RETRY LOOP — handles race condition where a concurrent SO creation
+    // grabs the same voucher counter simultaneously, causing E11000 duplicate key.
+    let newSalesOrder;
+    let saved = false;
+    let retries = 0;
 
-    await newSalesOrder.save();
+    while (!saved && retries < 5) {
+      try {
+        let newInvoiceId;
+
+        if (isDummy) {
+          // Find highest dummy invoice number in DB and go one higher
+          const existingDummyOrders = await SalesOrder.find({
+            branchId: originalOrder.branchId,
+            invoiceId: /^D\d+\//,
+            financialYear: currentFY
+          }).select('invoiceId').lean();
+
+          let highestNumInDB = 0;
+          existingDummyOrders.forEach(order => {
+            const parts = order.invoiceId.split('/');
+            if (parts.length >= 2) {
+              const num = parseInt(parts[0].replace('D', ''));
+              if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+            }
+          });
+          newInvoiceId = `D${highestNumInDB + 1}/001/${currentFY}`;
+
+        } else {
+          // Fetch voucher type fresh on every retry (gets latest counter after collision)
+          const voucher = await VoucherType.findOne({
+            branchId: originalOrder.branchId,
+            name: originalOrder.voucherType.toLowerCase(),
+            orderType: "SO",
+          });
+
+          if (!voucher) {
+            return res.status(404).json({ success: false, message: `Voucher Type '${originalOrder.voucherType}' not found` });
+          }
+
+          // Sync counter if financial year changed
+          if (voucher.financialYear !== currentFY) {
+            voucher.counter = 1;
+            voucher.financialYear = currentFY;
+          }
+
+          // Always re-scan DB for the real highest number to avoid stale counter
+          const existingOrders = await SalesOrder.find({
+            branchId: originalOrder.branchId,
+            invoiceId: new RegExp(`^${voucher.prefix}/`),
+            financialYear: currentFY
+          }).select('invoiceId').lean();
+
+          let highestNumInDB = 0;
+          existingOrders.forEach(order => {
+            const parts = order.invoiceId.split('/');
+            if (parts.length >= 2) {
+              const num = parseInt(parts[1]);
+              if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+            }
+          });
+
+          const nextNum = Math.max(voucher.counter, highestNumInDB + 1);
+          newInvoiceId = `${voucher.prefix}/${String(nextNum).padStart(3, "0")}/${currentFY}`;
+
+          // Increment voucher counter for next order
+          voucher.counter = nextNum + 1;
+          await voucher.save();
+        }
+
+        // Attempt to save with the generated invoiceId
+        newSalesOrder = new SalesOrder({
+          invoiceId: newInvoiceId,
+          voucherType: originalOrder.voucherType,
+          orderType: "SO",
+          branchId: originalOrder.branchId,
+          customer: originalOrder.customer,
+          openingBalance: Math.round(openingBalance),
+          closingBalance: Math.round(openingBalance + originalOrder.grandTotal),
+          warehouse: originalOrder.warehouse,
+          billingPerson: originalOrder.billingPerson,
+          agent: originalOrder.agent,
+          items: originalOrder.items.map(item => ({
+            productId: (item.productId && item.productId._id) ? item.productId._id : item.productId,
+            name: item.name,
+            qty: item.qty,
+            unit: item.unit,
+            sellingPrice: item.sellingPrice,
+            baseAmount: item.baseAmount,
+            discountType: item.discountType,
+            discountPercent: item.discountPercent,
+            discountAmount: item.discountAmount,
+            taxableAmount: item.taxableAmount,
+            gst: item.gst,
+            cgst: item.cgst,
+            sgst: item.sgst,
+            igst: item.igst,
+            taxAmount: item.taxAmount,
+            total: item.total,
+            lockedPrice: item.lockedPrice,
+            altQty: item.altQty,
+            altUnit: item.altUnit
+          })),
+          sampleItems: (originalOrder.sampleItems || []).map(item => ({
+            productId: (item.productId && item.productId._id) ? item.productId._id : item.productId,
+            name: item.name,
+            qty: item.qty,
+            sellingPrice: item.sellingPrice,
+            isSample: item.isSample,
+          })),
+          transportCharge: originalOrder.transportCharge,
+          subtotal: originalOrder.subtotal,
+          totalDiscount: originalOrder.totalDiscount,
+          totalTax: originalOrder.totalTax,
+          grandTotal: originalOrder.grandTotal,
+          customerMargin: originalOrder.customerMargin,
+          marginAmount: originalOrder.marginAmount,
+          grandTotalWithMargin: originalOrder.grandTotalWithMargin,
+          extraExpenses: originalOrder.extraExpenses,
+          extraExpenseAmount: originalOrder.extraExpenseAmount,
+          commonDiscount: originalOrder.commonDiscount,
+          ewayEnabled: originalOrder.ewayEnabled,
+          ewayDetails: originalOrder.ewayDetails,
+          salesOwner: originalOrder.salesOwner,
+          salesMan: originalOrder.salesMan,
+          deliveryMan: originalOrder.deliveryMan,
+          financialYear: currentFY,
+          isClaim: originalOrder.isClaim || false,
+          orderDate: new Date(newDate),
+          spottedCustomerName: originalOrder.spottedCustomerName,
+          spottedPhoneNumber: originalOrder.spottedPhoneNumber,
+          isDummy: originalOrder.isDummy,
+          status: "PLACED",
+          invoiceGenerated: false
+        });
+
+        await newSalesOrder.save();
+        saved = true;
+
+      } catch (saveErr) {
+        const isDuplicateKey = saveErr.code === 11000 || (saveErr.message && saveErr.message.includes('E11000'));
+        if (isDuplicateKey) {
+          retries++;
+          console.warn(`⚠️ change-date: Duplicate invoiceId collision on retry ${retries}/5. Re-computing ID...`);
+        } else {
+          throw saveErr; // Not a duplicate key error — rethrow to outer catch
+        }
+      }
+    }
+
+    if (!saved) {
+      return res.status(500).json({
+        success: false,
+        message: "System busy — could not assign a unique order ID after 5 attempts. Please try again."
+      });
+    }
 
     // Log the date change
     await createAuditLog({
@@ -1045,6 +1075,7 @@ router.post("/:id/change-date", auth, clearCachePrefix("/api/sales-orders"), asy
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
 
 // 🗑️ SOFT-CANCEL SALES ORDER (Revert effects, mark CANCELLED, keep in records)
 router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
