@@ -13,7 +13,7 @@ export default function BranchSalesReports() {
   const [loading, setLoading] = useState(false);
   
   // Filters
-  const [startDate, setStartDate] = useState(""); 
+  const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [productFilter, setProductFilter] = useState("");
   const [customerFilter, setCustomerFilter] = useState("");
@@ -291,7 +291,7 @@ export default function BranchSalesReports() {
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Total Quantity:</span>
-                    <span className="font-bold text-purple-600">{product.totalQty} {/\/\/ Determine unit based on name\n                      product.name.toLowerCase().includes('kg') ? 'kg' : 'units'}{/* fallback */}</span>
+                    <span className="font-bold text-purple-600">{product.totalQty} {product.name?.toLowerCase().includes('kg') ? 'kg' : 'units'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Invoice Count:</span>
@@ -353,7 +353,7 @@ export default function BranchSalesReports() {
                 <div className="space-y-3 text-sm mb-4">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Total Quantity:</span>
-                    <span className="font-bold text-blue-600">{customer.totalQty} {customer.name.toLowerCase().includes('kg') ? 'kg' : 'units'}</span>
+                    <span className="font-bold text-blue-600">{customer.totalQty} {customer.name?.toLowerCase().includes('kg') ? 'kg' : 'units'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Invoice Count:</span>
