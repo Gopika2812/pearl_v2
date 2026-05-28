@@ -66,6 +66,10 @@ export default function BranchRecycling() {
       resolvedThreshold = Math.min(autoThreshold, manualThreshold);
     } else {
       resolvedThreshold = Math.max(autoThreshold, manualThreshold);
+      // If calculated sales in period is 0, set resolved level to 0
+      if ((config?.sellingQtyInPeriod ?? 0) === 0) {
+        resolvedThreshold = 0;
+      }
     }
 
     const hasManual = product.restockingConfig?.restockingQty !== undefined && product.restockingConfig?.restockingQty !== null;

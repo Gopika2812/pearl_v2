@@ -17,6 +17,9 @@ export default function InventorySalesInvoice() {
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
 
   // Filter states
+  const [allowedBranchesState, setAllowedBranchesState] = useState([]);
+  // Current logged‑in user info for role checks
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const [filterVoucherType, setFilterVoucherType] = useState("");
   const [filterInvoiceId, setFilterInvoiceId] = useState("");
   const [filterCustomerName, setFilterCustomerName] = useState("");
@@ -419,18 +422,41 @@ export default function InventorySalesInvoice() {
                 </div>
 
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => handleSelectOrder(order)}
-                    className="flex-1 bg-blue-500 text-white py-2 rounded-lg font-bold hover:bg-blue-600 transition flex items-center justify-center gap-2"
-                  >
-                    <FaFileInvoice /> Generate
-                  </button>
-                  <button
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
-                    title="View details"
-                  >
-                    <FaEye />
-                  </button>
+                        <button
+                          onClick={() => handleSelectOrder(order)}
+                          className="flex-1 bg-blue-500 text-white py-2 rounded-lg font-bold hover:bg-blue-600 transition flex items-center justify-center gap-2"
+                        >
+                          <FaFileInvoice /> Generate
+                        </button>{currentUser.role === 'SUPER_ADMIN' && (
+        <button
+          onClick={async () => {
+            const newDate = prompt('Enter new date (YYYY-MM-DD)', new Date(order.createdAt).toISOString().split('T')[0]);
+            if (!newDate) return;
+            try {
+              const res = await fetch(`${API_BASE}/sales-orders/${order._id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ createdAt: newDate })
+              });
+              if (!res.ok) throw new Error('Failed to update date');
+              toast.success('Date updated');
+              fetchSalesOrders();
+            } catch (err) {
+              console.error('Date update error:', err);
+              toast.error(err.message || 'Date update failed');
+            }
+          }}
+          className="ml-2 bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition"
+        >
+          Change Date
+        </button>
+      )}                     })()
+                      <button
+                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+                        title="View details"
+                      >
+                        <FaEye />
+                      </button>
                 </div>
               </div>
 

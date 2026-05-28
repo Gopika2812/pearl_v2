@@ -39,7 +39,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
     leadTime: 7,
     minStockQty: 10,
     maxStockQty: 50,
-    totalQtyUnit: "",
+
     preferredVendor: "",
     restockingConfig: {
       salesPeriodDays: 7,
@@ -116,7 +116,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         leadTime: editingItem.leadTime || 7,
         minStockQty: editingItem.minStockQty || 10,
         maxStockQty: editingItem.maxStockQty || 50,
-        totalQtyUnit: editingItem.totalQtyUnit || "",
+
         preferredVendor: editingItem.preferredVendor || "",
         restockingConfig: editingItem.restockingConfig || {
           salesPeriodDays: 7,
@@ -154,7 +154,7 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
         leadTime: 7,
         minStockQty: 10,
         maxStockQty: 50,
-        totalQtyUnit: "",
+
         preferredVendor: "",
         restockingConfig: {
           salesPeriodDays: 7,
