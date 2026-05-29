@@ -138,7 +138,7 @@ router.post("/:id/record-payment", clearCachePrefix("/api/sales-orders"), async 
 // GET all sales orders with filtering and date ranges
 router.get("/", async (req, res) => {
   try {
-    const { branchId, customerName, status, isClaim, fromDate, toDate, customerId, search, voucherType, generated, isDummy } = req.query;
+    const { branchId, customerName, status, isClaim, fromDate, toDate, customerId, search, voucherType, generated, isDummy, isOnlineOrder } = req.query;
     console.log("🔍 [DEBUG] Sales Order Fetch Query:", { branchId, isClaim, fromDate, toDate, search, voucherType, isDummy });
     const query = {};
 
@@ -164,6 +164,10 @@ router.get("/", async (req, res) => {
       // Match both isDummy: false AND records where isDummy doesn't exist (older records)
       query.isDummy = { $ne: true };
     }
+ 
+    if (isOnlineOrder !== undefined) {
+      query.isOnlineOrder = isOnlineOrder === "true";
+    }
 
     // 4. Global Search (Overrides strict date filter if provided)
     if (search) {
@@ -178,7 +182,7 @@ router.get("/", async (req, res) => {
     }
 
     // 5. Date Filter logic:
-    const hasSearch = search || voucherType || customerName || customerId;
+    const hasSearch = search || voucherType || customerName || customerId || isOnlineOrder || status;
 
     // We apply date filter if:
     // a) fromDate or toDate are provided (non-empty)

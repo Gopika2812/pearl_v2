@@ -53,7 +53,7 @@ const OnlineOrdersPage = () => {
             const dateParams = (filterFromDate && filterToDate) ? `&fromDate=${filterFromDate}&toDate=${filterToDate}` : "";
             
             const res = await fetch(
-                `${API_BASE}/sales-orders?branchId=${currentBranch._id}${statusParam}${dateParams}${searchParam}`,
+                `${API_BASE}/sales-orders?branchId=${currentBranch._id}&isOnlineOrder=true${statusParam}${dateParams}${searchParam}`,
                 {
                     headers: {
                         Authorization: `Bearer ${localStorage.getItem("token")}`,
