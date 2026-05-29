@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
 import {
-    FaCog,
-    FaEdit,
-    FaFileInvoice,
-    FaFilter,
-    FaLayerGroup,
-    FaPlus,
-    FaShoppingCart,
-    FaSync,
-    FaTrash,
-    FaTruck,
-    FaUser,
-    FaWarehouse
+  FaCog,
+  FaEdit,
+  FaFileInvoice,
+  FaFilter,
+  FaLayerGroup,
+  FaPlus,
+  FaShoppingCart,
+  FaSync,
+  FaTrash,
+  FaTruck,
+  FaUser,
+  FaWarehouse
+
 } from "react-icons/fa";
 import { API_BASE, fetchWithAuth } from "../api";
 import CreditNoteModal from "../components/inventory/CreditNoteModal";
@@ -132,7 +133,7 @@ const OthersSummary = () => {
       setLoading(true);
       setError(null);
       let endpoint = "";
-      
+
       if (tableType === "voucher-types") endpoint = `${API_BASE}/voucher-types`;
       else if (tableType === "warehouses") endpoint = `${API_BASE}/warehouses`;
       else if (tableType === "product-groups") endpoint = `${API_BASE}/product-groups`;
@@ -175,10 +176,10 @@ const OthersSummary = () => {
           const commissionsRes = await fetchWithAuth(`${API_BASE}/sales-orders/commissions`);
           const commissionsData = await commissionsRes.json();
           const commissions = commissionsData.success ? commissionsData.data : commissionsData;
-          
+
           // Calculate earned commissions per person
           const commissionMap = {};
-          
+
           commissions.forEach(comm => {
             if (tableType === "sales-owners" && comm.salesOwnerId) {
               const id = comm.salesOwnerId;
@@ -191,7 +192,7 @@ const OthersSummary = () => {
               commissionMap[id] = (commissionMap[id] || 0) + (comm.deliveryManCommissionAmount || 0);
             }
           });
-          
+
           // Enhance data with earned commissions
           dataArray = dataArray.map(person => ({
             ...person,
@@ -240,7 +241,7 @@ const OthersSummary = () => {
         setSalesMen(menData.data || menData || []);
         setDeliveryMen(deliveryData.data || deliveryData || []);
         setVendors(vendorsData.data || vendorsData || []);
-        
+
         const posArray = poData.data || poData || [];
         console.log("📦 Setting POs to state:", posArray);
         setPurchaseOrders(posArray);
@@ -301,7 +302,7 @@ const OthersSummary = () => {
       }
 
       const result = await response.json();
-      
+
       // Handle both response formats
       let updatedItem = result;
       if (result.success !== undefined) {
@@ -369,7 +370,7 @@ const OthersSummary = () => {
       }
 
       const result = await response.json();
-      
+
       if (result.success) {
         setData([...data, result.data]);
         setShowCommissionRuleModal(false);
@@ -418,10 +419,10 @@ const OthersSummary = () => {
       }
 
       const result = await response.json();
-      
+
       // Handle both response formats
       let success = result.success !== undefined ? result.success : true;
-      
+
       if (success) {
         setData(data.filter((item) => item._id !== id));
         setDeleteConfirm(null);
@@ -447,7 +448,7 @@ const OthersSummary = () => {
   // Format field values for display
   const formatFieldValue = (value, field) => {
     if (!value && value !== 0) return "-";
-    
+
     // Format role type
     if (field === "roleType") {
       if (value === "SalesOwner") return "Sales Owner";
@@ -455,12 +456,12 @@ const OthersSummary = () => {
       if (value === "DeliveryMan") return "Delivery Man";
       return value;
     }
-    
+
     // Format currency for amount fields
     if (field === "totalCommission" || field === "grandTotalWithMargin" || field === "closingBalance" || field === "orderValue" || field === "commissionAmount" || field === "grandTotal" || field === "amount") {
       return `₹${parseFloat(value).toFixed(2)}`;
     }
-    
+
     // Format payment type
     if (field === "paymentType") {
       if (value === "vendor_payment") return "Vendor Payment";
@@ -468,23 +469,23 @@ const OthersSummary = () => {
       if (value === "loan_payment") return "Loan Payment";
       return value;
     }
-    
+
     // Format payment method
     if (field === "paymentMethod") {
       if (value === "bank_transfer") return "Bank Transfer";
       return value.charAt(0).toUpperCase() + value.slice(1);
     }
-    
+
     // Format percentages
     if (field === "commissionPercentage") {
       return `${parseFloat(value).toFixed(2)}%`;
     }
-    
+
     // Format currency for minimum order value
     if (field === "minimumOrderValue") {
       return `₹${parseFloat(value).toFixed(2)}`;
     }
-    
+
     // Format dates
     if (field === "createdAt" || field === "effectiveFrom" || field === "paymentDate") {
       try {
@@ -493,7 +494,7 @@ const OthersSummary = () => {
         return value;
       }
     }
-    
+
     return value;
   };
 
@@ -571,11 +572,10 @@ const OthersSummary = () => {
               <button
                 key={key}
                 onClick={() => handleTableChange(key)}
-                className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg font-semibold transition text-sm md:text-base ${
-                  tableType === key
+                className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg font-semibold transition text-sm md:text-base ${tableType === key
                     ? "bg-primary text-white shadow-md"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
+                  }`}
               >
                 {cfg.icon}
                 {cfg.label}
@@ -802,13 +802,12 @@ const OthersSummary = () => {
                   {filteredData.map((item, idx) => (
                     <tr
                       key={item._id}
-                      className={`border-b hover:bg-blue-50 transition ${
-                        idx % 2 === 0 ? "bg-white" : "bg-gray-50"
-                      }`}
+                      className={`border-b hover:bg-blue-50 transition ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"
+                        }`}
                     >
                       {config.fields.map((field, fieldIdx) => {
                         let cellValue = item[field];
-                        
+
                         // Handle nested fields like "vendor.name"
                         if (field.includes(".")) {
                           const parts = field.split(".");
@@ -817,20 +816,20 @@ const OthersSummary = () => {
                             cellValue = cellValue?.[part];
                           }
                         }
-                        
+
                         return (
-                        <td
-                          key={fieldIdx}
-                          className="px-4 md:px-6 py-4 text-sm text-gray-900 font-medium"
-                        >
-                          {tableType === "sales-orders" && field === "customerName"
-                            ? typeof item.customer === "object" ? item.customer?.name : item.customer
-                            : tableType === "sales-orders" && field === "salesOwnerName"
-                            ? typeof item.salesOwner === "object" ? item.salesOwner?.name : item.salesOwner
-                            : tableType === "sales-orders" && field === "orderValue"
-                            ? formatFieldValue(item.grandTotalWithMargin || item.grandTotal, "grandTotalWithMargin")
-                            : formatFieldValue(cellValue, field)}
-                        </td>
+                          <td
+                            key={fieldIdx}
+                            className="px-4 md:px-6 py-4 text-sm text-gray-900 font-medium"
+                          >
+                            {tableType === "sales-orders" && field === "customerName"
+                              ? typeof item.customer === "object" ? item.customer?.name : item.customer
+                              : tableType === "sales-orders" && field === "salesOwnerName"
+                                ? typeof item.salesOwner === "object" ? item.salesOwner?.name : item.salesOwner
+                                : tableType === "sales-orders" && field === "orderValue"
+                                  ? formatFieldValue(item.grandTotalWithMargin || item.grandTotal, "grandTotalWithMargin")
+                                  : formatFieldValue(cellValue, field)}
+                          </td>
                         );
                       })}
                       <td className="px-4 md:px-6 py-4 text-center space-x-1 md:space-x-2">
@@ -858,24 +857,24 @@ const OthersSummary = () => {
                                     alert("Sales order ID is missing");
                                     return;
                                   }
-                                  
+
                                   const url = `${API_BASE}/sales-orders/${item._id}`;
                                   console.log(`📋 Fetching from: ${url}`);
-                                  
+
                                   const response = await fetch(url);
-                                  
+
                                   if (!response.ok) {
-                                    console.error(`❌ API returned ${response.status}`);  
+                                    console.error(`❌ API returned ${response.status}`);
                                     throw new Error(`Server error: ${response.status}`);
                                   }
-                                  
+
                                   const result = await response.json();
                                   const salesOrder = result.success ? result.data : result.data || result;
-                                  
+
                                   if (!salesOrder) {
                                     throw new Error("No sales order data received");
                                   }
-                                  
+
                                   setSelectedSalesOrderForCredit(salesOrder);
                                   setShowCreditNoteModal(true);
                                 } catch (error) {
@@ -895,24 +894,24 @@ const OthersSummary = () => {
                                     alert("Sales order ID is missing");
                                     return;
                                   }
-                                  
+
                                   const url = `${API_BASE}/sales-orders/${item._id}`;
                                   console.log(`💰 Fetching from: ${url}`);
-                                  
+
                                   const response = await fetch(url);
-                                  
+
                                   if (!response.ok) {
                                     console.error(`❌ API returned ${response.status}`);
                                     throw new Error(`Server error: ${response.status}`);
                                   }
-                                  
+
                                   const result = await response.json();
                                   const salesOrder = result.success ? result.data : result.data || result;
-                                  
+
                                   if (!salesOrder) {
                                     throw new Error("No sales order data received");
                                   }
-                                  
+
                                   setSelectedSalesOrderForReceipt(salesOrder);
                                   setShowSalesReceiptModal(true);
                                 } catch (error) {
@@ -1054,7 +1053,7 @@ const OthersSummary = () => {
               Delete {config.label}?
             </h2>
             <p className="text-gray-600 mb-6">
-              {tableType === "sales-orders" 
+              {tableType === "sales-orders"
                 ? "Are you sure you want to delete this sales order? The customer's closing balance will be reverted. This action cannot be undone."
                 : `Are you sure you want to delete this ${config.label.toLowerCase()}? This action cannot be undone.`
               }
@@ -1084,7 +1083,7 @@ const OthersSummary = () => {
             <h2 className="text-xl font-bold mb-6 text-gray-900">
               Add Commission Rule
             </h2>
-            
+
             {/* Role Type Selector */}
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1110,9 +1109,9 @@ const OthersSummary = () => {
             {/* Person Name Dropdown (Dynamic based on Role Type) */}
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                {commissionRuleForm.roleType === "SalesOwner" ? "Sales Owner Name" : 
-                 commissionRuleForm.roleType === "SalesMan" ? "Sales Man Name" : 
-                 "Delivery Man Name"}
+                {commissionRuleForm.roleType === "SalesOwner" ? "Sales Owner Name" :
+                  commissionRuleForm.roleType === "SalesMan" ? "Sales Man Name" :
+                    "Delivery Man Name"}
               </label>
               <select
                 value={commissionRuleForm.personId}
@@ -1124,9 +1123,9 @@ const OthersSummary = () => {
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <option value="">Select {commissionRuleForm.roleType === "SalesOwner" ? "Sales Owner" : 
-                                          commissionRuleForm.roleType === "SalesMan" ? "Sales Man" : 
-                                          "Delivery Man"}</option>
+                <option value="">Select {commissionRuleForm.roleType === "SalesOwner" ? "Sales Owner" :
+                  commissionRuleForm.roleType === "SalesMan" ? "Sales Man" :
+                    "Delivery Man"}</option>
                 {commissionRuleForm.roleType === "SalesOwner" && salesOwners.map((owner) => (
                   <option key={owner._id} value={owner._id}>
                     {owner.name}
@@ -1269,7 +1268,7 @@ const OthersSummary = () => {
           fetchData();
         }}
         onSave={() => {
-         
+
         }}
         vendors={vendors}
         purchaseOrders={purchaseOrders}
