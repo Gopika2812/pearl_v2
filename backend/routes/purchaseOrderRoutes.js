@@ -280,10 +280,17 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         : (order.totalDiscount !== undefined && order.totalDiscount !== null
           ? order.totalDiscount
           : newItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0));
+      
+      const discountRatio = subtotal > 0 ? (totalDiscount / subtotal) : 0;
+      const sumRowDiscounts = newItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0);
+      const isCustomDiscount = Math.abs(totalDiscount - sumRowDiscounts) > 0.01;
+
       const totalTax = newItems.reduce((acc, i) => {
         const gst = Number(i.gst || 0);
-        const rowTaxable = (Number(i.purchasePrice) * Number(i.qty)) - (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100)));
-        return acc + (rowTaxable * gst / 100);
+        const rowPrice = Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty));
+        const rowDiscount = Number(i.discountAmount) || (rowPrice * (Number(i.discountPercent || 0) / 100));
+        const netTaxable = isCustomDiscount ? rowPrice * (1 - discountRatio) : (rowPrice - rowDiscount);
+        return acc + (netTaxable * gst / 100);
       }, 0);
       
       const finalGrandTotal = Math.round(subtotal - totalDiscount + totalTax + (order.extraExpenseAmount || 0));
@@ -409,10 +416,16 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         ? order.totalDiscount
         : invoiceItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0));
     
+    const discountRatio = subtotal > 0 ? (totalDiscount / subtotal) : 0;
+    const sumRowDiscounts = invoiceItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0);
+    const isCustomDiscount = Math.abs(totalDiscount - sumRowDiscounts) > 0.01;
+
     const totalTax = invoiceItems.reduce((acc, i) => {
       const gst = Number(i.gst || 0);
-      const rowTaxable = (Number(i.purchasePrice) * Number(i.qty)) - (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100)));
-      return acc + (rowTaxable * gst / 100);
+      const rowPrice = Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty));
+      const rowDiscount = Number(i.discountAmount) || (rowPrice * (Number(i.discountPercent || 0) / 100));
+      const netTaxable = isCustomDiscount ? rowPrice * (1 - discountRatio) : (rowPrice - rowDiscount);
+      return acc + (netTaxable * gst / 100);
     }, 0);
     
     const calculatedGrandTotal = Math.round(subtotal - totalDiscount + totalTax + (order.extraExpenseAmount || 0));
@@ -735,37 +748,45 @@ router.put("/:id", auth, async (req, res) => {
     // FORCED SERVER-SIDE RECALCULATION
     let calcSubtotal = 0;
     let calcDiscount = 0;
-    let calcTax = 0;
 
     order.items.forEach(i => {
       const q = Number(i.qty) || 0;
       const p = Number(i.purchasePrice) || 0;
       const dPct = Number(i.discountPercent) || 0;
-      const tPct = Number(i.gst) || 0;
 
       const rowPrice = q * p;
       const dAmount = (rowPrice * dPct) / 100;
-      const taxable = rowPrice - dAmount;
-      const taxAmount = (taxable * tPct) / 100;
 
       calcSubtotal += rowPrice;
       calcDiscount += dAmount;
-      calcTax += taxAmount;
 
-      // Sync the item fields as well
       i.rowPrice = rowPrice;
       i.discountAmount = dAmount;
-      i.taxableAmount = taxable;
-      i.rowTax = taxAmount;
-      i.total = taxable + taxAmount;
     });
 
     order.subtotal = Math.round(calcSubtotal);
-    if (totalDiscount !== undefined) {
-      order.totalDiscount = Math.round(Number(totalDiscount));
-    } else {
-      order.totalDiscount = Math.round(calcDiscount);
+    
+    let finalDiscount = calcDiscount;
+    if (totalDiscount !== undefined && totalDiscount !== "") {
+      finalDiscount = Number(totalDiscount);
     }
+    order.totalDiscount = Math.round(finalDiscount);
+
+    const discountRatio = calcSubtotal > 0 ? (finalDiscount / calcSubtotal) : 0;
+    const hasCustomDiscount = totalDiscount !== undefined && totalDiscount !== "";
+
+    let calcTax = 0;
+    order.items.forEach(i => {
+      const tPct = Number(i.gst) || 0;
+      const netTaxable = hasCustomDiscount ? i.rowPrice * (1 - discountRatio) : (i.rowPrice - i.discountAmount);
+      const taxAmount = (netTaxable * tPct) / 100;
+      calcTax += taxAmount;
+
+      i.taxableAmount = netTaxable;
+      i.rowTax = taxAmount;
+      i.total = netTaxable + taxAmount;
+    });
+
     order.totalTax = Math.round(calcTax);
     
     if (transportCharge !== undefined) order.transportCharge = Math.round(Number(transportCharge));

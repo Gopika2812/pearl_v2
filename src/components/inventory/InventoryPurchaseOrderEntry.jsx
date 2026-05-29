@@ -502,9 +502,24 @@ const InventoryPurchaseOrderEntry = ({
   }
   const baseTaxable = subtotal - totalDiscount;
 
-  const cgstTotal = items.reduce((sum, item) => sum + ((parseFloat(item.taxableAmount) || 0) * (parseFloat(item.cgst) || 0) / 100), 0);
-  const sgstTotal = items.reduce((sum, item) => sum + ((parseFloat(item.taxableAmount) || 0) * (parseFloat(item.sgst) || 0) / 100), 0);
-  const igstTotal = items.reduce((sum, item) => sum + ((parseFloat(item.taxableAmount) || 0) * (parseFloat(item.igst) || 0) / 100), 0);
+  const discountRatio = subtotal > 0 ? (totalDiscount / subtotal) : 0;
+  const isCustomDiscountApplied = customDiscount !== "";
+
+  const cgstTotal = items.reduce((sum, item) => {
+    const netTaxable = isCustomDiscountApplied ? (item.rowPrice || 0) * (1 - discountRatio) : (parseFloat(item.taxableAmount) || 0);
+    return sum + (netTaxable * (parseFloat(item.cgst) || 0) / 100);
+  }, 0);
+
+  const sgstTotal = items.reduce((sum, item) => {
+    const netTaxable = isCustomDiscountApplied ? (item.rowPrice || 0) * (1 - discountRatio) : (parseFloat(item.taxableAmount) || 0);
+    return sum + (netTaxable * (parseFloat(item.sgst) || 0) / 100);
+  }, 0);
+
+  const igstTotal = items.reduce((sum, item) => {
+    const netTaxable = isCustomDiscountApplied ? (item.rowPrice || 0) * (1 - discountRatio) : (parseFloat(item.taxableAmount) || 0);
+    return sum + (netTaxable * (parseFloat(item.igst) || 0) / 100);
+  }, 0);
+
   const totalTax = cgstTotal + sgstTotal + igstTotal;
 
   const extraExpenseAmount = extraExpenses.reduce(
