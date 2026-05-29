@@ -169,9 +169,7 @@ export const getPublicOrder = async (req, res) => {
         return res.status(410).json({ message: "Link expired" });
     }
 
-    if (sharedLink.isUsed) {
-        return res.status(403).json({ message: "Link already used" });
-    }
+
 
     const session = await CRMOrderSession.findById(sharedLink.sessionId._id)
         .populate("customerId")
@@ -269,7 +267,7 @@ export const confirmPublicOrder = async (req, res) => {
     const { items } = req.body; // Allows customer to update quantities
 
     const sharedLink = await CRMSharedLink.findOne({ token }).populate("sessionId");
-    if (!sharedLink || sharedLink.isUsed) return res.status(404).json({ message: "Invalid or used link" });
+    if (!sharedLink) return res.status(404).json({ message: "Invalid link" });
 
     const session = await CRMOrderSession.findById(sharedLink.sessionId._id).populate("customerId");
     if (!session) return res.status(404).json({ message: "Session not found" });
@@ -376,9 +374,7 @@ export const confirmPublicOrder = async (req, res) => {
 
     await salesOrder.save();
 
-    // Mark link and session as used
-    sharedLink.isUsed = true;
-    await sharedLink.save();
+
     
     session.status = "CONFIRMED";
     session.salesOrderRef = salesOrder._id;
