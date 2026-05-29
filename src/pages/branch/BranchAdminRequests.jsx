@@ -11,7 +11,7 @@ export default function BranchAdminRequests() {
   const [poRequests, setPoRequests] = useState([]);
   const [priceRequests, setPriceRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-
+  
   useEffect(() => {
     if (branch?._id) {
       fetchAllRequests();

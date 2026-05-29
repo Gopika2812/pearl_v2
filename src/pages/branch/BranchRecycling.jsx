@@ -45,7 +45,9 @@ export default function BranchRecycling() {
     const autoQty = (config?.sellingQtyInPeriod !== undefined && config?.sellingQtyInPeriod !== null)
       ? config.sellingQtyInPeriod
       : (product.reorderQty || 20);
-    const autoThreshold = config?.sellingQtyInPeriod || product.reorderLevel || 10;
+    const autoThreshold = (config?.sellingQtyInPeriod !== undefined && config?.sellingQtyInPeriod !== null)
+      ? config.sellingQtyInPeriod
+      : (product.reorderLevel || 10);
     
     // Manual values
     const manualQty = config?.restockingQty !== undefined && config?.restockingQty !== null
@@ -66,6 +68,12 @@ export default function BranchRecycling() {
       resolvedThreshold = Math.min(autoThreshold, manualThreshold);
     } else {
       resolvedThreshold = Math.max(autoThreshold, manualThreshold);
+    }
+
+    // If calculated sales in period is 0, set resolved levels (both threshold and qty) to 0
+    if ((config?.sellingQtyInPeriod ?? 0) === 0) {
+      resolvedQty = 0;
+      resolvedThreshold = 0;
     }
 
     const hasManual = product.restockingConfig?.restockingQty !== undefined && product.restockingConfig?.restockingQty !== null;
@@ -1597,7 +1605,9 @@ export default function BranchRecycling() {
     const autoQty = (restockingFormValues.sellingQtyInPeriod !== undefined && restockingFormValues.sellingQtyInPeriod !== null)
       ? restockingFormValues.sellingQtyInPeriod
       : (product.reorderQty || 20);
-    const autoThreshold = restockingFormValues.sellingQtyInPeriod || product.reorderLevel || 10;
+    const autoThreshold = (restockingFormValues.sellingQtyInPeriod !== undefined && restockingFormValues.sellingQtyInPeriod !== null)
+      ? restockingFormValues.sellingQtyInPeriod
+      : (product.reorderLevel || 10);
 
     const manualQty = restockingFormValues.restockingQty !== undefined && restockingFormValues.restockingQty !== null
       ? restockingFormValues.restockingQty
@@ -1617,6 +1627,12 @@ export default function BranchRecycling() {
       resolvedThreshold = Math.min(autoThreshold, manualThreshold);
     } else {
       resolvedThreshold = Math.max(autoThreshold, manualThreshold);
+    }
+
+    // If calculated sales in period is 0, set resolved levels (both threshold and qty) to 0
+    if ((restockingFormValues.sellingQtyInPeriod ?? 0) === 0) {
+      resolvedQty = 0;
+      resolvedThreshold = 0;
     }
 
     return (

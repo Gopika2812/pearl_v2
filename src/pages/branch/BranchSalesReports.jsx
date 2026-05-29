@@ -13,7 +13,7 @@ export default function BranchSalesReports() {
   const [loading, setLoading] = useState(false);
   
   // Filters
-  const [startDate, setStartDate] = useState(""); 
+  const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [productFilter, setProductFilter] = useState("");
   const [customerFilter, setCustomerFilter] = useState("");
@@ -59,7 +59,7 @@ export default function BranchSalesReports() {
           invoice.items.forEach((item) => {
             const productName = item.name;
             const productId = item.productId?._id || item.productId;
-            const qty = item.qty || 0;
+            const qty = typeof item.qty === 'string' ? parseFloat(item.qty) : (item.qty || 0);
             const total = item.total || 0;
 
             // Product-wise aggregation
@@ -101,7 +101,7 @@ export default function BranchSalesReports() {
         if (Array.isArray(invoice.items)) {
           invoice.items.forEach((item) => {
             const productName = item.name;
-            const qty = item.qty || 0;
+            const qty = typeof item.qty === 'string' ? parseFloat(item.qty) : (item.qty || 0);
             const total = item.total || 0;
 
             customerReport[customerId].totalQty += qty;
@@ -291,7 +291,7 @@ export default function BranchSalesReports() {
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Total Quantity:</span>
-                    <span className="font-bold text-purple-600">{product.totalQty} units</span>
+                    <span className="font-bold text-purple-600">{product.totalQty} {product.name?.toLowerCase().includes('kg') ? 'kg' : 'units'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Invoice Count:</span>
@@ -353,7 +353,7 @@ export default function BranchSalesReports() {
                 <div className="space-y-3 text-sm mb-4">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Total Quantity:</span>
-                    <span className="font-bold text-blue-600">{customer.totalQty} units</span>
+                    <span className="font-bold text-blue-600">{customer.totalQty} {customer.name?.toLowerCase().includes('kg') ? 'kg' : 'units'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Invoice Count:</span>

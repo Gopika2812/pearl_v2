@@ -88,6 +88,7 @@ const InventoryPurchaseOrderEntry = ({
   const [purchasePrice, setPurchasePrice] = useState(0);
   const [sellingPrice, setSellingPrice] = useState(0);
   const [discountPercent, setDiscountPercent] = useState("");
+  const [discountType, setDiscountType] = useState("percent"); // "percent" or "amount"
   const [displayPrice, setDisplayPrice] = useState(0);
   const [hsn, setHsn] = useState("");
   const [gst, setGst] = useState(0);
@@ -111,6 +112,11 @@ const InventoryPurchaseOrderEntry = ({
   const [expensePrice, setExpensePrice] = useState("");
   const [expenseGst, setExpenseGst] = useState("");
   const [masterExpenseNames, setMasterExpenseNames] = useState([]);
+
+  // Custom discount and round off states
+  const [customDiscount, setCustomDiscount] = useState("");
+  const [customDiscountType, setCustomDiscountType] = useState("amount"); // "amount" or "percentage"
+  const [enableRoundOff, setEnableRoundOff] = useState(true);
 
   // VENDOR SEARCH STATES
   const [vendorSearch, setVendorSearch] = useState("");
@@ -412,7 +418,18 @@ const InventoryPurchaseOrderEntry = ({
 
   const proceedAddItem = (product, finalPurchasePrice, finalSellingPrice) => {
     const rowPrice = (parseFloat(finalPurchasePrice) || 0) * (parseFloat(qty) || 0);
-    const rowDiscount = (rowPrice * (parseFloat(discountPercent) || 0)) / 100;
+    
+    let rowDiscount = 0;
+    let finalDiscountPercent = 0;
+    const discountVal = parseFloat(discountPercent) || 0;
+    if (discountType === "percent") {
+      rowDiscount = (rowPrice * discountVal) / 100;
+      finalDiscountPercent = discountVal;
+    } else {
+      rowDiscount = discountVal;
+      finalDiscountPercent = rowPrice > 0 ? (rowDiscount / rowPrice) * 100 : 0;
+    }
+
     const taxableAmount = rowPrice - rowDiscount;
     const taxRate = igst ? gst : cgst + sgst;
     const rowTax = (taxableAmount * taxRate) / 100;
@@ -433,7 +450,7 @@ const InventoryPurchaseOrderEntry = ({
         totalQty: product.totalQty || 0,
         purchasePrice: finalPurchasePrice,
         sellingPrice: finalSellingPrice,
-        discountPercent: parseFloat(discountPercent) || 0,
+        discountPercent: finalDiscountPercent,
         discountAmount: rowDiscount,
         rowPrice: rowPrice,
         taxableAmount: taxableAmount,
@@ -456,6 +473,7 @@ const InventoryPurchaseOrderEntry = ({
     setPurchasePrice(0);
     setSellingPrice(0);
     setDiscountPercent("");
+    setDiscountType("percent");
     setDisplayPrice(0);
     setHsn("");
     setGst(0);
@@ -471,7 +489,17 @@ const InventoryPurchaseOrderEntry = ({
 
   // Totals
   const subtotal = items.reduce((sum, item) => sum + (item.rowPrice || 0), 0);
-  const totalDiscount = items.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
+  const calculatedDiscount = items.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
+  
+  let totalDiscount = calculatedDiscount;
+  if (customDiscount !== "") {
+    const val = parseFloat(customDiscount) || 0;
+    if (customDiscountType === "percentage") {
+      totalDiscount = (subtotal * val) / 100;
+    } else {
+      totalDiscount = val;
+    }
+  }
   const baseTaxable = subtotal - totalDiscount;
 
   const cgstTotal = items.reduce((sum, item) => sum + ((parseFloat(item.taxableAmount) || 0) * (parseFloat(item.cgst) || 0) / 100), 0);
@@ -483,8 +511,10 @@ const InventoryPurchaseOrderEntry = ({
     (acc, exp) => acc + (exp.totalPrice || 0),
     0
   );
-  const grandTotal = Math.round(baseTaxable + totalTax + extraExpenseAmount);
-  const roundOff = Math.round((grandTotal - (baseTaxable + totalTax + extraExpenseAmount)) * 100) / 100;
+  
+  const exactGrandTotal = baseTaxable + totalTax + extraExpenseAmount;
+  const grandTotal = enableRoundOff ? Math.round(exactGrandTotal) : exactGrandTotal;
+  const roundOff = enableRoundOff ? (Math.round((grandTotal - exactGrandTotal) * 100) / 100) : 0;
 
   const handleAddExtraExpense = async () => {
     if (!expenseName.trim() || !expensePrice) {
@@ -576,6 +606,7 @@ const InventoryPurchaseOrderEntry = ({
     setPurchasePrice(0);
     setSellingPrice(0);
     setDiscountPercent("");
+    setDiscountType("percent");
     setDisplayPrice(0);
     setHsn("");
     setGst(0);
@@ -586,6 +617,9 @@ const InventoryPurchaseOrderEntry = ({
 
     // Footer
     setExtraExpenses([]);
+    setCustomDiscount("");
+    setCustomDiscountType("amount");
+    setEnableRoundOff(true);
   };
 
   // Place Purchase Order
@@ -605,21 +639,23 @@ const InventoryPurchaseOrderEntry = ({
       warehouse,
       items: items.map(item => ({
         ...item,
-        total: Math.round(Number(item.total) || 0)
+        total: enableRoundOff ? Math.round(Number(item.total) || 0) : Math.round(Number(item.total) * 100) / 100
       })),
-      subtotal: Math.round(subtotal),
-      totalTax: Math.round(totalTax),
+      subtotal: enableRoundOff ? Math.round(subtotal) : Math.round(subtotal * 100) / 100,
+      totalTax: enableRoundOff ? Math.round(totalTax) : Math.round(totalTax * 100) / 100,
+      totalDiscount: enableRoundOff ? Math.round(totalDiscount) : Math.round(totalDiscount * 100) / 100,
       extraExpenses: extraExpenses.map((exp) => ({
         expenseName: exp.expenseName,
-        amount: Math.round(Number(exp.amount || exp.basePrice) || 0),
-        basePrice: Math.round(Number(exp.basePrice || exp.amount) || 0),
+        amount: enableRoundOff ? Math.round(Number(exp.amount || exp.basePrice) || 0) : Math.round(Number(exp.amount || exp.basePrice) * 100) / 100,
+        basePrice: enableRoundOff ? Math.round(Number(exp.basePrice || exp.amount) || 0) : Math.round(Number(exp.basePrice || exp.amount) * 100) / 100,
         gst: Math.round(Number(exp.gst || exp.gstPercent) || 0),
         gstPercent: Math.round(Number(exp.gstPercent || exp.gst) || 0),
-        gstAmount: Math.round(Number(exp.gstAmount) || 0),
-        totalPrice: Math.round(Number(exp.totalPrice) || 0),
+        gstAmount: enableRoundOff ? Math.round(Number(exp.gstAmount) || 0) : Math.round(Number(exp.gstAmount) * 100) / 100,
+        totalPrice: enableRoundOff ? Math.round(Number(exp.totalPrice) || 0) : Math.round(Number(exp.totalPrice) * 100) / 100,
       })),
-      extraExpenseAmount: Math.round(extraExpenseAmount),
-      grandTotal: Math.round(grandTotal),
+      extraExpenseAmount: enableRoundOff ? Math.round(extraExpenseAmount) : Math.round(extraExpenseAmount * 100) / 100,
+      grandTotal: enableRoundOff ? Math.round(grandTotal) : Math.round(grandTotal * 100) / 100,
+      enableRoundOff,
       billingPerson,
       invoiceId,
       date,
@@ -959,7 +995,19 @@ const InventoryPurchaseOrderEntry = ({
               </div>
 
               <div>
-                <label className={labelClass}>Discount %</label>
+                <div className="flex justify-between items-center mb-1">
+                  <label className={labelClass}>Discount {discountType === "percent" ? "%" : "₹"}</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiscountType(prev => prev === "percent" ? "amount" : "percent");
+                      setDiscountPercent("");
+                    }}
+                    className="text-[#319bab] hover:underline text-[9px] font-black uppercase tracking-tight transition active:scale-95 animate-pulse"
+                  >
+                    Use {discountType === "percent" ? "₹" : "%"}
+                  </button>
+                </div>
                 <input
                   type="number"
                   className={inputClass}
@@ -1160,7 +1208,7 @@ const InventoryPurchaseOrderEntry = ({
                         <div className="text-[10px]">(-₹{(item.discountAmount || 0).toFixed(2)})</div>
                       </td>
                       <td className="px-4 py-3 text-right font-black text-gray-800">
-                        ₹{(parseFloat(item.total) || 0).toLocaleString()}
+                        ₹{(parseFloat(item.taxableAmount) || 0).toLocaleString()}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
@@ -1187,7 +1235,7 @@ const InventoryPurchaseOrderEntry = ({
               ORDER SUMMARY
             </h3>
 
-            <div className="space-y-3 relative z-10">
+            <div className="space-y-3 relative z-10 font-sans">
               <div className="flex justify-between items-center text-white/80">
                 <span className="text-sm font-medium uppercase tracking-wider">Sub Total</span>
                 <span className="font-bold">₹{subtotal.toLocaleString()}</span>
@@ -1195,8 +1243,76 @@ const InventoryPurchaseOrderEntry = ({
 
               <div className="flex justify-between items-center text-red-200">
                 <span className="text-sm font-medium uppercase tracking-wider">Total Discount</span>
-                <span className="font-bold">-₹{totalDiscount.toLocaleString()}</span>
+                <div className="flex items-center gap-2 font-sans bg-white/10 p-1.5 rounded-lg border border-white/20">
+                  {/* Selector for ₹ or % */}
+                  <div className="flex rounded bg-black/20 p-0.5 border border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomDiscountType("amount");
+                        if (customDiscount !== "") {
+                          const val = parseFloat(customDiscount) || 0;
+                          const converted = ((subtotal * val) / 100).toFixed(2);
+                          setCustomDiscount(converted);
+                        }
+                      }}
+                      className={`px-2 py-0.5 text-[10px] font-black rounded transition-all ${
+                        customDiscountType === "amount"
+                          ? "bg-white text-[#319bab] shadow-sm"
+                          : "text-white hover:bg-white/10"
+                      }`}
+                    >
+                      ₹
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomDiscountType("percentage");
+                        if (customDiscount !== "" && subtotal > 0) {
+                          const val = parseFloat(customDiscount) || 0;
+                          const converted = ((val / subtotal) * 100).toFixed(2);
+                          setCustomDiscount(converted);
+                        }
+                      }}
+                      className={`px-2 py-0.5 text-[10px] font-black rounded transition-all ${
+                        customDiscountType === "percentage"
+                          ? "bg-white text-[#319bab] shadow-sm"
+                          : "text-white hover:bg-white/10"
+                      }`}
+                    >
+                      %
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <span className="font-bold text-xs">{customDiscountType === "amount" ? "-₹" : "-%"}</span>
+                    <input
+                      type="number"
+                      step="any"
+                      value={customDiscount}
+                      onChange={(e) => setCustomDiscount(e.target.value)}
+                      placeholder={
+                        customDiscountType === "amount"
+                          ? calculatedDiscount.toFixed(2)
+                          : ((calculatedDiscount / (subtotal || 1)) * 100).toFixed(2)
+                      }
+                      className="w-20 px-2 py-0.5 bg-white/20 text-white font-bold border border-white/30 rounded text-right text-xs focus:outline-none focus:ring-1 focus:ring-white placeholder-red-200/50"
+                    />
+                  </div>
+                </div>
               </div>
+
+              {customDiscount !== "" && (
+                <div className="flex justify-end text-[10px] text-red-200/80 -mt-2 pr-2">
+                  {customDiscountType === "percentage" ? (
+                    <span>Equivalent to -₹{((subtotal * (parseFloat(customDiscount) || 0)) / 100).toFixed(2)}</span>
+                  ) : (
+                    subtotal > 0 && (
+                      <span>Equivalent to -{(((parseFloat(customDiscount) || 0) / subtotal) * 100).toFixed(2)}%</span>
+                    )
+                  )}
+                </div>
+              )}
 
               <div className="h-px bg-white/20 my-2"></div>
 
@@ -1216,17 +1332,28 @@ const InventoryPurchaseOrderEntry = ({
                 <span className="font-bold">₹{extraExpenseAmount.toLocaleString()}</span>
               </div>
 
-              {roundOff !== 0 && (
-                 <div className="flex justify-between items-center text-white/60 text-xs italic">
-                  <span>Round Off</span>
-                  <span>₹{roundOff.toFixed(2)}</span>
-                </div>
-              )}
+              {/* Round Off Checkbox and Value */}
+              <div className="flex justify-between items-center text-white/80 border-t border-white/20 pt-3 mt-1">
+                <span className="text-xs font-semibold uppercase tracking-wider flex items-center gap-2 select-none cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={enableRoundOff}
+                    onChange={(e) => setEnableRoundOff(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded text-[#319bab] bg-white/20 border-white/30 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                  />
+                  Round Off Grand Total
+                </span>
+                {roundOff !== 0 && (
+                  <span className="text-xs font-mono italic">₹{roundOff.toFixed(2)}</span>
+                )}
+              </div>
 
               <div className="pt-4 mt-4 border-t border-white/30 flex justify-between items-end">
                 <div>
                   <span className="block text-[10px] font-bold uppercase tracking-[0.2em] text-white/60 leading-none mb-1">Grand Total</span>
-                  <span className="text-4xl font-black tracking-tighter">₹{grandTotal.toLocaleString()}</span>
+                  <span className="text-4xl font-black tracking-tighter">
+                    ₹{enableRoundOff ? grandTotal.toLocaleString() : Number(grandTotal.toFixed(2)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </div>
                 <button 
                   onClick={handleFinalAction}

@@ -766,6 +766,327 @@ router.get("/commissions/order/:salesOrderId", async (req, res) => {
   }
 });
 
+// 📅 CHANGE SALES ORDER DATE (Cancel current order, recreate on selective date)
+router.post("/:id/change-date", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newDate } = req.body;
+
+    if (!newDate) {
+      return res.status(400).json({ success: false, message: "New date is required" });
+    }
+
+    // 🛡️ CHECK: Move Date Permission
+    if (req.user.role !== "SUPER_ADMIN" && req.user.role !== "ADMIN") {
+      const BranchUser = mongoose.model("BranchUser");
+      const dbUser = await BranchUser.findById(req.user.id || req.user._id);
+      const isAllowed = dbUser && (dbUser.actionPermissions?.get("action_move_date") === true || dbUser.actionPermissions?.action_move_date === true);
+      if (!isAllowed) {
+        return res.status(403).json({ success: false, message: "Permission Denied: You do not have permission to Move Date." });
+      }
+    }
+
+    const originalOrder = await SalesOrder.findById(id)
+      .populate("items.productId")
+      .populate("invoiceItems.productId")
+      .populate("lastInvoicedItems.productId");
+
+    if (!originalOrder) {
+      return res.status(404).json({ success: false, message: "Sales order not found" });
+    }
+
+    if (originalOrder.status === "CANCELLED") {
+      return res.status(400).json({ success: false, message: "Order is already cancelled" });
+    }
+
+    // --- STEP 1: CANCEL THE ORIGINAL SALES ORDER ---
+    if (originalOrder.status === "INVOICED") {
+      // 🛡️ CHECK: Edit Previous Day Permission
+      if (req.user.role !== "SUPER_ADMIN") {
+        const associatedInvoice = await Invoice.findOne({ salesOrderId: originalOrder._id });
+        if (associatedInvoice && !isToday(associatedInvoice.invoiceDate)) {
+          if (req.user.actionPermissions?.editPreviousDay === false) {
+            return res.status(403).json({ success: false, message: "Permission Denied: You cannot cancel invoices from a previous day." });
+          }
+        }
+      }
+
+      const SalesOwner = mongoose.model("SalesOwner");
+      const SalesMan = mongoose.model("SalesMan");
+      const DeliveryMan = mongoose.model("DeliveryMan");
+
+      // A. Revert Customer Balance
+      const amountToRevert = originalOrder.lastInvoicedGrandTotal || originalOrder.grandTotal || 0;
+      if (originalOrder.customer?.customerId && amountToRevert > 0) {
+        const customer = await Customer.findById(originalOrder.customer.customerId);
+        if (customer) {
+          let remainingToRevert = amountToRevert;
+          let currentCredit = customer.credit || 0;
+          let currentDebit = customer.debit || 0;
+
+          if (currentDebit >= remainingToRevert) {
+            currentDebit -= remainingToRevert;
+            remainingToRevert = 0;
+          } else {
+            remainingToRevert -= currentDebit;
+            currentDebit = 0;
+            currentCredit += remainingToRevert;
+          }
+
+          const newClosingBalance = (customer.closingBalance || 0) - amountToRevert;
+          await Customer.findByIdAndUpdate(originalOrder.customer.customerId, {
+            debit: currentDebit,
+            credit: currentCredit,
+            closingBalance: newClosingBalance,
+            totalBalance: newClosingBalance
+          });
+        }
+      }
+
+      // B. Revert Product Stock
+      const itemsToRevert = (originalOrder.lastInvoicedItems && originalOrder.lastInvoicedItems.length > 0)
+        ? originalOrder.lastInvoicedItems
+        : originalOrder.items;
+
+      for (const item of itemsToRevert) {
+        if (item.productId && item.qty > 0) {
+          await Product.findByIdAndUpdate(item.productId, { $inc: { totalQty: item.qty } });
+        }
+      }
+
+      // C. Revert Commissions
+      const commission = await Commission.findOne({ salesOrderId: id });
+      if (commission) {
+        if (commission.salesOwnerId) await SalesOwner.findByIdAndUpdate(commission.salesOwnerId, { $inc: { commissionAmount: -commission.salesOwnerCommissionAmount } });
+        if (commission.salesManId) await SalesMan.findByIdAndUpdate(commission.salesManId, { $inc: { commissionAmount: -commission.salesManCommissionAmount } });
+        if (commission.deliveryManId) await DeliveryMan.findByIdAndUpdate(commission.deliveryManId, { $inc: { commissionAmount: -commission.deliveryManCommissionAmount } });
+        await Commission.deleteOne({ salesOrderId: id });
+      }
+    }
+
+    // Snapshot into editHistory of original order
+    originalOrder.editHistory.push({
+      version: (originalOrder.editHistory.length || 0) + 1,
+      editType: 'RE_EDIT_STARTED',
+      items: originalOrder.items,
+      grandTotal: originalOrder.grandTotal,
+      editedAt: new Date(),
+      note: `Order CANCELLED due to date change to ${newDate} by ${req.user.username || "Admin"}.`
+    });
+
+    // Mark associated invoice as CANCELLED
+    await Invoice.findOneAndUpdate(
+      { salesOrderId: originalOrder._id },
+      {
+        status: "CANCELLED",
+        deliveryStatus: "CANCELLED",
+        cancelledAt: new Date(),
+        cancelledBy: req.user.username || req.user.id,
+        cancelReason: `Date changed to ${newDate}`
+      }
+    );
+
+    originalOrder.status = "CANCELLED";
+    originalOrder.cancelNarration = `Cancelled for date change to ${newDate}`;
+    originalOrder.cancelledBy = req.user.username || req.user.id;
+    originalOrder.cancelledAt = new Date();
+    await originalOrder.save();
+
+    // --- STEP 2: CREATE NEW SALES ORDER ON THE SELECTED DATE ---
+    const currentFY = getFinancialYear();
+    const isDummy = originalOrder.isDummy === true;
+
+    // Fetch opening balance once (outside the retry loop)
+    let openingBalance = 0;
+    if (!isDummy && originalOrder.customer?.customerId) {
+      const dbCustomer = await Customer.findById(originalOrder.customer.customerId);
+      if (dbCustomer) {
+        openingBalance = (dbCustomer.debit || 0) - (dbCustomer.credit || 0);
+      }
+    }
+
+    // 🔁 RETRY LOOP — handles race condition where a concurrent SO creation
+    // grabs the same voucher counter simultaneously, causing E11000 duplicate key.
+    let newSalesOrder;
+    let saved = false;
+    let retries = 0;
+
+    while (!saved && retries < 5) {
+      try {
+        let newInvoiceId;
+
+        if (isDummy) {
+          // Find highest dummy invoice number in DB and go one higher
+          const existingDummyOrders = await SalesOrder.find({
+            branchId: originalOrder.branchId,
+            invoiceId: /^D\d+\//,
+            financialYear: currentFY
+          }).select('invoiceId').lean();
+
+          let highestNumInDB = 0;
+          existingDummyOrders.forEach(order => {
+            const parts = order.invoiceId.split('/');
+            if (parts.length >= 2) {
+              const num = parseInt(parts[0].replace('D', ''));
+              if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+            }
+          });
+          newInvoiceId = `D${highestNumInDB + 1}/001/${currentFY}`;
+
+        } else {
+          // Fetch voucher type fresh on every retry (gets latest counter after collision)
+          const voucher = await VoucherType.findOne({
+            branchId: originalOrder.branchId,
+            name: originalOrder.voucherType.toLowerCase(),
+            orderType: "SO",
+          });
+
+          if (!voucher) {
+            return res.status(404).json({ success: false, message: `Voucher Type '${originalOrder.voucherType}' not found` });
+          }
+
+          // Sync counter if financial year changed
+          if (voucher.financialYear !== currentFY) {
+            voucher.counter = 1;
+            voucher.financialYear = currentFY;
+          }
+
+          // Always re-scan DB for the real highest number to avoid stale counter
+          const existingOrders = await SalesOrder.find({
+            branchId: originalOrder.branchId,
+            invoiceId: new RegExp(`^${voucher.prefix}/`),
+            financialYear: currentFY
+          }).select('invoiceId').lean();
+
+          let highestNumInDB = 0;
+          existingOrders.forEach(order => {
+            const parts = order.invoiceId.split('/');
+            if (parts.length >= 2) {
+              const num = parseInt(parts[1]);
+              if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+            }
+          });
+
+          const nextNum = Math.max(voucher.counter, highestNumInDB + 1);
+          newInvoiceId = `${voucher.prefix}/${String(nextNum).padStart(3, "0")}/${currentFY}`;
+
+          // Increment voucher counter for next order
+          voucher.counter = nextNum + 1;
+          await voucher.save();
+        }
+
+        // Attempt to save with the generated invoiceId
+        newSalesOrder = new SalesOrder({
+          invoiceId: newInvoiceId,
+          voucherType: originalOrder.voucherType,
+          orderType: "SO",
+          branchId: originalOrder.branchId,
+          customer: originalOrder.customer,
+          openingBalance: Math.round(openingBalance),
+          closingBalance: Math.round(openingBalance + originalOrder.grandTotal),
+          warehouse: originalOrder.warehouse,
+          billingPerson: originalOrder.billingPerson,
+          agent: originalOrder.agent,
+          items: originalOrder.items.map(item => ({
+            productId: (item.productId && item.productId._id) ? item.productId._id : item.productId,
+            name: item.name,
+            qty: item.qty,
+            unit: item.unit,
+            sellingPrice: item.sellingPrice,
+            baseAmount: item.baseAmount,
+            discountType: item.discountType,
+            discountPercent: item.discountPercent,
+            discountAmount: item.discountAmount,
+            taxableAmount: item.taxableAmount,
+            gst: item.gst,
+            cgst: item.cgst,
+            sgst: item.sgst,
+            igst: item.igst,
+            taxAmount: item.taxAmount,
+            total: item.total,
+            lockedPrice: item.lockedPrice,
+            altQty: item.altQty,
+            altUnit: item.altUnit
+          })),
+          sampleItems: (originalOrder.sampleItems || []).map(item => ({
+            productId: (item.productId && item.productId._id) ? item.productId._id : item.productId,
+            name: item.name,
+            qty: item.qty,
+            sellingPrice: item.sellingPrice,
+            isSample: item.isSample,
+          })),
+          transportCharge: originalOrder.transportCharge,
+          subtotal: originalOrder.subtotal,
+          totalDiscount: originalOrder.totalDiscount,
+          totalTax: originalOrder.totalTax,
+          grandTotal: originalOrder.grandTotal,
+          customerMargin: originalOrder.customerMargin,
+          marginAmount: originalOrder.marginAmount,
+          grandTotalWithMargin: originalOrder.grandTotalWithMargin,
+          extraExpenses: originalOrder.extraExpenses,
+          extraExpenseAmount: originalOrder.extraExpenseAmount,
+          commonDiscount: originalOrder.commonDiscount,
+          ewayEnabled: originalOrder.ewayEnabled,
+          ewayDetails: originalOrder.ewayDetails,
+          salesOwner: originalOrder.salesOwner,
+          salesMan: originalOrder.salesMan,
+          deliveryMan: originalOrder.deliveryMan,
+          financialYear: currentFY,
+          isClaim: originalOrder.isClaim || false,
+          orderDate: new Date(newDate),
+          spottedCustomerName: originalOrder.spottedCustomerName,
+          spottedPhoneNumber: originalOrder.spottedPhoneNumber,
+          isDummy: originalOrder.isDummy,
+          status: "PLACED",
+          invoiceGenerated: false
+        });
+
+        await newSalesOrder.save();
+        saved = true;
+
+      } catch (saveErr) {
+        const isDuplicateKey = saveErr.code === 11000 || (saveErr.message && saveErr.message.includes('E11000'));
+        if (isDuplicateKey) {
+          retries++;
+          console.warn(`⚠️ change-date: Duplicate invoiceId collision on retry ${retries}/5. Re-computing ID...`);
+        } else {
+          throw saveErr; // Not a duplicate key error — rethrow to outer catch
+        }
+      }
+    }
+
+    if (!saved) {
+      return res.status(500).json({
+        success: false,
+        message: "System busy — could not assign a unique order ID after 5 attempts. Please try again."
+      });
+    }
+
+    // Log the date change
+    await createAuditLog({
+      userId: req.user.id,
+      userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
+      username: req.user.username,
+      branchId: originalOrder.branchId,
+      action: "CHANGE_SO_DATE",
+      description: `Moved Order ${originalOrder.invoiceId} to ${newDate} as ${newSalesOrder.invoiceId}`,
+      targetId: newSalesOrder._id,
+      targetModel: "SalesOrder",
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully moved order to new date ${newDate}. Old order cancelled, new order ${newSalesOrder.invoiceId} created.`,
+      newOrder: newSalesOrder
+    });
+
+  } catch (err) {
+    console.error("Change SO date error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+
 // 🗑️ SOFT-CANCEL SALES ORDER (Revert effects, mark CANCELLED, keep in records)
 router.delete("/:id", auth, clearCachePrefix("/api/sales-orders"), async (req, res) => {
   try {

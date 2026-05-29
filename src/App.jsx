@@ -443,7 +443,7 @@ function AppContent() {
         "/branch/stock-summary": "stock-summary",
         "/branch/quick-links": "quick-links",
         "/branch/admin-requests": "admin-requests",
-        "/branch/tokenization": "tokenization",
+
         "/branch/insights": "insights",
         "/branch/receipt-records": "receipt",
         "/branch/payment-records": "payment-po",

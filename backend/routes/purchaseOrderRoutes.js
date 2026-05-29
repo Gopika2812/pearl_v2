@@ -275,7 +275,11 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
 
       // RECALCULATE NEW TOTALS
       const subtotal = newItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
-      const totalDiscount = newItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0);
+      const totalDiscount = req.body.totalDiscount !== undefined
+        ? Number(req.body.totalDiscount)
+        : (order.totalDiscount !== undefined && order.totalDiscount !== null
+          ? order.totalDiscount
+          : newItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0));
       const totalTax = newItems.reduce((acc, i) => {
         const gst = Number(i.gst || 0);
         const rowTaxable = (Number(i.purchasePrice) * Number(i.qty)) - (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100)));
@@ -399,7 +403,11 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
 
     // RECALCULATE ALL TOTALS FROM SCRATCH (BULLETPROOF)
     const subtotal = invoiceItems.reduce((acc, i) => acc + (Number(i.rowPrice) || (Number(i.purchasePrice) * Number(i.qty))), 0);
-    const totalDiscount = invoiceItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0);
+    const totalDiscount = req.body.totalDiscount !== undefined
+      ? Number(req.body.totalDiscount)
+      : (order.totalDiscount !== undefined && order.totalDiscount !== null
+        ? order.totalDiscount
+        : invoiceItems.reduce((acc, i) => acc + (Number(i.discountAmount) || (Number(i.purchasePrice) * Number(i.qty) * (Number(i.discountPercent || 0) / 100))), 0));
     
     const totalTax = invoiceItems.reduce((acc, i) => {
       const gst = Number(i.gst || 0);
@@ -538,12 +546,13 @@ router.post("/", auth, async (req, res) => {
       return res.status(400).json({ message: "branchId is required" });
     }
 
-    // Round numeric fields if provided
-    if (rest.grandTotal !== undefined) rest.grandTotal = Math.round(Number(rest.grandTotal));
-    if (rest.subtotal !== undefined) rest.subtotal = Math.round(Number(rest.subtotal));
-    if (rest.totalTax !== undefined) rest.totalTax = Math.round(Number(rest.totalTax));
-    if (rest.totalDiscount !== undefined) rest.totalDiscount = Math.round(Number(rest.totalDiscount));
-    if (rest.transportCharge !== undefined) rest.transportCharge = Math.round(Number(rest.transportCharge));
+    // Round numeric fields if provided (preserve decimals if enableRoundOff is explicitly false)
+    const preserveDecimals = req.body.enableRoundOff === false;
+    if (rest.grandTotal !== undefined) rest.grandTotal = preserveDecimals ? Math.round(Number(rest.grandTotal) * 100) / 100 : Math.round(Number(rest.grandTotal));
+    if (rest.subtotal !== undefined) rest.subtotal = preserveDecimals ? Math.round(Number(rest.subtotal) * 100) / 100 : Math.round(Number(rest.subtotal));
+    if (rest.totalTax !== undefined) rest.totalTax = Math.round(Number(rest.totalTax) * 100) / 100;
+    if (rest.totalDiscount !== undefined) rest.totalDiscount = Math.round(Number(rest.totalDiscount) * 100) / 100;
+    if (rest.transportCharge !== undefined) rest.transportCharge = Math.round(Number(rest.transportCharge) * 100) / 100;
 
     // Handle Customer-PO Flow / Auto Vendor Creation
     let resolvedVendorId = undefined;
@@ -690,27 +699,40 @@ router.post("/", auth, async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { items, warehouse, subtotal, totalTax, totalDiscount, grandTotal, transportCharge } = req.body;
+    const { items, warehouse, subtotal, totalTax, totalDiscount, grandTotal, transportCharge, vendor } = req.body;
 
     const order = await PurchaseOrder.findById(id);
     if (!order) return res.status(404).json({ message: "Purchase Order not found" });
 
-    // Allowed direct editing for invoiced orders
-    // if (order.status === "INVOICED") {
-    //   return res.status(400).json({ message: "Cannot edit an order that has already been invoiced" });
-    // }
-
     const oldState = {
       items: order.items.map(i => i.toObject()),
       grandTotal: order.grandTotal,
-      warehouse: order.warehouse
+      warehouse: order.warehouse,
+      vendor: order.vendor,
+      vendorId: order.vendorId
     };
 
-    // Update fields
+    let vendorChanged = false;
+    let oldVendorName = order.vendor;
+    let newVendorName = vendor;
+    let oldGrandTotal = order.grandTotal || 0;
+
+    if (newVendorName && newVendorName !== oldVendorName) {
+      vendorChanged = true;
+      const newVendorRecord = await Vendor.findOne({ branchId: order.branchId, name: newVendorName });
+      if (newVendorRecord) {
+        order.vendor = newVendorRecord.name;
+        order.vendorId = newVendorRecord._id;
+      } else {
+        order.vendor = newVendorName;
+      }
+    }
+
+    // Update warehouse & items fields
     if (items) order.items = items;
     if (warehouse) order.warehouse = warehouse;
     
-    // FORCED SERVER-SIDE RECALCULATION (Do not trust req.body totals)
+    // FORCED SERVER-SIDE RECALCULATION
     let calcSubtotal = 0;
     let calcDiscount = 0;
     let calcTax = 0;
@@ -739,12 +761,63 @@ router.put("/:id", auth, async (req, res) => {
     });
 
     order.subtotal = Math.round(calcSubtotal);
-    order.totalDiscount = Math.round(calcDiscount);
+    if (totalDiscount !== undefined) {
+      order.totalDiscount = Math.round(Number(totalDiscount));
+    } else {
+      order.totalDiscount = Math.round(calcDiscount);
+    }
     order.totalTax = Math.round(calcTax);
     
     if (transportCharge !== undefined) order.transportCharge = Math.round(Number(transportCharge));
     const extra = order.extraExpenseAmount || 0;
-    order.grandTotal = Math.round(calcSubtotal - calcDiscount + calcTax + extra);
+    const calculatedGrandTotal = Math.round(order.subtotal - order.totalDiscount + order.totalTax + extra);
+    order.grandTotal = calculatedGrandTotal;
+
+    // Adjust vendor balances if PO is already invoiced
+    if (order.status === "INVOICED") {
+      if (vendorChanged) {
+        // Revert old vendor credit balance
+        if (oldVendorName) {
+          const oldVendor = await Vendor.findOne({ branchId: order.branchId, name: oldVendorName });
+          if (oldVendor) {
+            oldVendor.credit = (oldVendor.credit || 0) - oldGrandTotal;
+            await oldVendor.save();
+          }
+        }
+        // Add credit balance to the new vendor
+        if (order.vendor) {
+          const newVendor = await Vendor.findOne({ branchId: order.branchId, name: order.vendor });
+          if (newVendor) {
+            newVendor.credit = (newVendor.credit || 0) + calculatedGrandTotal;
+            await newVendor.save();
+          }
+        }
+      } else {
+        // Vendor didn't change, but grand total might have changed
+        const vendorRecord = await Vendor.findOne({ branchId: order.branchId, name: order.vendor });
+        if (vendorRecord) {
+          const diff = calculatedGrandTotal - oldGrandTotal;
+          if (diff !== 0) {
+            vendorRecord.credit = (vendorRecord.credit || 0) + diff;
+            await vendorRecord.save();
+          }
+        }
+      }
+
+      // Also update the associated PurchaseInvoice
+      const pi = await PurchaseInvoice.findOne({ purchaseOrderId: order._id });
+      if (pi) {
+        pi.items = order.items;
+        pi.subtotal = order.subtotal;
+        pi.totalDiscount = order.totalDiscount;
+        pi.totalTax = order.totalTax;
+        pi.grandTotal = order.grandTotal;
+        pi.warehouse = order.warehouse;
+        pi.vendor = order.vendor;
+        pi.vendorId = order.vendorId;
+        await pi.save();
+      }
+    }
 
     await order.save();
 
@@ -770,7 +843,9 @@ router.put("/:id", auth, async (req, res) => {
         after: {
           items: order.items.map(i => i.toObject ? i.toObject() : i),
           grandTotal: order.grandTotal,
-          warehouse: order.warehouse
+          warehouse: order.warehouse,
+          vendor: order.vendor,
+          vendorId: order.vendorId
         }
       }
     });
