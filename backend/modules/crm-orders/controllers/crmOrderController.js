@@ -324,15 +324,15 @@ export const confirmPublicOrder = async (req, res) => {
         voucher.financialYear = currentFY;
     }
 
-    // 🛡️ SYNC COUNTER WITH DATABASE (Collision Protection)
-    const existingOrders = await SalesOrder.find({
+    // 🛡️ SYNC COUNTER WITH DATABASE FOR ONLINE ORDERS (Collision Protection)
+    const existingOnlineOrders = await SalesOrder.find({
         branchId: session.branchId,
-        invoiceId: new RegExp(`^${voucher.prefix}/`),
+        invoiceId: /^O\//,
         financialYear: currentFY
     }).select('invoiceId').lean();
 
     let highestNumInDB = 0;
-    existingOrders.forEach(order => {
+    existingOnlineOrders.forEach(order => {
         const parts = order.invoiceId.split('/');
         if (parts.length >= 2) {
             const num = parseInt(parts[1]);
@@ -340,8 +340,8 @@ export const confirmPublicOrder = async (req, res) => {
         }
     });
 
-    const nextNum = Math.max(voucher.counter, highestNumInDB + 1);
-    const invoiceId = `${voucher.prefix}/${String(nextNum).padStart(3, "0")}/${currentFY}`;
+    const nextNum = highestNumInDB + 1;
+    const invoiceId = `O/${String(nextNum).padStart(3, "0")}/${currentFY}`;
 
     const openingBalance = (customer.debit || 0) - (customer.credit || 0);
     const closingBalance = Math.round(openingBalance + grandTotal);
@@ -375,10 +375,6 @@ export const confirmPublicOrder = async (req, res) => {
     });
 
     await salesOrder.save();
-    
-    // Update voucher counter
-    voucher.counter = nextNum + 1;
-    await voucher.save();
 
     // Mark link and session as used
     sharedLink.isUsed = true;

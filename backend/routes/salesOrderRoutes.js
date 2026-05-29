@@ -1608,42 +1608,67 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
     }
 
     // ─── BRANCH B: FIRST-TIME INVOICE ─────────────────────────────────────
-    const rawSoId = salesOrder.invoiceId || "";
-    const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
-    const soPrefixPrefix = cleanSoId.split('/')[0];
-
-    let siPrefix = soPrefixPrefix.endsWith("SO")
-      ? soPrefixPrefix.replace(/SO$/i, "SI")
-      : `${soPrefixPrefix}SI`;
-
-    console.log(`🔍 Absolute Sync (Convert): SO [${soPrefixPrefix}] -> Target SI [${siPrefix}]`);
-
-
-    // 🔬 SEARCH ONLY BY EXACT PREFIX. DO NOT USE NAME FALLBACK.
-    let siVoucher = await VoucherType.findOne({
-      branchId: salesOrder.branchId,
-      prefix: siPrefix,
-      orderType: "SI",
-      financialYear: currentFY
-    });
-
-    // 🆕 AUTO-CREATE SI VOUCHER IF MISSING (EXACT PREFIX MATCH)
-    if (!siVoucher) {
-      console.log(`⚠️ No SI voucher found for prefix '${siPrefix}'. Auto-creating now...`);
-
-      siVoucher = new VoucherType({
+    let siNumber;
+    if (salesOrder.invoiceId && salesOrder.invoiceId.startsWith("O/")) {
+      const orderYear = new Date(salesOrder.orderDate || salesOrder.createdAt).getFullYear();
+      const InvoiceModel = mongoose.model("Invoice");
+      const existingOnlineInvoices = await InvoiceModel.find({
         branchId: salesOrder.branchId,
-        name: soPrefixPrefix.toLowerCase().replace(/so$/i, ""), // Normalize name from its prefix
-        orderType: "SI",
+        invoiceNumber: new RegExp(`^OI\\/\\d{3,}\\/${orderYear}$`)
+      }).select('invoiceNumber').lean();
+
+      let highestCounter = 0;
+      existingOnlineInvoices.forEach(inv => {
+        const parts = inv.invoiceNumber.split('/');
+        if (parts.length >= 2) {
+          const num = parseInt(parts[1]);
+          if (!isNaN(num) && num > highestCounter) highestCounter = num;
+        }
+      });
+
+      const nextSiNum = highestCounter + 1;
+      siNumber = `OI/${String(nextSiNum).padStart(3, "0")}/${orderYear}`;
+    } else {
+      const rawSoId = salesOrder.invoiceId || "";
+      const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
+      const soPrefixPrefix = cleanSoId.split('/')[0];
+
+      let siPrefix = soPrefixPrefix.endsWith("SO")
+        ? soPrefixPrefix.replace(/SO$/i, "SI")
+        : `${soPrefixPrefix}SI`;
+
+      console.log(`🔍 Absolute Sync (Convert): SO [${soPrefixPrefix}] -> Target SI [${siPrefix}]`);
+
+      // 🔬 SEARCH ONLY BY EXACT PREFIX. DO NOT USE NAME FALLBACK.
+      let siVoucher = await VoucherType.findOne({
+        branchId: salesOrder.branchId,
         prefix: siPrefix,
-        counter: 1,
+        orderType: "SI",
         financialYear: currentFY
       });
-      await siVoucher.save();
-      console.log(`✅ Automated SI Voucher created with absolute prefix: ${siPrefix} (Counter: 1)`);
-    }
 
-    const siNumber = `${siVoucher.prefix}/${String(siVoucher.counter).padStart(3, "0")}/${currentFY}`;
+      // 🆕 AUTO-CREATE SI VOUCHER IF MISSING (EXACT PREFIX MATCH)
+      if (!siVoucher) {
+        console.log(`⚠️ No SI voucher found for prefix '${siPrefix}'. Auto-creating now...`);
+
+        siVoucher = new VoucherType({
+          branchId: salesOrder.branchId,
+          name: soPrefixPrefix.toLowerCase().replace(/so$/i, ""), // Normalize name from its prefix
+          orderType: "SI",
+          prefix: siPrefix,
+          counter: 1,
+          financialYear: currentFY
+        });
+        await siVoucher.save();
+        console.log(`✅ Automated SI Voucher created with absolute prefix: ${siPrefix} (Counter: 1)`);
+      }
+
+      siNumber = `${siVoucher.prefix}/${String(siVoucher.counter).padStart(3, "0")}/${currentFY}`;
+
+      // Increment SI Counter
+      siVoucher.counter += 1;
+      await siVoucher.save();
+    }
 
     // Create separate Invoice document
     const itemsToInvoice = invoiceItems || salesOrder.items;
@@ -1672,10 +1697,6 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
       status: "FINALIZED"
     });
     await invoiceDoc.save();
-
-    // Increment SI Counter
-    siVoucher.counter += 1;
-    await siVoucher.save();
 
     // 2. Reduce Stock
     const allItems = [...itemsToInvoice, ...samplesToInvoice];
