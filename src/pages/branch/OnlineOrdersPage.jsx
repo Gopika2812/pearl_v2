@@ -12,7 +12,7 @@ const OnlineOrdersPage = () => {
     const { currentBranch } = useBranch();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState("pending"); // "pending" or "approved"
+    const [activeTab, setActiveTab] = useState("all"); // "all", "pending", or "approved"
     
     // Filters
     const [filterFromDate, setFilterFromDate] = useState("");
@@ -65,9 +65,11 @@ const OnlineOrdersPage = () => {
 
             if (activeTab === "pending") {
                 setOrders(data || []);
+            } else if (activeTab === "all") {
+                setOrders(data || []);
             } else {
-                // Filter approved online orders (isOnlineOrder === true)
-                const approvedOnline = (data || []).filter(o => o.isOnlineOrder === true);
+                // Filter approved online orders (status !== ONLINE_PENDING)
+                const approvedOnline = (data || []).filter(o => o.status !== "ONLINE_PENDING");
                 setOrders(approvedOnline);
             }
         } catch (err) {
@@ -163,6 +165,19 @@ const OnlineOrdersPage = () => {
 
                     {/* Tabs */}
                     <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl self-start md:self-auto">
+                        <button
+                            onClick={() => {
+                                setActiveTab("all");
+                                setOrders([]);
+                            }}
+                            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                                activeTab === "all"
+                                ? "bg-white text-indigo-600 shadow-sm"
+                                : "text-slate-500 hover:text-slate-800"
+                            }`}
+                        >
+                            All Orders
+                        </button>
                         <button
                             onClick={() => {
                                 setActiveTab("pending");
@@ -342,7 +357,7 @@ const OnlineOrdersPage = () => {
 
                                         {/* Status & Actions Column */}
                                         <div className="flex items-center gap-4 self-end lg:self-auto border-t lg:border-t-0 pt-4 lg:pt-0" onClick={e => e.stopPropagation()}>
-                                            {activeTab === "pending" ? (
+                                            {order.status === "ONLINE_PENDING" ? (
                                                 <button
                                                     onClick={() => handleApprove(order._id)}
                                                     className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/10 active:scale-95"

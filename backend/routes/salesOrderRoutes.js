@@ -241,6 +241,8 @@ router.get("/", async (req, res) => {
 
     if (status) {
       query.status = status.toUpperCase();
+    } else if (isOnlineOrder === "true") {
+      // Do not restrict status for online order queries to show all statuses (including ONLINE_PENDING)
     } else {
       query.status = { $ne: "ONLINE_PENDING" };
     }
