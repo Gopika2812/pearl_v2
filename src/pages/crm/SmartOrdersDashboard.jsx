@@ -27,7 +27,7 @@ const SmartOrdersDashboard = () => {
     const [isLoading, setIsLoading] = useState(false);
 
     // New states for Customer Table Mode
-    const [activeTab, setActiveTab] = useState("draft"); // "draft" or "customers"
+    const [activeTab, setActiveTab] = useState("customers"); // "draft" or "customers"
     const [customersList, setCustomersList] = useState([]);
     const [customersLoading, setCustomersLoading] = useState(false);
     const [customerSearchQuery, setCustomerSearchQuery] = useState("");
@@ -321,16 +321,6 @@ const SmartOrdersDashboard = () => {
                     {/* Tab Navigation */}
                     <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl self-start lg:self-auto">
                         <button
-                            onClick={() => setActiveTab("draft")}
-                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                                activeTab === "draft"
-                                ? "bg-white text-indigo-600 shadow-sm"
-                                : "text-slate-500 hover:text-slate-800"
-                            }`}
-                        >
-                            <FaShoppingCart /> Draft Mode
-                        </button>
-                        <button
                             onClick={() => setActiveTab("customers")}
                             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
                                 activeTab === "customers"
@@ -339,6 +329,16 @@ const SmartOrdersDashboard = () => {
                             }`}
                         >
                             <FaUsers /> Customers Directory
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("draft")}
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                                activeTab === "draft"
+                                ? "bg-white text-indigo-600 shadow-sm"
+                                : "text-slate-500 hover:text-slate-800"
+                            }`}
+                        >
+                            <FaShoppingCart /> Draft Mode
                         </button>
                     </div>
                 </div>

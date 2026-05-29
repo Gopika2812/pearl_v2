@@ -317,7 +317,31 @@ export const confirmPublicOrder = async (req, res) => {
     if (!voucher) return res.status(500).json({ message: "No sales voucher configured for this branch" });
 
     const currentFY = getFinancialYear();
-    const invoiceId = `${voucher.prefix}/${String(voucher.counter).padStart(3, "0")}/${currentFY}`;
+    
+    // 🔁 Reset counter if FY changed
+    if (voucher.financialYear !== currentFY) {
+        voucher.counter = 1;
+        voucher.financialYear = currentFY;
+    }
+
+    // 🛡️ SYNC COUNTER WITH DATABASE (Collision Protection)
+    const existingOrders = await SalesOrder.find({
+        branchId: session.branchId,
+        invoiceId: new RegExp(`^${voucher.prefix}/`),
+        financialYear: currentFY
+    }).select('invoiceId').lean();
+
+    let highestNumInDB = 0;
+    existingOrders.forEach(order => {
+        const parts = order.invoiceId.split('/');
+        if (parts.length >= 2) {
+            const num = parseInt(parts[1]);
+            if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+        }
+    });
+
+    const nextNum = Math.max(voucher.counter, highestNumInDB + 1);
+    const invoiceId = `${voucher.prefix}/${String(nextNum).padStart(3, "0")}/${currentFY}`;
 
     const openingBalance = (customer.debit || 0) - (customer.credit || 0);
     const closingBalance = Math.round(openingBalance + grandTotal);
@@ -353,7 +377,7 @@ export const confirmPublicOrder = async (req, res) => {
     await salesOrder.save();
     
     // Update voucher counter
-    voucher.counter += 1;
+    voucher.counter = nextNum + 1;
     await voucher.save();
 
     // Mark link and session as used

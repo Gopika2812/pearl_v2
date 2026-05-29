@@ -21,7 +21,7 @@ const SharedLinkCustomerPage = () => {
     const [allProducts, setAllProducts] = useState([]);
     const [searchTerm, setSearchTerm] = useState("");
     const [isBrowsing, setIsBrowsing] = useState(false);
-    const [viewMode, setViewMode] = useState("grid"); // "grid" or "table"
+    const [viewMode, setViewMode] = useState("table"); // "grid" or "table"
     const [recommendations, setRecommendations] = useState([]);
 
     useEffect(() => {
@@ -236,16 +236,16 @@ const SharedLinkCustomerPage = () => {
                             {/* Grid / Table Toggle */}
                             <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                                 <button 
-                                    onClick={() => setViewMode("grid")}
-                                    className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === "grid" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-                                >
-                                    Grid
-                                </button>
-                                <button 
                                     onClick={() => setViewMode("table")}
                                     className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === "table" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
                                 >
                                     Table
+                                </button>
+                                <button 
+                                    onClick={() => setViewMode("grid")}
+                                    className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${viewMode === "grid" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                                >
+                                    Grid
                                 </button>
                             </div>
                         </div>

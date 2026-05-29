@@ -18,7 +18,7 @@
     "exceljs": "^4.4.0",
     "html2canvas": "^1.4.1",
     "html5-qrcode": "^2.3.8",
-    "jspdf": "^2.5.2",
+    "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "papaparse": "^5.5.3",
     "puppeteer": "^24.37.5",
@@ -45,8 +45,12 @@
     "globals": "^16.5.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
-    "vite": "^5.4.8"
+    "vite": "^6.4.2"
   },
-  "overrides": {}
+  "overrides": {
+    "dompurify": "^3.3.4",
+    "esbuild": "^0.25.0",
+    "uuid": "^11.1.1"
+  }
 
 }
