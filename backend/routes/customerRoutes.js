@@ -1948,148 +1948,8 @@ router.get("/:id/ledger", async (req, res) => {
       ? moment.tz(endStr, IST).endOf("day").toDate()
       : moment.tz(IST).endOf("day").toDate();
 
-    // Start from the current live balances of BOTH sides if linked
-    const customerBal = (customer.debit || 0) - (customer.credit || 0);
-    const vendorBal = vendor ? (vendor.debit || 0) - (vendor.credit || 0) : 0;
-    const currentBalance = customerBal + vendorBal;
-
-    // Fetch all transactions since startDate for delta calculation
-    const invoicesAfter = await Invoice.find({
-      "customer.customerId": id,
-      branchId: customer.branchId,
-      status: "FINALIZED",
-      $or: [
-        { invoiceDate: { $gte: start } },
-        { invoiceDate: { $exists: false }, createdAt: { $gte: start } }
-      ]
-    }).select("grandTotal");
-
-    const receiptsAfter = await Receipt.find({
-      "customer.customerId": id,
-      branchId: customer.branchId,
-      status: { $in: ["confirmed", "bounced"] },
-      createdAt: { $gte: start }
-    }).select("amount status");
-
-    const cnAfter = await CreditNote.find({
-      "customer.customerId": id,
-      branchId: customer.branchId,
-      status: "Created",
-      $or: [
-        { date: { $gte: start } },
-        { date: { $exists: false }, createdAt: { $gte: start } }
-      ]
-    }).select("grandTotal");
-
-    // 2.3 Fetch Manual Journals
-    const mjAfterBy = await ManualJournal.find({
-      "by.partyType": "DEBTOR",
-      "by.partyId": id,
-      $or: [
-        { journalDate: { $gte: start } },
-        { journalDate: { $exists: false }, createdAt: { $gte: start } }
-      ]
-    }).select("amount");
-
-    const mjAfterTo = await ManualJournal.find({
-      "to.partyType": "DEBTOR",
-      "to.partyId": id,
-      $or: [
-        { journalDate: { $gte: start } },
-        { journalDate: { $exists: false }, createdAt: { $gte: start } }
-      ]
-    }).select("amount");
-
-    // 2.4 Fetch Vendor-side movements since start (if linked)
-    let vendorDebitsAfter = 0;
-    let vendorCreditsAfter = 0;
-
-    if (vendor) {
-      const vid = vendor._id;
-      const vInvoicesAfter = await mongoose.model("PurchaseInvoice").find({
-        branchId: customer.branchId,
-        $and: [
-          {
-            $or: [
-              { "vendor.vendorId": vid },
-              { vendorId: vid },
-              { vendor: vendor.name }
-            ]
-          },
-          {
-            $or: [
-              { invoiceDate: { $gte: start } },
-              { invoiceDate: { $exists: false }, createdAt: { $gte: start } }
-            ]
-          }
-        ]
-      }).select("grandTotal");
-
-      const vPaymentsAfter = await mongoose.model("Payment").find({
-        branchId: customer.branchId,
-        status: { $ne: "cancelled" },
-        createdAt: { $gte: start },
-        $or: [
-          { "vendor.vendorId": vid },
-          { "vendor.name": vendor.name }
-        ]
-      }).select("amount");
-
-      const vDebitNotesAfter = await mongoose.model("DebitNote").find({
-        branchId: customer.branchId,
-        status: "Created",
-        createdAt: { $gte: start },
-        $or: [
-          { "vendor.vendorId": vid },
-          { "vendor.name": vendor.name }
-        ]
-      }).select("grandTotal");
-
-      const vMjAfterBy = await ManualJournal.find({
-        "by.partyType": "VENDOR",
-        "by.partyId": vid,
-        $or: [
-          { journalDate: { $gte: start } },
-          { journalDate: { $exists: false }, createdAt: { $gte: start } }
-        ]
-      }).select("amount");
-
-      const vMjAfterTo = await ManualJournal.find({
-        "to.partyType": "VENDOR",
-        "to.partyId": vid,
-        $or: [
-          { journalDate: { $gte: start } },
-          { journalDate: { $exists: false }, createdAt: { $gte: start } }
-        ]
-      }).select("amount");
-
-      vendorCreditsAfter = vInvoicesAfter.reduce((sum, i) => sum + (i.grandTotal || 0), 0) +
-                           vMjAfterTo.reduce((sum, mj) => sum + (mj.amount || 0), 0);
-      
-      vendorDebitsAfter = vPaymentsAfter.reduce((sum, p) => sum + (p.amount || 0), 0) +
-                          vDebitNotesAfter.reduce((sum, dn) => sum + (dn.grandTotal || 0), 0) +
-                          vMjAfterBy.reduce((sum, mj) => sum + (mj.amount || 0), 0);
-    }
-
-    const totalDebitsAfter = invoicesAfter.reduce((sum, i) => sum + (i.grandTotal || 0), 0) +
-                            receiptsAfter.filter(r => r.status === "bounced").reduce((sum, r) => sum + (r.amount || 0), 0) +
-                            mjAfterBy.reduce((sum, mj) => sum + (mj.amount || 0), 0) +
-                            vendorDebitsAfter;
-    
-    const totalCreditsAfter = receiptsAfter.filter(r => r.status === "confirmed").reduce((sum, r) => sum + (r.amount || 0), 0) + 
-                             cnAfter.reduce((sum, cn) => sum + (cn.grandTotal || 0), 0) +
-                             mjAfterTo.reduce((sum, mj) => sum + (mj.amount || 0), 0) +
-                             vendorCreditsAfter;
-
-    let openingBalance = currentBalance - totalDebitsAfter + totalCreditsAfter;
-
-    // 🔒 STRICTOR RULE: If querying from the start of the financial year (April 1st, 2026) or earlier,
-    // the opening balance is strictly bound to the imported/static opening balance field in the database.
-    // This prevents subsequent backdated entries or calculations from altering the historical 31st March balance.
     const financialYearStart = moment.tz("2026-04-01", "Asia/Kolkata").startOf("day").toDate();
-    if (start <= financialYearStart) {
-      openingBalance = customer.openingBalance || 0;
-    }
+    const effectiveStart = start < financialYearStart ? start : financialYearStart;
 
     // 3. Fetch Transactions for the requested range (STRICTLY BRANCH FILTERED)
     const invoicesInRange = await Invoice.find({
@@ -2097,8 +1957,8 @@ router.get("/:id/ledger", async (req, res) => {
       branchId: customer.branchId,
       status: "FINALIZED",
       $or: [
-        { invoiceDate: { $gte: start, $lte: end } },
-        { invoiceDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+        { invoiceDate: { $gte: effectiveStart, $lte: end } },
+        { invoiceDate: { $exists: false }, createdAt: { $gte: effectiveStart, $lte: end } }
       ]
     }).select("grandTotal invoiceDate invoiceNumber salesOrderId status generatedBy deliveryPerson branchId createdAt")
       .populate("branchId", "name code")
@@ -2112,7 +1972,7 @@ router.get("/:id/ledger", async (req, res) => {
       "customer.customerId": id,
       branchId: customer.branchId,
       status: { $in: ["confirmed", "bounced", "cancelled"] },
-      createdAt: { $gte: start, $lte: end }
+      createdAt: { $gte: effectiveStart, $lte: end }
     }).select("amount createdAt receiptId paymentMethod originalInvoiceId relatedOrders originalSalesOrderId status generatedBy cancelledBy cancelReason branchId")
       .populate("branchId", "name code")
       .populate("generatedBy", "name")
@@ -2125,8 +1985,8 @@ router.get("/:id/ledger", async (req, res) => {
       branchId: customer.branchId,
       status: "Created",
       $or: [
-        { date: { $gte: start, $lte: end } },
-        { date: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+        { date: { $gte: effectiveStart, $lte: end } },
+        { date: { $exists: false }, createdAt: { $gte: effectiveStart, $lte: end } }
       ]
     }).select("grandTotal date creditNoteId reasonForReturn originalSalesOrderId branchId")
       .populate("branchId", "name code");
@@ -2135,8 +1995,8 @@ router.get("/:id/ledger", async (req, res) => {
         "by.partyType": "DEBTOR",
         "by.partyId": id,
         $or: [
-          { journalDate: { $gte: start, $lte: end } },
-          { journalDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+          { journalDate: { $gte: effectiveStart, $lte: end } },
+          { journalDate: { $exists: false }, createdAt: { $gte: effectiveStart, $lte: end } }
         ]
     }).select("amount journalDate journalId narration userName paymentMode");
 
@@ -2144,8 +2004,8 @@ router.get("/:id/ledger", async (req, res) => {
         "to.partyType": "DEBTOR",
         "to.partyId": id,
         $or: [
-          { journalDate: { $gte: start, $lte: end } },
-          { journalDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+          { journalDate: { $gte: effectiveStart, $lte: end } },
+          { journalDate: { $exists: false }, createdAt: { $gte: effectiveStart, $lte: end } }
         ]
     }).select("amount journalDate journalId narration userName paymentMode");
 
@@ -2170,8 +2030,8 @@ router.get("/:id/ledger", async (req, res) => {
           },
           {
             $or: [
-              { invoiceDate: { $gte: start, $lte: end } },
-              { invoiceDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+              { invoiceDate: { $gte: effectiveStart, $lte: end } },
+              { invoiceDate: { $exists: false }, createdAt: { $gte: effectiveStart, $lte: end } }
             ]
           }
         ]
@@ -2180,7 +2040,7 @@ router.get("/:id/ledger", async (req, res) => {
       vendorPaymentsInRange = await mongoose.model("Payment").find({
         branchId: customer.branchId,
         status: { $ne: "cancelled" },
-        createdAt: { $gte: start, $lte: end },
+        createdAt: { $gte: effectiveStart, $lte: end },
         $or: [
           { "vendor.vendorId": vid },
           { "vendor.name": vendor.name }
@@ -2190,7 +2050,7 @@ router.get("/:id/ledger", async (req, res) => {
       vendorDNInRange = await mongoose.model("DebitNote").find({
         branchId: customer.branchId,
         status: "Created",
-        createdAt: { $gte: start, $lte: end },
+        createdAt: { $gte: effectiveStart, $lte: end },
         $or: [
           { "vendor.vendorId": vid },
           { "vendor.name": vendor.name }
@@ -2201,8 +2061,8 @@ router.get("/:id/ledger", async (req, res) => {
         "by.partyType": "VENDOR",
         "by.partyId": vid,
         $or: [
-          { journalDate: { $gte: start, $lte: end } },
-          { journalDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+          { journalDate: { $gte: effectiveStart, $lte: end } },
+          { journalDate: { $exists: false }, createdAt: { $gte: effectiveStart, $lte: end } }
         ]
       }).select("amount journalDate journalId narration userName paymentMode");
 
@@ -2210,8 +2070,8 @@ router.get("/:id/ledger", async (req, res) => {
         "to.partyType": "VENDOR",
         "to.partyId": vid,
         $or: [
-          { journalDate: { $gte: start, $lte: end } },
-          { journalDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+          { journalDate: { $gte: effectiveStart, $lte: end } },
+          { journalDate: { $exists: false }, createdAt: { $gte: effectiveStart, $lte: end } }
         ]
       }).select("amount journalDate journalId narration userName paymentMode");
     }
@@ -2234,7 +2094,7 @@ router.get("/:id/ledger", async (req, res) => {
           deliveryMan: dMan,
           branchName: s.branchId?.name || "-",
           branchCode: s.branchId?.code || "-",
-          salesOrderId: s.salesOrderId?._id || s.salesOrderId // 👈 Added for link functionality
+          salesOrderId: s.salesOrderId?._id || s.salesOrderId
         };
       }),
       ...receiptsInRange.map(r => {
@@ -2344,22 +2204,32 @@ router.get("/:id/ledger", async (req, res) => {
       }))
     ].sort((a, b) => new Date(a.date) - new Date(b.date));
 
-
-
-    // Calculate running balance for the range
-    let currentRunning = openingBalance;
+    // Calculate running balance starting from the static opening balance
+    let currentRunning = customer.openingBalance || 0;
     const txnsWithBalance = txns.map(t => {
       currentRunning = currentRunning + t.debit - t.credit;
       return { ...t, balance: currentRunning };
     });
 
+    // Separate transactions into before the filtered start date and in the display range
+    const txnsBefore = txnsWithBalance.filter(t => new Date(t.date) < start);
+    const txnsDisplay = txnsWithBalance.filter(t => new Date(t.date) >= start && new Date(t.date) <= end);
+
+    const displayOpeningBalance = txnsBefore.length > 0
+      ? txnsBefore[txnsBefore.length - 1].balance
+      : (customer.openingBalance || 0);
+
+    const displayClosingBalance = txnsDisplay.length > 0
+      ? txnsDisplay[txnsDisplay.length - 1].balance
+      : displayOpeningBalance;
+
     res.json({
       success: true,
       data: {
         customerName: customer.name,
-        openingBalance,
-        closingBalance: currentRunning,
-        transactions: txnsWithBalance
+        openingBalance: displayOpeningBalance,
+        closingBalance: displayClosingBalance,
+        transactions: txnsDisplay
       }
     });
   } catch (error) {

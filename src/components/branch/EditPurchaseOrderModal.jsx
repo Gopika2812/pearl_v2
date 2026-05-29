@@ -101,7 +101,6 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
   // Calculate grand total 
   const calculateTotals = () => {
     let subtotal = 0;
-    let totalTax = 0;
     let calculatedDiscount = 0;
 
     items.forEach(item => {
@@ -110,11 +109,8 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
       const sub = qty * price;
       const dPercent = parseFloat(item.discountPercent) || 0;
       const dAmount = sub * (dPercent / 100);
-      const discounted = sub - dAmount;
-      const tax = discounted * ((parseFloat(item.gst) || 0) / 100);
 
       subtotal += sub;
-      totalTax += tax;
       calculatedDiscount += dAmount;
     });
 
@@ -127,6 +123,23 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
         totalDiscount = val;
       }
     }
+
+    const discountRatio = subtotal > 0 ? (totalDiscount / subtotal) : 0;
+    const isCustomDiscountApplied = customDiscount !== "";
+
+    let totalTax = 0;
+    items.forEach(item => {
+      const qty = parseFloat(item.qty) || 0;
+      const price = parseFloat(item.purchasePrice) || 0;
+      const rowPrice = qty * price;
+      const dPercent = parseFloat(item.discountPercent) || 0;
+      const dAmount = rowPrice * (dPercent / 100);
+
+      const netTaxable = isCustomDiscountApplied ? rowPrice * (1 - discountRatio) : (rowPrice - dAmount);
+      const gstRate = parseFloat(item.gst) || 0;
+      const tax = netTaxable * (gstRate / 100);
+      totalTax += tax;
+    });
 
     const extra = order?.extraExpenseAmount || 0;
     const grandTotal = subtotal - totalDiscount + totalTax + extra;

@@ -17,7 +17,7 @@ async function run() {
   await mongoose.connect(MONGO_URI);
   console.log("Connected to MongoDB");
 
-  const customerId = "69cc827090a268b9a0b7bf71";
+  const customerId = "69cc826e90a268b9a0b7bdff";
 
   // Check customer details
   const cust = await Customer.findById(customerId).lean();
