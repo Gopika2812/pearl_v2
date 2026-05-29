@@ -284,19 +284,21 @@ router.get("/history", cacheData(120), async (req, res) => {
       default: sortObj.date = -1;
     }
 
-    aggregation.push(
-      { $sort: sortObj },
-      {
-        $facet: {
-          metadata: [{ $count: "total" }],
-          data: [{ $skip: skip }, { $limit: limitNum }]
-        }
-      }
-    );
+    // Execute split queries to avoid MongoDB $facet sort memory limitations
+    const countPipeline = [
+      ...aggregation,
+      { $count: "total" }
+    ];
+    const countResult = await Invoice.aggregate(countPipeline).allowDiskUse(true);
+    const total = countResult[0]?.total || 0;
 
-    const result = await Invoice.aggregate(aggregation);
-    const history = result[0].data;
-    const total = result[0].metadata[0]?.total || 0;
+    const dataPipeline = [
+      ...aggregation,
+      { $sort: sortObj },
+      { $skip: skip },
+      { $limit: limitNum }
+    ];
+    const history = await Invoice.aggregate(dataPipeline).allowDiskUse(true);
 
     res.json({
       history,
