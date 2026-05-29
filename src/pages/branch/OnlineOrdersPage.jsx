@@ -316,66 +316,63 @@ const OnlineOrdersPage = () => {
                             const isExpanded = !!expandedOrders[order._id];
                             return (
                                 <div key={order._id} className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden hover:border-indigo-100 transition-colors">
-                                    
-                                    {/* Main Row Summary */}
-                                    <div className="p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6 cursor-pointer" onClick={() => toggleExpand(order._id)}>
-                                        <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-                                            
-                                            {/* ID & Date */}
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><FaFileInvoice size={14} /></span>
-                                                    <div>
-                                                        <p className="text-xs font-black text-slate-800 uppercase tracking-wider">{order.invoiceId}</p>
-                                                        <p className="text-[10px] text-slate-400 font-bold mt-0.5">
-                                                            {new Date(order.orderDate || order.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                                                        </p>
-                                                    </div>
+                                                               {/* Main Row Summary */}
+                                    <div className="p-6 flex flex-col md:grid md:grid-cols-12 gap-4 items-center cursor-pointer" onClick={() => toggleExpand(order._id)}>
+                                        
+                                        {/* ID & Date (2 cols) */}
+                                        <div className="md:col-span-2 w-full">
+                                            <div className="flex items-center gap-2">
+                                                <span className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><FaFileInvoice size={14} /></span>
+                                                <div>
+                                                    <p className="text-xs font-black text-slate-800 uppercase tracking-wider">{order.invoiceId}</p>
+                                                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                                                        {new Date(order.orderDate || order.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                    </p>
                                                 </div>
-                                            </div>
-
-                                            {/* Customer Details */}
-                                            <div className="md:col-span-2">
-                                                <div className="flex items-start gap-3">
-                                                    <span className="p-2 bg-slate-50 text-slate-500 rounded-lg shrink-0 mt-0.5"><FaUser size={14} /></span>
-                                                    <div>
-                                                        <p className="text-sm font-black text-slate-800 uppercase">{order.customer?.name}</p>
-                                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[10px] font-semibold text-slate-400">
-                                                            <span className="flex items-center gap-1"><FaPhoneAlt size={9} /> {order.customer?.whatsapp || "No Contact"}</span>
-                                                            <span className="flex items-center gap-1"><FaMapMarkerAlt size={9} /> {order.customer?.district ? `${order.customer.district}, ` : ""}{order.customer?.state || "N/A"}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Grand Total */}
-                                            <div className="text-left md:text-right">
-                                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Order Total</p>
-                                                <p className="text-lg font-black text-slate-800 mt-0.5">₹{(order.grandTotal || 0).toLocaleString()}</p>
                                             </div>
                                         </div>
 
-                                        {/* Status & Actions Column */}
-                                        <div className="flex items-center gap-4 self-end lg:self-auto border-t lg:border-t-0 pt-4 lg:pt-0" onClick={e => e.stopPropagation()}>
+                                        {/* Customer Details (5 cols) */}
+                                        <div className="md:col-span-5 w-full">
+                                            <div className="flex items-start gap-3">
+                                                <span className="p-2 bg-slate-50 text-slate-500 rounded-lg shrink-0 mt-0.5"><FaUser size={14} /></span>
+                                                <div>
+                                                    <p className="text-sm font-black text-slate-800 uppercase">{order.customer?.name}</p>
+                                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[10px] font-semibold text-slate-400">
+                                                        <span className="flex items-center gap-1"><FaPhoneAlt size={9} /> {order.customer?.whatsapp || "No Contact"}</span>
+                                                        <span className="flex items-center gap-1"><FaMapMarkerAlt size={9} /> {order.customer?.district ? `${order.customer.district}, ` : ""}{order.customer?.state || "N/A"}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Grand Total (2 cols) */}
+                                        <div className="md:col-span-2 w-full text-left md:text-right">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Order Total</p>
+                                            <p className="text-lg font-black text-slate-800 mt-0.5">₹{(order.grandTotal || 0).toLocaleString()}</p>
+                                        </div>
+
+                                        {/* Status & Actions Column (3 cols) */}
+                                        <div className="md:col-span-3 w-full flex items-center justify-end gap-3 border-t md:border-t-0 pt-4 md:pt-0" onClick={e => e.stopPropagation()}>
                                             {order.status === "ONLINE_PENDING" ? (
                                                 <button
                                                     onClick={() => handleApprove(order._id)}
-                                                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/10 active:scale-95"
+                                                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/10 active:scale-95 whitespace-nowrap"
                                                 >
                                                     <FaCheckCircle /> Approve as SO
                                                 </button>
                                             ) : (
-                                                <div className="flex items-center gap-3">
-                                                    <span className="px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="px-4 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl text-xs font-black uppercase tracking-wider whitespace-nowrap">
                                                         Approved as SO
                                                     </span>
                                                     {!order.invoiceGenerated && order.status !== "INVOICED" && (
                                                         <button
                                                             onClick={() => handleRevert(order._id)}
-                                                            className="p-2.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xl transition-all"
+                                                            className="p-2.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xl transition-all flex items-center justify-center"
                                                             title="Revert back to pending online approval"
                                                         >
-                                                            <FaUndo size={12} />
+                                                            <FaUndo size={10} />
                                                         </button>
                                                     )}
                                                 </div>
@@ -383,7 +380,7 @@ const OnlineOrdersPage = () => {
 
                                             <button 
                                                 onClick={() => toggleExpand(order._id)}
-                                                className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
+                                                className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-slate-600 transition-colors shrink-0"
                                             >
                                                 {isExpanded ? <FaChevronUp size={14} /> : <FaChevronDown size={14} />}
                                             </button>
