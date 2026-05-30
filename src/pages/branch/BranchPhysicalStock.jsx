@@ -114,6 +114,8 @@ const MultiUserSelect = ({ users, selected, onChange, disabled }) => {
   );
 };
 
+const generateUniqueRowId = () => `row_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
 export default function BranchPhysicalStock() {
   const { currentBranch, user } = useBranch();
 
@@ -395,7 +397,7 @@ export default function BranchPhysicalStock() {
         } catch {}
 
         const newRow = {
-          rowId: Date.now() + Math.random(),
+          rowId: generateUniqueRowId(),
           productId: product._id,
           productName: product.name,
           productGroupId: product.productGroup?._id || product.productGroup,
@@ -419,7 +421,7 @@ export default function BranchPhysicalStock() {
     } catch {
       // Fallback to current available qty if fetch fails
       const newRow = {
-        rowId: Date.now() + Math.random(),
+        rowId: generateUniqueRowId(),
         productId: product._id,
         productName: product.name,
         productGroupId: product.productGroup?._id || product.productGroup,
@@ -509,7 +511,7 @@ export default function BranchPhysicalStock() {
             const calculatedSystemQty = journalMap.has(pid) ? journalMap.get(pid) : (p.availableQty || 0);
             
             uniqueRowsMap.set(pid, {
-              rowId: Math.random() + Date.now(),
+              rowId: generateUniqueRowId(),
               productId: pid,
               productName: p.name,
               productGroupId: p.productGroup?._id || p.productGroup,
