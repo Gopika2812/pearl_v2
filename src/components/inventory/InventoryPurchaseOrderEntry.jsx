@@ -546,7 +546,7 @@ const InventoryPurchaseOrderEntry = ({
     0
   );
   
-  const exactGrandTotal = baseTaxable + totalTax + extraExpenseAmount;
+  const exactGrandTotal = baseTaxable + totalTax;
   const grandTotal = enableRoundOff ? Math.round(exactGrandTotal) : exactGrandTotal;
   const roundOff = enableRoundOff ? (Math.round((grandTotal - exactGrandTotal) * 100) / 100) : 0;
 
@@ -1355,6 +1355,11 @@ const InventoryPurchaseOrderEntry = ({
                   )}
                 </div>
               )}
+
+              <div className="flex justify-between items-center text-white/95 border-t border-white/20 pt-2 mt-1">
+                <span className="text-sm font-semibold uppercase tracking-wider">Discounted Value</span>
+                <span className="font-black text-lg">₹{baseTaxable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
 
               <div className="h-px bg-white/20 my-2"></div>
 

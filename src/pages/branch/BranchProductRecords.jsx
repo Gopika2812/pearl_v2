@@ -45,7 +45,7 @@ const BranchProductRecords = () => {
 
   const columnsConfig = [
     { id: "date", label: "Date", getValue: r => new Date(r.date).toLocaleDateString() },
-    { id: "time", label: "Time", getValue: r => new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
+    { id: "time", label: "Time", getValue: r => r.createdAt ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
     { id: "invoiceNo", label: "Invoice No", getValue: r => r.invoiceNumber },
     { id: "voucher", label: "Voucher", getValue: r => r.voucherType, permission: "voucher" },
     { id: "customer", label: "Customer", getValue: r => r.customerName || "Walk-in" },
@@ -589,7 +589,7 @@ const BranchProductRecords = () => {
                                   <td className="px-4 py-3">
                                     <div className="font-bold text-gray-700 text-xs">{r.voucherType}</div>
                                     <div className="text-[9px] text-gray-500 font-bold">
-                                      {new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      {r.createdAt ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </div>
                                     <div className="text-[9px] text-gray-400 font-bold">{r.invoiceNumber} | {new Date(r.date).toLocaleDateString()}</div>
                                   </td>

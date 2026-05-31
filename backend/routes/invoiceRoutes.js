@@ -218,6 +218,7 @@ router.get("/history", cacheData(120), async (req, res) => {
       {
         $project: {
           date: "$invoiceDate",
+          createdAt: 1,
           invoiceNumber: 1,
           voucherType: 1,
           customerName: "$customer.name",

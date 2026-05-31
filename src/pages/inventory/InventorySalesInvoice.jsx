@@ -427,7 +427,8 @@ export default function InventorySalesInvoice() {
                           className="flex-1 bg-blue-500 text-white py-2 rounded-lg font-bold hover:bg-blue-600 transition flex items-center justify-center gap-2"
                         >
                           <FaFileInvoice /> Generate
-                        </button>{currentUser.role === 'SUPER_ADMIN' && (
+                        </button>
+{currentUser.role === 'SUPER_ADMIN' && (
         <button
           onClick={async () => {
             const newDate = prompt('Enter new date (YYYY-MM-DD)', new Date(order.createdAt).toISOString().split('T')[0]);
@@ -450,7 +451,7 @@ export default function InventorySalesInvoice() {
         >
           Change Date
         </button>
-      )}                     })()
+      )}                    
                       <button
                         className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
                         title="View details"

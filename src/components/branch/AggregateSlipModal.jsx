@@ -91,8 +91,8 @@ const AggregateSlipModal = ({ isOpen, onClose, orders, branch }) => {
       ]),
       startY: 62,
       theme: 'grid',
-      headStyles: { fillColor: [49, 155, 171], fontSize: 9 },
-      bodyStyles: { fontSize: 8 },
+      headStyles: { fillColor: [49, 155, 171], fontSize: 11, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 10, fontStyle: 'bold', textColor: [0, 0, 0] },
     });
 
     // 2. CUSTOMER SUMMARY TABLE
@@ -110,8 +110,8 @@ const AggregateSlipModal = ({ isOpen, onClose, orders, branch }) => {
       ]),
       startY: finalY + 4,
       theme: 'grid',
-      headStyles: { fillColor: [79, 70, 229], fontSize: 9 }, // Indigo-600 ish
-      bodyStyles: { fontSize: 8 },
+      headStyles: { fillColor: [79, 70, 229], fontSize: 11, fontStyle: 'bold' }, // Indigo-600 ish
+      bodyStyles: { fontSize: 10, fontStyle: 'bold', textColor: [0, 0, 0] },
     });
 
     doc.save(`Loading-Slip-${new Date().toLocaleDateString("en-IN")}.pdf`);
@@ -149,7 +149,7 @@ const AggregateSlipModal = ({ isOpen, onClose, orders, branch }) => {
             </button>
           </div>
         </div>
-
+ 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50 space-y-6">
           
@@ -186,22 +186,22 @@ const AggregateSlipModal = ({ isOpen, onClose, orders, branch }) => {
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="bg-teal-50/50 border-b border-gray-100 text-teal-800">
                     <tr>
-                      <th className="px-6 py-3 font-bold uppercase tracking-wider text-[10px]">S.No</th>
-                      <th className="px-6 py-3 font-bold uppercase tracking-wider text-[10px]">Product Name</th>
-                      <th className="px-6 py-3 font-bold uppercase tracking-wider text-[10px] text-right">Qty Required</th>
+                      <th className="px-6 py-3 font-black uppercase tracking-wider text-xs">S.No</th>
+                      <th className="px-6 py-3 font-black uppercase tracking-wider text-xs">Product Name</th>
+                      <th className="px-6 py-3 font-black uppercase tracking-wider text-xs text-right">Qty Required</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {aggregatedItems.map((item, index) => (
                       <tr key={index} className={`hover:bg-gray-50 transition-colors ${item.isSample ? "bg-yellow-50/30" : ""}`}>
-                        <td className="px-6 py-3 font-medium text-gray-400 text-xs">{index + 1}</td>
+                        <td className="px-6 py-3 font-bold text-gray-800 text-sm">{index + 1}</td>
                         <td className="px-6 py-3">
-                          <span className={`font-bold ${item.isSample ? "text-yellow-700" : "text-gray-800"}`}>
+                          <span className={`font-black text-sm ${item.isSample ? "text-yellow-700" : "text-gray-900"}`}>
                             {item.name}
                           </span>
                         </td>
                         <td className="px-6 py-3 text-right">
-                          <span className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 font-black text-xs border border-indigo-100">
+                          <span className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 font-black text-sm border border-indigo-100">
                             {item.qty} {item.unit}
                             {item.altQty > 0 && <span className="ml-1 opacity-70">({item.altQty} {item.altUnit})</span>}
                           </span>
@@ -223,22 +223,22 @@ const AggregateSlipModal = ({ isOpen, onClose, orders, branch }) => {
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="bg-indigo-50/50 border-b border-gray-100 text-indigo-800">
                     <tr>
-                      <th className="px-6 py-3 font-bold uppercase tracking-wider text-[10px]">S.No</th>
-                      <th className="px-6 py-3 font-bold uppercase tracking-wider text-[10px]">Customer Name</th>
-                      <th className="px-6 py-3 font-bold uppercase tracking-wider text-[10px]">Order ID(s) / Invoice(s)</th>
+                      <th className="px-6 py-3 font-black uppercase tracking-wider text-xs">S.No</th>
+                      <th className="px-6 py-3 font-black uppercase tracking-wider text-xs">Customer Name</th>
+                      <th className="px-6 py-3 font-black uppercase tracking-wider text-xs">Order ID(s) / Invoice(s)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {customerSummary.map((cust, index) => (
                       <tr key={index} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-3 font-medium text-gray-400 text-xs">{index + 1}</td>
+                        <td className="px-6 py-3 font-bold text-gray-800 text-sm">{index + 1}</td>
                         <td className="px-6 py-3">
-                          <span className="font-black text-gray-700 uppercase text-xs">{cust.name}</span>
+                          <span className="font-black text-gray-900 uppercase text-sm">{cust.name}</span>
                         </td>
                         <td className="px-6 py-3">
                           <div className="flex flex-wrap gap-1">
                             {cust.orders.map(id => (
-                              <span key={id} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-bold border border-gray-200">
+                              <span key={id} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-black border border-gray-200">
                                 {id}
                               </span>
                             ))}

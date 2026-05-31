@@ -114,6 +114,8 @@ const MultiUserSelect = ({ users, selected, onChange, disabled }) => {
   );
 };
 
+const generateUniqueRowId = () => `row_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
 export default function BranchPhysicalStock() {
   const { currentBranch, user } = useBranch();
 
@@ -395,7 +397,7 @@ export default function BranchPhysicalStock() {
         } catch {}
 
         const newRow = {
-          rowId: Date.now() + Math.random(),
+          rowId: generateUniqueRowId(),
           productId: product._id,
           productName: product.name,
           productGroupId: product.productGroup?._id || product.productGroup,
@@ -419,7 +421,7 @@ export default function BranchPhysicalStock() {
     } catch {
       // Fallback to current available qty if fetch fails
       const newRow = {
-        rowId: Date.now() + Math.random(),
+        rowId: generateUniqueRowId(),
         productId: product._id,
         productName: product.name,
         productGroupId: product.productGroup?._id || product.productGroup,
@@ -509,7 +511,7 @@ export default function BranchPhysicalStock() {
             const calculatedSystemQty = journalMap.has(pid) ? journalMap.get(pid) : (p.availableQty || 0);
             
             uniqueRowsMap.set(pid, {
-              rowId: Math.random() + Date.now(),
+              rowId: generateUniqueRowId(),
               productId: pid,
               productName: p.name,
               productGroupId: p.productGroup?._id || p.productGroup,
@@ -559,13 +561,6 @@ export default function BranchPhysicalStock() {
 
     if (row.physicalQty === "" || row.physicalQty === null) return toast.warning("Physical Qty is mandatory");
     
-    if (!skipMandatory) {
-      if (!row.mrp || Number(row.mrp) <= 0) return toast.warning("Valid MRP is mandatory");
-      if (!row.batch || row.batch.trim() === "") return toast.warning("Batch Number is mandatory");
-      if (!row.expiryDate) return toast.warning("Expiry Date is mandatory");
-    }
-    
-    
     setRows(prev => prev.map(r => r.rowId === row.rowId ? { ...r, saving: true } : r));
     try {
       const isNoAction = row.physicalQty === "NO_ACTION";
@@ -585,8 +580,8 @@ export default function BranchPhysicalStock() {
         expiredQty: Number(row.expiredQty) || 0,
         physicalQty: isNoAction ? Number(row.systemQty) : (Number(row.physicalQty) || 0),
         mrp: Number(row.mrp) || 0,
-        batch: skipMandatory ? (isNoAction ? "NO_ACTION" : "ZERO_STOCK") : (row.batch || ""),
-        expiryDate: skipMandatory ? undefined : (row.expiryDate || undefined),
+        batch: row.batch ? row.batch.trim() : (skipMandatory ? (isNoAction ? "NO_ACTION" : "ZERO_STOCK") : ""),
+        expiryDate: row.expiryDate ? row.expiryDate : undefined,
         noAction: isNoAction,
         checkedBy: row.checkedBy,
         userId: user?._id || user?.id,

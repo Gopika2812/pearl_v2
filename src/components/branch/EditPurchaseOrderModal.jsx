@@ -142,7 +142,7 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
     });
 
     const extra = order?.extraExpenseAmount || 0;
-    const grandTotal = subtotal - totalDiscount + totalTax + extra;
+    const grandTotal = subtotal - totalDiscount + totalTax;
 
     return {
       subtotal: Math.round(subtotal),
@@ -657,6 +657,12 @@ const EditPurchaseOrderModal = ({ order, branchId, onClose, onSave }) => {
                     )}
                   </div>
                 )}
+                
+                <div className="flex justify-between items-center text-xs font-bold text-emerald-600 uppercase border-t border-gray-100 pt-2">
+                    <span>Discounted Value</span>
+                    <span className="text-emerald-800 text-sm font-semibold">₹{(currentTotals.subtotal - currentTotals.totalDiscount).toLocaleString()}</span>
+                </div>
+
                 <div className="flex justify-between items-center text-xs font-bold text-gray-500 uppercase">
                     <span>Tax</span>
                     <span className="text-gray-800 text-sm">₹{currentTotals.totalTax.toLocaleString()}</span>

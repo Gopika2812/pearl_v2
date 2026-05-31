@@ -293,7 +293,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
         return acc + (netTaxable * gst / 100);
       }, 0);
       
-      const finalGrandTotal = Math.round(subtotal - totalDiscount + totalTax + (order.extraExpenseAmount || 0));
+      const finalGrandTotal = Math.round(subtotal - totalDiscount + totalTax);
       const vendorDelta = finalGrandTotal - oldGrandTotal;
 
       // 1. UPDATE STOCK & SYNC PRICES (DELTA CALCULATION)
@@ -428,7 +428,7 @@ router.post('/:id/generate-invoice', auth, async (req, res) => {
       return acc + (netTaxable * gst / 100);
     }, 0);
     
-    const calculatedGrandTotal = Math.round(subtotal - totalDiscount + totalTax + (order.extraExpenseAmount || 0));
+    const calculatedGrandTotal = Math.round(subtotal - totalDiscount + totalTax);
     console.log(`[STABILITY CHECK] Recalculated GrandTotal: ${calculatedGrandTotal} (Sub: ${subtotal}, Tax: ${totalTax}, Disc: ${totalDiscount})`);
 
     let vId = order.vendorId;
@@ -791,7 +791,7 @@ router.put("/:id", auth, async (req, res) => {
     
     if (transportCharge !== undefined) order.transportCharge = Math.round(Number(transportCharge));
     const extra = order.extraExpenseAmount || 0;
-    const calculatedGrandTotal = Math.round(order.subtotal - order.totalDiscount + order.totalTax + extra);
+    const calculatedGrandTotal = Math.round(order.subtotal - order.totalDiscount + order.totalTax);
     order.grandTotal = calculatedGrandTotal;
 
     // Adjust vendor balances if PO is already invoiced
