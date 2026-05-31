@@ -418,6 +418,7 @@ router.get("/", async (req, res) => {
         reorderMode: dynamicRestocking?.reorderMode ?? product.restockingConfig?.reorderMode ?? "HIGH",
         reorderQtyMode: dynamicRestocking?.reorderQtyMode ?? product.restockingConfig?.reorderQtyMode ?? product.restockingConfig?.reorderMode ?? "HIGH",
         thresholdMode: dynamicRestocking?.thresholdMode ?? product.restockingConfig?.thresholdMode ?? product.restockingConfig?.reorderMode ?? "HIGH",
+        showAlert: dynamicRestocking?.showAlert ?? product.restockingConfig?.showAlert ?? false,
       };
 
       return {
@@ -2069,7 +2070,7 @@ router.get("/:productId/selling-qty/:days", async (req, res) => {
 router.put("/:productId/restocking-config", async (req, res) => {
   try {
     const { productId } = req.params;
-    const { salesPeriodDays, threshold, restockingQty, sellingQtyInPeriod, reorderMode, reorderQtyMode, thresholdMode } = req.body;
+    const { salesPeriodDays, threshold, restockingQty, sellingQtyInPeriod, reorderMode, reorderQtyMode, thresholdMode, showAlert } = req.body;
 
     console.log("📥 Backend received:", {
       productId,
@@ -2080,6 +2081,7 @@ router.put("/:productId/restocking-config", async (req, res) => {
       reorderMode,
       reorderQtyMode,
       thresholdMode,
+      showAlert,
     });
 
     if (!mongoose.Types.ObjectId.isValid(productId)) {
@@ -2105,6 +2107,7 @@ router.put("/:productId/restocking-config", async (req, res) => {
       reorderMode: reorderMode || product.restockingConfig?.reorderMode || "HIGH",
       reorderQtyMode: reorderQtyMode || product.restockingConfig?.reorderQtyMode || reorderMode || "HIGH",
       thresholdMode: thresholdMode || product.restockingConfig?.thresholdMode || reorderMode || "HIGH",
+      showAlert: showAlert !== undefined ? showAlert : (product.restockingConfig?.showAlert || false),
     };
 
     console.log("💾 Saving to DB:", product.restockingConfig);

@@ -70,6 +70,7 @@ const productSchema = new mongoose.Schema(
       reorderMode: { type: String, enum: ["HIGH", "LOW"], default: "HIGH" }, // Dynamic comparator mode (HIGH = Math.max, LOW = Math.min)
       reorderQtyMode: { type: String, enum: ["HIGH", "LOW"], default: "HIGH" },
       thresholdMode: { type: String, enum: ["HIGH", "LOW"], default: "HIGH" },
+      showAlert: { type: Boolean, default: false }, // User-selected alert status
     },
     // Unit Conversion Configuration
     unitConversion: {

@@ -59,10 +59,15 @@ router.get("/", async (req, res) => {
     const query = { branchId: branchObjectId };
 
     if (includeLinked !== "true") {
-      const linkedCustomers = await mongoose.model("Customer").find({
-        branchId: branchObjectId,
-        linkedVendorId: { $exists: true, $ne: null }
-      }).select("linkedVendorId").lean();
+      const linkedCustomers = await mongoose.model("Customer").collection.find(
+        {
+          branchId: branchObjectId,
+          linkedVendorId: { $exists: true, $ne: null }
+        },
+        {
+          projection: { linkedVendorId: 1 }
+        }
+      ).toArray();
       const linkedVendorIds = linkedCustomers
         .map(c => c.linkedVendorId)
         .filter(id => id && mongoose.Types.ObjectId.isValid(id));
@@ -241,7 +246,10 @@ router.get("/:id/ledger", async (req, res) => {
     }).select("amount journalDate journalId narration");
 
     const vendorObjectId = new mongoose.Types.ObjectId(id);
-    const linkedCustomers = await mongoose.model("Customer").find({ linkedVendorId: vendorObjectId }).select("_id").lean();
+    const linkedCustomers = await mongoose.model("Customer").collection.find(
+      { linkedVendorId: vendorObjectId },
+      { projection: { _id: 1 } }
+    ).toArray();
     const customerIds = linkedCustomers.map(c => c._id);
     
     const salesInvoicesAfterStart = await mongoose.model("Invoice").find({

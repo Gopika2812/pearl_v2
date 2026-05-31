@@ -422,6 +422,7 @@ export default function BranchRecycling() {
     }
     const pendingPO = await fetchPendingPurchaseOrders();
     setPendingPOMap(pendingPO || {});
+    await fetchAllProductsForGroups(); // Keep allProducts in sync for alerts & group filter counts
   };
 
   // Handle search - reset to page 1
@@ -787,6 +788,101 @@ export default function BranchRecycling() {
       toast.error("Error saving restocking configuration");
     } finally {
       setSavingRestockingConfig(false);
+    }
+  };
+
+  // Toggle Alert for a single product
+  const toggleProductAlert = async (product) => {
+    const productId = product._id;
+    const currentConfig = product.restockingConfig || {};
+    const newShowAlert = !(currentConfig.showAlert || false);
+
+    const payload = {
+      salesPeriodDays: currentConfig.salesPeriodDays !== undefined ? currentConfig.salesPeriodDays : 7,
+      sellingQtyInPeriod: currentConfig.sellingQtyInPeriod || 0,
+      threshold: currentConfig.threshold !== undefined && currentConfig.threshold !== null ? currentConfig.threshold : (product.reorderLevel || 10),
+      restockingQty: currentConfig.restockingQty !== undefined && currentConfig.restockingQty !== null ? currentConfig.restockingQty : (product.reorderQty || 20),
+      reorderMode: currentConfig.reorderQtyMode || currentConfig.reorderMode || "HIGH",
+      reorderQtyMode: currentConfig.reorderQtyMode || currentConfig.reorderMode || "HIGH",
+      thresholdMode: currentConfig.thresholdMode || currentConfig.reorderMode || "HIGH",
+      showAlert: newShowAlert,
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/products/${productId}/restocking-config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error("Failed to toggle alert");
+      const data = await res.json();
+      
+      const updateFn = (prevList) => prevList.map(p => p._id === productId ? { ...p, restockingConfig: data.restockingConfig || payload } : p);
+      setProducts(updateFn);
+      setAllProducts(updateFn);
+      
+      if (newShowAlert) {
+        setAlertDismissed(false); // Reset so it pops up immediately if critical
+      }
+      
+      toast.success(newShowAlert ? `🔔 Alert active for ${product.name}` : `🔕 Alert muted for ${product.name}`);
+    } catch (err) {
+      console.error("Error toggling alert:", err);
+      toast.error("Failed to toggle alert state");
+    }
+  };
+
+  // Bulk toggle alert state for all selected products
+  const applyBulkAlertToggle = async (enableAlert) => {
+    if (selectedProducts.size === 0) return;
+    setSavingBulkConfig(true);
+    try {
+      const selectedIds = Array.from(selectedProducts);
+      const promises = selectedIds.map(async (productId) => {
+        const product = allProducts.find((p) => p._id === productId) || products.find((p) => p._id === productId);
+        const currentConfig = product?.restockingConfig || {};
+
+        const payload = {
+          salesPeriodDays: currentConfig.salesPeriodDays !== undefined ? currentConfig.salesPeriodDays : 7,
+          sellingQtyInPeriod: currentConfig.sellingQtyInPeriod || 0,
+          threshold: currentConfig.threshold !== undefined && currentConfig.threshold !== null ? currentConfig.threshold : (product?.reorderLevel || 10),
+          restockingQty: currentConfig.restockingQty !== undefined && currentConfig.restockingQty !== null ? currentConfig.restockingQty : (product?.reorderQty || 20),
+          reorderMode: currentConfig.reorderQtyMode || currentConfig.reorderMode || "HIGH",
+          reorderQtyMode: currentConfig.reorderQtyMode || currentConfig.reorderMode || "HIGH",
+          thresholdMode: currentConfig.thresholdMode || currentConfig.reorderMode || "HIGH",
+          showAlert: enableAlert,
+        };
+
+        const saveRes = await fetch(`${API_BASE}/products/${productId}/restocking-config`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!saveRes.ok) throw new Error(`Failed to save config for product ID: ${productId}`);
+        const saveData = await saveRes.json();
+        return { productId, restockingConfig: saveData.restockingConfig || payload };
+      });
+
+      const results = await Promise.all(promises);
+
+      const updateFn = (prevList) => prevList.map((p) => {
+        const match = results.find((r) => r.productId === p._id);
+        return match ? { ...p, restockingConfig: match.restockingConfig } : p;
+      });
+      setProducts(updateFn);
+      setAllProducts(updateFn);
+
+      if (enableAlert) {
+        setAlertDismissed(false); // Reset so it pops up immediately if any selected items are critical
+      }
+
+      toast.success(`Bulk alert config saved for ${selectedProducts.size} items`);
+    } catch (err) {
+      console.error("Error in bulk alert toggle:", err);
+      toast.error("Error saving bulk alerts");
+    } finally {
+      setSavingBulkConfig(false);
     }
   };
 
@@ -1877,22 +1973,47 @@ export default function BranchRecycling() {
 
   // Trigger full page alert if low stock levels are reached
   useEffect(() => {
-    if (products.length > 0 && !alertDismissed) {
-      const criticalProducts = products.filter((p) => {
+    const sourceProducts = allProducts.length > 0 ? allProducts : products;
+    if (sourceProducts.length > 0) {
+      const criticalProducts = sourceProducts.filter((p) => {
         const { reorderLevel } = getReorderParams(p);
-        // Trigger alert if current stock hits or drops below reorder level (threshold)
-        return p.totalQty <= reorderLevel;
+        const isAlertMarked = p.restockingConfig?.showAlert || false;
+        // ONLY alert if user marked this product for alerts AND stock hits/falls below threshold AND threshold > 0
+        return isAlertMarked && p.totalQty <= reorderLevel && reorderLevel > 0;
       });
-      if (criticalProducts.length > 0) {
-        setAlertProducts(criticalProducts);
+      
+      setAlertProducts(criticalProducts);
+
+      if (criticalProducts.length > 0 && !alertDismissed && !showFullPageAlert) {
         setShowFullPageAlert(true);
       }
     }
-  }, [products, alertDismissed]);
+  }, [allProducts, products, alertDismissed]);
 
   // Full Page Stock Alarm/Alert Overlay
   const FullPageStockAlert = () => {
     if (!showFullPageAlert || alertProducts.length === 0) return null;
+
+    // Group alertProducts by productGroup
+    const groupedAlerts = alertProducts.reduce((acc, p) => {
+      let groupName = "Uncategorized";
+      if (p.productGroup) {
+        if (typeof p.productGroup === 'object') {
+          groupName = p.productGroup.name || p.productGroup._id;
+        } else {
+          groupName = String(p.productGroup);
+        }
+      }
+      
+      if (!acc[groupName]) {
+        acc[groupName] = { products: [], count: 0 };
+      }
+      acc[groupName].products.push(p);
+      acc[groupName].count += 1;
+      return acc;
+    }, {});
+    
+    const alertGroups = Object.keys(groupedAlerts).sort();
 
     return (
       <div className="fixed inset-0 bg-red-950/90 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
@@ -1910,43 +2031,40 @@ export default function BranchRecycling() {
                 CRITICAL STOCK REORDER LEVEL REACHED!
               </h2>
               <p className="text-red-100 text-sm md:text-base mt-2 max-w-2xl font-medium">
-                The closing quantities of the following products have reached or dropped below their safety threshold. Immediate action is required to avoid stockouts.
+                The following product groups contain items that have reached or dropped below their safety threshold.
               </p>
             </div>
           </div>
 
-          {/* List of critical products */}
+          {/* List of critical product groups */}
           <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-4">
-            <div className="flex justify-between items-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-2">
-              <span>Product Details</span>
-              <div className="flex gap-8">
-                <span className="w-24 text-right">System Qty</span>
-                <span className="w-24 text-right text-red-500">Threshold</span>
-                <span className="w-24 text-right text-green-600">Reorder Qty</span>
-              </div>
+            <div className="flex justify-between items-center text-xs font-bold text-gray-400 uppercase tracking-wider border-b pb-2 px-2">
+              <span>Product Group</span>
+              <span className="w-48 text-right">Low Stock Items</span>
             </div>
 
-            {alertProducts.map((p) => {
-              const { reorderQty, reorderLevel } = getReorderParams(p);
+            {alertGroups.map((groupName) => {
+              const groupData = groupedAlerts[groupName];
               return (
-                <div key={p._id} className="flex justify-between items-center py-4 border-b border-gray-100 hover:bg-red-50/30 px-2 rounded-lg transition-colors">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl">📦</span>
+                <div key={groupName} className="flex justify-between items-center py-4 border-b border-gray-100 hover:bg-red-50/30 px-4 rounded-xl transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className="text-3xl p-2 bg-red-50 text-red-500 rounded-lg shadow-sm border border-red-100">📦</div>
                     <div>
-                      <h4 className="font-extrabold text-gray-800 text-sm md:text-base">{p.name}</h4>
-                      <p className="text-xs text-gray-500">Preferred Vendor: <span className="font-semibold text-gray-700">{p.preferredVendor || "-"}</span></p>
+                      <h4 className="font-extrabold text-gray-800 text-lg md:text-xl">{groupName}</h4>
+                      <p className="text-sm text-red-500 font-bold mt-0.5">{groupData.count} product{groupData.count > 1 ? 's' : ''} reached critical stock</p>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <div className="text-lg font-bold text-gray-900 leading-none">
-                      {Number((p.totalQty || 0).toFixed(2))} <span className="text-[10px] text-gray-500 font-normal">{p.units}</span>
-                    </div>
-                    <span className="w-24 text-right text-red-600 font-extrabold">
-                      {reorderLevel} <span className="text-[10px] text-red-500 font-normal">{p.units}</span>
-                    </span>
-                    <span className="w-24 text-right text-green-600 font-extrabold">
-                      {reorderQty} <span className="text-[10px] text-green-600 font-normal">{p.units}</span>
-                    </span>
+                  <div className="flex items-center">
+                    <button
+                      onClick={() => {
+                        setSelectedProductGroup(groupName);
+                        setShowFullPageAlert(false);
+                        setAlertDismissed(true);
+                      }}
+                      className="px-5 py-2.5 bg-red-100 text-red-700 font-extrabold rounded-xl hover:bg-red-200 transition-colors shadow-sm transform hover:scale-105 active:scale-95 duration-150"
+                    >
+                      View Group
+                    </button>
                   </div>
                 </div>
               );
@@ -1962,7 +2080,7 @@ export default function BranchRecycling() {
               }}
               className="w-full md:w-auto px-6 py-3 border-2 border-gray-300 text-gray-600 font-bold hover:bg-gray-100 transition rounded-xl flex items-center justify-center gap-2"
             >
-              <span>🔓</span> Dismiss and View Page
+              <span>🔓</span> Dismiss and View All
             </button>
             
             <button
@@ -1979,7 +2097,7 @@ export default function BranchRecycling() {
               }}
               className="w-full md:w-auto px-8 py-3.5 bg-gradient-to-r from-red-600 to-rose-600 text-white font-extrabold hover:from-red-700 hover:to-rose-700 transition rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-red-600/35 transform hover:-translate-y-0.5 active:translate-y-0"
             >
-              <span>🛒</span> Select and Restock All ({alertProducts.length})
+              <span>🛒</span> Select All Critical Products ({alertProducts.length})
             </button>
           </div>
 
@@ -2004,6 +2122,23 @@ export default function BranchRecycling() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  if (alertProducts.length > 0) {
+                    setShowFullPageAlert(true);
+                  } else {
+                    toast.success("✨ All product stock levels are healthy! No low stock alerts.");
+                  }
+                }}
+                className={`px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2 shadow-sm cursor-pointer hover:scale-105 transform active:scale-95 duration-150 ${
+                  alertProducts.length > 0
+                    ? "bg-red-600 text-white hover:bg-red-700 animate-pulse border border-red-500 shadow-red-500/20"
+                    : "bg-white/10 text-gray-300 hover:bg-white/20 border border-white/15 backdrop-blur-sm"
+                }`}
+                title="View Critical Low Stock Alerts"
+              >
+                <span>🚨</span> Low Stock Alerts ({alertProducts.length})
+              </button>
               {(user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.actionPermissions?.export !== false) && (
                 <button
                   onClick={handleExportExcel}
@@ -2199,6 +2334,28 @@ export default function BranchRecycling() {
                 </button>
               </div>
 
+              {/* Bulk Alert Toggles */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => applyBulkAlertToggle(true)}
+                  disabled={savingBulkConfig}
+                  className="bg-red-600/20 hover:bg-red-600/30 text-red-100 border border-red-500/30 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer disabled:opacity-50"
+                  title="Enable low stock alerts for selected products"
+                >
+                  🔔 Enable Alerts
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyBulkAlertToggle(false)}
+                  disabled={savingBulkConfig}
+                  className="bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 cursor-pointer disabled:opacity-50"
+                  title="Disable alerts for selected products"
+                >
+                  🔕 Disable Alerts
+                </button>
+              </div>
+
               {actionPermissions.restock !== false && (
                 <button
                   type="button"
@@ -2289,6 +2446,11 @@ export default function BranchRecycling() {
                       className="px-2 py-2 text-left text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap sticky left-[36px] z-20 bg-slate-50 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]"
                     >
                       Product {sortConfig.key === "name" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    </th>
+                  )}
+                  {isFieldAllowed("productName") && (
+                    <th className="px-2 py-2 text-center text-[11px] font-bold whitespace-nowrap">
+                      Alert
                     </th>
                   )}
                   {isFieldAllowed("units") && (
@@ -2432,6 +2594,23 @@ export default function BranchRecycling() {
                         {isFieldAllowed("productName") && (
                           <td className="px-2 py-2 font-semibold text-gray-800 text-[11px] whitespace-normal min-w-[200px] sticky left-[36px] z-10 bg-inherit border-b border-r border-gray-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]" title={product.name}>
                             {product.name}
+                          </td>
+                        )}
+                        {isFieldAllowed("productName") && (
+                          <td className="px-2 py-2 text-center text-[11px] whitespace-nowrap z-10 bg-inherit border-b border-gray-100 border-r border-r-gray-100">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleProductAlert(product);
+                              }}
+                              className={`px-2 py-1 rounded shadow-sm border font-extrabold text-[10px] uppercase transition-all duration-200 w-[70px] ${
+                                product.restockingConfig?.showAlert
+                                  ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100 animate-pulse"
+                                  : "bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100"
+                              }`}
+                            >
+                              {product.restockingConfig?.showAlert ? "🔔 Active" : "🔕 Muted"}
+                            </button>
                           </td>
                         )}
                         {isFieldAllowed("units") && (

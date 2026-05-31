@@ -201,7 +201,7 @@ export default function BranchPhysicalStock() {
             productName: record.productName,
             productGroupId: record.productGroupId?._id || record.productGroupId,
             productGroupName: typeof record.productGroupId === 'object' ? record.productGroupId?.name : (record.productGroupName || ""),
-            systemQty: record.systemQty || 0,
+            systemQty: Math.round(Number(record.systemQty || 0) * 100) / 100,
             damagedQty: record.damagedQty || 0,
             expiredQty: record.expiredQty || 0,
             physicalQty: record.noAction ? "NO_ACTION" : record.physicalQty,
@@ -400,7 +400,7 @@ export default function BranchPhysicalStock() {
           productName: product.name,
           productGroupId: product.productGroup?._id || product.productGroup,
           productGroupName: typeof product.productGroup === 'object' ? product.productGroup?.name : "",
-          systemQty: calculatedSystemQty,
+          systemQty: Math.round(Number(calculatedSystemQty || 0) * 100) / 100,
           damagedQty: "",
           expiredQty: "",
           physicalQty: "",
@@ -424,7 +424,7 @@ export default function BranchPhysicalStock() {
         productName: product.name,
         productGroupId: product.productGroup?._id || product.productGroup,
         productGroupName: typeof product.productGroup === 'object' ? product.productGroup?.name : "",
-        systemQty: product.availableQty || 0,
+        systemQty: Math.round(Number(product.availableQty || 0) * 100) / 100,
         damagedQty: "",
         expiredQty: "",
         physicalQty: "",
@@ -492,7 +492,7 @@ export default function BranchPhysicalStock() {
               productName: p.name,
               productGroupId: p.productGroup?._id || p.productGroup,
               productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
-              systemQty: record.systemQty || 0,
+              systemQty: Math.round(Number(record.systemQty || 0) * 100) / 100,
               damagedQty: record.damagedQty || 0,
               expiredQty: record.expiredQty || 0,
               physicalQty: record.noAction ? "NO_ACTION" : record.physicalQty,
@@ -514,7 +514,7 @@ export default function BranchPhysicalStock() {
               productName: p.name,
               productGroupId: p.productGroup?._id || p.productGroup,
               productGroupName: typeof p.productGroup === 'object' ? p.productGroup?.name : "",
-              systemQty: calculatedSystemQty,
+              systemQty: Math.round(Number(calculatedSystemQty || 0) * 100) / 100,
               damagedQty: "",
               expiredQty: "",
               physicalQty: "",
@@ -959,7 +959,7 @@ export default function BranchPhysicalStock() {
                             </td>
                           )}
                           {isFieldVisible("productGroupName") && <td className="px-1.5 py-3 border-r border-gray-100 text-[9px] text-gray-400 font-black uppercase">{row.productGroupName || "-"}</td>}
-                          {isFieldVisible("systemQty") && <td className="px-1.5 py-3 border-r border-gray-100 text-center font-black text-[10px] text-blue-500">{row.systemQty}</td>}
+                          {isFieldVisible("systemQty") && <td className="px-1.5 py-3 border-r border-gray-100 text-center font-black text-[10px] text-blue-500">{Math.round(Number(row.systemQty || 0) * 100) / 100}</td>}
                           {isFieldVisible("damagedQty") && (
                             <td className="px-1.5 py-3 border-r border-gray-100">
                                 <input type="number" 
