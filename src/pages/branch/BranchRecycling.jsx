@@ -70,10 +70,10 @@ export default function BranchRecycling() {
       resolvedThreshold = Math.max(autoThreshold, manualThreshold);
     }
 
-    // If calculated sales in period is 0, set resolved levels (both threshold and qty) to 0
+    // If calculated sales in period is 0, set resolved levels to manual overrides if available, otherwise 0
     if ((config?.sellingQtyInPeriod ?? 0) === 0) {
-      resolvedQty = 0;
-      resolvedThreshold = 0;
+      resolvedQty = manualQty || 0;
+      resolvedThreshold = manualThreshold || 0;
     }
 
     const hasManual = product.restockingConfig?.restockingQty !== undefined && product.restockingConfig?.restockingQty !== null;
@@ -126,6 +126,7 @@ export default function BranchRecycling() {
   const [selectedProductGroup, setSelectedProductGroup] = useState("All"); // Filter by group
   const [allProducts, setAllProducts] = useState([]); // Store all products for group filtering
   const [allProductGroups, setAllProductGroups] = useState([]); // Store all unique product groups
+  const [rawProductGroups, setRawProductGroups] = useState([]); // Store raw product group objects
   const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" }); // Default: Alphabetical order
 
   // Full Page Stock Alert states
@@ -172,6 +173,7 @@ export default function BranchRecycling() {
       console.log("📦 Direct product groups response:", data);
 
       if (Array.isArray(data)) {
+        setRawProductGroups(data); // Save the raw array of groups
         const groupNames = data.map((g) => g.name).filter(Boolean);
         const finalGroups = ["All", ...Array.from(new Set(groupNames)).sort()];
         console.log("🏷️ Instantly loaded product groups:", finalGroups);
@@ -190,7 +192,7 @@ export default function BranchRecycling() {
       const branchId = currentBranch._id;
       console.log("🔄 Starting to fetch all products for group caching...");
 
-      const url = `${API_BASE}/products?branchId=${branchId}&limit=10000&includeRestocking=true`;
+      const url = `${API_BASE}/products?branchId=${branchId}&limit=10000&includeRestocking=true&mini=true`;
       console.log(`📄 Fetching all products in single optimized call: ${url}`);
 
       const res = await fetch(url);
@@ -409,20 +411,28 @@ export default function BranchRecycling() {
   const [showPendingSalesPopup, setShowPendingSalesPopup] = useState(false);
   const [pendingPOMap, setPendingPOMap] = useState({});
 
-  // Fetch both products, pending sales, and pending purchase orders
+  // Fetch both products, pending sales, and pending purchase orders concurrently
   const fetchAllData = async (page = 1, search = "") => {
-    await fetchProducts(page, search);
-    const pendingSalesData = await fetchPendingSales();
-    if (pendingSalesData) {
-      setPendingSalesMap(pendingSalesData.pendingMap || {});
-      setPendingSalesDetailsMap(pendingSalesData.detailsMap || {});
-    } else {
-      setPendingSalesMap({});
-      setPendingSalesDetailsMap({});
+    try {
+      const [_, pendingSalesData, pendingPO, __] = await Promise.all([
+        fetchProducts(page, search),
+        fetchPendingSales(),
+        fetchPendingPurchaseOrders(),
+        fetchAllProductsForGroups() // Keep allProducts in sync for alerts & group filter counts in background
+      ]);
+
+      if (pendingSalesData) {
+        setPendingSalesMap(pendingSalesData.pendingMap || {});
+        setPendingSalesDetailsMap(pendingSalesData.detailsMap || {});
+      } else {
+        setPendingSalesMap({});
+        setPendingSalesDetailsMap({});
+      }
+
+      setPendingPOMap(pendingPO || {});
+    } catch (err) {
+      console.error("❌ Error loading concurrent data:", err);
     }
-    const pendingPO = await fetchPendingPurchaseOrders();
-    setPendingPOMap(pendingPO || {});
-    await fetchAllProductsForGroups(); // Keep allProducts in sync for alerts & group filter counts
   };
 
   // Handle search - reset to page 1
@@ -1990,20 +2000,36 @@ export default function BranchRecycling() {
     }
   }, [allProducts, products, alertDismissed]);
 
+  // Helper to resolve product group name (handles object, rawProductGroups fallback, or populated lookup fallback)
+  const getGroupNameOfProduct = (product) => {
+    if (!product || !product.productGroup) return "Uncategorized";
+    
+    if (typeof product.productGroup === 'object') {
+      return product.productGroup.name || "Uncategorized";
+    }
+    
+    // If it's an ID string, first lookup in rawProductGroups state
+    if (Array.isArray(rawProductGroups)) {
+      const matched = rawProductGroups.find(g => g._id === product.productGroup || g.name === product.productGroup);
+      if (matched && matched.name) return matched.name;
+    }
+    
+    // If not found, try lookup in allProducts to find a populated one with the same ID
+    const populatedMatch = allProducts.find(p => p.productGroup && typeof p.productGroup === 'object' && p.productGroup._id === product.productGroup);
+    if (populatedMatch && populatedMatch.productGroup) {
+      return populatedMatch.productGroup.name || "Uncategorized";
+    }
+    
+    return String(product.productGroup);
+  };
+
   // Full Page Stock Alarm/Alert Overlay
   const FullPageStockAlert = () => {
     if (!showFullPageAlert || alertProducts.length === 0) return null;
 
-    // Group alertProducts by productGroup
+    // Group alertProducts by productGroup using the getGroupNameOfProduct helper
     const groupedAlerts = alertProducts.reduce((acc, p) => {
-      let groupName = "Uncategorized";
-      if (p.productGroup) {
-        if (typeof p.productGroup === 'object') {
-          groupName = p.productGroup.name || p.productGroup._id;
-        } else {
-          groupName = String(p.productGroup);
-        }
-      }
+      const groupName = getGroupNameOfProduct(p);
       
       if (!acc[groupName]) {
         acc[groupName] = { products: [], count: 0 };
