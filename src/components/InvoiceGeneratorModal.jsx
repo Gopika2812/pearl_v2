@@ -847,10 +847,12 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             </tr>
           </thead>
           <tbody>
-            ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0).map(item => `
+            ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0)
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(item => `
               <tr>
-                <td>${item.name}</td>
-                <td style="text-align: right; font-size: 20px;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
+                <td style="font-weight: 900; font-size: 18px; color: #000;">${item.name}</td>
+                <td style="text-align: right; font-size: 22px; font-weight: 900; color: #000;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
               </tr>
             `).join("")}
           </tbody>
@@ -963,15 +965,17 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                   </tr>
                 </thead>
                 <tbody>
-                  ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0).map((item, idx) => `
+                  ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((item, idx) => `
                     <tr>
-                      <td style="text-align: center; color: #64748b; font-size: 10px;">${idx + 1}</td>
-                      <td style="font-weight: bold; color: #1e293b;">${item.name}</td>
+                      <td style="text-align: center; color: #64748b; font-size: 11px; font-weight: bold;">${idx + 1}</td>
+                      <td style="font-weight: 900; color: #000; font-size: 15px; text-transform: uppercase;">${item.name}</td>
                       ${!isDummy ? `
-                        <td style="text-align: center; color: #475569;">${item.hsn || "-"}</td>
-                        <td style="text-align: center; color: #475569;">${item.gst || 0}%</td>
+                        <td style="text-align: center; color: #000; font-weight: bold;">${item.hsn || "-"}</td>
+                        <td style="text-align: center; color: #000; font-weight: bold;">${item.gst || 0}%</td>
                       ` : ''}
-                      <td style="text-align: center; font-weight: bold; color: #1e293b; font-size: 13px;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
+                      <td style="text-align: center; font-weight: 900; color: #000; font-size: 16px;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
                       ${!isDummy ? `
                         <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
                         <td style="text-align: right; font-weight: bold; color: #000;">₹${((item.qty || item.confirmedQty) * (item.sellingPrice || 0)).toFixed(2)}</td>

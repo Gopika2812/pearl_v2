@@ -5,8 +5,10 @@ import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
+import { useNavigate } from "react-router-dom";
 
 const BranchProductRecords = () => {
+  const navigate = useNavigate();
   const { currentBranch, user } = useBranch();
   const { productGroups, products, customers } = useInventory();
   const [analysisMode, setAnalysisMode] = useState("product"); // 'product' or 'customer'
@@ -591,7 +593,13 @@ const BranchProductRecords = () => {
                                     <div className="text-[9px] text-gray-500 font-bold">
                                       {r.createdAt ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </div>
-                                    <div className="text-[9px] text-gray-400 font-bold">{r.invoiceNumber} | {new Date(r.date).toLocaleDateString()}</div>
+                                    <div 
+                                      className="text-[9px] text-[#319bab] font-bold cursor-pointer hover:underline transition-colors"
+                                      onClick={() => navigate(`/branch/sales-orders?invoiceId=${encodeURIComponent(r.invoiceId || r.invoiceNumber)}`)}
+                                      title="Click to view full bill"
+                                    >
+                                      {r.invoiceId || r.invoiceNumber} | {new Date(r.date).toLocaleDateString()}
+                                    </div>
                                   </td>
                                 )}
                                 <td className="px-4 py-3">

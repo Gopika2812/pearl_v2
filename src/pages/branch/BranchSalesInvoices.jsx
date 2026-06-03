@@ -504,11 +504,12 @@ const BranchSalesInvoices = () => {
       } else {
         const errorMsg = data.message || "Failed to generate E-Way Bill";
         if (errorMsg.includes("distance between the pincodes given is too high")) {
+          const suggestedDist = data.details?.distance || "the exact distance";
           toast.error(
             <div className="flex flex-col gap-1 p-1">
               <span className="font-extrabold text-[12px] text-white">❌ E-Way Bill Distance Error</span>
               <span className="text-[11px] text-white/90">For already generated IRNs, the government portal locks the distance.</span>
-              <span className="text-[11px] font-black text-amber-300 mt-1">💡 Solution: Re-open the modal and enter "15" in the Distance field to generate successfully!</span>
+              <span className="text-[11px] font-black text-amber-300 mt-1">💡 Solution: Re-open the modal and enter <b>{suggestedDist}</b> in the Distance field to generate successfully!</span>
             </div>,
             { autoClose: 12000 }
           );
@@ -1289,11 +1290,11 @@ const BranchSalesInvoices = () => {
                                            </button>
                                            {inv.invoicePdfUrl && (
                                              <button
-                                               onClick={(e) => {
-                                                 e.stopPropagation();
-                                                 window.open(`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.invoicePdfUrl}`, "_blank");
+                                               onClick={() => {
+                                                 const url = inv.invoicePdfUrl.startsWith('http') ? inv.invoicePdfUrl : `${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.invoicePdfUrl}`;
+                                                 window.open(url, "_blank");
                                                }}
-                                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-600 hover:text-white text-[10px] font-black transition-all shadow-sm"
+                                               className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-lg text-[10px] font-black transition-all shadow-sm"
                                              >
                                                <FaFilePdf size={12} /> E-INV PDF
                                              </button>
@@ -1302,10 +1303,10 @@ const BranchSalesInvoices = () => {
                                        )}
                                        {(inv.ewayBillPdfUrl || inv.ewayBillNo) && (
                                          <button
-                                           onClick={(e) => {
-                                             e.stopPropagation();
+                                           onClick={() => {
                                              if (inv.ewayBillPdfUrl) {
-                                               window.open(`${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`, "_blank");
+                                               const url = inv.ewayBillPdfUrl.startsWith('http') ? inv.ewayBillPdfUrl : `${import.meta.env.VITE_GSTZEN_DOMAIN || "https://my.gstzen.in"}${inv.ewayBillPdfUrl}`;
+                                               window.open(url, "_blank");
                                              } else {
                                                toast.info("E-Way Bill ready but PDF link pending. Please try again in 5 seconds.");
                                                fetchInvoices();
