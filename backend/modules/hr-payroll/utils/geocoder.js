@@ -1,13 +1,41 @@
 import axios from "axios";
+import Branch from "../../../models/Branch.js";
 
 /**
  * Get Address name from Lat/Lng using Nominatim (OpenStreetMap)
  * @param {number} lat 
  * @param {number} lng 
+ * @param {string} [branchId]
  * @returns {Promise<string>}
  */
-export const getAddressFromCoords = async (lat, lng) => {
+export const getAddressFromCoords = async (lat, lng, branchId) => {
   try {
+    let replacements = {};
+    if (branchId) {
+      try {
+        const branch = await Branch.findById(branchId);
+        if (branch && branch.locationReplacements) {
+          replacements = branch.locationReplacements;
+        }
+      } catch (err) {
+        console.warn("Failed to load branch geocoding replacements:", err.message);
+      }
+    }
+
+    const cleanWithReplacements = (str) => {
+      if (!str) return "";
+      let result = str;
+      for (const [target, replacement] of Object.entries(replacements)) {
+        const regex = new RegExp(target, "gi");
+        result = result.replace(regex, replacement);
+      }
+      // Default fallback for Padappakurichi to Palayamkottai if not overridden
+      if (!replacements["Padappakurichi"]) {
+        result = result.replace(/Padappakurichi/gi, "Palayamkottai");
+      }
+      return result;
+    };
+
     const response = await axios.get(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
       {
@@ -19,22 +47,40 @@ export const getAddressFromCoords = async (lat, lng) => {
     );
     
     if (response.data && response.data.display_name) {
-      const addr = response.data.address;
+      const addr = response.data.address || {};
+      
+      const cleanRoad = (road) => {
+        if (!road) return "";
+        if (road.includes(" - ") && road.split(" - ").length > 2) {
+          const segments = road.split(" - ");
+          return segments[segments.length - 1]; // E.g., return just the last road descriptor
+        }
+        return road;
+      };
+
+      const poi = addr.building || addr.office || addr.amenity || addr.shop || addr.tourism || addr.leisure || addr.historic || addr.industrial || addr.commercial || addr.retail;
+      const roadName = cleanRoad(addr.road || addr.pedestrian);
+
       const parts = [
-        addr.building || addr.office || addr.amenity || addr.shop,
+        poi,
         addr.house_number,
-        addr.road || addr.pedestrian,
+        roadName,
         addr.neighbourhood || addr.quarter,
         addr.suburb || addr.city_district,
         addr.city || addr.town || addr.village,
+        addr.county,
         addr.state_district || addr.state
       ].filter(Boolean);
       
       // Deduplicate parts
-      const uniqueParts = [...new Set(parts)];
+      const uniqueParts = [...new Set(parts.map(p => p.trim()))];
       
-      const summary = uniqueParts.length > 0 ? uniqueParts.join(", ") : response.data.display_name.split(",").slice(0, 7).join(", ");
-      if (summary) return summary;
+      let summary = uniqueParts.length > 0 ? uniqueParts.join(", ") : response.data.display_name.split(",").slice(0, 7).join(", ");
+      if (summary) {
+        summary = cleanWithReplacements(summary);
+        const deduped = [...new Set(summary.split(",").map(s => s.trim()))].join(", ");
+        return deduped;
+      }
     }
     
     // Fallback to BigDataCloud if Nominatim fails or returns empty

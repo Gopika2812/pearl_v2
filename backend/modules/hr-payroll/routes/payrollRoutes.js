@@ -7,7 +7,9 @@ import {
   getPayrollHistory,
   updatePayrollAdjustments,
   getAllSalaryStructures,
-  revertPayrollStatus
+  revertPayrollStatus,
+  exportSalaryStructures,
+  bulkImportSalaryStructures
 } from "../controllers/payrollController.js";
 import auth from "../../../middleware/auth.js";
 
@@ -20,6 +22,8 @@ router.patch("/status/:payrollId", updatePayrollStatus);
 router.post("/revert/:payrollId", revertPayrollStatus);
 router.patch("/adjustments/:payrollId", updatePayrollAdjustments);
 router.get("/structures", getAllSalaryStructures);
+router.get("/export-structures", exportSalaryStructures);
+router.post("/bulk-import", bulkImportSalaryStructures);
 router.get("/structure/:employeeId", getSalaryStructure);
 router.post("/structure", updateSalaryStructure);
 router.get("/history", getPayrollHistory);
