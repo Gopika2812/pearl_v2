@@ -1,22 +1,33 @@
-import mongoose from 'mongoose';
-import '../modules/hr-payroll/models/Attendance.js';
+import mongoose from "mongoose";
+import dotenv from "dotenv";
 
-const Attendance = mongoose.model('Attendance');
+dotenv.config({ path: "../.env" });
 
-async function check() {
-  await mongoose.connect('mongodb+srv://gopikap2812_db_user:3EprufLKuDVKIdo3@branchesdb.njfcfju.mongodb.net/pearls_erp?retryWrites=true&w=majority');
-  
-  const today = new Date();
-  today.setHours(0,0,0,0);
-  
-  const attendance = await Attendance.findOne({ employeeId: '69cbbfc7ed9ad43085a1629f', date: { $gte: today } });
-  if (attendance) {
-    console.log('Attendance found for SATHYA');
-    console.log('Status:', attendance.status);
-    console.log('Branch ID in Attendance:', attendance.branch?.toString());
-  } else {
-    console.log('No attendance record found for SATHYA today');
+const run = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log("Connected to MongoDB");
+
+    const db = mongoose.connection.db;
+    const user = await db.collection("branchusers").findOne({ name: /Gopika/i });
+    if (!user) {
+      console.log("Gopika not found");
+      return;
+    }
+
+    const records = await db.collection("attendances").find({ employeeId: user._id }).toArray();
+    console.log("All attendance records for Gopika:");
+    records.forEach(r => {
+      console.log(`ID: ${r._id}, Date: ${r.date}`);
+      console.log(`Present Coords: ${r.presentLocation?.lat}, ${r.presentLocation?.lng}`);
+      console.log(`Present Address: ${r.presentLocation?.address}`);
+      console.log(`-----------------------------------`);
+    });
+
+    await mongoose.disconnect();
+  } catch (err) {
+    console.error(err);
   }
-}
+};
 
-check().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });
+run();

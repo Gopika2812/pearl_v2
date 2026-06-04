@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
-import { FaFileContract, FaSave, FaUser } from "react-icons/fa";
+import { FaFileContract, FaSave, FaUser, FaDownload, FaUpload } from "react-icons/fa";
 import { fetchWithAuth, API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import Papa from "papaparse";
 
 const SalaryStructurePage = () => {
   const { currentBranch, user } = useBranch();
@@ -77,6 +78,115 @@ const SalaryStructurePage = () => {
     }
   };
 
+  const handleExportCSV = async () => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/hr/payroll/export-structures?branchId=${currentBranch?._id}`);
+      const data = await res.json();
+      if (!data.success) {
+        toast.error(data.message || "Failed to fetch export data");
+        return;
+      }
+
+      // Convert JSON data to CSV using Papa.unparse
+      const csvData = data.data.map(item => ({
+        "Employee Code": item.employeeCode,
+        "Person Name": item.employeeName,
+        "Monthly Basic Salary": item.basicSalary,
+        "Overtime Rate": item.overtimeRate,
+        "Bonus/Allowances": item.bonus,
+        "Standard Deductions": item.deductions,
+        "Shift Start Time": item.shiftStartTime,
+        "Shift End Time": item.shiftEndTime,
+        "Monthly Leaves": item.allowedMonthlyLeaves
+      }));
+
+      const csvString = Papa.unparse(csvData);
+      const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Salary_Configuration_${currentBranch?.name || "Branch"}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success("CSV exported successfully");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to export salary configurations");
+    }
+  };
+
+  const handleImportCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const cleanNum = (val) => {
+      if (val === null || val === undefined || val === "") return 0;
+      return parseFloat(String(val).replace(/,/g, "")) || 0;
+    };
+    const cleanInt = (val) => {
+      if (val === null || val === undefined || val === "") return 0;
+      return parseInt(String(val).replace(/,/g, "")) || 0;
+    };
+
+    const getVal = (row, potentialKeys) => {
+      const keys = Object.keys(row);
+      for (const pk of potentialKeys) {
+        if (row[pk] !== undefined) return row[pk];
+        const normPk = pk.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const found = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, "") === normPk);
+        if (found !== undefined) return row[found];
+      }
+      return "";
+    };
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const parsed = results.data.map(row => ({
+          employeeCode: getVal(row, ["Employee Code", "employeeCode", "code"]),
+          employeeName: getVal(row, ["Person Name", "employeeName", "name", "employee"]),
+          basicSalary: cleanNum(getVal(row, ["Monthly Basic Salary", "basicSalary", "salary"])),
+          overtimeRate: cleanNum(getVal(row, ["Overtime Rate", "overtimeRate", "ot rate"])),
+          bonus: cleanNum(getVal(row, ["Bonus/Allowances", "bonus", "allowances", "bonusallowances"])),
+          deductions: cleanNum(getVal(row, ["Standard Deductions", "deductions", "deduction"])),
+          shiftStartTime: getVal(row, ["Shift Start Time", "shiftStartTime", "start time"]) || "09:00",
+          shiftEndTime: getVal(row, ["Shift End Time", "shiftEndTime", "end time"]) || "18:00",
+          allowedMonthlyLeaves: cleanInt(getVal(row, ["Monthly Leaves", "allowedMonthlyLeaves", "leaves"]))
+        }));
+
+        try {
+          const res = await fetchWithAuth(`${API_BASE}/hr/payroll/bulk-import`, {
+            method: "POST",
+            body: JSON.stringify({
+              branchId: currentBranch?._id,
+              data: parsed
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            toast.success(data.message || "Import completed successfully!");
+            fetchEmployees();
+            if (selectedEmployee) {
+              fetchStructure(selectedEmployee._id);
+            }
+          } else {
+            toast.error(data.message || "Import failed");
+          }
+        } catch (err) {
+          console.error(err);
+          toast.error("Error importing salary configurations");
+        }
+      },
+      error: (err) => {
+        toast.error("Failed to parse CSV file: " + err.message);
+      }
+    });
+
+    e.target.value = "";
+  };
+
   if (!isSuperAdmin) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm animate-in fade-in duration-500">
@@ -97,6 +207,27 @@ const SalaryStructurePage = () => {
         <div>
           <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Salary Configuration</h1>
           <p className="text-slate-500 text-sm font-medium uppercase tracking-widest">Define base pay and allowances for employees</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 text-indigo-600 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-indigo-100 hover:text-indigo-700 transition shadow-sm active:scale-95"
+          >
+            <FaDownload /> Export CSV
+          </button>
+          <button
+            onClick={() => document.getElementById("salary-csv-import").click()}
+            className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 text-emerald-600 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-emerald-100 hover:text-emerald-700 transition shadow-sm active:scale-95"
+          >
+            <FaUpload /> Import CSV
+          </button>
+          <input
+            type="file"
+            id="salary-csv-import"
+            accept=".csv"
+            onChange={handleImportCSV}
+            className="hidden"
+          />
         </div>
       </div>
 

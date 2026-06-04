@@ -16,8 +16,15 @@ const BranchDeliveryReceipt = () => {
   const [receipts, setReceipts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState([]);
-  const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split("T")[0]);
-  const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split("T")[0]);
+  const getLocalDateString = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [filterFromDate, setFilterFromDate] = useState(getLocalDateString());
+  const [filterToDate, setFilterToDate] = useState(getLocalDateString());
   const [filterDeliveryPerson, setFilterDeliveryPerson] = useState("");
   const [filterReceiptId, setFilterReceiptId] = useState("");
   const [expandedId, setExpandedId] = useState(null);
@@ -35,7 +42,7 @@ const BranchDeliveryReceipt = () => {
     500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0
   });
   const [deliveryPerson, setDeliveryPerson] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(getLocalDateString());
   const [submitting, setSubmitting] = useState(false);
 
   // Auto-set delivery person from user login
