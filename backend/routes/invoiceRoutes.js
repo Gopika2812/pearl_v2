@@ -1007,6 +1007,8 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             originalQty,
             confirmedQty,
             backOrderQty,
+            isConfirmed: item.isConfirmed === true,
+            isNeutralized: item.isNeutralized === true,
             discountPercent,
             discountAmount,
             sellingPrice,
@@ -2407,5 +2409,6 @@ router.patch("/:invoiceId/delivery-flow", async (req, res) => {
 
 
 export default router;
+
 
 

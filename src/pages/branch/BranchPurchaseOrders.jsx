@@ -768,7 +768,12 @@ const BranchPurchaseOrders = () => {
                                               {item.qty}
                                             </td>
                                             <td className="py-2 px-3 text-right">
-                                              ₹{item.purchasePrice?.toFixed(2)}
+                                              <div>₹{item.purchasePrice?.toFixed(2)}</div>
+                                              {item.marketCapPrice > 0 && (
+                                                <div className="text-[9px] text-indigo-600 font-black bg-indigo-50 border border-indigo-100 inline-block px-1.5 py-0.5 rounded mt-0.5">
+                                                  MCP: ₹{item.marketCapPrice?.toFixed(2)}
+                                                </div>
+                                              )}
                                             </td>
                                             <td className="py-2 px-3 text-right">
                                               ₹{item.sellingPrice?.toFixed(2)}

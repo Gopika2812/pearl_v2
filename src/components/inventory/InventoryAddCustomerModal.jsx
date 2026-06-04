@@ -117,6 +117,30 @@ const InventoryAddCustomerModal = ({ isOpen, onClose, onSave, salesOwners = [], 
     }
   }, [isOpen, branchId]);
 
+  // Auto-select "New Customer" in categories and groups for new registrations
+  useEffect(() => {
+    if (!editingItem && isOpen && Array.isArray(customerCategories) && Array.isArray(customerGroups)) {
+      const defaultCategories = customerCategories
+        .filter(c => c.name && c.name.toLowerCase() === "new customer")
+        .map(c => c._id);
+        
+      const defaultGroups = customerGroups
+        .filter(g => g.name && g.name.toLowerCase() === "new customer")
+        .map(g => g._id);
+
+      setCustomer(prev => {
+        if (!prev._id && prev.customerCategories.length === 0 && prev.customerGroups.length === 0) {
+          return {
+            ...prev,
+            customerCategories: defaultCategories,
+            customerGroups: defaultGroups
+          };
+        }
+        return prev;
+      });
+    }
+  }, [isOpen, editingItem, customerCategories, customerGroups]);
+
   const fetchVendors = async () => {
     try {
       const res = await fetchWithAuth(`${API_BASE}/vendors?branchId=${branchId}&limit=1000`);

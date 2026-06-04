@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { API_BASE, apiWithAuth } from "../api";
 import { QUICK_LINKS_CONFIG } from "../utils/quickLinksConfig";
 import { useBranch } from "../context/BranchContext";
+import FilterableSelect from "./FilterableSelect";
 
 const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   const { currentBranch, user } = useBranch();
@@ -254,8 +255,15 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     try {
       const payload = {
         branchId,
-        marginPercentage: parseFloat(groupMarginData.marginPercentage),
       };
+      
+      if (groupMarginData.marginPercentage !== undefined && groupMarginData.marginPercentage !== "") {
+        payload.marginPercentage = parseFloat(groupMarginData.marginPercentage);
+      }
+      
+      if (groupMarginData.adminMargin !== undefined && groupMarginData.adminMargin !== "") {
+        payload.adminMargin = parseFloat(groupMarginData.adminMargin);
+      }
 
       if (groupMarginData.type === "group") {
         payload.productGroupId = groupMarginData.selectedGroupId;
@@ -276,6 +284,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
           selectedGroupId: "",
           selectedCategoryId: "",
           marginPercentage: "",
+          adminMargin: "",
         });
       }
     } catch (error) {
@@ -969,65 +978,80 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
             {groupMarginData.type === "group" ? (
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Select Group:</label>
-                <select
-                  value={groupMarginData.selectedGroupId}
-                  onChange={(e) =>
-                    setGroupMarginData({
-                      ...groupMarginData,
-                      selectedGroupId: e.target.value,
-                    })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">-- Select a product group --</option>
-                  {productGroups.map((group) => (
-                    <option key={group._id} value={group._id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="w-full border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-purple-500 bg-white">
+                  <FilterableSelect
+                    options={productGroups}
+                    value={groupMarginData.selectedGroupId}
+                    onChange={(val) =>
+                      setGroupMarginData({
+                        ...groupMarginData,
+                        selectedGroupId: val,
+                      })
+                    }
+                    placeholder="-- Select a product group --"
+                    className="!py-2"
+                  />
+                </div>
               </div>
             ) : (
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Select Category:</label>
-                <select
-                  value={groupMarginData.selectedCategoryId}
-                  onChange={(e) =>
-                    setGroupMarginData({
-                      ...groupMarginData,
-                      selectedCategoryId: e.target.value,
-                    })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">-- Select a product category --</option>
-                  {productCategories.map((category) => (
-                    <option key={category._id} value={category._id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="w-full border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-purple-500 bg-white">
+                  <FilterableSelect
+                    options={productCategories}
+                    value={groupMarginData.selectedCategoryId}
+                    onChange={(val) =>
+                      setGroupMarginData({
+                        ...groupMarginData,
+                        selectedCategoryId: val,
+                      })
+                    }
+                    placeholder="-- Select a product category --"
+                    className="!py-2"
+                  />
+                </div>
               </div>
             )}
 
-            {/* Margin Percentage Input */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Margin Percentage (%):</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={groupMarginData.marginPercentage}
-                onChange={(e) =>
-                  setGroupMarginData({
-                    ...groupMarginData,
-                    marginPercentage: e.target.value,
-                  })
-                }
-                placeholder="e.g., 25.50"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
+            {/* Margin Percentage Inputs */}
+            <div className="mb-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Margin Percentage (%):</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={groupMarginData.marginPercentage}
+                  onChange={(e) =>
+                    setGroupMarginData({
+                      ...groupMarginData,
+                      marginPercentage: e.target.value,
+                    })
+                  }
+                  placeholder="e.g., 25.50 (Leave blank to skip)"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Admin Margin (%):</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={groupMarginData.adminMargin}
+                  onChange={(e) =>
+                    setGroupMarginData({
+                      ...groupMarginData,
+                      adminMargin: e.target.value,
+                    })
+                  }
+                  placeholder="e.g., 10.00 (Leave blank to skip)"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
             </div>
 
             {/* Action Buttons */}

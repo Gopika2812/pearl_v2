@@ -11,6 +11,7 @@ const PurchaseItemSchema = new mongoose.Schema({
 
   qty: Number,
   purchasePrice: Number,
+  marketCapPrice: { type: Number, default: 0 },
   sellingPrice: Number,
   rowPrice: Number,
   discountPercent: { type: Number, default: 0 },

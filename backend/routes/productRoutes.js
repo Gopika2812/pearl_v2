@@ -1946,12 +1946,12 @@ router.get("/:id/ledger", auth, async (req, res) => {
 
 router.post("/apply-group-margin", async (req, res) => {
   try {
-    const { branchId, productGroupId, productCategoryId, marginPercentage } = req.body;
+    const { branchId, productGroupId, productCategoryId, marginPercentage, adminMargin } = req.body;
 
-    if (!branchId || !marginPercentage === undefined) {
+    if (!branchId || (marginPercentage === undefined && adminMargin === undefined)) {
       return res.status(400).json({
         success: false,
-        message: "branchId and marginPercentage are required"
+        message: "branchId and at least one of marginPercentage or adminMargin are required"
       });
     }
 
@@ -1973,31 +1973,26 @@ router.post("/apply-group-margin", async (req, res) => {
       updateMessage = "product category";
     }
 
-    // Find all matching products and update their margin percentage
-    const result = await Product.updateMany(
-      query,
-      {
-        marginPercentage: marginPercentage,
-        $set: {} // Let the pre-save hook handle margin/price calculations
+    // Fetch products to update
+    const productsToUpdate = await Product.find(query);
+
+    // Save each product to trigger pre-save hooks and calculations
+    for (const product of productsToUpdate) {
+      if (marginPercentage !== undefined && marginPercentage !== "") {
+        product.marginPercentage = Math.round(marginPercentage * 100) / 100;
+        product.markModified("marginPercentage");
       }
-    );
-
-    // Fetch updated products to trigger pre-save hooks for calculations
-    const updatedProducts = await Product.find(query);
-
-    // Round marginPercentage input
-    const roundedMargin = Math.round(marginPercentage * 100) / 100;
-
-    // Save each product to trigger pre-save hooks
-    for (const product of updatedProducts) {
-      product.marginPercentage = roundedMargin;
+      if (adminMargin !== undefined && adminMargin !== "") {
+        product.adminMargin = Math.round(adminMargin * 100) / 100;
+        product.markModified("adminMargin");
+      }
       await product.save();
     }
 
     res.status(200).json({
       success: true,
-      message: `Applied ${roundedMargin}% margin to ${updatedProducts.length} products in the ${updateMessage}`,
-      updatedCount: updatedProducts.length
+      message: `Applied margins to ${productsToUpdate.length} products in the ${updateMessage}`,
+      updatedCount: productsToUpdate.length
     });
   } catch (error) {
     console.error("Apply group margin error:", error);

@@ -1505,6 +1505,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                       <th className="p-3 text-right">Original Qty</th>
                       <th className="p-3 text-right">Confirmed Qty</th>
                       <th className="p-3 text-right text-[10px] uppercase">Back Order</th>
+                      <th className="p-3 text-center text-[10px] uppercase">Confirm BO</th>
                       <th className="p-3 text-center text-[10px] uppercase">Disc %</th>
                       <th className="p-3 text-right text-[10px] uppercase">Disc Amount</th>
                       <th className="p-3 text-right text-[10px] uppercase">Price</th>
@@ -1567,6 +1568,21 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                         </td>
                         <td className="p-3 text-right font-bold text-red-600">
                           {item.backOrderQty} {item.unit}
+                        </td>
+                        <td className="p-3 text-center">
+                          {item.backOrderQty > 0 && (
+                            <input
+                              type="checkbox"
+                              checked={!!item.isConfirmed}
+                              onChange={(e) => {
+                                const updated = [...editedItems];
+                                updated[idx].isConfirmed = e.target.checked;
+                                setEditedItems(updated);
+                              }}
+                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                              title="Tick to confirm this back order product for restocking"
+                            />
+                          )}
                         </td>
                         <td className="p-3">
                           <div className="flex items-center justify-center gap-0.5">

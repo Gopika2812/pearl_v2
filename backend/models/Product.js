@@ -30,6 +30,7 @@ const productSchema = new mongoose.Schema(
     totalQty: { type: Number, default: 0 },
     totalQtyUnit: { type: String, default: "" }, // Unit for total quantity
     purchasingPrice: { type: Number, default: 0 },
+    marketCapPrice: { type: Number, default: 0 }, // Market Cap (Approval Rate)
     sellingPrice: { type: Number, default: 0 },
     lockedPrice: { type: Number, default: 0 },
     mrp: { type: Number, default: 0 }, // Maximum Retail Price
@@ -88,6 +89,8 @@ const productSchema = new mongoose.Schema(
     priceHistory: [{
       oldPurchasingPrice: Number,
       newPurchasingPrice: Number,
+      oldMarketCapPrice: Number,
+      newMarketCapPrice: Number,
       oldSellingPrice: Number,
       newSellingPrice: Number,
       oldGst: Number,
@@ -105,51 +108,55 @@ const productSchema = new mongoose.Schema(
 productSchema.pre("save", function () {
   const isNew = this.isNew;
   const pPriceChanged = this.isModified("purchasingPrice");
+  const mcpChanged = this.isModified("marketCapPrice");
   const sPriceChanged = this.isModified("sellingPrice");
   const marginChanged = this.isModified("margin");
   const marginPctChanged = this.isModified("marginPercentage");
 
+  const baseCost = this.marketCapPrice > 0 ? this.marketCapPrice : (this.purchasingPrice || 0);
+  const costChanged = pPriceChanged || mcpChanged;
+
   // PRIORITY 1: Explicit Marginal Percentage Change
   if (marginPctChanged && this.marginPercentage > 0) {
     this.marginPercentage = Math.round(this.marginPercentage * 100) / 100;
-    this.sellingPrice = Math.round(((this.purchasingPrice || 0) + ((this.purchasingPrice || 0) * this.marginPercentage / 100)) * 100) / 100;
-    this.margin = Math.round((this.sellingPrice - (this.purchasingPrice || 0)) * 100) / 100;
+    this.sellingPrice = Math.round((baseCost + (baseCost * this.marginPercentage / 100)) * 100) / 100;
+    this.margin = Math.round((this.sellingPrice - baseCost) * 100) / 100;
   }
   // PRIORITY 2: Explicit Margin Amount Change
   else if (marginChanged) {
     this.margin = Math.round(this.margin * 100) / 100;
-    this.sellingPrice = Math.round(((this.purchasingPrice || 0) + this.margin) * 100) / 100;
-    if (this.purchasingPrice > 0) {
-      this.marginPercentage = Math.round((this.margin / this.purchasingPrice) * 100 * 100) / 100;
+    this.sellingPrice = Math.round((baseCost + this.margin) * 100) / 100;
+    if (baseCost > 0) {
+      this.marginPercentage = Math.round((this.margin / baseCost) * 100 * 100) / 100;
     }
   }
-  // PRIORITY 3: Only Purchasing Price changed (Maintain Margin Percentage if available)
-  else if (!isNew && pPriceChanged && !sPriceChanged) {
+  // PRIORITY 3: Only Cost (Purchasing Price or MCP) changed (Maintain Margin Percentage if available)
+  else if (!isNew && costChanged && !sPriceChanged) {
     if (this.marginPercentage > 0) {
-      this.sellingPrice = Math.round(((this.purchasingPrice || 0) + ((this.purchasingPrice || 0) * this.marginPercentage / 100)) * 100) / 100;
-      this.margin = Math.round((this.sellingPrice - (this.purchasingPrice || 0)) * 100) / 100;
+      this.sellingPrice = Math.round((baseCost + (baseCost * this.marginPercentage / 100)) * 100) / 100;
+      this.margin = Math.round((this.sellingPrice - baseCost) * 100) / 100;
       console.log(`🛡️ Product Sync: [${this.name}] cost updated. Maintained ${this.marginPercentage}% margin. New sellingPrice: ₹${this.sellingPrice}`);
     } else if (this.margin !== undefined && this.margin !== null) {
       // Fallback to absolute margin if percentage not set
-      this.sellingPrice = Math.round(((this.purchasingPrice || 0) + this.margin) * 100) / 100;
-      if (this.purchasingPrice > 0) {
-        this.marginPercentage = Math.round((this.margin / this.purchasingPrice) * 100 * 100) / 100;
+      this.sellingPrice = Math.round((baseCost + this.margin) * 100) / 100;
+      if (baseCost > 0) {
+        this.marginPercentage = Math.round((this.margin / baseCost) * 100 * 100) / 100;
       }
       console.log(`🛡️ Product Sync: [${this.name}] cost updated. Maintained ₹${this.margin} margin. New sellingPrice: ₹${this.sellingPrice}`);
     }
   }
   // PRIORITY 4: Only Selling Price changed (Recalculate Margin)
-  else if (sPriceChanged && !pPriceChanged) {
-    this.margin = Math.round(((this.sellingPrice || 0) - (this.purchasingPrice || 0)) * 100) / 100;
-    if (this.purchasingPrice > 0) {
-      this.marginPercentage = Math.round((this.margin / this.purchasingPrice) * 100 * 100) / 100;
+  else if (sPriceChanged && !costChanged) {
+    this.margin = Math.round(((this.sellingPrice || 0) - baseCost) * 100) / 100;
+    if (baseCost > 0) {
+      this.marginPercentage = Math.round((this.margin / baseCost) * 100 * 100) / 100;
     }
   }
   // DEFAULT: Sync values
   else {
-    this.margin = Math.round(((this.sellingPrice || 0) - (this.purchasingPrice || 0)) * 100) / 100;
-    if (this.purchasingPrice > 0) {
-      this.marginPercentage = Math.round((this.margin / this.purchasingPrice) * 100 * 100) / 100;
+    this.margin = Math.round(((this.sellingPrice || 0) - baseCost) * 100) / 100;
+    if (baseCost > 0) {
+      this.marginPercentage = Math.round((this.margin / baseCost) * 100 * 100) / 100;
     }
   }
 

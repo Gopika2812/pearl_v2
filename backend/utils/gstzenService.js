@@ -321,11 +321,6 @@ class GSTZenService {
 
       // Final Path Logic
       let endpoint = (process.env.GSTZEN_EINVOICE_ENDPOINT || "/~gstzen/a/post-einvoice-data/einvoice-json/").trim().replace(/^\/+/, "");
-      
-      // If vehicle details exist, use the dedicated combined generation endpoint
-      if (payload.EwbDtls) {
-        endpoint = "~gstzen/a/post-einvoice-data/einvoice-json/genewb/";
-      }
 
       console.log(`📡 Sending [${isB2C ? "B2C E-Way Bill" : "B2B E-Invoice"}] to: ${this.baseUrl}/${endpoint}`);
       

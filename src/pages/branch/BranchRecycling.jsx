@@ -155,6 +155,53 @@ export default function BranchRecycling() {
   const [bulkRestockPreviewItems, setBulkRestockPreviewItems] = useState([]);
   const [bulkRestockEditQty, setBulkRestockEditQty] = useState({});
 
+  // Neutralize Pending SO Qty State
+  const [isNeutralizing, setIsNeutralizing] = useState(false);
+
+  const handleNeutralizePending = async () => {
+    if (selectedProducts.size === 0) return;
+    
+    const daysStr = prompt("Enter number of days (e.g. 3) to neutralize older pending sales order items (Note: items explicitly confirmed in Back Order edits will be preserved):", "3");
+    if (!daysStr) return;
+    
+    const days = parseInt(daysStr, 10);
+    if (isNaN(days) || days < 0) {
+      toast.error("Please enter a valid number of days");
+      return;
+    }
+
+    setIsNeutralizing(true);
+    try {
+      const productIds = Array.from(selectedProducts);
+      const res = await fetch(`${API_BASE}/sales-orders/neutralize`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({
+          branchId: currentBranch._id,
+          productIds,
+          days
+        })
+      });
+
+      const data = await res.json();
+      if (data.success || res.ok) {
+        toast.success(`Successfully neutralized ${data.neutralizedCount || 0} old pending sales order items.`);
+        setSelectedProducts(new Set());
+        fetchAllData(currentPage, searchTerm); // Refresh pending SO qty
+      } else {
+        toast.error(data.message || "Failed to neutralize");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error connecting to server");
+    } finally {
+      setIsNeutralizing(false);
+    }
+  };
+
   // Fetch product groups directly from `/api/product-groups` immediately
   const fetchProductGroupsDirectly = async () => {
     if (!currentBranch?._id) return;
@@ -340,7 +387,7 @@ export default function BranchRecycling() {
         if (Array.isArray(order.items)) {
           order.items.forEach((item) => {
             const prodId = item.productId?._id || item.productId;
-            if (prodId) {
+            if (prodId && item.isNeutralized !== true) {
               pendingMap[prodId] = (pendingMap[prodId] || 0) + (item.qty || 0);
               
               if (!detailsMap[prodId]) {
@@ -2392,6 +2439,16 @@ export default function BranchRecycling() {
                   ✓ Create Bulk PO ({selectedProducts.size} Products)
                 </button>
               )}
+
+              {/* Neutralize Button */}
+              <button
+                onClick={handleNeutralizePending}
+                disabled={isNeutralizing}
+                className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 shadow cursor-pointer ml-auto flex items-center gap-2"
+                title="Neutralize old pending Sales Orders for these products"
+              >
+                {isNeutralizing ? "Processing..." : `🧹 Neutralize SO Qty`}
+              </button>
             </div>
           </div>
         )}

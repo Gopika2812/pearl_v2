@@ -432,7 +432,12 @@ const BranchProductRecords = () => {
                               : 'bg-white border-gray-50 hover:border-indigo-100 hover:bg-gray-50 text-gray-700'
                           }`}
                         >
-                          <div className="font-bold text-[11px] truncate">{p.name}</div>
+                          <div className="font-bold text-[11px] truncate flex justify-between items-center">
+                            <span>{p.name}</span>
+                            {p.marketCapPrice > 0 && (
+                              <span className="ml-2 px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[8px] font-black uppercase rounded">MCP</span>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
