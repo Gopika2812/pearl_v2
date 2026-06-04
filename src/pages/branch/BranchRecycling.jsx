@@ -1039,8 +1039,6 @@ export default function BranchRecycling() {
           "Normal";
 
         const purDate = product.lastPurchaseDate ? new Date(product.lastPurchaseDate).toLocaleDateString('en-GB') : "-";
-        const salDate = product.lastSalesDate ? new Date(product.lastSalesDate).toLocaleDateString('en-GB') : "-";
-
         const getAgeInDays = (dateStr) => {
           if (!dateStr) return "-";
           const lastDate = new Date(dateStr);
@@ -1052,7 +1050,8 @@ export default function BranchRecycling() {
         };
 
         const purAge = getAgeInDays(product.lastPurchaseDate);
-        const salAge = getAgeInDays(product.lastSalesDate);
+        const salQty = product.restockingConfig?.sellingQtyInPeriod || 0;
+        const salAge = product.restockingConfig?.salesPeriodDays ? `${product.restockingConfig.salesPeriodDays} days` : "-";
 
         const groupName = product.productGroup && typeof product.productGroup === 'object' 
           ? (product.productGroup.name || product.productGroup._id)
@@ -1072,8 +1071,8 @@ export default function BranchRecycling() {
           "PO Qty": poQty,
           "Last Purchase Date": purDate,
           "Purchase Age": purAge,
-          "Last Sales Date": salDate,
-          "Sales Age": salAge,
+          "Sales Qty in Period": salQty,
+          "Sales Age (Period)": salAge,
           "SO Qty": soQty,
           "Net Available Qty": netAvailability,
           "Min Level (Threshold)": reorderLevel,
@@ -2576,10 +2575,10 @@ export default function BranchRecycling() {
                     Pur. Age {sortConfig.key === "purchaseAge" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
                   <th 
-                    onClick={() => handleSort("lastSalesDate")}
+                    onClick={() => handleSort("sellingQtyInPeriod")}
                     className="px-1 py-2 text-left text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap text-indigo-600"
                   >
-                    Sal. Date {sortConfig.key === "lastSalesDate" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    Sal. Qty {sortConfig.key === "sellingQtyInPeriod" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
                   <th 
                     onClick={() => handleSort("salesAge")}
@@ -2737,13 +2736,13 @@ export default function BranchRecycling() {
                         <td className="px-1 py-2 text-left text-[11px] text-gray-600 whitespace-nowrap">
                           {getPurchaseAgeString(product.lastPurchaseDate)}
                         </td>
-                        {/* Last Sales Date */}
-                        <td className="px-1 py-2 text-left text-[11px] text-indigo-600 font-medium whitespace-nowrap">
-                          {getPurchaseDateString(product.lastSalesDate)}
+                        {/* Sales Qty in Period */}
+                        <td className="px-1 py-2 text-left text-[11px] text-indigo-600 font-black whitespace-nowrap">
+                          {product.restockingConfig?.sellingQtyInPeriod || "-"}
                         </td>
-                        {/* Sales Age (Days) */}
+                        {/* Sales Period (Age) */}
                         <td className="px-1 py-2 text-left text-[11px] text-indigo-600 font-medium whitespace-nowrap">
-                          {getPurchaseAgeString(product.lastSalesDate)}
+                          {product.restockingConfig?.salesPeriodDays ? `${product.restockingConfig.salesPeriodDays}d` : "-"}
                         </td>
                         {isFieldAllowed("pendingSales") && (
                           <td className="px-1 py-2 text-right text-[11px]">
