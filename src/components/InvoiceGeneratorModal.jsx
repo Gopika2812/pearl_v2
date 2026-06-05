@@ -541,6 +541,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             transportGstPercent: Number(transportGstPercent) || 18,
             extraExpenseAmount: Number(extraExpenseAmount) || 0,
             extraExpenses,
+            useSoNumber,
             customerId: selectedCustomer?.customerId || selectedCustomer?._id, // Use swapped customer
             finalizedBy: user?.id || user?._id,
             finalizedByUsername: user?.username || user?.fullName || user?.name || "System",

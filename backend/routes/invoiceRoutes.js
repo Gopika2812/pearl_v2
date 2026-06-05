@@ -1024,18 +1024,23 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         // ==========================================
         // 3️⃣ UPDATE STOCK (DELTA-BASED)
         // ==========================================
-        const lastItems = salesOrder.lastInvoicedItems || [];
-        const allProductIds = new Set([
-          ...processedItems.map(i => i.productId ? (i.productId._id || i.productId).toString() : null).filter(Boolean),
-          ...lastItems.map(i => i.productId ? (i.productId._id || i.productId).toString() : null).filter(Boolean)
-        ]);
+        let stockAdjustments = [];
+        if (invoiceType === "TAX_INVOICE") {
+          const lastItems = salesOrder.lastInvoicedItems || [];
+          const allProductIds = new Set([
+            ...processedItems.map(i => i.productId ? (i.productId._id || i.productId).toString() : null).filter(Boolean),
+            ...lastItems.map(i => i.productId ? (i.productId._id || i.productId).toString() : null).filter(Boolean)
+          ]);
 
-        for (const pId of allProductIds) {
-          const newItem = processedItems.find(i => i.productId && (i.productId._id || i.productId).toString() === pId);
-          const oldItem = lastItems.find(i => i.productId && (i.productId._id || i.productId).toString() === pId);
-          const deltaQty = (newItem?.qty || 0) - (oldItem?.qty || 0);
-          if (deltaQty !== 0) {
-            await Product.updateOne({ _id: pId }, { $inc: { totalQty: -deltaQty } }, { session });
+          for (const pId of allProductIds) {
+            const newItem = processedItems.find(i => i.productId && (i.productId._id || i.productId).toString() === pId);
+            const oldItem = lastItems.find(i => i.productId && (i.productId._id || i.productId).toString() === pId);
+            const deltaQty = (newItem?.qty || 0) - (oldItem?.qty || 0);
+            if (deltaQty !== 0) {
+              await Product.updateOne({ _id: pId }, { $inc: { totalQty: -deltaQty } }, { session });
+              const prodName = newItem?.name || oldItem?.name || "Unknown Product";
+              stockAdjustments.push(`${prodName} (${deltaQty > 0 ? '-' : '+'}${Math.abs(deltaQty)})`);
+            }
           }
         }
 
@@ -1046,7 +1051,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           // Calculate opening balance BEFORE we apply the current update
           // Opening Balance = Current DB Balance - (last grand total if this was already invoiced)
           const currentBalance = (customer.debit || 0) - (customer.credit || 0);
-          const balanceAdjustment = salesOrder.invoiceGenerated ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
+          const balanceAdjustment = salesOrder.salesInvoiceGenerated ? (salesOrder.lastInvoicedGrandTotal || 0) : 0;
           dynamicOpeningBalance = currentBalance - balanceAdjustment;
           closingBalance = dynamicOpeningBalance + grandTotal;
         }
@@ -1090,19 +1095,21 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           return isVendor;
         };
 
-        if (isCustomerSwapped && salesOrder.invoiceGenerated) {
-          // A. Revert old customer
-          const oldCustomer = await Customer.findById(lastCustomerId).session(session);
-          if (oldCustomer) {
-            await updateBalance(oldCustomer, lastGrandTotal, true);
-          }
-          // B. Apply to new customer
-          await updateBalance(customer, grandTotal, false);
-        } else {
-          // Standard delta for same customer
-          const totalDelta = salesOrder.invoiceGenerated ? (grandTotal - lastGrandTotal) : grandTotal;
-          if (totalDelta !== 0) {
-            await updateBalance(customer, totalDelta, false);
+        if (invoiceType === "TAX_INVOICE") {
+          if (isCustomerSwapped && salesOrder.salesInvoiceGenerated) {
+            // A. Revert old customer
+            const oldCustomer = await Customer.findById(lastCustomerId).session(session);
+            if (oldCustomer) {
+              await updateBalance(oldCustomer, lastGrandTotal, true);
+            }
+            // B. Apply to new customer
+            await updateBalance(customer, grandTotal, false);
+          } else {
+            // Standard delta for same customer
+            const totalDelta = salesOrder.salesInvoiceGenerated ? (grandTotal - lastGrandTotal) : grandTotal;
+            if (totalDelta !== 0) {
+              await updateBalance(customer, totalDelta, false);
+            }
           }
         }
 
@@ -1156,6 +1163,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           invoice.deliveryMan = salesOrder.deliveryMan;
           // 🛡️ LOCK DATE: Always use original SO date to prevent month-jumping during tax filing
           invoice.invoiceDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
+          invoice.status = invoiceType === "TAX_INVOICE" ? "FINALIZED" : "DRAFT";
 
           // Copy spotted fields if they exist
           invoice.spottedCustomerName = salesOrder.spottedCustomerName;
@@ -1193,7 +1201,7 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             billingPerson: finalizedByUsername || salesOrder.billingPerson || "System",
             generatedBy: finalizedByUsername || "System",
             deliveryMan: salesOrder.deliveryMan,
-            status: "FINALIZED",
+            status: invoiceType === "TAX_INVOICE" ? "FINALIZED" : "DRAFT",
             spottedCustomerName: salesOrder.spottedCustomerName,
             spottedPhoneNumber: salesOrder.spottedPhoneNumber,
           });
@@ -1247,21 +1255,29 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         // For simplicity and user request, we focus financial tracking on the Invoice documents
         salesOrder.notes = notes;
         salesOrder.invoiceGenerated = true;
-        salesOrder.status = "INVOICED";
-        salesOrder.salesInvoiceId = invoiceNumber;
-        salesOrder.lastInvoicedGrandTotal = grandTotal;
-        salesOrder.lastInvoicedCustomerId = customer._id;
-        salesOrder.lastInvoicedItems = processedItems;
+
+        if (invoiceType === "TAX_INVOICE") {
+          salesOrder.status = "INVOICED";
+          salesOrder.salesInvoiceId = invoiceNumber;
+          salesOrder.lastInvoicedGrandTotal = grandTotal;
+          salesOrder.lastInvoicedCustomerId = customer._id;
+          salesOrder.lastInvoicedItems = processedItems;
+          salesOrder.salesInvoiceGenerated = true;
+        }
+
         salesOrder.invoiceItems = processedItems; // Sync to schema field
         if (isCustomerSwapped) salesOrder.customer = customerSnapshot;
 
+        const adjustmentNote = stockAdjustments.length > 0 ? ` Stock Adjusted: ${stockAdjustments.join(", ")}.` : "";
         salesOrder.editHistory.push({
           version: salesOrder.editHistory.length + 1,
-          editType: "INVOICED",
+          editType: invoiceType === "TAX_INVOICE" ? "INVOICED" : "DRAFT_SAVED",
           grandTotal,
           editedAt: new Date(),
           editedBy: req.user.username, // ✨ NEW
-          note: `Invoice ${invoiceNumber} finalized. ${isCustomerSwapped ? 'Customer Swap Applied.' : ''}`
+          note: invoiceType === "TAX_INVOICE" 
+            ? `Invoice ${invoiceNumber} finalized. ${isCustomerSwapped ? 'Customer Swap Applied.' : ''}${adjustmentNote}`
+            : `Dummy Bill updated. No stock/balance changes applied.`
         });
 
         // 🛡️ LOCK SO DATE: Ensure the original order date is preserved

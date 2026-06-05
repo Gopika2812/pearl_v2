@@ -139,7 +139,7 @@ router.post("/:id/record-payment", clearCachePrefix("/api/sales-orders"), async 
 router.get("/", async (req, res) => {
   try {
     const { branchId, customerName, status, isClaim, fromDate, toDate, customerId, search, voucherType, generated, isDummy, isOnlineOrder } = req.query;
-    console.log("🔍 [DEBUG] Sales Order Fetch Query:", { branchId, isClaim, fromDate, toDate, search, voucherType, isDummy });
+    console.log("🔍 [DEBUG] Sales Order Fetch Query:", { branchId, isClaim, fromDate, toDate, search, voucherType, isDummy, isOnlineOrder });
     const query = {};
 
     // 1. Branch Filter (Always required)
@@ -222,13 +222,22 @@ router.get("/", async (req, res) => {
         if (start) dateCriteria.$gte = start;
         if (end) dateCriteria.$lte = end;
 
-        query.$and = query.$and || [];
-        query.$and.push({
+        // ✅ FIX: Use $or at top level to avoid complex nested $and logic
+        const dateFilter = {
           $or: [
             { orderDate: dateCriteria },
             { orderDate: { $exists: false }, createdAt: dateCriteria }
           ]
-        });
+        };
+
+        // If query already has conditions, merge properly
+        if (Object.keys(query).length > 0) {
+          query.$and = query.$and || [];
+          query.$and.push(dateFilter);
+        } else {
+          // Simple case: no other filters, apply directly
+          Object.assign(query, dateFilter);
+        }
 
         console.log(`📅 [DEBUG] Final Date Filter Applied: ${start ? moment(start).format() : 'ANY'} to ${end ? moment(end).format() : 'ANY'}`);
       }
@@ -256,6 +265,8 @@ router.get("/", async (req, res) => {
     }
 
     // ⚡ Optimized Fetch
+    console.log("📋 [DEBUG] Final MongoDB Query:", JSON.stringify(query, null, 2));
+    
     const salesOrders = await SalesOrder.find(query)
       .select("invoiceId salesInvoiceId printCount customer items sampleItems grandTotalWithMargin grandTotal commonDiscount invoiceCommonDiscount closingBalance salesOwner createdAt orderDate invoiceGenerated warehouse billingPerson voucherType reEditRequestStatus reEditRequestBy reEditRequestAt isReEdited status editHistory lastInvoicedGrandTotal transportCharge transportGstPercent transportGstAmount invoiceTransportCharge invoiceTransportGstAmount extraExpenses extraExpenseAmount invoiceItems lastInvoicedItems invoiceSubtotal invoiceTotalTax invoiceGrandTotal invoiceOpeningBalance invoiceClosingBalance deliveryMan spottedCustomerName spottedPhoneNumber")
       .populate('salesOwner', 'name')
@@ -686,14 +697,16 @@ router.post("/", auth, clearCachePrefix("/api/sales-orders"), async (req, res) =
       deliveryMan,
       financialYear: currentFY,
       isClaim: isClaim || false,
-      orderDate: orderDate ? new Date(orderDate) : new Date(),
+      orderDate: orderDate ? moment.tz(orderDate, "Asia/Kolkata").startOf("day").toDate() : new Date(),
       spottedCustomerName,
       spottedPhoneNumber,
       isDummy: isDummy === true,
+      status: "PLACED",
+      invoiceGenerated: false,
     });
 
     await salesOrder.save();
-    console.log("✅ SalesOrder saved successfully");
+    console.log("✅ SalesOrder saved successfully with status: PLACED, orderDate:", new Date(salesOrder.orderDate));
 
     if (!isDummy && voucher) {
       // ✅ Sync and Increment voucher counter
@@ -1041,7 +1054,7 @@ router.post("/:id/change-date", auth, clearCachePrefix("/api/sales-orders"), asy
           deliveryMan: originalOrder.deliveryMan,
           financialYear: currentFY,
           isClaim: originalOrder.isClaim || false,
-          orderDate: new Date(newDate),
+          orderDate: moment.tz(newDate, "Asia/Kolkata").startOf("day").toDate(),
           spottedCustomerName: originalOrder.spottedCustomerName,
           spottedPhoneNumber: originalOrder.spottedPhoneNumber,
           isDummy: originalOrder.isDummy,

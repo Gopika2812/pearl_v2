@@ -224,6 +224,11 @@ const salesOrderSchema = new mongoose.Schema(
       default: false,
     },
 
+    salesInvoiceGenerated: {
+      type: Boolean,
+      default: false,
+    },
+
     recordType: {
       type: String,
       enum: ["SALES ORDER", "SALES INVOICE"],
@@ -278,7 +283,7 @@ const salesOrderSchema = new mongoose.Schema(
         version: Number,
         editType: {
           type: String,
-          enum: ["CREATED", "PRE_INVOICE_EDIT", "INVOICED", "RE_EDIT_STARTED", "RE_INVOICED", "CANCELLED", "GENERAL_EDIT", "INVOICE_CANCELLED"],
+          enum: ["CREATED", "PRE_INVOICE_EDIT", "INVOICED", "RE_EDIT_STARTED", "RE_INVOICED", "CANCELLED", "GENERAL_EDIT", "INVOICE_CANCELLED", "DRAFT_SAVED"],
         },
         items: Array,
         subtotal: Number,

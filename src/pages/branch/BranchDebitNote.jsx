@@ -1,9 +1,11 @@
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import React, { useEffect, useState } from "react";
-import { FaPlus, FaUndoAlt, FaSearch, FaFileInvoiceDollar, FaChevronDown, FaChevronUp, FaFileContract, FaPrint } from "react-icons/fa";
+import { FaChevronDown, FaChevronUp, FaDownload, FaFileInvoiceDollar, FaPlus, FaPrint, FaSearch, FaUndoAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
+import { API_BASE, fetchWithAuth } from "../../api";
 import SupplierDebitNoteModal from "../../components/inventory/SupplierDebitNoteModal";
 import { useBranch } from "../../context/BranchContext";
-import { API_BASE, fetchWithAuth } from "../../api";
 import { getInvoiceHTML } from "../../utils/invoiceUtils";
 
 export default function BranchDebitNote() {
@@ -79,6 +81,215 @@ export default function BranchDebitNote() {
       printWindow.print();
       setTimeout(() => printWindow.close(), 1000);
     }, 500);
+  };
+
+  const handleDownloadPDF = (dn) => {
+    try {
+      const doc = new jsPDF("p", "mm", "a4");
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.height;
+      let yPos = 10;
+
+      // ==================== TOP BORDER ====================
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(1);
+      doc.line(10, yPos, pageWidth - 10, yPos);
+
+      // ==================== HEADER WITH 3 COLUMNS ====================
+      yPos += 4;
+
+      // LEFT: Logo/Title
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 100, 100);
+      doc.text("Debit Note ID: " + (dn.debitNoteId || "N/A"), 15, yPos + 8);
+
+      // CENTER: Company Info
+      doc.setFontSize(20);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(0, 0, 0);
+      doc.text(currentBranch?.name || "PEARL AGENCY", pageWidth / 2, yPos + 6, { align: "center" });
+
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(0, 0, 0);
+      yPos += 10;
+      doc.text(`${currentBranch?.address || ""}`, pageWidth / 2, yPos, { align: "center" });
+      doc.text(`Mobile: ${currentBranch?.phone || "N/A"} | GSTIN: ${currentBranch?.gstNumber || "N/A"}`, pageWidth / 2, yPos + 4, { align: "center" });
+
+      // RIGHT: QR Code placeholder
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 100, 100);
+      doc.rect(pageWidth - 35, yPos - 10, 25, 20);
+      doc.text("QR CODE", pageWidth - 23, yPos + 2, { align: "center" });
+
+      // ==================== BOTTOM BORDER ====================
+      yPos += 10;
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(1);
+      doc.line(10, yPos, pageWidth - 10, yPos);
+
+      // ==================== SECTION TITLE ====================
+      yPos += 6;
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(150, 150, 150);
+      doc.text("PURCHASE RETURN / DEBIT NOTE DETAILS", 15, yPos);
+
+      // ==================== LEFT SIDE: ID & DATE | RIGHT SIDE: VENDOR & CONTACT ====================
+      yPos += 7;
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(0, 0, 0);
+
+      // Left info
+      doc.text("Debit Note ID: " + (dn.debitNoteId || "N/A"), 15, yPos);
+      doc.text("Note Date: " + new Date(dn.createdAt).toLocaleDateString("en-IN"), 15, yPos + 5);
+
+      // Right info
+      const rightCol = pageWidth - 100;
+      doc.text("Vendor: " + (dn.vendor?.name || "N/A"), rightCol, yPos);
+      doc.text("Contact: " + (dn.vendor?.phone || "N/A"), rightCol, yPos + 5);
+
+      // ==================== VENDOR BOX ====================
+      yPos += 12;
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.5);
+      doc.rect(15, yPos, 165, 28);
+
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(0, 0, 0);
+      doc.text("SUPPLIER (VENDOR) " + (dn.vendor?.name || "N/A"), 18, yPos + 4);
+
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "normal");
+      doc.text((dn.vendor?.location || ""), 18, yPos + 8);
+      doc.text(`Phone: ${dn.vendor?.phone || "N/A"}`, 18, yPos + 12);
+      doc.text(`GSTIN: ${dn.vendor?.gstNumber || "N/A"}`, 18, yPos + 16);
+
+      yPos += 32;
+
+      // ==================== ITEMS TABLE ====================
+      autoTable(doc, {
+        head: [["#", "PRODUCT NAME", "HSN", "QTY", "RATE", "DISC %", "TOTAL"]],
+        body: (dn.items || []).map((item, index) => [
+          index + 1,
+          item.name,
+          item.hsn || "-",
+          (item.qty || item.returnedQty || 0),
+          "₹" + (item.purchasePrice || 0),
+          (item.discountPercent || 0) + "%",
+          "₹" + ((item.total || 0)).toLocaleString()
+        ]),
+        startY: yPos,
+        theme: 'grid',
+        headStyles: {
+          fillColor: [0, 0, 0],
+          fontSize: 7,
+          fontStyle: 'bold',
+          textColor: [255, 255, 255],
+          halign: 'center',
+          valign: 'middle',
+          lineColor: [0, 0, 0],
+          lineWidth: 0.5
+        },
+        bodyStyles: {
+          fontSize: 7,
+          textColor: [0, 0, 0],
+          lineColor: [100, 100, 100],
+          lineWidth: 0.3
+        },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 7 },
+          1: { halign: 'left', cellWidth: 55 },
+          2: { halign: 'center', cellWidth: 15 },
+          3: { halign: 'center', cellWidth: 13 },
+          4: { halign: 'right', cellWidth: 18 },
+          5: { halign: 'center', cellWidth: 15 },
+          6: { halign: 'right', cellWidth: 22 }
+        },
+        margin: { left: 15, right: 15 },
+        lineWidth: 0.5
+      });
+
+      yPos = doc.lastAutoTable.finalY + 8;
+
+      // ==================== BOTTOM SECTION: LEFT BOX & RIGHT TOTALS ====================
+      const boxHeight = 40;
+      const boxWidth = 75;
+
+      // LEFT: Reason Box with vertical line (design element)
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.5);
+      doc.rect(15, yPos, boxWidth, boxHeight);
+
+      // Vertical line on left side (visual design element like balance box)
+      doc.setLineWidth(3);
+      doc.line(15, yPos, 15, yPos + boxHeight);
+
+      doc.setLineWidth(0.5);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(0, 0, 0);
+      doc.text("REASON FOR RETURN", 18, yPos + 4);
+
+      doc.setFontSize(6);
+      doc.setFont("helvetica", "normal");
+      const reasonText = dn.reason || "Material Returned to Vendor";
+      const splitReason = doc.splitTextToSize(reasonText, 65);
+      doc.text(splitReason, 18, yPos + 9);
+
+      // RIGHT: Summary Totals
+      const rightMargin = 100;
+      const taxAmount = dn.items?.reduce((sum, item) => sum + (item.tax || 0), 0) || 0;
+      const subtotal = (dn.grandTotal || 0);
+      const baseAmount = subtotal - taxAmount;
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(0, 0, 0);
+
+      let summaryY = yPos + 4;
+      doc.text("Subtotal:", rightMargin, summaryY);
+      doc.text("₹" + baseAmount.toLocaleString(), pageWidth - 18, summaryY, { align: "right" });
+
+      summaryY += 5;
+      if (taxAmount > 0) {
+        doc.text("CGST (9%):", rightMargin, summaryY);
+        doc.text("₹" + (taxAmount / 2).toLocaleString(), pageWidth - 18, summaryY, { align: "right" });
+
+        summaryY += 5;
+        doc.text("SGST (9%):", rightMargin, summaryY);
+        doc.text("₹" + (taxAmount / 2).toLocaleString(), pageWidth - 18, summaryY, { align: "right" });
+      }
+
+      summaryY += 6;
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.5);
+      doc.line(rightMargin, summaryY - 1, pageWidth - 18, summaryY - 1);
+
+      summaryY += 4;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("GRAND TOTAL:", rightMargin, summaryY);
+      doc.text("₹" + subtotal.toLocaleString(), pageWidth - 18, summaryY, { align: "right" });
+
+      // ==================== FOOTER ====================
+      yPos = pageHeight - 10;
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 100, 100);
+      doc.text("ORIGINAL COPY", 15, yPos);
+
+      // Save the PDF
+      doc.save(`${dn.debitNoteId}_${new Date().toISOString().slice(0, 10)}.pdf`);
+      toast.success("PDF downloaded successfully!");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast.error("Failed to generate PDF");
+    }
   };
 
   const handleEdit = (dn) => {
@@ -226,6 +437,20 @@ export default function BranchDebitNote() {
                                     title="Cancel Debit Note"
                                   >
                                       CANCEL
+                                  </button>
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handlePrint(dn); }}
+                                    className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all text-[10px] font-black border border-blue-100 flex items-center gap-1"
+                                    title="Print Debit Note"
+                                  >
+                                      <FaPrint size={10} /> PRINT
+                                  </button>
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handleDownloadPDF(dn); }}
+                                    className="px-2 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-600 hover:text-white transition-all text-[10px] font-black border border-green-100 flex items-center gap-1"
+                                    title="Download PDF"
+                                  >
+                                      <FaDownload size={10} /> PDF
                                   </button>
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); toggleExpand(dn._id); }}

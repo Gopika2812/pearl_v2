@@ -277,7 +277,7 @@ export const InventoryProvider = ({ children }) => {
       if (!branchId) return;
       
       // ⚡ PERFORMANCE: Only fetch a small set initially
-      const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${branchId}&limit=10000`);
+      const res = await fetchWithAuth(`${API_BASE}/customers?branchId=${branchId}&limit=10000&mini=true`);
       const json = await res.json();
       setCustomers(json.data || []);
     } catch (err) {

@@ -1003,7 +1003,7 @@ router.get("/", async (req, res) => {
     pipeline.push({ $limit: pageSize });
 
     // 2.6 Deferred Lookup for Last Invoice (If not already looked up early)
-    if (!isInvoiceAgeSort) {
+    if (!isInvoiceAgeSort && !isMini) {
         pipeline.push(
             {
                 $lookup: {
@@ -1035,7 +1035,7 @@ router.get("/", async (req, res) => {
     }
 
     // 2.65 Deferred Lookup for Last Receipt (If not already looked up early)
-    if (!isReceiptAgeSort) {
+    if (!isReceiptAgeSort && !isMini) {
         pipeline.push(
             {
                 $lookup: {
