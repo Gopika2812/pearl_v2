@@ -17,6 +17,7 @@ import CustomerFollowUpHistoryModal from "../../components/branch/CustomerFollow
 import TokenManagerModal from "../../components/branch/TokenManagerModal";
 import CategoryManagementModal from "../../components/branch/CategoryManagementModal";
 import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCustomerModal";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 const BranchFollowUp = () => {
     const navigate = useNavigate();
@@ -44,100 +45,7 @@ const BranchFollowUp = () => {
 
     const [startDate, setStartDate] = useState(defaultStartDate);
     const [endDate, setEndDate] = useState(defaultEndDate);
-    const [datePreset, setDatePreset] = useState("Cur FY");
-    const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
 
-    const getPresetDates = (preset) => {
-        const today = new Date();
-        let start = new Date();
-        let end = new Date();
-
-        switch (preset) {
-            case "Today":
-                break;
-            case "Yesterday":
-                start.setDate(today.getDate() - 1);
-                end.setDate(today.getDate() - 1);
-                break;
-            case "This Week": {
-                const day = today.getDay();
-                const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-                start.setDate(diff);
-                break;
-            }
-            case "Last Week": {
-                const lastWeekDay = today.getDay();
-                const lastWeekDiff = today.getDate() - lastWeekDay + (lastWeekDay === 0 ? -6 : 1) - 7;
-                start.setDate(lastWeekDiff);
-                end = new Date(start);
-                end.setDate(start.getDate() + 6);
-                break;
-            }
-            case "This Month":
-                start = new Date(today.getFullYear(), today.getMonth(), 1);
-                end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-                break;
-            case "Last Month":
-                start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                end = new Date(today.getFullYear(), today.getMonth(), 0);
-                break;
-            case "This Quarter": {
-                const currentMonth = today.getMonth();
-                const fyStartYear = currentMonth < 3 ? today.getFullYear() - 1 : today.getFullYear();
-                let qStartMonth, qEndMonth, qYear;
-                if (currentMonth >= 3 && currentMonth <= 5) {
-                    qStartMonth = 3; qEndMonth = 5; qYear = fyStartYear;
-                } else if (currentMonth >= 6 && currentMonth <= 8) {
-                    qStartMonth = 6; qEndMonth = 8; qYear = fyStartYear;
-                } else if (currentMonth >= 9 && currentMonth <= 11) {
-                    qStartMonth = 9; qEndMonth = 11; qYear = fyStartYear;
-                } else {
-                    qStartMonth = 0; qEndMonth = 2; qYear = fyStartYear + 1;
-                }
-                start = new Date(qYear, qStartMonth, 1);
-                end = new Date(qYear, qEndMonth + 1, 0);
-                break;
-            }
-            case "Last Quarter": {
-                const currentMonth = today.getMonth();
-                const fyStartYear = currentMonth < 3 ? today.getFullYear() - 1 : today.getFullYear();
-                let qStartMonth, qEndMonth, qYear;
-                if (currentMonth >= 3 && currentMonth <= 5) {
-                    qStartMonth = 0; qEndMonth = 2; qYear = fyStartYear;
-                } else if (currentMonth >= 6 && currentMonth <= 8) {
-                    qStartMonth = 3; qEndMonth = 5; qYear = fyStartYear;
-                } else if (currentMonth >= 9 && currentMonth <= 11) {
-                    qStartMonth = 6; qEndMonth = 8; qYear = fyStartYear;
-                } else {
-                    qStartMonth = 9; qEndMonth = 11; qYear = fyStartYear;
-                }
-                start = new Date(qYear, qStartMonth, 1);
-                end = new Date(qYear, qEndMonth + 1, 0);
-                break;
-            }
-            case "Cur FY": {
-                const currentMonth = today.getMonth();
-                const fyStartYear = currentMonth < 3 ? today.getFullYear() - 1 : today.getFullYear();
-                start = new Date(fyStartYear, 3, 1);
-                end = new Date(fyStartYear + 1, 3, 0);
-                break;
-            }
-            case "Pre FY": {
-                const currentMonth = today.getMonth();
-                const fyStartYear = currentMonth < 3 ? today.getFullYear() - 1 : today.getFullYear();
-                start = new Date(fyStartYear - 1, 3, 1);
-                end = new Date(fyStartYear, 3, 0);
-                break;
-            }
-            default:
-                return null;
-        }
-
-        return {
-            start: start.toISOString().split("T")[0],
-            end: end.toISOString().split("T")[0]
-        };
-    };
     
     // Permission helper
     const isFieldAllowed = (fieldId) => {
@@ -461,82 +369,14 @@ const BranchFollowUp = () => {
 
                             {/* Date Range Selector */}
                             <div className="relative min-w-[200px]">
-                                <button
-                                    onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
-                                    className="w-full flex items-center justify-between bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg px-3 py-2.5 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all shadow-sm hover:bg-gray-100"
-                                >
-                                    <div className="flex items-center gap-1.5">
-                                        <FaCalendarAlt className="text-indigo-500" size={12} />
-                                        <span className="normal-case font-bold tracking-tight">
-                                            {new Date(startDate).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })} - {new Date(endDate).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                                        </span>
-                                    </div>
-                                    <FaChevronDown size={10} className="text-gray-400 ml-1.5" />
-                                </button>
-
-                                {isDateDropdownOpen && (
-                                    <div className="absolute right-0 lg:left-0 mt-2 w-[340px] bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 flex gap-3 animate-fade-in">
-                                        {/* Presets Column */}
-                                        <div className="flex flex-col gap-1 border-r border-gray-100 pr-3 w-[120px] shrink-0">
-                                            {["Today", "Yesterday", "This Week", "Last Week", "This Month", "Last Month", "This Quarter", "Last Quarter", "Cur FY", "Pre FY"].map(preset => (
-                                                <button
-                                                    key={preset}
-                                                    onClick={() => {
-                                                        setDatePreset(preset);
-                                                        const dates = getPresetDates(preset);
-                                                        if (dates) {
-                                                            setStartDate(dates.start);
-                                                            setEndDate(dates.end);
-                                                        }
-                                                    }}
-                                                    className={`text-left px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
-                                                        datePreset === preset 
-                                                            ? "bg-indigo-50 text-indigo-700 font-extrabold" 
-                                                            : "text-gray-500 hover:bg-gray-50"
-                                                    }`}
-                                                >
-                                                    {preset}
-                                                </button>
-                                            ))}
-                                        </div>
-
-                                        {/* Custom Picker Column */}
-                                        <div className="flex-1 flex flex-col gap-3.5 justify-between">
-                                            <div className="flex flex-col gap-2.5">
-                                                <div>
-                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">Start Date</label>
-                                                    <input
-                                                        type="date"
-                                                        value={startDate}
-                                                        onChange={(e) => {
-                                                            setDatePreset("Custom");
-                                                            setStartDate(e.target.value);
-                                                        }}
-                                                        className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-indigo-500"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1">End Date</label>
-                                                    <input
-                                                        type="date"
-                                                        value={endDate}
-                                                        onChange={(e) => {
-                                                            setDatePreset("Custom");
-                                                            setEndDate(e.target.value);
-                                                        }}
-                                                        className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-700 outline-none focus:border-indigo-500"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={() => setIsDateDropdownOpen(false)}
-                                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase tracking-widest py-2 rounded-lg transition-colors shadow-md shadow-indigo-100 mt-2"
-                                            >
-                                                Apply Filter
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
+                                <DateRangeDropdown
+                                    startDate={startDate}
+                                    endDate={endDate}
+                                    onDateChange={(start, end) => {
+                                        setStartDate(start);
+                                        setEndDate(end);
+                                    }}
+                                />
                             </div>
 
                             {user?.role === "SUPER_ADMIN" && (

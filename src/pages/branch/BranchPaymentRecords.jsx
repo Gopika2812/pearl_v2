@@ -3,6 +3,7 @@ import { FaFileInvoiceDollar, FaSearch, FaArrowLeft, FaUndo, FaCheckCircle, FaTi
 import { toast } from "react-toastify";
 import { useBranch } from "../../context/BranchContext";
 import { useNavigate } from "react-router-dom";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 
@@ -22,8 +23,8 @@ export default function BranchPaymentRecords() {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
   const [totalFilteredAmount, setTotalFilteredAmount] = useState(0);
@@ -195,23 +196,29 @@ export default function BranchPaymentRecords() {
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">Start Date</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-4 py-3 bg-red-50/20 border border-red-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-gray-700 font-medium"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">End Date</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-4 py-3 bg-red-50/20 border border-red-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 text-gray-700 font-medium"
-              />
+            <div className="md:col-span-2 flex flex-col justify-end">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">Date Range</label>
+              <div className="flex gap-2 items-center">
+                <DateRangeDropdown
+                    startDate={startDate}
+                    endDate={endDate}
+                    onDateChange={(start, end) => {
+                        setStartDate(start);
+                        setEndDate(end);
+                    }}
+                />
+                <button
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    setStartDate(today);
+                    setEndDate(today);
+                    setSearchTerm("");
+                  }}
+                  className="bg-red-600 text-white px-4 py-3 rounded-xl text-xs font-bold hover:bg-red-700 transition flex-shrink-0"
+                >
+                  RESET
+                </button>
+              </div>
             </div>
           </div>
         </div>

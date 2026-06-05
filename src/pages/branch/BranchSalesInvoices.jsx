@@ -11,6 +11,7 @@ import FilterableSelect from "../../components/FilterableSelect";
 import BulkEInvoiceModal from "../../components/branch/BulkEInvoiceModal";
 import BulkPdfDownloadModal from "../../components/branch/BulkPdfDownloadModal";
 import InvoiceQrModal from "../../components/branch/InvoiceQrModal";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 // QR Implementation Fix
 
@@ -964,27 +965,20 @@ const BranchSalesInvoices = () => {
               </select>
             </div>
 
-            <div>
-              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">From</label>
-              <input
-                type="date"
-                className="w-full bg-slate-50/50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-black focus:bg-white focus:border-indigo-500 transition-all outline-none"
-                value={filterFromDate}
-                onChange={(e) => setFilterFromDate(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">To Date</label>
-              <input
-                type="date"
-                className="w-full bg-slate-50/50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-black focus:bg-white focus:border-indigo-500 transition-all outline-none"
-                value={filterToDate}
-                onChange={(e) => {
-                    setFilterToDate(e.target.value);
-                    setCurrentPage(1);
-                }}
-              />
+            <div className="col-span-2 md:col-span-1 lg:col-span-2 flex flex-col justify-end">
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Date Range</label>
+                <div className="h-12 flex items-center">
+                    <DateRangeDropdown 
+                        startDate={filterFromDate}
+                        endDate={filterToDate}
+                        onDateChange={(start, end) => {
+                            setFilterFromDate(start);
+                            setFilterToDate(end);
+                            setCurrentPage(1);
+                        }}
+                        minWidth="100%"
+                    />
+                </div>
             </div>
           </div>
 

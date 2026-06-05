@@ -9,6 +9,7 @@ import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 import StockSummaryExportModal from "../../components/branch/StockSummaryExportModal";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 const BranchStockSummary = () => {
   const { currentBranch, user } = useBranch();
@@ -322,23 +323,14 @@ const BranchStockSummary = () => {
             )}
 
             <div className="grid grid-cols-2 md:flex bg-gray-50 p-1.5 rounded-2xl border border-gray-200 w-full md:w-auto">
-              <div className="flex items-center px-3 border-r border-gray-200">
-                <FaCalendarAlt className="text-gray-400 text-sm mr-2" />
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                  className="bg-transparent text-[10px] font-black text-gray-600 outline-none w-full"
+                <DateRangeDropdown
+                    startDate={fromDate}
+                    endDate={toDate}
+                    onDateChange={(start, end) => {
+                        setFromDate(start);
+                        setToDate(end);
+                    }}
                 />
-              </div>
-              <div className="flex items-center px-3">
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                  className="bg-transparent text-[10px] font-black text-gray-600 outline-none w-full"
-                />
-              </div>
             </div>
 
             <div className="grid grid-cols-2 md:flex items-center gap-2 w-full md:w-auto">
@@ -581,6 +573,8 @@ const BranchStockSummary = () => {
                         <th className="px-6 py-4 text-center">Opening</th>
                         <th className="px-6 py-4 text-center">Inwards</th>
                         <th className="px-6 py-4 text-center">Outwards</th>
+                        <th className="px-6 py-4 text-center text-blue-500">Sales Qty</th>
+                        <th className="px-6 py-4 text-center text-blue-500">Sales Age</th>
                         <th className="px-6 py-4 text-right">Closing</th>
                         <th className="px-6 py-4 text-right font-black">Value</th>
                       </tr>
@@ -604,6 +598,11 @@ const BranchStockSummary = () => {
                           <td className="px-6 py-4 text-center font-bold text-gray-400">{item.opening.qty}</td>
                           <td className="px-6 py-4 text-center font-bold text-green-600">{item.purchasesInPeriod || 0}</td>
                           <td className="px-6 py-4 text-center font-bold text-red-500">{item.salesInPeriod || 0}</td>
+                          <td className="px-6 py-4 text-center font-bold text-blue-500">{item.salesQty || 0}</td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="font-bold text-blue-600">{item.salesAge}</span>
+                            {item.salesAge !== "-" && <div className="text-[9px] text-gray-400 font-bold uppercase">{item.lastSalesDate}</div>}
+                          </td>
                           <td className="px-6 py-4 text-right font-black text-gray-600">{item.closing.qty}</td>
                           <td className="px-6 py-4 text-right font-black text-secondary">₹{item.closing.amount.toLocaleString()}</td>
                         </tr>
@@ -620,7 +619,7 @@ const BranchStockSummary = () => {
                     <table className="w-full text-left border-collapse min-w-[500px]">
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
-                          {["Product", "Opening", "In", "Out", "Closing", "Value"].map(h => (
+                          {["Product", "Opening", "In", "Out", "Sales Qty", "Age", "Closing", "Value"].map(h => (
                             <th key={h} className="px-3 py-3 font-black text-[9px] uppercase tracking-widest text-gray-400 border-r last:border-0">{h}</th>
                           ))}
                         </tr>
@@ -632,6 +631,8 @@ const BranchStockSummary = () => {
                             <td className="px-3 py-3 border-r border-gray-100 text-center font-bold text-gray-400 text-[10px]">{item.opening.qty}</td>
                             <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-green-600 text-[10px]">{item.purchasesInPeriod || 0}</td>
                             <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-red-500 text-[10px]">{item.salesInPeriod || 0}</td>
+                            <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-blue-500 text-[10px]">{item.salesQty || 0}</td>
+                            <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-blue-600 text-[10px]">{item.salesAge}</td>
                             <td className="px-3 py-3 border-r border-gray-100 text-center font-black text-gray-600 text-[10px]">{item.closing.qty}</td>
                             <td className="px-3 py-3 text-right font-black text-secondary text-[10px]">₹{Math.round(item.closing.amount || 0).toLocaleString()}</td>
                           </tr>

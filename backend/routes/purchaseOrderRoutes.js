@@ -966,6 +966,15 @@ const revertPOEffects = async (order) => {
     }
     console.log(`📉 Reverted vendor credit: -₹${order.grandTotal}`);
   }
+
+  // 3. Mark linked PurchaseInvoice as CANCELLED
+  if (order.purchaseInvoiceId) {
+    await PurchaseInvoice.findOneAndUpdate(
+      { purchaseInvoiceId: order.purchaseInvoiceId, branchId: order.branchId },
+      { status: "CANCELLED" }
+    );
+    console.log(`❌ Cancelled linked Purchase Invoice: ${order.purchaseInvoiceId}`);
+  }
 };
 
 // 📨 REQUEST EDIT PERMISSION
@@ -1167,7 +1176,7 @@ router.patch("/:id/approve-cancel", async (req, res) => {
       if (order.purchaseInvoiceId) {
         await PurchaseInvoice.findOneAndUpdate(
           { purchaseInvoiceId: order.purchaseInvoiceId, branchId: order.branchId },
-          { cancelRequestStatus: "APPROVED" }
+          { cancelRequestStatus: "APPROVED", status: "CANCELLED" }
         );
       }
     }

@@ -24,6 +24,9 @@ const BranchProductRecords = () => {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [totalRecords, setTotalRecords] = useState(0);
+  const [globalTotalQty, setGlobalTotalQty] = useState(0);
+  const [globalTotalProfit, setGlobalTotalProfit] = useState(0);
+  const [globalAvgProfitPercent, setGlobalAvgProfitPercent] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(500);
 
@@ -89,6 +92,9 @@ const BranchProductRecords = () => {
 
       setRecords(data.history || []);
       setTotalRecords(data.total || 0);
+      setGlobalTotalQty(data.totalQty || 0);
+      setGlobalTotalProfit(data.totalGrossProfit || 0);
+      setGlobalAvgProfitPercent(data.total > 0 ? data.totalProfitPercentSum / data.total : 0);
     } catch (err) {
       console.error("Error fetching history:", err);
       toast.error(err.message || "Failed to fetch sales history");
@@ -128,9 +134,9 @@ const BranchProductRecords = () => {
       : <FaSortAmountDown className="inline ml-1 text-[#319bab]" />;
   };
 
-  // Calculate total profit for the current view
-  const totalProfit = records.reduce((sum, r) => sum + (r.grossProfit * r.qty), 0);
-  const totalQty = records.reduce((sum, r) => sum + (r.qty || 0), 0);
+  // Totals are now fetched from the backend (global)
+  const totalProfit = globalTotalProfit;
+  const totalQty = globalTotalQty;
 
   const handleExportExcel = async () => {
     try {
@@ -508,9 +514,7 @@ const BranchProductRecords = () => {
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avg. Profit %</span>
                       <span className="text-xl font-black text-[#319bab]">
-                        {records.length > 0 
-                          ? (records.reduce((s, r) => s + ((r.grossProfit / (r.purchasingPrice || 1)) * 100), 0) / records.length).toFixed(1)
-                          : "0.0"}%
+                        {globalAvgProfitPercent.toFixed(1)}%
                       </span>
                     </div>
                   )}
@@ -518,11 +522,30 @@ const BranchProductRecords = () => {
 
                 {/* DATA TABLE */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
+                  <div className="p-4 border-b border-gray-50 flex flex-col sm:flex-row sm:items-center justify-between bg-gray-50/30 gap-3">
                     <span className="text-xs font-black text-gray-500 uppercase tracking-widest">
                       {selectedProductId ? "Item Detailed Record" : "Global Branch Records"}
                     </span>
-                    <span className="text-[10px] text-[#319bab] font-bold">Showing {records.length} of {totalRecords} Entries</span>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Show:</span>
+                        <select 
+                          className="bg-white border border-gray-200 text-[10px] rounded px-2 py-1 outline-none text-[#319bab] font-bold shadow-sm cursor-pointer"
+                          value={limit}
+                          onChange={(e) => {
+                            setLimit(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                        >
+                          <option value="50">50</option>
+                          <option value="100">100</option>
+                          <option value="250">250</option>
+                          <option value="500">500</option>
+                          <option value="1000">1000</option>
+                        </select>
+                      </div>
+                      <span className="text-[10px] text-[#319bab] font-bold">Showing {records.length} of {totalRecords} Entries</span>
+                    </div>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm border-collapse">

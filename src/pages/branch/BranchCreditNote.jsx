@@ -6,6 +6,7 @@ import { useBranch } from "../../context/BranchContext";
 import { API_BASE, fetchWithAuth } from "../../api";
 import EInvoicePrintModal from "../../components/branch/EInvoicePrintModal";
 import { getInvoiceHTML } from "../../utils/invoiceUtils";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 export default function BranchCreditNote() {
   const { currentBranch, user } = useBranch();
@@ -208,25 +209,15 @@ export default function BranchCreditNote() {
                 />
             </div>
 
-            <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm">
-                <div className="flex items-center px-4 border-r border-gray-100">
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mr-3">From</span>
-                    <input 
-                        type="date"
-                        value={fromDate}
-                        onChange={(e) => setFromDate(e.target.value)}
-                        className="bg-transparent text-sm font-black text-gray-700 outline-none"
-                    />
-                </div>
-                <div className="flex items-center px-4">
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mr-3">To</span>
-                    <input 
-                        type="date"
-                        value={toDate}
-                        onChange={(e) => setToDate(e.target.value)}
-                        className="bg-transparent text-sm font-black text-gray-700 outline-none"
-                    />
-                </div>
+            <div className="z-10">
+                <DateRangeDropdown
+                    startDate={fromDate}
+                    endDate={toDate}
+                    onDateChange={(start, end) => {
+                        setFromDate(start);
+                        setToDate(end);
+                    }}
+                />
             </div>
 
             <div className="hidden md:flex flex-col items-end">

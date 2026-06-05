@@ -7,7 +7,6 @@ import { API_BASE } from "./api";
 import BranchSidebar from "./components/BranchSidebar";
 import BranchTopbar from "./components/BranchTopbar";
 import ProtectedRoute from "./components/ProtectedRoute";
-import RestockingAlertModal from "./components/RestockingAlertModal";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
 import SuperAdminSidebar from "./components/SuperAdminSidebar";
@@ -759,7 +758,6 @@ function AppContent() {
 
       <SecurityOverlay />
       <FollowUpReminderModal />
-      <RestockingAlertModal />
       
           <div className="flex">
             {/* Sidebar logic:

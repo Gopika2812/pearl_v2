@@ -1667,7 +1667,9 @@ router.get("/stock-journal", async (req, res) => {
           $group: {
             _id: "$items.productId",
             outBeforeReport: { $sum: { $cond: [{ $lt: ["$invoiceDate", reportStart] }, "$items.qty", 0] } },
-            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$invoiceDate", reportStart] }, { $lte: ["$invoiceDate", reportEnd] }] }, "$items.qty", 0] } }
+            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$invoiceDate", reportStart] }, { $lte: ["$invoiceDate", reportEnd] }] }, "$items.qty", 0] } },
+            lastSalesDate: { $max: "$invoiceDate" },
+            totalSalesQty: { $sum: "$items.qty" }
           }
         }
       ]),
@@ -1717,7 +1719,7 @@ router.get("/stock-journal", async (req, res) => {
 
     // Maps for O(1) lookup
     const pMap = new Map(purchases.map(p => [p._id.toString(), { inBefore: p.inBeforeReport, inDuring: p.inDuringPeriod }]));
-    const sMap = new Map(sales.map(s => [s._id.toString(), { outBefore: s.outBeforeReport, outDuring: s.outDuringPeriod }]));
+    const sMap = new Map(sales.map(s => [s._id.toString(), { outBefore: s.outBeforeReport, outDuring: s.outDuringPeriod, lastSalesDate: s.lastSalesDate, totalSalesQty: s.totalSalesQty }]));
     const dnMap = new Map(debitNotes.map(dn => [dn._id.toString(), { outBefore: dn.outBeforeReport, outDuring: dn.outDuringPeriod }]));
     const cnMap = new Map(creditNotes.map(cn => [cn._id.toString(), { inBefore: cn.inBeforeReport, inDuring: cn.inDuringPeriod }]));
     const psvMap = new Map(psvTotals.map(psv => [psv._id.toString(), psv]));
@@ -1749,6 +1751,16 @@ router.get("/stock-journal", async (req, res) => {
 
       const inwards = ps.inDuring + cns.inDuring + psv.inDuring;
       const outwards = ss.outDuring + dns.outDuring + psv.outDuring;
+      
+      let salesAge = "-";
+      let formattedLastSalesDate = "-";
+      if (ss.lastSalesDate) {
+        const diffTime = Math.abs(new Date() - new Date(ss.lastSalesDate));
+        salesAge = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        formattedLastSalesDate = new Date(ss.lastSalesDate).toLocaleDateString("en-IN", {
+          day: "2-digit", month: "short", year: "numeric"
+        });
+      }
 
       return {
         productId: pid,
@@ -1767,6 +1779,9 @@ router.get("/stock-journal", async (req, res) => {
         },
         purchasesInPeriod: inwards,
         salesInPeriod: outwards,
+        lastSalesDate: formattedLastSalesDate,
+        salesAge,
+        salesQty: ss.outDuring || 0
       };
     });
 
@@ -1946,7 +1961,7 @@ router.get("/:id/ledger", auth, async (req, res) => {
 
 router.post("/apply-group-margin", async (req, res) => {
   try {
-    const { branchId, productGroupId, productCategoryId, marginPercentage, adminMargin } = req.body;
+    const { branchId, productGroupId, productCategoryId, productIds, marginPercentage, adminMargin } = req.body;
 
     if (!branchId || (marginPercentage === undefined && adminMargin === undefined)) {
       return res.status(400).json({
@@ -1955,17 +1970,20 @@ router.post("/apply-group-margin", async (req, res) => {
       });
     }
 
-    if (!productGroupId && !productCategoryId) {
+    if (!productGroupId && !productCategoryId && (!productIds || productIds.length === 0)) {
       return res.status(400).json({
         success: false,
-        message: "Either productGroupId or productCategoryId is required"
+        message: "Either productGroupId, productCategoryId, or specific products must be selected"
       });
     }
 
     const query = { branchId };
     let updateMessage = "";
 
-    if (productGroupId) {
+    if (productIds && productIds.length > 0) {
+      query._id = { $in: productIds };
+      updateMessage = "selected products";
+    } else if (productGroupId) {
       query.productGroup = productGroupId;
       updateMessage = "product group";
     } else if (productCategoryId) {

@@ -359,10 +359,19 @@ router.get("/history", cacheData(120), async (req, res) => {
     // Execute split queries to avoid MongoDB $facet sort memory limitations
     const countPipeline = [
       ...aggregation,
-      { $count: "total" }
+      { 
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          totalQty: { $sum: "$qty" },
+          totalGrossProfit: { $sum: { $multiply: ["$grossProfit", "$qty"] } },
+          totalProfitPercentSum: { $sum: "$profitPercent" }
+        }
+      }
     ];
     const countResult = await Invoice.aggregate(countPipeline).allowDiskUse(true);
-    const total = countResult[0]?.total || 0;
+    const globalStats = countResult[0] || { total: 0, totalQty: 0, totalGrossProfit: 0, totalProfitPercentSum: 0 };
+    const total = globalStats.total;
 
     const dataPipeline = [
       ...aggregation,
@@ -375,6 +384,9 @@ router.get("/history", cacheData(120), async (req, res) => {
     res.json({
       history,
       total,
+      totalQty: globalStats.totalQty,
+      totalGrossProfit: globalStats.totalGrossProfit,
+      totalProfitPercentSum: globalStats.totalProfitPercentSum,
       page: parseInt(page),
       limit: limitNum
     });

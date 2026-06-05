@@ -112,14 +112,17 @@ productSchema.pre("save", function () {
   const sPriceChanged = this.isModified("sellingPrice");
   const marginChanged = this.isModified("margin");
   const marginPctChanged = this.isModified("marginPercentage");
+  const adminMarginChanged = this.isModified("adminMargin");
 
   const baseCost = this.marketCapPrice > 0 ? this.marketCapPrice : (this.purchasingPrice || 0);
   const costChanged = pPriceChanged || mcpChanged;
 
-  // PRIORITY 1: Explicit Marginal Percentage Change
-  if (marginPctChanged && this.marginPercentage > 0) {
-    this.marginPercentage = Math.round(this.marginPercentage * 100) / 100;
-    this.sellingPrice = Math.round((baseCost + (baseCost * this.marginPercentage / 100)) * 100) / 100;
+  // PRIORITY 1: Explicit Marginal Percentage Change OR Admin Margin Change
+  if ((marginPctChanged && this.marginPercentage > 0) || adminMarginChanged) {
+    this.marginPercentage = Math.round((this.marginPercentage || 0) * 100) / 100;
+    const adminMarginPct = this.adminMargin || 0;
+    const totalMarginPct = this.marginPercentage + adminMarginPct;
+    this.sellingPrice = Math.round((baseCost + (baseCost * totalMarginPct / 100)) * 100) / 100;
     this.margin = Math.round((this.sellingPrice - baseCost) * 100) / 100;
   }
   // PRIORITY 2: Explicit Margin Amount Change
@@ -127,36 +130,44 @@ productSchema.pre("save", function () {
     this.margin = Math.round(this.margin * 100) / 100;
     this.sellingPrice = Math.round((baseCost + this.margin) * 100) / 100;
     if (baseCost > 0) {
-      this.marginPercentage = Math.round((this.margin / baseCost) * 100 * 100) / 100;
+      const adminMarginPct = this.adminMargin || 0;
+      const totalMarginPct = (this.margin / baseCost) * 100;
+      this.marginPercentage = Math.round((totalMarginPct - adminMarginPct) * 100) / 100;
     }
   }
   // PRIORITY 3: Only Cost (Purchasing Price or MCP) changed (Maintain Margin Percentage if available)
   else if (!isNew && costChanged && !sPriceChanged) {
-    if (this.marginPercentage > 0) {
-      this.sellingPrice = Math.round((baseCost + (baseCost * this.marginPercentage / 100)) * 100) / 100;
+    if (this.marginPercentage > 0 || this.adminMargin > 0) {
+      const adminMarginPct = this.adminMargin || 0;
+      const totalMarginPct = (this.marginPercentage || 0) + adminMarginPct;
+      this.sellingPrice = Math.round((baseCost + (baseCost * totalMarginPct / 100)) * 100) / 100;
       this.margin = Math.round((this.sellingPrice - baseCost) * 100) / 100;
-      console.log(`🛡️ Product Sync: [${this.name}] cost updated. Maintained ${this.marginPercentage}% margin. New sellingPrice: ₹${this.sellingPrice}`);
     } else if (this.margin !== undefined && this.margin !== null) {
       // Fallback to absolute margin if percentage not set
       this.sellingPrice = Math.round((baseCost + this.margin) * 100) / 100;
       if (baseCost > 0) {
-        this.marginPercentage = Math.round((this.margin / baseCost) * 100 * 100) / 100;
+        const adminMarginPct = this.adminMargin || 0;
+        const totalMarginPct = (this.margin / baseCost) * 100;
+        this.marginPercentage = Math.round((totalMarginPct - adminMarginPct) * 100) / 100;
       }
-      console.log(`🛡️ Product Sync: [${this.name}] cost updated. Maintained ₹${this.margin} margin. New sellingPrice: ₹${this.sellingPrice}`);
     }
   }
   // PRIORITY 4: Only Selling Price changed (Recalculate Margin)
   else if (sPriceChanged && !costChanged) {
     this.margin = Math.round(((this.sellingPrice || 0) - baseCost) * 100) / 100;
     if (baseCost > 0) {
-      this.marginPercentage = Math.round((this.margin / baseCost) * 100 * 100) / 100;
+      const adminMarginPct = this.adminMargin || 0;
+      const totalMarginPct = (this.margin / baseCost) * 100;
+      this.marginPercentage = Math.round((totalMarginPct - adminMarginPct) * 100) / 100;
     }
   }
   // DEFAULT: Sync values
   else {
     this.margin = Math.round(((this.sellingPrice || 0) - baseCost) * 100) / 100;
     if (baseCost > 0) {
-      this.marginPercentage = Math.round((this.margin / baseCost) * 100 * 100) / 100;
+      const adminMarginPct = this.adminMargin || 0;
+      const totalMarginPct = (this.margin / baseCost) * 100;
+      this.marginPercentage = Math.round((totalMarginPct - adminMarginPct) * 100) / 100;
     }
   }
 
@@ -187,34 +198,52 @@ productSchema.pre(["findOneAndUpdate", "findByIdAndUpdate"], async function () {
   const sUpdated = update.sellingPrice !== undefined;
   const mUpdated = update.margin !== undefined;
   const mpUpdated = update.marginPercentage !== undefined;
+  const amUpdated = update.adminMargin !== undefined;
+
+  let current;
+  const getCurrent = async () => {
+    if (!current) current = await this.model.findById(filter._id);
+    return current || {};
+  };
 
   // PRIORITY 1: Explicit Margin Update (Percentage or Amount)
-  if (mpUpdated && update.marginPercentage > 0) {
-    update.marginPercentage = Math.round(update.marginPercentage * 100) / 100;
-    const pPrice = pUpdated ? update.purchasingPrice : (await this.model.findById(filter._id))?.purchasingPrice || 0;
-    update.sellingPrice = Math.round((pPrice + (pPrice * update.marginPercentage / 100)) * 100) / 100;
+  if ((mpUpdated && update.marginPercentage > 0) || amUpdated) {
+    const cur = await getCurrent();
+    const marginPct = mpUpdated ? update.marginPercentage : (cur.marginPercentage || 0);
+    const adminMarginPct = amUpdated ? update.adminMargin : (cur.adminMargin || 0);
+    const totalMarginPct = marginPct + adminMarginPct;
+    
+    if (mpUpdated) update.marginPercentage = Math.round(update.marginPercentage * 100) / 100;
+    if (amUpdated) update.adminMargin = Math.round(update.adminMargin * 100) / 100;
+
+    const pPrice = pUpdated ? update.purchasingPrice : (cur.purchasingPrice || 0);
+    update.sellingPrice = Math.round((pPrice + (pPrice * totalMarginPct / 100)) * 100) / 100;
     update.margin = Math.round((update.sellingPrice - pPrice) * 100) / 100;
   }
   else if (mUpdated) {
+    const cur = await getCurrent();
     update.margin = Math.round(update.margin * 100) / 100;
-    const pPrice = pUpdated ? update.purchasingPrice : (await this.model.findById(filter._id))?.purchasingPrice || 0;
+    const pPrice = pUpdated ? update.purchasingPrice : (cur.purchasingPrice || 0);
     update.sellingPrice = Math.round((pPrice + update.margin) * 100) / 100;
     if (pPrice > 0) {
-      update.marginPercentage = Math.round((update.margin / pPrice) * 100 * 100) / 100;
+      const adminMarginPct = amUpdated ? update.adminMargin : (cur.adminMargin || 0);
+      const totalMarginPct = (update.margin / pPrice) * 100;
+      update.marginPercentage = Math.round((totalMarginPct - adminMarginPct) * 100) / 100;
     }
   }
   // PRIORITY 2: Only Purchase Price updated (Maintain Absolute Margin Amount)
   else if (pUpdated && !sUpdated) {
     try {
-      const current = await this.model.findById(filter._id);
-      if (current && current.margin !== undefined) {
-        const targetMargin = current.margin;
+      const cur = await getCurrent();
+      if (cur.margin !== undefined) {
+        const targetMargin = cur.margin;
         update.sellingPrice = Math.round((update.purchasingPrice + targetMargin) * 100) / 100;
         update.margin = targetMargin;
         if (update.purchasingPrice > 0) {
-          update.marginPercentage = Math.round((targetMargin / update.purchasingPrice) * 100 * 100) / 100;
+          const adminMarginPct = amUpdated ? update.adminMargin : (cur.adminMargin || 0);
+          const totalMarginPct = (targetMargin / update.purchasingPrice) * 100;
+          update.marginPercentage = Math.round((totalMarginPct - adminMarginPct) * 100) / 100;
         }
-        console.log(`🛡️ Product Sync (Update): [${current.name}] P: ₹${update.purchasingPrice}, New S: ₹${update.sellingPrice} (Keep M: ₹${targetMargin})`);
       }
     } catch (err) {
       console.warn("Pricing Sync Error:", err.message);
@@ -223,11 +252,13 @@ productSchema.pre(["findOneAndUpdate", "findByIdAndUpdate"], async function () {
   // PRIORITY 3: Only Selling Price updated (Recalculate Margin)
   else if (sUpdated && !pUpdated) {
     try {
-      const current = await this.model.findById(filter._id);
-      const pPrice = current?.purchasingPrice || 0;
+      const cur = await getCurrent();
+      const pPrice = cur.purchasingPrice || 0;
       update.margin = Math.round((update.sellingPrice - pPrice) * 100) / 100;
       if (pPrice > 0) {
-        update.marginPercentage = Math.round((update.margin / pPrice) * 100 * 100) / 100;
+        const adminMarginPct = amUpdated ? update.adminMargin : (cur.adminMargin || 0);
+        const totalMarginPct = (update.margin / pPrice) * 100;
+        update.marginPercentage = Math.round((totalMarginPct - adminMarginPct) * 100) / 100;
       }
     } catch (err) {
       console.warn("Pricing Sync Error:", err.message);
@@ -235,9 +266,12 @@ productSchema.pre(["findOneAndUpdate", "findByIdAndUpdate"], async function () {
   }
   // DEFAULT: Recalculate margins if both updated or unknown state
   else if (pUpdated && sUpdated) {
+    const cur = await getCurrent();
     update.margin = Math.round((update.sellingPrice - update.purchasingPrice) * 100) / 100;
     if (update.purchasingPrice > 0) {
-      update.marginPercentage = Math.round((update.margin / update.purchasingPrice) * 100 * 100) / 100;
+      const adminMarginPct = amUpdated ? update.adminMargin : (cur.adminMargin || 0);
+      const totalMarginPct = (update.margin / update.purchasingPrice) * 100;
+      update.marginPercentage = Math.round((totalMarginPct - adminMarginPct) * 100) / 100;
     }
   }
 
