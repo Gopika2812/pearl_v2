@@ -245,11 +245,7 @@ router.post("/login", async (req, res) => {
         username: user.username,
         role: user.role,
         branch: user.branch._id,
-        allowedPages: user.allowedPages || [],
-        fieldPermissions: user.fieldPermissions || {},
-        actionPermissions: user.actionPermissions || {},
-        allowedVoucherTypes: user.allowedVoucherTypes || [],
-        allowedBranches: user.allowedBranches || [],
+        branchId: user.branch._id,
       },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
@@ -598,11 +594,7 @@ router.post("/switch-branch", auth, async (req, res) => {
         username: user.username,
         role: user.role,
         branch: targetBranch._id, // Set the switched branch ID here!
-        allowedPages: user.allowedPages || [],
-        fieldPermissions: user.fieldPermissions || {},
-        actionPermissions: user.actionPermissions || {},
-        allowedVoucherTypes: user.allowedVoucherTypes || [],
-        allowedBranches: user.allowedBranches || [],
+        branchId: targetBranch._id,
       },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }

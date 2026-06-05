@@ -533,6 +533,7 @@ function AppContent() {
 
   // 🛡️ SECURITY PROTECTION: Prevent Right-Click, Selection, and Sensitive Shortcuts
   useEffect(() => {
+    return; // Enabled inspection/DevTools for debugging
     // Only apply to branch users, not super admins
     if (!isBranchRoute || user?.role === "SUPER_ADMIN" || !user) return;
 
