@@ -1050,8 +1050,11 @@ export default function BranchRecycling() {
         };
 
         const purAge = getAgeInDays(product.lastPurchaseDate);
-        const salQty = product.restockingConfig?.sellingQtyInPeriod || 0;
-        const salAge = product.restockingConfig?.salesPeriodDays ? `${product.restockingConfig.salesPeriodDays} days` : "-";
+        const purQty = product.lastPurchaseQty || "-";
+        
+        const salDate = product.lastSalesDate ? new Date(product.lastSalesDate).toLocaleDateString('en-GB') : "-";
+        const salQty = product.lastSalesQty || "-";
+        const salAge = getAgeInDays(product.lastSalesDate);
 
         const groupName = product.productGroup && typeof product.productGroup === 'object' 
           ? (product.productGroup.name || product.productGroup._id)
@@ -1071,8 +1074,8 @@ export default function BranchRecycling() {
           "PO Qty": poQty,
           "Last Purchase Date": purDate,
           "Purchase Age": purAge,
-          "Sales Qty in Period": salQty,
-          "Sales Age (Period)": salAge,
+          "Last Sales Date": salDate,
+          "Sales Age": salAge,
           "SO Qty": soQty,
           "Net Available Qty": netAvailability,
           "Min Level (Threshold)": reorderLevel,
@@ -1415,9 +1418,21 @@ export default function BranchRecycling() {
         return direction === "asc" ? valA - valB : valB - valA;
       }
 
+      if (key === "lastPurchaseQty") {
+        const valA = Number(a.lastPurchaseQty) || 0;
+        const valB = Number(b.lastPurchaseQty) || 0;
+        return direction === "asc" ? valA - valB : valB - valA;
+      }
+
       if (key === "lastSalesDate" || key === "salesAge") {
         const valA = a.lastSalesDate ? new Date(a.lastSalesDate).getTime() : 0;
         const valB = b.lastSalesDate ? new Date(b.lastSalesDate).getTime() : 0;
+        return direction === "asc" ? valA - valB : valB - valA;
+      }
+
+      if (key === "lastSalesQty") {
+        const valA = Number(a.lastSalesQty) || 0;
+        const valB = Number(b.lastSalesQty) || 0;
         return direction === "asc" ? valA - valB : valB - valA;
       }
     });
@@ -2575,10 +2590,10 @@ export default function BranchRecycling() {
                     Pur. Age {sortConfig.key === "purchaseAge" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
                   <th 
-                    onClick={() => handleSort("sellingQtyInPeriod")}
+                    onClick={() => handleSort("lastSalesDate")}
                     className="px-1 py-2 text-left text-[11px] font-bold cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap text-indigo-600"
                   >
-                    Sal. Qty {sortConfig.key === "sellingQtyInPeriod" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
+                    Sal. Date {sortConfig.key === "lastSalesDate" ? (sortConfig.direction === "asc" ? "↑" : "↓") : "⇅"}
                   </th>
                   <th 
                     onClick={() => handleSort("salesAge")}
@@ -2736,13 +2751,13 @@ export default function BranchRecycling() {
                         <td className="px-1 py-2 text-left text-[11px] text-gray-600 whitespace-nowrap">
                           {getPurchaseAgeString(product.lastPurchaseDate)}
                         </td>
-                        {/* Sales Qty in Period */}
-                        <td className="px-1 py-2 text-left text-[11px] text-indigo-600 font-black whitespace-nowrap">
-                          {product.restockingConfig?.sellingQtyInPeriod || "-"}
+                        {/* Last Sales Date */}
+                        <td className="px-1 py-2 text-left text-[11px] text-indigo-600 whitespace-nowrap">
+                          {getPurchaseDateString(product.lastSalesDate)}
                         </td>
-                        {/* Sales Period (Age) */}
+                        {/* Sales Age */}
                         <td className="px-1 py-2 text-left text-[11px] text-indigo-600 font-medium whitespace-nowrap">
-                          {product.restockingConfig?.salesPeriodDays ? `${product.restockingConfig.salesPeriodDays}d` : "-"}
+                          {getPurchaseAgeString(product.lastSalesDate)}
                         </td>
                         {isFieldAllowed("pendingSales") && (
                           <td className="px-1 py-2 text-right text-[11px]">

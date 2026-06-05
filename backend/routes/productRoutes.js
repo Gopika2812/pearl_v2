@@ -190,15 +190,20 @@ router.get("/", async (req, res) => {
       .lean();
 
     if (mini === "true" || mini === true) {
-        // Fetch last purchase dates for all products in this branch
-        const [poDates, piDates] = await Promise.all([
+        // Fetch last purchase and sales dates for all products in this branch
+        const [poDates, piDates, siDates] = await Promise.all([
           PurchaseOrder.aggregate([
             { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
             { $unwind: "$items" },
             { $group: { _id: "$items.productId", lastDate: { $max: "$date" } } }
           ]),
           PurchaseInvoice.aggregate([
-            { $match: { branchId: branchObjectId } },
+            { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
+            { $unwind: "$items" },
+            { $group: { _id: "$items.productId", lastDate: { $max: "$invoiceDate" } } }
+          ]),
+          Invoice.aggregate([
+            { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
             { $unwind: "$items" },
             { $group: { _id: "$items.productId", lastDate: { $max: "$invoiceDate" } } }
           ])
@@ -218,9 +223,17 @@ router.get("/", async (req, res) => {
           }
         });
 
+        const salesDateMap = new Map();
+        if (siDates) {
+          siDates.forEach(d => {
+            if (d._id) salesDateMap.set(d._id.toString(), d.lastDate);
+          });
+        }
+
         const enhanced = products.map(product => ({
           ...product,
-          lastPurchaseDate: purchaseDateMap.get(product._id.toString()) || null
+          lastPurchaseDate: purchaseDateMap.get(product._id.toString()) || null,
+          lastSalesDate: salesDateMap.get(product._id.toString()) || null
         }));
 
         return res.json({
@@ -277,7 +290,7 @@ router.get("/", async (req, res) => {
         { $group: { _id: "$items.productId", lastDate: { $max: "$date" } } }
       ]),
       PurchaseInvoice.aggregate([
-        { $match: { branchId: branchObjectId, "items.productId": { $in: productIds } } },
+        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, "items.productId": { $in: productIds } } },
         { $unwind: "$items" },
         { $match: { "items.productId": { $in: productIds } } },
         { $group: { _id: "$items.productId", lastDate: { $max: "$invoiceDate" } } }
@@ -298,7 +311,9 @@ router.get("/", async (req, res) => {
 
     const purchaseDateMap = new Map();
     poDates.forEach(d => {
-      if (d._id) purchaseDateMap.set(d._id.toString(), d.lastDate);
+      if (d._id) {
+        purchaseDateMap.set(d._id.toString(), d.lastDate);
+      }
     });
     piDates.forEach(d => {
       if (d._id) {
@@ -313,7 +328,9 @@ router.get("/", async (req, res) => {
     const salesDateMap = new Map();
     if (siDates) {
       siDates.forEach(d => {
-        if (d._id) salesDateMap.set(d._id.toString(), d.lastDate);
+        if (d._id) {
+          salesDateMap.set(d._id.toString(), d.lastDate);
+        }
       });
     }
 

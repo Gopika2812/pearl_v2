@@ -18,6 +18,7 @@ import TokenManagerModal from "../../components/branch/TokenManagerModal";
 import CategoryManagementModal from "../../components/branch/CategoryManagementModal";
 import InventoryAddCustomerModal from "../../components/inventory/InventoryAddCustomerModal";
 import DateRangeDropdown from "../../components/common/DateRangeDropdown";
+import SearchableSelect from "../../components/common/SearchableSelect";
 
 const BranchFollowUp = () => {
     const navigate = useNavigate();
@@ -324,47 +325,48 @@ const BranchFollowUp = () => {
                         </div>
 
                         {/* Filter Selects Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 lg:flex gap-2 lg:gap-3">
-                            <div className="relative min-w-[140px]">
-                                <select
-                                    className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2.5 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
+                        <div className="grid grid-cols-1 sm:grid-cols-3 lg:flex gap-2 lg:gap-3 z-30">
+                            <div className="relative min-w-[140px] z-30">
+                                <SearchableSelect
+                                    options={[
+                                        { value: "", label: "All Groups" },
+                                        { value: "none", label: "None / Unassigned" },
+                                        ...customerGroups.map(g => ({ value: g._id, label: g.name }))
+                                    ]}
                                     value={groupFilter}
-                                    onChange={(e) => setGroupFilter(e.target.value)}
-                                >
-                                    <option value="">All Groups</option>
-                                    {customerGroups.map(g => (
-                                        <option key={g._id} value={g._id}>{g.name}</option>
-                                    ))}
-                                </select>
-                                <FaFilter className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
+                                    onChange={setGroupFilter}
+                                    placeholder="All Groups"
+                                    icon={FaFilter}
+                                />
                             </div>
 
-                            <div className="relative min-w-[140px]">
-                                <select
-                                    className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2.5 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
+                            <div className="relative min-w-[140px] z-20">
+                                <SearchableSelect
+                                    options={[
+                                        { value: "", label: "All Categories" },
+                                        { value: "none", label: "None / Unassigned" },
+                                        ...customerCategories.map(cat => ({ value: cat._id, label: cat.name }))
+                                    ]}
                                     value={categoryFilter}
-                                    onChange={(e) => setCategoryFilter(e.target.value)}
-                                >
-                                    <option value="">All Categories</option>
-                                    {customerCategories.map(cat => (
-                                        <option key={cat._id} value={cat._id}>{cat.name}</option>
-                                    ))}
-                                </select>
-                                <FaTag className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
+                                    onChange={setCategoryFilter}
+                                    placeholder="All Categories"
+                                    icon={FaTag}
+                                />
                             </div>
 
-                            <div className="relative min-w-[140px]">
-                                <select
-                                    className="w-full appearance-none bg-gray-50 border border-gray-200 focus:border-indigo-500 rounded-lg pl-3 pr-8 py-2.5 text-xs font-bold uppercase text-gray-700 outline-none cursor-pointer transition-all"
+                            <div className="relative min-w-[140px] z-10">
+                                <SearchableSelect
+                                    options={[
+                                        { value: "", label: "All Zones" },
+                                        { value: "safe_zone", label: "Safe Zone" },
+                                        { value: "medium_zone", label: "Medium Zone" },
+                                        { value: "risk_zone", label: "Risk Zone" }
+                                    ]}
                                     value={zoneFilter}
-                                    onChange={(e) => setZoneFilter(e.target.value)}
-                                >
-                                    <option value="">All Zones</option>
-                                    <option value="safe_zone">Safe Zone</option>
-                                    <option value="medium_zone">Medium Zone</option>
-                                    <option value="risk_zone">Risk Zone</option>
-                                </select>
-                                <FaClock className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={10} />
+                                    onChange={setZoneFilter}
+                                    placeholder="All Zones"
+                                    icon={FaClock}
+                                />
                             </div>
 
                             {/* Date Range Selector */}
