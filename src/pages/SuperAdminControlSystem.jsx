@@ -47,6 +47,16 @@ export default function SuperAdminControlSystem() {
   const [allowedQuickLinks, setAllowedQuickLinks] = useState([]);
   const [allowedBranchesState, setAllowedBranchesState] = useState([]);
 
+  // Store the initially loaded state to compute diffs
+  const [initialState, setInitialState] = useState({
+    userPermissions: [],
+    fieldPermissions: {},
+    actionPermissions: {},
+    allowedVoucherTypes: [],
+    allowedQuickLinks: [],
+    allowedBranchesState: [],
+  });
+
   // Check Super Admin auth
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -79,6 +89,15 @@ export default function SuperAdminControlSystem() {
       setAllowedVoucherTypes([]);
       setAllowedQuickLinks([]);
       setAllowedBranchesState([selectedBranch._id]);
+
+      setInitialState({
+        userPermissions: [],
+        fieldPermissions: {},
+        actionPermissions: {},
+        allowedVoucherTypes: [],
+        allowedQuickLinks: [],
+        allowedBranchesState: [selectedBranch._id],
+      });
     }
   }, [selectedBranch]);
 
@@ -132,7 +151,10 @@ export default function SuperAdminControlSystem() {
 
   const toggleActionPermission = (action) => {
     setActionPermissions(prev => {
-      const newVal = !prev[action];
+      const isCurrentlyEnabled = (action === "bypassSalesOrderLock" || action === "allowDummyBills" || action === "action_move_date")
+        ? prev[action] === true
+        : prev[action] !== false;
+      const newVal = !isCurrentlyEnabled;
 
       // Automatically sync Sales Order menu and sub-menu checkboxes when toggling Bypass SO Lock
       if (action === "bypassSalesOrderLock") {
@@ -214,13 +236,28 @@ export default function SuperAdminControlSystem() {
     }
 
     // Load their permissions into the active configuration
-    setUserPermissions(user.allowedPages || []);
-    setFieldPermissions(user.fieldPermissions || {});
-    setActionPermissions(user.actionPermissions || {});
-    setAllowedVoucherTypes(user.allowedVoucherTypes || []);
-    setAllowedQuickLinks(user.allowedQuickLinks || []);
+    const pages = user.allowedPages || [];
+    const fields = user.fieldPermissions || {};
+    const actions = user.actionPermissions || {};
+    const vouchers = user.allowedVoucherTypes || [];
+    const quickLinks = user.allowedQuickLinks || [];
     const branchIds = (user.allowedBranches || []).map(b => b._id || b);
+
+    setUserPermissions(pages);
+    setFieldPermissions(fields);
+    setActionPermissions(actions);
+    setAllowedVoucherTypes(vouchers);
+    setAllowedQuickLinks(quickLinks);
     setAllowedBranchesState(branchIds);
+
+    setInitialState({
+      userPermissions: pages,
+      fieldPermissions: fields,
+      actionPermissions: actions,
+      allowedVoucherTypes: vouchers,
+      allowedQuickLinks: quickLinks,
+      allowedBranchesState: branchIds,
+    });
 
     toast.info(`Loaded permissions from ${user.username}`);
   };
@@ -244,8 +281,63 @@ export default function SuperAdminControlSystem() {
     try {
       const token = localStorage.getItem("token");
       
+      // Calculate Diffs
+      const addedPages = userPermissions.filter(p => !initialState.userPermissions.includes(p));
+      const removedPages = initialState.userPermissions.filter(p => !userPermissions.includes(p));
+
+      const addedVouchers = allowedVoucherTypes.filter(v => !initialState.allowedVoucherTypes.includes(v));
+      const removedVouchers = initialState.allowedVoucherTypes.filter(v => !allowedVoucherTypes.includes(v));
+
+      const addedQuickLinks = allowedQuickLinks.filter(q => !initialState.allowedQuickLinks.includes(q));
+      const removedQuickLinks = initialState.allowedQuickLinks.filter(q => !allowedQuickLinks.includes(q));
+
+      const addedBranches = allowedBranchesState.filter(b => !initialState.allowedBranchesState.includes(b));
+      const removedBranches = initialState.allowedBranchesState.filter(b => !allowedBranchesState.includes(b));
+
+      const allActionKeys = [...new Set([...Object.keys(actionPermissions), ...Object.keys(initialState.actionPermissions)])];
+      const actionChanges = {};
+      allActionKeys.forEach(k => {
+        if (actionPermissions[k] !== initialState.actionPermissions[k]) {
+          actionChanges[k] = actionPermissions[k];
+        }
+      });
+
+      const allFieldKeys = [...new Set([...Object.keys(fieldPermissions), ...Object.keys(initialState.fieldPermissions)])];
+      const fieldChanges = {};
+      allFieldKeys.forEach(k => {
+        if (fieldPermissions[k] !== initialState.fieldPermissions[k]) {
+          fieldChanges[k] = fieldPermissions[k];
+        }
+      });
+      
       // Parallel commits to all selected users
       const promises = selectedUserIds.map(async (userId) => {
+        // Fetch current state of this user
+        const userRes = await fetch(`${API_BASE}/branch-users/${userId}`);
+        const userData = await userRes.json();
+        if (!userData.success) throw new Error(`Failed to fetch user ${userId}`);
+        const currentUser = userData.data;
+
+        // Apply diffs to current state
+        const finalPages = [...new Set([...(currentUser.allowedPages || []), ...addedPages])].filter(p => !removedPages.includes(p));
+        
+        const finalFields = { ...(currentUser.fieldPermissions || {}) };
+        Object.keys(fieldChanges).forEach(k => finalFields[k] = fieldChanges[k]);
+
+        const finalActions = { ...(currentUser.actionPermissions || {}) };
+        Object.keys(actionChanges).forEach(k => finalActions[k] = actionChanges[k]);
+
+        const finalVouchers = [...new Set([...(currentUser.allowedVoucherTypes || []), ...addedVouchers])].filter(v => !removedVouchers.includes(v));
+        
+        const finalQuickLinks = [...new Set([...(currentUser.allowedQuickLinks || []), ...addedQuickLinks])].filter(q => !removedQuickLinks.includes(q));
+
+        const finalAllowedBranches = [...new Set([...(currentUser.allowedBranches || []).map(b => b._id || b), ...addedBranches])].filter(b => !removedBranches.includes(b));
+
+        let finalPrimaryBranch = currentUser.branch?._id || currentUser.branch;
+        if (!finalAllowedBranches.includes(finalPrimaryBranch)) {
+           finalPrimaryBranch = finalAllowedBranches[0] || selectedBranch._id;
+        }
+
         const res = await fetch(`${API_BASE}/branch-users/${userId}`, {
           method: "PUT",
           headers: {
@@ -253,15 +345,13 @@ export default function SuperAdminControlSystem() {
             "Authorization": `Bearer ${token}`
           },
           body: JSON.stringify({
-            allowedPages: userPermissions,
-            fieldPermissions: fieldPermissions,
-            actionPermissions: actionPermissions,
-            allowedVoucherTypes: allowedVoucherTypes,
-            allowedQuickLinks: allowedQuickLinks,
-            allowedBranches: allowedBranchesState,
-            branch: allowedBranchesState.includes(selectedBranch._id)
-              ? selectedBranch._id
-              : (allowedBranchesState[0] || selectedBranch._id)
+            allowedPages: finalPages,
+            fieldPermissions: finalFields,
+            actionPermissions: finalActions,
+            allowedVoucherTypes: finalVouchers,
+            allowedQuickLinks: finalQuickLinks,
+            allowedBranches: finalAllowedBranches,
+            branch: finalPrimaryBranch
           })
         });
         return res.json();
