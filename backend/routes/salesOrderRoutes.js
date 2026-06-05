@@ -359,6 +359,76 @@ router.get("/history", cacheData(120), async (req, res) => {
         }
       },
       {
+        $addFields: {
+          computedPurchasingPrice: {
+            $let: {
+              vars: {
+                historyStats: {
+                  $reduce: {
+                    input: { $ifNull: ["$productInfo.priceHistory", []] },
+                    initialValue: {
+                      bestBeforeDate: new Date(0),
+                      bestBeforePrice: null,
+                      earliestDate: new Date("2100-01-01T00:00:00Z"),
+                      earliestOldPrice: null
+                    },
+                    in: {
+                      bestBeforeDate: {
+                        $cond: [
+                          { $and: [
+                              { $lte: ["$$this.effectiveDate", "$createdAt"] },
+                              { $gt: ["$$this.effectiveDate", "$$value.bestBeforeDate"] }
+                          ]},
+                          "$$this.effectiveDate",
+                          "$$value.bestBeforeDate"
+                        ]
+                      },
+                      bestBeforePrice: {
+                        $cond: [
+                          { $and: [
+                              { $lte: ["$$this.effectiveDate", "$createdAt"] },
+                              { $gt: ["$$this.effectiveDate", "$$value.bestBeforeDate"] }
+                          ]},
+                          "$$this.newPurchasingPrice",
+                          "$$value.bestBeforePrice"
+                        ]
+                      },
+                      earliestDate: {
+                        $cond: [
+                          { $lt: ["$$this.effectiveDate", "$$value.earliestDate"] },
+                          "$$this.effectiveDate",
+                          "$$value.earliestDate"
+                        ]
+                      },
+                      earliestOldPrice: {
+                        $cond: [
+                          { $lt: ["$$this.effectiveDate", "$$value.earliestDate"] },
+                          "$$this.oldPurchasingPrice",
+                          "$$value.earliestOldPrice"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              in: {
+                $cond: [
+                  { $ne: ["$$historyStats.bestBeforePrice", null] },
+                  "$$historyStats.bestBeforePrice",
+                  {
+                    $cond: [
+                      { $ne: ["$$historyStats.earliestOldPrice", null] },
+                      "$$historyStats.earliestOldPrice",
+                      "$productInfo.purchasingPrice"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
         $project: {
           date: "$createdAt",
           invoiceId: 1,
@@ -366,7 +436,7 @@ router.get("/history", cacheData(120), async (req, res) => {
           customerName: "$customer.name",
           productName: "$items.name",
           productGroupName: "$groupInfo.name",
-          purchasingPrice: "$productInfo.purchasingPrice",
+          purchasingPrice: "$computedPurchasingPrice",
           gst: "$items.gst",
           qty: "$items.qty",
           sellingPrice: "$items.sellingPrice",
@@ -392,7 +462,7 @@ router.get("/history", cacheData(120), async (req, res) => {
                   }
                 ]
               },
-              "$productInfo.purchasingPrice"
+              "$computedPurchasingPrice"
             ]
           }
         }
@@ -2608,3 +2678,4 @@ router.put("/:id/revoke", auth, async (req, res) => {
 });
 
 export default router;
+

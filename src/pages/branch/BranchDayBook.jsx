@@ -6,6 +6,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { API_BASE } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 const BranchDayBook = () => {
     const { currentBranch, user } = useBranch();
     const [dayBook, setDayBook] = useState([]);
@@ -232,25 +233,15 @@ const BranchDayBook = () => {
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <div className="flex items-center bg-gray-50 p-2 rounded-xl border border-gray-200">
-                                <div className="flex items-center gap-2 px-2">
-                                    <FaCalendarAlt className="text-[#319bab] text-sm" />
-                                    <input
-                                        type="date"
-                                        value={fromDate}
-                                        onChange={(e) => setFromDate(e.target.value)}
-                                        className="bg-transparent text-xs font-bold outline-none text-gray-700"
-                                    />
-                                </div>
-                                <span className="text-gray-300 mx-1">|</span>
-                                <div className="flex items-center gap-2 px-2">
-                                    <input
-                                        type="date"
-                                        value={toDate}
-                                        onChange={(e) => setToDate(e.target.value)}
-                                        className="bg-transparent text-xs font-bold outline-none text-gray-700"
-                                    />
-                                </div>
+                            <div className="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-200">
+                                <DateRangeDropdown
+                                    startDate={fromDate}
+                                    endDate={toDate}
+                                    onDateChange={(start, end) => {
+                                        setFromDate(start);
+                                        setToDate(end);
+                                    }}
+                                />
                             </div>
                             <button
                                 onClick={fetchDayBook}

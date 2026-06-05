@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { API_BASE, apiWithAuth } from "../api";
 import { QUICK_LINKS_CONFIG } from "../utils/quickLinksConfig";
 import { useBranch } from "../context/BranchContext";
+import FilterableSelect from "./FilterableSelect";
 
 const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   const { currentBranch, user } = useBranch();
@@ -60,6 +61,10 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   // Column Selection for Export
   const [showColumnSelector, setShowColumnSelector] = useState(false);
   const [selectedExportColumns, setSelectedExportColumns] = useState([]);
+
+  // Checkbox Selection
+  const [selectedProductIds, setSelectedProductIds] = useState([]);
+  const [bulkMarginData, setBulkMarginData] = useState({ marginPercentage: "", adminMargin: "" });
 
   const resourceConfig = QUICK_LINKS_CONFIG;
 
@@ -240,13 +245,13 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
       return;
     }
 
-    if (groupMarginData.type === "group" && !groupMarginData.selectedGroupId) {
-      toast.error("Please select a product group");
+    if (groupMarginData.type === "group" && !groupMarginData.selectedGroupId && selectedProductIds.length === 0) {
+      toast.error("Please select a product group or specific products");
       return;
     }
 
-    if (groupMarginData.type === "category" && !groupMarginData.selectedCategoryId) {
-      toast.error("Please select a product category");
+    if (groupMarginData.type === "category" && !groupMarginData.selectedCategoryId && selectedProductIds.length === 0) {
+      toast.error("Please select a product category or specific products");
       return;
     }
 
@@ -254,10 +259,19 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
     try {
       const payload = {
         branchId,
-        marginPercentage: parseFloat(groupMarginData.marginPercentage),
       };
+      
+      if (groupMarginData.marginPercentage !== undefined && groupMarginData.marginPercentage !== "") {
+        payload.marginPercentage = parseFloat(groupMarginData.marginPercentage);
+      }
+      
+      if (groupMarginData.adminMargin !== undefined && groupMarginData.adminMargin !== "") {
+        payload.adminMargin = parseFloat(groupMarginData.adminMargin);
+      }
 
-      if (groupMarginData.type === "group") {
+      if (selectedProductIds.length > 0) {
+        payload.productIds = selectedProductIds;
+      } else if (groupMarginData.type === "group") {
         payload.productGroupId = groupMarginData.selectedGroupId;
       } else {
         payload.productCategoryId = groupMarginData.selectedCategoryId;
@@ -276,7 +290,10 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
           selectedGroupId: "",
           selectedCategoryId: "",
           marginPercentage: "",
+          adminMargin: "",
         });
+        setBulkMarginData({ marginPercentage: "", adminMargin: "" });
+        setSelectedProductIds([]);
       }
     } catch (error) {
       console.error("Apply margin error:", error);
@@ -488,7 +505,67 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
   // Reset to page 1 when search query or sort changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sortConfig]);
+  }, [searchQuery, sortConfig, selectedGroup, selectedCategory]);
+
+  // Handle Select All
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      // Select all in current filter
+      setSelectedProductIds(filteredData.map(item => item._id));
+    } else {
+      setSelectedProductIds([]);
+    }
+  };
+
+  const handleSelectProduct = (id) => {
+    if (selectedProductIds.includes(id)) {
+      setSelectedProductIds(selectedProductIds.filter(pid => pid !== id));
+    } else {
+      setSelectedProductIds([...selectedProductIds, id]);
+    }
+  };
+
+  const applyBulkMargin = async () => {
+    if (selectedProductIds.length === 0) return;
+    
+    // Validate inputs
+    if (!bulkMarginData.marginPercentage && !bulkMarginData.adminMargin) {
+      toast.error("Please enter Margin % or Admin Margin %");
+      return;
+    }
+    
+    setApplyingMargin(true);
+    try {
+      const payload = {
+        branchId,
+        productIds: selectedProductIds
+      };
+      
+      if (bulkMarginData.marginPercentage !== undefined && bulkMarginData.marginPercentage !== "") {
+        payload.marginPercentage = parseFloat(bulkMarginData.marginPercentage);
+      }
+      
+      if (bulkMarginData.adminMargin !== undefined && bulkMarginData.adminMargin !== "") {
+        payload.adminMargin = parseFloat(bulkMarginData.adminMargin);
+      }
+
+      const response = await apiWithAuth.post(`/products/apply-group-margin`, payload);
+      
+      if (response.data.success) {
+        toast.success(response.data.message);
+        // Refresh the product data
+        await fetchData();
+        // Reset form
+        setBulkMarginData({ marginPercentage: "", adminMargin: "" });
+        setSelectedProductIds([]);
+      }
+    } catch (error) {
+      console.error("Apply margin error:", error);
+      toast.error(error.response?.data?.message || "Failed to apply bulk margin");
+    } finally {
+      setApplyingMargin(false);
+    }
+  };
 
   // Calculate pagination based on sorted data
   const totalPages = Math.ceil(sortedData.length / itemsPerPage);
@@ -553,12 +630,6 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
               >
                 <FaFileExport /> Export PDF
               </button>
-              <button
-                onClick={() => setShowGroupMargin(true)}
-                className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-5 py-2 rounded-lg transition font-semibold shadow-md"
-              >
-                💰 Group Margin
-              </button>
             </>
           )}
         </div>
@@ -620,6 +691,47 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
         )}
       </div>
 
+      {/* Bulk Margin Action Bar */}
+      {type === "product" && (
+        <div className="mb-6 bg-purple-50 border border-purple-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="bg-purple-100 text-purple-700 w-10 h-10 rounded-full flex items-center justify-center font-black">
+              {selectedProductIds.length}
+            </div>
+            <div>
+              <h3 className="font-bold text-purple-900">Bulk Margin Update</h3>
+              <p className="text-xs text-purple-700">Select products below to apply global margins</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <input
+              type="number"
+              placeholder="Margin %"
+              className="px-3 py-2 border border-purple-300 rounded-lg w-28 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+              value={bulkMarginData.marginPercentage}
+              onChange={(e) => setBulkMarginData({ ...bulkMarginData, marginPercentage: e.target.value })}
+              disabled={selectedProductIds.length === 0}
+            />
+            <input
+              type="number"
+              placeholder="Admin Margin %"
+              className="px-3 py-2 border border-purple-300 rounded-lg w-36 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+              value={bulkMarginData.adminMargin}
+              onChange={(e) => setBulkMarginData({ ...bulkMarginData, adminMargin: e.target.value })}
+              disabled={selectedProductIds.length === 0}
+            />
+            <button
+              onClick={applyBulkMargin}
+              disabled={selectedProductIds.length === 0 || applyingMargin}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white font-bold rounded-lg transition-colors whitespace-nowrap shadow-sm"
+            >
+              {applyingMargin ? "Applying..." : "Apply to Selected"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {searchQuery || selectedGroup !== "All" || selectedCategory !== "All" ? (
         <p className="text-sm text-gray-600 mt-2 mb-4">
           Found {filteredData.length} of {data.length} {config.label.toLowerCase()} records
@@ -654,6 +766,16 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
+                    {type === "product" && (
+                      <th className="p-4 w-12 text-center">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
+                          checked={filteredData.length > 0 && selectedProductIds.length === filteredData.length}
+                          onChange={handleSelectAll}
+                        />
+                      </th>
+                    )}
                     {config.displayFields.map((field) => (
                       <th 
                         key={field} 
@@ -679,9 +801,28 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                   {paginatedData.map((item) => (
                     <React.Fragment key={item._id}>
                       <tr 
-                        onClick={() => setExpandedId(expandedId === item._id ? null : item._id)}
-                        className={`hover:bg-blue-50/50 transition cursor-pointer group ${expandedId === item._id ? 'bg-blue-50/80' : ''}`}
+                        onClick={() => {
+                          if (type === "product") {
+                            handleSelectProduct(item._id);
+                          } else {
+                            setExpandedId(expandedId === item._id ? null : item._id);
+                          }
+                        }}
+                        className={`hover:bg-blue-50/50 transition cursor-pointer group ${expandedId === item._id ? 'bg-blue-50/80' : ''} ${selectedProductIds.includes(item._id) ? 'bg-purple-50/50' : ''}`}
                       >
+                        {type === "product" && (
+                          <td className="p-4 text-center">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
+                              checked={selectedProductIds.includes(item._id)}
+                              onChange={() => {
+                                handleSelectProduct(item._id);
+                              }}
+                              onClick={(e) => e.stopPropagation()} // Prevent double-trigger from row
+                            />
+                          </td>
+                        )}
                         {config.displayFields.map((field, idx) => {
                           const value = item[field];
                           let displayValue = "-";
@@ -729,9 +870,15 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                             <td key={field} className="p-4 text-sm text-gray-700 font-medium">
                               <div className="flex items-center gap-2">
                                 {idx === 0 && (
-                                  <span className="text-gray-400">
+                                  <button 
+                                    className="text-gray-400 hover:text-gray-600 transition"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setExpandedId(expandedId === item._id ? null : item._id);
+                                    }}
+                                  >
                                     {expandedId === item._id ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
-                                  </span>
+                                  </button>
                                 )}
                                 {displayValue}
                               </div>
@@ -771,7 +918,7 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
                       </tr>
                       {expandedId === item._id && (
                         <tr className="bg-gray-50/80 animate-in fade-in duration-300">
-                          <td colSpan={config.displayFields.length + ((actionPermissions.edit !== false || actionPermissions.delete !== false || isFieldAllowed("action_edit") || isFieldAllowed("action_delete")) ? 1 : 0)} className="p-6">
+                          <td colSpan={config.displayFields.length + ((actionPermissions.edit !== false || actionPermissions.delete !== false || isFieldAllowed("action_edit") || isFieldAllowed("action_delete")) ? 1 : 0) + (type === "product" ? 1 : 0)} className="p-6">
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                               {config.detailedFields ? (
                                 config.detailedFields.map((key) => {
@@ -918,137 +1065,8 @@ const QuickLinksDataManager = ({ type, onCancel, onEdit }) => {
         </div>
       )}
 
-      {/* Group Margin Modal */}
-      {showGroupMargin && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md p-6">
-            <h3 className="text-2xl font-bold text-gray-800 mb-4">Apply Group Margin</h3>
-            
-            {/* Margin Type Toggle */}
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Apply to:</label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    value="group"
-                    checked={groupMarginData.type === "group"}
-                    onChange={(e) =>
-                      setGroupMarginData({
-                        ...groupMarginData,
-                        type: e.target.value,
-                        selectedGroupId: "",
-                        selectedCategoryId: "",
-                      })
-                    }
-                    className="cursor-pointer"
-                  />
-                  <span>Product Group</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    value="category"
-                    checked={groupMarginData.type === "category"}
-                    onChange={(e) =>
-                      setGroupMarginData({
-                        ...groupMarginData,
-                        type: e.target.value,
-                        selectedGroupId: "",
-                        selectedCategoryId: "",
-                      })
-                    }
-                    className="cursor-pointer"
-                  />
-                  <span>Product Category</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Select Group or Category */}
-            {groupMarginData.type === "group" ? (
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Select Group:</label>
-                <select
-                  value={groupMarginData.selectedGroupId}
-                  onChange={(e) =>
-                    setGroupMarginData({
-                      ...groupMarginData,
-                      selectedGroupId: e.target.value,
-                    })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">-- Select a product group --</option>
-                  {productGroups.map((group) => (
-                    <option key={group._id} value={group._id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Select Category:</label>
-                <select
-                  value={groupMarginData.selectedCategoryId}
-                  onChange={(e) =>
-                    setGroupMarginData({
-                      ...groupMarginData,
-                      selectedCategoryId: e.target.value,
-                    })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">-- Select a product category --</option>
-                  {productCategories.map((category) => (
-                    <option key={category._id} value={category._id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Margin Percentage Input */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Margin Percentage (%):</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={groupMarginData.marginPercentage}
-                onChange={(e) =>
-                  setGroupMarginData({
-                    ...groupMarginData,
-                    marginPercentage: e.target.value,
-                  })
-                }
-                placeholder="e.g., 25.50"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowGroupMargin(false)}
-                className="flex-1 px-4 py-2 bg-gray-400 hover:bg-gray-500 text-white rounded-lg transition font-semibold"
-              >
-                <FaTimes className="inline mr-2" /> Cancel
-              </button>
-              <button
-                onClick={applyGroupMargin}
-                disabled={applyingMargin}
-                className="flex-1 px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-purple-300 text-white rounded-lg transition font-semibold"
-              >
-                {applyingMargin ? "Applying..." : "Apply Margin"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Group Margin Modal is removed in favor of inline bulk edit */}
+      {/* Column Selection Modal */}
       {/* Column Selection Modal */}
       {showColumnSelector && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { FaHistory, FaSearch, FaSync, FaTruck, FaCheckCircle, FaUser, FaCommentDots, FaMapMarkerAlt, FaChevronDown, FaBoxOpen, FaClipboardCheck, FaUndo, FaPlus, FaTrash, FaTimes } from "react-icons/fa";
+import { FaHistory, FaSearch, FaSync, FaTruck, FaCheckCircle, FaUser, FaCommentDots, FaMapMarkerAlt, FaChevronDown, FaBoxOpen, FaClipboardCheck, FaUndo, FaPlus, FaTrash, FaTimes, FaCoins } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { useSearchParams } from "react-router-dom";
 import { API_BASE, fetchWithAuth } from "../../api";
@@ -22,8 +22,15 @@ const BranchDeliveryFlow = () => {
       setFilterStatus(statusParam);
     }
   }, [searchParams]);
-  const [filterFromDate, setFilterFromDate] = useState(new Date().toISOString().split("T")[0]);
-  const [filterToDate, setFilterToDate] = useState(new Date().toISOString().split("T")[0]);
+  const getLocalDateString = (d = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [filterFromDate, setFilterFromDate] = useState(getLocalDateString());
+  const [filterToDate, setFilterToDate] = useState(getLocalDateString());
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
   const [updatingId, setUpdatingId] = useState(null);
@@ -52,6 +59,7 @@ const BranchDeliveryFlow = () => {
   const [showLiveScanner, setShowLiveScanner] = useState(false);
   const [showBulkScanModal, setShowBulkScanModal] = useState(null); // array of inv numbers
   const [verifiedInvoices, setVerifiedInvoices] = useState({}); // { invoiceId: boolean }
+  const [showSearchInput, setShowSearchInput] = useState(false);
 
   const addStaffSlot = (role) => {
     if (bulkData[role].length >= 5) {
@@ -92,7 +100,10 @@ const BranchDeliveryFlow = () => {
 
   const [completingAnim, setCompletingAnim] = useState({}); // { invoiceId: 'processing' | 'done' }
 
-  const handleCompleteWithAnimation = (invoiceId) => {
+  const handleConfirmCompletionDetails = async (inv, paymentOptions, collectedAmount, expenseAmount, expenseNote, denominations) => {
+    setShowScanCompletionModal(null);
+    setScanPaymentOptions([]);
+    const invoiceId = inv._id;
     // Phase 1: Processing (clipboard spins)
     setCompletingAnim(prev => ({ ...prev, [invoiceId]: 'processing' }));
     // Phase 2: Done (green checkmark)
@@ -102,7 +113,7 @@ const BranchDeliveryFlow = () => {
     // Phase 3: Fire API & cleanup
     setTimeout(() => {
       setCompletingAnim(prev => { const n = { ...prev }; delete n[invoiceId]; return n; });
-      handleMarkStatus(invoiceId, 'COMPLETED');
+      performScanUpdate(inv, "COMPLETED", paymentOptions, "deliveryCompleted", collectedAmount, expenseAmount, expenseNote, denominations);
     }, 1600);
   };
 
@@ -388,6 +399,12 @@ const BranchDeliveryFlow = () => {
     const invNo = inputToUse.trim().toUpperCase();
     setScanInput("");
 
+    // Set search to isolate this record
+    setSearchTerm(invNo);
+    setFilterFromDate("");
+    setFilterToDate("");
+    setShowSearchInput(true);
+
     // Find invoice in current list or fetch if not found
     let inv = invoices.find(i => i.invoiceNumber === invNo);
 
@@ -443,7 +460,7 @@ const BranchDeliveryFlow = () => {
     }
   };
 
-  const performScanUpdate = async (inv, status, paymentOptions = [], targetRole = null) => {
+  const performScanUpdate = async (inv, status, paymentOptions = [], targetRole = null, collectedAmount = null, expenseAmount = null, expenseNote = null, denominations = null) => {
     const activeRole = targetRole || selectedScanRole;
 
     let payload = {
@@ -468,6 +485,10 @@ const BranchDeliveryFlow = () => {
     if (status === "COMPLETED") {
       payload.deliveryPaymentType = paymentOptions.join(",");
       payload.deliveryCompletedAt = new Date();
+      if (collectedAmount !== null) payload.deliveryPaymentAmount = Number(collectedAmount) || 0;
+      if (expenseAmount !== null) payload.deliveryExpenseAmount = Number(expenseAmount) || 0;
+      if (expenseNote !== null) payload.deliveryExpenseNote = expenseNote;
+      if (denominations !== null) payload.deliveryDenominations = denominations;
     }
 
     try {
@@ -615,17 +636,44 @@ const BranchDeliveryFlow = () => {
         {/* FILTERS */}
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="lg:col-span-1">
+            <div className="lg:col-span-1 flex flex-col justify-end">
               <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Search</label>
-              <div className="relative group">
-                <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-                <input
-                  type="text"
-                  placeholder="SI ID, Customer, Names..."
-                  className="w-full bg-slate-50/50 border border-slate-100 rounded-xl pl-11 pr-4 py-2.5 text-sm font-bold focus:bg-white focus:border-indigo-500 transition-all outline-none"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+              <div className="flex items-center gap-2">
+                {!showSearchInput && !searchTerm ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowSearchInput(true)}
+                    className="w-10 h-10 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl flex items-center justify-center transition shadow-sm"
+                    title="Search"
+                  >
+                    <FaSearch size={14} />
+                  </button>
+                ) : (
+                  <div className="relative flex-1 group flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                      <input
+                        type="text"
+                        placeholder="SI ID, Customer, Names..."
+                        className="w-full bg-slate-50/50 border border-slate-100 rounded-xl pl-11 pr-4 py-2 text-sm font-bold focus:bg-white focus:border-indigo-500 transition-all outline-none"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSearchInput(false);
+                        setSearchTerm("");
+                      }}
+                      className="w-10 h-10 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center transition shadow-sm border border-rose-100"
+                      title="Clear Search"
+                    >
+                      <FaTimes size={14} />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             <div>
@@ -1023,7 +1071,10 @@ const BranchDeliveryFlow = () => {
                                 </button>
                               )}
                               <button
-                                onClick={() => !completingAnim[inv._id] && verifiedInvoices[inv._id] && (rowPayments[inv._id] || []).length > 0 && areNotesFilled(inv) && handleCompleteWithAnimation(inv._id)}
+                                onClick={() => {
+                                  setScanPaymentOptions(rowPayments[inv._id] || []);
+                                  setShowScanCompletionModal(inv);
+                                }}
                                 disabled={(rowPayments[inv._id] || []).length === 0 || !areNotesFilled(inv) || !verifiedInvoices[inv._id] || !!completingAnim[inv._id]}
                                 className={`group flex-[2] flex items-center justify-center gap-1.5 py-2 text-white rounded-lg text-[9px] font-black uppercase tracking-widest shadow-md transition-all duration-500 ${completingAnim[inv._id] === 'done'
                                     ? 'bg-emerald-500 shadow-emerald-200 scale-105'
@@ -1259,7 +1310,10 @@ const BranchDeliveryFlow = () => {
                             </button>
                           )}
                           <button
-                            onClick={() => !completingAnim[inv._id] && verifiedInvoices[inv._id] && (rowPayments[inv._id] || []).length > 0 && areNotesFilled(inv) && handleCompleteWithAnimation(inv._id)}
+                            onClick={() => {
+                              setScanPaymentOptions(rowPayments[inv._id] || []);
+                              setShowScanCompletionModal(inv);
+                            }}
                             disabled={(rowPayments[inv._id] || []).length === 0 || !areNotesFilled(inv) || !verifiedInvoices[inv._id] || !!completingAnim[inv._id]}
                             className={`group flex-[2] flex items-center justify-center gap-2 py-3.5 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all duration-500 ${completingAnim[inv._id] === 'done'
                                 ? 'bg-emerald-500 shadow-emerald-200 scale-[1.05]'
@@ -1497,7 +1551,9 @@ const BranchDeliveryFlow = () => {
           }}
           selectedOptions={scanPaymentOptions}
           setSelectedOptions={setScanPaymentOptions}
-          onConfirm={() => performScanUpdate(showScanCompletionModal, "COMPLETED", scanPaymentOptions)}
+          onConfirm={(paymentOptions, collectedAmount, expenseAmount, expenseNote, denominations) => 
+            handleConfirmCompletionDetails(showScanCompletionModal, paymentOptions, collectedAmount, expenseAmount, expenseNote, denominations)
+          }
         />
       )}
 
@@ -1540,48 +1596,171 @@ const BranchDeliveryFlow = () => {
 // 💳 SCAN COMPLETION MODAL
 const ScanCompletionModal = ({ invoice, onClose, onConfirm, selectedOptions, setSelectedOptions }) => {
   const [verifyDispatch, setVerifyDispatch] = useState(false);
-  const options = ["CHEQUE", "OLD PAYMENT", "SPOTPAYMENTCASH", "SPOTPAYMENTUPI", "CASH & UPI", "SIGNATURE"];
+  const [collectedAmount, setCollectedAmount] = useState(0);
+  const [expenseAmount, setExpenseAmount] = useState(0);
+  const [expenseNote, setExpenseNote] = useState("");
+  const [denominations, setDenominations] = useState({
+    500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0
+  });
+
+  const optionLabels = {
+    CHEQUE: 'Cheque',
+    OLD_PAYMENT: 'Old Payment',
+    SPOT_CASH: 'Spot Payment Cash',
+    SPOT_UPI: 'Spot Payment UPI',
+    CASH_UPI: 'Cash & UPI',
+    SIGNATURE: 'Signature'
+  };
+
+  const options = Object.keys(optionLabels);
+
+  const denominationsTotal = Object.entries(denominations).reduce(
+    (sum, [val, count]) => sum + Number(val) * (Number(count) || 0),
+    0
+  );
+
+  const hasCash = selectedOptions.some(opt => ["SPOT_CASH", "CASH_UPI"].includes(opt));
+  const netCash = Math.max(0, collectedAmount - expenseAmount);
+  const cashMatches = !hasCash || Math.abs(denominationsTotal - netCash) < 1;
+
+  const handleConfirm = () => {
+    if (hasCash && !cashMatches) {
+      alert(`Cash Breakdown total (₹${denominationsTotal.toLocaleString()}) does not match Net Cash in Hand (₹${netCash.toLocaleString()}).\n\nPlease adjust denominations.`);
+      return;
+    }
+    const finalDenominations = {
+      d500: Number(denominations[500]) || 0,
+      d200: Number(denominations[200]) || 0,
+      d100: Number(denominations[100]) || 0,
+      d50: Number(denominations[50]) || 0,
+      d20: Number(denominations[20]) || 0,
+      d10: Number(denominations[10]) || 0,
+      d5: Number(denominations[5]) || 0,
+      d2: Number(denominations[2]) || 0,
+      d1: Number(denominations[1]) || 0,
+      total: denominationsTotal
+    };
+    onConfirm(selectedOptions, collectedAmount, expenseAmount, expenseNote, finalDenominations);
+  };
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-      <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
-        <div className="bg-slate-800 p-6 flex items-center justify-between text-white">
+      <div className="bg-white rounded-[2rem] w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100 flex flex-col max-h-[90vh]">
+        <div className="bg-slate-800 p-6 flex items-center justify-between text-white shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
               <FaClipboardCheck className="text-white" />
             </div>
             <div>
               <h2 className="text-lg font-black uppercase tracking-tight">Complete Delivery</h2>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{invoice.invoiceNumber}</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{invoice.invoiceNumber} • {invoice.customer?.name}</p>
             </div>
           </div>
           <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition border-0 bg-transparent text-white cursor-pointer">
             <FaTimes />
           </button>
         </div>
-        <div className="p-8">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Select Delivery Options (Multiple Allowed)</p>
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            {options.map(opt => (
-              <label key={opt} className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${selectedOptions.includes(opt) ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}>
-                <input
-                  type="checkbox"
-                  className="hidden"
-                  checked={selectedOptions.includes(opt)}
-                  onChange={() => {
-                    if (selectedOptions.includes(opt)) setSelectedOptions(selectedOptions.filter(o => o !== opt));
-                    else setSelectedOptions([...selectedOptions, opt]);
-                  }}
-                />
-                <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${selectedOptions.includes(opt) ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-200 group-hover:border-slate-300'}`}>
-                  {selectedOptions.includes(opt) && <FaCheckCircle className="text-white text-xs" />}
-                </div>
-                <span className="text-[10px] font-black uppercase tracking-tight">{opt}</span>
-              </label>
-            ))}
+        <div className="p-8 space-y-6 overflow-y-auto flex-1">
+          <div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Select Delivery Options (Multiple Allowed)</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {options.map(opt => (
+                <label key={opt} className={`flex items-center gap-2.5 p-3.5 rounded-xl border-2 transition-all cursor-pointer group ${selectedOptions.includes(opt) ? 'bg-indigo-50 border-indigo-600 text-indigo-700 font-bold' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}>
+                  <input
+                    type="checkbox"
+                    className="hidden"
+                    checked={selectedOptions.includes(opt)}
+                    onChange={() => {
+                      if (selectedOptions.includes(opt)) setSelectedOptions(selectedOptions.filter(o => o !== opt));
+                      else setSelectedOptions([...selectedOptions, opt]);
+                    }}
+                  />
+                  <div className={`w-5 h-5 rounded flex items-center justify-center transition-colors border ${selectedOptions.includes(opt) ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-200 group-hover:border-slate-300'}`}>
+                    {selectedOptions.includes(opt) && <FaCheckCircle className="text-white text-[10px]" />}
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-tight">{optionLabels[opt]}</span>
+                </label>
+              ))}
+            </div>
           </div>
 
-          <label className={`flex items-center gap-3 p-4 mb-6 rounded-2xl border-2 transition-all cursor-pointer group ${verifyDispatch ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5">Amount Collected (₹)</label>
+              <input
+                type="number"
+                placeholder="0"
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold focus:bg-white focus:border-indigo-500 outline-none"
+                value={collectedAmount || ""}
+                onChange={(e) => setCollectedAmount(Number(e.target.value) || 0)}
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5">Expense Incurred (₹)</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  placeholder="Amount"
+                  className="w-24 bg-slate-50 border border-slate-100 rounded-xl px-3 py-3 text-sm font-bold focus:bg-white focus:border-indigo-500 outline-none"
+                  value={expenseAmount || ""}
+                  onChange={(e) => setExpenseAmount(Number(e.target.value) || 0)}
+                />
+                <input
+                  type="text"
+                  placeholder="Expense Reason/Note"
+                  className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-3 py-3 text-xs font-bold focus:bg-white focus:border-indigo-500 outline-none"
+                  value={expenseNote}
+                  onChange={(e) => setExpenseNote(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {hasCash && (
+            <div className="border-t border-slate-100 pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-1">
+                  <FaCoins className="text-amber-500" /> Cash Denomination Breakdown
+                </h4>
+                <div className="text-[10px] font-black uppercase tracking-widest">
+                  Net Cash: <span className="text-emerald-600">₹{netCash.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                {[500, 200, 100, 50, 20, 10, 5, 2, 1].map((val) => (
+                  <div key={val} className="flex flex-col bg-slate-50 p-2 rounded-xl border border-slate-100">
+                    <span className="text-[8px] font-black text-slate-400 uppercase mb-0.5">₹{val}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-300 font-bold">x</span>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={denominations[val] === 0 ? "" : denominations[val]}
+                        onChange={(e) => {
+                          const valCount = e.target.value === "" ? 0 : Number(e.target.value);
+                          setDenominations({ ...denominations, [val]: valCount });
+                        }}
+                        className="w-full bg-transparent outline-none font-black text-xs text-slate-700"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className={`p-3.5 rounded-xl border border-dashed flex items-center justify-between ${cashMatches ? 'bg-emerald-50/50 border-emerald-200 text-emerald-800' : 'bg-rose-50/50 border-rose-200 text-rose-800'}`}>
+                <div className="text-[9px] font-black uppercase tracking-widest">
+                  {cashMatches ? 'Denominations Match Net Cash' : `Mismatch: ₹${Math.abs(denominationsTotal - netCash).toLocaleString()}`}
+                </div>
+                <div className="text-xs font-black">
+                  Total: ₹{denominationsTotal.toLocaleString()}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <label className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${verifyDispatch ? 'bg-indigo-50 border-indigo-600 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'}`}>
             <input
               type="checkbox"
               className="hidden"
@@ -1597,17 +1776,17 @@ const ScanCompletionModal = ({ invoice, onClose, onConfirm, selectedOptions, set
             </div>
           </label>
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 pt-2">
             <button
               onClick={onClose}
-              className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition"
+              className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition border-0 cursor-pointer"
             >
               Cancel
             </button>
             <button
-              disabled={!verifyDispatch}
-              onClick={onConfirm}
-              className={`flex-[2] py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all ${verifyDispatch ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
+              disabled={!verifyDispatch || !cashMatches}
+              onClick={handleConfirm}
+              className={`flex-[2] py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all border-0 cursor-pointer ${verifyDispatch && cashMatches ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xl shadow-indigo-100 active:scale-95' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
             >
               Mark as Completed
             </button>

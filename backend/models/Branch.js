@@ -102,7 +102,10 @@ const branchSchema = new mongoose.Schema(
       type: Number,
       default: 120, // Default 120 minutes (2 hours)
     },
-
+    locationReplacements: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
   },
   { timestamps: true }
 );

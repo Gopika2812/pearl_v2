@@ -16,6 +16,7 @@ import Vendor from "../models/Vendor.js";
 import BranchUser from "../models/BranchUser.js";
 import { getFinancialYear } from "../utils/financialYear.js";
 import { createAuditLog } from "../utils/logUtil.js";
+import DeliveryReceipt from "../models/DeliveryReceipt.js";
 
 
 import moment from "moment-timezone";
@@ -216,6 +217,76 @@ router.get("/history", cacheData(120), async (req, res) => {
         }
       },
       {
+        $addFields: {
+          computedPurchasingPrice: {
+            $let: {
+              vars: {
+                historyStats: {
+                  $reduce: {
+                    input: { $ifNull: ["$productInfo.priceHistory", []] },
+                    initialValue: {
+                      bestBeforeDate: new Date(0),
+                      bestBeforePrice: null,
+                      earliestDate: new Date("2100-01-01T00:00:00Z"),
+                      earliestOldPrice: null
+                    },
+                    in: {
+                      bestBeforeDate: {
+                        $cond: [
+                          { $and: [
+                              { $lte: ["$$this.effectiveDate", "$createdAt"] },
+                              { $gt: ["$$this.effectiveDate", "$$value.bestBeforeDate"] }
+                          ]},
+                          "$$this.effectiveDate",
+                          "$$value.bestBeforeDate"
+                        ]
+                      },
+                      bestBeforePrice: {
+                        $cond: [
+                          { $and: [
+                              { $lte: ["$$this.effectiveDate", "$createdAt"] },
+                              { $gt: ["$$this.effectiveDate", "$$value.bestBeforeDate"] }
+                          ]},
+                          "$$this.newPurchasingPrice",
+                          "$$value.bestBeforePrice"
+                        ]
+                      },
+                      earliestDate: {
+                        $cond: [
+                          { $lt: ["$$this.effectiveDate", "$$value.earliestDate"] },
+                          "$$this.effectiveDate",
+                          "$$value.earliestDate"
+                        ]
+                      },
+                      earliestOldPrice: {
+                        $cond: [
+                          { $lt: ["$$this.effectiveDate", "$$value.earliestDate"] },
+                          "$$this.oldPurchasingPrice",
+                          "$$value.earliestOldPrice"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              in: {
+                $cond: [
+                  { $ne: ["$$historyStats.bestBeforePrice", null] },
+                  "$$historyStats.bestBeforePrice",
+                  {
+                    $cond: [
+                      { $ne: ["$$historyStats.earliestOldPrice", null] },
+                      "$$historyStats.earliestOldPrice",
+                      "$productInfo.purchasingPrice"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
         $project: {
           date: "$invoiceDate",
           createdAt: 1,
@@ -224,7 +295,7 @@ router.get("/history", cacheData(120), async (req, res) => {
           customerName: "$customer.name",
           productName: "$items.name",
           productGroupName: "$groupInfo.name",
-          purchasingPrice: "$productInfo.purchasingPrice",
+          purchasingPrice: "$computedPurchasingPrice",
           gst: "$items.gst",
           qty: "$items.qty",
           sellingPrice: "$items.sellingPrice",
@@ -250,7 +321,7 @@ router.get("/history", cacheData(120), async (req, res) => {
                   }
                 ]
               },
-              "$productInfo.purchasingPrice"
+              "$computedPurchasingPrice"
             ]
           }
         }
@@ -288,10 +359,19 @@ router.get("/history", cacheData(120), async (req, res) => {
     // Execute split queries to avoid MongoDB $facet sort memory limitations
     const countPipeline = [
       ...aggregation,
-      { $count: "total" }
+      { 
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          totalQty: { $sum: "$qty" },
+          totalGrossProfit: { $sum: { $multiply: ["$grossProfit", "$qty"] } },
+          totalProfitPercentSum: { $sum: "$profitPercent" }
+        }
+      }
     ];
     const countResult = await Invoice.aggregate(countPipeline).allowDiskUse(true);
-    const total = countResult[0]?.total || 0;
+    const globalStats = countResult[0] || { total: 0, totalQty: 0, totalGrossProfit: 0, totalProfitPercentSum: 0 };
+    const total = globalStats.total;
 
     const dataPipeline = [
       ...aggregation,
@@ -304,6 +384,9 @@ router.get("/history", cacheData(120), async (req, res) => {
     res.json({
       history,
       total,
+      totalQty: globalStats.totalQty,
+      totalGrossProfit: globalStats.totalGrossProfit,
+      totalProfitPercentSum: globalStats.totalProfitPercentSum,
       page: parseInt(page),
       limit: limitNum
     });
@@ -937,6 +1020,8 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
             originalQty,
             confirmedQty,
             backOrderQty,
+            isConfirmed: item.isConfirmed === true,
+            isNeutralized: item.isNeutralized === true,
             discountPercent,
             discountAmount,
             sellingPrice,
@@ -2273,7 +2358,10 @@ router.patch("/:invoiceId/delivery-flow", async (req, res) => {
       updatedById,
       deliveryPaymentType,
       deliveryPaymentAmount,
-      deliverySignature
+      deliverySignature,
+      deliveryExpenseAmount,
+      deliveryExpenseNote,
+      deliveryDenominations
     } = req.body;
 
     const inv = await Invoice.findById(invoiceId);
@@ -2292,6 +2380,65 @@ router.patch("/:invoiceId/delivery-flow", async (req, res) => {
     if (deliveryPaymentType !== undefined) updateData.deliveryPaymentType = deliveryPaymentType;
     if (deliveryPaymentAmount !== undefined) updateData.deliveryPaymentAmount = deliveryPaymentAmount;
     if (deliverySignature !== undefined) updateData.deliverySignature = deliverySignature;
+    if (deliveryExpenseAmount !== undefined) updateData.deliveryExpenseAmount = deliveryExpenseAmount;
+    if (deliveryExpenseNote !== undefined) updateData.deliveryExpenseNote = deliveryExpenseNote;
+    if (deliveryDenominations !== undefined) updateData.deliveryDenominations = deliveryDenominations;
+
+    // --- REVERSION CLEANUP FOR COMBINED DAILY DELIVERY RECEIPTS ---
+    if (inv.deliveryStatus === "COMPLETED" && (deliveryStatus === "PENDING" || req.body.isReverted === true)) {
+      try {
+        const receipt = await DeliveryReceipt.findOne({
+          branchId: inv.branchId,
+          "collections.invoiceId": inv._id
+        });
+
+        if (receipt) {
+          // Remove the collection
+          receipt.collections = receipt.collections.filter(c => c.invoiceId?.toString() !== inv._id.toString());
+          // Remove expenses
+          receipt.expenses = receipt.expenses.filter(e => e.invoiceId?.toString() !== inv._id.toString());
+
+          // Subtract denominations
+          if (inv.deliveryDenominations) {
+            receipt.denominations.d500 = Math.max(0, (receipt.denominations.d500 || 0) - (Number(inv.deliveryDenominations.d500) || 0));
+            receipt.denominations.d200 = Math.max(0, (receipt.denominations.d200 || 0) - (Number(inv.deliveryDenominations.d200) || 0));
+            receipt.denominations.d100 = Math.max(0, (receipt.denominations.d100 || 0) - (Number(inv.deliveryDenominations.d100) || 0));
+            receipt.denominations.d50 = Math.max(0, (receipt.denominations.d50 || 0) - (Number(inv.deliveryDenominations.d50) || 0));
+            receipt.denominations.d20 = Math.max(0, (receipt.denominations.d20 || 0) - (Number(inv.deliveryDenominations.d20) || 0));
+            receipt.denominations.d10 = Math.max(0, (receipt.denominations.d10 || 0) - (Number(inv.deliveryDenominations.d10) || 0));
+            receipt.denominations.d5 = Math.max(0, (receipt.denominations.d5 || 0) - (Number(inv.deliveryDenominations.d5) || 0));
+            receipt.denominations.d2 = Math.max(0, (receipt.denominations.d2 || 0) - (Number(inv.deliveryDenominations.d2) || 0));
+            receipt.denominations.d1 = Math.max(0, (receipt.denominations.d1 || 0) - (Number(inv.deliveryDenominations.d1) || 0));
+          }
+
+          // Recalculate totals
+          receipt.totalCollected = receipt.collections.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+          receipt.totalExpense = receipt.expenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+          receipt.netAmount = receipt.totalCollected - receipt.totalExpense;
+
+          receipt.denominations.total = 
+            (receipt.denominations.d500 * 500) +
+            (receipt.denominations.d200 * 200) +
+            (receipt.denominations.d100 * 100) +
+            (receipt.denominations.d50 * 50) +
+            (receipt.denominations.d20 * 20) +
+            (receipt.denominations.d10 * 10) +
+            (receipt.denominations.d5 * 5) +
+            (receipt.denominations.d2 * 2) +
+            (receipt.denominations.d1 * 1);
+
+          if (receipt.collections.length === 0 && receipt.expenses.length === 0) {
+            await DeliveryReceipt.findByIdAndDelete(receipt._id);
+            console.log(`🗑️ Deleted empty DeliveryReceipt ${receipt.receiptId} after reverting invoice ${inv.invoiceNumber}`);
+          } else {
+            await receipt.save();
+            console.log(`🔄 Reverted collection/expense for invoice ${inv.invoiceNumber} in DeliveryReceipt ${receipt.receiptId}`);
+          }
+        }
+      } catch (revertErr) {
+        console.error("⚠️ Failed to revert DeliveryReceipt collection/expense:", revertErr);
+      }
+    }
 
     if (deliveryStatus !== undefined) {
       updateData.deliveryStatus = deliveryStatus;
@@ -2301,6 +2448,156 @@ router.patch("/:invoiceId/delivery-flow", async (req, res) => {
         if (!inv.deliveryLogId) {
           updateData.deliveryLogId = await generateDeliveryLogId(inv.branchId);
         }
+
+        // --- DYNAMIC DAILY DELIVERY RECEIPTS INTEGRATION ---
+        try {
+          const dPerson = deliveryPerson || inv.deliveryPerson || "System";
+          
+          // Get start and end of day in local/IST time to normalize daily combined receipts
+          const startOfDay = new Date();
+          startOfDay.setHours(0, 0, 0, 0);
+          const endOfDay = new Date();
+          endOfDay.setHours(23, 59, 59, 999);
+
+          let receipt = await DeliveryReceipt.findOne({
+            branchId: inv.branchId,
+            deliveryPerson: dPerson,
+            date: { $gte: startOfDay, $lte: endOfDay }
+          });
+
+          const pAmount = Number(deliveryPaymentAmount !== undefined ? deliveryPaymentAmount : inv.grandTotal) || 0;
+          const pMode = (deliveryPaymentType && (deliveryPaymentType.includes("CASH") || deliveryPaymentType.includes("SPOT_CASH") || deliveryPaymentType.includes("SPOTPAYMENTCASH") || deliveryPaymentType.includes("CASH_UPI"))) ? "CASH" : "UPI";
+
+          const newCollection = {
+            customer: { customerId: inv.customer.customerId, name: inv.customer.name },
+            amount: pAmount,
+            paymentMode: pMode,
+            invoiceId: inv._id,
+            invoiceNumber: inv.invoiceNumber
+          };
+
+          const newExpenses = [];
+          const expAmt = Number(deliveryExpenseAmount) || 0;
+          if (expAmt > 0) {
+            newExpenses.push({
+              amount: expAmt,
+              note: deliveryExpenseNote || `Delivery expense for Invoice ${inv.invoiceNumber}`,
+              invoiceId: inv._id
+            });
+          }
+
+          if (receipt) {
+            // Append collections and expenses
+            receipt.collections.push(newCollection);
+            if (newExpenses.length > 0) {
+              receipt.expenses.push(...newExpenses);
+            }
+            
+            // Sum denominations
+            if (deliveryDenominations) {
+              receipt.denominations.d500 = (receipt.denominations.d500 || 0) + (Number(deliveryDenominations.d500) || 0);
+              receipt.denominations.d200 = (receipt.denominations.d200 || 0) + (Number(deliveryDenominations.d200) || 0);
+              receipt.denominations.d100 = (receipt.denominations.d100 || 0) + (Number(deliveryDenominations.d100) || 0);
+              receipt.denominations.d50 = (receipt.denominations.d50 || 0) + (Number(deliveryDenominations.d50) || 0);
+              receipt.denominations.d20 = (receipt.denominations.d20 || 0) + (Number(deliveryDenominations.d20) || 0);
+              receipt.denominations.d10 = (receipt.denominations.d10 || 0) + (Number(deliveryDenominations.d10) || 0);
+              receipt.denominations.d5 = (receipt.denominations.d5 || 0) + (Number(deliveryDenominations.d5) || 0);
+              receipt.denominations.d2 = (receipt.denominations.d2 || 0) + (Number(deliveryDenominations.d2) || 0);
+              receipt.denominations.d1 = (receipt.denominations.d1 || 0) + (Number(deliveryDenominations.d1) || 0);
+            }
+
+            // Recalculate totals
+            receipt.totalCollected = receipt.collections.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+            receipt.totalExpense = receipt.expenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+            receipt.netAmount = receipt.totalCollected - receipt.totalExpense;
+            
+            receipt.denominations.total = 
+              (receipt.denominations.d500 * 500) +
+              (receipt.denominations.d200 * 200) +
+              (receipt.denominations.d100 * 100) +
+              (receipt.denominations.d50 * 50) +
+              (receipt.denominations.d20 * 20) +
+              (receipt.denominations.d10 * 10) +
+              (receipt.denominations.d5 * 5) +
+              (receipt.denominations.d2 * 2) +
+              (receipt.denominations.d1 * 1);
+
+            await receipt.save();
+          } else {
+            // Helper to generate Receipt ID inside the context
+            const generateLocalReceiptId = async (bId) => {
+              const BranchModel = mongoose.model("Branch");
+              const br = await BranchModel.findById(bId);
+              const branchCode = br?.code || "BR";
+              const prefix = `DR-${branchCode}-`;
+              
+              const lastReceipt = await DeliveryReceipt.findOne({
+                branchId: new mongoose.Types.ObjectId(bId),
+                receiptId: { $regex: `^${prefix}` }
+              }).sort({ receiptId: -1 });
+
+              let nextNum = 1;
+              if (lastReceipt && lastReceipt.receiptId) {
+                const parts = lastReceipt.receiptId.split("-");
+                const lastNum = parseInt(parts[parts.length - 1]);
+                if (!isNaN(lastNum)) {
+                  nextNum = lastNum + 1;
+                }
+              }
+              return `${prefix}${nextNum.toString().padStart(4, "0")}`;
+            };
+
+            const newReceiptId = await generateLocalReceiptId(inv.branchId);
+
+            const initialDenominations = {
+              d500: Number(deliveryDenominations?.d500) || 0,
+              d200: Number(deliveryDenominations?.d200) || 0,
+              d100: Number(deliveryDenominations?.d100) || 0,
+              d50: Number(deliveryDenominations?.d50) || 0,
+              d20: Number(deliveryDenominations?.d20) || 0,
+              d10: Number(deliveryDenominations?.d10) || 0,
+              d5: Number(deliveryDenominations?.d5) || 0,
+              d2: Number(deliveryDenominations?.d2) || 0,
+              d1: Number(deliveryDenominations?.d1) || 0,
+              total: 0
+            };
+
+            initialDenominations.total = 
+              (initialDenominations.d500 * 500) +
+              (initialDenominations.d200 * 200) +
+              (initialDenominations.d100 * 100) +
+              (initialDenominations.d50 * 50) +
+              (initialDenominations.d20 * 20) +
+              (initialDenominations.d10 * 10) +
+              (initialDenominations.d5 * 5) +
+              (initialDenominations.d2 * 2) +
+              (initialDenominations.d1 * 1);
+
+            const newRec = new DeliveryReceipt({
+              branchId: inv.branchId,
+              receiptId: newReceiptId,
+              date: new Date(),
+              deliveryPerson: dPerson,
+              collections: [newCollection],
+              expenses: newExpenses,
+              totalCollected: pAmount,
+              totalExpense: expAmt,
+              netAmount: pAmount - expAmt,
+              denominations: initialDenominations,
+              createdBy: updatedBy || "System"
+            });
+            await newRec.save();
+          }
+        } catch (receiptErr) {
+          console.error("⚠️ Failed to generate/update DeliveryReceipt for completed delivery:", receiptErr);
+        }
+      } else if (deliveryStatus === "PENDING") {
+        updateData.deliveryPaymentAmount = 0;
+        updateData.deliveryExpenseAmount = 0;
+        updateData.deliveryExpenseNote = "";
+        updateData.deliveryDenominations = {
+          d500: 0, d200: 0, d100: 0, d50: 0, d20: 0, d10: 0, d5: 0, d2: 0, d1: 0, total: 0
+        };
       }
     }
 
@@ -2353,5 +2650,6 @@ router.patch("/:invoiceId/delivery-flow", async (req, res) => {
 
 
 export default router;
+
 
 

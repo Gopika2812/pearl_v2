@@ -188,9 +188,8 @@ router.get("/", async (req, res) => {
       .skip(skip)
       .limit(pageSize)
       .lean();
-
     if (mini === "true" || mini === true) {
-        // Fetch last purchase dates for all products in this branch
+        // Fetch last purchase and sales dates for all products in this branch
         const [poDates, piDates, siDates] = await Promise.all([
           PurchaseOrder.aggregate([
             { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
@@ -198,7 +197,7 @@ router.get("/", async (req, res) => {
             { $group: { _id: "$items.productId", lastDate: { $max: "$date" } } }
           ]),
           PurchaseInvoice.aggregate([
-            { $match: { branchId: branchObjectId } },
+            { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" } } },
             { $unwind: "$items" },
             { $group: { _id: "$items.productId", lastDate: { $max: "$invoiceDate" } } }
           ]),
@@ -290,7 +289,7 @@ router.get("/", async (req, res) => {
         { $group: { _id: "$items.productId", lastDate: { $max: "$date" } } }
       ]),
       PurchaseInvoice.aggregate([
-        { $match: { branchId: branchObjectId, "items.productId": { $in: productIds } } },
+        { $match: { branchId: branchObjectId, status: { $ne: "CANCELLED" }, "items.productId": { $in: productIds } } },
         { $unwind: "$items" },
         { $match: { "items.productId": { $in: productIds } } },
         { $group: { _id: "$items.productId", lastDate: { $max: "$invoiceDate" } } }
@@ -311,7 +310,9 @@ router.get("/", async (req, res) => {
 
     const purchaseDateMap = new Map();
     poDates.forEach(d => {
-      if (d._id) purchaseDateMap.set(d._id.toString(), d.lastDate);
+      if (d._id) {
+        purchaseDateMap.set(d._id.toString(), d.lastDate);
+      }
     });
     piDates.forEach(d => {
       if (d._id) {
@@ -326,7 +327,9 @@ router.get("/", async (req, res) => {
     const salesDateMap = new Map();
     if (siDates) {
       siDates.forEach(d => {
-        if (d._id) salesDateMap.set(d._id.toString(), d.lastDate);
+        if (d._id) {
+          salesDateMap.set(d._id.toString(), d.lastDate);
+        }
       });
     }
 
@@ -1680,7 +1683,9 @@ router.get("/stock-journal", async (req, res) => {
           $group: {
             _id: "$items.productId",
             outBeforeReport: { $sum: { $cond: [{ $lt: ["$invoiceDate", reportStart] }, "$items.qty", 0] } },
-            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$invoiceDate", reportStart] }, { $lte: ["$invoiceDate", reportEnd] }] }, "$items.qty", 0] } }
+            outDuringPeriod: { $sum: { $cond: [{ $and: [{ $gte: ["$invoiceDate", reportStart] }, { $lte: ["$invoiceDate", reportEnd] }] }, "$items.qty", 0] } },
+            lastSalesDate: { $max: "$invoiceDate" },
+            totalSalesQty: { $sum: "$items.qty" }
           }
         }
       ]),
@@ -1730,7 +1735,7 @@ router.get("/stock-journal", async (req, res) => {
 
     // Maps for O(1) lookup
     const pMap = new Map(purchases.map(p => [p._id.toString(), { inBefore: p.inBeforeReport, inDuring: p.inDuringPeriod }]));
-    const sMap = new Map(sales.map(s => [s._id.toString(), { outBefore: s.outBeforeReport, outDuring: s.outDuringPeriod }]));
+    const sMap = new Map(sales.map(s => [s._id.toString(), { outBefore: s.outBeforeReport, outDuring: s.outDuringPeriod, lastSalesDate: s.lastSalesDate, totalSalesQty: s.totalSalesQty }]));
     const dnMap = new Map(debitNotes.map(dn => [dn._id.toString(), { outBefore: dn.outBeforeReport, outDuring: dn.outDuringPeriod }]));
     const cnMap = new Map(creditNotes.map(cn => [cn._id.toString(), { inBefore: cn.inBeforeReport, inDuring: cn.inDuringPeriod }]));
     const psvMap = new Map(psvTotals.map(psv => [psv._id.toString(), psv]));
@@ -1762,6 +1767,16 @@ router.get("/stock-journal", async (req, res) => {
 
       const inwards = ps.inDuring + cns.inDuring + psv.inDuring;
       const outwards = ss.outDuring + dns.outDuring + psv.outDuring;
+      
+      let salesAge = "-";
+      let formattedLastSalesDate = "-";
+      if (ss.lastSalesDate) {
+        const diffTime = Math.abs(new Date() - new Date(ss.lastSalesDate));
+        salesAge = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        formattedLastSalesDate = new Date(ss.lastSalesDate).toLocaleDateString("en-IN", {
+          day: "2-digit", month: "short", year: "numeric"
+        });
+      }
 
       return {
         productId: pid,
@@ -1780,6 +1795,9 @@ router.get("/stock-journal", async (req, res) => {
         },
         purchasesInPeriod: inwards,
         salesInPeriod: outwards,
+        lastSalesDate: formattedLastSalesDate,
+        salesAge,
+        salesQty: ss.outDuring || 0
       };
     });
 
@@ -1959,26 +1977,29 @@ router.get("/:id/ledger", auth, async (req, res) => {
 
 router.post("/apply-group-margin", async (req, res) => {
   try {
-    const { branchId, productGroupId, productCategoryId, marginPercentage } = req.body;
+    const { branchId, productGroupId, productCategoryId, productIds, marginPercentage, adminMargin } = req.body;
 
-    if (!branchId || !marginPercentage === undefined) {
+    if (!branchId || (marginPercentage === undefined && adminMargin === undefined)) {
       return res.status(400).json({
         success: false,
-        message: "branchId and marginPercentage are required"
+        message: "branchId and at least one of marginPercentage or adminMargin are required"
       });
     }
 
-    if (!productGroupId && !productCategoryId) {
+    if (!productGroupId && !productCategoryId && (!productIds || productIds.length === 0)) {
       return res.status(400).json({
         success: false,
-        message: "Either productGroupId or productCategoryId is required"
+        message: "Either productGroupId, productCategoryId, or specific products must be selected"
       });
     }
 
     const query = { branchId };
     let updateMessage = "";
 
-    if (productGroupId) {
+    if (productIds && productIds.length > 0) {
+      query._id = { $in: productIds };
+      updateMessage = "selected products";
+    } else if (productGroupId) {
       query.productGroup = productGroupId;
       updateMessage = "product group";
     } else if (productCategoryId) {
@@ -1986,31 +2007,26 @@ router.post("/apply-group-margin", async (req, res) => {
       updateMessage = "product category";
     }
 
-    // Find all matching products and update their margin percentage
-    const result = await Product.updateMany(
-      query,
-      {
-        marginPercentage: marginPercentage,
-        $set: {} // Let the pre-save hook handle margin/price calculations
+    // Fetch products to update
+    const productsToUpdate = await Product.find(query);
+
+    // Save each product to trigger pre-save hooks and calculations
+    for (const product of productsToUpdate) {
+      if (marginPercentage !== undefined && marginPercentage !== "") {
+        product.marginPercentage = Math.round(marginPercentage * 100) / 100;
+        product.markModified("marginPercentage");
       }
-    );
-
-    // Fetch updated products to trigger pre-save hooks for calculations
-    const updatedProducts = await Product.find(query);
-
-    // Round marginPercentage input
-    const roundedMargin = Math.round(marginPercentage * 100) / 100;
-
-    // Save each product to trigger pre-save hooks
-    for (const product of updatedProducts) {
-      product.marginPercentage = roundedMargin;
+      if (adminMargin !== undefined && adminMargin !== "") {
+        product.adminMargin = Math.round(adminMargin * 100) / 100;
+        product.markModified("adminMargin");
+      }
       await product.save();
     }
 
     res.status(200).json({
       success: true,
-      message: `Applied ${roundedMargin}% margin to ${updatedProducts.length} products in the ${updateMessage}`,
-      updatedCount: updatedProducts.length
+      message: `Applied margins to ${productsToUpdate.length} products in the ${updateMessage}`,
+      updatedCount: productsToUpdate.length
     });
   } catch (error) {
     console.error("Apply group margin error:", error);

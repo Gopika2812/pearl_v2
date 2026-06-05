@@ -127,117 +127,143 @@ const PayrollPage = () => {
 
   const handlePrint = (record) => {
     const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error("Popup blocked! Please allow popups for this website in your browser settings to print payslips.");
+      return;
+    }
+
+    const branchLetter = (currentBranch?.name || 'B').trim().charAt(0).toUpperCase();
+    const shortId = record._id ? String(record._id).slice(-4) : '0000';
+    const refCode = `${branchLetter}${shortId}`;
+
     const content = `
       <html>
         <head>
           <title>Payslip - ${record.employeeId?.name}</title>
           <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-            body { font-family: 'Inter', sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
-            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 4px solid #4f46e5; padding-bottom: 20px; margin-bottom: 30px; }
-            .logo-container { display: flex; align-items: center; gap: 15px; }
-            .logo { width: 60px; height: 60px; object-fit: contain; }
-            .company-name { font-size: 24px; font-weight: 900; text-transform: uppercase; letter-spacing: -1px; }
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
+            body { font-family: 'Inter', sans-serif; padding: 20px; color: #1e293b; background: white; margin: 0; }
+            .payslip-container { max-width: 700px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #4f46e5; padding-bottom: 12px; margin-bottom: 20px; }
+            .logo-container { display: flex; align-items: center; gap: 10px; }
+            .logo { width: 50px; height: 50px; object-fit: contain; }
+            .company-name { font-size: 20px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.5px; color: #1e293b; }
             .payslip-title { text-align: right; }
-            .payslip-title h1 { margin: 0; font-size: 28px; font-weight: 900; color: #4f46e5; text-transform: uppercase; }
-            .payslip-title p { margin: 0; font-size: 14px; color: #64748b; font-weight: 700; }
+            .payslip-title h1 { margin: 0; font-size: 24px; font-weight: 900; color: #4f46e5; text-transform: uppercase; letter-spacing: 0.5px; }
+            .payslip-title p { margin: 2px 0 0 0; font-size: 11px; color: #64748b; font-weight: 700; }
             
-            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
-            .info-section h2 { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #94a3b8; margin-bottom: 10px; }
-            .info-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
-            .info-item span:first-child { color: #64748b; font-weight: 500; }
-            .info-item span:last-child { font-weight: 700; }
+            .info-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 24px; margin-bottom: 20px; }
+            .info-section h2 { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; margin: 0 0 6px 0; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+            .info-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 12px; gap: 10px; }
+            .info-item span:first-child { color: #64748b; font-weight: 500; min-width: 80px; }
+            .info-item span:last-child { font-weight: 700; text-align: right; }
+            .ref-item { display: flex; flex-direction: column; align-items: flex-start; padding: 6px 0; font-size: 12px; gap: 2px; }
+            .ref-item span:first-child { color: #64748b; font-weight: 500; }
+            .ref-item span:last-child { font-weight: 600; text-align: left; font-family: monospace; font-size: 10.5px; word-break: break-all; color: #64748b; }
 
-            .salary-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
-            .salary-table th { background: #f8fafc; padding: 15px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; border-bottom: 2px solid #e2e8f0; }
-            .salary-table td { padding: 15px; font-size: 14px; border-bottom: 1px solid #f1f5f9; }
+            .salary-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            .salary-table th { background: #f8fafc; padding: 10px 12px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; border-bottom: 2px solid #e2e8f0; }
+            .salary-table td { padding: 10px 12px; font-size: 12px; border-bottom: 1px solid #f1f5f9; }
             
-            .earnings { color: #059669; }
-            .deductions { color: #dc2626; }
+            .earnings { color: #059669; font-weight: 700; }
+            .deductions { color: #dc2626; font-weight: 700; }
             
-            .total-box { background: #4f46e5; color: white; padding: 30px; rounded: 20px; display: flex; justify-content: space-between; align-items: center; border-radius: 20px; }
-            .total-label { font-size: 14px; font-weight: 700; text-transform: uppercase; }
-            .total-value { font-size: 32px; font-weight: 900; }
+            .total-box { background: #4f46e5; color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; border-radius: 12px; margin-bottom: 15px; }
+            .total-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+            .total-value { font-size: 22px; font-weight: 900; }
 
-            .footer { margin-top: 60px; text-align: center; font-size: 11px; color: #94a3b8; }
-            @media print { .no-print { display: none; } }
+            .footer { margin-top: 24px; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 12px; }
+
+            @media print {
+              body { padding: 0; background: none; }
+              .payslip-container { border: none; padding: 0; box-shadow: none; max-width: 100%; }
+              @page { size: portrait; margin: 15mm; }
+            }
           </style>
         </head>
         <body>
-          <div class="header">
-            <div class="logo-container">
-              <img src="/logo.jpeg" class="logo" alt="Pearls Logo" />
-              <div class="company-name">Pearls ERP</div>
+          <div class="payslip-container">
+            <div class="header">
+              <div class="logo-container">
+                <img src="/logo.jpeg" class="logo" alt="Pearls Logo" />
+                <div class="company-name">Pearls ERP</div>
+              </div>
+              <div class="payslip-title">
+                <h1>Payslip</h1>
+                <p>For the month of ${record.month}</p>
+              </div>
             </div>
-            <div class="payslip-title">
-              <h1>Payslip</h1>
-              <p>For the month of ${record.month}</p>
+
+            <div class="info-grid">
+              <div class="info-section">
+                <h2>Employee Details</h2>
+                <div class="info-item"><span>Name</span><span>${record.employeeId?.name}</span></div>
+                <div class="info-item"><span>Employee ID</span><span>${record.employeeCode || '---'}</span></div>
+                <div class="info-item"><span>Role</span><span>${record.employeeId?.role}</span></div>
+                <div class="info-item"><span>Branch</span><span>${currentBranch?.name}</span></div>
+              </div>
+              <div class="info-section">
+                <h2>Payment Details</h2>
+                <div class="info-item"><span>Status</span><span style="color: ${record.status === 'Paid' ? '#059669' : '#d97706'}">${record.status}</span></div>
+                <div class="info-item"><span>Payment Date</span><span>${record.paymentDate ? new Date(record.paymentDate).toLocaleDateString() : 'Pending'}</span></div>
+                <div class="info-item"><span>Reference ID</span><span>${refCode}</span></div>
+                ${record.zohoExpenseId ? `<div class="info-item"><span>Zoho Ref</span><span>#${record.zohoExpenseId}</span></div>` : ''}
+              </div>
+            </div>
+
+            <table class="salary-table">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th style="text-align: right">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Basic Salary</td>
+                  <td style="text-align: right" class="earnings">${record.basicSalary.toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td>Overtime Pay</td>
+                  <td style="text-align: right" class="earnings">${record.overtimePay.toLocaleString()}</td>
+                </tr>
+                ${record.manualBonus > 0 ? `<tr><td>Additional Bonus (Adj)</td><td style="text-align: right" class="earnings">${record.manualBonus.toLocaleString()}</td></tr>` : ''}
+                
+                <tr>
+                  <td>Standard Deductions</td>
+                  <td style="text-align: right" class="deductions">-${record.deductions.toLocaleString()}</td>
+                </tr>
+                ${record.lateHoursDeduction > 0 ? `<tr><td>Late Coming Fine</td><td style="text-align: right" class="deductions">-${record.lateHoursDeduction.toLocaleString()}</td></tr>` : ''}
+                ${record.extraLeaveDeduction > 0 ? `<tr><td>Unpaid Leaves Deduction</td><td style="text-align: right" class="deductions">-${record.extraLeaveDeduction.toLocaleString()}</td></tr>` : ''}
+                ${record.manualFine > 0 ? `<tr><td>Additional Fine (Adj)</td><td style="text-align: right" class="deductions">-${record.manualFine.toLocaleString()}</td></tr>` : ''}
+              </tbody>
+            </table>
+
+            <div class="total-box">
+              <div class="total-label">Net Payout (Grand Pay)</div>
+              <div class="total-value">₹${record.netSalary.toLocaleString()}</div>
+            </div>
+
+            <div class="footer">
+              <p>This is a computer-generated payslip and does not require a physical signature.</p>
+              <p>&copy; ${new Date().getFullYear()} Pearls ERP Systems. All rights reserved.</p>
             </div>
           </div>
-
-          <div class="info-grid">
-            <div class="info-section">
-              <h2>Employee Details</h2>
-              <div class="info-item"><span>Name</span><span>${record.employeeId?.name}</span></div>
-              <div class="info-item"><span>Employee ID</span><span>${record.employeeCode || '---'}</span></div>
-              <div class="info-item"><span>Role</span><span>${record.employeeId?.role}</span></div>
-              <div class="info-item"><span>Branch</span><span>${currentBranch?.name}</span></div>
-            </div>
-            <div class="info-section">
-              <h2>Payment Details</h2>
-              <div class="info-item"><span>Status</span><span style="color: ${record.status === 'Paid' ? '#059669' : '#d97706'}">${record.status}</span></div>
-              <div class="info-item"><span>Payment Date</span><span>${record.paymentDate ? new Date(record.paymentDate).toLocaleDateString() : 'Pending'}</span></div>
-              <div class="info-item"><span>Reference ID</span><span>${record._id}</span></div>
-              ${record.zohoExpenseId ? `<div class="info-item"><span>Zoho Ref</span><span>#${record.zohoExpenseId}</span></div>` : ''}
-            </div>
-          </div>
-
-          <table class="salary-table">
-            <thead>
-              <tr>
-                <th>Description</th>
-                <th style="text-align: right">Amount (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Basic Salary</td>
-                <td style="text-align: right" class="earnings">${record.basicSalary.toLocaleString()}</td>
-              </tr>
-              <tr>
-                <td>Overtime Pay</td>
-                <td style="text-align: right" class="earnings">${record.overtimePay.toLocaleString()}</td>
-              </tr>
-              ${record.manualBonus > 0 ? `<tr><td>Additional Bonus (Adj)</td><td style="text-align: right" class="earnings">${record.manualBonus.toLocaleString()}</td></tr>` : ''}
-              
-              <tr>
-                <td>Standard Deductions</td>
-                <td style="text-align: right" class="deductions">-${record.deductions.toLocaleString()}</td>
-              </tr>
-              ${record.lateHoursDeduction > 0 ? `<tr><td>Late Coming Fine</td><td style="text-align: right" class="deductions">-${record.lateHoursDeduction.toLocaleString()}</td></tr>` : ''}
-              ${record.extraLeaveDeduction > 0 ? `<tr><td>Unpaid Leaves Deduction</td><td style="text-align: right" class="deductions">-${record.extraLeaveDeduction.toLocaleString()}</td></tr>` : ''}
-              ${record.manualFine > 0 ? `<tr><td>Additional Fine (Adj)</td><td style="text-align: right" class="deductions">-${record.manualFine.toLocaleString()}</td></tr>` : ''}
-            </tbody>
-          </table>
-
-          <div class="total-box">
-            <div class="total-label">Net Payout (Grand Pay)</div>
-            <div class="total-value">₹${record.netSalary.toLocaleString()}</div>
-          </div>
-
-          <div class="footer">
-            <p>This is a computer-generated payslip and does not require a physical signature.</p>
-            <p>&copy; ${new Date().getFullYear()} Pearls ERP Systems. All rights reserved.</p>
-          </div>
-
-          <script>
-            window.onload = function() { window.print(); window.close(); }
-          </script>
         </body>
       </html>
     `;
     printWindow.document.write(content);
     printWindow.document.close();
+
+    setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+      } catch (e) {
+        console.error("Printing failed:", e);
+      }
+    }, 500);
   };
 
   return (

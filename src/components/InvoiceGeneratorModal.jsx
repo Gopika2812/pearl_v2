@@ -848,10 +848,12 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
             </tr>
           </thead>
           <tbody>
-            ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0).map(item => `
+            ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0)
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(item => `
               <tr>
-                <td>${item.name}</td>
-                <td style="text-align: right; font-size: 20px;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
+                <td style="font-weight: 900; font-size: 18px; color: #000;">${item.name}</td>
+                <td style="text-align: right; font-size: 22px; font-weight: 900; color: #000;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
               </tr>
             `).join("")}
           </tbody>
@@ -964,15 +966,17 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                   </tr>
                 </thead>
                 <tbody>
-                  ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0).map((item, idx) => `
+                  ${previewData?.items?.filter(item => (item.confirmedQty || item.qty) > 0)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((item, idx) => `
                     <tr>
-                      <td style="text-align: center; color: #64748b; font-size: 10px;">${idx + 1}</td>
-                      <td style="font-weight: bold; color: #1e293b;">${item.name}</td>
+                      <td style="text-align: center; color: #64748b; font-size: 11px; font-weight: bold;">${idx + 1}</td>
+                      <td style="font-weight: 900; color: #000; font-size: 15px; text-transform: uppercase;">${item.name}</td>
                       ${!isDummy ? `
-                        <td style="text-align: center; color: #475569;">${item.hsn || "-"}</td>
-                        <td style="text-align: center; color: #475569;">${item.gst || 0}%</td>
+                        <td style="text-align: center; color: #000; font-weight: bold;">${item.hsn || "-"}</td>
+                        <td style="text-align: center; color: #000; font-weight: bold;">${item.gst || 0}%</td>
                       ` : ''}
-                      <td style="text-align: center; font-weight: bold; color: #1e293b; font-size: 13px;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
+                      <td style="text-align: center; font-weight: 900; color: #000; font-size: 16px;">${item.qty || item.confirmedQty} ${item.unit || ""}</td>
                       ${!isDummy ? `
                         <td style="text-align: right;">₹${item.sellingPrice?.toFixed(2) || 0}</td>
                         <td style="text-align: right; font-weight: bold; color: #000;">₹${((item.qty || item.confirmedQty) * (item.sellingPrice || 0)).toFixed(2)}</td>
@@ -1502,6 +1506,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                       <th className="p-3 text-right">Original Qty</th>
                       <th className="p-3 text-right">Confirmed Qty</th>
                       <th className="p-3 text-right text-[10px] uppercase">Back Order</th>
+                      <th className="p-3 text-center text-[10px] uppercase">Confirm BO</th>
                       <th className="p-3 text-center text-[10px] uppercase">Disc %</th>
                       <th className="p-3 text-right text-[10px] uppercase">Disc Amount</th>
                       <th className="p-3 text-right text-[10px] uppercase">Price</th>
@@ -1564,6 +1569,21 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                         </td>
                         <td className="p-3 text-right font-bold text-red-600">
                           {item.backOrderQty} {item.unit}
+                        </td>
+                        <td className="p-3 text-center">
+                          {item.backOrderQty > 0 && (
+                            <input
+                              type="checkbox"
+                              checked={!!item.isConfirmed}
+                              onChange={(e) => {
+                                const updated = [...editedItems];
+                                updated[idx].isConfirmed = e.target.checked;
+                                setEditedItems(updated);
+                              }}
+                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                              title="Tick to confirm this back order product for restocking"
+                            />
+                          )}
                         </td>
                         <td className="p-3">
                           <div className="flex items-center justify-center gap-0.5">

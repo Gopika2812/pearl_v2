@@ -15,6 +15,25 @@ const InventoryAddProductModal = ({ isOpen, onClose, productGroups, productCateg
       console.log("  Product Categories:", productCategories);
     }
   }, [isOpen, productGroups, productCategories, branchId]);
+
+  // Auto-select "New category" for new products
+  useEffect(() => {
+    if (!editingItem && isOpen && Array.isArray(productCategories)) {
+      const defaultCategories = productCategories
+        .filter(c => c.name && c.name.toLowerCase() === "new category")
+        .map(c => c._id);
+
+      setProduct(prev => {
+        if (prev.productCategories.length === 0 && prev.name === "") {
+          return {
+            ...prev,
+            productCategories: defaultCategories
+          };
+        }
+        return prev;
+      });
+    }
+  }, [isOpen, editingItem, productCategories]);
   
   const [product, setProduct] = useState({
     name: "",

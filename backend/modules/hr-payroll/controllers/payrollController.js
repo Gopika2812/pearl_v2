@@ -3,8 +3,22 @@ import PayrollRecord from "../models/PayrollRecord.js";
 import SalaryStructure from "../models/SalaryStructure.js";
 import Attendance from "../models/Attendance.js";
 import HREmployeeProfile from "../models/HREmployeeProfile.js";
+import BranchUser from "../../../models/BranchUser.js";
 import { calculatePayroll } from "../services/payrollEngine.js";
 import { createSalaryExpense } from "../services/zohoBooksService.js";
+
+const getSundaysInMonth = (monthStr) => {
+  const [year, month] = monthStr.split("-").map(Number);
+  const sundays = [];
+  const date = new Date(year, month - 1, 1);
+  while (date.getMonth() === month - 1) {
+    if (date.getDay() === 0) { // 0 represents Sunday
+      sundays.push(new Date(date));
+    }
+    date.setDate(date.getDate() + 1);
+  }
+  return sundays;
+};
 
 // Generate/Update Payroll for an employee
 export const generatePayroll = async (req, res) => {
@@ -26,6 +40,15 @@ export const generatePayroll = async (req, res) => {
       date: { $gte: start, $lte: end },
     });
 
+    const sundays = getSundaysInMonth(month);
+    const sundayDatesStr = sundays.map(d => d.toISOString().split("T")[0]);
+
+    const attendanceMap = new Map();
+    attendanceRecords.forEach(record => {
+      const dateStr = new Date(record.date).toISOString().split("T")[0];
+      attendanceMap.set(dateStr, record);
+    });
+
     let presentDays = 0;
     let overtimeHours = 0;
     let totalLateHours = 0;
@@ -33,12 +56,21 @@ export const generatePayroll = async (req, res) => {
     let totalAbsent = 0;
 
     attendanceRecords.forEach(record => {
+      const dateStr = new Date(record.date).toISOString().split("T")[0];
+      const isSunday = sundayDatesStr.includes(dateStr);
+
       if (record.status === "Present") {
         presentDays++;
-        overtimeHours += (record.overtimeHours || 0);
+        if (isSunday) {
+          // If they work on Sunday, all working hours on Sunday are treated as Overtime
+          overtimeHours += (record.workingHours || 0);
+        } else {
+          // Normal days: add overtime hours logged
+          overtimeHours += (record.overtimeHours || 0);
+        }
         
-        // Calculate Late Hours if presentTime is after shiftStartTime
-        if (record.presentTime) {
+        // Calculate Late Hours if presentTime is after shiftStartTime (skip late hours on Sundays)
+        if (!isSunday && record.presentTime) {
           const pt = new Date(record.presentTime);
           const [sh, sm] = (salaryStructure.shiftStartTime || "09:00").split(":").map(Number);
           const shiftStart = new Date(record.presentTime);
@@ -50,9 +82,18 @@ export const generatePayroll = async (req, res) => {
           }
         }
       } else if (record.status === "Leave") {
-        totalLeaves++;
+        if (!isSunday) totalLeaves++;
       } else if (record.status === "Absent") {
-        totalAbsent++;
+        if (!isSunday) totalAbsent++;
+      }
+    });
+
+    // Automatically count unmarked or unpaid Sundays as Paid Weekly Off
+    sundays.forEach(sunday => {
+      const dateStr = sunday.toISOString().split("T")[0];
+      const record = attendanceMap.get(dateStr);
+      if (!record || record.status !== "Present") {
+        presentDays++; // Paid day
       }
     });
 
@@ -298,3 +339,170 @@ export const revertPayrollStatus = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// Export Salary Structures for a branch (returns all active branch employees and their configured structures or default values)
+export const exportSalaryStructures = async (req, res) => {
+  try {
+    const { branchId } = req.query;
+    if (!branchId) return res.status(400).json({ success: false, message: "branchId is required" });
+
+    // 1. Fetch active users of the branch
+    const users = await BranchUser.find({ branch: branchId, status: "ACTIVE" }).lean();
+    
+    // 2. Fetch employee profiles to get employee code
+    const profiles = await HREmployeeProfile.find({ branch: branchId });
+    const profileMap = new Map(profiles.map(p => [p.employeeId.toString(), p.employeeCode]));
+
+    // 3. Fetch existing salary structures
+    const structures = await SalaryStructure.find({ branch: branchId }).lean();
+    const structureMap = new Map(structures.map(s => [s.employeeId.toString(), s]));
+
+    // 4. Merge them
+    const result = users.map(user => {
+      const empCode = profileMap.get(user._id.toString()) || "";
+      const struct = structureMap.get(user._id.toString()) || {};
+      
+      return {
+        employeeCode: empCode,
+        employeeName: user.name || user.username || "",
+        basicSalary: struct.basicSalary !== undefined ? struct.basicSalary : 0,
+        overtimeRate: struct.overtimeRate !== undefined ? struct.overtimeRate : 0,
+        bonus: struct.bonus !== undefined ? struct.bonus : 0,
+        deductions: struct.deductions !== undefined ? struct.deductions : 0,
+        shiftStartTime: struct.shiftStartTime || "09:00",
+        shiftEndTime: struct.shiftEndTime || "18:00",
+        allowedMonthlyLeaves: struct.allowedMonthlyLeaves !== undefined ? struct.allowedMonthlyLeaves : 0,
+      };
+    });
+
+    // Sort by employee code
+    result.sort((a, b) => a.employeeCode.localeCompare(b.employeeCode));
+
+    res.status(200).json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Bulk Import/Update Salary Structures
+export const bulkImportSalaryStructures = async (req, res) => {
+  try {
+    const { branchId, data } = req.body;
+    if (!branchId) return res.status(400).json({ success: false, message: "branchId is required" });
+    if (!Array.isArray(data)) return res.status(400).json({ success: false, message: "data array is required" });
+
+    // 1. Fetch active employees and profiles to build map for matching
+    const users = await BranchUser.find({ branch: branchId, status: "ACTIVE" }).lean();
+    const userMapByName = new Map(users.map(u => [u.name.toLowerCase().trim(), u._id]));
+    const userMapByUsername = new Map(users.map(u => [u.username.toLowerCase().trim(), u._id]));
+
+    const profiles = await HREmployeeProfile.find({ branch: branchId });
+    const profileMapByCode = new Map(profiles.map(p => [p.employeeCode.trim(), p.employeeId]));
+
+    let updatedCount = 0;
+    let skippedCount = 0;
+    const errors = [];
+
+    for (const row of data) {
+      const code = row.employeeCode ? String(row.employeeCode).trim() : "";
+      const name = row.employeeName ? String(row.employeeName).trim() : "";
+
+      let employeeId = null;
+
+      // Match by code first
+      if (code && profileMapByCode.has(code)) {
+        employeeId = profileMapByCode.get(code);
+      } else if (name) {
+        // Fallback to name match
+        const nameLower = name.toLowerCase();
+        if (userMapByName.has(nameLower)) {
+          employeeId = userMapByName.get(nameLower);
+        } else if (userMapByUsername.has(nameLower)) {
+          employeeId = userMapByUsername.get(nameLower);
+        }
+      }
+
+      if (!employeeId) {
+        skippedCount++;
+        errors.push(`Employee not found: Code "${code}", Name "${name}"`);
+        continue;
+      }
+
+      // Values parsing
+      const cleanNumber = (val) => {
+        if (val === null || val === undefined || val === "") return 0;
+        return Number(String(val).replace(/,/g, "")) || 0;
+      };
+
+      const basicSalary = cleanNumber(row.basicSalary);
+      const overtimeRate = cleanNumber(row.overtimeRate);
+      const bonus = cleanNumber(row.bonus);
+      const deductions = cleanNumber(row.deductions);
+      const shiftStartTime = row.shiftStartTime || "09:00";
+      const shiftEndTime = row.shiftEndTime || "18:00";
+      const allowedMonthlyLeaves = cleanNumber(row.allowedMonthlyLeaves);
+
+      // Find or create structure
+      let structure = await SalaryStructure.findOne({ employeeId });
+      const changes = [];
+
+      if (structure) {
+        if (structure.basicSalary !== basicSalary) changes.push(`Basic: ${structure.basicSalary} → ${basicSalary}`);
+        if (structure.overtimeRate !== overtimeRate) changes.push(`OT: ${structure.overtimeRate} → ${overtimeRate}`);
+        if (structure.bonus !== bonus) changes.push(`Bonus: ${structure.bonus} → ${bonus}`);
+        if (structure.deductions !== deductions) changes.push(`Deductions: ${structure.deductions} → ${deductions}`);
+        if (structure.shiftStartTime !== shiftStartTime) changes.push(`Shift Start: ${structure.shiftStartTime} → ${shiftStartTime}`);
+        if (structure.shiftEndTime !== shiftEndTime) changes.push(`Shift End: ${structure.shiftEndTime} → ${shiftEndTime}`);
+        if (structure.allowedMonthlyLeaves !== allowedMonthlyLeaves) changes.push(`Leaves: ${structure.allowedMonthlyLeaves} → ${allowedMonthlyLeaves}`);
+      } else {
+        changes.push("Initial Configuration via Bulk Import");
+      }
+
+      const updateData = {
+        employeeId,
+        basicSalary,
+        overtimeRate,
+        bonus,
+        deductions,
+        shiftStartTime,
+        shiftEndTime,
+        allowedMonthlyLeaves,
+        branch: branchId
+      };
+
+      if (changes.length > 0) {
+        const historyEntry = {
+          changedBy: req.user?.id || null,
+          changedByName: req.user?.username || "Super Admin (Bulk Import)",
+          details: changes.join(" | "),
+          timestamp: new Date()
+        };
+
+        if (structure) {
+          structure.changeHistory.push(historyEntry);
+          Object.assign(structure, updateData);
+          await structure.save();
+        } else {
+          structure = new SalaryStructure({
+            ...updateData,
+            changeHistory: [historyEntry]
+          });
+          await structure.save();
+        }
+        updatedCount++;
+      } else {
+        // No changes, count as skipped/unchanged but not an error
+        skippedCount++;
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Bulk import completed. Updated: ${updatedCount}, Unchanged/Skipped: ${skippedCount}`,
+      data: { updatedCount, skippedCount, errors }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+

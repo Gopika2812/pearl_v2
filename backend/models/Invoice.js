@@ -225,10 +225,22 @@ const invoiceSchema = new mongoose.Schema(
     deliveryCompletedAt: { type: Date },
     deliveryPaymentType: { type: String, default: "NONE" }, // Can be comma-separated if multiple (e.g. "CASH,CHEQUE")
     deliveryPaymentAmount: { type: Number, default: 0 },
+    deliveryExpenseAmount: { type: Number, default: 0 },
+    deliveryExpenseNote: { type: String, default: "" },
+    deliveryDenominations: {
+      d500: { type: Number, default: 0 },
+      d200: { type: Number, default: 0 },
+      d100: { type: Number, default: 0 },
+      d50: { type: Number, default: 0 },
+      d20: { type: Number, default: 0 },
+      d10: { type: Number, default: 0 },
+      d5: { type: Number, default: 0 },
+      d2: { type: Number, default: 0 },
+      d1: { type: Number, default: 0 },
+    },
     deliverySignature: { type: String }, // Base64 or image URL
     isReverted: { type: Boolean, default: false },
     deliveryLogId: { type: String }, // e.g., DL-BR01-0001
-
     spottedCustomerName: String,
     spottedPhoneNumber: String,
   },

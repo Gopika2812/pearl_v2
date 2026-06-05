@@ -5,8 +5,11 @@ import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
+import { useNavigate } from "react-router-dom";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 const BranchProductRecords = () => {
+  const navigate = useNavigate();
   const { currentBranch, user } = useBranch();
   const { productGroups, products, customers } = useInventory();
   const [analysisMode, setAnalysisMode] = useState("product"); // 'product' or 'customer'
@@ -22,6 +25,9 @@ const BranchProductRecords = () => {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [totalRecords, setTotalRecords] = useState(0);
+  const [globalTotalQty, setGlobalTotalQty] = useState(0);
+  const [globalTotalProfit, setGlobalTotalProfit] = useState(0);
+  const [globalAvgProfitPercent, setGlobalAvgProfitPercent] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(500);
 
@@ -87,6 +93,9 @@ const BranchProductRecords = () => {
 
       setRecords(data.history || []);
       setTotalRecords(data.total || 0);
+      setGlobalTotalQty(data.totalQty || 0);
+      setGlobalTotalProfit(data.totalGrossProfit || 0);
+      setGlobalAvgProfitPercent(data.total > 0 ? data.totalProfitPercentSum / data.total : 0);
     } catch (err) {
       console.error("Error fetching history:", err);
       toast.error(err.message || "Failed to fetch sales history");
@@ -126,9 +135,9 @@ const BranchProductRecords = () => {
       : <FaSortAmountDown className="inline ml-1 text-[#319bab]" />;
   };
 
-  // Calculate total profit for the current view
-  const totalProfit = records.reduce((sum, r) => sum + (r.grossProfit * r.qty), 0);
-  const totalQty = records.reduce((sum, r) => sum + (r.qty || 0), 0);
+  // Totals are now fetched from the backend (global)
+  const totalProfit = globalTotalProfit;
+  const totalQty = globalTotalQty;
 
   const handleExportExcel = async () => {
     try {
@@ -138,10 +147,16 @@ const BranchProductRecords = () => {
       }
 
       setLoading(true);
-      toast.info("Preparing complete export data...");
+      
+      const exportLimit = Math.min(totalRecords, 5000);
+      if (totalRecords > 5000) {
+        toast.warning("For performance reasons, only the first 5,000 records are exported at once. Please use date filters to narrow down.");
+      } else {
+        toast.info("Preparing complete export data...");
+      }
 
-      // Fetch ALL records for the current filter (no limit)
-      let url = `${API_BASE}/invoices/history?branchId=${currentBranch._id}&page=1&limit=${totalRecords}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
+      // Fetch ALL records for the current filter (with safety cap)
+      let url = `${API_BASE}/invoices/history?branchId=${currentBranch._id}&page=1&limit=${exportLimit}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
       if (fromDate) url += `&fromDate=${fromDate}`;
       if (toDate) url += `&toDate=${toDate}`;
       if (selectedProductGroupId) url += `&productGroupId=${selectedProductGroupId}`;
@@ -151,7 +166,7 @@ const BranchProductRecords = () => {
       const res = await fetchWithAuth(url);
       const data = await res.json();
       
-      if (!res.ok) throw new Error("Failed to fetch all records for export");
+      if (!res.ok) throw new Error("Failed to fetch records for export");
       
       const allRecords = data.history || [];
 
@@ -179,10 +194,13 @@ const BranchProductRecords = () => {
       worksheet['!cols'] = wscols;
 
       const groupName = selectedProductGroupId 
-        ? productGroups.find(g => g._id === selectedProductGroupId)?.name 
+        ? productGroups.find(g => g._id === selectedProductGroupId)?.name || "Group"
         : "AllGroups";
 
-      const fileName = `ProductAnalysis_${groupName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      // Sanitize group name to prevent file-save errors from illegal characters like / \ : * ? " < > |
+      const safeGroupName = groupName.replace(/[^a-zA-Z0-9_-]/g, "_");
+
+      const fileName = `ProductAnalysis_${safeGroupName}_${new Date().toISOString().split('T')[0]}.xlsx`;
 
       XLSX.writeFile(workbook, fileName);
       toast.success("Full analysis exported successfully!");
@@ -430,7 +448,12 @@ const BranchProductRecords = () => {
                               : 'bg-white border-gray-50 hover:border-indigo-100 hover:bg-gray-50 text-gray-700'
                           }`}
                         >
-                          <div className="font-bold text-[11px] truncate">{p.name}</div>
+                          <div className="font-bold text-[11px] truncate flex justify-between items-center">
+                            <span>{p.name}</span>
+                            {p.marketCapPrice > 0 && (
+                              <span className="ml-2 px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[8px] font-black uppercase rounded">MCP</span>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -443,36 +466,24 @@ const BranchProductRecords = () => {
           {/* RIGHT SIDE: TRANSACTION RECORD */}
           <div className="lg:w-3/4 space-y-6">
             {/* DATE FILTERS */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                <div className="space-y-1">
-                  <label>Start Period</label>
-                  <input 
-                    type="date" 
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-gray-700 outline-none focus:border-[#319bab] transition text-xs"
-                  />
-                </div>
-                
-                <div className="space-y-1">
-                  <label>End Period</label>
-                  <input 
-                    type="date" 
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-gray-700 outline-none focus:border-[#319bab] transition text-xs"
-                  />
-                </div>
-
-                <div className="flex gap-2 h-[34px]">
-                  <button 
-                    onClick={handleReset}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg font-black transition text-[10px] uppercase tracking-widest"
-                  >
-                    Reset Filter
-                  </button>
-                </div>
+            {/* DATE FILTERS */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-end gap-4">
+              <div className="flex items-center gap-3 z-10">
+                <DateRangeDropdown
+                    startDate={fromDate}
+                    endDate={toDate}
+                    onDateChange={(start, end) => {
+                        setFromDate(start);
+                        setToDate(end);
+                        setCurrentPage(1);
+                    }}
+                />
+                <button 
+                  onClick={handleReset}
+                  className="text-[10px] font-black text-[#319bab] hover:text-[#257f87] uppercase tracking-wider px-2"
+                >
+                  RESET
+                </button>
               </div>
             </div>
 
@@ -501,9 +512,7 @@ const BranchProductRecords = () => {
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center">
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avg. Profit %</span>
                       <span className="text-xl font-black text-[#319bab]">
-                        {records.length > 0 
-                          ? (records.reduce((s, r) => s + ((r.grossProfit / (r.purchasingPrice || 1)) * 100), 0) / records.length).toFixed(1)
-                          : "0.0"}%
+                        {globalAvgProfitPercent.toFixed(1)}%
                       </span>
                     </div>
                   )}
@@ -511,11 +520,30 @@ const BranchProductRecords = () => {
 
                 {/* DATA TABLE */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
+                  <div className="p-4 border-b border-gray-50 flex flex-col sm:flex-row sm:items-center justify-between bg-gray-50/30 gap-3">
                     <span className="text-xs font-black text-gray-500 uppercase tracking-widest">
                       {selectedProductId ? "Item Detailed Record" : "Global Branch Records"}
                     </span>
-                    <span className="text-[10px] text-[#319bab] font-bold">Showing {records.length} of {totalRecords} Entries</span>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Show:</span>
+                        <select 
+                          className="bg-white border border-gray-200 text-[10px] rounded px-2 py-1 outline-none text-[#319bab] font-bold shadow-sm cursor-pointer"
+                          value={limit}
+                          onChange={(e) => {
+                            setLimit(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                        >
+                          <option value="50">50</option>
+                          <option value="100">100</option>
+                          <option value="250">250</option>
+                          <option value="500">500</option>
+                          <option value="1000">1000</option>
+                        </select>
+                      </div>
+                      <span className="text-[10px] text-[#319bab] font-bold">Showing {records.length} of {totalRecords} Entries</span>
+                    </div>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm border-collapse">
@@ -591,7 +619,13 @@ const BranchProductRecords = () => {
                                     <div className="text-[9px] text-gray-500 font-bold">
                                       {r.createdAt ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(r.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </div>
-                                    <div className="text-[9px] text-gray-400 font-bold">{r.invoiceNumber} | {new Date(r.date).toLocaleDateString()}</div>
+                                    <div 
+                                      className="text-[9px] text-[#319bab] font-bold cursor-pointer hover:underline transition-colors"
+                                      onClick={() => navigate(`/branch/sales-orders?invoiceId=${encodeURIComponent(r.invoiceId || r.invoiceNumber)}`)}
+                                      title="Click to view full bill"
+                                    >
+                                      {r.invoiceId || r.invoiceNumber} | {new Date(r.date).toLocaleDateString()}
+                                    </div>
                                   </td>
                                 )}
                                 <td className="px-4 py-3">

@@ -3,6 +3,7 @@ import { FaBox, FaChartBar, FaList, FaThLarge, FaUser } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 export default function BranchSalesReports() {
   const { branch, branchLoaded } = useBranch();
@@ -13,8 +14,8 @@ export default function BranchSalesReports() {
   const [loading, setLoading] = useState(false);
   
   // Filters
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [productFilter, setProductFilter] = useState("");
   const [customerFilter, setCustomerFilter] = useState("");
 
@@ -173,22 +174,15 @@ export default function BranchSalesReports() {
       {/* Filters */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Start Date</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">End Date</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          <div className="md:col-span-2">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Date Range</label>
+            <DateRangeDropdown
+                startDate={startDate}
+                endDate={endDate}
+                onDateChange={(start, end) => {
+                    setStartDate(start);
+                    setEndDate(end);
+                }}
             />
           </div>
           <div>
@@ -212,8 +206,9 @@ export default function BranchSalesReports() {
           <div className="flex items-end gap-2">
             <button
               onClick={() => {
-                setStartDate("");
-                setEndDate("");
+                const today = new Date().toISOString().split('T')[0];
+                setStartDate(today);
+                setEndDate(today);
                 setProductFilter("");
                 setCustomerFilter("");
               }}

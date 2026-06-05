@@ -67,7 +67,9 @@ const salesOrderSchema = new mongoose.Schema(
         isNegativeStockBilled: { type: Boolean, default: false },
         originalQty: { type: Number, default: 0 },
         confirmedQty: { type: Number, default: 0 },
-        backOrderQty: { type: Number, default: 0 }
+        backOrderQty: { type: Number, default: 0 },
+        isConfirmed: { type: Boolean, default: false },
+        isNeutralized: { type: Boolean, default: false }
       },
     ],
 
@@ -123,7 +125,9 @@ const salesOrderSchema = new mongoose.Schema(
         total: Number,
         originalQty: { type: Number, default: 0 },
         confirmedQty: { type: Number, default: 0 },
-        backOrderQty: { type: Number, default: 0 }
+        backOrderQty: { type: Number, default: 0 },
+        isConfirmed: { type: Boolean, default: false },
+        isNeutralized: { type: Boolean, default: false }
       },
     ],
 

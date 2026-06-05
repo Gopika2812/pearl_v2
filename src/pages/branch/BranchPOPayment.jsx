@@ -6,6 +6,7 @@ import { API_BASE } from "../../api";
 import POPaymentModal from "../../components/inventory/POPaymentModal";
 import VendorCreditPaymentModal from "../../components/inventory/VendorCreditPaymentModal";
 import { useBranch } from "../../context/BranchContext";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 export default function BranchPOPayment() {
   const { currentBranch, user } = useBranch();
@@ -28,8 +29,8 @@ export default function BranchPOPayment() {
   const [paymentData, setPaymentData] = useState({});
   const [expandedPOs, setExpandedPOs] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
 
@@ -192,31 +193,28 @@ export default function BranchPOPayment() {
               </div>
             </div>
 
-            {/* Start Date */}
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">Start Date</label>
-              <div className="relative">
-                <FaCalendarAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-[#319bab] opacity-50" />
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-[#319bab]/5 border border-[#319bab]/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#319bab] text-gray-700 font-medium"
+            <div className="md:col-span-2 flex flex-col justify-end">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">Date Range</label>
+              <div className="flex gap-2 items-center">
+                <DateRangeDropdown
+                    startDate={startDate}
+                    endDate={endDate}
+                    onDateChange={(start, end) => {
+                        setStartDate(start);
+                        setEndDate(end);
+                    }}
                 />
-              </div>
-            </div>
-
-            {/* End Date */}
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">End Date</label>
-              <div className="relative">
-                <FaCalendarAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-[#319bab] opacity-50" />
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-[#319bab]/5 border border-[#319bab]/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#319bab] text-gray-700 font-medium"
-                />
+                <button
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    setStartDate(today);
+                    setEndDate(today);
+                    setSearchTerm("");
+                  }}
+                  className="bg-[#319bab] text-white px-4 py-3 rounded-xl text-xs font-bold hover:bg-[#257f87] transition flex-shrink-0"
+                >
+                  RESET
+                </button>
               </div>
             </div>
           </div>

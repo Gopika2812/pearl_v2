@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { useBranch } from "../../context/BranchContext";
 import EditReceiptModal from "../../components/sales/EditReceiptModal";
 import { FaArrowLeft, FaFileAlt, FaSearch, FaTimesCircle, FaEdit } from "react-icons/fa";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 
@@ -161,26 +162,17 @@ export default function BranchReceiptRecords() {
               </div>
             </div>
 
-            {/* Start Date */}
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">Start Date</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-4 py-3 bg-blue-50/20 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 font-medium"
-              />
-            </div>
-
-            {/* End Date */}
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">End Date</label>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full px-4 py-3 bg-blue-50/20 border border-blue-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 font-medium"
+            {/* Date Range */}
+            <div className="md:col-span-2 flex flex-col justify-end">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-widest pl-2">Date Range</label>
+              <div className="flex gap-2 items-center">
+                <DateRangeDropdown
+                    startDate={startDate}
+                    endDate={endDate}
+                    onDateChange={(start, end) => {
+                        setStartDate(start);
+                        setEndDate(end);
+                    }}
                 />
                 <button
                   onClick={() => {
@@ -191,7 +183,7 @@ export default function BranchReceiptRecords() {
                   }}
                   className="bg-blue-600 text-white px-4 py-3 rounded-xl text-xs font-bold hover:bg-blue-700 transition flex-shrink-0"
                 >
-                  TODAY
+                  RESET
                 </button>
               </div>
             </div>

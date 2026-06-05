@@ -86,6 +86,7 @@ const InventoryPurchaseOrderEntry = ({
   const [showItemDropdown, setShowItemDropdown] = useState(false);
   const [qty, setQty] = useState("");
   const [purchasePrice, setPurchasePrice] = useState(0);
+  const [marketCapPrice, setMarketCapPrice] = useState(0);
   const [sellingPrice, setSellingPrice] = useState(0);
   const [discountPercent, setDiscountPercent] = useState("");
   const [discountType, setDiscountType] = useState("percent"); // "percent" or "amount"
@@ -210,6 +211,7 @@ const InventoryPurchaseOrderEntry = ({
     setItemSearch("");
     setQty("");
     setPurchasePrice(0);
+    setMarketCapPrice(0);
     setSellingPrice(0);
     setDisplayPrice(0);
     setHsn("");
@@ -242,6 +244,7 @@ const InventoryPurchaseOrderEntry = ({
     setSelectedProductData(product);
     setQty("");
     setPurchasePrice(product.purchasingPrice || product.rate || 0);
+    setMarketCapPrice(product.marketCapPrice || 0);
     setSellingPrice(product.sellingPrice || product.rate || 0);
     setDiscountPercent("");
     setHsn(product.hsnCode || product.hsncode || "");
@@ -314,7 +317,8 @@ const InventoryPurchaseOrderEntry = ({
   // 🔍 ASYNC PRODUCT SEARCH
   useEffect(() => {
     if (!itemSearch.trim()) {
-      setFetchedProducts(productGroup ? filteredProducts : products || []);
+      const list = productGroup ? filteredProducts : (products || []);
+      setFetchedProducts(list.slice(0, 30));
       return;
     }
 
@@ -356,9 +360,10 @@ const InventoryPurchaseOrderEntry = ({
       let changed = false;
 
       // Filter products that actually need stock syncing (not in cache or matches current search)
+      // LIMIT to 30 to prevent network flooding and backend lockups
       const productsToFetch = fetchedProducts.filter(p => 
         newCache[p._id] === undefined || (itemSearch && p.name.toLowerCase().includes(itemSearch.toLowerCase()))
-      );
+      ).slice(0, 30);
 
       if (productsToFetch.length === 0) return;
 
@@ -431,10 +436,10 @@ const InventoryPurchaseOrderEntry = ({
       return;
     }
 
-    proceedAddItem(product, Number(purchasePrice), Number(sellingPrice));
+    proceedAddItem(product, Number(purchasePrice), Number(sellingPrice), Number(marketCapPrice));
   };
 
-  const proceedAddItem = (product, finalPurchasePrice, finalSellingPrice) => {
+  const proceedAddItem = (product, finalPurchasePrice, finalSellingPrice, finalMarketCapPrice) => {
     const rowPrice = (parseFloat(finalPurchasePrice) || 0) * (parseFloat(qty) || 0);
     
     let rowDiscount = 0;
@@ -467,6 +472,7 @@ const InventoryPurchaseOrderEntry = ({
         units: product.units || "",
         totalQty: product.totalQty || 0,
         purchasePrice: finalPurchasePrice,
+        marketCapPrice: finalMarketCapPrice,
         sellingPrice: finalSellingPrice,
         discountPercent: finalDiscountPercent,
         discountAmount: rowDiscount,
@@ -490,6 +496,7 @@ const InventoryPurchaseOrderEntry = ({
     setProductGroup("");
     setQty("");
     setPurchasePrice(0);
+    setMarketCapPrice(0);
     setSellingPrice(0);
     setDiscountPercent("");
     setDiscountType("percent");
@@ -638,6 +645,7 @@ const InventoryPurchaseOrderEntry = ({
     setItemSearch("");
     setQty("");
     setPurchasePrice(0);
+    setMarketCapPrice(0);
     setSellingPrice(0);
     setDiscountPercent("");
     setDiscountType("percent");
@@ -978,7 +986,7 @@ const InventoryPurchaseOrderEntry = ({
             </div>
 
             {/* ROW 2: Prices, Qty, HSN */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className={labelClass}>Purchase ₹</label>
@@ -1009,8 +1017,8 @@ const InventoryPurchaseOrderEntry = ({
                     onChange={(e) => {
                       const val = +e.target.value;
                       setPurchasePrice(val);
-                      // ⚡ AUTO-RECALCULATE SELLING PRICE
-                      if (selectedProductData && selectedProductData.marginPercentage > 0) {
+                      // ⚡ AUTO-RECALCULATE SELLING PRICE if MCP is not present
+                      if (!marketCapPrice && selectedProductData && selectedProductData.marginPercentage > 0) {
                         const newSelling = Math.round((val + (val * selectedProductData.marginPercentage / 100)) * 100) / 100;
                         setSellingPrice(newSelling);
                       }
@@ -1024,6 +1032,37 @@ const InventoryPurchaseOrderEntry = ({
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className={labelClass}>Market Cap ₹</label>
+                  {selectedProductData && selectedProductData.marketCapPrice > 0 && (
+                    <span className="text-[9px] font-black text-gray-400">
+                      Prev: ₹{selectedProductData.marketCapPrice}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  className={`${inputClass} border-indigo-200 bg-indigo-50 focus:ring-indigo-500`}
+                  value={marketCapPrice}
+                  onChange={(e) => {
+                    const val = +e.target.value;
+                    setMarketCapPrice(val);
+                    // ⚡ AUTO-RECALCULATE SELLING PRICE based on MCP
+                    if (val > 0 && selectedProductData && selectedProductData.marginPercentage > 0) {
+                      const newSelling = Math.round((val + (val * selectedProductData.marginPercentage / 100)) * 100) / 100;
+                      setSellingPrice(newSelling);
+                    } else if (!val && selectedProductData && selectedProductData.marginPercentage > 0) {
+                      // Revert to purchasing price base
+                      const baseCost = purchasePrice || selectedProductData.purchasingPrice || 0;
+                      const newSelling = Math.round((baseCost + (baseCost * selectedProductData.marginPercentage / 100)) * 100) / 100;
+                      setSellingPrice(newSelling);
+                    }
+                  }}
+                  placeholder="Optional"
+                />
               </div>
 
               <div>
@@ -1221,6 +1260,7 @@ const InventoryPurchaseOrderEntry = ({
                     <th className="px-4 py-3 text-center">Package</th>
                     <th className="px-4 py-3 text-center">Qty Ordered</th>
                     <th className="px-4 py-3 text-right">Rate</th>
+                    <th className="px-4 py-3 text-right text-indigo-500">Selling</th>
                     <th className="px-4 py-3 text-right text-red-500">Discount</th>
                     <th className="px-4 py-3 text-right">Total</th>
                     <th className="px-4 py-3 text-center">Action</th>
@@ -1244,7 +1284,15 @@ const InventoryPurchaseOrderEntry = ({
                           <div className="text-[10px] text-[#319bab] font-semibold">({item.altQty} {item.altUnit})</div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right">₹{(item.purchasePrice || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div>₹{(item.purchasePrice || 0).toLocaleString()}</div>
+                        {item.marketCapPrice > 0 && (
+                          <div className="text-[10px] text-gray-500">MCP: ₹{item.marketCapPrice.toLocaleString()}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right text-indigo-600 font-bold">
+                        ₹{(item.sellingPrice || 0).toLocaleString()}
+                      </td>
                       <td className="px-4 py-3 text-right text-red-600 font-bold">
                         {item.discountPercent || 0}%
                         <div className="text-[10px]">(-₹{(item.discountAmount || 0).toFixed(2)})</div>

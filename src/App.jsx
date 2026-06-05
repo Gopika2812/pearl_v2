@@ -215,8 +215,24 @@ function AppContent() {
   const FollowUpReminderModal = () => {
     if (activeReminders.length === 0) return null;
 
-    const handleSnooze = (reminderId) => {
+    const handleSnoozeAll = () => {
       const snoozeDuration = 15 * 60 * 1000; // Snooze for 15 minutes
+      const expiry = Date.now() + snoozeDuration;
+      const updated = { ...snoozedFollowUps };
+      activeReminders.forEach(r => {
+        updated[r._id] = expiry;
+      });
+      setSnoozedFollowUps(updated);
+      try {
+        sessionStorage.setItem("snoozed_followups", JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+      toast.info("All reminders snoozed for 15 minutes.", { autoClose: 2000 });
+    };
+
+    const handleSnoozeSingle = (reminderId) => {
+      const snoozeDuration = 15 * 60 * 1000;
       const expiry = Date.now() + snoozeDuration;
       const updated = { ...snoozedFollowUps, [reminderId]: expiry };
       setSnoozedFollowUps(updated);
@@ -245,83 +261,88 @@ function AppContent() {
       }
     };
 
-    const currentReminder = activeReminders[0];
-
     return (
       <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-        <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100 flex flex-col">
+        <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-slate-100 flex flex-col">
           
-          <div className="bg-gradient-to-br from-rose-500 to-amber-600 px-8 py-10 text-white text-center relative overflow-hidden">
+          <div className="bg-gradient-to-br from-rose-500 to-amber-600 px-8 py-8 text-white text-center relative shrink-0 overflow-hidden">
             <div className="absolute top-0 right-0 -translate-y-1/4 translate-x-1/4 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
             <div className="relative z-10">
-              <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm border border-white/30 shadow-lg">
-                <FaClock className="text-3xl text-white animate-pulse" />
+              <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-3 backdrop-blur-sm border border-white/30 shadow-lg">
+                <FaClock className="text-2xl text-white animate-pulse" />
               </div>
               <h2 className="text-2xl font-black uppercase tracking-tight">Follow-Up Alert!</h2>
-              <p className="text-rose-100 font-bold text-[10px] uppercase tracking-widest mt-1">Overdue customer contact action required</p>
+              <p className="text-rose-100 font-bold text-[10px] uppercase tracking-widest mt-1">You have {activeReminders.length} pending {activeReminders.length === 1 ? 'follow-up' : 'follow-ups'}</p>
             </div>
           </div>
 
-          <div className="p-8 space-y-6 flex-1 bg-slate-50/50">
-            <div className="space-y-4">
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Customer</p>
-                <h3 className="text-lg font-black text-slate-800 uppercase">{currentReminder.customerId?.name || "Unknown Customer"}</h3>
-                {currentReminder.customerId?.whatsapp && (
-                  <p className="text-xs font-semibold text-slate-400 mt-0.5">WhatsApp: {currentReminder.customerId.whatsapp}</p>
+          <div className="p-6 space-y-4 flex-1 bg-slate-50/50 overflow-y-auto">
+            {activeReminders.map(reminder => (
+              <div key={reminder._id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm relative group transition-all hover:shadow-md">
+                <div className="absolute top-4 right-4 flex gap-2">
+                  <button
+                    onClick={() => handleComplete(reminder._id)}
+                    className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition"
+                    title="Mark Completed"
+                  >
+                    Done
+                  </button>
+                  <button
+                    onClick={() => {
+                      navigate(`/branch/follow-up`);
+                      handleSnoozeSingle(reminder._id);
+                    }}
+                    className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition"
+                    title="Fulfill Now"
+                  >
+                    <FaArrowRight size={12} />
+                  </button>
+                </div>
+
+                <div className="pr-20">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Customer</p>
+                  <h3 className="text-sm font-black text-slate-800 uppercase leading-tight">{reminder.customerId?.name || "Unknown Customer"}</h3>
+                  {reminder.customerId?.whatsapp && (
+                    <p className="text-[10px] font-semibold text-slate-400 mt-0.5">WhatsApp: {reminder.customerId.whatsapp}</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mt-4 bg-slate-50 p-3 rounded-xl">
+                  <div>
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Scheduled Date</p>
+                    <p className="text-xs font-black text-slate-700">
+                      {new Date(reminder.nextFollowUpDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Scheduled Time</p>
+                    <p className="text-xs font-black text-slate-700 font-mono">
+                      {new Date(reminder.nextFollowUpDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+
+                {reminder.remarks && (
+                  <div className="mt-4 border-t border-slate-50 pt-3">
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Remarks</p>
+                    <p className="text-[11px] font-bold text-slate-600 leading-relaxed italic">"{reminder.remarks}"</p>
+                  </div>
                 )}
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Scheduled Date</p>
-                  <p className="text-xs font-black text-slate-700">
-                    {new Date(currentReminder.nextFollowUpDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Scheduled Time</p>
-                  <p className="text-xs font-black text-slate-700 font-mono">
-                    {new Date(currentReminder.nextFollowUpDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
+                
+                <div className="mt-3 flex justify-between items-center text-[8px] font-bold text-slate-400">
+                  <span className="uppercase">Scheduled By:</span>
+                  <span className="text-slate-600 uppercase font-black">{reminder.followUpBy}</span>
                 </div>
               </div>
-
-              {currentReminder.remarks && (
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Follow-Up Remarks</p>
-                  <p className="text-xs font-bold text-slate-600 leading-relaxed italic">"{currentReminder.remarks}"</p>
-                </div>
-              )}
-
-              <div className="flex justify-between items-center text-[9px] font-bold text-slate-400 px-2">
-                <span className="uppercase">Scheduled By:</span>
-                <span className="text-slate-600 uppercase font-black">{currentReminder.followUpBy}</span>
-              </div>
-            </div>
+            ))}
           </div>
 
-          <div className="p-8 bg-white border-t border-slate-100 flex flex-col sm:flex-row gap-3">
+          <div className="p-6 bg-white border-t border-slate-100 flex gap-3 shrink-0">
             <button
-              onClick={() => handleSnooze(currentReminder._id)}
-              className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest transition shadow-sm animate-in zoom-in-95 duration-200"
+              onClick={handleSnoozeAll}
+              className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest transition shadow-sm animate-in zoom-in-95 duration-200"
             >
-              Ask Me Later
-            </button>
-            <button
-              onClick={() => handleComplete(currentReminder._id)}
-              className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition shadow-lg shadow-emerald-100 animate-in zoom-in-95 duration-200"
-            >
-              Mark Completed
-            </button>
-            <button
-              onClick={() => {
-                navigate(`/branch/follow-up`);
-                handleSnooze(currentReminder._id);
-              }}
-              className="py-4 px-5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-100 animate-in zoom-in-95 duration-200"
-            >
-              Fulfill Now <FaArrowRight size={10} />
+              Ask Me Later (Snooze All)
             </button>
           </div>
 

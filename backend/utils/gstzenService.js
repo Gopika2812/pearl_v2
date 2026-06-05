@@ -280,6 +280,21 @@ class GSTZenService {
           Pin: Number(invoiceData.customer?.pincode || invoiceData.customer?.customerId?.pincode || 628501),
           Stcd: buyerStateCode
         },
+        DispDtls: {
+          Nm: String(invoiceData.branchId?.name || "Seller"),
+          Addr1: String(invoiceData.branchId?.address || "Address"),
+          Loc: String(invoiceData.branchId?.city || "CITY"),
+          Pin: Number(invoiceData.branchId?.pincode || 627003),
+          Stcd: sellerStateCode
+        },
+        ShipDtls: {
+          Gstin: buyerGstin,
+          LglNm: String(invoiceData.customer?.name || "Buyer"),
+          Addr1: String(invoiceData.customer?.address || "Address"),
+          Loc: String(invoiceData.customer?.city || "CITY"),
+          Pin: Number(invoiceData.customer?.pincode || invoiceData.customer?.customerId?.pincode || 628501),
+          Stcd: buyerStateCode
+        },
         ItemList: itemList,
         ValDtls: {
           AssVal: totalAssVal,
@@ -296,15 +311,16 @@ class GSTZenService {
       if (invoiceData.vehicleNo) {
         payload.EwbDtls = {
           TransMode: invoiceData.transportMode || "1",
-          ...(Number(invoiceData.transportDistance || 0) > 0 ? { Distance: Number(invoiceData.transportDistance) } : {}),
+          Distance: Number(invoiceData.transportDistance || 0),
           VehNo: String(invoiceData.vehicleNo).replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
           VehType: invoiceData.vehicleType === "OVERSIZED" ? "O" : "R"
         };
+        if (invoiceData.transporterId) payload.EwbDtls.TransId = invoiceData.transporterId;
+        if (invoiceData.transporterName) payload.EwbDtls.TransName = invoiceData.transporterName;
       }
 
       // Final Path Logic
       let endpoint = (process.env.GSTZEN_EINVOICE_ENDPOINT || "/~gstzen/a/post-einvoice-data/einvoice-json/").trim().replace(/^\/+/, "");
-      // if (!endpoint) throw new Error("GSTZEN_EINVOICE_ENDPOINT missing in .env");
 
       console.log(`📡 Sending [${isB2C ? "B2C E-Way Bill" : "B2B E-Invoice"}] to: ${this.baseUrl}/${endpoint}`);
       
@@ -327,14 +343,45 @@ class GSTZenService {
 
         console.log(`✅ E-Invoice Data: IRN=[${result.Irn || result.irn}], QR_URL=[${qrUrl ? 'YES' : 'NO'}], SIGNED_QR=[${signedQr ? 'YES' : 'NO'}]`);
 
+        // 🔴 CHECK FOR DISTANCE ERROR IN EWB DESPITE IRN SUCCESS
+        const isDistanceError = result.InfoDtls && result.InfoDtls.some(info => 
+          info.Desc && Array.isArray(info.Desc) && info.Desc.some(desc => desc.ErrorCode === "4013")
+        );
+        
+        let finalEwbNo = result.EwbNo || result.ewbNo;
+        let finalEwbPdf = result.EWayBillPdfUrl;
+        let finalEwbDate = result.EwbDt || result.ewbDate;
+        let finalEwbValid = result.EwbValidTill || result.ewbValidUntil;
+
+        if (isDistanceError && result.distance && payload.EwbDtls && payload.EwbDtls.Distance === 0) {
+          console.log(`🔄 [AUTO-RETRY EWB] IRN Success but EWB rejected Distance 0. Retrying EWB with distance: ${result.distance}`);
+          payload.EwbDtls.Distance = result.distance;
+          
+          try {
+            const retryResponse = await this.apiClient.post(endpoint, payload, { headers });
+            const retryResult = retryResponse.data;
+            if (retryResult.EwbNo || retryResult.ewbNo) {
+               console.log(`✅ [AUTO-RETRY EWB] Success! EWB No: ${retryResult.EwbNo || retryResult.ewbNo}`);
+               finalEwbNo = retryResult.EwbNo || retryResult.ewbNo;
+               finalEwbPdf = retryResult.EWayBillPdfUrl;
+               finalEwbDate = retryResult.EwbDt || retryResult.ewbDate;
+               finalEwbValid = retryResult.EwbValidTill || retryResult.ewbValidUntil;
+            }
+          } catch (retryErr) {
+            console.error("❌ EWB Auto-Retry failed:", retryErr.message);
+          }
+        }
+
         return {
           success: true,
           irn: result.Irn || result.irn,
           ackNo: result.AckNo || result.ackNo,
           ackDate: result.AckDt || result.ackDate,
-          ewayBillNo: result.EwbNo || result.ewbNo,
+          ewayBillNo: finalEwbNo,
           invoicePdfUrl: this.makeAbsoluteUrl(result.InvoicePdfUrl),
-          ewayBillPdfUrl: this.makeAbsoluteUrl(result.EWayBillPdfUrl),
+          ewayBillPdfUrl: this.makeAbsoluteUrl(finalEwbPdf),
+          ewayBillDate: finalEwbDate,
+          ewayBillValidUntil: finalEwbValid,
           qrCodeUrl: this.makeAbsoluteUrl(qrUrl),
           signedInvoice: result.SignedInvoice,
           signedQrCode: signedQr,
@@ -391,13 +438,14 @@ class GSTZenService {
         SellerDtls: { Gstin: invoiceData.seller?.gstin || invoiceData.branchId?.gstin || "33DULPS2600Q1Z6" },
         EwbDtls: {
           TransMode: invoiceData.transportMode || "1",
-          ...(distance > 0 ? { Distance: distance } : {}),
-          TransGstin: invoiceData.transporterId || "",
-          TransName: invoiceData.transporterName || "",
+          Distance: distance,
           VehNo: cleanVehNo,
           VehType: invoiceData.vehicleType === "OVERSIZED" ? "O" : "R"
         }
       };
+      
+      if (invoiceData.transporterId) payload.EwbDtls.TransId = invoiceData.transporterId;
+      if (invoiceData.transporterName) payload.EwbDtls.TransName = invoiceData.transporterName;
 
       // 🚀 RESTORE THE WORKING ENDPOINT
       let endpoint = process.env.GSTZEN_EINVOICE_ENDPOINT || "/~gstzen/a/post-einvoice-data/einvoice-json/";
@@ -431,6 +479,31 @@ class GSTZenService {
           ewayBillPdfUrl: this.makeAbsoluteUrl(result.EWayBillPdfUrl)
         };
       } else {
+        // 🔄 AUTO-RETRY LOGIC FOR DISTANCE ERROR (4013)
+        const isDistanceError = result.InfoDtls && result.InfoDtls.some(info => 
+          info.Desc && Array.isArray(info.Desc) && info.Desc.some(desc => desc.ErrorCode === "4013")
+        );
+        
+        if (isDistanceError && result.distance && distance === 0) {
+          console.log(`🔄 [AUTO-RETRY] NIC rejected Distance 0. Retrying with NIC's suggested distance: ${result.distance}`);
+          payload.EwbDtls.Distance = result.distance;
+          
+          const retryResponse = await this.apiClient.post(endpoint, payload, { headers });
+          const retryResult = retryResponse.data;
+          const retryEwbNo = retryResult.EwbNo || retryResult.ewbNo;
+          
+          if (retryEwbNo) {
+            console.log(`✅ [AUTO-RETRY] Success! EWB No: ${retryEwbNo}`);
+            return {
+              success: true,
+              ewayBillNo: retryEwbNo,
+              ewayBillDate: retryResult.EwbDt || retryResult.ewbDate,
+              ewayBillValidUntil: retryResult.EwbValidTill || retryResult.ewbValidUntil,
+              ewayBillPdfUrl: this.makeAbsoluteUrl(retryResult.EWayBillPdfUrl)
+            };
+          }
+        }
+
         // Find specific errors in InfoDtls if possible
         let errorMsg = result.message || "E-Way Bill Generation Failed";
         if (result.InfoDtls && result.InfoDtls.length > 0) {

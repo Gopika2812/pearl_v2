@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import CustomerDebitReceiptModal from "../../components/sales/CustomerDebitReceiptModal";
 import CustomerReceiptModal from "../../components/inventory/CustomerReceiptModal";
 import { useBranch } from "../../context/BranchContext";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ? `${import.meta.env.VITE_API_BASE_URL}/api` : "https://pearls-erp-2026.onrender.com/api";
 
@@ -282,25 +283,18 @@ export default function BranchReceipt() {
             </div>
           </div>
           
-          <div>
-            <label className="block text-[10px] font-bold text-cyan-600 uppercase mb-1">From Date</label>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="w-full px-4 py-2 bg-cyan-50/30 border border-cyan-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all text-sm font-medium"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold text-cyan-600 uppercase mb-1">To Date</label>
-            <div className="flex gap-2">
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="w-full px-4 py-2 bg-cyan-50/30 border border-cyan-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all text-sm font-medium"
-              />
+          <div className="md:col-span-2 flex flex-col justify-end z-10">
+            <label className="block text-[10px] font-bold text-cyan-600 uppercase mb-1">Date Range</label>
+            <div className="flex gap-2 items-center">
+                <DateRangeDropdown
+                    startDate={fromDate}
+                    endDate={toDate}
+                    onDateChange={(start, end) => {
+                        setFromDate(start);
+                        setToDate(end);
+                        setCurrentPage(1);
+                    }}
+                />
               <button 
                 onClick={() => {
                   setFromDate(new Date().toISOString().split('T')[0]);
@@ -308,9 +302,9 @@ export default function BranchReceipt() {
                   setSearchTerm("");
                   setCurrentPage(1);
                 }}
-                className="bg-cyan-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-cyan-700 transition flex-shrink-0"
+                className="bg-cyan-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-cyan-700 transition flex-shrink-0 h-[38px]"
               >
-                TODAY
+                RESET
               </button>
             </div>
           </div>

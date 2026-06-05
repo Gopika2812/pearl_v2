@@ -3,6 +3,7 @@ import { FaChevronDown, FaFileAlt, FaSync, FaSearch } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 const BranchPurchaseInvoices = () => {
   const { currentBranch, user } = useBranch();
@@ -117,25 +118,15 @@ const BranchPurchaseInvoices = () => {
             />
           </div>
 
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="flex items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-1">
-              <span className="text-[10px] font-black text-gray-400 uppercase mr-2 mt-0.5">From</span>
-              <input
-                type="date"
-                value={filterFromDate}
-                onChange={(e) => setFilterFromDate(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 text-xs font-bold text-gray-700 outline-none"
-              />
-            </div>
-            <div className="flex items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-1">
-              <span className="text-[10px] font-black text-gray-400 uppercase mr-2 mt-0.5">To</span>
-              <input
-                type="date"
-                value={filterToDate}
-                onChange={(e) => setFilterToDate(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 text-xs font-bold text-gray-700 outline-none"
-              />
-            </div>
+          <div className="flex items-center gap-3 w-full md:w-auto z-10">
+            <DateRangeDropdown
+                startDate={filterFromDate}
+                endDate={filterToDate}
+                onDateChange={(start, end) => {
+                    setFilterFromDate(start);
+                    setFilterToDate(end);
+                }}
+            />
             <button
                onClick={() => {
                  setFilterFromDate(new Date().toISOString().split('T')[0]);
@@ -166,6 +157,7 @@ const BranchPurchaseInvoices = () => {
                     {isFieldAllowed("vendorBillNo") && <th className="px-6 py-4 text-left">Vendor Bill#</th>}
                     {isFieldAllowed("billDate") && <th className="px-6 py-4 text-center">Bill Date</th>}
                     {isFieldAllowed("grandTotal") && <th className="px-6 py-4 text-right">Grand Total</th>}
+                    <th className="px-6 py-4 text-center">Status</th>
                     {isFieldAllowed("entryDate") && <th className="px-6 py-4 text-center">Entry Date</th>}
                     {isFieldAllowed("action") && <th className="px-6 py-4 text-center">Action</th>}
                   </tr>
@@ -208,6 +200,11 @@ const BranchPurchaseInvoices = () => {
                         {isFieldAllowed("grandTotal") && (
                           <td className="px-6 py-4 text-right font-black text-green-700">₹{(inv.grandTotal || 0).toLocaleString()}</td>
                         )}
+                        <td className="px-6 py-4 text-center">
+                          <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wider ${inv.status === 'CANCELLED' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                            {inv.status || 'INVOICED'}
+                          </span>
+                        </td>
                         {isFieldAllowed("entryDate") && (
                           <td className="px-6 py-4 text-center">
                             <p className="text-xs font-bold text-gray-700">{new Date(inv.createdAt).toLocaleDateString("en-IN")}</p>

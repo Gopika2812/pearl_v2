@@ -57,24 +57,74 @@ const AttendancePage = () => {
           const leaveLoc = updatedRecord.leaveLocation;
           
           const resolveAddress = async (l) => {
-            if (!l?.lat || (l.address && l.address !== "Location Captured")) return l.address;
-            try {
-              // Try BigDataCloud
-              const fbRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${l.lat}&longitude=${l.lng}&localityLanguage=en`);
-              const fbData = await fbRes.json();
-              if (fbData && fbData.city) {
-                return `${fbData.locality || fbData.principalSubdivision || ""}, ${fbData.city || ""}`.trim().replace(/^,/, "");
+            if (!l?.lat) return "";
+
+            const cleanAndDeduplicate = (str) => {
+              if (!str) return "";
+              let result = str;
+              const replacements = currentBranch?.locationReplacements || {};
+              for (const [target, replacement] of Object.entries(replacements)) {
+                const regex = new RegExp(target, "gi");
+                result = result.replace(regex, replacement);
               }
-              // Try Nominatim as secondary fallback
-              const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18`);
+              if (!replacements["Padappakurichi"]) {
+                result = result.replace(/Padappakurichi/gi, "Palayamkottai");
+              }
+              const parts = result.split(",").map(p => p.trim()).filter(Boolean);
+              const uniqueParts = [...new Set(parts)];
+              return uniqueParts.join(", ");
+            };
+
+            if (l.address && l.address !== "Location Captured") return cleanAndDeduplicate(l.address);
+
+            try {
+              // 1. Try Nominatim (OpenStreetMap) first for detailed location names
+              const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18&addressdetails=1`);
               const nomData = await nomRes.json();
-              if (nomData && nomData.display_name) {
-                const parts = nomData.display_name.split(",").slice(0, 7);
-                return [...new Set(parts)].join(", ");
+              if (nomData) {
+                const addr = nomData.address || {};
+                const cleanRoad = (road) => {
+                  if (!road) return "";
+                  if (road.includes(" - ") && road.split(" - ").length > 2) {
+                    const segments = road.split(" - ");
+                    return segments[segments.length - 1]; // E.g., return just the last road descriptor
+                  }
+                  return road;
+                };
+
+                const poi = addr.building || addr.office || addr.amenity || addr.shop || addr.tourism || addr.leisure || addr.historic || addr.industrial || addr.commercial || addr.retail;
+                const roadName = cleanRoad(addr.road || addr.pedestrian);
+
+                const parts = [
+                  poi,
+                  addr.house_number,
+                  roadName,
+                  addr.neighbourhood || addr.quarter,
+                  addr.suburb || addr.city_district,
+                  addr.city || addr.town || addr.village,
+                  addr.county,
+                  addr.state_district || addr.state
+                ].filter(Boolean);
+
+                const summary = parts.length > 0 ? parts.join(", ") : nomData.display_name.split(",").slice(0, 7).join(", ");
+                if (summary) return cleanAndDeduplicate(summary);
               }
             } catch (e) {
-              console.error("Client-side geocoding failed:", e);
+              console.warn("Nominatim client geocoder failed, trying fallback...", e);
             }
+
+            try {
+              // 2. Fallback to BigDataCloud
+              const fbRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${l.lat}&longitude=${l.lng}&localityLanguage=en`);
+              const fbData = await fbRes.json();
+              if (fbData) {
+                const rawAddr = `${fbData.locality || fbData.principalSubdivision || ""}, ${fbData.city || ""}`;
+                return cleanAndDeduplicate(rawAddr) || "Location Captured";
+              }
+            } catch (e) {
+              console.error("All client-side geocoders failed:", e);
+            }
+
             return l.address || "Location Captured";
           };
 
@@ -199,24 +249,74 @@ const AttendancePage = () => {
         
         // If backend failed to get address, try client-side fallback with multiple services
         const resolveClientSide = async (l) => {
-          if (!l?.lat || (l.address && l.address !== "Location Captured")) return l.address;
-          try {
-            // Service 1: BigDataCloud
-            const fbRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${l.lat}&longitude=${l.lng}&localityLanguage=en`);
-            const fbData = await fbRes.json();
-            if (fbData && fbData.city) {
-              return `${fbData.locality || fbData.principalSubdivision || ""}, ${fbData.city || ""}`.trim().replace(/^,/, "");
+          if (!l?.lat) return "";
+
+          const cleanAndDeduplicate = (str) => {
+            if (!str) return "";
+            let result = str;
+            const replacements = currentBranch?.locationReplacements || {};
+            for (const [target, replacement] of Object.entries(replacements)) {
+              const regex = new RegExp(target, "gi");
+              result = result.replace(regex, replacement);
             }
-            // Service 2: Nominatim
-            const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18`);
+            if (!replacements["Padappakurichi"]) {
+              result = result.replace(/Padappakurichi/gi, "Palayamkottai");
+            }
+            const parts = result.split(",").map(p => p.trim()).filter(Boolean);
+            const uniqueParts = [...new Set(parts)];
+            return uniqueParts.join(", ");
+          };
+
+          if (l.address && l.address !== "Location Captured") return cleanAndDeduplicate(l.address);
+
+          try {
+            // 1. Try Nominatim (OpenStreetMap) first for detailed location names
+            const nomRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${l.lat}&lon=${l.lng}&zoom=18&addressdetails=1`);
             const nomData = await nomRes.json();
-            if (nomData && nomData.display_name) {
-              const parts = nomData.display_name.split(",").slice(0, 7);
-              return [...new Set(parts)].join(", ");
+            if (nomData) {
+              const addr = nomData.address || {};
+              const cleanRoad = (road) => {
+                if (!road) return "";
+                if (road.includes(" - ") && road.split(" - ").length > 2) {
+                  const segments = road.split(" - ");
+                  return segments[segments.length - 1]; // E.g., return just the last road descriptor
+                }
+                return road;
+              };
+
+              const poi = addr.building || addr.office || addr.amenity || addr.shop || addr.tourism || addr.leisure || addr.historic || addr.industrial || addr.commercial || addr.retail;
+              const roadName = cleanRoad(addr.road || addr.pedestrian);
+
+              const parts = [
+                poi,
+                addr.house_number,
+                roadName,
+                addr.neighbourhood || addr.quarter,
+                addr.suburb || addr.city_district,
+                addr.city || addr.town || addr.village,
+                addr.county,
+                addr.state_district || addr.state
+              ].filter(Boolean);
+
+              const summary = parts.length > 0 ? parts.join(", ") : nomData.display_name.split(",").slice(0, 7).join(", ");
+              if (summary) return cleanAndDeduplicate(summary);
             }
           } catch (e) {
-            console.error("Client-side geocoding failed:", e);
+            console.warn("Nominatim client geocoder failed, trying fallback...", e);
           }
+
+          try {
+            // 2. Fallback to BigDataCloud
+            const fbRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${l.lat}&longitude=${l.lng}&localityLanguage=en`);
+            const fbData = await fbRes.json();
+            if (fbData) {
+              const rawAddr = `${fbData.locality || fbData.principalSubdivision || ""}, ${fbData.city || ""}`;
+              return cleanAndDeduplicate(rawAddr) || "Location Captured";
+            }
+          } catch (e) {
+            console.error("All client-side geocoders failed:", e);
+          }
+
           return l.address || "Location Captured";
         };
 
@@ -356,12 +456,12 @@ const AttendancePage = () => {
                           <div className="w-6 h-6 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-emerald-200">
                             <FaCheck className="text-[10px]" />
                           </div>
-                          <span className="text-emerald-600 font-black">Presented</span>
+                          <span className="text-emerald-600 font-black">In</span>
                         </div>
                       ) : (
                         <>
                           <FaCheck className={`text-sm transition-transform duration-500 ${fetchingLocation ? "animate-spin" : "group-hover/btn:scale-125"}`} /> 
-                          <span>{fetchingLocation ? "Locating..." : "Present"}</span>
+                          <span>{fetchingLocation ? "Locating..." : "In"}</span>
                         </>
                       )}
                     </button>
@@ -401,12 +501,12 @@ const AttendancePage = () => {
                           <div className="w-6 h-6 bg-amber-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-amber-200">
                             <FaRunning className="text-[10px]" />
                           </div>
-                          <span className="text-amber-600 font-black">Left</span>
+                          <span className="text-amber-600 font-black">Out</span>
                         </div>
                       ) : (
                         <>
                           <FaRunning className={`text-sm transition-transform duration-500 ${fetchingLocation ? "animate-spin" : "group-hover/btn:scale-125"}`} /> 
-                          <span>{fetchingLocation ? "Locating..." : "Leave"}</span>
+                          <span>{fetchingLocation ? "Locating..." : "Out"}</span>
                         </>
                       )}
                     </button>

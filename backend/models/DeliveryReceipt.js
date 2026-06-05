@@ -28,12 +28,15 @@ const deliveryReceiptSchema = new mongoose.Schema(
         },
         amount: { type: Number, default: 0 },
         paymentMode: { type: String, enum: ["CASH", "UPI"], default: "CASH" },
+        invoiceId: { type: mongoose.Schema.Types.ObjectId, ref: "Invoice" },
+        invoiceNumber: String
       }
     ],
     expenses: [
       {
         amount: { type: Number, default: 0 },
         note: { type: String, default: "" },
+        invoiceId: { type: mongoose.Schema.Types.ObjectId, ref: "Invoice" }
       }
     ],
     totalCollected: {

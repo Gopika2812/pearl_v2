@@ -748,31 +748,71 @@ router.get("/", async (req, res) => {
 
     // 1️⃣ Group Filter (Check both new plural and legacy singular fields)
     if (isFilterSet(customerGroupId)) {
-      try {
-        const gId = new mongoose.Types.ObjectId(customerGroupId);
+      if (customerGroupId === "none") {
         andConditions.push({
-          $or: [
-            { customerGroups: gId },
-            { customerGroup: gId }
+          $and: [
+            {
+              $or: [
+                { customerGroups: { $size: 0 } },
+                { customerGroups: { $exists: false } },
+                { customerGroups: null }
+              ]
+            },
+            {
+              $or: [
+                { customerGroup: null },
+                { customerGroup: { $exists: false } }
+              ]
+            }
           ]
         });
-      } catch (e) {
-        console.error("Invalid Group ID in filter:", customerGroupId);
+      } else {
+        try {
+          const gId = new mongoose.Types.ObjectId(customerGroupId);
+          andConditions.push({
+            $or: [
+              { customerGroups: gId },
+              { customerGroup: gId }
+            ]
+          });
+        } catch (e) {
+          console.error("Invalid Group ID in filter:", customerGroupId);
+        }
       }
     }
 
     // 2️⃣ Category Filter (Check both new plural and legacy singular fields)
     if (isFilterSet(customerCategoryId)) {
-      try {
-        const cId = new mongoose.Types.ObjectId(customerCategoryId);
+      if (customerCategoryId === "none") {
         andConditions.push({
-          $or: [
-            { customerCategories: cId },
-            { customerCategory: cId }
+          $and: [
+            {
+              $or: [
+                { customerCategories: { $size: 0 } },
+                { customerCategories: { $exists: false } },
+                { customerCategories: null }
+              ]
+            },
+            {
+              $or: [
+                { customerCategory: null },
+                { customerCategory: { $exists: false } }
+              ]
+            }
           ]
         });
-      } catch (e) {
-        console.error("Invalid Category ID in filter:", customerCategoryId);
+      } else {
+        try {
+          const cId = new mongoose.Types.ObjectId(customerCategoryId);
+          andConditions.push({
+            $or: [
+              { customerCategories: cId },
+              { customerCategory: cId }
+            ]
+          });
+        } catch (e) {
+          console.error("Invalid Category ID in filter:", customerCategoryId);
+        }
       }
     }
 
@@ -808,6 +848,7 @@ router.get("/", async (req, res) => {
 
     const filter = andConditions.length > 1 ? { $and: andConditions } : andConditions[0];
 
+    console.log("⚡ filter built:", JSON.stringify(filter, null, 2));
 
     // ⚡ Build the Aggregation Pipeline
     const pipeline = [];

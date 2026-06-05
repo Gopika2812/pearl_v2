@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import { API_BASE, fetchWithAuth } from "../../api";
 import EditPurchaseOrderModal from "../../components/branch/EditPurchaseOrderModal";
 import { useBranch } from "../../context/BranchContext";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 const BranchPurchaseOrders = () => {
   const { currentBranch, user } = useBranch();
@@ -445,25 +446,15 @@ const BranchPurchaseOrders = () => {
             />
           </div>
           
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="flex items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-1">
-              <span className="text-[10px] font-black text-gray-400 uppercase mr-2 mt-0.5">From</span>
-              <input
-                type="date"
-                value={filterFromDate}
-                onChange={(e) => setFilterFromDate(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 text-xs font-bold text-gray-700 outline-none"
-              />
-            </div>
-            <div className="flex items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-1">
-              <span className="text-[10px] font-black text-gray-400 uppercase mr-2 mt-0.5">To</span>
-              <input
-                type="date"
-                value={filterToDate}
-                onChange={(e) => setFilterToDate(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 text-xs font-bold text-gray-700 outline-none"
-              />
-            </div>
+          <div className="flex items-center gap-3 w-full md:w-auto z-10">
+            <DateRangeDropdown
+                startDate={filterFromDate}
+                endDate={filterToDate}
+                onDateChange={(start, end) => {
+                    setFilterFromDate(start);
+                    setFilterToDate(end);
+                }}
+            />
             <button
                onClick={() => {
                  setFilterFromDate(new Date().toISOString().split('T')[0]);
@@ -768,7 +759,12 @@ const BranchPurchaseOrders = () => {
                                               {item.qty}
                                             </td>
                                             <td className="py-2 px-3 text-right">
-                                              ₹{item.purchasePrice?.toFixed(2)}
+                                              <div>₹{item.purchasePrice?.toFixed(2)}</div>
+                                              {item.marketCapPrice > 0 && (
+                                                <div className="text-[9px] text-indigo-600 font-black bg-indigo-50 border border-indigo-100 inline-block px-1.5 py-0.5 rounded mt-0.5">
+                                                  MCP: ₹{item.marketCapPrice?.toFixed(2)}
+                                                </div>
+                                              )}
                                             </td>
                                             <td className="py-2 px-3 text-right">
                                               ₹{item.sellingPrice?.toFixed(2)}

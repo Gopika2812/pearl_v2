@@ -50,7 +50,7 @@ export const markAttendance = async (req, res) => {
     let addressName = "";
     try {
       if (location?.lat && location?.lng) {
-        addressName = await getAddressFromCoords(location.lat, location.lng);
+        addressName = await getAddressFromCoords(location.lat, location.lng, branchId);
       }
     } catch (e) {
       console.error("Geocoder failed:", e.message);
