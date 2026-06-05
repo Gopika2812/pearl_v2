@@ -6,6 +6,7 @@ import { API_BASE, fetchWithAuth } from "../../api";
 import { useBranch } from "../../context/BranchContext";
 import { useInventory } from "../../context/InventoryContext";
 import { useNavigate } from "react-router-dom";
+import DateRangeDropdown from "../../components/common/DateRangeDropdown";
 
 const BranchProductRecords = () => {
   const navigate = useNavigate();
@@ -146,10 +147,16 @@ const BranchProductRecords = () => {
       }
 
       setLoading(true);
-      toast.info("Preparing complete export data...");
+      
+      const exportLimit = Math.min(totalRecords, 5000);
+      if (totalRecords > 5000) {
+        toast.warning("For performance reasons, only the first 5,000 records are exported at once. Please use date filters to narrow down.");
+      } else {
+        toast.info("Preparing complete export data...");
+      }
 
-      // Fetch ALL records for the current filter (no limit)
-      let url = `${API_BASE}/invoices/history?branchId=${currentBranch._id}&page=1&limit=${totalRecords}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
+      // Fetch ALL records for the current filter (with safety cap)
+      let url = `${API_BASE}/invoices/history?branchId=${currentBranch._id}&page=1&limit=${exportLimit}&sortKey=${sortConfig.key}&sortDirection=${sortConfig.direction}`;
       if (fromDate) url += `&fromDate=${fromDate}`;
       if (toDate) url += `&toDate=${toDate}`;
       if (selectedProductGroupId) url += `&productGroupId=${selectedProductGroupId}`;
@@ -159,7 +166,7 @@ const BranchProductRecords = () => {
       const res = await fetchWithAuth(url);
       const data = await res.json();
       
-      if (!res.ok) throw new Error("Failed to fetch all records for export");
+      if (!res.ok) throw new Error("Failed to fetch records for export");
       
       const allRecords = data.history || [];
 
@@ -187,10 +194,13 @@ const BranchProductRecords = () => {
       worksheet['!cols'] = wscols;
 
       const groupName = selectedProductGroupId 
-        ? productGroups.find(g => g._id === selectedProductGroupId)?.name 
+        ? productGroups.find(g => g._id === selectedProductGroupId)?.name || "Group"
         : "AllGroups";
 
-      const fileName = `ProductAnalysis_${groupName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      // Sanitize group name to prevent file-save errors from illegal characters like / \ : * ? " < > |
+      const safeGroupName = groupName.replace(/[^a-zA-Z0-9_-]/g, "_");
+
+      const fileName = `ProductAnalysis_${safeGroupName}_${new Date().toISOString().split('T')[0]}.xlsx`;
 
       XLSX.writeFile(workbook, fileName);
       toast.success("Full analysis exported successfully!");
@@ -456,36 +466,24 @@ const BranchProductRecords = () => {
           {/* RIGHT SIDE: TRANSACTION RECORD */}
           <div className="lg:w-3/4 space-y-6">
             {/* DATE FILTERS */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                <div className="space-y-1">
-                  <label>Start Period</label>
-                  <input 
-                    type="date" 
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-gray-700 outline-none focus:border-[#319bab] transition text-xs"
-                  />
-                </div>
-                
-                <div className="space-y-1">
-                  <label>End Period</label>
-                  <input 
-                    type="date" 
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-gray-700 outline-none focus:border-[#319bab] transition text-xs"
-                  />
-                </div>
-
-                <div className="flex gap-2 h-[34px]">
-                  <button 
-                    onClick={handleReset}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg font-black transition text-[10px] uppercase tracking-widest"
-                  >
-                    Reset Filter
-                  </button>
-                </div>
+            {/* DATE FILTERS */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-end gap-4">
+              <div className="flex items-center gap-3 z-10">
+                <DateRangeDropdown
+                    startDate={fromDate}
+                    endDate={toDate}
+                    onDateChange={(start, end) => {
+                        setFromDate(start);
+                        setToDate(end);
+                        setCurrentPage(1);
+                    }}
+                />
+                <button 
+                  onClick={handleReset}
+                  className="text-[10px] font-black text-[#319bab] hover:text-[#257f87] uppercase tracking-wider px-2"
+                >
+                  RESET
+                </button>
               </div>
             </div>
 
