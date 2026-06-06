@@ -1695,50 +1695,10 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
     }
 
     // ─── BRANCH B: FIRST-TIME DRAFT INVOICE ─────────────────────────────────
-    let siNumber;
-    const rawSoId = salesOrder.invoiceId || "";
-    const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
-    const parts = cleanSoId.split('/');
-    const soPrefixPrefix = parts[0];
-
-    let siPrefix = soPrefixPrefix.endsWith("SO")
-      ? soPrefixPrefix.replace(/SO$/i, "SI")
-      : (soPrefixPrefix.endsWith("-SO") ? soPrefixPrefix.replace(/-SO$/i, "-SI") : (soPrefixPrefix.endsWith("O") ? soPrefixPrefix.replace(/O$/i, "I") : `${soPrefixPrefix}SI`));
-
-    siNumber = `${siPrefix}/${parts.slice(1).join('/')}`;
-
-    // Create separate Invoice document as DRAFT
     const itemsToInvoice = invoiceItems || salesOrder.items;
     const samplesToInvoice = invoiceSampleItems || salesOrder.sampleItems;
     const grandTotalToUse = Math.round(Number(invoiceGrandTotal) || salesOrder.grandTotal || 0);
 
-    const invoiceDoc = new Invoice({
-      invoiceNumber: siNumber,
-      salesOrderId: salesOrder._id,
-      branchId: salesOrder.branchId,
-      warehouse: salesOrder.warehouse,
-      billingPerson: salesOrder.billingPerson,
-      customer: salesOrder.customer,
-      items: itemsToInvoice,
-      sampleItems: samplesToInvoice,
-      subtotal: Math.round(Number(invoiceSubtotal) || 0),
-      totalDiscount: Math.round(Number(invoiceTotalDiscount) || 0),
-      commonDiscount: Math.round(Number(invoiceCommonDiscount) || 0),
-      totalTax: { total: Math.round(Number(invoiceTotalTax) || 0) },
-      transportCharge: Math.round(Number(invoiceTransportCharge) || 0),
-      grandTotal: grandTotalToUse,
-      openingBalance: Math.round(Number(invoiceOpeningBalance) || 0),
-      closingBalance: Math.round(Number(invoiceOpeningBalance) + grandTotalToUse), // Draft closing balance
-      financialYear: currentFY,
-      invoiceDate: salesOrder.orderDate || salesOrder.createdAt,
-      status: "DRAFT" // Create as DRAFT first
-    });
-    await invoiceDoc.save();
-
-    // 2. Reduce Stock (Deferred: Do nothing for draft)
-    // 3. Increase Customer Balance (Deferred: Do nothing for draft)
-
-    // 4. Record on SalesOrder
     const allItems = [...itemsToInvoice, ...samplesToInvoice];
     const invoiceSnapshot = {
       version: (salesOrder.editHistory.length || 0) + 1,
@@ -1747,14 +1707,14 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
       grandTotal: grandTotalToUse,
       invoicedAt: new Date(),
       editedBy: req.user.username,
-      invoiceNumber: siNumber
+      invoiceNumber: salesOrder.invoiceId // Use Sales Order ID for Dummy/Draft tracking
     };
 
     salesOrder.editHistory.push(invoiceSnapshot);
     // Do NOT set lastInvoicedItems, lastInvoicedGrandTotal, lastInvoicedCustomerId, status = "INVOICED" yet
     salesOrder.invoiceItems = allItems;
     salesOrder.items = allItems;
-    salesOrder.salesInvoiceId = siNumber;
+    salesOrder.salesInvoiceId = undefined; // Ensure salesInvoiceId is NOT generated/set yet
     salesOrder.recordType = "SALES INVOICE";
     salesOrder.invoiceGenerated = true;
 
@@ -1766,17 +1726,17 @@ router.patch("/:id/generate-invoice", auth, clearCachePrefix("/api/sales-orders"
       userModel: req.user.role === "SUPER_ADMIN" ? "SuperAdmin" : "BranchUser",
       username: req.user.username,
       branchId: salesOrder.branchId,
-      action: isReInvoice ? "RE_INVOICE_SO" : "INVOICE_SO",
-      description: `${isReInvoice ? 'Regenerated' : 'Finalized'} Invoice: ${siNumber} for PO: ${salesOrder.invoiceId}. Total: ₹${grandTotalToUse}. Items: ${allItems.slice(0, 3).map(i => i.productName || i.name).join(", ")}${allItems.length > 3 ? "..." : ""}`,
+      action: "PREPARE_DRAFT_INVOICE",
+      description: `Prepared Draft Invoice (Dummy Bill) for SO: ${salesOrder.invoiceId}. Total: ₹${grandTotalToUse}. Items: ${allItems.slice(0, 3).map(i => i.productName || i.name).join(", ")}${allItems.length > 3 ? "..." : ""}`,
       targetId: salesOrder._id,
       targetModel: "SalesOrder",
     });
 
     res.json({
       success: true,
-      message: `Sales Invoice ${siNumber} generated successfully.`,
-      siNumber,
-      invoiceId: invoiceDoc._id
+      message: `Draft Invoice prepared successfully.`,
+      siNumber: null,
+      invoiceId: null
     });
 
   } catch (error) {

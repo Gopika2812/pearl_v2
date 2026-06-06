@@ -609,7 +609,9 @@ router.post("/preview/:salesOrderId", async (req, res) => {
     const useSoNumber = req.body.useSoNumber === true;
     let predictedSI = salesOrder.salesInvoiceId; // Use existing if already generated
 
-    if (!predictedSI) {
+    if (invoiceType === "ORDER_DETAILS") {
+      predictedSI = salesOrder.invoiceId;
+    } else if (!predictedSI) {
       const rawSoId = salesOrder.invoiceId || "";
       // Robust prefix extraction and replacement
       const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
@@ -621,7 +623,7 @@ router.post("/preview/:salesOrderId", async (req, res) => {
         ? soMainPrefix.replace(/SO$/i, "SI")
         : (soMainPrefix.endsWith("-SO") ? soMainPrefix.replace(/-SO$/i, "-SI") : (soMainPrefix.endsWith("O") ? soMainPrefix.replace(/O$/i, "I") : `${soMainPrefix}SI`));
 
-      if (useSoNumber || invoiceType === "ORDER_DETAILS") {
+      if (useSoNumber) {
         // Option A: Match SO sequential ID but swap prefix to SI
         predictedSI = `${siPrefix}/${parts.slice(1).join('/')}`;
       } else {
@@ -944,70 +946,72 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         let invoiceNumber;
         let generateNewSequence = false;
 
-        if (invoice) {
-          if (invoice.status === "DRAFT" && invoiceType === "TAX_INVOICE" && req.body.useSoNumber !== true) {
-            // Upgrading from Dummy to Real: Generate a proper sequential number instead of reusing the SO number.
-            generateNewSequence = true;
-          } else {
-            invoiceNumber = invoice.invoiceNumber;
+        if (invoiceType === "TAX_INVOICE") {
+          if (invoice) {
+            if (invoice.status === "DRAFT" && req.body.useSoNumber !== true) {
+              // Upgrading from Dummy to Real: Generate a proper sequential number instead of reusing the SO number.
+              generateNewSequence = true;
+            } else {
+              invoiceNumber = invoice.invoiceNumber;
+            }
           }
-        }
 
-        if (!invoice || generateNewSequence) {
-          const useSoNumber = req.body.useSoNumber === true;
-          const rawSoId = salesOrder.invoiceId || "";
-          const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
-          const parts = cleanSoId.split('/');
-          const soMainPrefix = parts[0];
+          if (!invoice || generateNewSequence) {
+            const useSoNumber = req.body.useSoNumber === true;
+            const rawSoId = salesOrder.invoiceId || "";
+            const cleanSoId = rawSoId.replace(/^(SO|SO REF|SO\sREF)[:\s\-]*/i, "");
+            const parts = cleanSoId.split('/');
+            const soMainPrefix = parts[0];
 
-          let siPrefix = soMainPrefix.endsWith("SO")
-            ? soMainPrefix.replace(/SO$/i, "SI")
-            : (soMainPrefix.endsWith("-SO") ? soMainPrefix.replace(/-SO$/i, "-SI") : (soMainPrefix.endsWith("O") ? soMainPrefix.replace(/O$/i, "I") : `${soMainPrefix}SI`));
+            let siPrefix = soMainPrefix.endsWith("SO")
+              ? soMainPrefix.replace(/SO$/i, "SI")
+              : (soMainPrefix.endsWith("-SO") ? soMainPrefix.replace(/-SO$/i, "-SI") : (soMainPrefix.endsWith("O") ? soMainPrefix.replace(/O$/i, "I") : `${soMainPrefix}SI`));
 
-          if (useSoNumber || invoiceType === "ORDER_DETAILS") {
-            // Option A: Match SO sequential ID but swap prefix to SI
-            invoiceNumber = `${siPrefix}/${parts.slice(1).join('/')}`;
-          } else {
-            // Option B: Generate NEW sequential SI number
-            let siVoucher = await VoucherType.findOne({
-              branchId: salesOrder.branchId,
-              prefix: siPrefix,
-              orderType: "SI",
-              financialYear
-            }).session(session);
-
-            if (!siVoucher) {
-              siVoucher = new VoucherType({
+            if (useSoNumber) {
+              // Option A: Match SO sequential ID but swap prefix to SI
+              invoiceNumber = `${siPrefix}/${parts.slice(1).join('/')}`;
+            } else {
+              // Option B: Generate NEW sequential SI number
+              let siVoucher = await VoucherType.findOne({
                 branchId: salesOrder.branchId,
-                name: soMainPrefix.toLowerCase().replace(/so$/i, ""),
-                orderType: "SI",
                 prefix: siPrefix,
-                counter: 1,
+                orderType: "SI",
                 financialYear
+              }).session(session);
+
+              if (!siVoucher) {
+                siVoucher = new VoucherType({
+                  branchId: salesOrder.branchId,
+                  name: soMainPrefix.toLowerCase().replace(/so$/i, ""),
+                  orderType: "SI",
+                  prefix: siPrefix,
+                  counter: 1,
+                  financialYear
+                });
+                await siVoucher.save({ session });
+              }
+
+              const existingInvoices = await Invoice.find({
+                branchId: salesOrder.branchId,
+                invoiceNumber: new RegExp(`^${siPrefix}/`),
+                financialYear,
+                status: { $ne: "DRAFT" }
+              }).select('invoiceNumber').session(session).lean();
+
+              let highestNumInDB = 0;
+              existingInvoices.forEach(inv => {
+                const parts = inv.invoiceNumber.split('/');
+                if (parts.length >= 2) {
+                  const num = parseInt(parts[1]);
+                  if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
+                }
               });
+
+              const nextNum = Math.max(siVoucher.counter, highestNumInDB + 1);
+              invoiceNumber = `${siPrefix}/${String(nextNum).padStart(3, "0")}/${financialYear}`;
+              siVoucher.counter = nextNum + 1;
               await siVoucher.save({ session });
             }
-
-            const existingInvoices = await Invoice.find({
-              branchId: salesOrder.branchId,
-              invoiceNumber: new RegExp(`^${siPrefix}/`),
-              financialYear,
-              status: { $ne: "DRAFT" }
-            }).select('invoiceNumber').session(session).lean();
-
-            let highestNumInDB = 0;
-            existingInvoices.forEach(inv => {
-              const parts = inv.invoiceNumber.split('/');
-              if (parts.length >= 2) {
-                const num = parseInt(parts[1]);
-                if (!isNaN(num) && num > highestNumInDB) highestNumInDB = num;
-              }
-            });
-
-            const nextNum = Math.max(siVoucher.counter, highestNumInDB + 1);
-            invoiceNumber = `${siPrefix}/${String(nextNum).padStart(3, "0")}/${financialYear}`;
-            siVoucher.counter = nextNum + 1;
-            await siVoucher.save({ session });
           }
         }
 
@@ -1237,70 +1241,72 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
         } : {};
 
 
-        if (invoice) {
-          invoice.customer = customerSnapshot;
-          invoice.seller = sellerSnapshot;
-          invoice.items = processedItems;
-          invoice.subtotal = grossSubtotal;
-          invoice.totalTax = totalTax;
-          invoice.transportCharge = tCharge;
-          invoice.transportGstPercent = tGstPercent;
-          invoice.transportGstAmount = tGstAmount;
-          invoice.commonDiscount = commonDiscount;
-          invoice.extraExpenseAmount = extraExpenseAmount;
-          invoice.extraExpenses = extraExpensesList;
-          invoice.grandTotal = grandTotal;
-          invoice.openingBalance = dynamicOpeningBalance;
-          invoice.closingBalance = closingBalance;
-          invoice.balanceType = closingBalance >= 0 ? "Dr" : "Cr";
-          invoice.billingPerson = finalizedByUsername || invoice.billingPerson || "System";
-          invoice.generatedBy = finalizedByUsername || invoice.generatedBy || "System";
-          invoice.deliveryMan = salesOrder.deliveryMan;
-          // 🛡️ LOCK DATE: Always use original SO date to prevent month-jumping during tax filing
-          invoice.invoiceDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
-          invoice.status = invoiceType === "TAX_INVOICE" ? "FINALIZED" : "DRAFT";
+        if (invoiceType === "TAX_INVOICE") {
+          if (invoice) {
+            invoice.customer = customerSnapshot;
+            invoice.seller = sellerSnapshot;
+            invoice.items = processedItems;
+            invoice.subtotal = grossSubtotal;
+            invoice.totalTax = totalTax;
+            invoice.transportCharge = tCharge;
+            invoice.transportGstPercent = tGstPercent;
+            invoice.transportGstAmount = tGstAmount;
+            invoice.commonDiscount = commonDiscount;
+            invoice.extraExpenseAmount = extraExpenseAmount;
+            invoice.extraExpenses = extraExpensesList;
+            invoice.grandTotal = grandTotal;
+            invoice.openingBalance = dynamicOpeningBalance;
+            invoice.closingBalance = closingBalance;
+            invoice.balanceType = closingBalance >= 0 ? "Dr" : "Cr";
+            invoice.billingPerson = finalizedByUsername || invoice.billingPerson || "System";
+            invoice.generatedBy = finalizedByUsername || invoice.generatedBy || "System";
+            invoice.deliveryMan = salesOrder.deliveryMan;
+            // 🛡️ LOCK DATE: Always use original SO date to prevent month-jumping during tax filing
+            invoice.invoiceDate = salesOrder.orderDate || salesOrder.createdAt || new Date();
+            invoice.status = "FINALIZED";
 
-          // Copy spotted fields if they exist
-          invoice.spottedCustomerName = salesOrder.spottedCustomerName;
-          invoice.spottedPhoneNumber = salesOrder.spottedPhoneNumber;
+            // Copy spotted fields if they exist
+            invoice.spottedCustomerName = salesOrder.spottedCustomerName;
+            invoice.spottedPhoneNumber = salesOrder.spottedPhoneNumber;
 
-          // ✨ RESET E-INVOICE STATUS: Clear old errors when user re-finalizes with new data
-          invoice.einvoiceStatus = null;
-          invoice.einvoiceError = null;
+            // ✨ RESET E-INVOICE STATUS: Clear old errors when user re-finalizes with new data
+            invoice.einvoiceStatus = null;
+            invoice.einvoiceError = null;
 
-          await invoice.save({ session });
-        } else {
-          invoice = new Invoice({
-            invoiceNumber,
-            invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
-            financialYear,
-            salesOrderId: salesOrder._id,
-            branchId: salesOrder.branchId,
-            warehouse: salesOrder.warehouse,
-            seller: sellerSnapshot,
-            customer: customerSnapshot,
-            items: processedItems,
-            sampleItems: salesOrder.sampleItems || [],
-            subtotal: grossSubtotal,
-            totalTax,
-            transportCharge: tCharge,
-            transportGstPercent: tGstPercent,
-            transportGstAmount: tGstAmount,
-            commonDiscount: commonDiscount,
-            extraExpenseAmount: extraExpenseAmount,
-            extraExpenses: extraExpensesList,
-            grandTotal,
-            openingBalance: dynamicOpeningBalance,
-            closingBalance: closingBalance,
-            balanceType: closingBalance >= 0 ? "Dr" : "Cr",
-            billingPerson: finalizedByUsername || salesOrder.billingPerson || "System",
-            generatedBy: finalizedByUsername || "System",
-            deliveryMan: salesOrder.deliveryMan,
-            status: invoiceType === "TAX_INVOICE" ? "FINALIZED" : "DRAFT",
-            spottedCustomerName: salesOrder.spottedCustomerName,
-            spottedPhoneNumber: salesOrder.spottedPhoneNumber,
-          });
-          await invoice.save({ session });
+            await invoice.save({ session });
+          } else {
+            invoice = new Invoice({
+              invoiceNumber,
+              invoiceDate: salesOrder.orderDate || salesOrder.createdAt || new Date(),
+              financialYear,
+              salesOrderId: salesOrder._id,
+              branchId: salesOrder.branchId,
+              warehouse: salesOrder.warehouse,
+              seller: sellerSnapshot,
+              customer: customerSnapshot,
+              items: processedItems,
+              sampleItems: salesOrder.sampleItems || [],
+              subtotal: grossSubtotal,
+              totalTax,
+              transportCharge: tCharge,
+              transportGstPercent: tGstPercent,
+              transportGstAmount: tGstAmount,
+              commonDiscount: commonDiscount,
+              extraExpenseAmount: extraExpenseAmount,
+              extraExpenses: extraExpensesList,
+              grandTotal,
+              openingBalance: dynamicOpeningBalance,
+              closingBalance: closingBalance,
+              balanceType: closingBalance >= 0 ? "Dr" : "Cr",
+              billingPerson: finalizedByUsername || salesOrder.billingPerson || "System",
+              generatedBy: finalizedByUsername || "System",
+              deliveryMan: salesOrder.deliveryMan,
+              status: "FINALIZED",
+              spottedCustomerName: salesOrder.spottedCustomerName,
+              spottedPhoneNumber: salesOrder.spottedPhoneNumber,
+            });
+            await invoice.save({ session });
+          }
         }
 
         // ==========================================

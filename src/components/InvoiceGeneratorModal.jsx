@@ -933,7 +933,7 @@ const InvoiceGeneratorModal = ({ order, onClose, onSuccess, useSoNumber = false 
                 <div class="order-header-col" style="text-align: right; display: flex; flex-direction: column; justify-content: center;">
                   <div class="label">Date:</div>
                   <div style="font-weight: bold;">${new Date(previewData?.invoiceDate || generatedInvoice?.invoiceDate || order?.orderDate || order?.createdAt || new Date()).toLocaleDateString("en-IN")}</div>
-                  <div class="label" style="margin-top: 6px;">Invoice No:</div>
+                  <div class="label" style="margin-top: 6px;">${isDummy ? "Order No (SO):" : "Invoice No:"}</div>
                   <div style="font-weight: bold; color: #dc2626;">${generatedInvoice?.invoiceNumber || previewData?.invoiceNumber || order?.invoiceId || "PENDING"}</div>
                   ${(() => {
                     const groupObj = previewData?.customer?.customerGroup || previewData?.customer?.customerId?.customerGroup || order?.customer?.customerGroup || order?.customer?.customerId?.customerGroup;
