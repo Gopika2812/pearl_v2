@@ -1396,15 +1396,22 @@ router.post("/finalize/:salesOrderId", auth, async (req, res) => {
           username: req.user.username,
           branchId: salesOrder.branchId,
           action: isModified ? "BACK_ORDER_EDIT" : (alreadyInvoiced ? "RE_INVOICE_SO" : "INVOICE_SO"),
-          description: `${alreadyInvoiced ? 'Regenerated' : 'Finalized'} Invoice: ${invoiceNumber} for Order: ${salesOrder.invoiceId}. Total: ₹${grandTotal}.${modificationSummary}`,
-          targetId: invoice._id,
-          targetModel: "Invoice",
+          description: invoice 
+            ? `${alreadyInvoiced ? 'Regenerated' : 'Finalized'} Invoice: ${invoiceNumber} for Order: ${salesOrder.invoiceId}. Total: ₹${grandTotal}.${modificationSummary}`
+            : `Updated Dummy Bill for Order: ${salesOrder.invoiceId}. Total: ₹${grandTotal}.${modificationSummary}`,
+          targetId: invoice ? invoice._id : salesOrder._id,
+          targetModel: invoice ? "Invoice" : "SalesOrder",
         });
 
         await session.commitTransaction();
         session.endSession();
         finalizeSuccess = true;
-        return res.json({ success: true, invoiceNumber, invoiceId: invoice._id, invoice: invoice.toObject ? invoice.toObject() : invoice });
+        return res.json({ 
+          success: true, 
+          invoiceNumber: invoice ? invoice.invoiceNumber : salesOrder.invoiceId, 
+          invoiceId: invoice ? invoice._id : null, 
+          invoice: invoice ? (invoice.toObject ? invoice.toObject() : invoice) : null 
+        });
 
       } catch (error) {
         await session.abortTransaction();
